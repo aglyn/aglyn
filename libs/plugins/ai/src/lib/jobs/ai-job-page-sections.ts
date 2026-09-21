@@ -152,11 +152,42 @@ const AI_PAGE_SECTION_REPEAT_SHAPE = `put {{1}}, {{2}}… where its copies diffe
  * the section check draws into its copies (`ai-repeated-items.ts`). It rides
  * the request of a section whose plan line shows items on a workspace that
  * keeps no reusable components, and no other: a section with nothing to repeat
- * pays nothing for it, the cached prefix every workspace shares says only that
- * a repeated item is written once, and a workspace that places components is
- * never shown how.
+ * pays nothing for it, and the cached prefix every workspace shares says only
+ * that a repeated item is written once.
  */
 export const AI_PAGE_SECTION_REPEAT_LINE = `Write a repeated item once: ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
+
+/**
+ * How a workspace that keeps reusable components writes a repeated item
+ * (AGL-3143 §10): as one instance of a component the section already places,
+ * repeated, rather than the item's subtree drawn once per copy.
+ *
+ * It rides the request of a section whose plan line shows items AND names a
+ * record to place, on the same terms the repeat line rides a Free one: a
+ * section with nothing to repeat, or nothing to repeat it FROM, pays nothing
+ * for it.
+ *
+ * ## Why a paid section could not be built without it (AGL-3024)
+ *
+ * The Free path is reconciled at both ends — its plan is held to the sections
+ * its wall pays for (AGL-3070) and its request is shown the repeat shape
+ * (AGL-3053). The paid path was reconciled at neither: `AI_BUILD_PLAN_LIMITS`
+ * lets a plan promise up to `items: 500` in one section, the pass that builds
+ * it fits `aiJobPageSectionMaxElements` — fifteen at the balanced tier — and
+ * the request said only how many elements to keep under, never how to get
+ * there. A six-card grid measured live on 2026-09-21 was drawn inline, ran
+ * past its ceiling, and was cut off; the re-ask then said to place an instance
+ * "of a component the site has" without naming one, so it was cut off too, and
+ * `AI_GENERATION_MAX_ATTEMPTS` ended the job with no page. A four-card grid on
+ * the same site had fitted, which is why this went unseen.
+ *
+ * ⛔ This does NOT make the plan and the pass agree about what fits — a plan
+ * may still promise more items than any ceiling can carry, and this line only
+ * gives the pass its cheapest way to try. That bound belongs on the plan step
+ * and is deliberately not taken here.
+ */
+export const AI_PAGE_SECTION_INSTANCE_LINE =
+  'Write a repeated item once: place one instance of the component this section places and repeat that instance, rather than drawing the item again for each copy.'
 
 /**
  * What a pass whose answer ran past its ceiling is told makes a section
@@ -195,7 +226,9 @@ export function aiPageSectionPrompt(input: AiPageSectionPromptInput): string {
       : 'Nothing is built yet: this section holds the page’s h1.',
     ...(input.reusableComponents === false
       ? [AI_PAGE_SECTION_INLINE_LINE, ...(section.items ? [AI_PAGE_SECTION_REPEAT_LINE] : [])]
-      : []),
+      : section.items && section.uses.length
+        ? [AI_PAGE_SECTION_INSTANCE_LINE]
+        : []),
     `Keep this section to at most ${input.maxElements} elements.`,
   ].join('\n')
 }

@@ -1589,6 +1589,14 @@ Assist panel.
   to build with the inventory ids it places, the names of the sections built
   above it, never their content, and the most elements the section may carry
   (`aiJobPageSectionMaxElements`, [in real tokens](#the-time-budget)). A section
+  whose plan line shows items is also told how to repeat one within that budget,
+  and only then: written once where the workspace keeps no reusable components
+  (AGL-3053), and placed as one repeated instance of the component the section
+  places where it keeps them (AGL-3143). Before that second line existed, a paid
+  section was told how many elements to keep under but never how to get there,
+  and a six-card grid measured live on 2026-09-21 was drawn inline, cut off, and
+  cut off again on the re-ask, ending the job with no page. A section with
+  nothing to repeat, or nothing to repeat it from, is told neither. A section
   cut off at its ceiling is re-asked for a smaller one — fewer elements, shorter
   copy, a repeated item placed as an instance, or written once where the
   workspace keeps no reusable components — and one cut off twice stops as

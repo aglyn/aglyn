@@ -45,6 +45,7 @@ import { AI_FREE_PAGE_FIXTURE, AI_PAGE_BRIEF_FIXTURES, type AiPageBriefFixture }
 import {
   AI_JOB_PAGE_INSTRUCTIONS,
   AI_PAGE_SECTION_INLINE_LINE,
+  AI_PAGE_SECTION_INSTANCE_LINE,
   AI_PAGE_SECTION_REPEAT_LINE,
   AI_PAGE_SECTION_TOOL,
   aiEmptyPage,
@@ -687,6 +688,46 @@ describe('a repeated item written once (AGL-3053)', () => {
     // The page instructions every workspace shares say only that a repeated item is written once.
     expect(AI_JOB_PAGE_INSTRUCTIONS[0].text).toContain('a repeated item is written once, and a form is a Form (form) with no formId')
     expect(AI_JOB_PAGE_INSTRUCTIONS[0].text).not.toMatch(/written out each time|\{\{1\}\}|"repeat"/)
+  })
+
+  it('shows a workspace that keeps components how to repeat one, and only where there is something to repeat from (AGL-3143 §10)', () => {
+    // The live failure this fixes (AGL-3024, 2026-09-21): a paid plan promised
+    // a six-card grid placing a component, the pass was told only "at most 15
+    // elements", drew the cards inline, ran past its ceiling and was cut off
+    // — twice, which ends the job with no page at all.
+    const job = { brief: fixture.brief, inputs: { pageType: fixture.pageType } }
+    const plan = confirmed(fixture)
+    const sectionsOf = (sections: { name: string; uses: string[]; items: number }[]) => ({
+      ...screen,
+      sections: sections as unknown as typeof screen.sections,
+    })
+    const promptFor = (uses: string[], items: number) =>
+      aiPageSectionPrompt({
+        job,
+        plan,
+        screen: sectionsOf([{ name: 'practice areas grid', uses, items }]),
+        index: 0,
+        maxElements: 15,
+      })
+
+    // Items AND something to repeat from: the pass is shown the cheap shape.
+    expect(promptFor(['new:practice-area-link-card'], 6)).toContain(AI_PAGE_SECTION_INSTANCE_LINE)
+    // Items but nothing to place, or something to place but nothing repeated:
+    // the line buys nothing, so it is not sent.
+    expect(promptFor([], 6)).not.toContain(AI_PAGE_SECTION_INSTANCE_LINE)
+    expect(promptFor(['new:practice-area-link-card'], 0)).not.toContain(AI_PAGE_SECTION_INSTANCE_LINE)
+    // It never reaches a workspace that keeps no components: that one is shown
+    // the repeat shape instead, and must not be shown both.
+    expect(
+      aiPageSectionPrompt({
+        job,
+        plan,
+        screen: sectionsOf([{ name: 'practice areas grid', uses: ['new:x'], items: 6 }]),
+        index: 0,
+        maxElements: 15,
+        reusableComponents: false,
+      }),
+    ).not.toContain(AI_PAGE_SECTION_INSTANCE_LINE)
   })
 
   it('keeps the cards written once as the cards written out: the same elements, the same copy, a card each', () => {
