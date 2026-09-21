@@ -1192,6 +1192,14 @@ jobs:
       # package this misses is a release that publishes fifty and fails on the
       # fifty-first, which cannot be repaired — a published version is final.
       - run: npm run test:trust-packages
+      # AGL-3201 — `npm view` with MORE THAN ONE field answers with an ARRAY
+      # wrapping the object, and with one field it answers bare. Reading the
+      # multi-field answer as an object gives `undefined` for every field,
+      # which reads as "this package has no tags" — and would move `latest` on
+      # a package whose tags were simply never read. The skip for a version a
+      # package never published is held here too: `@aglyn/cli` carries its own
+      # number, and counting npm's refusal as a failure would red every run.
+      - run: npm run test:dist-tag-latest
 
       # AGL-3079 — every Firestore document the platform names is named by
       # `createResourceUid()`, the 10-character id a member sees in the

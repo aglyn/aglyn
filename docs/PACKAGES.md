@@ -624,6 +624,25 @@ replaced was granular with the 2FA bypass and expired 2026-12-19; npm removes
 direct publishing with those in **January 2027**. A secret that does not exist
 cannot expire, leak, or be rotated into a broken release.
 
+### `latest` has to be moved by hand until 1.0.0
+
+`publish-packages.mjs` puts a prerelease under its own label (`beta`) and never
+`latest`, so a beta is not what `npm install` hands somebody who asked for
+nothing in particular. That rule assumes `latest` points at a release worth
+having, and it does not: **npm sets `latest` on a package's FIRST publish
+whatever `--tag` says**, so all 50 libs pinned it to `1.0.0-beta.143` — the one
+build whose folder-subpath imports a consumer cannot resolve at all.
+
+```sh
+npm run dist-tag:latest            # read only: what each tag says
+npm run dist-tag:latest -- --set   # the owner moves the ones behind
+```
+
+It targets the version the repo carries, skips a package that version was never
+published for (`@aglyn/cli` keeps its own number), and is the owner's to run —
+it changes what every `npm install` of these packages hands out. When a
+non-prerelease ships it sets `latest` itself and this stops having a job.
+
 ⛔ **`createPackage` is not the same as being configured**, and the check knows
 the difference. A row created after 2026-09-03 carries `createStagedPackage`
 alone unless publishing was asked for explicitly; it appears on every listing
