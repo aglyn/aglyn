@@ -32,6 +32,12 @@ import {
   notAcceptableBody,
   wantsMarkdown,
 } from '@aglyn/aglyn/app-utils/accept-negotiation'
+// Deep import for the same reason, and this one imports nothing itself: two
+// string constants, not a barrel (AGL-3205).
+import {
+  ENTRY_PREVIEW_PARAM,
+  ENTRY_PREVIEW_ROUTE_SEGMENT,
+} from '@aglyn/aglyn/app-utils/entry-preview-link'
 import { resolveSchemeRouteSegment } from '@aglyn/shared-ui-theme/util/scheme-route-segment'
 import {
   parseThemeModeCookie,
@@ -964,12 +970,48 @@ export const middleware: NextMiddleware = async (req, event) => {
   // matcher above already keeps `/api`, `/_next`, etc. off this rewrite, and
   // API routes are in `pages/api` (which win over the `[host]` catch-all).
   // Preserve the query string (search pages, tenantHost overrides).
-  const rewrite = `/${tenantHost}/${scheme}${req.nextUrl.pathname}${req.nextUrl.search}`
+  /**
+   * A LIVE-SITE PREVIEW GOES TO A DIFFERENT ROUTE (AGL-3205).
+   *
+   * A request carrying `?aglyn_preview=…` is rewritten one segment deeper, to
+   * `app/[host]/[scheme]/aglyn-preview/[...slug]`, which is `force-dynamic`.
+   * The reader's address bar still says the post's real URL; what changes is
+   * which Next route answers it, and that is the whole safety property:
+   *
+   *  - The catch-all is ISR-cached and Next keys that cache on the PATHNAME,
+   *    not the query. A preview rendered there would be written into the
+   *    entry the next anonymous visitor is served — an unpublished post,
+   *    published by a cache, for an hour.
+   *  - Telling them apart INSIDE the catch-all is not an option: any dynamic
+   *    API (`searchParams`, `headers`, `cookies`) opts the entire tenant
+   *    render out of static generation, for every page of every customer
+   *    site. See the note on `revalidate` in that route.
+   *
+   * NOTHING IS VERIFIED HERE. The parameter only routes; the signature is
+   * checked on the other side, in Node, against the host the request actually
+   * resolved to and the collection and entry the path names — before anything
+   * withheld is read. A forged parameter therefore buys an uncacheable render
+   * of the public answer and nothing else.
+   *
+   * With no parameter this branch does not run and the rewrite below is
+   * character-for-character what it has always been.
+   */
+  const previewing = Boolean(req.nextUrl.searchParams.get(ENTRY_PREVIEW_PARAM))
+  const routePrefix = previewing ? `/${ENTRY_PREVIEW_ROUTE_SEGMENT}` : ''
+  const rewrite = `/${tenantHost}/${scheme}${routePrefix}${req.nextUrl.pathname}${req.nextUrl.search}`
   console.debug(
     'Tenant Host Switch=',
     'Rewriting',
     'rewrite=',
-    rewrite,
+    // The token is a bearer capability and this line goes to the platform's
+    // log, which outlives it and is readable by people the link was never
+    // sent to. The ROUTE is what is worth logging; the signature is not.
+    previewing
+      ? rewrite.replace(
+          new RegExp(`(${ENTRY_PREVIEW_PARAM}=)[^&]*`),
+          '$1<redacted>',
+        )
+      : rewrite,
     'tenantHost=',
     tenantHost,
     'req.nextUrl.pathname=',
@@ -1060,6 +1102,30 @@ export const middleware: NextMiddleware = async (req, event) => {
   // `base-uri 'self'`, `frame-ancestors` — the six owner-widened directives,
   // and the plugin sandbox.
   const response = NextResponse.rewrite(new URL(rewrite, req.url))
+  if (previewing) {
+    /**
+     * Said out loud rather than inherited (AGL-3205).
+     *
+     * `force-dynamic` on the preview route already means Next never writes an
+     * ISR entry and Vercel sends its own private/no-store headers. This states
+     * it at the edge anyway, because the thing being prevented — an
+     * unpublished post held in a shared cache — is not a defect anyone would
+     * notice in testing, and "the framework's default is right" is not a
+     * claim a spec can hold. It also covers the layers Next has no say over:
+     * a CDN in front of the deployment, and a corporate proxy.
+     *
+     * `private` as well as `no-store`, because the two answer different
+     * caches, and `Vary` on the parameter is not the answer — a cache that
+     * ignores the header would key a preview under the public URL.
+     */
+    response.headers.set(
+      'Cache-Control',
+      'private, no-store, no-cache, max-age=0, must-revalidate',
+    )
+    // Belt and braces for a CDN that reads only the CDN-specific header.
+    response.headers.set('CDN-Cache-Control', 'no-store')
+    response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
+  }
   /*
    * `img-src` IS NOW ENFORCED, alongside the base directives (AGL-1152).
    *
