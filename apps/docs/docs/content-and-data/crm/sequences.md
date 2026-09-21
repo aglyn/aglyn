@@ -85,6 +85,10 @@ The **display name** is the name recipients see beside the address.
 - **Warm-up** — a newly connected mailbox ramps up: at most **10** a day in
   its first week, **20** in its second and **30** from its third. The daily
   cap still applies, so a mailbox capped at 20 never sends more than 20.
+  **Warm up gradually** is on for every new connection; the member who owns
+  the mailbox can switch it off for one that has sent mail for years and
+  already has its reputation, and it then sends at its cap from that day.
+  Switching it back on starts a fresh ramp.
 - **Sending window** — the days of the week and the hours the mailbox sends
   in, read in the mailbox's **timezone**. A message that comes due outside the
   window waits for the next opening.

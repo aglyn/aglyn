@@ -595,6 +595,18 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
       if (!isValidTimezone(body['timezone'])) return invalid('Choose a timezone from the list.')
       update.timezone = body['timezone']
     }
+    if (body['warmUp'] !== undefined) {
+      /*
+       * The ramp guards a NEW sender's reputation; a mailbox that has sent
+       * mail for years has one already, and ramping it to ten a day guards
+       * nothing (AGL-3228). Its member decides. Turning the ramp back on
+       * starts a fresh one from today, which is what "warm up" means.
+       */
+      if (typeof body['warmUp'] !== 'boolean') return invalid('Say whether to warm the mailbox up gradually.')
+      const running = typeof mailbox.rampStartedAtMs === 'number'
+      if (body['warmUp'] && !running) update.rampStartedAtMs = deps.now()
+      if (!body['warmUp'] && running) update.rampStartedAtMs = null
+    }
     if (!Object.keys(update).length) return ok({ ok: true, mailbox })
     const nowMs = deps.now()
     await mailboxRef(deps.firestore(), gate.orgId, mailbox.id).update({ ...update, updatedAtMs: nowMs })

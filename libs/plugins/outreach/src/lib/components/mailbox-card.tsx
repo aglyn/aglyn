@@ -25,9 +25,11 @@ import {
   Box,
   Button,
   Chip,
+  FormControlLabel,
   FormHelperText,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -98,6 +100,7 @@ export const MAILBOX_ACTION_LABELS = {
   test: 'Send a test to myself',
   testElsewhere: 'Send a test',
   testAddress: 'Test address',
+  warmUp: 'Warm up gradually',
   disconnect: 'Disconnect',
   reconnect: 'Reconnect',
 } as const
@@ -132,6 +135,8 @@ interface Draft {
   dailyCap: string
   window: OutreachSendWindow
   timezone: string
+  /** Whether the warm-up ramp applies — `rampStartedAtMs` as a switch. */
+  warmUp: boolean
 }
 
 const draftOf = (mailbox: OutreachMailbox): Draft => ({
@@ -140,6 +145,7 @@ const draftOf = (mailbox: OutreachMailbox): Draft => ({
   dailyCap: String(mailbox.dailyCap ?? ''),
   window: mailbox.window ?? OUTREACH_DEFAULT_WINDOW,
   timezone: mailbox.timezone ?? 'UTC',
+  warmUp: typeof mailbox.rampStartedAtMs === 'number',
 })
 
 /**
@@ -188,7 +194,8 @@ export function MailboxCard(props: MailboxCardProps) {
   const todayLimit = outreachEffectiveDailyCap(
     {
       dailyCap: typeof capCheck === 'number' ? capCheck : mailbox.dailyCap,
-      rampStartedAtMs: mailbox.rampStartedAtMs,
+      // A ramp switched on in the draft reads as starting today.
+      rampStartedAtMs: draft.warmUp ? (mailbox.rampStartedAtMs ?? nowMs) : null,
       timezone: timezoneValid ? draft.timezone : mailbox.timezone,
     },
     nowMs,
@@ -205,6 +212,7 @@ export function MailboxCard(props: MailboxCardProps) {
         ...(draft.dailyCap !== stored.dailyCap ? { dailyCap: Number(draft.dailyCap) } : {}),
         ...(JSON.stringify(draft.window) !== JSON.stringify(stored.window) ? { window: draft.window } : {}),
         ...(draft.timezone !== stored.timezone ? { timezone: draft.timezone } : {}),
+        ...(draft.warmUp !== stored.warmUp ? { warmUp: draft.warmUp } : {}),
       })
       enqueueSnackbar('Mailbox settings saved', { variant: 'success' })
     } catch (error) {
@@ -391,9 +399,24 @@ export function MailboxCard(props: MailboxCardProps) {
               helperText={
                 typeof capCheck !== 'number'
                   ? capCheck.message
-                  : `${RAMP_SENTENCE} Today’s limit: ${todayLimit}.`
+                  : draft.warmUp
+                    ? `${RAMP_SENTENCE} Today’s limit: ${todayLimit}.`
+                    : `No warm-up: today’s limit is the cap, ${todayLimit}.`
               }
             />
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={draft.warmUp}
+                  onChange={(event) => setDraft({ ...draft, warmUp: event.target.checked })}
+                />
+              }
+              label={MAILBOX_ACTION_LABELS.warmUp}
+            />
+            <FormHelperText sx={{ mt: -1 }}>
+              {'For a mailbox that is new or has not sent much. One that has sent mail for years already has ' +
+                'its reputation and can start at its cap.'}
+            </FormHelperText>
             <Box>
               <Typography variant="subtitle2" gutterBottom>
                 Sending window

@@ -697,6 +697,23 @@ describe('settings and status (AGL-2978)', () => {
     })
   })
 
+  it('lets its member switch the warm-up ramp off, and back on from today (AGL-3228)', async () => {
+    const mailbox = await connectMailbox()
+    expect(typeof docs.get(mailboxPath(mailbox.id))?.['rampStartedAtMs']).toBe('number')
+    const off = await run('settings', post('outreach/mailboxes/settings', { orgId: ORG, mailboxId: mailbox.id, warmUp: false }))
+    expect(off.status).toBe(200)
+    expect(docs.get(mailboxPath(mailbox.id))?.['rampStartedAtMs']).toBeNull()
+    // Off again is a no-op, not a write.
+    const still = await run('settings', post('outreach/mailboxes/settings', { orgId: ORG, mailboxId: mailbox.id, warmUp: false }))
+    expect(still.status).toBe(200)
+    expect(docs.get(mailboxPath(mailbox.id))?.['rampStartedAtMs']).toBeNull()
+    const on = await run('settings', post('outreach/mailboxes/settings', { orgId: ORG, mailboxId: mailbox.id, warmUp: true }))
+    expect(on.status).toBe(200)
+    expect(docs.get(mailboxPath(mailbox.id))?.['rampStartedAtMs']).toBe(NOW)
+    const bad = await run('settings', post('outreach/mailboxes/settings', { orgId: ORG, mailboxId: mailbox.id, warmUp: 'yes' }))
+    expect(bad.status).toBe(400)
+  })
+
   it('refuses an unverified send-as, a cap over 50, an empty window and an unknown timezone', async () => {
     const mailbox = await connectMailbox()
     const refuse = async (patch: Record<string, unknown>) =>
