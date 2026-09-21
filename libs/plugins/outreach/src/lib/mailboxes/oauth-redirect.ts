@@ -23,8 +23,9 @@ import { OUTREACH_API_ROUTES } from '../constants/api-routes'
  * Google redirects only to an address registered on the OAuth client, matched
  * exactly, so the redirect cannot follow whichever host a rep happened to open
  * the console on: it is the deployment's canonical console origin,
- * `NEXT_PUBLIC_CONSOLE_URL`, plus the callback route. That is the one address
- * an operator registers.
+ * `NEXT_PUBLIC_CONSOLE_URL` (the production console when unset, as every
+ * other reader of that variable treats it), plus the callback route. That is
+ * the one address an operator registers.
  *
  * Local development is the one exception, and never in production: a request
  * from `http://localhost` or `127.0.0.1` is sent back to itself, so a developer
@@ -39,10 +40,20 @@ export const OUTREACH_OAUTH_CALLBACK_PATH = `/api/${OUTREACH_API_ROUTES.mailboxe
 
 const stripTrailingSlash = (value: string) => value.replace(/\/+$/, '')
 
-/** The canonical console origin, or `null` when it is unset or not http(s). */
+/**
+ * The console's own address when a deployment names none — the same fallback
+ * `apps/console/app/api/_lib/auth-action-url.ts` and the layout use, so an
+ * unset variable means the production console rather than "not configured".
+ */
+export const DEFAULT_CONSOLE_ORIGIN = 'https://app.aglyn.com'
+
+/**
+ * The canonical console origin: `NEXT_PUBLIC_CONSOLE_URL`, the production
+ * console when that is unset, or `null` when it is set to something that is
+ * not an http(s) address — a value nobody could have registered on the client.
+ */
 export function canonicalConsoleOrigin(): string | null {
-  const raw = stripTrailingSlash(String(process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim())
-  if (!raw) return null
+  const raw = stripTrailingSlash(String(process.env.NEXT_PUBLIC_CONSOLE_URL ?? '').trim()) || DEFAULT_CONSOLE_ORIGIN
   try {
     const url = new URL(raw)
     return url.protocol === 'https:' || url.protocol === 'http:' ? url.origin : null
@@ -53,7 +64,7 @@ export function canonicalConsoleOrigin(): string | null {
 
 /**
  * The redirect address for a connect started by `requestUrl`, or `null` when
- * the deployment names no console origin to register.
+ * the deployment's console origin is set to something unusable.
  */
 export function outreachOAuthRedirectUri(requestUrl: string): string | null {
   if (process.env['NODE_ENV'] !== 'production') {

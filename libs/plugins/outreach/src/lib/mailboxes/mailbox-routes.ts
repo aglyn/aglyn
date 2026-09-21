@@ -39,6 +39,7 @@ import {
   type OutreachApiRefusalReason,
   type OutreachConnectReturn,
   type OutreachMailboxAvailability,
+  type OutreachMailboxAvailabilityGate,
   type OutreachMailboxDisconnectResponse,
 } from './mailbox-api'
 import {
@@ -237,9 +238,18 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     if (request.method !== 'GET') return methodNotAllowed('GET')
     const gate = await outreachMemberGate(request, new URL(request.url).searchParams.get('orgId'), deps.gate)
     if (gate instanceof Response) return gate
-    const configured =
-      deps.readConfig().configured && deps.stateSigningConfigured() && Boolean(deps.redirectUri(request.url))
-    return ok({ configured, canManageAll: gate.isOrgAdmin } satisfies OutreachMailboxAvailability)
+    // Every gate is named, not the first: an operator fixing a deployment
+    // should see the whole list once rather than one variable per redeploy.
+    const missing: OutreachMailboxAvailabilityGate[] = []
+    const config = deps.readConfig()
+    if (config.configured === false) missing.push({ gate: 'google', missing: config.missing })
+    if (!deps.stateSigningConfigured()) missing.push({ gate: 'state' })
+    if (!deps.redirectUri(request.url)) missing.push({ gate: 'redirect' })
+    return ok({
+      configured: missing.length === 0,
+      canManageAll: gate.isOrgAdmin,
+      ...(missing.length ? { missing } : {}),
+    } satisfies OutreachMailboxAvailability)
   }
 
   const connect: PluginWebApiHandler = async (request) => {

@@ -105,11 +105,23 @@ describe('outreachOAuthRedirectUri (AGL-2978)', () => {
     )
   })
 
-  it('is null when the deployment names no usable console origin', () => {
+  it('falls back to the production console when the deployment names none (AGL-3228)', () => {
     setNodeEnv('production')
     delete process.env.NEXT_PUBLIC_CONSOLE_URL
-    expect(outreachOAuthRedirectUri('https://console.example.com/api/x')).toBeNull()
+    expect(outreachOAuthRedirectUri('https://console.example.com/api/x')).toBe(
+      `https://app.aglyn.com${OUTREACH_OAUTH_CALLBACK_PATH}`,
+    )
+    process.env.NEXT_PUBLIC_CONSOLE_URL = '   '
+    expect(outreachOAuthRedirectUri('https://console.example.com/api/x')).toBe(
+      `https://app.aglyn.com${OUTREACH_OAUTH_CALLBACK_PATH}`,
+    )
+  })
+
+  it('is null when the deployment names an unusable console origin', () => {
+    setNodeEnv('production')
     process.env.NEXT_PUBLIC_CONSOLE_URL = 'javascript:alert(1)'
+    expect(outreachOAuthRedirectUri('https://console.example.com/api/x')).toBeNull()
+    process.env.NEXT_PUBLIC_CONSOLE_URL = 'not a url'
     expect(outreachOAuthRedirectUri('https://console.example.com/api/x')).toBeNull()
   })
 })

@@ -420,9 +420,11 @@ describe('the member gate every authenticated mailbox route climbs (AGL-2978)', 
       canManageAll: true,
     })
     configured = false
+    // Not configured names the gate, with the variables the Google gate wants.
     expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`))).body).toEqual({
       configured: false,
       canManageAll: false,
+      missing: [{ gate: 'google', missing: ['OUTREACH_TOKEN_KEY'] }],
     })
     const refused = await run('connect', post('outreach/mailboxes/connect', { orgId: ORG }))
     expect(refused.status).toBe(503)
