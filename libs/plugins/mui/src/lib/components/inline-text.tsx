@@ -179,7 +179,7 @@ export const schema: Aglyn.ComponentSchema<InlineTextProps> = {
   displayName: 'Inline Text',
   description:
     'One run of text inside a sentence — put several side by side in a ' +
-    'paragraph to emphasise a phrase without breaking the line.',
+    'paragraph to emphasize a phrase without breaking the line.',
   category: Aglyn.ComponentCategory.TEXT,
   icon: { path: mdiFormatColorText.path, sx: { color: '#057822' } },
   flags: {
@@ -277,7 +277,7 @@ export const presets: Aglyn.PresetSchema[] = [
   {
     $id: generatePresetId(ID, 'emphasis'),
     type: Aglyn.NodeType.PRESET,
-    displayName: 'Emphasised Text',
+    displayName: 'Emphasized Text',
     pluginId: BUNDLE_ID,
     description: 'A phrase picked out of a muted sentence',
     category: Aglyn.ComponentCategory.TEXT,
@@ -290,7 +290,7 @@ export const presets: Aglyn.PresetSchema[] = [
         element: 'strong',
         tone: 'primary',
         weight: 'bold',
-        children: 'the emphasised phrase',
+        children: 'the emphasized phrase',
       },
     },
   },
@@ -302,7 +302,7 @@ export const presets: Aglyn.PresetSchema[] = [
     type: Aglyn.NodeType.PRESET,
     displayName: 'Two-tone Statement',
     pluginId: BUNDLE_ID,
-    description: 'A muted sentence with one phrase emphasised',
+    description: 'A muted sentence with one phrase emphasized',
     category: Aglyn.ComponentCategory.TEXT,
     icon: { path: mdiFormatColorHighlight.path, sx: { color: '#057822' } },
     data: {

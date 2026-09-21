@@ -3277,7 +3277,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                         } could not be recorded because the product was ` +
                         'deleted during checkout, so this order is short of ' +
                         'what the shopper was charged. Refund the difference ' +
-                        'or fulfil it by hand.',
+                        'or fulfill it by hand.',
                     },
                   ]
                 : []),
@@ -3340,7 +3340,7 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               `${unresolvedLines.length} ${
                 unresolvedLines.length === 1 ? 'line' : 'lines'
               } could not be recorded — the product was deleted during ` +
-              'checkout. Refund the difference or fulfil it by hand.',
+              'checkout. Refund the difference or fulfill it by hand.',
             link: `/${hostId}/products`,
           })
         }

@@ -2826,7 +2826,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     category: 'Text',
     displayName: 'Inline Text',
     summary:
-      'One run of text inside a sentence — put several side by side in a paragraph to emphasise a phrase without bre…',
+      'One run of text inside a sentence — put several side by side in a paragraph to emphasize a phrase without bre…',
     acceptsChildren: false,
     propsSchema: {
       type: 'object',
@@ -2878,7 +2878,7 @@ export const AI_PALETTE: Record<string, AiPaletteEntry> = {
     textLimits: {
       children: 2000,
     },
-    presets: ['Inline Text', 'Emphasised Text'],
+    presets: ['Inline Text', 'Emphasized Text'],
   },
   muiLinkBox: {
     pluginId: 'mui',
