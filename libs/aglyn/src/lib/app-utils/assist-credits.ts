@@ -16,12 +16,8 @@
  */
 
 import {
-  AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K,
-  hasAiAddon,
   isUncappedPlanComp,
-  resolveEffectivePlan,
   resolveOrgEntitlements,
-  resolvePlanComp,
   resolvePlanPricing,
 } from './plan-entitlements'
 import type { AglynOrgBilling } from '../foundation/definitions/org-billing.types'
@@ -175,24 +171,28 @@ export function assistCreditsFromUsd(usd: number): number {
  *
  * ## `null` is not zero, and the difference is the whole safety property
  *
- * Starter carries `assistCreditsPerMonth: 0` because it carries no
- * `aiAssist` and is not sold generative building. It still reaches the
- * console assistant's docs-grounded rung, which is bounded by the free daily
- * message cap and by the operator's spend backstop. Resolving its band as a
- * budget of `$0` would refuse that rung outright — a tier's whole assistant
- * turned off by a pricing field that was never about it.
+ * A band of 0 resolves to `null` — "this org sells no band" — and never to
+ * a budget of `$0`. An org with no band still reaches the console
+ * assistant's docs-grounded rung, which is bounded by the free daily message
+ * cap and by the operator's spend backstop. Resolving zero as a budget would
+ * refuse that rung outright: a whole assistant turned off by a pricing field
+ * that was never about it.
  *
- * Free is different since AGL-2925: it carries a REAL band of
- * `FREE_AI_TASTE_CREDITS_PER_MONTH` credits with no rate beside it, so it
+ * Since AGL-3203 no PLAN ROW bands at zero. Free carries the AGL-2925 taste
+ * of `FREE_AI_TASTE_CREDITS_PER_MONTH` with no rate beside it, so it
  * resolves to a budget here and `assistBandRefuses` makes that budget a
- * wall. Its docs-grounded chat draws on the same band, which is fine — the
- * band is sized so that a month of it costs under a third of a dollar.
+ * wall; Starter carries 750 WITH a rate, so its budget is a line it meters
+ * past rather than a wall. Both draw their docs-grounded chat on the same
+ * band, which is fine — each is sized so a month of it costs well under a
+ * dollar.
  *
- * Starter WITH the Aglyn AI add-on (AGL-2896) is a different org: the
- * resolver has added `AI_ADDON_CREDITS_PER_MONTH.starter` to its band, so it
- * answers a real budget here and is metered like any Pro-and-up plan. The
- * add-on widens the one pool rather than opening a second, which is why this
- * function needs no knowledge of it.
+ * So the zero case is now reached only by a per-org override that writes
+ * one, and the reading above is what keeps that org's assistant running.
+ *
+ * The Aglyn AI add-on (AGL-2896) needs no knowledge here either way: the
+ * resolver has already added `AI_ADDON_CREDITS_PER_MONTH[plan]` to the
+ * band, because the add-on widens the one pool rather than opening a
+ * second.
  *
  * The same reading is what makes the guard survive a stubbed entitlements
  * module. A test double that answers 0 for every quota produces `null` here,
@@ -258,40 +258,30 @@ export function assistCreditOverage(
  * it, so the gate, the invoice and the refusal sentence cannot quote three
  * different rates for one org.
  *
- * The plan's `extraAssistCreditsUsdPer1k` is the answer wherever it is set.
- * Starter's is null because Starter sells no band — but Starter with the
- * Aglyn AI add-on HAS a band, and a finite band with no rate beside it is
- * usage past a bound that is silently free. That org sells at
- * `AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K`, read here rather than written
- * onto `PLAN_PRICING`, where it would advertise a rate on a band the plan
- * does not carry without the add-on. The add-on is read through
- * `hasAiAddon`, so a dead subscription takes the rate away with the band.
+ * The plan's `extraAssistCreditsUsdPer1k` IS the answer — the whole answer,
+ * since AGL-3203. Starter used to be the one exception: it banded at 0, so
+ * the rate could not sit on its plan row without advertising a fee on a
+ * quantity the plan never sold, and the add-on's band was priced from a
+ * constant read here instead. Starter now includes 750 credits
+ * unconditionally and carries $3.00 on its own row, so the exception and its
+ * constant are gone and there is exactly one place the rate is written.
  *
- * Free and Enterprise stay null with or without the add-on: Free sells no
+ * Free and Enterprise are null with or without the add-on: Free sells no
  * add-on and its taste band is a wall by decision (AGL-2925), and
  * Enterprise's usage is in the contract.
  *
- * A STAFF COMP is null on every plan and with every add-on (AGL-3034). The
- * rate is read through `resolvePlanPricing`, which sells nothing on a comp,
- * and the Starter add-on exception is refused for one explicitly — on a
- * workspace with no subscription a staff-set add-on quantity still counts, so
- * without the check a Starter comp would be sold overage past a band that no
- * invoice will ever carry. `null` here is what makes a comp's band a wall at
- * the gate and prices its overage to zero at the charge: the AI overage path
+ * A STAFF COMP is null on every plan and with every add-on (AGL-3034),
+ * because `resolvePlanPricing` — never `PLAN_PRICING` indexed directly —
+ * sells nothing on a comp. That is what makes a comp's band a wall at the
+ * gate and prices its overage to zero at the charge: the AI overage path
  * (AGL-3011) claims only what `assistMonthOverage` prices, so a comp never
- * becomes a Stripe invoice.
+ * becomes a Stripe invoice. The function is a single read for that reason;
+ * a second source for the rate is how a comp gets quoted one.
  */
 export function resolveAssistOverageRateUsdPer1k(
   org: Partial<AglynOrgBilling> | null | undefined,
 ): number | null {
-  const plan = resolveEffectivePlan(org)
-  const listed = resolvePlanPricing(org).extraAssistCreditsUsdPer1k
-  if (listed !== null) return listed
-  if (resolvePlanComp(org)) return null
-  if (plan === 'starter' && hasAiAddon(org)) {
-    return AI_ADDON_STARTER_ASSIST_RATE_USD_PER_1K
-  }
-  return null
+  return resolvePlanPricing(org).extraAssistCreditsUsdPer1k
 }
 
 export interface AssistCreditOveragePrice {
@@ -440,12 +430,19 @@ export function resolveAssistHardCap(
  *   `resolveAssistOverageRateUsdPer1k` is `null` has no rate to bill, so
  *   credits past its band would be provider spend with no invoice line — the
  *   silent free overage `plan-entitlements.spec.ts` forbids. Enterprise is
- *   the case: its band is contractual and the switch changes nothing there.
+ *   one case, its band being contractual; FREE is the other, its taste band
+ *   a wall by the AGL-2925 decision so that nothing about a Free workspace
+ *   can produce a charge.
  *
  * Everything else sells past the band by default, which is the 2026-09-07
- * decision this function encodes. A plan with no band at all (Free, Starter)
- * answers the same as Enterprise, harmlessly: `resolveAssistBudgetUsd` is
- * `null` for them and the reservation never measures against a band.
+ * decision this function encodes — and since AGL-3203 that includes Starter,
+ * which carries 750 credits and a $3.00 rate like every paid tier above it.
+ *
+ * An org with NO band at all answers the same as Enterprise, harmlessly:
+ * `resolveAssistBudgetUsd` is `null` for it and the reservation never
+ * measures against a band. No plan ROW is in that state any more — Free and
+ * Starter both were, at different times — so it is reached by a per-org
+ * override that writes a zero.
  *
  * An UNCAPPED staff comp (AGL-3049) is neither: it has no band to be a wall,
  * and nothing is sold past a band it does not have. It answers false, ahead

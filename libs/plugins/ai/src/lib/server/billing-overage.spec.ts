@@ -299,12 +299,20 @@ describe('get — what the card reads', () => {
     ).toBe(false)
   })
 
-  it('says a plan with no band, or no rate, sells no overage — so the card offers no switch', async () => {
-    // Starter: no band. Free: the 300-credit taste, and no rate (AGL-2925).
-    mockDocs.set('orgs/org-1', org('starter'))
+  it('says an org with no band, or no rate, sells no overage — so the card offers no switch', async () => {
+    // No band: a per-org `assistCreditsPerMonth: 0` override, which since
+    // AGL-3203 is the only way an org gets there — every plan row now bands
+    // above zero, Starter included. Its plan still QUOTES $3.00, and that
+    // rate alone sells nothing: `sellsOverage` needs both halves, because a
+    // rate with no band underneath it has no quantity to charge for.
+    // Free: the 300-credit taste, and no rate (AGL-2925) — the mirror case.
+    mockDocs.set('orgs/org-1', {
+      ...org('starter'),
+      entitlements: { assistCreditsPerMonth: 0 },
+    })
     expect(
       await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
-    ).toMatchObject({ bandCredits: null, overageRateUsdPer1k: null, sellsOverage: false })
+    ).toMatchObject({ bandCredits: null, overageRateUsdPer1k: 3, sellsOverage: false })
     mockDocs.set('orgs/org-1', org('free'))
     expect(
       await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
@@ -318,15 +326,27 @@ describe('get — what the card reads', () => {
     ).toBeGreaterThan(0)
   })
 
-  it('Starter WITH the add-on sells past its band, at the add-on rate the invoice bills (AGL-3014)', async () => {
-    // Starter's band and rate arrive with the add-on, not from `PLAN_PRICING`,
-    // where a listed rate would advertise a band the plan does not carry
-    // without it. Read from the table this card said "never charged" while
-    // `assistMonthOverage` billed the same workspace $3 per 1,000.
+  it('Starter sells past its band at the same rate with and without the add-on (AGL-3014, AGL-3203)', async () => {
+    // The AGL-3014 bug was a SPLIT: Starter banded at zero, so its rate could
+    // not sit on `PLAN_PRICING` and the add-on's band was priced from a
+    // separate constant instead. This card read the table and said "never
+    // charged" while `assistMonthOverage` billed the same workspace $3 per
+    // 1,000.
+    //
+    // AGL-3203 closed the split at the source — Starter includes 750 credits
+    // and carries $3.00 on its own row, so there is one place the rate is
+    // written and the divergence cannot recur. What this test now pins is
+    // exactly that: the rate is the SAME figure either way, and only the
+    // band moves when the add-on is bought.
     mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
     expect(
       await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
-    ).toMatchObject({ bandCredits: 4_000, overageRateUsdPer1k: 3, sellsOverage: true })
+    ).toMatchObject({ bandCredits: 4_750, overageRateUsdPer1k: 3, sellsOverage: true })
+    // THE CONTROL: bare Starter, which used to be the divergent half.
+    mockDocs.set('orgs/org-1', org('starter'))
+    expect(
+      await (await POST(post({ orgId: 'org-1', action: 'get' }))).json(),
+    ).toMatchObject({ bandCredits: 750, overageRateUsdPer1k: 3, sellsOverage: true })
   })
 
   it('a dead subscription takes the add-on rate away with the band (AGL-3014)', async () => {
@@ -412,7 +432,13 @@ describe('setHardCap — the write', () => {
     expect(walled).toMatchObject({ code: 'not_sold' })
     expect(mockDocs.get('orgs/org-1')).toEqual(org('enterprise'))
 
-    mockDocs.set('orgs/org-1', org('starter'))
+    // No band at all. Since AGL-3203 every plan row bands above zero, so an
+    // org only reaches this branch through a per-org `assistCreditsPerMonth`
+    // override — which resolves to a null budget exactly as bare Starter did.
+    mockDocs.set('orgs/org-1', {
+      ...org('starter'),
+      entitlements: { assistCreditsPerMonth: 0 },
+    })
     const starter = await POST(
       post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }),
     )
@@ -433,8 +459,10 @@ describe('setHardCap — the write', () => {
 
   it('Starter WITH the add-on may throw the switch — it has overage to stop (AGL-3014)', async () => {
     // The refusal is `!sellsOverage`, so reading the rate off `PLAN_PRICING`
-    // 409'd the one plan whose rate lives on the add-on: the workspace was
-    // billed overage and refused the control that stops it.
+    // used to 409 the one plan whose rate lived on the add-on: the workspace
+    // was billed overage and refused the control that stops it. Starter now
+    // carries $3.00 on its own row (AGL-3203), so both halves read one
+    // figure and the switch is offered either way.
     mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
     const response = await POST(
       post({ orgId: 'org-1', action: 'setHardCap', hardCap: true }),
@@ -584,12 +612,13 @@ describe('setCap — the ceiling on overage (AGL-2898)', () => {
     expect(mockAudit).toEqual([])
   })
 
-  it('Starter WITH the add-on may set a ceiling — it has overage to bound (AGL-3014)', async () => {
+  it('Starter may set a ceiling with or without the add-on — both have overage to bound (AGL-3014, AGL-3203)', async () => {
     // The ceiling's refusal is the switch's, `!sellsOverage`, and it misread
-    // the same way: Starter lists no rate on `PLAN_PRICING`, so a workspace
-    // billed $3 per 1,000 past the add-on's band was told there was no
-    // overage to cap. FORCED RED by reading `overageRateUsdPer1k` off the
-    // table again: this answered 409 `not_sold` and wrote nothing.
+    // the same way: Starter used to list no rate on `PLAN_PRICING`, so a
+    // workspace billed $3 per 1,000 past the add-on's band was told there
+    // was no overage to cap. Since AGL-3203 the rate is on Starter's own
+    // row, so the two halves cannot disagree — which is what the add-on and
+    // bare readings below pin together.
     mockDocs.set('orgs/org-1', { ...org('starter'), seatAddons: { aiAddon: 1 } })
     const response = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
     expect(response.status).toBe(200)
@@ -601,14 +630,35 @@ describe('setCap — the ceiling on overage (AGL-2898)', () => {
     const read = await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()
     expect(read).toMatchObject({ capUsd: 25, overageRateUsdPer1k: 3, sellsOverage: true })
 
-    // The control: the same request on Starter without the add-on has no
-    // band and nothing sold past it, so it is still refused.
+    // Starter WITHOUT the add-on takes the same ceiling, at the same rate,
+    // against its own 750-credit band (AGL-3203). The add-on widens the
+    // band; it no longer decides whether there is a band at all.
     mockAudit = []
     mockDocs.set('orgs/org-1', org('starter'))
     const bare = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
-    expect(bare.status).toBe(409)
-    await expect(bare.json()).resolves.toMatchObject({ code: 'not_sold' })
-    expect(mockDocs.get('orgs/org-1')).toEqual(org('starter'))
+    expect(bare.status).toBe(200)
+    await expect(bare.json()).resolves.toEqual({ ok: true, capUsd: 25 })
+    const bareRead = await (await POST(post({ orgId: 'org-1', action: 'get' }))).json()
+    expect(bareRead).toMatchObject({
+      capUsd: 25,
+      overageRateUsdPer1k: 3,
+      sellsOverage: true,
+    })
+
+    // THE CONTROL: an org with no band at all is still refused, and writes
+    // nothing. Every plan row bands above zero since AGL-3203, so the case
+    // is reached by a per-org `assistCreditsPerMonth: 0` override — which
+    // resolves to a null budget exactly as bare Starter used to.
+    mockAudit = []
+    const bandless = {
+      ...org('starter'),
+      entitlements: { assistCreditsPerMonth: 0 },
+    }
+    mockDocs.set('orgs/org-1', bandless)
+    const refused = await POST(post({ orgId: 'org-1', action: 'setCap', capUsd: 25 }))
+    expect(refused.status).toBe(409)
+    await expect(refused.json()).resolves.toMatchObject({ code: 'not_sold' })
+    expect(mockDocs.get('orgs/org-1')).toEqual(bandless)
     expect(mockAudit).toEqual([])
   })
 

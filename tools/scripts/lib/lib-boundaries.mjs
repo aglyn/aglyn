@@ -494,6 +494,54 @@ export function packagesImported(libRoot, ownName, builtins = NODE_BUILTINS) {
   return [...found].sort()
 }
 
+/**
+ * The workspace subpaths a lib's SHIPPED source imports: `[{ specifier, name,
+ * subpath }]` for every `@scope/name/sub/path` naming one of `workspaceNames`.
+ */
+export function workspaceSubpathsImported(libRoot, workspaceNames) {
+  const found = new Map()
+  for (const file of walk(join(libRoot, 'src'), (name) => SOURCE_FILE.test(name) && !SPEC_FILE.test(name) && !STORY_FILE.test(name))) {
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      if (COMMENT_LINE.test(line)) continue
+      const specifiers = []
+      const statement = STATEMENT_IMPORT.exec(line)
+      if (statement) specifiers.push(statement[1])
+      for (const call of line.matchAll(CALL_IMPORT)) specifiers.push(call[1])
+      for (const specifier of specifiers) {
+        const name = packageOfSpecifier(specifier)
+        if (!name || !workspaceNames.has(name) || specifier === name) continue
+        found.set(specifier, { specifier, name, subpath: specifier.slice(name.length + 1) })
+      }
+    }
+  }
+  return [...found.values()]
+}
+
+/**
+ * Subpaths a consumer of the published package could not resolve (AGL-3201).
+ *
+ * Inside this repo `@aglyn/x/model` resolves through a tsconfig alias to a
+ * FOLDER and its index. A published package is resolved by its `exports` map,
+ * where `./*` means `./src/lib/*.js` — a file — so the same import finds
+ * `model.js`, which does not exist, and the package fails at load in somebody
+ * else's build while every test here passes. A subpath is fine when the target
+ * package names it in `exports` or it is a module file under `src/lib`.
+ *
+ * `target(name)` answers `{ exports, hasModule(subpath) }` for a workspace
+ * package, or null.
+ */
+export function unresolvableSubpaths(imports, target) {
+  return imports
+    .filter(({ name, subpath }) => {
+      const found = target(name)
+      if (!found) return false
+      if (found.exports?.[`./${subpath}`]) return false
+      return !found.hasModule(subpath)
+    })
+    .map(({ specifier }) => specifier)
+    .sort()
+}
+
 /** `unist` → `@types/unist`; `@scope/name` → `@types/scope__name`. */
 export function typesPackageOf(name) {
   return `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`

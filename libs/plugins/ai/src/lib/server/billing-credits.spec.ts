@@ -123,11 +123,18 @@ describe('the assist credit odometer', () => {
   })
 
   it('reports NO band for a plan that sells none, rather than 0 of 0', async () => {
-    // Starter carries `assistCreditsPerMonth: 0`, which means "this plan
-    // sells no assist band" — not "a band of zero". Converting the operator
-    // backstop into credits here would name a band the workspace never
-    // bought. (Free carried 0 too until the taste, AGL-2925.)
-    mockDocs.set('orgs/org-1', { plan: 'starter' })
+    // `assistCreditsPerMonth: 0` means "this org sells no assist band" — not
+    // "a band of zero". Converting the operator backstop into credits here
+    // would name a band the workspace never bought.
+    //
+    // Since AGL-3203 no PLAN ROW bands at zero — Starter includes 750 — so
+    // the zero arrives as a per-org entitlements override, which is the only
+    // way an org reaches this reading now. (Free carried 0 too until the
+    // taste, AGL-2925.)
+    mockDocs.set('orgs/org-1', {
+      plan: 'starter',
+      entitlements: { assistCreditsPerMonth: 0 },
+    })
     mockDocs.set(`orgs/org-1/assistUsage/${MONTH}`, { estCostUsd: 4.5 })
     const payload = await (await GET(get())).json()
     expect(payload.credits).toBeNull()

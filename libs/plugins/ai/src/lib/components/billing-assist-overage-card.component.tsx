@@ -416,9 +416,10 @@ export function BillingAssistOverageControls({
       </Stack>
 
       {nothingToStop && band === null ? (
-        // Free: no band, and nothing is ever billed for AI, so neither
-        // stop applies — the switch has no band to stop at and the ceiling
-        // has no overage to bound.
+        // No band at all, and nothing ever billed for AI, so neither stop
+        // applies — the switch has no band to stop at and the ceiling has no
+        // overage to bound. Since AGL-3203 every plan row carries a band, so
+        // this is an org whose band was overridden to zero.
         <Alert severity="info">
           Your plan includes no AI credits and is never charged for any, so
           there is no band to stop at, no overage to put a dollar ceiling on,

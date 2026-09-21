@@ -117,6 +117,7 @@ import {
   collectionKey,
   formatStampFull,
   formatStampShort,
+  entryPublishStamp,
   slugify,
   useContentScope,
 } from './content-scope.context'
@@ -1162,27 +1163,33 @@ export function CollectionEntriesPage() {
         field: 'publishedAt',
         headerName: 'Published',
         width: 130,
+        /*
+          `type: 'date'` so the grid compares the instants rather than their
+          string forms, and a `valueGetter` so what it compares is the stamp
+          the cell below actually shows — see {@link entryPublishStamp}
+          (AGL-3206).
+        */
+        type: 'date',
+        valueGetter: (_value: any, row: any) =>
+          entryPublishStamp(row)?.toDate?.() ?? null,
         sortingOrder: ['desc', 'asc'],
         filterable: false,
-        renderCell: ({ row }: { row: any }) => (
-          <Box
-            component="span"
-            title={
-              formatStampFull(row.publishedAt) ??
-              formatStampFull(row.publishAt)
-            }
-          >
-            {row.publishedAt ? (
-              formatStampShort(row.publishedAt)
-            ) : row.status === 'scheduled' && row.publishAt ? (
-              <Typography variant="body2" color="info.main" component="span">
-                {formatStampShort(row.publishAt)}
-              </Typography>
-            ) : (
-              '—'
-            )}
-          </Box>
-        ),
+        renderCell: ({ row }: { row: any }) => {
+          const stamp = entryPublishStamp(row)
+          return (
+            <Box component="span" title={formatStampFull(stamp)}>
+              {!stamp ? (
+                '—'
+              ) : row.publishedAt ? (
+                formatStampShort(stamp)
+              ) : (
+                <Typography variant="body2" color="info.main" component="span">
+                  {formatStampShort(stamp)}
+                </Typography>
+              )}
+            </Box>
+          )
+        },
       },
       {
         field: 'categoryId',

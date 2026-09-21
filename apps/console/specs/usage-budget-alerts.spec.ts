@@ -958,6 +958,12 @@ describe('the Assist margin guard is staff-facing (AGL-1528)', () => {
  * 1x. A workspace WITH a band is measured against that band or an operator's
  * explicit figure instead, and is not told about a $40 stop it never gets.
  *
+ * ⚠️ Starter was the bandless fixture until AGL-3203 gave it 750 credits. No
+ * plan row bands at zero now, so these cases carry an explicit
+ * `entitlements: { assistCreditsPerMonth: 0 }` override — the org shape the
+ * $40 ceiling actually binds. A bare Starter is now a banded workspace and
+ * belongs with Pro in the negative case at the end of this block.
+ *
  * The ceiling function is NOT faked in this suite. It is required through the
  * real implementation module in the `@aglyn/tenant-data-admin` mock above, so
  * the figure announced here and the figure enforced in the reservation cannot
@@ -968,7 +974,14 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     // No environment variable: the ceiling ships armed at $40, so a fresh
     // deployment announces the refusal without anyone opting in.
     expect(process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD).toBeUndefined()
-    mockOrgs = [seededOrg({ plan: 'starter', rollup: null, assistEstCostUsd: 41 })]
+    mockOrgs = [
+      seededOrg({
+        plan: 'starter',
+        entitlements: { assistCreditsPerMonth: 0 },
+        rollup: null,
+        assistEstCostUsd: 41,
+      }),
+    ]
     await run()
     const ceiling = mockStaffNotifications.filter((entry) =>
       entry.title.includes('REFUSING'),
@@ -988,7 +1001,14 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     // Without this, the test above is satisfied by a build that announces a
     // refusal for every org with any Assist cost at all. $39 is over the $25
     // review threshold — so the margin alert DOES fire — and under $40.
-    mockOrgs = [seededOrg({ plan: 'starter', rollup: null, assistEstCostUsd: 39 })]
+    mockOrgs = [
+      seededOrg({
+        plan: 'starter',
+        entitlements: { assistCreditsPerMonth: 0 },
+        rollup: null,
+        assistEstCostUsd: 39,
+      }),
+    ]
     await run()
     expect(
       mockStaffNotifications.filter((entry) => entry.title.includes('REFUSING')),
@@ -1003,6 +1023,7 @@ describe('the REFUSAL is announced to staff in its own words (AGL-2264)', () => 
     mockOrgs = [
       seededOrg({
         plan: 'starter',
+        entitlements: { assistCreditsPerMonth: 0 },
         rollup: null,
         assistEstCostUsd: 41,
         usageAlerts: { assistCogs: { month: MONTH, threshold: 1 } },
@@ -1138,26 +1159,49 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
     expect(mail[0].text).toContain(alert.body)
   })
 
-  it('Starter WITH the add-on is quoted the rate it is billed, not $0.00 (AGL-3014)', async () => {
-    // Starter lists no `extraAssistCreditsUsdPer1k`; the add-on's $3.00 comes
-    // from `resolveAssistOverageRateUsdPer1k`. Read off the table, this alert
-    // told a workspace its extra credits "are now billed" and quoted
-    // "$0.00 per 1,000" in the same breath, while the invoice charged $3.00.
+  it('Starter is quoted the rate it is billed, not $0.00 (AGL-3014, AGL-3203)', async () => {
+    // AGL-3014: Starter listed no `extraAssistCreditsUsdPer1k` and the
+    // add-on's $3.00 came from `resolveAssistOverageRateUsdPer1k`. Read off
+    // the table, this alert told a workspace its extra credits "are now
+    // billed" and quoted "$0.00 per 1,000" in the same breath, while the
+    // invoice charged $3.00. AGL-3203 put the rate on the plan row, so the
+    // two readings cannot diverge again — asserted here BOTH ways.
+    //
+    // With the add-on the band is 750 + 4,000 = 4,750.
     mockOrgs = [
       seededOrg({
         plan: 'starter',
         seatAddons: { aiAddon: 1 },
         rollup: null,
-        assistEstCostUsd: credits(4_500),
+        assistEstCostUsd: credits(5_250),
       }),
     ]
     await run()
     expect(assistAlerts()).toHaveLength(1)
     const [alert] = assistAlerts()
     expect(alert.title).toContain('extra credits are now billed')
-    expect(alert.body).toContain('4,500 of 4,000 credits used')
+    expect(alert.body).toContain('5,250 of 4,750 credits used')
     expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
     expect(alert.body).not.toContain('$0.00 per 1,000')
+  })
+
+  it('…and WITHOUT the add-on too, against the plan\u2019s own 750 (AGL-3203)', async () => {
+    // The shape that did not exist before: a bare Starter with overage to
+    // bill. Same sentence, same rate, smaller band — which is the proof the
+    // rate is the plan's and not the add-on's.
+    mockOrgs = [
+      seededOrg({
+        plan: 'starter',
+        rollup: null,
+        assistEstCostUsd: credits(1_000),
+      }),
+    ]
+    await run()
+    expect(assistAlerts()).toHaveLength(1)
+    const [alert] = assistAlerts()
+    expect(alert.title).toContain('extra credits are now billed')
+    expect(alert.body).toContain('1,000 of 750 credits used')
+    expect(alert.body).toContain('metered on your monthly invoice at $3.00 per 1,000')
   })
 
   it('at the band with the org’s own switch on: AI stops, and the switch is named', async () => {
@@ -1210,12 +1254,21 @@ describe('the AI credits band alerts the customer (AGL-2898)', () => {
     }
   })
 
-  it('has NO band to alert on for a plan that sells none', async () => {
-    // Starter with no override: `resolveAssistCreditBudget` is null, the
-    // limit is 0 and the check is skipped like every other zero-quota
-    // dimension. (Free carries the taste since AGL-2925 and alerts on it,
-    // with the wall copy the Free-band case above exercises.)
-    mockOrgs = [seededOrg({ plan: 'starter', rollup: null, assistEstCostUsd: credits(900) })]
+  it('has NO band to alert on for an org that sells none', async () => {
+    // `resolveAssistCreditBudget` is null, the limit is 0 and the check is
+    // skipped like every other zero-quota dimension. Starter supplied this
+    // case until AGL-3203 gave it 750 credits; no plan row bands at zero
+    // now, so the org is made by an override. (Free carries the taste since
+    // AGL-2925 and alerts on it, with the wall copy the Free-band case above
+    // exercises.)
+    mockOrgs = [
+      seededOrg({
+        plan: 'starter',
+        entitlements: { assistCreditsPerMonth: 0 },
+        rollup: null,
+        assistEstCostUsd: credits(900),
+      }),
+    ]
     await run()
     expect(assistAlerts()).toHaveLength(0)
     expect(assistGuard()).toBeUndefined()

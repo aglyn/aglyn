@@ -17,6 +17,7 @@
 
 import { HOST_ERROR_SCREEN_SLOTS, type ScreenUid } from '../foundation'
 import { collectionListUrl } from './collection-entries'
+import { ENTRY_PREVIEW_ROUTE_SEGMENT } from './entry-preview-link'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 import {
   formatCollectionLinkValue,
@@ -89,6 +90,16 @@ export function normalizeScreenSlug(
  *    app owns. `/search` matches `app/[host]/[scheme]/search`; the other three are the
  *    middleware matcher's exclusions, so no host rewrite happens at all and
  *    the path is parsed as `[host]` with an empty slug.
+ *  - `aglyn-preview` — the same mechanism as `search`, one route over
+ *    (AGL-3205). The live-site preview of an unpublished collection entry is
+ *    a rewrite to `app/[host]/[scheme]/aglyn-preview/[...slug]`, because it
+ *    must be a DIFFERENT Next route from the ISR-cached catch-all; a static
+ *    folder wins over the optional catch-all beside it, so `/aglyn-preview/x`
+ *    would reach the preview page and 404 rather than render a screen. The
+ *    bare `/aglyn-preview` would in fact still serve — the preview route's
+ *    catch-all is required, not optional — and it is reserved anyway for the
+ *    reason given below about child paths: a child only exists when its
+ *    parent is published, and this rule refuses the parent.
  *
  * NOT reserved, and deliberately so, because measuring found them fine:
  * `401`, `403`, `503` (`/401` returns 200 through the catch-all — two of the
@@ -104,6 +115,7 @@ export const RESERVED_SCREEN_ROUTE_SEGMENTS: readonly string[] = [
   '404',
   '500',
   'search',
+  ENTRY_PREVIEW_ROUTE_SEGMENT,
   'api',
   '_next',
   '_static',

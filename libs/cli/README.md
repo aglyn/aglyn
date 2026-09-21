@@ -63,6 +63,6 @@ environment so the key lives wherever you already keep secrets.
 | `-h`, `--help` | usage |
 | `-V`, `--version` | version |
 
-## Licence
+## License
 
 Apache-2.0

@@ -1,12 +1,18 @@
 # @aglyn/shared-util-email
 
+> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+
+## Install
+
+    npm install @aglyn/shared-util-email@beta
+
 One place that sends outbound **application** email, via
 [Resend](https://resend.com).
 
 Before this library the same ~30 lines of `fetch('https://api.resend.com/emails')`
 were copy-pasted across 10 files, each reading the env vars itself and each
 handling failure a little differently. Consolidating them means the provider,
-the sender identity, and the failure semantics change in one place (AGL-709).
+the sender identity, and the failure semantics change in one place.
 
 ## What is and is not in scope
 
@@ -52,7 +58,7 @@ if (!result.sent) {
 `sendEmail()` **never throws**. Outbound mail is best-effort everywhere in
 this codebase — a checkout must not fail because a receipt bounced — so every
 outcome comes back as a result object. Do check `sent`: it is what lets the
-console tell a user honestly whether a message actually went out (AGL-708).
+console tell a user honestly whether a message actually went out.
 
 Optional fields: `html`, `headers` (e.g. `List-Unsubscribe`), `tags` (webhook
 attribution), `replyTo`, and `from` (overrides the configured sender — rarely
@@ -102,3 +108,7 @@ Run `nx test shared-util-email` to execute the unit tests via
 
 Note: prefer bare `jest` over `nx test` when a test depends on env vars — `nx`
 injects the root `.env`, which can turn a genuinely failing test green.
+
+## License
+
+Apache-2.0. Source: https://github.com/aglyn/aglyn/tree/main/libs/shared/util/email

@@ -368,44 +368,64 @@ describe('report-usage records Assist provider spend (AGL-2280)', () => {
     expect(huge['costUsd']).toBeCloseTo(none['costUsd'], 10)
   })
 
-  it('Starter WITH the AI add-on is invoiced past the add-on band at the rate its card quotes (AGL-3014)', async () => {
+  it('Starter is invoiced past its band at the rate its card quotes (AGL-3014, AGL-3203)', async () => {
     /*
-      Starter lists no assist band and no rate. The add-on brings both: a
-      4,000-credit band, and Pro's $3.00 per 1,000 from
-      `resolveAssistOverageRateUsdPer1k` rather than from
-      `PLAN_PRICING.starter`. The overage card, the ceiling, the 100% alert
-      and the refusal sentence all quote that rate, so the invoice line is
-      pinned in plain figures rather than re-derived through the helper it
-      shares with them: $10.50 of billed spend is 10,500 credits, 6,500 past
-      the band, $19.50.
+      AGL-3014 was Starter listing no assist band and no rate: the add-on
+      brought both, and the rate came from `resolveAssistOverageRateUsdPer1k`
+      rather than from `PLAN_PRICING.starter`, so a reader that went to the
+      table quoted $0.00 while the invoice charged $3.00.
 
-      FORCED RED by answering `null` from the resolver's add-on branch: the
-      rollup recorded no rate and `billedCents` did not move.
+      AGL-3203 ended the split — the plan carries 750 credits and $3.00 on its
+      own row — so the add-on now WIDENS a band rather than creating one:
+      750 + 4,000 = 4,750. The overage card, the ceiling, the 100% alert and
+      the refusal sentence all quote the same rate, so the invoice line is
+      pinned in plain figures rather than re-derived through the helper it
+      shares with them: $10.50 of billed spend is 10,500 credits, 5,750 past
+      the band, $17.25.
+
+      FORCED RED by answering `null` from the rate resolver: the rollup
+      recorded no rate and `billedCents` did not move.
     */
     const starterWithAi = { plan: 'starter', seatAddons: { aiAddon: 1 } }
     const none = await rollupFor(undefined, starterWithAi)
     const over = await rollupFor(10.5, starterWithAi)
     expect(over).toMatchObject({
       assistCredits: 10_500,
-      assistCreditsBand: 4_000,
-      assistCreditsOverage: 6_500,
-      assistOverageUsd: 19.5,
+      assistCreditsBand: 4_750,
+      assistCreditsOverage: 5_750,
+      assistOverageUsd: 17.25,
       assistOverageRateUsd: 3,
-      assistOverageMeteredUsd: 19.5,
+      assistOverageMeteredUsd: 17.25,
     })
-    expect(over['billedCents']).toBe(none['billedCents'] + 1_950)
+    expect(over['billedCents']).toBe(none['billedCents'] + 1_725)
 
-    // The control: the same workspace and spend without the add-on has no
-    // band to be over, so nothing past one reaches the invoice.
+    // WITHOUT the add-on the same workspace is invoiced too, against the
+    // plan's own 750 and at the same rate — the shape AGL-3203 introduced,
+    // and the proof the rate belongs to the plan rather than to the add-on.
     const bareNone = await rollupFor(undefined, { plan: 'starter' })
     const bare = await rollupFor(10.5, { plan: 'starter' })
     expect(bare).toMatchObject({
       assistCredits: 10_500,
+      assistCreditsBand: 750,
+      assistCreditsOverage: 9_750,
+      assistOverageUsd: 29.25,
+      assistOverageRateUsd: 3,
+    })
+    expect(bare['billedCents']).toBe(bareNone['billedCents'] + 2_925)
+
+    // THE CONTROL, moved to where it still lives: an org with NO band has
+    // nothing to be over, so nothing past one reaches the invoice. No plan
+    // row bands at zero any more, so that org is made by an override.
+    const bandless = { plan: 'starter', entitlements: { assistCreditsPerMonth: 0 } }
+    const noneBandless = await rollupFor(undefined, bandless)
+    const overBandless = await rollupFor(10.5, bandless)
+    expect(overBandless).toMatchObject({
+      assistCredits: 10_500,
       assistCreditsBand: null,
       assistCreditsOverage: 0,
       assistOverageUsd: 0,
-      assistOverageRateUsd: null,
+      assistOverageRateUsd: 3,
     })
-    expect(bare['billedCents']).toBe(bareNone['billedCents'])
+    expect(overBandless['billedCents']).toBe(noneBandless['billedCents'])
   })
 })

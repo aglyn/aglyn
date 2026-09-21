@@ -36,6 +36,7 @@ import {
   assistUsdFromCredits,
 } from '@aglyn/aglyn/app-utils/assist-credits'
 import {
+  AI_ADDON_CREDITS_PER_MONTH,
   FREE_AI_TASTE_CREDITS_PER_MONTH,
   PLAN_ENTITLEMENTS,
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -287,11 +288,18 @@ const ORG = 'org-assist'
  * An org that sells NO assist band (AGL-2925). Every case below about the
  * operator backstop used to pass no org at all, and a plan-less org
  * resolves as Free — which since the Free taste carries a band of its own,
- * a small one that binds long before the $40 default. Starter is the one
- * plan left whose band is genuinely none; `entitled` is a separate
- * argument here, so the same fixture serves the monthly-gated cases too.
+ * a small one that binds long before the $40 default.
+ *
+ * The band is a per-org `assistCreditsPerMonth` override rather than a plan
+ * row: since AGL-3203 no plan rows at zero (Starter includes 750), so an
+ * explicit override is the only way to reach the null budget the backstop
+ * cases need. `entitled` is a separate argument here, so the same fixture
+ * serves the monthly-gated cases too.
  */
-const NO_BAND = { plan: 'starter' as const }
+const NO_BAND = {
+  plan: 'starter' as const,
+  entitlements: { assistCreditsPerMonth: 0 },
+}
 
 const firestore = () =>
   mockMakeFirestore() as unknown as FirebaseFirestore.Firestore
@@ -1331,15 +1339,18 @@ describe("the PLAN's band binds, and the operator default may not undercut it", 
   })
 
   it('an org with NO band is unchanged — the default still binds it', async () => {
-    // Starter sells no assist band. Its assistant is bounded by the daily
-    // message cap and by the operator backstop, exactly as before. (Free
-    // did too, until the taste gave it a band — AGL-2925.)
+    // An org that sells no assist band is bounded by the daily message cap
+    // and by the operator backstop, exactly as before. Since AGL-3203 the
+    // zero is a per-org override and never a plan row — Starter's own row
+    // includes 750 credits. (Free had no band either, until the taste gave
+    // it one — AGL-2925.)
     expect(assistMonthlyCeilingUsd(null)).toBe(
       ASSIST_ORG_MONTHLY_COGS_LIMIT_DEFAULT_USD,
     )
     mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
     const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, {
       plan: 'starter',
+      entitlements: { assistCreditsPerMonth: 0 },
     })
     expect(reservation).toMatchObject({
       allowed: false,
@@ -1603,12 +1614,14 @@ describe('what leaves the server is credits, never our provider bill', () => {
   })
 
   it('reports NO credit standing for an org with no band', async () => {
-    // A Starter workspace refused at the operator backstop has no credit
-    // balance. Converting $40 into "40,000 credits" would name a band it
-    // never bought.
+    // A workspace refused at the operator backstop has no credit balance.
+    // Converting $40 into "40,000 credits" would name a band it never
+    // bought. Since AGL-3203 an org gets there through a per-org
+    // `assistCreditsPerMonth: 0` override rather than a plan row.
     mockDocs.set(monthPath, { messages: 400, estCostUsd: 45 })
     const reservation = await reserveAssistMessage(firestore(), ORG, false, NOW, {
       plan: 'starter',
+      entitlements: { assistCreditsPerMonth: 0 },
     })
     expect(reservation.allowed).toBe(false)
     expect(publicAssistQuota(reservation).credits).toBeNull()
@@ -2421,16 +2434,29 @@ describe('tokens by kind on the month, on the signal and on the person’s month
   })
 })
 
-describe('Starter WITH the AI add-on is metered like the plan whose rate it carries (AGL-3014)', () => {
+describe('Starter is metered the same with and without the AI add-on (AGL-3014, AGL-3203)', () => {
   const monthPath = `orgs/${ORG}/assistUsage/2026-08`
-  /** The add-on's band on Starter, sold past at $3.00 per 1,000. */
-  const ADDON_BAND = 4_000
+  /**
+   * Starter's whole band once the add-on is on, sold past at $3.00 per
+   * 1,000: the plan's own 750 credits (AGL-3203) PLUS the add-on's 4,000.
+   * The add-on widens the one pool; it does not replace the plan's row.
+   */
+  const ADDON_BAND =
+    PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth + AI_ADDON_CREDITS_PER_MONTH.starter
+  /** Pinned beside the sum, so a silent move of either half is caught. */
+  const BARE_BAND = 750
   const starterWithAi = { plan: 'starter' as const, seatAddons: { aiAddon: 1 } }
-  /** 2,000 credits past the band: $6.00 at the add-on's rate. */
+  /** 2,000 credits past the widened band: $6.00 at the plan's rate. */
   const PAST_ADDON_BAND = {
     messages: 12,
     estCostUsd: assistUsdFromCredits(ADDON_BAND + 2_000),
   }
+
+  it('the band is the plan row plus the add-on, and neither half is zero', () => {
+    expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(BARE_BAND)
+    expect(AI_ADDON_CREDITS_PER_MONTH.starter).toBe(4_000)
+    expect(ADDON_BAND).toBe(4_750)
+  })
 
   beforeAll(() => {
     // The band arrives with the plugin's declaration of the add-on, as the
@@ -2450,11 +2476,11 @@ describe('Starter WITH the AI add-on is metered like the plan whose rate it carr
       allowed: true,
       refusedBy: null,
       costLimitUsd: null,
-      budgetUsd: 4,
+      budgetUsd: 4.75,
     })
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 13 })
     expect(publicAssistQuota(reservation).credits).toEqual({
-      used: 6_000,
+      used: 6_750,
       limit: ADDON_BAND,
       remaining: 0,
     })
@@ -2464,8 +2490,8 @@ describe('Starter WITH the AI add-on is metered like the plan whose rate it carr
     // `assistRefusedByOverageCap` read the rate off `PLAN_PRICING` before
     // AGL-3014 and answered false here, so the refusal fell through to the
     // doors' generic 429 while the ceiling the workspace set had caused it.
-    // FORCED RED by restoring that table read: `assistOwnControlRefusalText`
-    // answered null.
+    // AGL-3203 put the rate on Starter's own row, so the table and the gate
+    // now read one figure and the misread has no second source to come from.
     const capped = { ...starterWithAi, assistOverage: { capUsd: 6 } }
     mockDocs.set(monthPath, PAST_ADDON_BAND)
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, capped)
@@ -2480,19 +2506,48 @@ describe('Starter WITH the AI add-on is metered like the plan whose rate it carr
     const stopped = { ...starterWithAi, assistOverage: { hardCap: true } }
     mockDocs.set(monthPath, PAST_ADDON_BAND)
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, stopped)
-    expect(reservation).toMatchObject({ allowed: false, refusedBy: 'band', costLimitUsd: 4 })
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'band',
+      costLimitUsd: 4.75,
+    })
     expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
     expect(assistOwnControlRefusalText(stopped, coreRefusal(reservation.refusedBy))).toContain(
       '$3.00 per 1,000 credits',
     )
   })
 
-  it('THE CONTROL: without the add-on the same spend meets no band, and a stored ceiling binds nothing', async () => {
-    // Starter alone sells no band, so there is no overage for a ceiling to
-    // reach: only the operator backstop measures it, and $6 is under that.
+  it('THE CONTROL: without the add-on the same spend meets the same machinery, from the plan’s own band', async () => {
+    // The AGL-3014 bug was Starter's band and rate living somewhere the rest
+    // of the stack did not read. AGL-3203 ended that: bare Starter bands at
+    // 750 on its own row and sells past it at the same $3.00 per 1,000, so
+    // the SAME stored ceiling binds it — 6,750 credits used is 6,000 past
+    // 750, which is $6.00 and meets the $6 ceiling exactly. Only the band
+    // moves when the add-on is bought.
     mockDocs.set(monthPath, PAST_ADDON_BAND)
     const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
       plan: 'starter',
+      assistOverage: { capUsd: 6 },
+    })
+    expect(reservation).toMatchObject({
+      allowed: false,
+      refusedBy: 'cap',
+      capReason: 'customer',
+      budgetUsd: 0.75,
+    })
+    expect(mockDocs.get(monthPath)).toMatchObject({ messages: 12 })
+  })
+
+  it('THE COUNTER-CASE: an org with no band at all has nothing for a ceiling to bind', async () => {
+    // What a stored ceiling still binds nothing on: an org whose band is
+    // zero, which since AGL-3203 is a per-org `assistCreditsPerMonth`
+    // override and never a plan row. There is no overage for the ceiling to
+    // reach, so only the operator backstop measures the month — and $6.75 is
+    // under it.
+    mockDocs.set(monthPath, PAST_ADDON_BAND)
+    const reservation = await reserveAssistMessage(firestore(), ORG, true, NOW, {
+      plan: 'starter',
+      entitlements: { assistCreditsPerMonth: 0 },
       assistOverage: { capUsd: 6 },
     })
     expect(reservation).toMatchObject({ allowed: true, refusedBy: null, budgetUsd: null })

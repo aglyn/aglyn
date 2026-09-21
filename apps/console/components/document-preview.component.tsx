@@ -19,6 +19,11 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import ConsentBannerUi from '@aglyn/aglyn/app-utils/consent-banner-ui'
+// Deep, like the line above and for the same reason (AGL-2486): the theme
+// resolver is not on the client barrel, and the besigner editors reach it by
+// this same path. One resolver for every surface that draws a site's
+// appearance, so a fallback preview cannot style differently from the editor.
+import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 // Deep import for the same reason as `consent-banner-ui` above (AGL-2486):
 // the plugin-manager barrel is server-reachable and this hook is not.
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
@@ -240,10 +245,33 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
     advertising: boolean
   } | null>(null)
 
-  // The display name of the document being previewed, for the browser tab
-  // (AGL-2551). `undefined` while the read is outstanding, and it stays that
-  // way if the read finds nothing — see the declaration below.
-  const [subjectName, setSubjectName] = useState<string | undefined>(undefined)
+  /**
+   * The PARENT document of the thing being previewed (AGL-2551, AGL-3204).
+   *
+   * One read, three readers: its `displayName` titles the browser tab, and
+   * the resolver below takes its version pointer, its definition root and its
+   * layout binding off the same snapshot. `undefined` while the read is
+   * outstanding; `null` once it has failed or found nothing.
+   */
+  const [parentDoc, setParentDoc] = useState<
+    Record<string, unknown> | null | undefined
+  >(undefined)
+  // Stays `undefined` while the read is outstanding, and stays that way if
+  // the document has no name — see `useDeclareDocumentSubject` below.
+  const subjectName = (parentDoc as { displayName?: string } | null | undefined)
+    ?.displayName
+
+  /**
+   * The document as STORED, for a preview opened without a snapshot
+   * (AGL-3204) — the composed canvas tree, not the raw `nodes` field.
+   *
+   * `undefined` while the reads are outstanding, `null` once they have
+   * settled on nothing renderable. The difference matters: one holds the
+   * spinner, the other prints the refusal.
+   */
+  const [storedNodes, setStoredNodes] = useState<
+    Aglyn.NodesMap | null | undefined
+  >(undefined)
 
   const hostId = ids?.hostId
   const kind = ids?.kind
@@ -272,35 +300,232 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
    * component definitions and its form designs before it can paint. A failure
    * is swallowed: an unnamed preview tab is the behavior that shipped, and
    * the id title underneath it is still unique per document.
+   *
+   * ## …and, without a snapshot, WHAT it renders (AGL-3204)
+   *
+   * AGL-1203 gave this surface a single source: a `localStorage` snapshot the
+   * besigner writes just before opening the tab. Nothing else writes that
+   * key, and five surfaces link straight at a preview route — a version row's
+   * Preview, the layouts/components/templates/forms cards — so all of them,
+   * plus any pasted or bookmarked preview URL, landed on "No preview state
+   * found". That was not a fallback firing; it was the only thing the route
+   * could produce for a reader who had not just pressed Preview in the editor.
+   *
+   * So the snapshot becomes the optimization it reads as. It still wins, and
+   * has to: it is the only thing that can carry besigner edits that were
+   * never saved. Without one, the stored document is read and rendered —
+   * the version the URL names, or the one the document currently points at.
+   *
+   * Resolved HERE rather than in an effect of its own because the first read
+   * is this one. The parent carries the name, the version pointer, the
+   * definition root and the layout binding, so on the snapshot path nothing
+   * below runs and the read profile is exactly what it was.
    */
   useEffect(() => {
     if (!firestore || !hostId || !kind || !docId) return undefined
     let cancelled = false
-    firestoreOneShotRetry(
-      () =>
-        getDoc(
-          firestoreDoc(
-            firestore,
-            'hosts',
-            hostId,
-            KIND_COLLECTION[kind],
-            docId,
-          ),
-        ),
-      'preview-subject',
-    )
-      .then((snapshot) => {
-        if (cancelled) return
-        setSubjectName(
-          (snapshot.data() as { displayName?: string } | undefined)
-            ?.displayName,
+    const collectionName = KIND_COLLECTION[kind]
+
+    /**
+     * The layout chain above a screen, walked as the besigner walks it
+     * before writing a snapshot (AGL-703): a layout may itself render inside
+     * another, and a screen preview that dropped the outer chrome would be a
+     * different kind of wrong from the one being fixed here.
+     *
+     * Walked rather than subscribed because the chain's length is only known
+     * by walking it. Fail-open at every step, exactly as the besigner's own
+     * walk is — a preview is worth showing without its outer chrome, and it
+     * is not worth failing over.
+     */
+    const readLayoutChain = async (binding: unknown) => {
+      const chain: Aglyn.LayoutChainEntry[] = []
+      const seen = new Set<string>()
+      let layoutId = binding
+      while (
+        layoutId &&
+        !seen.has(String(layoutId)) &&
+        chain.length < Aglyn.MAX_LAYOUT_CHAIN_DEPTH
+      ) {
+        seen.add(String(layoutId))
+        try {
+          const layout = await getDoc(
+            firestoreDoc(firestore, 'hosts', hostId, 'layouts', String(layoutId)),
+          )
+          const layoutVersionId = layout.get('versionId')
+          if (!layoutVersionId) break
+          const version = await getDoc(
+            firestoreDoc(
+              firestore,
+              'hosts',
+              hostId,
+              'layouts',
+              String(layoutId),
+              'versions',
+              String(layoutVersionId),
+            ),
+          )
+          chain.push({
+            layoutId: String(layoutId),
+            // Decoded (AGL-1397). These reads carry no converter, so every
+            // ancestor arrives as `Bytes` and composes to nothing — the
+            // preview loses its outer chrome silently.
+            nodes: Aglyn.decodeStoredNodes(version.get('nodes')) as any,
+            // The layout's properties (AGL-2893), applied with this version's
+            // values exactly as the published page applies them.
+            props: version.get('props'),
+          })
+          layoutId = layout.get('layoutId')
+        } catch (error) {
+          console.error(error)
+          break
+        }
+      }
+      return chain
+    }
+
+    const resolve = async () => {
+      let parent: Record<string, unknown> | null
+      try {
+        const snapshot = await firestoreOneShotRetry(
+          () =>
+            getDoc(
+              firestoreDoc(firestore, 'hosts', hostId, collectionName, docId),
+            ),
+          'preview-subject',
         )
+        parent = (snapshot.data() as Record<string, unknown> | undefined) ?? null
+      } catch {
+        parent = null
+      }
+      if (cancelled) return
+      setParentDoc(parent)
+
+      /**
+       * The snapshot wins, so nothing below is read when there is one — the
+       * besigner path costs exactly what it cost before this change.
+       *
+       * `null` rather than left `undefined`: it means "no fallback was
+       * resolved", which is what `applyState` needs to hear. Left undefined
+       * it would read as "still reading", so the ceiling below would warn
+       * about a read nobody started, and a snapshot EVICTED while this tab
+       * is open (the budget in `writePreviewState` allows exactly that)
+       * would hold a spinner instead of saying what it said before.
+       */
+      if (readPreviewState({ hostId, kind, docId, versionId })) {
+        setStoredNodes(null)
+        return
+      }
+
+      // A template versions but never publishes, so its tree lives on the
+      // document itself and its route carries no version segment.
+      let raw: unknown = kind === 'template' ? parent?.nodes : undefined
+      let rootId = parent?.rootId
+      let layoutBinding = parent?.layoutId
+      let layoutPropValues: unknown
+
+      if (kind !== 'template') {
+        // The version the URL names, or — for a link that named none — the
+        // one this document currently points at.
+        const version = versionId ?? (parent?.versionId as string | undefined)
+        if (!version) {
+          if (!cancelled) setStoredNodes(null)
+          return
+        }
+        let data: Record<string, unknown> | undefined
+        try {
+          const snapshot = await firestoreOneShotRetry(
+            () =>
+              getDoc(
+                firestoreDoc(
+                  firestore,
+                  'hosts',
+                  hostId,
+                  collectionName,
+                  docId,
+                  'versions',
+                  version,
+                ),
+              ),
+            'preview-version',
+          )
+          data = snapshot.data() as Record<string, unknown> | undefined
+        } catch (error) {
+          console.error(error)
+          if (!cancelled) setStoredNodes(null)
+          return
+        }
+        if (cancelled) return
+        raw = data?.nodes
+        // A component's and a form's definition root is written on the
+        // VERSION; the parent's is the fallback for one saved before it was.
+        rootId = data?.rootId ?? rootId
+        layoutPropValues = data?.layoutPropValues
+        // Version-first with a document fallback — the rule the besigner and
+        // `composeScreenNodes` both follow. A key PRESENT on the version
+        // wins, because a `null` there means explicitly no layout.
+        if (data && 'layoutId' in data) layoutBinding = data.layoutId
+      }
+
+      const decoded = Aglyn.decodeStoredNodes<Aglyn.NodesMap>(raw)
+      if (!decoded || !Object.keys(decoded).length) {
+        setStoredNodes(null)
+        return
+      }
+      // A component, a form and a component-kind template are stored as a
+      // DEFINITION rooted at the promoted node, and the canvas needs the
+      // canonical root or it renders nothing (AGL-680). A tree that already
+      // carries one passes straight through, so this is safe for the kinds
+      // that never wrap.
+      const tree = Aglyn.definitionToCanvasTree({
+        rootId: rootId as string | undefined,
+        nodes: decoded,
+      }) as Aglyn.NodesMap
+
+      if (kind !== 'screen') {
+        setStoredNodes(tree)
+        return
+      }
+      const chain = await readLayoutChain(layoutBinding)
+      if (cancelled) return
+      setStoredNodes(
+        Aglyn.composeLayoutChainWithProps(
+          chain as any,
+          tree as any,
+          layoutPropValues as any,
+        ) as Aglyn.NodesMap,
+      )
+    }
+
+    resolve().catch((error) => {
+      console.error(error)
+      if (!cancelled) setStoredNodes(null)
+    })
+
+    /**
+     * The same ceiling the host reads get, for the same reason (AGL-1261): a
+     * one-shot read has no timeout of its own, and while `storedNodes` is
+     * `undefined` the apply effect returns early — so a wedged read would
+     * hold the spinner forever, which is the blank tab in a new costume.
+     * Fail open to the refusal, which is at least a true statement.
+     */
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      setStoredNodes((current) => {
+        if (current !== undefined) return current
+        console.warn(
+          `[preview] the stored-document read did not settle within ` +
+            `${DEFINITIONS_TIMEOUT_MS}ms — saying so rather than holding a ` +
+            'spinner that never resolves.',
+        )
+        return null
       })
-      .catch(() => undefined)
+    }, DEFINITIONS_TIMEOUT_MS)
+
     return () => {
       cancelled = true
+      clearTimeout(timer)
     }
-  }, [firestore, hostId, kind, docId])
+  }, [firestore, hostId, kind, docId, versionId])
 
   // Unconditional, and tolerant of a name that has not arrived: until one
   // does, the hook leaves the server's id title alone rather than blanking the
@@ -562,14 +787,30 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
 
     const applyState = () => {
       const state = readPreviewState(resolved)
-      if (!state) {
+      // The snapshot first — it is the only source that can carry besigner
+      // edits which were never saved — then the document as stored
+      // (AGL-3204).
+      const nodes = state?.nodes ?? storedNodes
+      if (!nodes) {
+        // `undefined` means the stored read has not answered yet. Holding
+        // the spinner is right; calling it missing would flash the refusal
+        // over a preview that is about to work.
+        if (storedNodes === undefined) return
         setMissing(true)
         return
       }
       setMissing(false)
-      setHostTheme(state.theme)
+      /**
+       * The snapshot carries the theme it was taken with. Without one it
+       * resolves from the site document this surface ALREADY read for
+       * `{{host.*}}` tokens, through the same function the besigner calls
+       * before it writes a snapshot (AGL-1021) — so the fallback costs no
+       * read of its own, and a preview opened from a version row is styled
+       * like the live site instead of dropping to MUI's default blue.
+       */
+      setHostTheme(state?.theme ?? resolveSiteTheme(hostDoc as any))
       const grafted = Aglyn.composeReusableComponentNodes(
-        state.nodes as any,
+        nodes as any,
         definitions as any,
         // Placed forms resolve here too, in the SAME call the tenant makes
         // — one graft that expands a component inside a form design and a
@@ -603,7 +844,16 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
     }
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
-  }, [hostId, kind, docId, versionId, definitions, formDesigns, hostDoc])
+  }, [
+    hostId,
+    kind,
+    docId,
+    versionId,
+    definitions,
+    formDesigns,
+    hostDoc,
+    storedNodes,
+  ])
 
   // A placed asset's shape, and a film's length and poster, as its DAM
   // document records them NOW (AGL-2849, AGL-2856), laid over the tree Preview
@@ -683,9 +933,17 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
           gap: 1,
         }}
       >
-        <Typography variant="h6">{'No preview state found'}</Typography>
+        {/*
+         * Retitled with the fallback (AGL-3204). "No preview state found"
+         * named an implementation detail — the `localStorage` key — and the
+         * line under it prescribed the workaround for the defect itself:
+         * open the besigner, press Preview, come back. Now that the stored
+         * document renders, this appears only when there genuinely is no
+         * saved version to draw, and it says that instead.
+         */}
+        <Typography variant="h6">{'Nothing to preview yet'}</Typography>
         <Typography color="text.secondary">
-          {`Open this ${KIND_LABEL[kind ?? 'screen']} in the besigner and click Preview again.`}
+          {`This ${KIND_LABEL[kind ?? 'screen']} has no saved version to render.`}
         </Typography>
       </Stack>
     )

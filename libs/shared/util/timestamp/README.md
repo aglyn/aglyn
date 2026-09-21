@@ -1,7 +1,14 @@
 # @aglyn/shared-util-timestamp
 
-Two entry points. **Which one you import decides whether the Firestore client
-ends up in your bundle**, so pick deliberately.
+> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+
+## Install
+
+    npm install @aglyn/shared-util-timestamp@beta
+
+A point in time at nanosecond resolution, the JSON shape it serializes to, and
+calendar math in a named time zone. None of the three imports the Firestore
+SDK, or anything else.
 
 ## `@aglyn/shared-util-timestamp` — the `Timestamp` class
 
@@ -11,16 +18,19 @@ import { Timestamp } from '@aglyn/shared-util-timestamp'
 await setDoc(ref, { createdAt: Timestamp.now() })
 ```
 
-`Timestamp extends` the Firestore SDK's own `Timestamp`. That `extends` is a
-**hard runtime dependency** — not type-only, not tree-shakeable — and it is
-load-bearing: Firestore's serialiser recognises timestamps by `instanceof`
-against its own class. An object that fails that check is not written as a
-timestamp, so ordering queries and `.toDate()` on read stop working.
+`Timestamp` has the members Firestore's own timestamp has — `seconds`,
+`nanoseconds`, `toDate()`, `toMillis()`, `isEqual()` — and it extends the
+built-in `Date`. That base is deliberate. Firestore's client accepts a field
+value that is `instanceof Date` and writes it as a real timestamp, so a value
+from this class can be written into a document as it is, while the package
+itself depends on no SDK. A plain custom class would be refused by Firestore as
+an unsupported field value.
 
-Use this anywhere the value is **written into a Firestore document**. That is
-the console and the plugin console cards, which already ship the SDK.
+Three members differ from `Date` on purpose: `valueOf()` returns a zero-padded
+string that orders correctly, `toJSON()` returns `{ seconds, nanoseconds, type }`,
+and `toString()` returns the `Timestamp(seconds=…, nanoseconds=…)` form.
 
-## `@aglyn/shared-util-timestamp/timestamp-json` — the serialised shape
+## `@aglyn/shared-util-timestamp/timestamp-json` — the serialized shape
 
 ```ts
 import { timestampNowJson } from '@aglyn/shared-util-timestamp/timestamp-json'
@@ -29,7 +39,7 @@ logger.debug(timestampNowJson(), event, payload)
 ```
 
 Returns exactly what `Timestamp.now().toJSON()` returns, and imports nothing.
-Use it when you only need to **stamp or serialise** — a log line, an emitted
+Use it when you only need to **stamp or serialize** — a log line, an emitted
 event, a JSON payload — and the value never reaches Firestore.
 
 ## `@aglyn/shared-util-timestamp/zoned-time` — calendar math in a named zone
@@ -51,26 +61,12 @@ It is the one copy the booking slots, the CRM digest and the Sequences send
 windows read. Imports nothing, like `timestamp-json`, and
 `zoned-time.isolation.spec.ts` holds it to that.
 
-## Why the split exists (AGL-1151)
+## Why `timestamp-json` is its own entry point
 
-Every tenant site was shipping the Firestore client in its eagerly-loaded page
-chunk. The route was two calls to `Timestamp.now().toJSON()` in `libs/aglyn` —
-both formatting log lines. Nothing on a published site writes to Firestore from
-the browser; the SDK was pure weight.
+Code that only stamps a log line or an event has no use for the class, so the
+serialized shape is available without it. `ITimestamp`, the structural type, is
+safe to import from the root anywhere: a type import is erased.
 
-`timestamp-json.isolation.spec.ts` guards this and is worth understanding before
-editing either module: it asserts that requiring `timestamp-json` loads no
-`firebase` module. Its first version sat beside the behavioural tests, which
-import `./timestamp`, so `firebase` was already cached before the check ran and
-it passed just as happily when the isolation was broken. If you touch that test,
-break the isolation on purpose and confirm it fails — a green run proves nothing
-on its own.
+## License
 
-The type-only `ITimestamp` is safe to import from the root anywhere, since
-`import type` is erased.
-
-## Running unit tests
-
-`npx jest --config libs/shared/util/timestamp/jest.config.ts`
-
-(`nx test` leaks the root `.env`; run bare jest.)
+Apache-2.0. Source: https://github.com/aglyn/aglyn/tree/main/libs/shared/util/timestamp

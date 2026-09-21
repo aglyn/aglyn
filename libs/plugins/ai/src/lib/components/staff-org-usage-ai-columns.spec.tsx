@@ -31,7 +31,10 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { render, screen } from '@testing-library/react'
-import { AI_ADDON_CREDITS_PER_MONTH } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import {
+  AI_ADDON_CREDITS_PER_MONTH,
+  PLAN_ENTITLEMENTS,
+} from '@aglyn/aglyn/app-utils/plan-entitlements'
 // The AI add-on's band is this plugin's declaration: without it the pool
 // resolves no add-on credits at all.
 import '../declarations'
@@ -103,8 +106,9 @@ describe('the AI credit pool line on the staff usage table', () => {
     expect(
       assistPoolSentence({ aiAddon: false, addonCredits: 0, creditsPerMonth: 2_750 }),
     ).toBe('Aglyn AI add-on off — 2,750 AI credits/mo.')
-    // No band at all (Free, Starter without the add-on): said as such, not
-    // as "0 credits".
+    // No band at all: said as such, not as "0 credits". Since AGL-3203 no
+    // plan row bands at zero — Free carries the taste and Starter includes
+    // 750 — so this is an org whose band an override zeroed.
     expect(
       assistPoolSentence({ aiAddon: false, addonCredits: 0, creditsPerMonth: null }),
     ).toBe('Aglyn AI add-on off — no AI credit band.')
@@ -124,8 +128,23 @@ describe('the AI credit pool line on the staff usage table', () => {
       addonCredits: AI_ADDON_CREDITS_PER_MONTH.pro,
       creditsPerMonth: 12_000 + AI_ADDON_CREDITS_PER_MONTH.pro,
     })
+    // A bare plan row reads as its own band: Starter includes 750 credits
+    // since AGL-3203.
     expect(
       staffAssistPool({ plan: 'starter', subscription: { status: 'active' } } as never),
+    ).toEqual({
+      aiAddon: false,
+      addonCredits: 0,
+      creditsPerMonth: PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth,
+    })
+    // ...and an override of zero is what reads as NO band, which is the only
+    // way an org gets there now that no plan row bands at zero.
+    expect(
+      staffAssistPool({
+        plan: 'starter',
+        entitlements: { assistCreditsPerMonth: 0 },
+        subscription: { status: 'active' },
+      } as never),
     ).toEqual({ aiAddon: false, addonCredits: 0, creditsPerMonth: null })
   })
 

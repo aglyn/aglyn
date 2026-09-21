@@ -1,10 +1,20 @@
 # @aglyn/plugins-video-delivery
 
-Library video served from Cloudflare R2 through a Worker (AGL-2824), behind
+Library video served from Cloudflare R2 through a Worker, behind
 core's media delivery contract (`core.media-delivery` in
 `@aglyn/aglyn/plugin-manager/media-delivery-provider`). Core makes every
 access decision and never names a provider; this plugin holds the copies
 and serves them.
+
+> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+
+## Install
+
+```bash
+npm install @aglyn/plugins-video-delivery@beta
+```
+
+A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`) by the console and the tenant runtime; it is not a standalone library.
 
 - `declarations.server.ts` — registers the provider at boot in both apps
   (`serverDeclarations` in `plugins.config.json`).
@@ -44,8 +54,12 @@ Nothing here runs until all three are on:
 - The platform's bucket keeps every video, and the storage counter counts it
   once; a copy's size is never added to it. Making the R2 copy the ONLY copy
   is a later step, and the storage cost model for video depends on that step
-  (AGL-2825).
+ .
 - Cloudflare receives customer video and, in transit, the viewer's IP address
   and user agent. It must be on `/legal/subprocessors` before the flag is on
   for any customer. The owner decides and publishes that; this plugin
   declares no `subprocessors` entry until the page carries the row.
+
+## License
+
+Apache-2.0. Source: https://github.com/aglyn/aglyn/tree/main/libs/plugins/video-delivery

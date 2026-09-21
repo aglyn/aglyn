@@ -1,34 +1,34 @@
 # @aglyn/shared-util-logger
 
----
+A small leveled logger: named instances, a log level per instance, and a
+replaceable handler. The larger Aglyn packages log through it, and it works on
+its own. Its shape follows `@firebase/logger`; it depends on nothing.
 
-# Logger Helper
+> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
 
-This library was generated with [Nx](https://nx.dev).
+## Install
 
-Logger framework and logical flow is inspired by `@firebase/logger`
+    npm install @aglyn/shared-util-logger@beta
 
-This package serves as the base of all logging in the JS SDK. Any logging that is intended to be
-visible to Firebase end developers should go through this module.
+## Usage
 
-## Basic Usage
-
-Firebase components should import the `Logger` class and instantiate a new instance by passing a
-component name (
-e.g. `@aglyn/<project-name>`) to the constructor.
-
-_e.g._
+Create one `Logger` per component, named for it:
 
 ```typescript
-import { Logger } from '@aglyn/shared-util-logger'
+import { Logger, LogLevel } from '@aglyn/shared-util-logger'
 
-const logger = new Logger(`@aglyn/<project-name>`)
+const logger = new Logger('@acme/checkout')
+logger.setLogLevel(LogLevel.WARN)
+logger.warn('inventory is stale', { sku })
 ```
+
+`logLevel` decides which calls reach the handler. `logHandler` replaces the
+default handler, which writes to the console, and `userLogHandler` adds one
+that runs beside it, for forwarding logs somewhere else.
 
 Each `Logger` instance supports 5 log functions each to be used in a specific instance:
 
-- `debug`: Internal logs; use this to allow developers to send us their debug logs for us to be able
-  to diagnose an issue.
+- `debug`: Internal detail, for diagnosing an issue.
 - `log`: Use to inform your user about things they may need to know.
 - `info`: Use if you have to inform the user about something that they need to take a concrete
   action on. Once they take that action, the log should go away.
@@ -43,6 +43,6 @@ Each log will be formatted in the following manner:
 `"[${new Date()}] ${COMPONENT_NAME}: ${...args}"`
 ```
 
-## Running unit tests
+## License
 
-Run `nx test shared-util-logger` to execute the unit tests via [Jest](https://jestjs.io).
+Apache-2.0. Source: https://github.com/aglyn/aglyn/tree/main/libs/shared/util/logger

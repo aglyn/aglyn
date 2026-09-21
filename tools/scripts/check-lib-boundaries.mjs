@@ -56,6 +56,8 @@ import {
   missingMapRows,
   overrideWiring,
   packageFindings,
+  unresolvableSubpaths,
+  workspaceSubpathsImported,
   packagesImported,
   peerFamiliesImported,
   readPackageMap,
@@ -140,6 +142,18 @@ const rootVersion = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'ut
 const workspacePackages = new Set(packageMap.map((project) => project.alias).filter(Boolean))
 const rootManifest = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8'))
 const rootRanges = { ...(rootManifest.devDependencies ?? {}), ...(rootManifest.dependencies ?? {}) }
+const rootByAlias = new Map(packageMap.filter((project) => project.alias).map((project) => [project.alias, join(REPO_ROOT, project.root)]))
+const subpathTarget = (name) => {
+  const targetRoot = rootByAlias.get(name)
+  if (!targetRoot || !existsSync(join(targetRoot, 'package.json'))) return null
+  const manifest = JSON.parse(readFileSync(join(targetRoot, 'package.json'), 'utf8'))
+  return {
+    exports: manifest.exports,
+    hasModule: (subpath) =>
+      (subpath === 'server' && existsSync(join(targetRoot, 'src', 'server.ts'))) ||
+      ['.ts', '.tsx'].some((extension) => existsSync(join(targetRoot, 'src', 'lib', subpath + extension))),
+  }
+}
 for (const project of packageMap) {
   const root = join(REPO_ROOT, project.root)
   if (project.projectType !== 'library') continue
@@ -162,6 +176,11 @@ for (const project of packageMap) {
     moduleExists: (stem) => ['.ts', '.tsx'].some((extension) => existsSync(join(root, stem + extension))),
   })
   for (const finding of findings) problems.push(`${project.root}/package.json: ${finding}`)
+  // What this lib imports from a sibling by SUBPATH must be something the
+  // sibling's published `exports` can answer (AGL-3201).
+  for (const specifier of unresolvableSubpaths(workspaceSubpathsImported(root, workspacePackages), subpathTarget)) {
+    problems.push(`${project.root}: imports "${specifier}", which resolves here through a tsconfig alias to a folder and would not resolve from the published package. Name the module file, or give the target package an explicit exports entry for it.`)
+  }
 }
 
 const edgeCount = Object.values(document.graph.dependencies).flat().filter((edge) => edge.type === 'static' && !edge.target.startsWith('npm:')).length

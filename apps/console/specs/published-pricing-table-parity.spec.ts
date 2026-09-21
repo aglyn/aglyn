@@ -775,9 +775,42 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       })
     })
 
-    it('AI credits / mo — 300 · — · 2.75k · 7.5k · 10k · 13k · 58k', () => {
+    /**
+     * ⚠️ PINNED APART ON PURPOSE — THE PAGE HAS NOT CAUGHT UP (AGL-3203).
+     *
+     * This is the one row where the two sides currently disagree, and the gap
+     * is named here rather than closed by editing the transcription, for the
+     * reason the campaign-email row above records: a transcription is only
+     * worth anything if it was transcribed.
+     *
+     * The page still reads `—` for Starter. The code reads 750. Starter's
+     * band was 0 while Free's is 300, so the published column showed a
+     * PAYING plan including fewer AI credits than the free one — which is
+     * what this row's own column made visible, and what AGL-3203 decided.
+     *
+     * ⛔ CLOSING THIS IS A BESIGNER REPUBLISH, not a code change: screen
+     * `v0clP6xQl-`, the Starter cell of "AI credits / mo", `—` → `750 / mo`,
+     * on every breakpoint, plus the Starter plan panel. When that lands,
+     * move `PUBLISHED[1]` to 750, delete this block, and put the fetch date
+     * on the row — in the same commit, as the header requires.
+     */
+    it('AI credits / mo — the code is ahead of the page on Starter', () => {
+      // What the page serves today. Free's 300, and Starter's dash.
       const PUBLISHED: Row = [300, NONE, 2750, 7500, 10000, 13000, 58000]
-      expect(quotaColumn('assistCreditsPerMonth')).toEqual(PUBLISHED)
+      // What the code enforces today. Identical but for Starter.
+      const CODE: Row = [300, 750, 2750, 7500, 10000, 13000, 58000]
+      expect(quotaColumn('assistCreditsPerMonth')).toEqual(CODE)
+      // The gap, stated as itself — one column, in the direction that gives
+      // the customer MORE than the page promised, which is the safe
+      // direction for a divergence to sit in while it waits for a republish.
+      expect(
+        PUBLISHED_COLUMNS.filter((_, i) => PUBLISHED[i] !== CODE[i]),
+      ).toEqual(['starter'])
+      expect(CODE[1]).toBeGreaterThan(PUBLISHED[1])
+      // …and the reason the decision was made: a paid plan must not include
+      // less than the free one. The page still shows that it does.
+      expect(CODE[1]).toBeGreaterThan(CODE[0])
+      expect(PUBLISHED[1]).toBeLessThan(PUBLISHED[0])
     })
   })
 
@@ -989,18 +1022,39 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
     })
 
     /**
-     * THE AI CREDITS ROW (AGL-2900). Starter's dash is the page saying the
-     * plan sells no credits past a band it does not have; the ladder from
-     * Pro down is the rate `priceAssistCreditOverage` bills. With the add-on,
-     * Starter joins at Pro's rate — read through `assist-credits.ts`, never
-     * written onto `PLAN_PRICING.starter`, and stated on the page by the
-     * add-on card's sentence rather than by this row.
+     * THE AI CREDITS RATE ROW (AGL-2900), ⚠️ PINNED APART SINCE AGL-3203.
+     *
+     * The ladder from Pro down is the rate `priceAssistCreditOverage` bills.
+     * Starter's dash used to be the page correctly saying the plan sold
+     * nothing past a band it did not have; the rate it charged WITH the AI
+     * add-on was held off `PLAN_PRICING` and stated by the add-on card's
+     * sentence instead.
+     *
+     * AGL-3203 ended that: Starter includes 750 credits and carries $3.00 on
+     * its own row, because a finite band with no rate beside it is usage past
+     * a bound that is silently free. The page has not caught up.
+     *
+     * ⛔ CLOSING THIS IS A BESIGNER REPUBLISH: screen `v0clP6xQl-`, the
+     * Starter cell of "AI credits, per 1,000 over the included band",
+     * `—` → `$3`, on every breakpoint. Then move `PUBLISHED[0]` to 3 and
+     * delete this block, in the same commit.
      */
-    it('AI credits per 1,000 over band — — · $3 · $2.75 · $2.50 · $2.25 · $2', () => {
+    it('AI credits per 1,000 over band — the code is ahead of the page on Starter', () => {
+      // What the page serves today.
       const PUBLISHED = [null, 3, 2.75, 2.5, 2.25, 2]
+      // What the code bills today.
+      const CODE = [3, 3, 2.75, 2.5, 2.25, 2]
       expect(PAID.map((p) => PLAN_PRICING[p].extraAssistCreditsUsdPer1k)).toEqual(
-        PUBLISHED,
+        CODE,
       )
+      // The gap is Starter's cell and nothing else. ⚠️ Unlike the band row
+      // above, this one diverges in the direction that charges MORE than the
+      // page states, which is the dangerous direction and the reason the
+      // republish is owed rather than merely due.
+      expect(PAID.filter((_, i) => PUBLISHED[i] !== CODE[i])).toEqual(['starter'])
+      expect(PUBLISHED[0]).toBeNull()
+      // It joins the ladder at Pro's figure rather than stepping above it.
+      expect(CODE[0]).toBe(CODE[1])
       expect(PLAN_PRICING.enterprise.extraAssistCreditsUsdPer1k).toBeNull()
     })
 

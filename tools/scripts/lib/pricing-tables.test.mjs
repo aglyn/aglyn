@@ -772,12 +772,18 @@ describe('the /pricing table reconciler can fail (AGL-1278)', () => {
 
     const assist = row('extraAssistCreditsUsdPer1k')
     assert.ok(assist, 'the assist overage row is not published')
-    // Starter's dash is CORRECT, not a gap: assist is refused at the band on
-    // every tier, so a plan with no rate simply stops. Email's dash would mean
-    // the opposite — transactional mail cannot be refused — which is why the
-    // email row above carries a rate on every paid tier and this one does not.
+    // Since AGL-3203 Starter carries a rate like every paid tier, because it
+    // now includes a band of its own (750 credits) and a finite band with no
+    // rate beside it is silently free past the band. It joins the ladder at
+    // Pro's $3.00 rather than stepping above it.
+    //
+    // The dash it used to print was CORRECT then, and for a reason the email
+    // row still depends on: assist is refused at the band, so a plan with no
+    // rate simply stops. Email's dash would mean the opposite — transactional
+    // mail cannot be refused — which is why the email row above carries a
+    // rate on every paid tier whatever its band.
     assert.deepEqual(assist.values, {
-      starter: '—',
+      starter: '$3',
       pro: '$3',
       business: '$2.75',
       scale: '$2.50',

@@ -527,6 +527,19 @@ export interface CollectionContent {
    * an entry route reads one document by slug and bounds nothing.
    */
   entriesReachedBound?: boolean
+  /**
+   * Present ONLY when a verified preview grant revealed an entry the public
+   * site withholds (AGL-3205) — never on a public render, and never for an
+   * entry that is already live. Its absence is what the preview chrome reads
+   * to say "this one is actually published", so it must not be set
+   * defensively.
+   */
+  entryPreview?: {
+    /** The stored `status` — `scheduled` or `draft`. */
+    status: string
+    /** The instant it is scheduled for, or null when nothing is scheduled. */
+    publishAtSeconds: number | null
+  }
   /** List pagination (AGL-620); null for entry pages or unpaginated lists. */
   pagination?: CollectionPagination | null
   /**
@@ -882,8 +895,32 @@ export async function getCollectionContent(options: {
    * windows describe the FILTERED set rather than the whole collection.
    */
   categorySlug?: string
+  /**
+   * Reveal the named entry even though the public site withholds it — the
+   * live-site preview of a scheduled post (AGL-3205).
+   *
+   * ⛔ A VERIFIED GRANT, NOT A REQUEST. The caller passes `true` only after a
+   * signed preview token has been checked against the resolved hostId AND
+   * this exact `collectionSlug`/`entrySlug` (`verifyCollectionPreviewToken`).
+   * The token format stays in the app that receives the URL; what crosses into
+   * this lib is the verdict, so nothing here can be tricked by a payload's own
+   * spelling of which entry it names.
+   *
+   * ENTRY ROUTES ONLY, and one entry at a time. It is ignored on a list route
+   * — a preview of one post must not add it to `/blog`, to the feed, or to a
+   * Collection entries block on any other page, all of which read the SHARED
+   * cached source. Nothing it touches is cached at all.
+   *
+   * The preview render also writes NOTHING: see the `flipDueEntry` guard
+   * below. Publishing a schedule stays the sole business of a public render.
+   */
+  previewUnpublishedEntry?: boolean
 }): Promise<CollectionContent> {
   const { hostId, collectionSlug, entrySlug } = options
+  // Never on a list route, whatever the caller passed: `entrySlug` is what
+  // makes the grant addressable at all, and the list is the shared cached
+  // read this must stay out of.
+  const preview = Boolean(options.previewUnpublishedEntry) && Boolean(entrySlug)
   const data: CollectionContent = {
     collection: null,
     entries: [],
@@ -944,23 +981,59 @@ export async function getCollectionContent(options: {
     // Same two-step as `listLiveEntries`: only pay for the org read when
     // something is due, and record the refusal on its own pass because a
     // refused entry never becomes the `entryDoc` below (AGL-471).
+    //
+    // A PREVIEW RENDER SKIPS BOTH WRITES (AGL-3205). `flipDueEntry` is the
+    // entire publishing mechanism for a content entry, and it is a mechanism
+    // that belongs to the PUBLIC render: a preview is one person looking at
+    // one post through a link, and it must not be able to publish it, nor to
+    // burn its schedule with the terminal refusal marker. Skipping the writes
+    // costs nothing — the next public render asks the same questions and
+    // writes the same answers — and it is what keeps "nothing but a render
+    // publishes a content entry" true of renders anybody can reach.
     const dueHere = entryQuery.docs.filter((docSnapshot) =>
       isDueScheduled(docSnapshot.data()),
     )
     const permission: SchedulePermission = dueHere.length
       ? await scheduledPublishingPermission(hostId)
       : 'allowed'
-    if (permission !== 'allowed') {
+    if (permission !== 'allowed' && !preview) {
       for (const docSnapshot of dueHere) {
         flipDueEntry(docSnapshot.ref, docSnapshot.data(), permission)
       }
     }
-    const entryDoc = entryQuery.docs.find((docSnapshot) =>
-      isLive(docSnapshot.data(), permission),
-    )
+    /**
+     * What a grant reveals: an entry this collection HOLDS and the site does
+     * not serve.
+     *
+     * Deliberately not routed through `isLive`, which is the public answer and
+     * has one other reader (`entry-link-routes`) whose whole job is to agree
+     * with it. A second, wider answer inside it would make a LINK to a
+     * previewed post resolve on the public site.
+     *
+     * Every status but `published` qualifies, which is `draft` as well as
+     * `scheduled`: the ask is "let me see it before it goes out", and a post
+     * is most worth looking at before its schedule is set. The blast radius is
+     * the same either way — one entry, named in the signature, on one host.
+     */
+    const entryDoc =
+      entryQuery.docs.find((docSnapshot) =>
+        isLive(docSnapshot.data(), permission),
+      ) ?? (preview ? entryQuery.docs[0] : undefined)
     if (entryDoc) {
       const value = entryDoc.data()
-      flipDueEntry(entryDoc.ref, value, permission)
+      if (!preview) flipDueEntry(entryDoc.ref, value, permission)
+      if (preview && !isLive(value, permission)) {
+        // The facts the preview chrome states back to the reader, so the page
+        // cannot be mistaken for the published post. Read from the stored
+        // document rather than inferred from the render.
+        data.entryPreview = {
+          status: String(value['status'] ?? 'draft'),
+          publishAtSeconds:
+            typeof value['publishAt']?.seconds === 'number'
+              ? value['publishAt'].seconds
+              : null,
+        }
+      }
       data.entry = {
         $id: entryDoc.id,
         title: value['title'] ?? entrySlug,

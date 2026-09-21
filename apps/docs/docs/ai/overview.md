@@ -83,9 +83,9 @@ and not per site. With it on, every member who has the permission to generate ca
 every door above, on every site in the workspace.
 
 - It adds a band of **AI credits** to the band your plan already includes.
-- Starter includes no AI credits on its own, so the add-on is what gives a Starter
-  workspace something to generate against. It also opens the guided assist that Pro and
-  up already include.
+- Every paid plan already includes some credits, Starter included, so the add-on widens
+  a band you have rather than opening your first one. On Starter it also opens the
+  guided assist that Pro and up already include.
 - Enterprise workspaces carry generative building in their agreement rather than buying
   the add-on.
 - **Free workspaces** do not buy it. A Free workspace gets a small monthly allowance of

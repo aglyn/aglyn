@@ -636,15 +636,23 @@ describe('the gate ladder — every guard forced red once', () => {
   })
 
   it('a workspace with NO band gets the OPERATOR backstop, in its words', async () => {
-    // Starter sells no assist band, so what refuses it is the operator
-    // ceiling and not a quantity anyone bought. Telling that workspace it
+    // This workspace sells no assist band, so what refuses it is the
+    // operator ceiling and not a quantity anyone bought. Telling it that it
     // "used its credits" would name a band it never had, and the payload
     // carries no credit standing for it at all. (Free was the example until
     // the taste gave it a band — AGL-2925; see the case below.)
+    //
+    // The zero is a per-org `assistCreditsPerMonth` override: since AGL-3203
+    // no plan row bands at zero — Starter includes 750 — so an override is
+    // the only way to the null budget bare Starter used to resolve to.
     process.env.ASSIST_ORG_MONTHLY_COGS_LIMIT_USD = '40'
     try {
       seedOrgs()
-      mockDocs.set(`orgs/${FREE_ORG}`, { name: 'Starters', plan: 'starter' })
+      mockDocs.set(`orgs/${FREE_ORG}`, {
+        name: 'Starters',
+        plan: 'starter',
+        entitlements: { assistCreditsPerMonth: 0 },
+      })
       mockDocs.set(`orgs/${FREE_ORG}/assistUsage/${MONTH}`, {
         messages: 5,
         estCostUsd: 41.5,

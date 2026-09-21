@@ -561,14 +561,25 @@ What still stands between `besigner-ui` and an editor that embeds anywhere:
    draft store from whoever embeds it; the contract belongs in
    `@aglyn/besigner` and the Firestore implementation beside the console.
 
+## Publishing
+
+`npm run publish:packages` (`tools/scripts/publish-packages.mjs`) is a DRY RUN
+unless given `--publish`. It asks the registry which packages are missing at
+the version the repo carries, builds those, checks every one and copies the
+root `LICENSE` into it, and only then publishes — a published version cannot
+be replaced, so a failure has to come before the first. A version already out
+is skipped, which makes a second run safe and lets a half-finished one be
+finished. A prerelease publishes under its own label (`beta`), never `latest`.
+
+`.github/workflows/publish-packages.yml` runs it on the push to `production`,
+and by hand as a dry run or for real. It needs the `NPM_TOKEN` repository
+secret — an npm automation token with publish rights on `@aglyn` — and fails
+without it. `@aglyn/cli` keeps its own version and rides the same run.
+
 ## Later
 
 A follow-up project, not this document's commit:
 
-- `nx release` with independent versioning and `publishConfig` per package.
-- A `publish-packages.yml` workflow on the `production` promotion tag that
-  publishes every changed package with provenance, and a `CHANGELOG` per
-  package.
 - An `examples/` consumer that builds the designer UI from the published
   packages, which is the proof the map is real.
 - The licensing decision — which pieces are open source and under which

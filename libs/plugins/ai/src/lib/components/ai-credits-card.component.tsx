@@ -52,10 +52,12 @@ export interface AiCreditsCardProps {
  * readout is the only thing standing between a customer and learning their
  * limit by being turned down mid-build.
  *
- * Rendered only where a band is sold. Free and Starter carry
- * `assistCreditsPerMonth: 0` and no `aiAssist`, and a "0 of 0" meter is not
- * a readout of anything. Starter WITH the AI add-on carries the add-on's
- * band and renders like any Pro-and-up plan. ONE meter for one pool: the
+ * Rendered only where a band is sold, which since AGL-3203 is every plan
+ * row: Free carries the taste and Starter 750, so both render a meter even
+ * though neither carries `aiAssist` — the band is credits, not the guided
+ * rung. What still renders nothing is a band of ZERO, which now reaches this
+ * component only as a per-org override, and a "0 of 0" meter is not a
+ * readout of anything. ONE meter for one pool: the
  * add-on widens `assistCreditsPerMonth` rather than opening a second band,
  * so the limit here is already plan plus add-on and the caption under it
  * says how much of that the add-on is.

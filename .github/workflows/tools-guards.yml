@@ -1019,6 +1019,15 @@ jobs:
       # passing tests about destructive writes ran nowhere.
       - run: npm run test:backfill-core
 
+      # AGL-3079. `tools/scripts/lib/resource-uid.mjs` restates the platform's
+      # id shape, because a `.mjs` under tools/ cannot import the TypeScript
+      # that owns it. These assertions read that owning source, so the
+      # restatement fails here the moment RESOURCE_ID_LENGTH moves, or
+      # createResourceUid stops being createUid(RESOURCE_ID_LENGTH), or the
+      # vendor lib stops mapping createUid onto nanoid. Without this step the
+      # restatement is trusted rather than pinned.
+      - run: npm run test:resource-uid
+
       # AGL-2631. The CRM lifecycle backfill's decisions — which facet gets
       # which stage, which contact becomes a historical lead and which is
       # left (erased, already a lead, already worked), what a company's
@@ -1161,6 +1170,7 @@ jobs:
       # self-test runs first: its fixtures are the core importing a plugin
       # and a plugin importing a plugin, the two edges the map exists for.
       - run: npm run test:lib-boundaries
+      - run: npm run test:publish-packages
       - run: npm run check:lib-boundaries
 
       # AGL-3079 — every Firestore document the platform names is named by

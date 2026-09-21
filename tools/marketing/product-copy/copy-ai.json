@@ -331,7 +331,7 @@
       "section": "early-access",
       "phrase": "an add-on on every paid plan … Free workspaces get a small monthly allowance instead",
       "source": "apps/docs/docs/ai/overview.md#the-add-on; libs/aglyn/src/lib/foundation/definitions/org-billing.types.ts → `aiGenerative` ('No self-serve tier includes it; the Aglyn AI add-on switches it on')",
-      "concern": "RESOLVED as a shape, NOT as a number. No price, no band size and no plan table appears on this page — both figures live on /pricing and in Billing, and `docs/PRICING_SURFACES.md` is explicit that a price reaching an unguarded hand-edited surface is how this fails. Re-read it before anyone adds a figure here. Starter's position (no AI credits of its own, so the add-on is what gives it something to generate against) and Enterprise's (generative building in the agreement rather than the add-on) are both true and both deliberately left to /pricing."
+      "concern": "RESOLVED as a shape, NOT as a number. No price, no band size and no plan table appears on this page — both figures live on /pricing and in Billing, and `docs/PRICING_SURFACES.md` is explicit that a price reaching an unguarded hand-edited surface is how this fails. Re-read it before anyone adds a figure here. Starter's position CHANGED on 2026-09-20 (AGL-3203): it includes AI credits of its own now, so the add-on widens a band rather than creating one, and any copy saying the add-on is what gives Starter something to generate against is false. Enterprise's position (generative building in the agreement rather than the add-on) is unchanged. Both are deliberately left to /pricing, which is why this page needed no edit \u2014 a page that had stated Starter's position would have."
     },
     {
       "section": "disclosure",

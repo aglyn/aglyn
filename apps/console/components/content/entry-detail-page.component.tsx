@@ -32,6 +32,7 @@ import {
   mdiChevronUp,
   mdiClockOutline,
   mdiDeleteOutline,
+  mdiEyeOutline,
   mdiFileDocumentMultipleOutline,
   mdiLinkVariant,
   mdiOpenInNew,
@@ -919,6 +920,80 @@ export function EntryDetailPage() {
     }
   }, [aiInstruction, aiBusy, editor, user, orgId, hostId, enqueueSnackbar])
 
+  /**
+   * The live-site preview link for an entry the site does not serve yet
+   * (AGL-3205).
+   *
+   * The link is minted server-side and cannot be built here: it carries an
+   * HMAC over `TOKEN_SIGNING_SECRET`, which no browser may hold. The route
+   * re-checks that this user may still edit this site's content before it
+   * signs anything, so the button is an affordance and never the gate.
+   *
+   * The window is opened BEFORE the await and navigated after. A `window.open`
+   * on the far side of a network round trip has lost the user gesture that
+   * authorizes it, and Safari blocks it outright — the tab opens blank here
+   * and gets its address a moment later.
+   */
+  const [previewBusy, setPreviewBusy] = useState(false)
+  const handlePreviewOnSite = useCallback(async () => {
+    if (previewBusy || !selected?.slug || !stored?.slug || !hostId) return
+    setPreviewBusy(true)
+    const tab = window.open('', '_blank', 'noopener,noreferrer')
+    try {
+      const response = await authorizedFetch(user, '/api/content/preview-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hostId,
+          collectionSlug: selected.slug,
+          // The STORED slug, never the buffer, for the reason `entryPublicPath`
+          // gives: an unsaved slug names a page that does not exist, and the
+          // signature would be minted for an address nothing answers.
+          entrySlug: stored.slug,
+        }),
+      })
+      const payload = await response.json()
+      const locked = parseLockdownRefusal(response.status, payload)
+      if (locked) {
+        tab?.close()
+        return void enqueueSnackbar(lockdownRefusalText(locked), {
+          variant: 'warning',
+          persist: true,
+        })
+      }
+      if (!response.ok || !payload?.url) {
+        tab?.close()
+        return void enqueueSnackbar(
+          payload?.error ?? 'Could not create a preview link',
+          { variant: 'error', allowDuplicate: true },
+        )
+      }
+      if (tab) tab.location.href = payload.url
+      else window.location.href = payload.url
+      // Best effort, and never the thing the feature depends on: the clipboard
+      // is unavailable over plain http and behind a denied permission, and the
+      // link is in the new tab's address bar either way.
+      try {
+        await navigator.clipboard?.writeText(payload.url)
+      } catch {
+        /* the tab is open; the copy was a convenience */
+      }
+      enqueueSnackbar('Preview opened — link copied, and it works for 2 hours', {
+        variant: 'success',
+        persist: false,
+      })
+    } catch (error) {
+      console.error(error)
+      tab?.close()
+      enqueueSnackbar('An error has occurred', {
+        variant: 'error',
+        allowDuplicate: true,
+      })
+    } finally {
+      setPreviewBusy(false)
+    }
+  }, [previewBusy, selected, stored, hostId, user, enqueueSnackbar])
+
   /* ── derived, for the panels ───────────────────────────────────────── */
 
   const entryIsPublished = stored?.status === 'published'
@@ -1188,6 +1263,23 @@ export function EntryDetailPage() {
               >
                 {'View'}
               </AppLink>
+            ) : null}
+            {/* The other half of `View` (AGL-3205). An entry the site does not
+                serve yet has no live address, and until now that meant no way
+                to look at it as the site will render it — theme, shared layout,
+                entry template and all. This opens exactly that page at exactly
+                that URL, behind a signed two-hour link. Shown only where it
+                applies: a saved entry that is not published. */}
+            {!entryIsPublished && stored?.slug && selected?.slug ? (
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={previewBusy}
+                startIcon={<MdiIcon path={mdiEyeOutline.path} size={0.8} />}
+                onClick={() => void handlePreviewOnSite()}
+              >
+                {'Preview on site'}
+              </Button>
             ) : null}
             {stored ? (
               <Button

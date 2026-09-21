@@ -9,12 +9,38 @@ on Aglyn**). These are authoring inputs for the besigner, not application code
 | `product-page-skeleton.md` | The `/product/*` page contract: 8 sections in document order (74 text slots with a seven-card Explore grid; the Explore count follows the copy), plus the invariants (Container geometry, the heading-variant trap, the measured type scale). Derived by reading the built `/product/besigner` document live. |
 | `apply-page-copy.js` | Pours one `product-copy/copy-<page>.json` into a freshly-pasted copy of that skeleton, in the besigner's page context. Verifies every section's slot count and writes **nothing** on a mismatch. |
 | `verify-applier.mjs` | `node tools/marketing/verify-applier.mjs` — drives the applier over all eight pages against a stub canvas that models the REAL write semantics. |
+| `pour-page.mjs` | `node tools/marketing/pour-page.mjs --host <h> --screen <s> --copy <file> [--apply]` — pours a `copy-<page>.json` into a screen version through **Firestore**, because the besigner route is closed (AGL-2920). Dry run by default; `--apply` writes a NEW version and moves the screen's `versionId` to it, never touching the source version and never publishing. |
+| `firestore-canvas.mjs` | The `canvas` that `pour-page.mjs` hands the applier, backed by a stored `nodes` map. Resolves a child given either as a `NodeId` or as an inline node, because `AglynNodeSchema.nodes` is `NodeId[] \| AglynNodeSchema[]` and both are valid documents. |
+| `verify-pour-canvas.mjs` | `node tools/marketing/verify-pour-canvas.mjs` — drives the REAL applier over a stored-shaped document in both the normalized and denormalized child forms, asserts they produce an identical page, and asserts the refusals still refuse. |
 | `product-copy/copy-<page>.json` | Copy and structure extracted verbatim from the Figma frames, one file per product page, plus a `claimsToVerify` list per page. |
 | `shared-copy/band-<name>.json` | A block placed on **many** pages, worded once. `band-ai.json` is the first (AGL-2921) — see "One band on twenty-five pages" below. |
 | `blog-copy/post-<slug>.json` | One blog post: prose rather than slots, every internal link resolved against the real tree, and the rolling-out notice held outside the body. Three so far (AGL-2922) — see "Blog posts are prose, so the contract is the links" below. |
 | `extract-solutions-copy.mjs` | Extracts one `solutions-copy/copy-<page>.json` per solutions/use-case frame from a `get_metadata` dump of canvas `163:89`. Unit is a **card in a grid**. |
 | `extract-pricing-copy.mjs` | Extracts `pricing-copy/copy-<variant>.json` from the four Pricing frame dumps. Unit is a **row in a table**. See below — it is deliberately not the solutions extractor. |
 | `build-pricing-tables.mts` | Builds `pricing-copy/tables.json` FROM `plan-entitlements.ts` and reconciles all six tables it emits — `compare` (rows and plan columns), `tiers`, `usage`, `metered`, `fees`, `addons` — against the extractions, cell by cell. `npm run check:pricing-tables` runs it without writing. Deliberate divergences are declared with the frame's exact stale value, and a declaration the frame has caught up on fails until it is deleted. The tables that read every breakpoint print a compared-cell count; zero is a failure, because a reader that matches nothing reports clean. A rate the code charges but no row publishes is a failure too: `RATE_KEYS` enumerates every `extra*` field off `PLAN_PRICING` itself, so a new overage rate fails on the commit that adds it rather than after somebody reads an invoice line with no published price. A row we publish that the frame carries nowhere is declared in `USAGE_EXPECTED_ABSENT` and resolves — failing until the entry is deleted — once every breakpoint carries it. |
+
+## The besigner route is closed, so the pour goes through Firestore
+
+`apply-page-copy.js` opens with `window.AglynModule.canvas` and says to paste
+it into the besigner's own page context. On `app.aglyn.com` that context is not
+reachable: `AglynModule` is absent from the top frame, the two real canvas
+frames both throw `SecurityError` on any property read, and neither
+`window.Aglyn` nor `window.__AGLYN_PLUGIN_HOST__` carries a canvas. Measured
+2026-09-20 with the besigner fully loaded.
+
+`pour-page.mjs` therefore supplies a canvas backed by the stored document
+instead. It does **not** re-implement the contract — it reads and evaluates
+`apply-page-copy.js` verbatim, exactly as `verify-applier.mjs` does. The slot
+assertions, the flattens and the prop-spread stay in one place, because each of
+those guards exists thanks to a bug that already happened once, and a second
+copy is a second place for them to rot.
+
+The node schema is the part worth knowing: `AglynNodeSchema.nodes` is
+`NodeId[] | AglynNodeSchema[]`. A lookup that only understood ids would resolve
+every child of a denormalized document to `undefined`, walk to zero text nodes,
+and report a slot-count mismatch — a shape fault that reads as a copy fault, on
+the one tool whose job is to refuse a shifted pour. `verify-pour-canvas.mjs`
+drives both forms and requires them to agree.
 
 ## Why the applier refuses rather than repairs
 

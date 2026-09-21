@@ -1,14 +1,24 @@
 # @aglyn/plugins-workflows
 
-The Automation plugin (AGL-395): the console's **Automation** section —
+The Automation plugin: the console's **Automation** section —
 Workflows, Actions and Webhooks — and the engine that runs what is built there.
+
+> Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
+
+## Install
+
+```bash
+npm install @aglyn/plugins-workflows@beta
+```
+
+A plugin is loaded through Aglyn's plugin manager (`@aglyn/aglyn`) by the console and the tenant runtime; it is not a standalone library.
 
 ## The engine
 
 `src/lib/engine/` holds the automation engine, and nothing outside this plugin
 runs an automation:
 
-- `workflow-steps.ts` — ONE STEP MODEL (AGL-3105). A stored step is a function
+- `workflow-steps.ts` — ONE STEP MODEL. A stored step is a function
   call or an Actions step, told apart by `type`; nothing is migrated. It also
   holds which Actions steps a workflow may run (every server-side one), the
   refusal for the rest, and the validation both editors use. Pure and
@@ -50,3 +60,7 @@ the core's own compose path read it too.
 - `./server` — the tenant and console API surfaces: the inbound webhook, the
   flow-resume job, the automation draft writer.
 - `./declarations.server` — the boot registration above.
+
+## License
+
+Apache-2.0. Source: https://github.com/aglyn/aglyn/tree/main/libs/plugins/workflows

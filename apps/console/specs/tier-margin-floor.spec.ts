@@ -841,7 +841,7 @@ describe('what full utilization costs against each price, and where it stops cle
         ]),
       ),
     ).toEqual({
-      starter: '$15.51 net of Stripe, vs $10.34 cost',
+      starter: '$15.51 net of Stripe, vs $11.09 cost',
       pro: '$37.84 net of Stripe, vs $36.76 cost',
       business: '$96.1 net of Stripe, vs $94.44 cost',
       scale: '$173.78 net of Stripe, vs $170.15 cost',
@@ -884,7 +884,7 @@ describe('what full utilization costs against each price, and where it stops cle
         PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u, 'year'))]),
       ),
     ).toEqual({
-      starter: [84.4, 80.8, 64.6, 32.3],
+      starter: [84.4, 79.6, 62.3, 27.6],
       pro: [81.6, 73.5, 49.9, 2.8],
       business: [76.9, 73.2, 49.4, 1.7],
       scale: [80.3, 73.3, 49.6, 2],
@@ -909,7 +909,7 @@ describe('what full utilization costs against each price, and where it stops cle
         PAID.map((plan) => [plan, [0.03, 0.25, 0.5, 1].map((u) => pct(plan, u, 'month'))]),
       ),
     ).toEqual({
-      starter: [87.9, 85.6, 75.2, 54.6],
+      starter: [87.9, 84.8, 73.7, 51.6],
       pro: [85.9, 80.2, 63.8, 30.9],
       business: [82.5, 79.9, 62.9, 28.9],
       scale: [84.9, 79.9, 62.8, 28.6],
@@ -1118,7 +1118,7 @@ describe('what full utilization costs against each price, and where it stops cle
         ]),
       ),
     ).toEqual({
-      starter: [31.5, -3.6],
+      starter: [28.5, -8.3],
       pro: [5.3, -34.1],
       business: [13.6, -19.8],
       scale: [15.2, -16.6],
@@ -1270,30 +1270,39 @@ describe('what full utilization costs against each price, and where it stops cle
 
   /**
    * STARTER IS THE WIDEST RUNG, and the arithmetic is here rather than
-   * asserted by absence. Its bands imply $10.34 against a $16 annual price —
-   * 32.3%, an order of magnitude more room than any rung above it — and
-   * bandwidth is 81% of that, $8.36.
+   * asserted by absence. Its bands imply $11.09 against a $16 annual price —
+   * 27.6%, an order of magnitude more room than any rung above it — and
+   * bandwidth is 75% of that, $8.36.
    *
-   * It is also THE CONTROL FOR THE BAND RESIZE. Starter sells neither assist
-   * nor campaign email, so those two terms are ZERO here, and its bandwidth
-   * BAND has never moved: it was never under water, so the 2026-09-07 resize
-   * passed it by and it kept the room the five tiers above it spent.
+   * It is also THE CONTROL FOR THE BAND RESIZE, on bandwidth: Starter's
+   * bandwidth BAND has never moved: it was never under water, so the
+   * 2026-09-07 resize passed it by and it kept the room the five tiers above
+   * it spent.
+   *
+   * ⚠ It is NO LONGER the zero-assist control. AGL-3203 gave Starter 750
+   * credits, so the assist term is $0.75 here and the "term present and
+   * ZERO" reading moved to campaign email, which Starter still bands at 0.
+   * That reading has to live SOMEWHERE — a term that vanishes instead of
+   * reading zero drops cost by arithmetic rather than by entitlement — and
+   * email is where it lives now.
    */
   it('leaves Starter the widest rung, on bandwidth alone', () => {
     expect(listPriceUsd('starter', 'month')).toBe(25)
     expect(listPriceUsd('starter', 'year')).toBe(16)
-    expect(tierCostUsd('starter', 1)).toBeCloseTo(10.34, 2)
-    // The metered axes alone are $8.81 — $8.36 of which is bandwidth — plus
-    // the 500 runs it sells, 0.6¢; the CRM decision terms are the $1.53 on top.
-    expect(Object.values(bandCostTerms('starter')).reduce((a, b) => a + b, 0)).toBeCloseTo(8.81, 2)
+    expect(tierCostUsd('starter', 1)).toBeCloseTo(11.09, 2)
+    // The metered axes alone are $9.56 — $8.36 of which is bandwidth — plus
+    // the 750 assist credits at 75¢ and the 500 runs it sells, 0.6¢; the CRM
+    // decision terms are the $1.53 on top.
+    expect(Object.values(bandCostTerms('starter')).reduce((a, b) => a + b, 0)).toBeCloseTo(9.56, 2)
     expect(bandCostTerms('starter').bandwidth).toBeCloseTo(8.36, 2)
     expect(PLAN_ENTITLEMENTS.starter.bandwidthGb).toBe(50)
-    // Untouched by the assist term, because there is no band to price: the
-    // term is present and it is ZERO, which is a different statement from
-    // the term being absent.
+    // The assist term is REAL here since AGL-3203, and it is the whole of
+    // what the decision cost this tier: 750 credits, 75¢, and the rung stays
+    // the widest on the ladder with it counted.
     expect(Object.keys(tierCostTerms('starter'))).toContain('assistCredits')
-    expect(tierCostTerms('starter').assistCredits).toBe(0)
-    expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(0)
+    expect(tierCostTerms('starter').assistCredits).toBeCloseTo(0.75, 2)
+    expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(750)
+    // The band is credits, not the guided rung — that still starts at Pro.
     expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(false)
     // The email axis, read the same way and for the same reason. Campaign
     // email begins at Pro, so the term is present and ZERO rather than
@@ -1351,8 +1360,11 @@ describe('what full utilization costs against each price, and where it stops cle
         price -
         (Object.values(terms).reduce((a, b) => a + b, 0) - terms.assistCredits)
       const band = PLAN_ENTITLEMENTS[plan].assistCreditsPerMonth
-      // Starter sells no assist, and a plan with no band is not measured
-      // against a share of a remainder it never spends.
+      // Every paid plan sells an assist band since AGL-3203, so the null
+      // branch no longer fires on any shipped row. It is kept because it is
+      // the rule's guard, not a Starter special case: a band of zero is "not
+      // sold" and must not be measured against a share of a remainder it
+      // never spends.
       const share = band === 0 ? null : (band * ASSIST_CREDIT_COST_USD) / room
       expect(
         `${plan}: ${share === null ? 'none' : share > 0 && share <= 1 / 3}`,
@@ -1368,7 +1380,7 @@ describe('what full utilization costs against each price, and where it stops cle
         ]),
       ),
     ).toEqual({
-      starter: 0,
+      starter: 750,
       pro: 2_750,
       business: 7_500,
       scale: 10_000,
@@ -1878,7 +1890,7 @@ describe('the infra pass-through is priced by a different rule', () => {
         ]),
       ),
     ).toEqual({
-      starter: [53.1, 30],
+      starter: [50.1, 25.3],
       pro: [29.3, 0.4],
       business: [27.9, 0.3],
       scale: [27.8, 0.8],
@@ -1968,7 +1980,7 @@ describe('the Aglyn AI add-on band clears the same invariant with its revenue co
         ]),
       ),
     ).toEqual({
-      starter: [39.6, 54],
+      starter: [36.6, 51.8],
       pro: [18.2, 35.7],
       business: [14.9, 33.2],
       scale: [14.8, 32.8],

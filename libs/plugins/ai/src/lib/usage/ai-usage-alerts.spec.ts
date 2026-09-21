@@ -49,11 +49,19 @@ const LAST_MONTH = '2026-08'
 const PRO_ORG = { plan: 'pro', slug: 'acme' }
 
 /**
- * A Starter org without the AI add-on: no band of its own, so the operator
- * backstop — the repo default when nothing is configured — is the ceiling its
- * reservations refuse at.
+ * An org with no band of its own, so the operator backstop — the repo default
+ * when nothing is configured — is the ceiling its reservations refuse at.
+ *
+ * The band is a per-org `assistCreditsPerMonth` override rather than the
+ * plan's own row: since AGL-3203 no plan rows at zero (Starter includes 750),
+ * so an explicit override is the only way an org reaches the null budget bare
+ * Starter used to resolve to.
  */
-const NO_BAND_ORG = { plan: 'starter', slug: 'acme' }
+const NO_BAND_ORG = {
+  plan: 'starter',
+  slug: 'acme',
+  entitlements: { assistCreditsPerMonth: 0 },
+}
 
 type Guards = Record<string, { month?: string; threshold?: number }>
 
@@ -149,9 +157,11 @@ describe('the margin guard (AGL-2984)', () => {
       `The ${aiAddonName()} add-on is on, with an AI credit band of `,
     )
 
-    // The premise: Starter with no add-on sells no band.
-    expect(resolveAssistCreditBudget({ plan: 'starter' } as never)).toBeNull()
-    const noBand = fakeSweep({ assistUsd: 30, org: { plan: 'starter' } })
+    // The premise: this org sells no band. Since AGL-3203 that is a per-org
+    // `assistCreditsPerMonth: 0` override and never a plan row — Starter's
+    // own row includes 750 credits.
+    expect(resolveAssistCreditBudget(NO_BAND_ORG as never)).toBeNull()
+    const noBand = fakeSweep({ assistUsd: 30, org: NO_BAND_ORG })
     await evaluateAiUsageAlerts(noBand.context)
     expect(noBand.sent[0].body).toContain(
       `The ${aiAddonName()} add-on is off, with no AI credit band.`,

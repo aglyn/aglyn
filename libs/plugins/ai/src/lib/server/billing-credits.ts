@@ -56,9 +56,10 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
  * the model is swapped. `publicAssistCredits` is the one conversion, and no
  * dollar figure crosses this boundary.
  *
- * `credits: null` is the honest answer for a plan that sells no assist band —
- * Starter without the AI add-on. It is not "0 of 0"; there is no band to be a
- * fraction of, and the page renders no meter rather than an empty one.
+ * `credits: null` is the honest answer for an org that has no assist band at
+ * all. Since AGL-3203 no plan ROW bands at zero, so what reaches this is a
+ * per-org override that writes one. It is not "0 of 0"; there is no band to
+ * be a fraction of, and the page renders no meter rather than an empty one.
  *
  * An UNCAPPED staff comp (AGL-3049) has no band either, but it has a meter:
  * the workspace draws credits with no limit to draw them against. It answers

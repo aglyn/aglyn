@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/aglyn",
-  "version": "1.0.0-beta.143",
+  "version": "1.0.0-beta.144",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -22,6 +22,10 @@
       "types": "./src/server.d.ts",
       "default": "./src/server.js"
     },
+    "./foundation": {
+      "types": "./src/lib/foundation/index.d.ts",
+      "default": "./src/lib/foundation/index.js"
+    },
     "./*": {
       "types": "./src/lib/*.d.ts",
       "default": "./src/lib/*.js"
@@ -29,15 +33,15 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-enums": "1.0.0-beta.143",
-    "@aglyn/shared-data-mdi": "1.0.0-beta.143",
-    "@aglyn/shared-data-types": "1.0.0-beta.143",
-    "@aglyn/shared-util-email": "1.0.0-beta.143",
-    "@aglyn/shared-util-http": "1.0.0-beta.143",
-    "@aglyn/shared-util-logger": "1.0.0-beta.143",
-    "@aglyn/shared-util-timestamp": "1.0.0-beta.143",
-    "@aglyn/shared-util-tools": "1.0.0-beta.143",
-    "@aglyn/shared-util-vendor": "1.0.0-beta.143",
+    "@aglyn/shared-data-enums": "1.0.0-beta.144",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.144",
+    "@aglyn/shared-data-types": "1.0.0-beta.144",
+    "@aglyn/shared-util-email": "1.0.0-beta.144",
+    "@aglyn/shared-util-http": "1.0.0-beta.144",
+    "@aglyn/shared-util-logger": "1.0.0-beta.144",
+    "@aglyn/shared-util-timestamp": "1.0.0-beta.144",
+    "@aglyn/shared-util-tools": "1.0.0-beta.144",
+    "@aglyn/shared-util-vendor": "1.0.0-beta.144",
     "@data-driven-forms/react-form-renderer": "^4.2.0",
     "@msgpack/msgpack": "^3.1.3",
     "@types/unist": "^3.0.3",
@@ -55,6 +59,20 @@
     "firebase": "^12.18.0",
     "next": "16.3.3",
     "react": "^19.2.8"
+  },
+  "peerDependenciesMeta": {
+    "@mui/material": {
+      "optional": true
+    },
+    "@mui/system": {
+      "optional": true
+    },
+    "firebase": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    }
   },
   "sideEffects": [
     "./src/lib/foundation/constants/_internal.*",

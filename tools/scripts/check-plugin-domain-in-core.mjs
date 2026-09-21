@@ -87,7 +87,9 @@ const MANIFEST = /^apps\/[^/]+\/(?:constants|utils)\/plugins\.[a-z.]*generated\.
 
 const SOURCE = /\.(?:ts|tsx|js|jsx|mjs|cjs)$/
 const SPEC = /\.(?:spec|test|e2e)\.(?:[tj]sx?|mjs)$|\/fixtures\//
-const GENERATED = /\.generated\.ts$/
+// Generated output is not authored code. The icon set is one path per icon,
+// and an icon NAMED `inbox` or `shopping` is a drawing, not the plugin.
+const GENERATED = /\.generated\.ts$|^libs\/shared\/data\/mdi\/generated\//
 
 /**
  * Rule 1. A domain token opens the file's name, or names a directory on an

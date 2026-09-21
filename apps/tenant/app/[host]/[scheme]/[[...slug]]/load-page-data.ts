@@ -22,6 +22,7 @@ import {
   getDomainLockdown,
   getPlatformLockdown,
   getRealmPluginInstalls,
+  verifyCollectionPreviewToken,
 } from '@aglyn/tenant-data-admin'
 import composeScreenNodes from '@aglyn/tenant-runtime/compose-screen-nodes'
 import {
@@ -151,7 +152,11 @@ const mergePageData = (
 }
 
 const loadPageDataCached = cache(
-  async (hostParam: string, slugKey: string): Promise<LoadResult> => {
+  async (
+    hostParam: string,
+    slugKey: string,
+    previewToken: string,
+  ): Promise<LoadResult> => {
     const slug = JSON.parse(slugKey) as string[]
     const context = { params: { host: hostParam, slug } }
 
@@ -843,10 +848,38 @@ const loadPageDataCached = cache(
         const entrySlug = route.entrySlug
         const isList = !entrySlug
         const page = route.page
+        /**
+         * The live-site preview grant, checked HERE (AGL-3205).
+         *
+         * This is the last point before a withheld entry could be read, and
+         * the first point at which the question is answerable: `hostId` is the
+         * host this request actually RESOLVED to, so a token minted for one
+         * site cannot be presented to another, whatever its payload says. The
+         * route's own `collectionSlug`/`entrySlug` are passed as the scope, so
+         * a token for one post cannot be carried to the URL of another.
+         *
+         * A list route never asks: `entrySlug` is undefined there, and a
+         * preview of one post must not reach `/blog`, the feed, or any page
+         * carrying a Collection entries block — all of which read the SHARED
+         * cached source.
+         *
+         * Everything about a failed check is the public path: no grant, the
+         * entry stays withheld, and the render is the one this route has
+         * always produced.
+         */
+        const previewGranted =
+          Boolean(previewToken) &&
+          Boolean(entrySlug) &&
+          verifyCollectionPreviewToken(previewToken, {
+            hostId,
+            collectionSlug: route.collectionSlug,
+            entrySlug: entrySlug as string,
+          })
         const content = await getCollectionContent({
           hostId,
           collectionSlug: route.collectionSlug,
           entrySlug,
+          ...(previewGranted ? { previewUnpublishedEntry: true } : {}),
           ...(isList
             ? {
                 page,
@@ -1424,7 +1457,23 @@ const loadPageDataCached = cache(
 export const loadPageData = (
   hostParam: string,
   slug: string[],
-): Promise<LoadResult> => loadPageDataCached(hostParam, JSON.stringify(slug))
+  /**
+   * The raw, UNVERIFIED preview token off the request URL (AGL-3205), passed
+   * only by the preview route — every public caller omits it and gets `''`.
+   *
+   * It is threaded in rather than read from `headers()` here because reading a
+   * dynamic API inside this loader would opt the ISR-cached catch-all above it
+   * out of static rendering entirely, which is the AGL-1152 regression the
+   * whole file is written around. It is verified far below, inside the
+   * collection branch and against the RESOLVED host, so nothing withheld is
+   * loaded on the strength of an unchecked string.
+   *
+   * It is part of the `cache()` key, which is what it must be: two renders in
+   * one request that disagree about the grant are two different pages.
+   */
+  previewToken = '',
+): Promise<LoadResult> =>
+  loadPageDataCached(hostParam, JSON.stringify(slug), previewToken)
 
 // Still exported from here: this is the module the API route and the specs
 // name it by. It lives in `utils/not-found-screen-id.ts` (AGL-2648) so the

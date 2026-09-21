@@ -65,11 +65,38 @@ export async function editAccessMintRefusal(options: {
   /** From verified ID-token claims; a hint carries none, so it stays false. */
   staff?: boolean
 }): Promise<Response | null> {
-  const { request, firestore, host, orgId, uid, staff = false } = options
-
-  if (!(await isServerReleaseFlagOnForOrg('release_edit_bar', orgId))) {
+  if (!(await isServerReleaseFlagOnForOrg('release_edit_bar', options.orgId))) {
     return Response.json({ error: 'Not available' }, { status: 404 })
   }
+  return hostContentEditRefusal(options)
+}
+
+/**
+ * Steps 2–4 of the gate above, WITHOUT the edit-bar release flag (AGL-3205).
+ *
+ * "May this uid edit this host's content?" is a question more than one feature
+ * asks. The live-site preview of an unpublished entry asks it — the link it
+ * mints reveals a post the public cannot see, so the person asking for one has
+ * to be someone who could have published it — and it is emphatically NOT the
+ * edit bar: `release_edit_bar` is that surface's kill switch, and a preview
+ * link has no business disappearing when somebody turns the bar off.
+ *
+ * Split rather than copied, for the reason this module exists at all: the
+ * whole note above is about not growing a second authorization path that
+ * drifts from the first. Callers that ARE the edit bar keep calling
+ * {@link editAccessMintRefusal} and keep its flag.
+ */
+export async function hostContentEditRefusal(options: {
+  request: Request
+  firestore: Firestore
+  /** The `hosts/{hostId}` snapshot, already confirmed to exist. */
+  host: DocumentSnapshot
+  orgId: string
+  uid: string
+  /** From verified ID-token claims; a hint carries none, so it stays false. */
+  staff?: boolean
+}): Promise<Response | null> {
+  const { request, firestore, host, orgId, uid, staff = false } = options
 
   const membership = await firestore
     .collection('orgs')
