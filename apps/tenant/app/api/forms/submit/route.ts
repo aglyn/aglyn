@@ -30,7 +30,7 @@ import {
   visitorWriteRefusal,
 } from '@aglyn/tenant-data-admin'
 import { emitHostEvent, resolveDatasetDoc } from '@aglyn/tenant-runtime'
-import recordCapturedContact from '../../../../utils/record-captured-contact'
+import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
 // The leaf, not the barrel: this route's specs substitute the barrel wholesale,
 // and the verification must be the real one under them.

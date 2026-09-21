@@ -40,7 +40,6 @@
 
 const sent: Array<Record<string, unknown>> = []
 const metered: string[] = []
-const upserted: Array<Record<string, unknown>> = []
 const enrolled: Array<Record<string, unknown>> = []
 let pendingCalls: Array<{ hostId: string; email: string; topicId: string }> = []
 let pendingResult = 'pending'
@@ -105,9 +104,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // name it does not list, which would make the handler throw rather than
   // fail an assertion.
   resolveCampaignTouch: async () => null,
-  upsertHostContact: async (options: Record<string, unknown>) => {
-    upserted.push(options)
-  },
   enrollListMember: async (options: Record<string, unknown>) => {
     enrolled.push(options)
     return { enrolled: true, memberId: 'm1', adopted: false, created: true }
@@ -163,6 +159,8 @@ jest.mock('@aglyn/tenant-data-admin/server/email-unsubscribe-link', () => ({
     input['siteBase'] ? `${input['siteBase']}/api/email/confirm?tid=newsletter` : '',
 }))
 
+import type { PluginContactCaptureRequest } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { standInRecordSystem } from '../testing/stand-in-record-system'
 import { newsletterHandler } from './newsletter'
 
 const HOST = 'host-1'
@@ -179,6 +177,8 @@ const ADDRESS = 'dana@example.com'
  * keeps this file about the confirmation rather than about the limiter.
  */
 let signUpSeq = 0
+/** What the door reported, filled by the stand-in record system. */
+let captured: PluginContactCaptureRequest[] = []
 
 async function signUp(body: Record<string, unknown> = {}) {
   const out: { code: number; body: any } = { code: 0, body: undefined }
@@ -207,7 +207,7 @@ async function signUp(body: Record<string, unknown> = {}) {
 beforeEach(() => {
   sent.length = 0
   metered.length = 0
-  upserted.length = 0
+  captured = standInRecordSystem()
   enrolled.length = 0
   pendingCalls = []
   pendingResult = 'pending'
@@ -243,12 +243,22 @@ describe('when the site asks for one', () => {
    * they do would lose the record of what the person actually did — the
    * confirmation gates the SEND, on their topic entry.
    */
+  /**
+   * The door reports the person to whichever plugin keeps them (AGL-3080),
+   * and the confirmation gates the SEND rather than the capture: somebody who
+   * typed their address and asked to be subscribed did that whether or not
+   * they go on to click a link, and withholding the record until they do
+   * would lose what they actually did.
+   */
   it('still captures the contact and its consent record', async () => {
     await signUp()
-    expect(upserted).toHaveLength(1)
-    expect(upserted[0]).toMatchObject({
-      email: ADDRESS,
+    expect(captured).toHaveLength(1)
+    expect(captured[0]).toMatchObject({
+      hostId: HOST,
+      identity: { email: ADDRESS },
+      interaction: { source: 'newsletter' },
       marketingConsent: true,
+      lifecycleFloor: 'subscriber',
     })
   })
 

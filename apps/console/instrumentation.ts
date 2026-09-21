@@ -15,6 +15,13 @@
  * limitations under the License.
  */
 
+// STATIC, unlike the deferred relative imports below. Deferring a lib by its
+// own specifier makes nx treat it as lazy-loaded everywhere, which is what
+// the AGL-1921 note below describes costing this app its 181 static imports
+// of `@aglyn/tenant-data-admin`. Nothing in this subpath touches
+// firebase-admin, so the edge bundle is unaffected.
+import { registerPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+
 /**
  * Server-side error reporting for the console runtime (AGL-1921).
  *
@@ -50,6 +57,24 @@
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return
+
+  /*
+   * The same boot step, offered to a capture door that finds nobody keeping
+   * people (AGL-3080).
+   *
+   * The `catch` below is deliberate, and it means a bad boot leaves a process
+   * where every capture answers "this workspace keeps no records", no contact
+   * is ever written, and nothing is red. Core cannot run the step itself: the
+   * manifest names every plugin, which is the one import core may not make.
+   * So it is handed over, here, before the step it repairs.
+   */
+  registerPluginDeclarationsRepair(async () => {
+    const { registerPluginServerDeclarations } = await import(
+      './constants/plugins.declarations.server.generated'
+    )
+    await registerPluginServerDeclarations()
+  })
+
   // Logged, not thrown: a declaration that fails to load costs its plugin's
   // keys and events, and a boot that throws costs every route.
   try {
