@@ -121,6 +121,9 @@ export function AiJobPlan({
           {plan.screens.map((screen, index) => (
             <Typography key={`screen-${index}`} variant="body2" role="listitem">
               Builds the screen {screen.title} at {screen.slug}
+              {screen.duplicateOf
+                ? `, from a copy of ${named(screen.duplicateOf)}`
+                : ''}
               {screen.layout ? ` in ${named(screen.layout)}` : ''}
               {screen.sections.length
                 ? `: ${screen.sections.map((section) => section.name).join(', ')}`

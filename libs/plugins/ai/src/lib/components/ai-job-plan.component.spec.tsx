@@ -96,6 +96,22 @@ it('shows what the plan is estimated to cost beside the button that confirms it'
   expect(screen.getByRole('button', { name: 'Confirm plan' })).toBeTruthy()
 })
 
+it('says a screen starts from a copy, as a creation does (AGL-3024)', () => {
+  // A `create` row has always disclosed "from a copy of"; a screen row said
+  // "Builds the screen", full stop. Measured live 2026-09-21: the member
+  // confirmed a plan reading "Builds the screen Practice Areas", and the step
+  // took its copy branch and duplicated an existing page instead. A plan is
+  // the contract the member confirms and pays against, so the word for what
+  // it will do has to be the true one.
+  const copying = {
+    ...PLAN,
+    screens: [{ ...PLAN.screens[0], duplicateOf: 'scr-home' }],
+  }
+  render(<AiJobPlan job={job({ plan: copying })} onResume={jest.fn()} />)
+  const row = screen.getByText(/the screen Home/)
+  expect(row.textContent).toContain('from a copy of')
+})
+
 it('says nothing about cost once the plan is being built', () => {
   render(
     <AiJobPlan
