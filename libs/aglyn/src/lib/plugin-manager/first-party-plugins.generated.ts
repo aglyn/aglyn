@@ -9,6 +9,7 @@
 
 import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 import type { ResolvedPluginHostCollection } from './plugin-host-collections'
+import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
   {
@@ -408,5 +409,26 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "pluginId": "workflows",
     "name": "actions",
     "routeSlug": "automation"
+  },
+]
+
+/**
+ * Every org capacity a first-party plugin backs, declared by that plugin
+ * (AGL-3080). Core owns the money; this says what is counted and what it is
+ * called.
+ */
+export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[] = [
+  {
+    "pluginId": "data",
+    "kind": "datasets",
+    "order": 30,
+    "collection": "datasets",
+    "addonKind": "datasets",
+    "includedEntitlement": "datasetsPerOrg",
+    "nouns": {
+      "one": "dataset",
+      "many": "datasets",
+      "addon": "extra datasets"
+    }
   },
 ]

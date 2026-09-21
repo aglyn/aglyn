@@ -551,7 +551,7 @@ describe('the in-use figure never exceeds what the org bought', () => {
         quantity: 0,
         currentQuantity: 0,
         included: 1,
-        counts: { datasetCount: 40 },
+        counts: { declared: { datasets: 40 } },
       }),
     ).toBeNull()
   })
@@ -566,7 +566,7 @@ describe('the in-use figure never exceeds what the org bought', () => {
       quantity: 0,
       currentQuantity: 5,
       included: 3,
-      counts: { datasetCount: 20 },
+      counts: { declared: { datasets: 20 } },
     })
     expect(refusal).toMatchObject({ inUse: 5, release: 17 })
   })

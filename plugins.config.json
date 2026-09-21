@@ -496,6 +496,20 @@
         "releaseFlag": "release_data_store",
         "publishedSiteImpact": "console-only"
       },
+      "orgCapacities": [
+        {
+          "kind": "datasets",
+          "order": 30,
+          "collection": "datasets",
+          "addonKind": "datasets",
+          "includedEntitlement": "datasetsPerOrg",
+          "nouns": {
+            "one": "dataset",
+            "many": "datasets",
+            "addon": "extra datasets"
+          }
+        }
+      ],
       "contributes": {
         "console": {
           "shell": true,

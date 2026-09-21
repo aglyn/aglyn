@@ -23,6 +23,7 @@ import {
   getDocsFromServer,
   type Firestore,
 } from 'firebase/firestore'
+import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 import fetchSeatCounts from './fetch-seat-counts'
 import { overLimitRows, overLimitSummaryLine } from './over-limit'
 
@@ -65,7 +66,7 @@ async function countOrgSites(
 
 /**
  * What the org will be over on a target plan (AGL-483): sites, team seats and
- * datasets.
+ * every capacity a plugin declares it backs.
  *
  * Downgrades never delete anything, but the customer is entitled to know what
  * they will be over BEFORE they choose. Shared (AGL-2154) because the same
@@ -98,29 +99,38 @@ export async function overLimitSummary(options: {
   // An unknown plan is refused BEFORE the counts, so a typo costs no reads.
   // The comparison itself lives in `over-limit.ts`; this is existence only.
   if (!PLAN_ENTITLEMENTS[targetPlan] || !orgId) return []
-  const [seatCounts, datasetCount, siteCount] = await Promise.all([
+  // The declared capacities are counted the way the server gate counts them —
+  // one aggregation on `orgs/{orgId}/<collection>` — so the warning and the
+  // refusal are measuring the same documents and cannot disagree.
+  const capacities = pluginOrgCapacities()
+  const [seatCounts, siteCount, ...declaredCounts] = await Promise.all([
     fetchSeatCounts(user, orgId),
-    getCountFromServer(collection(firestore, 'orgs', orgId, 'datasets'))
-      .then((snapshot) => snapshot.data().count)
-      .catch(() => null),
     options.siteCount === undefined
       ? countOrgSites(firestore, user?.uid, orgId)
       : Promise.resolve(options.siteCount),
+    ...capacities.map((one) =>
+      getCountFromServer(collection(firestore, 'orgs', orgId, one.collection))
+        .then((snapshot) => snapshot.data().count)
+        .catch(() => null),
+    ),
   ])
   // An unanswerable count is NOT "you are under the limit" — `overLimitRows`
   // emits a row for it rather than omitting it, so the confirmation cannot
   // read as a clean bill of health it never earned.
   //
-  // Every row measures what the plan INCLUDES (`hostLimit`, `managersPerOrg`,
-  // `datasetsPerOrg`), never the purchase CEILING (`maxDatasetsPerOrg` and
-  // friends) — the two are far apart, Starter includes 3 datasets and sells up
-  // to 10, and measuring against the ceiling printed a number the word
-  // "includes" makes false while clearing an org that a plan change strands.
+  // Every row measures what the plan INCLUDES — `hostLimit`, `managersPerOrg`,
+  // and whichever field each declared capacity names — never the purchase
+  // CEILING (`maxDatasetsPerOrg` and friends). The two are far apart, Starter
+  // includes 3 datasets and sells up to 10, and measuring against the ceiling
+  // printed a number the word "includes" makes false while clearing an org
+  // that a plan change strands.
   return overLimitRows(
     {
       siteCount,
       managerSeats: seatCounts == null ? null : seatCounts.managerSeats,
-      datasetCount,
+      declared: Object.fromEntries(
+        capacities.map((one, index) => [one.kind, declaredCounts[index]]),
+      ),
     },
     targetPlan,
   ).map((row) => overLimitSummaryLine(row, targetPlan))

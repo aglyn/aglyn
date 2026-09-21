@@ -985,20 +985,6 @@
       "lane": "workflows"
     },
     {
-      "path": "apps/console/utils/over-limit-summary.ts",
-      "rules": [
-        "plugin-collection:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "apps/console/utils/over-limit.ts",
-      "rules": [
-        "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
       "path": "apps/console/utils/promote-form-version.ts",
       "rules": [
         "domain-declares:forms"
@@ -1018,13 +1004,6 @@
       "path": "apps/console/utils/server/announce-dataset-change.ts",
       "rules": [
         "domain-declares:data"
-      ],
-      "lane": "data"
-    },
-    {
-      "path": "apps/console/utils/server/capacity-in-use.ts",
-      "rules": [
-        "plugin-collection:data"
       ],
       "lane": "data"
     },

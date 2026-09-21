@@ -47,6 +47,10 @@
  */
 
 import { countManagerSeats, type OrgPlan } from '@aglyn/aglyn/server'
+import {
+  pluginOrgCapacities,
+  pluginOrgCapacityForAddon,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 import { firebaseAdmin, listOrgMembers } from '@aglyn/tenant-data-admin'
 import {
   blockingOverLimitRows,
@@ -67,12 +71,19 @@ import type { AddonKind } from '@aglyn/tenant-data-admin/server/billing-addons'
  * switch — turning it off refuses a capability, not a person or their data,
  * which is exactly the class that never needed this.
  */
-export type CapacityAddonKind = 'hosts' | 'datasets' | 'managers'
+export type CapacityAddonKind = string
+
+/**
+ * `hosts` and `managers` are the platform's own — every workspace has sites
+ * and people. Everything else is an add-on a PLUGIN backs, declared by that
+ * plugin (AGL-3080); `datasets` used to be written here and is now the data
+ * plugin's declaration.
+ */
+const CORE_CAPACITY_ADDON_KINDS = ['hosts', 'managers'] as const
 
 export const CAPACITY_ADDON_KINDS: readonly CapacityAddonKind[] = [
-  'hosts',
-  'datasets',
-  'managers',
+  ...CORE_CAPACITY_ADDON_KINDS,
+  ...pluginOrgCapacities().map((one) => one.addonKind),
 ]
 
 export function isCapacityAddonKind(
@@ -125,8 +136,15 @@ export async function countOrgSites(
   }
 }
 
-/** Datasets the org holds — `orgs/{orgId}/datasets`, what `checkDatasetQuota` meters. */
-export async function countOrgDatasets(orgId: string): Promise<number | null> {
+/**
+ * A declared capacity's documents — `orgs/{orgId}/<collection>`, the same
+ * aggregation `countOrgDatasets` was before the collection stopped being
+ * core's to name (AGL-3080).
+ */
+export async function countOrgCapacity(
+  orgId: string,
+  collectionName: string,
+): Promise<number | null> {
   try {
     const count = (
       await firebaseAdmin
@@ -134,13 +152,13 @@ export async function countOrgDatasets(orgId: string): Promise<number | null> {
         .firestore()
         .collection('orgs')
         .doc(orgId)
-        .collection('datasets')
+        .collection(collectionName)
         .count()
         .get()
     ).data().count
     return Number(count) || 0
   } catch (error) {
-    console.warn('[capacity] dataset count unreadable', { orgId, error })
+    console.warn('[capacity] count unreadable', { orgId, collectionName, error })
     return null
   }
 }
@@ -190,15 +208,22 @@ export async function readCapacityCounts(options: {
   kinds: readonly CapacityAddonKind[]
 }): Promise<CapacityCounts> {
   const { orgId, org, kinds } = options
-  const [siteCount, datasetCount, managerSeats] = await Promise.all([
+  const wanted = pluginOrgCapacities().filter((one) =>
+    kinds.includes(one.addonKind),
+  )
+  const [siteCount, managerSeats, ...declaredCounts] = await Promise.all([
     kinds.includes('hosts') ? countOrgSites(orgId, org) : undefined,
-    kinds.includes('datasets') ? countOrgDatasets(orgId) : undefined,
     kinds.includes('managers') ? countOrgManagerSeats(orgId) : undefined,
+    ...wanted.map((one) => countOrgCapacity(orgId, one.collection)),
   ])
   const counts: CapacityCounts = {}
   if (kinds.includes('hosts')) counts.siteCount = siteCount
-  if (kinds.includes('datasets')) counts.datasetCount = datasetCount
   if (kinds.includes('managers')) counts.managerSeats = managerSeats
+  if (wanted.length) {
+    counts.declared = Object.fromEntries(
+      wanted.map((one, index) => [one.kind, declaredCounts[index]]),
+    )
+  }
   return counts
 }
 
@@ -214,20 +239,26 @@ export async function readCapacityCounts(options: {
  */
 export function includedCapacity(
   kind: CapacityAddonKind,
+  /*
+   * The two fields core reads itself are named and typed; the rest is an
+   * index because a declared capacity names its own field and core cannot
+   * know which one. Callers pass a whole resolved entitlement bag, which
+   * carries non-numeric members (`features`), so the index is `unknown` and
+   * every declared read is coerced below.
+   */
   baseline: {
     hostLimit: number
-    datasetsPerOrg: number
     managersPerOrg: number
-  },
+  } & Readonly<Record<string, unknown>>,
 ): number {
-  switch (kind) {
-    case 'hosts':
-      return baseline.hostLimit
-    case 'datasets':
-      return baseline.datasetsPerOrg
-    case 'managers':
-      return baseline.managersPerOrg
-  }
+  if (kind === 'hosts') return baseline.hostLimit
+  if (kind === 'managers') return baseline.managersPerOrg
+  const declared = pluginOrgCapacityForAddon(kind)
+  // A kind nobody backs includes NOTHING, so every held document reads as
+  // over — the same way round as `overLimitRows`, and for the same reason:
+  // an unknown capacity treated as unlimited would clear a reduction that
+  // strands real data, and clear it silently.
+  return declared ? Number(baseline[declared.includedEntitlement] ?? 0) : 0
 }
 
 /** How much of a kind the org holds, from a counts bag. */
@@ -235,14 +266,10 @@ function heldCount(
   kind: CapacityAddonKind,
   counts: CapacityCounts,
 ): number | null | undefined {
-  switch (kind) {
-    case 'hosts':
-      return counts.siteCount
-    case 'datasets':
-      return counts.datasetCount
-    case 'managers':
-      return counts.managerSeats
-  }
+  if (kind === 'hosts') return counts.siteCount
+  if (kind === 'managers') return counts.managerSeats
+  const declared = pluginOrgCapacityForAddon(kind)
+  return declared ? counts.declared?.[declared.kind] : undefined
 }
 
 /**
@@ -255,12 +282,14 @@ const NOUNS: Record<
   { one: string; many: string; addon: string }
 > = {
   hosts: { one: 'site', many: 'sites', addon: 'extra sites' },
-  datasets: { one: 'dataset', many: 'datasets', addon: 'extra datasets' },
   managers: {
     one: 'team member',
     many: 'team members',
     addon: 'extra team seats',
   },
+  ...Object.fromEntries(
+    pluginOrgCapacities().map((one) => [one.addonKind, one.nouns]),
+  ),
 }
 
 function noun(kind: CapacityAddonKind, quantity: number): string {

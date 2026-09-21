@@ -654,6 +654,75 @@ function hostCollectionRows() {
   return rows
 }
 
+/**
+ * The org capacities each plugin backs (AGL-3080).
+ *
+ * Compiled for the reason the whole file is, and here the reason is money: the
+ * readers are the downgrade REFUSAL and the warning the customer reads before
+ * choosing, and a capacity missing from one of them lets a plan change strand
+ * the thing it names with nothing red.
+ *
+ * Checked here: one declaration per kind, one per add-on kind, an order that
+ * does not collide with core's own two, and the nouns actually written. Core
+ * owns whether a reduction is refused; a declaration only says what is
+ * counted, against which entitlement, and what to call it.
+ */
+const CORE_ORG_CAPACITY_ORDERS = { sites: 10, seats: 20 }
+
+function orgCapacityRows() {
+  const rows = []
+  const kinds = new Map()
+  const addons = new Map()
+  const orders = new Map(Object.entries(CORE_ORG_CAPACITY_ORDERS))
+  for (const plugin of config.plugins) {
+    const declared = plugin.orgCapacities
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" orgCapacities`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name the capacity the plugin backs`)
+    }
+    for (const declaration of declared) {
+      const { kind, order, collection, addonKind, includedEntitlement, nouns } = declaration
+      const what = `${where} "${kind ?? ''}"`
+      for (const [field, value] of [
+        ['kind', kind],
+        ['collection', collection],
+        ['addonKind', addonKind],
+        ['includedEntitlement', includedEntitlement],
+      ]) {
+        if (typeof value !== 'string' || !value.trim()) throw new Error(`${what} needs a "${field}"`)
+      }
+      if (!Number.isInteger(order)) throw new Error(`${what} needs an integer "order"`)
+      const heldKind = kinds.get(kind)
+      if (heldKind) throw new Error(`${what} is already declared by "${heldKind}" — one capacity has one owner`)
+      if (kind in CORE_ORG_CAPACITY_ORDERS) {
+        throw new Error(`${what} is a capacity the platform owns — a site and a team seat exist with no plugin loaded`)
+      }
+      kinds.set(kind, plugin.id)
+      const heldAddon = addons.get(addonKind)
+      if (heldAddon) {
+        throw new Error(`${what}: add-on kind "${addonKind}" is already backed by "${heldAddon}" — two capacities on one purchase would each measure the other's quantity`)
+      }
+      addons.set(addonKind, plugin.id)
+      const heldOrder = orders.get(String(order))
+      if (heldOrder) {
+        // Two capacities sharing an order list in whichever sequence the
+        // config happens to hold them, and the warning and the refusal would
+        // then disagree about which one to read first.
+        throw new Error(`${what}: "order" ${order} is already taken by "${heldOrder}"`)
+      }
+      orders.set(String(order), plugin.id)
+      for (const field of ['one', 'many', 'addon']) {
+        if (typeof nouns?.[field] !== 'string' || !nouns[field].trim()) {
+          throw new Error(`${what} needs "nouns.${field}" — a refusal that had no word for it would read as a bug`)
+        }
+      }
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows.sort((a, b) => a.order - b.order)
+}
+
 function catalogContent() {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
@@ -677,7 +746,7 @@ function catalogContent() {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection } from './plugin-host-collections'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -701,6 +770,15 @@ ${editBarRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\
  */
 export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollection[] = [
 ${hostCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every org capacity a first-party plugin backs, declared by that plugin
+ * (AGL-3080). Core owns the money; this says what is counted and what it is
+ * called.
+ */
+export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[] = [
+${orgCapacityRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 `
   )

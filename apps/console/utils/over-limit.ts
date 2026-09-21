@@ -17,6 +17,7 @@
 
 import { PLAN_ENTITLEMENTS } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
+import { pluginOrgCapacities } from '@aglyn/aglyn/plugin-manager/plugin-org-capacity'
 
 /**
  * What a plan change would leave an org over, as data rather than sentences.
@@ -35,7 +36,7 @@ import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.ty
  */
 
 /**
- * The three capacities a plan change can strand.
+ * A capacity a plan change can strand.
  *
  * ⛔ **The saved-form catalog is not one of them, and must not be added.**
  * `formsPerHost` is refused at the CREATE and nowhere else. A site holding
@@ -44,33 +45,73 @@ import type { OrgPlan } from '@aglyn/aglyn/foundation/definitions/org-billing.ty
  * and every one keeps accepting submissions, which are metered revenue on
  * their own band; a catalog ceiling that reached them would refuse money as
  * well as data. There is nothing to release, so there is nothing to warn
- * about and nothing to refuse a downgrade over. The three kinds here are the
- * ones where holding past the new plan really does mean capacity the org is
- * no longer entitled to.
+ * about and nothing to refuse a downgrade over. The kinds here are the ones
+ * where holding past the new plan really does mean capacity the org is no
+ * longer entitled to.
  *
  * The ceiling also does not move with the plan, so a downgrade cannot strand
  * a catalog in the first place.
+ *
+ * A string rather than a closed union since AGL-3080, because the platform no
+ * longer knows the whole set: `sites` and `seats` are its own — every
+ * workspace has them with no plugin loaded — and every other capacity is
+ * declared by the plugin that backs it. Nothing here switches on the value;
+ * the two tables below are the only things that resolve one, and both are
+ * derived from the same list.
  */
-export type OverLimitKind = 'sites' | 'seats' | 'datasets'
+export type OverLimitKind = string
 
-/** Order is the order both readers present: sites, seats, datasets. */
-export const OVER_LIMIT_KINDS: readonly OverLimitKind[] = [
-  'sites',
-  'seats',
-  'datasets',
+/**
+ * The platform's own capacities, and their nouns.
+ *
+ * `held` names the things counted; `unreadable` names the capacity when there
+ * is no count to attach a noun to — "5 team members" is a roster, "team seats
+ * could not be checked" is a quota, and they are not the same word. A
+ * declared capacity says `one`/`many` instead, and `many` is what it is
+ * called in both positions: a plugin that needs the distinction can be given
+ * it when one does, rather than every plugin being asked for a word twice.
+ */
+const CORE_CAPACITIES: ReadonlyArray<{
+  kind: OverLimitKind
+  order: number
+  entitlement: 'hostLimit' | 'managersPerOrg'
+  nouns: { held: string; unreadable: string }
+}> = [
+  {
+    kind: 'sites',
+    order: 10,
+    entitlement: 'hostLimit',
+    nouns: { held: 'sites', unreadable: 'sites' },
+  },
+  {
+    kind: 'seats',
+    order: 20,
+    entitlement: 'managersPerOrg',
+    nouns: { held: 'team members', unreadable: 'team seats' },
+  },
 ]
 
 /**
- * Nouns per kind. `held` names the things counted; `unreadable` names the
- * capacity when there is no count to attach a noun to — "5 team members" is a
- * roster, "team seats could not be checked" is a quota, and they are not the
- * same word.
+ * Every capacity, platform's then declared, in the order both readers present
+ * — so the warning and the refusal list the same capacities in the same
+ * sequence. The generator refuses a declared order that collides with core's.
  */
-const NOUNS: Record<OverLimitKind, { held: string; unreadable: string }> = {
-  sites: { held: 'sites', unreadable: 'sites' },
-  seats: { held: 'team members', unreadable: 'team seats' },
-  datasets: { held: 'datasets', unreadable: 'datasets' },
-}
+const CAPACITIES = [
+  ...CORE_CAPACITIES,
+  ...pluginOrgCapacities().map((one) => ({
+    kind: one.kind,
+    order: one.order,
+    entitlement: one.includedEntitlement,
+    nouns: { held: one.nouns.many, unreadable: one.nouns.many },
+  })),
+].sort((a, b) => a.order - b.order)
+
+export const OVER_LIMIT_KINDS: readonly OverLimitKind[] = CAPACITIES.map(
+  (one) => one.kind,
+)
+
+const NOUNS: Record<OverLimitKind, { held: string; unreadable: string }> =
+  Object.fromEntries(CAPACITIES.map((one) => [one.kind, one.nouns]))
 
 export interface OverLimitRow {
   kind: OverLimitKind
@@ -93,7 +134,13 @@ export interface OverLimitRow {
 export interface OverLimitCounts {
   siteCount?: number | null
   managerSeats?: number | null
-  datasetCount?: number | null
+  /**
+   * Counts for the declared capacities, keyed by kind. Named separately from
+   * the platform's two because those two have callers that predate this and
+   * read better spelled out; a declared capacity has no name core could have
+   * chosen in advance.
+   */
+  declared?: Readonly<Record<string, number | null | undefined>>
 }
 
 /**
@@ -106,14 +153,25 @@ export function overLimitRows(
 ): OverLimitRow[] {
   const target = PLAN_ENTITLEMENTS[targetPlan]
   if (!target) return []
-  const measured: Record<OverLimitKind, { count: number | null | undefined; included: number }> = {
-    sites: { count: counts.siteCount, included: target.hostLimit },
-    seats: { count: counts.managerSeats, included: target.managersPerOrg },
-    datasets: { count: counts.datasetCount, included: target.datasetsPerOrg },
+  const held = (kind: OverLimitKind): number | null | undefined => {
+    if (kind === 'sites') return counts.siteCount
+    if (kind === 'seats') return counts.managerSeats
+    return counts.declared?.[kind]
   }
   const rows: OverLimitRow[] = []
-  for (const kind of OVER_LIMIT_KINDS) {
-    const { count, included } = measured[kind]
+  for (const capacity of CAPACITIES) {
+    const kind = capacity.kind
+    const count = held(kind)
+    /*
+     * A declared capacity whose entitlement field is missing is measured as
+     * ZERO included, which reports the org as over by everything it holds.
+     * That is the loud failure and the right one: the alternative — treating
+     * an unknown field as unlimited — would clear every org silently, which
+     * is the reassuring answer this whole module exists to refuse.
+     */
+    const included = Number(
+      (target as unknown as Record<string, unknown>)[capacity.entitlement] ?? 0,
+    )
     if (count === undefined) continue
     if (count === null) {
       rows.push({ kind, count: null, included, excess: 0 })
