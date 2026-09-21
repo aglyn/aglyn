@@ -259,14 +259,27 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     expect(payload.screensUrl).toBe(
       'https://app.aglyn.com/acme/hosts/www/screens',
     )
-    expect(payload.inboxUrl).toBe('https://app.aglyn.com/acme/hosts/www/inbox')
-    // The commerce console's Orders SECTION, which is a path segment beneath
-    // the surface (AGL-2501). The `?tab=orders` this used to build names no
-    // section, so the shell would redirect it to Catalog — the link would
-    // resolve, and land somewhere other than orders.
-    expect(payload.ordersUrl).toBe(
-      'https://app.aglyn.com/acme/hosts/www/products/orders',
-    )
+    /*
+     * The PLUGINS' links, each declared by its own plugin and resolved
+     * against this site's plugin set (AGL-3080). The route names no plugin
+     * any more, so this asserts the compiled table reaches the payload —
+     * including the commerce console's Orders SECTION, a path segment
+     * beneath the surface (AGL-2501). The `?tab=orders` this once built
+     * names no section, so the shell would redirect it to Catalog: the link
+     * would resolve, and land somewhere other than orders.
+     */
+    expect(payload.quickLinks).toEqual([
+      {
+        id: 'inbox',
+        label: 'Inbox',
+        url: 'https://app.aglyn.com/acme/hosts/www/inbox',
+      },
+      {
+        id: 'commerce',
+        label: 'Orders',
+        url: 'https://app.aglyn.com/acme/hosts/www/products/orders',
+      },
+    ])
     expect(payload.editUrl).toBe(
       'https://app.aglyn.com/acme/hosts/www/screens/screen-1/versions/v-live/besigner',
     )
@@ -276,18 +289,19 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     expect(payload.accountUrl).toBe('https://app.aglyn.com/manage/user')
   })
 
+  const linkIds = (payload: { quickLinks?: { id: string }[] }) =>
+    (payload.quickLinks ?? []).map((link) => link.id)
+
   it("subtracts the host's per-site deny-list from the quick links", async () => {
     mockHostData = { ...mockHostData, disabledPlugins: ['inbox'] }
     const payload = await (await POST(contextRequest())).json()
-    expect(payload.inboxUrl).toBeNull()
-    expect(payload.ordersUrl).not.toBeNull()
+    expect(linkIds(payload)).toEqual(['commerce'])
   })
 
   it('subtracts release-flagged-off plugins from the quick links', async () => {
     mockFlagFilter = (ids) => ids.filter((id) => id !== 'commerce')
     const payload = await (await POST(contextRequest())).json()
-    expect(payload.ordersUrl).toBeNull()
-    expect(payload.inboxUrl).not.toBeNull()
+    expect(linkIds(payload)).toEqual(['inbox'])
   })
 
   it("resolves the site's favicon exactly like the layout's icon link", async () => {

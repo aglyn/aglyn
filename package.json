@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.145",
+  "version": "1.0.0-beta.146",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -245,6 +245,8 @@
     "test:linear-ids": "node --test tools/scripts/lib/linear-ids.test.mjs",
     "check:lib-boundaries": "node tools/scripts/check-lib-boundaries.mjs",
     "publish:packages": "node tools/scripts/publish-packages.mjs",
+    "trust:packages": "node tools/scripts/trust-packages.mjs",
+    "test:trust-packages": "node --test tools/scripts/lib/trust-packages.test.mjs",
     "proof:consumer": "node tools/scripts/consumer-proof.mjs",
     "sync:lib-dependencies": "node tools/scripts/sync-lib-dependencies.mjs",
     "sync:lib-dependencies:check": "node tools/scripts/sync-lib-dependencies.mjs --check",

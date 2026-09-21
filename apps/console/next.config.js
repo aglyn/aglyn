@@ -26,13 +26,14 @@ const { syncMonacoAssets } = require('../../tools/scripts/lib/sync-monaco-assets
 const isProduction = process.env.NODE_ENV !== 'production'
 
 /**
- * Vendor Monaco into `public/monaco/vs` before Next reads `public/` (AGL-1779).
+ * Vendor Monaco into `public/_static/monaco/vs` before Next reads `public/`
+ * (AGL-1779).
  *
  * The besigner's Edit -> Raw JSON opens `@aglyn/shared-ui-json-editor`, whose
  * `@monaco-editor/loader` otherwise injects a `<script>` from
  * `cdn.jsdelivr.net` into the `app.aglyn.com` origin — unpinned, un-SRI'd, and
  * permitted by the bare `https:` in this app's `script-src`. The matching
- * `loader.config({ paths: { vs: '/monaco/vs' } })` lives in
+ * `loader.config({ paths: { vs: '/_static/monaco/vs' } })` lives in
  * `libs/shared/ui/json-editor/src/lib/components/monaco-editor.tsx` and has NO
  * CDN fallback, so this copy is not optional — `syncMonacoAssets` throws and
  * fails the build rather than letting the editor 404 in production while

@@ -37,6 +37,11 @@ export default [
     // against the CWD eslint was invoked from (the workspace root, under
     // `nx lint console`), not against this file — which is why the two
     // entries beside it never matched anything either.
-    ignores: ['next-env.d.ts', '.next', '**/public/monaco/**'],
+    ignores: [
+      'next-env.d.ts',
+      '.next',
+      '**/public/_static/monaco/**',
+      '**/public/monaco/**',
+    ],
   },
 ]

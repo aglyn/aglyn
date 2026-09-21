@@ -25,6 +25,7 @@ import RenderedCanvasElementsProvider from '../contexts/rendered-canvas-elements
 import { BesignerAppProvider } from '../contexts/besigner-app-context'
 import useClipboardShortcuts from '../hooks/use-clipboard-shortcuts'
 import BesignerDndContext from './besigner-dnd-context.component'
+import { SubtreeJsonDialogHost } from './subtree-json-dialog.component'
 
 export interface BesignerComponentProps {
   noSsr?: boolean
@@ -67,6 +68,16 @@ export const BesignerRootProviderComponent = (
           <RenderedCanvasElementsProvider>
             <ComponentsDrawerContextProvider>
               {children}
+              {/*
+                Element -> Edit JSON, mounted once per surface (AGL-3208).
+
+                It belongs here for the same reason the clipboard shortcuts
+                do: every besigner surface offers it, and nothing smaller
+                outlives the menu that opens it. Rendered inside
+                `NodeContextMenu`, as it was, it was unmounted by the click
+                that reached into it.
+              */}
+              <SubtreeJsonDialogHost />
             </ComponentsDrawerContextProvider>
           </RenderedCanvasElementsProvider>
         </BesignerDndContext>

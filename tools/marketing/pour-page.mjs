@@ -53,17 +53,61 @@
 // * Writes a NEW version document and moves the screen's `versionId` to it.
 //   The source version is never modified, so the previous state stays intact
 //   and reachable in version history.
-// * Never publishes, never touches `publishedAt`, never moves a publish
-//   pointer. A poured page still has to be reviewed and published by hand.
+// * Never touches `publishedAt` and never adds a route to the host's `screens`
+//   map, which is what makes a screen reachable at all.
+//
+// ⛔ BUT: ON A ROUTED SCREEN, MOVING `versionId` IS THE PUBLISH.
+//
+//   An earlier version of this block said the script "never moves a publish
+//   pointer". That is wrong for a screen and it is the one clause a reader
+//   would rely on. The tenant renders whatever `screens/<id>.versionId` names
+//   — `get-screen.ts` says so in as many words: "a screen publish flips
+//   `versionId` on this doc" — so for any screen that already has a route,
+//   `--apply` IS a publish, live within the 600s pointer TTL.
+//
+//   It is safe on an UNROUTED screen (no entry in the host's `screens` map,
+//   `publishedAt` absent) because there is no URL for the tenant to serve it
+//   from. That is the only reason pouring `/product/ai` does not expose it,
+//   and it stops being true the moment the page is routed. Check before you
+//   apply; do not infer it from this script's name.
 // * Refuses on any problem the applier reports, writing nothing — a partial
 //   pour reads as a plausible page with one slot shifted, which is the
 //   failure that matters here.
 
 import { readFileSync } from 'node:fs'
+import { decode, encode } from '@msgpack/msgpack'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { CANVAS_ROOT_ELEMENT_ID, firestoreCanvas } from './firestore-canvas.mjs'
 import { createResourceUid } from '../scripts/lib/resource-uid.mjs'
+
+/**
+ * `nodes` is stored in TWO live forms and both reach this script (AGL-1223).
+ * A plain Firestore map, and msgpack BYTES: the client converter compresses on
+ * write (AGL-1151), so anything saved through the editor arrives here as a Node
+ * `Buffer`, while documents written before that path learned to — or by
+ * `updateDoc` around the converter — are still maps. `/product/ai`'s own
+ * version is bytes; `/pricing`'s is 628 KB of them.
+ *
+ * Reading the raw field and walking it as a map is a SILENT failure, not a
+ * loud one: `Object.values` over a Buffer yields the individual byte NUMBERS,
+ * none of which has `props` or `componentId`, so the applier's walk finds zero
+ * text nodes and reports a slot-count mismatch — a shape problem wearing a
+ * copy problem's clothes. `libs/aglyn/src/lib/app-utils/stored-nodes.ts` owns
+ * this rule for app code and its docblock is the long version.
+ *
+ * ⚠️ `byteOffset`/`byteLength`, ALWAYS. firebase-admin hands back POOLED
+ * Buffers — a small field is typically a view into a shared 8 KB ArrayBuffer —
+ * so `new Uint8Array(buf.buffer)` decodes the whole pool and throws on the
+ * trailing garbage instead of returning the document.
+ */
+const decodeNodes = (raw) =>
+  Buffer.isBuffer(raw)
+    ? decode(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength))
+    : raw
+
+/** Write back in the form it was read in, so a pour never changes the shape. */
+const encodeNodes = (nodes, wasBytes) => (wasBytes ? Buffer.from(encode(nodes)) : nodes)
 
 const args = process.argv.slice(2)
 const flag = (name) => {
@@ -124,6 +168,8 @@ if (!sourceSnap.exists) {
   process.exit(1)
 }
 const source = sourceSnap.data()
+const storedAsBytes = Buffer.isBuffer(source.nodes)
+source.nodes = decodeNodes(source.nodes)
 if (!source.nodes || !source.nodes[CANVAS_ROOT_ELEMENT_ID]) {
   console.error(
     `version ${sourceVersionId} has no '${CANVAS_ROOT_ELEMENT_ID}' root in its nodes map`,
@@ -178,7 +224,7 @@ const newVersionRef = versionsRef.doc(createResourceUid())
 const { $id: _ignoredId, createdAt: _ignoredCreated, ...carried } = source
 await newVersionRef.set({
   ...carried,
-  nodes,
+  nodes: encodeNodes(nodes, storedAsBytes),
   hostId,
   screenId,
   createdAt: FieldValue.serverTimestamp(),

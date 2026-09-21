@@ -106,8 +106,14 @@ interface EditContext {
   editUrl: string | null
   consoleUrl: string
   screensUrl?: string | null
-  inboxUrl?: string | null
-  ordersUrl?: string | null
+  /**
+   * One per plugin THIS SITE runs, in the order the bar draws them
+   * (AGL-3080). The bar names no plugin: each declares its own link in
+   * `plugins.config.json` and the edit-context route resolves them against
+   * the site's plugin set, so a plugin added later appears here without this
+   * file changing.
+   */
+  quickLinks?: ReadonlyArray<{ id: string; label: string; url: string }> | null
   /** The console's host analytics surface, server-built like every link. */
   analyticsUrl?: string | null
   /** Today's site-wide pageviews from the first-party beacon; null unknown. */
@@ -883,28 +889,18 @@ export default function AdminBar({
           Screens
         </a>
       ) : null}
-      {context?.inboxUrl ? (
+      {(context?.quickLinks ?? []).map((link) => (
         <a
+          key={link.id}
           className="aglyn-ab-desktop"
           style={quietLinkStyle}
-          href={context.inboxUrl}
+          href={link.url}
           target="_blank"
           rel="noreferrer"
         >
-          Inbox
+          {link.label}
         </a>
-      ) : null}
-      {context?.ordersUrl ? (
-        <a
-          className="aglyn-ab-desktop"
-          style={quietLinkStyle}
-          href={context.ordersUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Orders
-        </a>
-      ) : null}
+      ))}
       <button
         ref={userButtonRef}
         type="button"
@@ -1056,30 +1052,19 @@ export default function AdminBar({
               Screens
             </a>
           ) : null}
-          {context?.inboxUrl ? (
+          {(context?.quickLinks ?? []).map((link) => (
             <a
+              key={link.id}
               role="menuitem"
               style={menuItemStyle}
-              href={context.inboxUrl}
+              href={link.url}
               target="_blank"
               rel="noreferrer"
               onClick={() => setMenuOpen(false)}
             >
-              Inbox
+              {link.label}
             </a>
-          ) : null}
-          {context?.ordersUrl ? (
-            <a
-              role="menuitem"
-              style={menuItemStyle}
-              href={context.ordersUrl}
-              target="_blank"
-              rel="noreferrer"
-              onClick={() => setMenuOpen(false)}
-            >
-              Orders
-            </a>
-          ) : null}
+          ))}
           {context?.analyticsUrl ? (
             <a
               role="menuitem"

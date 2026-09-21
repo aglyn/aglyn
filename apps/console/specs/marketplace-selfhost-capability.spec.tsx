@@ -32,18 +32,10 @@
  * another.
  */
 
-import { render, screen } from '@testing-library/react'
+import { RELEASE_FLAGS } from '@aglyn/aglyn/app-utils/release-flags'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { RELEASE_FLAGS } from '@aglyn/aglyn/app-utils/release-flags'
-import MarketplaceTitleLayout from '../app/(app)/[orgSlug]/marketplace/layout'
-
-const ORIGINAL_KEY = process.env.STRIPE_SECRET_KEY
-
-afterEach(() => {
-  if (ORIGINAL_KEY === undefined) delete process.env.STRIPE_SECRET_KEY
-  else process.env.STRIPE_SECRET_KEY = ORIGINAL_KEY
-})
+import { platformPaymentsConfigured } from '../utils/server/payments-platform'
 
 /** The alert MUI renders, by severity class (`MuiAlert-colorInfo` etc). */
 const alertOfSeverity = (severity: 'info' | 'warning' | 'error') =>
@@ -51,61 +43,48 @@ const alertOfSeverity = (severity: 'info' | 'warning' | 'error') =>
     `.MuiAlert-color${severity[0].toUpperCase()}${severity.slice(1)}`,
   )
 
-describe('the Stripe capability notice (AGL-2019)', () => {
-  it('SELF-HOST shape: no Stripe key, so the notice appears above the marketplace', () => {
-    delete process.env.STRIPE_SECRET_KEY
-    render(
-      <MarketplaceTitleLayout>
-        <div>{'marketplace body'}</div>
-      </MarketplaceTitleLayout>,
-    )
-    expect(screen.getByText(/Payments are not configured/i)).toBeTruthy()
-    expect(screen.getByText(/STRIPE_SECRET_KEY/)).toBeTruthy()
-    // The body is still rendered — browsing and free installs genuinely work,
-    // so this informs, it does not replace the feature.
-    expect(screen.getByText('marketplace body')).toBeTruthy()
+describe('what the deployment can do is read on the SERVER (AGL-3080)', () => {
+  /*
+   * The console's half. The SENTENCE moved to the marketplace plugin, whose
+   * own spec holds it; what stays here is the part only the app can get
+   * wrong — reading a server-only secret in a server component, and drawing
+   * the zone that carries the answer to the reader.
+   */
+  const source = (...segments: string[]) =>
+    readFileSync(join(__dirname, '..', ...segments), 'utf8')
+
+  it('reads the key in the org layout, which is a SERVER component', () => {
+    // Read anywhere below it and the key — which carries no `NEXT_PUBLIC_`
+    // prefix, so Next never inlines it — is `undefined` in the browser, and
+    // every deployment reports a working Stripe platform as absent,
+    // including ours.
+    const layout = source('app', '(app)', '[orgSlug]', 'layout.tsx')
+    expect(layout).not.toMatch(/'use client'/)
+    expect(layout).toMatch(/payments=\{platformPaymentsConfigured\(\)\}/)
   })
 
-  it('is INFO — an unconfigured deployment has not failed at anything', () => {
-    // The severity is the point. `warning` or `error` would tell an operator
-    // something is wrong with their install when they have simply not set up
-    // a feature they may not even want. This is the console half of the same
-    // rule the storefront cart follows.
-    delete process.env.STRIPE_SECRET_KEY
-    render(
-      <MarketplaceTitleLayout>
-        <div />
-      </MarketplaceTitleLayout>,
-    )
-    expect(alertOfSeverity('info')).toBeTruthy()
-    expect(alertOfSeverity('warning')).toBeNull()
-    expect(alertOfSeverity('error')).toBeNull()
+  it('tests the key PREFIX, so a half-filled .env reads as unconfigured', () => {
+    // A `.env` left holding the template's placeholder is truthy, and would
+    // report a working Stripe platform to an operator who has none.
+    expect(platformPaymentsConfigured('sk_test_abc123')).toBe(true)
+    expect(platformPaymentsConfigured('rk_live_abc123')).toBe(true)
+    expect(platformPaymentsConfigured('your-key-here')).toBe(false)
+    expect(platformPaymentsConfigured('')).toBe(false)
+    expect(platformPaymentsConfigured(undefined)).toBe(false)
   })
 
-  it('AGLYN-OPERATED shape: a real key means no notice at all', () => {
-    // Without this the guard would pass by always rendering the notice, which
-    // would put a permanent "not configured" banner on our own console.
-    process.env.STRIPE_SECRET_KEY = 'sk_test_abc123'
-    render(
-      <MarketplaceTitleLayout>
-        <div>{'marketplace body'}</div>
-      </MarketplaceTitleLayout>,
+  it('draws the marketplace zone above the WHOLE subtree', () => {
+    // On the layout rather than the pages, for the reason the check was:
+    // it covers the sections, the listing, publish and publisher routes
+    // without five copies of it.
+    const layout = source(
+      'app',
+      '(app)',
+      '[orgSlug]',
+      'marketplace',
+      'layout.tsx',
     )
-    expect(screen.queryByText(/Payments are not configured/i)).toBeNull()
-    expect(screen.getByText('marketplace body')).toBeTruthy()
-  })
-
-  it('a half-filled .env reads as UNCONFIGURED, not as configured', () => {
-    // `platformPaymentsConfigured` tests the key's PREFIX rather than its
-    // truthiness, so a placeholder left in the template does not silently
-    // pass for a working Stripe platform.
-    process.env.STRIPE_SECRET_KEY = 'your-key-here'
-    render(
-      <MarketplaceTitleLayout>
-        <div />
-      </MarketplaceTitleLayout>,
-    )
-    expect(screen.getByText(/Payments are not configured/i)).toBeTruthy()
+    expect(layout).toMatch(/<PluginWidgetSlot slot="marketplaceCapability" \/>/)
   })
 })
 

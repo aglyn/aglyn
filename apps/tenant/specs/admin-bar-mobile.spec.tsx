@@ -67,8 +67,16 @@ const CONTEXT_RESPONSE = {
   editUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/screens/screen-1/versions/v-live/besigner`,
   consoleUrl: `${CONSOLE_ORIGIN}/acme/hosts/www`,
   screensUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/screens`,
-  inboxUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/inbox`,
-  ordersUrl: null,
+  // One per plugin the SITE runs, already resolved and ordered by the server
+  // (AGL-3080). The bar names no plugin, so the fixture is the contract: a
+  // list it draws in order, and nothing it draws for a plugin not in it.
+  quickLinks: [
+    {
+      id: 'inbox',
+      label: 'Inbox',
+      url: `${CONSOLE_ORIGIN}/acme/hosts/www/inbox`,
+    },
+  ],
   analyticsUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/analytics`,
   viewsToday: 128,
   screenViewsToday: 12,
@@ -200,8 +208,8 @@ describe('AdminBar at phone widths (AGL-1829)', () => {
     ).toBe(CONTEXT_RESPONSE.screensUrl)
     expect(
       (within(menu).getByText('Inbox') as HTMLAnchorElement).href,
-    ).toBe(CONTEXT_RESPONSE.inboxUrl)
-    // ordersUrl is null — absent from the menu like the bar.
+    ).toBe(CONTEXT_RESPONSE.quickLinks[0].url)
+    // Commerce is not in this site's links — absent from the menu like the bar.
     expect(within(menu).queryByText('Orders')).toBeNull()
     // The analytics row carries the stat cluster into the collapsed menu.
     expect(
