@@ -24,13 +24,33 @@ name: Publish packages
 # replaced.
 #
 # ---------------------------------------------------------------------------
-# CREDENTIALS
+# HOW THE REGISTRY KNOWS IT IS US (AGL-3201)
 # ---------------------------------------------------------------------------
-# `NPM_TOKEN` is an npm automation token with publish rights on the `@aglyn`
-# scope. `id-token: write` is for provenance: npm signs each package with this
-# run's identity, which is what links a registry page to the commit it was
-# built from. A missing token FAILS the run — a release whose packages did not
-# go out must not read as a green check.
+# TRUSTED PUBLISHING, first. npm mints nothing long-lived: GitHub issues this
+# one run an OIDC token, npm checks it against the trusted publisher each
+# package names — this repository, this workflow file — and takes the release.
+# `id-token: write` is what lets GitHub issue it. Provenance comes with it for
+# free: npm generates the attestation itself, which is what lets anyone check
+# that a version on the registry was built from the commit it claims.
+#
+# Trust is configured PER PACKAGE and there are 51. `npm run trust:packages`
+# lists what each one trusts today, and the owner configures the rest with
+# `-- --set`; it is their account's security setting, so an agent may run the
+# listing and never the change.
+#
+# `NPM_TOKEN` is the FALLBACK, and it is on its way out. npm uses OIDC where
+# it can and a token only where it cannot, so a package without a trusted
+# publisher yet still publishes on this token — which is a granular token with
+# the 2FA bypass, expiring 2026-12-19. npm is removing direct publishing with
+# those in JANUARY 2027 regardless, so the token is a bridge to be deleted
+# once `npm run trust:packages` reports every package configured, not a thing
+# to renew.
+#
+# A missing token is a NOTICE rather than a failure now: with trust
+# configured there is nothing for it to do, and failing on its absence would
+# turn the finished state into a red run. A release that genuinely cannot
+# publish still fails — npm refuses the publish and the script exits non-zero,
+# which is the failure that was always doing the real work.
 
 on:
   push:
@@ -70,8 +90,28 @@ jobs:
 
       - run: npm ci
 
+      # Trusted publishing needs npm 11.5.1 (AGL-3201). An older one does not
+      # look for the OIDC token at all — it simply falls through to the token
+      # and publishes, so the run goes GREEN having used the credential this
+      # workflow exists to stop using, and the day that token expires is the
+      # day anyone finds out. Asserted rather than assumed: the npm here is
+      # whatever Node ships, which moves without this repository.
+      - name: npm is new enough to use trusted publishing
+        run: |
+          have=$(npm --version)
+          want=11.5.1
+          if [ "$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -n1)" != "$want" ]; then
+            echo "::error::npm $have cannot use trusted publishing; $want or later can. Raise .nvmrc, or install npm@$want in this job."
+            exit 1
+          fi
+          echo "npm $have"
+
       - name: Publish what the registry is missing
         env:
+          # The fallback, for a package whose trusted publisher is not
+          # configured yet. npm prefers OIDC wherever a package names this
+          # workflow, so this goes unused as `trust:packages` is completed,
+          # and is deleted when it reports every package configured.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           PUBLISH: ${{ github.event_name == 'push' || inputs.publish }}
           ONLY: ${{ inputs.only }}
@@ -79,8 +119,7 @@ jobs:
           args=()
           if [ "$PUBLISH" = "true" ]; then
             if [ -z "$NODE_AUTH_TOKEN" ]; then
-              echo "::error::NPM_TOKEN is not set, so nothing can be published. Add an npm automation token with publish rights on the @aglyn scope as the NPM_TOKEN repository secret, then re-run this job."
-              exit 1
+              echo "::notice::No NPM_TOKEN. Every package published here must name this workflow as a trusted publisher, or npm will refuse it — check with \`npm run trust:packages\`."
             fi
             args+=(--publish)
           fi

@@ -1173,6 +1173,16 @@ jobs:
       - run: npm run test:publish-packages
       - run: npm run check:lib-boundaries
 
+      # AGL-3201 — the set `trust:packages` points at npm's trusted publishing
+      # has to be the same set `publish:packages` publishes, and its npm
+      # version gate has to compare NUMBERS. `npm trust` arrived in 11.15.0
+      # and every version from 11.9 to 11.14 sorts above it as a string, so a
+      # text comparison passes the gate and then fails with "Unknown command",
+      # which reads like a typo rather than like a version to upgrade. A
+      # package this misses is a release that publishes fifty and fails on the
+      # fifty-first, which cannot be repaired — a published version is final.
+      - run: npm run test:trust-packages
+
       # AGL-3079 — every Firestore document the platform names is named by
       # `createResourceUid()`, the 10-character id a member sees in the
       # console's URLs and the public API routes by. AI-created screens,

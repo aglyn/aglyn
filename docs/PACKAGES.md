@@ -572,9 +572,44 @@ is skipped, which makes a second run safe and lets a half-finished one be
 finished. A prerelease publishes under its own label (`beta`), never `latest`.
 
 `.github/workflows/publish-packages.yml` runs it on the push to `production`,
-and by hand as a dry run or for real. It needs the `NPM_TOKEN` repository
-secret — an npm automation token with publish rights on `@aglyn` — and fails
-without it. `@aglyn/cli` keeps its own version and rides the same run.
+and by hand as a dry run or for real. `@aglyn/cli` keeps its own version and
+rides the same run.
+
+### How the registry knows it is us
+
+**Trusted publishing** (AGL-3201). GitHub issues the run one short-lived OIDC
+token, npm checks it against the trusted publisher each package names — this
+repository, `publish-packages.yml` — and takes the release. There is no
+long-lived secret to expire, leak or rotate, and provenance comes with it: npm
+generates the attestation itself, which is what lets anyone check that a
+version on the registry was built from the commit it claims. It needs npm
+11.5.1 or later, which the workflow asserts rather than assumes — an older npm
+does not look for the OIDC token at all, falls through to the token, and
+publishes green using the credential this exists to stop using.
+
+Trust is configured **per package** — npm has no scope-level setting — and
+there are 51:
+
+```sh
+npm run trust:packages            # read only: what each package trusts today
+npm run trust:packages -- --set   # the owner configures the ones missing it
+```
+
+`--set` is the account owner's to run: npm challenges it with the account's
+second factor, and an agent may not touch an account's security settings. It
+needs npm 11.15.0 or later, which is when `npm trust` arrived. It asks for
+**both** `--allow-publish` and `--allow-stage-publish`: a configuration created
+after 2026-09-03 permits staged publishing and nothing else unless publishing
+is asked for explicitly, so without the first flag every package would be
+configured, look configured, and refuse the release.
+
+**`NPM_TOKEN` is the fallback, and a bridge.** npm uses OIDC where it can and a
+token only where it cannot, so a package whose trusted publisher is not
+configured yet still publishes on the token. It is a granular token with the
+2FA bypass, expiring **2026-12-19**, and npm removes direct publishing with
+those in **January 2027** — so it is deleted once `trust:packages` reports
+every package configured, not renewed. Its absence is a notice rather than a
+failure: with trust configured there is nothing for it to do.
 
 ## Later
 
