@@ -83,6 +83,26 @@ as live as a cell here. The per-site cost calculator on
 the extra-site rate as constants inside a sandboxed embed, which no parity
 spec reads, so a rate change owes it an edit too.
 
+On **2026-09-21** it was republished to version `ZZkN4U426l`, "Starter AI
+credits 750 / mo and $3 per 1k (AGL-3203)": four stored text nodes, because a
+row lives in four places and a republish that edits two of them is a page that
+contradicts itself on a phone. The band cell in the desktop compare table and
+in the Starter plan panel, and the rate cell in the desktop usage table and in
+the Starter panel of the mobile rates accordion. `8ac82d78a` had already moved
+`PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth` to 750 and
+`PLAN_PRICING.starter.extraAssistCreditsUsdPer1k` to $3.00, so the page was
+quoting no rate for usage the product was billing — the dangerous direction.
+The parity spec's two rows were un-pinned in the same commit.
+
+⚠️ The version was cut from whatever was LIVE at the moment of the cut, not
+from the version the work started on. A first draft (`hnvbBlI1qZ`) had branched
+from `Te6EHU387Y` hours earlier; by publish time a peer had shipped
+`q7m6kY1j9A`, the AGL-2968 calculator band, and publishing that draft would
+have silently deleted nine nodes nobody would have thought to look for. The
+draft is retained, renamed to say what superseded it. **Re-read the screen's
+`versionId` immediately before you branch, and diff your new version against
+the live one — not against the one you started from.**
+
 **#9 quotes the price in prose and nothing reads it.** `/pricing`'s
 description is a plain-text field on the screen's detail page, separate from
 the body, and it propagates into `<meta name="description">`,
