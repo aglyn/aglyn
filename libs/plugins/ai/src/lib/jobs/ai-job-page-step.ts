@@ -461,8 +461,23 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
     // is the draft — unrouted, as every copy is — and nothing is generated.
     // Only a page is a page's start: a collection entry template's copy stays
     // a template, so a plan naming one builds the page instead.
+    // A copy shows what its SOURCE shows, and this branch generates nothing.
+    // So if the source cannot already show what the plan promised, copying it
+    // can only produce a page that breaks the promise — the refusal below
+    // would be certain before the copy was ever minted. Read the source and
+    // build instead, rather than leave the member a page they must throw away
+    // and a Try again that can only copy the same thing (AGL-3024).
+    // Only a source we could READ and found short diverts: one we cannot read
+    // is one we cannot judge, and the review after the copy still answers for
+    // that. A short source carries findings; an unreadable one carries none.
+    const sourceReview =
+      !written && screen.duplicateOf
+        ? await aiCopiedPageReview(firestore, { hostId, id: screen.duplicateOf, name, screen })
+        : null
+    const sourceShort = Boolean(sourceReview?.findings.length)
     if (
       !written &&
+      !sourceShort &&
       screen.duplicateOf &&
       inventory.screens.some((row) => row.id === screen.duplicateOf && !row.template)
     ) {
