@@ -16,6 +16,7 @@ content on the marketing site and is written separately.
 ### Added
 
 - **marketplace:** the marketplace decides what to sign, the shell signs it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **outreach:** a mailbox test can go to an address the member names, so an outside inbox can show the sender authentication results ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
 
 ### Fixed
 
