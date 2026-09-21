@@ -399,6 +399,7 @@
         "console": {
           "shell": true,
           "slots": [
+            "hostArtifactPublish",
             "marketplaceCapability",
             "marketplaceListing",
             "orgAddons",

@@ -17,9 +17,11 @@
 'use client'
 
 import {
+  CONSOLE_WIDGET_SLOTS,
   PLAN_ENTITLEMENTS,
   PLATFORM_BRAND_NAME,
   resolveMarketplaceFeePct,
+  type ConsolePublishableArtifact,
 } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
@@ -41,9 +43,7 @@ import { useOrgSlug } from '../hooks/use-org-scope'
 import useFirestoreCollection from '../hooks/use-firestore-collection'
 import useCurrentOrg from '../hooks/use-current-org'
 import useFirestoreDoc from '../hooks/use-firestore-doc'
-import PublishArtifactDialog, {
-  type PublishArtifactTarget,
-} from './templates/publish-artifact-dialog.component'
+import PluginWidgetSlot from './plugin-widget-slot.component'
 
 type PublishKind =
   | 'component'
@@ -108,11 +108,12 @@ const PICKERS: Record<
 
 /**
  * Org-level publish (AGL-776): pick a source site, then a component, a layout,
- * or the whole site (as a template), and publish it to the marketplace under
- * the org's publisher identity. The host-based publish routes already derive
- * the publishing org from the source `hostId`, so this only assembles their
- * request — the shared PublishArtifactDialog owns the name/price form and the
- * POST. Plugins publish from their own bundle upload, not here.
+ * or the whole site (as a template), and publish it under the org's publisher
+ * identity. This panel's whole job is choosing WHAT: it names the kind, the
+ * scope that holds it and the document, and hands that to the
+ * `hostArtifactPublish` zone (AGL-3080), whose widget owns the name/price
+ * form, the route and the POST. Plugins publish from their own bundle upload,
+ * not here.
  *
  * The per-site publish buttons (Components/Layouts/Setup pages) stay as
  * in-context shortcuts; this is the one place that spans every site.
@@ -141,7 +142,7 @@ export function OrgPublishPanel({
   const hostId = sourceHostId || hosts[0]?.id || ''
   const [kind, setKind] = useState<PublishKind>('component')
   const [artifactId, setArtifactId] = useState('')
-  const [target, setTarget] = useState<PublishArtifactTarget | null>(null)
+  const [target, setTarget] = useState<ConsolePublishableArtifact | null>(null)
 
   // Held at null while there is no host, never addressed as `hosts/-none-`
   // (AGL-1440): an org with ZERO sites has no `hosts[0]`, so the sentinel was
@@ -264,65 +265,39 @@ export function OrgPublishPanel({
 
   const hostLabel = hosts.find((host) => host.id === hostId)?.label
 
+  /*
+   * WHAT IS BEING PUBLISHED, in this console's own words (AGL-3080).
+   *
+   * This used to build seven marketplace requests — an endpoint, a payload
+   * key and a noun each — which made a panel about the org's own artifacts a
+   * file that could not be right without being kept in step with a plugin's
+   * routes. It now says only what the thing IS and which scope holds it; the
+   * `hostArtifactPublish` zone's widget decides where it goes.
+   *
+   * ⚠️ Datasets are ORG-scoped and every other kind is a site's, which is why
+   * both scopes ride and neither is inferred from the other.
+   */
   const openPublish = () => {
-    if (kind === 'site') {
-      return setTarget({
-        endpoint: 'marketplace/publish-template',
-        payload: { hostId },
-        displayName: hostLabel,
-        noun: 'site template',
-      })
-    }
-    if (kind === 'component') {
-      const chosen = components.find((entry: any) => entry.$id === selectedId)
-      return setTarget({
-        endpoint: 'marketplace/publish',
-        payload: { hostId, componentId: selectedId },
-        displayName: artifactName(chosen),
-        noun: 'component',
-      })
-    }
-    if (kind === 'datasetSchema') {
-      const chosen = datasets.find((entry: any) => entry.$id === selectedId)
-      // Datasets are org-scoped, so this route takes orgId rather than hostId.
-      return setTarget({
-        endpoint: 'marketplace/publish-dataset-schema',
-        payload: { orgId, datasetId: selectedId },
-        displayName: artifactName(chosen),
-        noun: 'dataset schema',
-      })
-    }
-    if (kind === 'theme') {
-      return setTarget({
-        endpoint: 'marketplace/publish-theme',
-        payload: { hostId },
-        displayName: hostLabel ? `${hostLabel} theme` : undefined,
-        noun: 'theme',
-      })
-    }
-    if (kind === 'emailTemplate') {
-      return setTarget({
-        endpoint: 'marketplace/publish-email-template',
-        payload: { hostId, templateKey: selectedId },
-        displayName: emailLabel(selectedId),
-        noun: 'email template',
-      })
-    }
-    if (kind === 'emailStarter') {
-      const chosen = emailScreens.find((entry: any) => entry.$id === selectedId)
-      return setTarget({
-        endpoint: 'marketplace/publish-email-starter',
-        payload: { hostId, screenId: selectedId },
-        displayName: artifactName(chosen),
-        noun: 'email starter',
-      })
-    }
-    const chosen = layouts.find((entry: any) => entry.$id === selectedId)
+    const named =
+      kind === 'site'
+        ? hostLabel
+        : kind === 'theme'
+          ? hostLabel && `${hostLabel} theme`
+          : kind === 'emailTemplate'
+            ? emailLabel(selectedId)
+            : artifactName(
+                activeList.find((entry: any) => entry.$id === selectedId),
+              )
     setTarget({
-      endpoint: 'marketplace/publish-layout',
-      payload: { hostId, layoutId: selectedId },
-      displayName: artifactName(chosen),
-      noun: 'layout',
+      kind,
+      hostId,
+      orgId,
+      // Absent for a kind that IS the site — a whole site template, a theme —
+      // where `hostId` above already names it.
+      ...(kind === 'site' || kind === 'theme'
+        ? {}
+        : { artifactId: selectedId }),
+      ...(named ? { displayName: named } : {}),
     })
   }
 
@@ -522,7 +497,15 @@ export function OrgPublishPanel({
           )}
         </Box>
       </Stack>
-      <PublishArtifactDialog target={target} onClose={() => setTarget(null)} />
+      {/* No `useSlotWidgets` gate on the button above, unlike the pages that
+          offer a publish in passing: this panel is drawn inside the
+          marketplace's own surface, so a workspace that cannot reach the
+          zone's widget never reaches this panel either. */}
+      <PluginWidgetSlot
+        slot={CONSOLE_WIDGET_SLOTS.hostArtifactPublish}
+        artifact={target}
+        onClose={() => setTarget(null)}
+      />
     </CardDisplay>
   )
 }

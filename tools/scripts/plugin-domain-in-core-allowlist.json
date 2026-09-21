@@ -808,13 +808,6 @@
       "lane": "plugin-id"
     },
     {
-      "path": "apps/console/components/templates/publish-artifact-dialog.component.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/components/templates/template-gallery-dialog.component.tsx",
       "rules": [
         "plugin-id",

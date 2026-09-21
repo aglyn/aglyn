@@ -18,9 +18,11 @@
 
 import {
   CANVAS_ROOT_ELEMENT_ID,
+  CONSOLE_WIDGET_SLOTS,
   createResourceUid,
   decodeStoredNodes,
   LAYOUT_SLOT_COMPONENT_ID,
+  type ConsolePublishableArtifact,
 } from '@aglyn/aglyn'
 import { MUI_BUNDLE_ID } from '@aglyn/aglyn'
 import {
@@ -77,14 +79,13 @@ import {
 import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
 import AuthenticatedLayout from '../../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../../components/layouts/dashboard.layout'
-import PublishArtifactDialog, {
-  type PublishArtifactTarget,
-} from '../../../../../../components/templates/publish-artifact-dialog.component'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from '../../../../../../components/templates/save-as-template-dialog.component'
 import MainLayout from '../../../../../../components/layouts/main.layout'
-import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.component'
+import PluginWidgetSlot, {
+  useSlotWidgets,
+} from '../../../../../../components/plugin-widget-slot.component'
 import HostDisplayNameComponent from '../../../../../../components/host-display-name.component'
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import { useHostId, useHostSubdomain } from '../../../../../../components/host-id-provider'
@@ -118,7 +119,19 @@ function Layouts(props) {
   const [saveTemplateFor, setSaveTemplateFor] =
     useState<SaveAsTemplateSource | null>(null)
   const [publishTarget, setPublishTarget] =
-    useState<PublishArtifactTarget | null>(null)
+    useState<ConsolePublishableArtifact | null>(null)
+  /*
+   * WHETHER ANYTHING PUBLISHES A LAYOUT (AGL-3080).
+   *
+   * The menu item below is one entry of a list this page builds, so it cannot
+   * be a widget; what it opens is. Offering it on a workspace whose
+   * `hostArtifactPublish` zone has no widget would be a menu item that opens
+   * an empty dialog, so the entry is left out instead.
+   */
+  const { widgets: publishWidgets } = useSlotWidgets([
+    CONSOLE_WIDGET_SLOTS.hostArtifactPublish,
+  ])
+  const canPublish = publishWidgets.length > 0
   const handleFormOpen = useCallback(() => {
     setQuickDrawerOpen(true)
   }, [])
@@ -527,22 +540,30 @@ function Layouts(props) {
                   buildTemplateSource(layoutId, versionId, row.displayName),
                 ),
             },
-            {
-              // Publishing shares the whole layout with other organizations;
-              // saving a template above keeps it on this site (AGL-672).
-              key: 'publish',
-              label: 'Publish to marketplace',
-              icon: <MdiIcon path={mdiStorefrontOutline.path} size={0.8} />,
-              onClick: () =>
-                setPublishTarget({
-                  endpoint: 'marketplace/publish-layout',
-                  payload: { hostId, layoutId },
-                  displayName: row.displayName,
-                  description: row.description,
-                  noun: 'layout',
-                  categoryPlaceholder: 'e.g. Marketing, Docs, Storefront',
-                }),
-            },
+            ...(canPublish
+              ? [
+                  {
+                    // Publishing shares the whole layout with other
+                    // organizations; saving a template above keeps it on this
+                    // site (AGL-672). WHERE it is shared is the zone's
+                    // (AGL-3080): this says only that the thing is a layout,
+                    // which site holds it and what it is called.
+                    key: 'publish',
+                    label: 'Publish',
+                    icon: (
+                      <MdiIcon path={mdiStorefrontOutline.path} size={0.8} />
+                    ),
+                    onClick: () =>
+                      setPublishTarget({
+                        kind: 'layout',
+                        hostId,
+                        artifactId: layoutId,
+                        displayName: row.displayName,
+                        description: row.description,
+                      }),
+                  },
+                ]
+              : []),
             {
               key: 'delete',
               label: 'Delete',
@@ -696,8 +717,9 @@ function Layouts(props) {
         source={saveTemplateFor}
         onClose={() => setSaveTemplateFor(null)}
       />
-      <PublishArtifactDialog
-        target={publishTarget}
+      <PluginWidgetSlot
+        slot={CONSOLE_WIDGET_SLOTS.hostArtifactPublish}
+        artifact={publishTarget}
         onClose={() => setPublishTarget(null)}
       />
     </>
