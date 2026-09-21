@@ -54,7 +54,7 @@ import { execFileSync } from 'node:child_process'
 import { cert, applicationDefault, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
 
-import { renderReleaseEntry } from './lib/changelog-entry.mjs'
+import { changelogEntryId, renderReleaseEntry } from './lib/changelog-entry.mjs'
 import {
   compareVersions,
   parseCommit,
@@ -444,7 +444,9 @@ async function main() {
   // updates the entry that is already there instead of publishing a second
   // one at a different id.
   const existing = await entriesRef.where('slug', '==', entry.slug).limit(1).get()
-  const target = existing.empty ? entriesRef.doc(`cl-${entry.slug}`) : existing.docs[0].ref
+  const target = existing.empty
+    ? entriesRef.doc(changelogEntryId(entry.slug))
+    : existing.docs[0].ref
   const publishedAt = Timestamp.fromDate(new Date(entry.publishedAt))
   await target.set(
     {

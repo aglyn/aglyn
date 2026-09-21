@@ -467,6 +467,26 @@ export function clockUtc(iso) {
  * the honest record (a version cut and never promoted) rather than an
  * oversight, and a compare link to a tag nobody cut is a 404.
  */
+/**
+ * The document id a release's changelog entry is published under.
+ *
+ * A NAMED key function rather than a template literal at the call site, which
+ * `check:id-minting` (AGL-3079) refuses: an id with a meaning is allowed, and
+ * the rule is that the scheme has one place where it is written and reviewed,
+ * so that every reader of the key calls the same function rather than
+ * re-deriving it. The meaning here is the point — the id is DERIVED from the
+ * release slug precisely so that re-running a promotion whose write failed
+ * lands on the entry that is already there instead of publishing a second one
+ * beside it. A minted id would make the script non-idempotent, which for a
+ * publisher that runs inside a promotion is the failure worth designing out.
+ *
+ * The `cl-` prefix keeps a changelog entry's id recognisable in a collection
+ * that a customer's own entries also live in.
+ */
+export function changelogEntryId(slug) {
+  return `cl-${slug}`
+}
+
 export function renderReleaseEntry({
   version,
   commits,
