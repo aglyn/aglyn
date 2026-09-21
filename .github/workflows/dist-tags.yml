@@ -1,0 +1,84 @@
+name: Reconcile dist-tags
+
+# Point the dist-tags at a version that is already on the registry (AGL-3201).
+#
+# ---------------------------------------------------------------------------
+# WHY THIS IS A WORKFLOW AND NOT SOMETHING SOMEBODY TYPES
+# ---------------------------------------------------------------------------
+# `npm publish --tag` takes ONE tag, so a release always leaves a second one
+# unset, and an OIDC identity may not set it: a trusted-publisher token
+# authorizes `npm publish` and `npm stage publish`, and npm's documentation is
+# explicit that everything else "requires traditional authentication methods".
+#
+# `publish-packages.yml` does the ordinary case as part of a release. This one
+# exists for a GAP — versions published before a tagging rule changed, or a
+# release whose tag step failed — so that closing it needs neither a person's
+# second factor nor a republish. Both use the same script and the same secret.
+#
+# ---------------------------------------------------------------------------
+# WHAT IT WILL NOT DO
+# ---------------------------------------------------------------------------
+# It publishes nothing and it builds nothing. A version it is pointed at must
+# already be on the registry; a package that does not have it is skipped, not
+# failed. And it never walks `latest` back onto a prerelease once a real
+# release exists — `tagsFor` asks the same rule the publish uses, so the two
+# cannot disagree.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to point the tags at. Empty = the version this branch carries.'
+        type: string
+        default: ''
+      set:
+        description: 'Move the tags. Off is a read-only report of where they point today.'
+        type: boolean
+        default: false
+      probe:
+        description: 'First prove this runner may move a tag at all, by writing a throwaway one and removing it.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: dist-tags
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tags:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      - name: Reconcile
+        env:
+          # The one thing this secret still does. It cannot publish: no step in
+          # this workflow runs `npm publish`.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.version }}
+          SET: ${{ inputs.set }}
+          PROBE: ${{ inputs.probe }}
+        run: |
+          args=()
+          if [ "$PROBE" = "true" ]; then args+=(--probe); fi
+          if [ "$SET" = "true" ]; then
+            if [ -z "$NODE_AUTH_TOKEN" ]; then
+              echo "::error::NPM_TOKEN is not set, so no tag can be moved. An OIDC identity may not set a dist-tag — this step needs the token."
+              exit 1
+            fi
+            args+=(--set)
+          fi
+          if [ -n "$VERSION" ]; then args+=(--version "$VERSION"); fi
+          node tools/scripts/dist-tags.mjs "${args[@]}"

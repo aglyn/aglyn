@@ -649,18 +649,37 @@ step would need back the long-lived token trusted publishing exists to retire.
 The tag is chosen at publish time because that is the only moment CI may
 choose it.
 
-For a gap already on the registry — versions published before this rule — the
-tag is moved by hand:
+### The second tag
+
+`npm publish --tag` takes ONE tag, so a version always leaves another unset:
+while no release exists the publish spends it on `latest` and `beta` is left
+behind, and afterwards it runs the other way round. `publish-packages.yml`
+closes that with a step of its own, and `dist-tags.yml` closes a gap on demand
+— a version published before a rule changed, or a tag step that failed —
+without a republish.
 
 ```sh
-npm run dist-tag:latest            # read only: what each tag says
-npm run dist-tag:latest -- --set   # the owner moves the ones behind
+npm run dist-tags                     # read only: where every tag points today
+npm run dist-tags -- --set            # move the ones behind
+npm run dist-tags -- --probe          # may this runner move a tag at all?
+npm run dist-tags -- --version 1.0.0  # a version other than the repo's
 ```
 
-It targets the version the repo carries, skips a package that version was never
-published for, and is the owner's to run: it changes what every `npm install`
-of these packages hands out, and npm challenges it with the account's second
-factor.
+`tagsFor` asks `distTagFor` rather than repeating its rule, so the publish and
+this can never disagree about which tag a version belongs on — and **`latest`
+is never walked back onto a prerelease once a release exists.** A package the
+version was never published for is skipped, not failed.
+
+⛔ **This is the one thing `NPM_TOKEN` still does.** An OIDC identity may not
+set a dist-tag, so the publish step runs tokenless and this one carries the
+secret. In `publish-packages.yml` it is `continue-on-error`: the default
+install is already correct by then, so a missing or expired token leaves a
+stale second tag and nothing worse. The token expires **2026-12-19**, and on
+that day releases go out exactly as before.
+
+`--probe` exists because a run where every tag already happens to be correct
+writes nothing, and so cannot tell a runner that may write from one that may
+not. It writes a throwaway tag no consumer reads and removes it again.
 
 ⛔ **`createPackage` is not the same as being configured**, and the check knows
 the difference. A row created after 2026-09-03 carries `createStagedPackage`

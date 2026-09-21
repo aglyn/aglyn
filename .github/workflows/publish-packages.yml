@@ -38,16 +38,16 @@ name: Publish packages
 # `-- --set`; it is their account's security setting, so an agent may run the
 # listing and never the change.
 #
-# THERE IS NO TOKEN ANY MORE. All 51 packages name this workflow as a trusted
-# publisher, each with `createPackage` — the permission a plain `npm publish`
-# needs, as distinct from the staged-publish one a configuration made after
-# 2026-09-03 gets by default. Verified package by package on 2026-09-21, which
-# is what let `NPM_TOKEN` go.
+# NOTHING IS PUBLISHED WITH A TOKEN. All 51 packages name this workflow as a
+# trusted publisher, each with `createPackage` — the permission a plain `npm
+# publish` needs, as distinct from the staged-publish one a configuration made
+# after 2026-09-03 gets by default. Verified package by package on 2026-09-21.
 #
-# The token it replaced was granular with the 2FA bypass and expired
-# 2026-12-19; npm removes direct publishing with those in January 2027. A
-# secret that no longer exists cannot expire, leak or be rotated into a broken
-# release, which is the whole point of the change.
+# `NPM_TOKEN` survives for ONE step, the dist-tag below, because an OIDC
+# identity is not allowed to set a tag at all. It cannot publish anything: the
+# publish step has no token in its environment, so provenance is tied to this
+# workflow's own identity rather than to a secret anybody holding it could
+# use, and the token expiring on 2026-12-19 costs a tag and not a release.
 
 on:
   push:
@@ -112,3 +112,36 @@ jobs:
           if [ "$PUBLISH" = "true" ]; then args+=(--publish); fi
           if [ -n "$ONLY" ]; then args+=(--only "$ONLY"); fi
           node tools/scripts/publish-packages.mjs "${args[@]}"
+
+      # ---------------------------------------------------------------------
+      # THE SECOND TAG (AGL-3201)
+      # ---------------------------------------------------------------------
+      # `npm publish --tag` takes ONE tag, so a version always leaves a second
+      # one unset: while no release exists the publish spends it on `latest`,
+      # and `beta` is left behind; afterwards it runs the other way round.
+      #
+      # ⛔ THE OIDC IDENTITY CANNOT SET IT. A trusted-publisher token
+      # authorizes `npm publish` and `npm stage publish`, and npm's docs are
+      # explicit that everything else "requires traditional authentication
+      # methods". So this one step uses `NPM_TOKEN` — and it is the only thing
+      # the token still does. Publishing above is tokenless, which is what
+      # keeps provenance tied to this workflow's own identity rather than to a
+      # secret anybody holding it could use.
+      #
+      # `continue-on-error`, deliberately. The DEFAULT INSTALL is already
+      # correct when this step runs — the publish set it — so a missing or
+      # expired token leaves a stale `beta` and nothing worse. The token
+      # expires 2026-12-19; on that day this step starts failing softly and
+      # releases go out exactly as before. Failing the run instead would turn
+      # a cosmetic tag into a red release.
+      - name: Point the second dist-tag at what was just published
+        if: ${{ github.event_name == 'push' || inputs.publish }}
+        continue-on-error: true
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::notice::No NPM_TOKEN, so the second dist-tag was left where it was. The default install is unaffected — the publish set it. Move it by hand with \`npm run dist-tags -- --set\`."
+            exit 0
+          fi
+          node tools/scripts/dist-tags.mjs --set
