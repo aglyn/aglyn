@@ -54,20 +54,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/app/(app)/admin/plugin-reviews/[listingId]/page.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/(app)/admin/plugin-reviews/page.tsx",
-      "rules": [
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/app/(app)/admin/tax-return/page.tsx",
       "rules": [
         "domain-declares:commerce",
@@ -120,13 +106,6 @@
       "lane": "ai"
     },
     {
-      "path": "apps/console/app/api/_lib/publisher-review-email.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/app/api/_lib/site-export.ts",
       "rules": [
         "plugin-id"
@@ -165,15 +144,6 @@
         "domain-declares:forms"
       ],
       "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/api/admin/plugin-reviews/route.ts",
-      "rules": [
-        "plugin-id",
-        "plugin-collection:marketplace",
-        "domain-declares:marketplace"
-      ],
-      "lane": "plugin-id"
     },
     {
       "path": "apps/console/app/api/admin/reap-plugin-artifacts/route.ts",

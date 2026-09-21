@@ -35,8 +35,8 @@
  * a failed drop shortens nothing but never lets anything through.
  */
 import postTenantRevalidate, {
+  dropSiteCaches,
   revalidateEntireHost,
-  revalidateHostsWithPlugin,
   revalidateOrgHosts,
 } from '../utils/server/tenant-revalidate'
 
@@ -131,36 +131,41 @@ describe('cache drops for changes that are not a publish (AGL-1152)', () => {
     expect(body.hostId).toBe('h1')
   })
 
-  it('A PLUGIN REVOCATION reaches host-scoped AND org-scoped installs', async () => {
-    // An org-tier pin (AGL-237) applies to every host in the org, and it is
-    // those hosts that hold the cached HTML — the org renders nothing. A
-    // fan-out that only understood host installs would leave every org-tier
-    // site running the bundle we just killed.
+  it('drops a NAMED SET of sites, and only those', async () => {
+    /*
+     * The fan-out half of what used to be `revalidateHostsWithPlugin`
+     * (AGL-3080). Which sites are affected is the caller's — for a
+     * marketplace revocation that means walking install pins, which is the
+     * marketplace's own collection and now lives in that plugin. What stays
+     * here is the part that takes the tenant's revalidation paths and cache
+     * tags: turning a list of host ids into dropped pages.
+     */
     const firestore = makeFirestore({
       hosts: {
-        direct: { subdomain: 'direct', screens: {} },
-        orgA1: { subdomain: 'a1', screens: {}, orgId: 'orgA' },
-        orgA2: { subdomain: 'a2', screens: {}, orgId: 'orgA' },
-        unrelated: { subdomain: 'nope', screens: {}, orgId: 'orgB' },
+        one: { subdomain: 'one', screens: {} },
+        two: { subdomain: 'two', screens: {} },
+        untouched: { subdomain: 'nope', screens: {} },
       },
-      installs: [
-        { owner: 'hosts', ownerId: 'direct' },
-        { owner: 'orgs', ownerId: 'orgA' },
-      ],
     })
 
-    const result = await revalidateHostsWithPlugin(firestore, 'listing-1')
+    const result = await dropSiteCaches(firestore, {
+      hostIds: ['one', 'two'],
+      reason: 'marketplace listing lst_1 revoked',
+    })
 
-    expect(result.installsFound).toBe(2)
-    expect(bustedHostIds()).toEqual(['direct', 'orgA1', 'orgA2'])
+    expect(bustedHostIds()).toEqual(['one', 'two'])
+    expect(result.hosts).toHaveLength(2)
     expect(result.hostsDropped).toBe(0)
   })
 
-  it('a revocation with no installs makes no requests at all', async () => {
-    const firestore = makeFirestore({ hosts: {}, installs: [] })
-    const result = await revalidateHostsWithPlugin(firestore, 'listing-1')
+  it('an empty set makes no requests at all', async () => {
+    const firestore = makeFirestore({ hosts: {} })
+    const result = await dropSiteCaches(firestore, {
+      hostIds: [],
+      reason: 'nothing affected',
+    })
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(result.installsFound).toBe(0)
+    expect(result.hosts).toHaveLength(0)
   })
 
   it('A PLAN CHANGE drops every host in the org and nobody else’s', async () => {
@@ -182,11 +187,13 @@ describe('cache drops for changes that are not a publish (AGL-1152)', () => {
     fetchMock.mockResolvedValue({ ok: false, status: 503, json: async () => ({}) })
     const firestore = makeFirestore({
       hosts: { h1: { subdomain: 'acme', screens: {}, orgId: 'orgA' } },
-      installs: [{ owner: 'hosts', ownerId: 'h1' }],
     })
 
-    const revoked = await revalidateHostsWithPlugin(firestore, 'listing-1')
-    expect(revoked.hosts[0].reason).toBe('tenant-503')
+    const dropped = await dropSiteCaches(firestore, {
+      hostIds: ['h1'],
+      reason: 'marketplace listing lst_1 revoked',
+    })
+    expect(dropped.hosts[0].reason).toBe('tenant-503')
 
     const planned = await revalidateOrgHosts(firestore, 'orgA')
     expect(planned[0].reason).toBe('tenant-503')

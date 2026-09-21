@@ -529,108 +529,70 @@ const MAX_REVOKE_FANOUT_HOSTS = 200
 /** Concurrent tenant round trips. Bounded so a wide fan-out is not a burst. */
 const FANOUT_CONCURRENCY = 10
 
-export interface PluginFanoutResult {
+/**
+ * DROP THE CACHED PAGES OF A NAMED SET OF SITES (AGL-1152, AGL-3080).
+ *
+ * The fan-out policy, and nothing about who asked. It caps the number of
+ * sites, bounds the concurrency, and says out loud when the cap truncated
+ * the list — which is the only record that some sites were left serving the
+ * stopped content on purpose.
+ *
+ * ## Why this is the shape the seam took
+ *
+ * It used to be `revalidateHostsWithPlugin(firestore, listingId)`: it walked
+ * the `installs` collection group itself, expanded org-tier pins to their
+ * hosts, and then fanned out. But `installs` is the MARKETPLACE's own
+ * collection — its `hostCollections` entry names it — so half that function
+ * was a plugin's knowledge living in the console, and the plugin that owned
+ * it could not call the other half.
+ *
+ * So it split along the line that was already there. The plugin answers
+ * which sites (its pins, its tiers, its rules) and calls
+ * `dropPluginSiteCache`; this answers how to drop one, which takes the
+ * tenant's revalidation paths and cache tags and is the app's.
+ */
+export interface SiteCacheDropResult {
   hosts: WholeHostRevalidateResult[]
-  /** Install pins matched by the collection-group query. */
-  installsFound: number
   /** Affected hosts NOT dropped because the cap bit — 0 in the normal case. */
   hostsDropped: number
 }
 
-/**
- * Drop the cached pages of every host running a given plugin (AGL-1152).
- *
- * ## Why a revocation needs this
- *
- * The tenant stamps each `marketplacePlugin` node with its pinned install and
- * its kill-switch state AT COMPOSE TIME, so a page cached before a revocation
- * goes on serving the pre-revocation answer until it re-renders. The
- * per-install revocation read is deliberately kept on a short TTL as a
- * security bound — but that bound is only consulted DURING a render, so on a
- * page nobody is requesting it bounds nothing at all. This is what actually
- * makes a kill switch take effect on already-cached HTML.
- *
- * ## Scope
- *
- * Installs live at BOTH `orgs/{orgId}/installs/{listingId}` (org-tier, applies
- * to every host in the org — AGL-237) and `hosts/{hostId}/installs/{listingId}`,
- * so the collection-group query finds both and org hits are expanded to their
- * hosts. Backed by the `installs.listingId` COLLECTION_GROUP field override;
- * Firestore auto-creates single-field indexes at COLLECTION scope only.
- *
- * BEST EFFORT, like everything else here: the tenant still refuses a revoked
- * plugin at render time. This only shrinks the window in which cached HTML
- * shows the old answer. Never throws.
- */
-export async function revalidateHostsWithPlugin(
+export async function dropSiteCaches(
   firestore: Firestore,
-  listingId: string,
-): Promise<PluginFanoutResult> {
-  const empty: PluginFanoutResult = {
-    hosts: [],
-    installsFound: 0,
-    hostsDropped: 0,
-  }
-  if (!listingId) return empty
-  try {
-    const installs = await firestore
-      .collectionGroup('installs')
-      .where('listingId', '==', listingId)
-      .get()
-    if (installs.empty) return empty
-
-    const hostIds = new Set<string>()
-    const orgIds = new Set<string>()
-    for (const doc of installs.docs) {
-      const owner = doc.ref.parent.parent
-      if (!owner) continue
-      if (owner.parent.id === 'hosts') hostIds.add(owner.id)
-      else if (owner.parent.id === 'orgs') orgIds.add(owner.id)
-    }
-    // An org-tier pin applies to every host in the org, so it is the org's
-    // hosts that hold the cached HTML — the org itself renders nothing.
-    await Promise.all(
-      [...orgIds].map(async (orgId) => {
-        const hosts = await firestore
-          .collection('hosts')
-          .where('orgId', '==', orgId)
-          .get()
-        for (const host of hosts.docs) hostIds.add(host.id)
+  options: {
+    hostIds: readonly string[]
+    /** What the purge is for, for the truncation log. */
+    reason: string
+  },
+): Promise<SiteCacheDropResult> {
+  const all = [...new Set(options.hostIds.filter(Boolean))]
+  if (!all.length) return { hosts: [], hostsDropped: 0 }
+  const targets = all.slice(0, MAX_REVOKE_FANOUT_HOSTS)
+  const hostsDropped = all.length - targets.length
+  if (hostsDropped > 0) {
+    // Said out loud, for the same reason the tenant logs its own path cap
+    // (AGL-1161): the only record that some sites were left serving the
+    // stopped content on purpose.
+    console.warn(
+      JSON.stringify({
+        tag: 'AGL-1152:revoke-fanout-truncated',
+        reason: options.reason,
+        affected: all.length,
+        cap: MAX_REVOKE_FANOUT_HOSTS,
+        dropped: hostsDropped,
       }),
     )
-
-    const all = [...hostIds]
-    const targets = all.slice(0, MAX_REVOKE_FANOUT_HOSTS)
-    const hostsDropped = all.length - targets.length
-    if (hostsDropped > 0) {
-      // Said out loud, for the same reason the tenant logs its own path cap
-      // (AGL-1161): the only record that some sites were left serving the
-      // revoked bundle on purpose.
-      console.warn(
-        JSON.stringify({
-          tag: 'AGL-1152:revoke-fanout-truncated',
-          listingId,
-          affected: all.length,
-          cap: MAX_REVOKE_FANOUT_HOSTS,
-          dropped: hostsDropped,
-        }),
-      )
-    }
-
-    const results: WholeHostRevalidateResult[] = []
-    for (let i = 0; i < targets.length; i += FANOUT_CONCURRENCY) {
-      const batch = targets.slice(i, i + FANOUT_CONCURRENCY)
-      results.push(
-        ...(await Promise.all(
-          batch.map((hostId) => revalidateEntireHost(firestore, hostId)),
-        )),
-      )
-    }
-    return { hosts: results, installsFound: installs.size, hostsDropped }
-  } catch (error) {
-    console.error('[tenant-revalidate] plugin fan-out failed', listingId, error)
-    return empty
   }
+  const results: WholeHostRevalidateResult[] = []
+  for (let i = 0; i < targets.length; i += FANOUT_CONCURRENCY) {
+    const batch = targets.slice(i, i + FANOUT_CONCURRENCY)
+    results.push(
+      ...(await Promise.all(
+        batch.map((hostId) => revalidateEntireHost(firestore, hostId)),
+      )),
+    )
+  }
+  return { hosts: results, hostsDropped }
 }
 
 /**

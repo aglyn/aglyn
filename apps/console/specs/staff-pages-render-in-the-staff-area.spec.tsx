@@ -110,6 +110,8 @@ jest.mock('../hooks/use-is-staff', () => ({
   __esModule: true,
   default: () => true,
   useIsStaff: () => true,
+  // The shared staff page reads the role to hand it to a plugin (AGL-3080).
+  useStaffRole: () => 'super',
 }))
 jest.mock('../components/host-id-provider', () => ({
   __esModule: true,

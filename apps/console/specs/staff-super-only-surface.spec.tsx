@@ -197,9 +197,22 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ui: ['components/staff-org-actions.component.tsx'],
     via: /StaffRoleOnly/,
   },
+  /*
+   * The control that grants realm trust lives in the marketplace plugin
+   * since AGL-3080, while `sign-plugin/route.ts` — the key holder — stayed
+   * in this app. So this row reads ACROSS: the paths below are joined onto
+   * `CONSOLE_ROOT`, and `../../libs/...` climbs out of the app to the repo.
+   *
+   * `BlockedControl` rather than `SuperStaffOnly`: the wrapper moved to
+   * `shared-ui-jsx` so a plugin could use it, and the console's own
+   * `SuperStaffOnly` renders it. The verdict is the same
+   * `resolveStaffRoleGate(role, ['super'])` either side.
+   */
   'sign-plugin/route.ts': {
-    ui: ['app/(app)/admin/plugin-reviews/[listingId]/page.tsx'],
-    via: /SuperStaffOnly/,
+    ui: [
+      '../../libs/plugins/marketplace/src/lib/components/plugin-review-detail.component.tsx',
+    ],
+    via: /BlockedControl/,
   },
   // Staff refunds (AGL-2486). The only entry here whose gate is not "which
   // role are you" but "how much is this": support may refund up to a cap and

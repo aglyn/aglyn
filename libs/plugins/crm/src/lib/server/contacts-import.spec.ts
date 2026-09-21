@@ -437,6 +437,10 @@ describe('companies', () => {
     })
     expect(doorCall('a@x.co').facet.companyId).toBe(id)
     expect(doorCall('b@x.co').facet.companyId).toBe(id)
+    // The name rides beside the link, spelled as the record was created,
+    // so `{{contact.company}}` renders for an imported person.
+    expect(doorCall('a@x.co').facet.companyName).toBe('Acme Widgets')
+    expect(doorCall('b@x.co').facet.companyName).toBe('Acme Widgets')
   })
 
   it('reuses a company this scope can see and ignores one it cannot', async () => {
@@ -447,6 +451,8 @@ describe('companies', () => {
     const out = await importRows([{ email: 'a@x.co', companyName: 'ACME' }])
     expect(out.body.companiesCreated).toBe(0)
     expect(doorCall('a@x.co').facet.companyId).toBe('ours')
+    // As the record spells it, not as the row typed it.
+    expect(doorCall('a@x.co').facet.companyName).toBe('Acme')
   })
 
   it('sees an org-wide company from any site, and never creates a twin of it', async () => {

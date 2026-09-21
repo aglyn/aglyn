@@ -20,7 +20,7 @@ import {
   revocationWithdrawsReviewedClaim,
   shouldStripVerifiedOnTakedown,
   VERIFIED_STRIPPED_STATUS,
-} from '../../../../constants/plugin-review-status'
+} from '../model/plugin-review-status'
 import {
   checkPluginBundle,
   isPluginRevoked,
@@ -42,7 +42,7 @@ import {
   isImpersonationSession,
   updateExisting,
 } from '@aglyn/tenant-data-admin'
-import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import {
   buildRoute,
   compareArtifactVersions,
@@ -51,12 +51,12 @@ import {
 import {
   outstandingChecklistItems,
   PLUGIN_REVIEW_CHECKLIST,
-} from '../../../../constants/plugin-review-checklist'
+} from '../model/plugin-review-checklist'
 import {
   pluginRejectionCategory,
   rejectionHeadline,
   rejectionInputError,
-} from '../../../../constants/plugin-rejection-categories'
+} from '../model/plugin-rejection-categories'
 import { attestationsForBytes } from '@aglyn/aglyn/app-utils/publisher-attestation'
 import { VERIFICATION_DECLINE_COOLDOWN_DAYS } from '@aglyn/aglyn/app-utils/marketplace-verification'
 import {
@@ -71,8 +71,8 @@ import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
  * platform suppression list before addressing anybody, and that list has to
  * be reachable by a spec that does not drag the admin SDK in behind a route.
  */
-import { emailPublisher } from '../../_lib/publisher-review-email'
-import { revalidateHostsWithPlugin } from '../../../../utils/server/tenant-revalidate'
+import { emailPublisher } from './publisher-review-email'
+import { dropCachesForListing } from './revoke-cache-drop'
 
 /**
  * Marketplace review queue (AGL-432) — Strapi Market's two-phase review
@@ -771,7 +771,7 @@ async function handler(request: Request): Promise<Response> {
         // Plugin-only: it walks the plugin INSTALL PINS, which an email
         // starter has none of, and an email is never part of a cached page —
         // its kill is felt at the send, where nothing is cached.
-        if (isPlugin) await revalidateHostsWithPlugin(firestore, listingId)
+        if (isPlugin) await dropCachesForListing(firestore, listingId)
         // The offer follows the kill switch here too (AGL-2368). AGL-2306
         // taught the per-version revoke and the reject path to repair the
         // mirror and left this one out, so a takedown flattened `versions` to
@@ -1192,7 +1192,7 @@ async function handler(request: Request): Promise<Response> {
       // Same reach as the takedown path above (AGL-1152): a per-version
       // revocation changes what every cached page renders, and nothing else
       // drops that HTML.
-      await revalidateHostsWithPlugin(firestore, listingId)
+      await dropCachesForListing(firestore, listingId)
 
       // Withdraw the "Reviewed" chip when the bytes we just killed are the ones
       // customers are being offered (AGL-1121).
@@ -1533,5 +1533,4 @@ async function handler(request: Request): Promise<Response> {
   }
 }
 
-export const dynamic = 'force-dynamic'
-export { handler as GET, handler as POST }
+export { handler as marketplaceAdminReviews }

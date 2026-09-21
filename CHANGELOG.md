@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.151 — 2026-09-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.150...v1.0.0-beta.151)
+
+### Added
+
+- **marketplace:** the review queue moves, and a plugin can drop a site's cache ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025), [AGL-1059](https://linear.app/aglyn/issue/AGL-1059))
+
+### Fixed
+
+- **ai:** a page is built when the screen it would copy cannot keep the plan ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024), [AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **ai:** a plan says when a screen starts from a copy ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024), [AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+- **console:** the site-cache boot defers a FILE, not a lib specifier ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-2282](https://linear.app/aglyn/issue/AGL-2282), [AGL-1921](https://linear.app/aglyn/issue/AGL-1921))
+- **crm:** a capture door writes the company's name beside its link ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
+- **ai:** a page job copies its source once, however often the step runs ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024), [AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+
 ## v1.0.0-beta.150 — 2026-09-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.149...v1.0.0-beta.150)

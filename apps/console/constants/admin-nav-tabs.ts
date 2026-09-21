@@ -95,11 +95,12 @@ function consoleAdminNavTabItems() {
       label: 'Coupons',
       href: buildRoute(Route.ADMIN_COUPONS),
     },
-    {
-      id: 'nav-tab-admin-plugin-reviews',
-      label: 'Plugin reviews',
-      href: buildRoute(Route.ADMIN_PLUGIN_REVIEWS),
-    },
+    /*
+     * Plugin reviews used to sit HERE. It is a plugin staff page since
+     * AGL-3080 — the queue triages a collection only the marketplace writes
+     * — so it arrives through `staffPages` instead, at the same
+     * `/admin/plugin-reviews` URL, and lands with the other plugin tabs.
+     */
     {
       id: 'nav-tab-admin-support',
       label: 'Support',

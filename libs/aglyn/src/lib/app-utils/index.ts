@@ -21,3 +21,4 @@
 // reached via `@aglyn/aglyn`, keeps both for client consumers unchanged.
 export * from './server'
 export * from './contexts'
+export * from './staff-role-gate'

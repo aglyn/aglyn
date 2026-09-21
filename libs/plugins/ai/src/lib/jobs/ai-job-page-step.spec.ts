@@ -1010,6 +1010,44 @@ describe('when a pass stops', () => {
     expect(outcome.review?.message).toContain('"what the inspection covers"')
   })
 
+  it('claims its one copy by the id the job recorded, so a second pass replays instead of minting another screen (AGL-3024)', async () => {
+    // Measured live on 2026-09-21, on test-org / harborline-law: the copy is
+    // refused for showing less than the plan promised, the member presses Try
+    // again, and the step copies the SOURCE again — leaving "Practice Areas
+    // 2", then "Practice Areas 3". The copy is written under an id core mints,
+    // never the id the job recorded, so `written` cannot find it and this
+    // branch fires on every pass. `attemptKey` is what makes core replay the
+    // first copy; without it the retry is both unwinnable and a litter of
+    // orphan screens.
+    const outcome = await step()(copiedScreen(2))
+    expect(outcome.review?.findings.map((finding) => finding.code)).toEqual(['plan-items-short'])
+    expect(duplicate).toHaveBeenCalledWith('screen', expect.objectContaining({ attemptKey: SCREEN_ID }))
+  })
+
+  it('builds the page when the screen the plan copies cannot already show what the plan promised (AGL-3024)', async () => {
+    // Measured live 2026-09-21 on test-org: the plan named an existing
+    // Practice Areas page, that page showed two cards, the plan promised six,
+    // and the step copied anyway — then refused its own copy. The member was
+    // left a page to throw away and a Try again that could only copy the same
+    // two cards. A copy shows what its SOURCE shows, so the source settles it
+    // BEFORE a screen is minted.
+    const nodes: Record<string, unknown> = {
+      [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['grid'] },
+      grid: { componentId: 'muiGrid', props: { container: true }, nodes: ['card-0', 'card-1'] },
+      'card-0': { componentId: 'muiCard', props: { variant: 'outlined' } },
+      'card-1': { componentId: 'muiCard', props: { variant: 'outlined' } },
+    }
+    mockDocs.set('hosts/host-1/screens/scr-home', { displayName: 'Home', versionId: 'v-home' })
+    mockDocs.set('hosts/host-1/screens/scr-home/versions/v-home', { nodes })
+    mockRunAiRequest.mockResolvedValueOnce(sectionAnswer(FIXTURE.answers[0]))
+    const outcome = await step()(context({ plan: { ...PLAN, screens: [{ ...SCREEN, duplicateOf: 'scr-home' }] } }))
+    // No screen is minted to be thrown away, and the page is built instead.
+    expect(duplicate).not.toHaveBeenCalled()
+    expect(mockRunAiRequest).toHaveBeenCalledTimes(1)
+    expect(outcome).toMatchObject({ continue: true, outputs: [] })
+    expect(outcome.review).toBeUndefined()
+  })
+
   it('stops for a person when the copy cannot be read back at all', async () => {
     duplicate.mockResolvedValueOnce({ ok: true, id: 'scr-gone', versionId: 'v-copy', name: 'Home copy' })
     const outcome = await step()(context({ plan: { ...PLAN, screens: [{ ...SCREEN, duplicateOf: 'scr-home' }] } }))

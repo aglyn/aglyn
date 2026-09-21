@@ -1385,6 +1385,49 @@ export interface ConsoleUpgradeNotice {
 export interface ConsoleStaffPageProps {
   /** The page's own console path, `/admin/{id}`. */
   basePath: string
+  /**
+   * Path segments beneath {@link basePath}, `[]` on the page's own URL
+   * (AGL-3080). Only ever non-empty for a page that declared
+   * {@link ConsoleStaffPage.ownsSubtree}.
+   *
+   * The staff twin of {@link ConsolePluginPageProps.segments}, and for the
+   * same case: a queue is a list, and a row of it is a page. A staff page
+   * without this could only ever BE the list.
+   */
+  segments?: readonly string[]
+  /**
+   * The viewer's staff ROLE, or `null` while the claim is still resolving
+   * (AGL-3080).
+   *
+   * Not every staff act is open to every staff role — six are `super`-only
+   * on the server — and a page that cannot tell renders live controls to a
+   * `support` engineer who clicks them and gets a raw 403. Pass it to
+   * `resolveStaffRoleGate` and render the verdict with
+   * `BlockedControl`; `null` must never be treated as a refusal, or every
+   * page flashes a disabled button at the people who may use it.
+   *
+   * ⚠️ NOT the boundary. The routes verify the decoded token per request and
+   * refuse regardless of what rendered. This exists so the console stops
+   * promising what the server will refuse.
+   */
+  staffRole?: string | null
+  /**
+   * Console destinations a staff page may link ACROSS to, built by the shell
+   * (AGL-3080) — the staff twin of {@link ConsolePluginOrgMount}'s paths,
+   * and for the same reason: a plugin cannot import the console's route
+   * table, and a plugin that rebuilt one of these from a string would break
+   * silently the day the console moved it.
+   */
+  staffPaths?: ConsoleStaffPagePaths
+}
+
+export interface ConsoleStaffPagePaths {
+  /**
+   * The staff console's page for one workspace. `undefined` on a deployment
+   * that has no such page, which a caller renders as no link rather than a
+   * dead one.
+   */
+  orgDetail(orgId: string): string | undefined
 }
 
 /**
@@ -1414,6 +1457,25 @@ export interface ConsoleStaffPage {
    * gives, validated by the console.
    */
   header?: { title: string; icon?: MdiIconProps; docsTopic?: string }
+  /**
+   * Whether this page claims every path beneath `/admin/{id}` too
+   * (AGL-3080) — the staff twin of {@link ConsoleNavItem.ownsSubtree}, with
+   * the same trade and the same duty.
+   *
+   * The case is a staff QUEUE: the list is the page, and each row opens one
+   * submission. The set of ids is a property of the data, so no static list
+   * could enumerate them, and without this every row's URL is a 404.
+   *
+   * A page that claims its subtree can no longer tell a typo from an id, so
+   * it takes on saying "no such thing" itself — which a queue has to be able
+   * to do anyway for a submission withdrawn while a link to it was still in
+   * a reviewer's inbox.
+   *
+   * The console's own staff routes keep winning their segments either way:
+   * a static path beats a dynamic one segment by segment, so `/admin/orgs/1`
+   * is still the orgs route and never a staff page's subtree.
+   */
+  ownsSubtree?: boolean
   Component: ComponentType<ConsoleStaffPageProps>
 }
 

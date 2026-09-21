@@ -17,19 +17,32 @@
 
 import type { Metadata } from 'next'
 import { entityPageTitle } from '../../../entity-page-title'
+import { segmentTitle } from '../../../page-title'
 import type { ReactNode } from 'react'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
 // component cannot export `metadata` — so its title lives here, in the
 // nearest server layout. A plugin's staff page is named by its id, the same
 // segment its URL carries, so two open staff tabs never share a title.
+//
+// The subject wraps INSIDE `segmentTitle` (AGL-2486), not around it: since
+// AGL-3080 a staff page may claim its subtree, which puts a titled route
+// below this one, so what this declares must stay the `{ default, template }`
+// object — `entityPageTitle` builds the DEFAULT string that object carries.
+// Returning a bare string here would strip the brand off
+// `/admin/{id}/{row}`, which is the AGL-1059 regression the sibling test in
+// `page-title.spec.ts` exists to catch.
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ staffPage: string }>
 }): Promise<Metadata> {
   const { staffPage } = await params
-  return { title: entityPageTitle({ subject: staffPage, noun: 'Staff page' }) }
+  return {
+    title: segmentTitle(
+      entityPageTitle({ subject: staffPage, noun: 'Staff page' }),
+    ),
+  }
 }
 
 export default function AdminStaffPluginTitleLayout({

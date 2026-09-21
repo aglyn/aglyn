@@ -16,9 +16,18 @@
  */
 'use client'
 
-import { Alert, Box, Tooltip } from '@mui/material'
-import { cloneElement, isValidElement, type ReactElement } from 'react'
+import {
+  resolveStaffRoleGate,
+  SUPER_STAFF_ONLY_REASON,
+  type StaffRoleGate,
+} from '@aglyn/aglyn/app-utils/staff-role-gate'
+import BlockedControl from '@aglyn/shared-ui-jsx/components/blocked-control.component'
+import { Alert } from '@mui/material'
+import { type ReactElement } from 'react'
 import { useStaffRole } from '../hooks/use-is-staff'
+
+export { SUPER_STAFF_ONLY_REASON }
+export type { StaffRoleGate }
 
 /**
  * The ONE affordance for a super-only staff control (AGL-2131).
@@ -52,57 +61,16 @@ import { useStaffRole } from '../hooks/use-is-staff'
  * stops promising what the server will refuse.
  */
 
-/** The single sentence every blocked super-only control says. */
-export const SUPER_STAFF_ONLY_REASON =
-  'This action requires the super staff role. Ask someone who holds it.'
-
-export interface StaffRoleGate {
-  /**
-   * `false` while the claim is still resolving. Nothing may be BLOCKED in
-   * that window: rendering a refusal there would flash a disabled button at
-   * every super-staff member on every admin page load, which is the flicker
-   * `useStaffRole`'s own `null` state exists to prevent.
-   */
-  ready: boolean
-  /** Whether the viewer's role is one the route admits. `false` until `ready`. */
-  admitted: boolean
-  /**
-   * The one thing call sites actually branch on: a RESOLVED claim the route
-   * would refuse. Deliberately not `!admitted` — that is true during the
-   * unresolved window too, and would disable the control for everyone for a
-   * beat.
-   */
-  blocked: boolean
-  /** The reason to show when `blocked`, else `undefined`. */
-  reason?: string
-}
-
 /**
  * Resolves the viewer's standing against the set of roles a route admits.
  *
- * Not every gated act is super-only: /api/admin/org-override admits `billing`
- * for plan and quota writes and reserves only `releaseFlags` for `super`. A
- * gate that could only say "super" would disable that dialog for the role
- * whose entire purpose it is — trading one dishonest control for another.
+ * The VERDICT moved to `@aglyn/aglyn/app-utils/staff-role-gate` in AGL-3080,
+ * so a plugin's staff page can reach the same answer from the role the shell
+ * hands it. What stays here is the only part that is this app's: reading the
+ * claim off the session.
  */
 export function useStaffRoleGate(allowed: readonly string[]): StaffRoleGate {
-  // `null` means "still reading the token", and it is also what the hook
-  // returns for a non-staff viewer — who never reaches an /admin page at all,
-  // because StaffOnly 404s them first. Treating both as "not yet resolved" is
-  // therefore right for the only population that gets here.
-  const role = useStaffRole()
-  const ready = role !== null
-  const admitted = ready && allowed.includes(String(role))
-  const blocked = ready && !admitted
-  return {
-    ready,
-    admitted,
-    blocked,
-    reason: blocked
-      ? `This action requires the ${allowed.join(' or ')} staff role. ` +
-        'Ask someone who holds it.'
-      : undefined,
-  }
+  return resolveStaffRoleGate(useStaffRole(), allowed)
 }
 
 const SUPER: readonly string[] = ['super']
@@ -121,24 +89,10 @@ export interface StaffRoleOnlyProps {
 /** {@link SuperStaffOnly} for a gate that is not super-only. */
 export function StaffRoleOnly({ roles, children }: StaffRoleOnlyProps) {
   const { blocked, reason } = useStaffRoleGate(roles)
-  if (!blocked || !isValidElement(children)) return children
   return (
-    <Tooltip title={reason ?? SUPER_STAFF_ONLY_REASON}>
-      {/* The reason also lands on the span as a real `aria-label` and
-          `title`, not only inside the Tooltip's popper. A disabled control
-          whose only explanation appears on hover says nothing at all to a
-          screen reader, and nothing to anyone on a touch device — which
-          would leave exactly the dead button this component exists to
-          replace. */}
-      <Box
-        component="span"
-        aria-label={reason ?? SUPER_STAFF_ONLY_REASON}
-        title={reason ?? SUPER_STAFF_ONLY_REASON}
-        sx={{ display: 'inline-flex' }}
-      >
-        {cloneElement(children, { disabled: true })}
-      </Box>
-    </Tooltip>
+    <BlockedControl blocked={blocked} reason={reason ?? SUPER_STAFF_ONLY_REASON}>
+      {children}
+    </BlockedControl>
   )
 }
 
@@ -162,24 +116,10 @@ export interface SuperStaffOnlyProps {
  */
 export function SuperStaffOnly({ children }: SuperStaffOnlyProps) {
   const { blocked, reason } = useSuperStaffGate()
-  if (!blocked || !isValidElement(children)) return children
   return (
-    <Tooltip title={reason ?? SUPER_STAFF_ONLY_REASON}>
-      {/* The reason also lands on the span as a real `aria-label` and
-          `title`, not only inside the Tooltip's popper. A disabled control
-          whose only explanation appears on hover says nothing at all to a
-          screen reader, and nothing to anyone on a touch device — which
-          would leave exactly the dead button this component exists to
-          replace. */}
-      <Box
-        component="span"
-        aria-label={reason ?? SUPER_STAFF_ONLY_REASON}
-        title={reason ?? SUPER_STAFF_ONLY_REASON}
-        sx={{ display: 'inline-flex' }}
-      >
-        {cloneElement(children, { disabled: true })}
-      </Box>
-    </Tooltip>
+    <BlockedControl blocked={blocked} reason={reason ?? SUPER_STAFF_ONLY_REASON}>
+      {children}
+    </BlockedControl>
   )
 }
 

@@ -82,9 +82,25 @@ jest.mock('../constants/docs-links', () => ({
 
 jest.mock('../constants/route-links', () => ({
   __esModule: true,
-  Route: { ADMIN_OVERVIEW: '/admin', ADMIN_STAFF_PAGE: '/admin/[staffPage]' },
-  buildRoute: (route: string, params?: { staffPage?: string }) =>
-    route.replace('[staffPage]', params?.staffPage ?? ''),
+  Route: {
+    ADMIN_OVERVIEW: '/admin',
+    ADMIN_STAFF_PAGE: '/admin/[staffPage]',
+    ADMIN_ORG_DETAIL: '/admin/orgs/[orgId]',
+  },
+  buildRoute: (route: string, params?: { staffPage?: string; orgId?: string }) =>
+    route
+      .replace('[staffPage]', params?.staffPage ?? '')
+      .replace('[orgId]', params?.orgId ?? ''),
+}))
+
+// The shared staff page reads the viewer's ROLE to hand it to a plugin
+// (AGL-3080). Not this file's subject, and reaching the real hook would drag
+// the Firebase provider into a spec about a document title.
+jest.mock('../hooks/use-is-staff', () => ({
+  __esModule: true,
+  default: () => true,
+  useIsStaff: () => true,
+  useStaffRole: () => 'super',
 }))
 
 jest.mock('../constants/staff-plugins', () => ({

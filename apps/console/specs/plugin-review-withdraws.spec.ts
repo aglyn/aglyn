@@ -45,7 +45,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ROUTE = readFileSync(
-  join(__dirname, '..', 'app/api/admin/plugin-reviews/route.ts'),
+  join(__dirname, '..', '..', '..', 'libs/plugins/marketplace/src/lib/server/admin-reviews.ts'),
   'utf8',
 )
 

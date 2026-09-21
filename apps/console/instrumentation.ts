@@ -21,6 +21,7 @@
 // of `@aglyn/tenant-data-admin`. Nothing in this subpath touches
 // firebase-admin, so the edge bundle is unaffected.
 import { registerPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+import { registerPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
 
 /**
  * Server-side error reporting for the console runtime (AGL-1921).
@@ -74,6 +75,42 @@ export async function register(): Promise<void> {
     )
     await registerPluginServerDeclarations()
   })
+
+  /*
+   * And the one capability this app offers plugins on the server (AGL-3080):
+   * dropping a site's cached pages.
+   *
+   * A marketplace revocation is the caller. The plugin knows WHICH sites —
+   * its own install pins, its own tiers — and this app knows HOW to drop
+   * one, because that takes the tenant's revalidation paths and cache tags.
+   * Neither half is guessable from the other side.
+   *
+   * Installed HERE rather than inside a route, because a route that
+   * registered it would leave every other route in the process resolving
+   * "no cache to drop" — which is exactly the zero that reads as an answer
+   * (AGL-3025), and on this path it means a revoked plugin quietly kept
+   * serving. The deferred imports keep firebase-admin out of the edge
+   * bundle, as everything else in this file does.
+   */
+  registerPluginSiteCache(
+    {
+      drop: async (request) => {
+        /*
+         * Deferred by RELATIVE path, never as `@aglyn/tenant-data-admin`
+         * (AGL-1921, and AGL-3080 re-learned it): nx treats a lib that is
+         * ever `import()`ed as lazy-loaded EVERYWHERE, and
+         * `@nx/enforce-module-boundaries` then forbids all 181 static
+         * imports of it across this app. `site-cache-drop.ts` holds the
+         * static import; deferring that file keeps firebase-admin out of
+         * the edge bundle just the same, and registers no lib-level lazy
+         * edge.
+         */
+        const { consoleSiteCache } = await import('./utils/server/site-cache-drop')
+        return await consoleSiteCache.drop(request)
+      },
+    },
+    { pluginId: 'console' },
+  )
 
   // Logged, not thrown: a declaration that fails to load costs its plugin's
   // keys and events, and a boot that throws costs every route.

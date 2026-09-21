@@ -76,11 +76,9 @@ export enum Route {
   // screen for browsing individual orgs. Settings that describe the platform
   // rather than one org belong on their own tab, beside the flags.
   ADMIN_SETTINGS = '/admin/settings',
-  ADMIN_PLUGIN_REVIEWS = '/admin/plugin-reviews',
   // One submission or listed plugin in full (AGL-959): the queue index is
   // for scanning, this is where a reviewer reads the manifest, weighs the
   // verifier findings and acts.
-  ADMIN_PLUGIN_REVIEW = '/admin/plugin-reviews/[listingId]',
   // A page a plugin adds to the staff area (AGL-2939), rendered by the
   // console's generic staff route. The console's own staff routes win the
   // segments they use.
@@ -555,8 +553,6 @@ export interface RoutePayload {
   [Route.ADMIN_USER_DETAIL]: { uid: string }
   [Route.ADMIN_FLAGS]: undefined
   [Route.ADMIN_SETTINGS]: undefined
-  [Route.ADMIN_PLUGIN_REVIEWS]: undefined
-  [Route.ADMIN_PLUGIN_REVIEW]: { listingId: string }
   [Route.ADMIN_STAFF_PAGE]: { staffPage: string }
   [Route.ADMIN_SUPPORT]: undefined
   [Route.ADMIN_CONTACT_SUPPRESSIONS]: undefined
