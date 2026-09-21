@@ -261,6 +261,7 @@
         "console": {
           "shell": true,
           "slots": [
+            "marketplaceCapability",
             "marketplaceListing",
             "orgAddons",
             "orgMarketplace",

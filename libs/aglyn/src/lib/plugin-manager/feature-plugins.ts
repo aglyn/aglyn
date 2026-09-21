@@ -594,6 +594,19 @@ export const CONSOLE_WIDGET_SLOTS = {
   /** Marketplace listing detail body. Props: hostId, listingId, permissions. */
   marketplaceListing: 'marketplaceListing',
   /**
+   * Above the whole Marketplace subtree: what THIS DEPLOYMENT cannot do
+   * (AGL-2019, moved out of the console app by AGL-3080). No props — the
+   * widget reads {@link DeploymentCapabilities} from the context the org's
+   * server layout provides, and draws nothing when the deployment is
+   * configured.
+   *
+   * A zone rather than a component the app holds, because the sentence is
+   * the marketplace's: it names what still works without a Stripe platform
+   * (browsing, free installs) and that is the plugin's knowledge, not the
+   * shell's. The app supplies only the fact.
+   */
+  marketplaceCapability: 'marketplaceCapability',
+  /**
    * Org marketplace browse body (AGL-772). Props: hostId (acting site),
    * permissions, orgScoped. The single org-scope place to browse + install,
    * replacing the per-site marketplace tab.

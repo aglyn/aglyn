@@ -17,6 +17,7 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import MarketplaceBrowse from './components/marketplace-browse.component'
+import MarketplacePaymentsNotice from './components/marketplace-payments-notice.component'
 import HostPluginsCard from './components/host-plugins-card.component'
 import PluginSiteSetPanel from './components/plugin-site-set-panel.component'
 import { MarketplaceListingContent } from './components/listing-content.component'
@@ -47,6 +48,17 @@ export function registerMarketplaceConsole(): void {
         slot: 'marketplaceListing',
         widgetId: 'marketplace-listing-content',
         Component: MarketplaceListingContent,
+      },
+      // What this deployment cannot do, said BEFORE the click (AGL-2019,
+      // moved here by AGL-3080). The sentence names what still works
+      // without a Stripe platform — browsing and free installs — which is
+      // this plugin's knowledge; the app supplies only the fact, through
+      // the deployment-capability context its org layout provides. The
+      // widget draws nothing at all on a configured deployment.
+      {
+        slot: 'marketplaceCapability',
+        widgetId: 'marketplace-payments-notice',
+        Component: MarketplacePaymentsNotice,
       },
       // Org marketplace browse (AGL-772): the org-scope `/marketplace`
       // page renders this with an acting hostId + orgScoped, so listing

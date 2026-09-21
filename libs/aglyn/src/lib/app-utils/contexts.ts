@@ -25,6 +25,7 @@
  * (client) — never `@aglyn/aglyn/server` (AGL-405).
  */
 export * from './console-widget-slot-context'
+export * from './deployment-capabilities-context'
 export * from './enabled-plugins-context'
 export * from './entity-picker-context'
 export * from './link-target-search-context'

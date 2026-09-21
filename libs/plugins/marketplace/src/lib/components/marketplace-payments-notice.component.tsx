@@ -17,6 +17,7 @@
 
 'use client'
 
+import { useDeploymentCapabilities } from '@aglyn/aglyn'
 import {
   operatorMarketplaceNotConfiguredText,
   operatorPaymentsNotConfiguredText,
@@ -26,7 +27,7 @@ import AlertTitle from '@mui/material/AlertTitle'
 
 /**
  * Says, BEFORE the click, that this deployment cannot take marketplace
- * payments (AGL-2019).
+ * payments (AGL-2019) — and nothing at all when it can.
  *
  * `release_marketplace` defaults ON, so a fresh self-host install shows the
  * full Marketplace — browse, listing pages, a Buy button, a publisher payout
@@ -47,6 +48,20 @@ import AlertTitle from '@mui/material/AlertTitle'
  * one that is off — so the text leads with what still works.
  */
 export default function MarketplacePaymentsNotice() {
+  /*
+   * The deployment's own answer (AGL-3080), not this plugin's. The key is a
+   * server-only secret and a plugin has no way to read an environment at
+   * all; the console's org layout reads it before any JavaScript ships and
+   * hands it down, so this notice is here on the first paint rather than
+   * after a round trip the reader has already clicked past.
+   *
+   * It defaults to CONFIGURED when nobody provided it, which is the safe way
+   * round: a surface mounted outside the provider — a test harness, a widget
+   * in a zone — would otherwise put a permanent "not configured" banner on a
+   * console whose Stripe platform is working.
+   */
+  const { payments } = useDeploymentCapabilities()
+  if (payments) return null
   return (
     <Alert severity="info" sx={{ mb: 2 }}>
       <AlertTitle>{'Payments are not configured'}</AlertTitle>

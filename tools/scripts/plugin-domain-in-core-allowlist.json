@@ -651,14 +651,6 @@
       "lane": "marketing"
     },
     {
-      "path": "apps/console/components/marketplace-payments-notice.component.tsx",
-      "rules": [
-        "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/components/marketplace/edit-listing-dialog.component.tsx",
       "rules": [
         "domain-name"
