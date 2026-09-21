@@ -19,6 +19,7 @@
 //   npm run dist-tags -- --set              # moves the ones that are behind
 //   npm run dist-tags -- --version 1.0.0    # a version other than the repo's
 //   npm run dist-tags -- --probe            # can this runner move a tag at all?
+//                                           (rewrites one tag to its own value)
 //
 // ---------------------------------------------------------------------------
 // THE TWO TAGS, AND WHY NEITHER IS AUTOMATIC
@@ -150,42 +151,36 @@ export function verdictFor(answer, version) {
 }
 
 /**
- * A tag name no consumer reads, for proving this runner may write tags at all.
- *
- * Deliberately not `latest` or a prerelease label: the probe must not be able
- * to change what a single `npm install` hands out, even if it is interrupted
- * between the add and the remove. It names itself, so a stray one left by a
- * killed run is obviously debris and obviously safe to delete.
- */
-export const PROBE_TAG = 'ci-auth-probe'
-
-/**
  * Can this runner move a dist-tag?
  *
  * `npm publish` and `npm dist-tag add` are DIFFERENT registry operations with
  * different authorization, and a release that publishes perfectly can still
  * be unable to set its second tag — the OIDC identity that published is not
- * allowed to. Whether the token in the environment can is not knowable from
- * a run where every tag already happens to be correct, because then nothing
- * is written and nothing is learned.
+ * allowed to. Whether the token in the environment can is not knowable from a
+ * run where every tag already happens to be correct, because then nothing is
+ * written and nothing is learned.
  *
- * So it writes a throwaway tag on one package and removes it again. The
- * answer is the point; the tag is not.
+ * ⚑ SO IT REWRITES A TAG TO THE VALUE IT ALREADY HAS. A real authenticated
+ * write, and a no-op in its effect — there is nothing to undo, and nothing
+ * is left behind if the run is killed half way.
+ *
+ * ⛔ It used to write a throwaway tag and delete it, and that was wrong: the
+ * publish token is allowed to ADD a dist-tag and is refused (403) on DELETE,
+ * so the probe proved write access and then could not clean up after itself.
+ * A probe that needs a second permission to undo its own first one is not a
+ * probe; it is a second thing that can fail.
  */
-export function probeWriteAccess(name, version, run = runNpm) {
+export function probeWriteAccess(name, tags, run = runNpm) {
+  const [tag, version] = Object.entries(tags ?? {})[0] ?? []
+  if (!tag || !version) {
+    return { ok: false, why: `${name} has no dist-tag to rewrite` }
+  }
   try {
-    run(['dist-tag', 'add', `${name}@${version}`, PROBE_TAG])
+    run(['dist-tag', 'add', `${name}@${version}`, tag])
   } catch (error) {
     return { ok: false, why: `${error.message}` }
   }
-  try {
-    run(['dist-tag', 'rm', name, PROBE_TAG])
-  } catch (error) {
-    // The answer was already obtained. A tag nothing reads, left behind, is
-    // debris rather than a failure — say so and do not fail the run over it.
-    return { ok: true, leftBehind: PROBE_TAG, why: `${error.message}` }
-  }
-  return { ok: true }
+  return { ok: true, tag, version }
 }
 
 function runNpm(args) {
@@ -212,21 +207,23 @@ function main(argv) {
      * runner that may write from one that may not. The probe is asked of the
      * first package that actually has this version.
      */
-    const subject = names.find((name) => readTags(name).versions?.includes(version))
+    const subject = names
+      .map((name) => ({ name, answer: readTags(name) }))
+      .find((entry) => Object.keys(entry.answer.tags ?? {}).length > 0)
     if (!subject) {
-      console.error(`dist-tags: no package has ${version}, so write access could not be probed.`)
+      console.error('dist-tags: no package has a tag to rewrite, so write access could not be probed.')
       return 1
     }
-    const answer = probeWriteAccess(subject, version)
+    const answer = probeWriteAccess(subject.name, subject.answer.tags)
     if (!answer.ok) {
       console.error(`dist-tags: this runner CANNOT move a dist-tag — ${answer.why}`)
       console.error('An OIDC identity may not; a token with write on the scope may.')
       return 1
     }
-    console.log(`dist-tags: write access confirmed on ${subject}.`)
-    if (answer.leftBehind) {
-      console.error(`dist-tags: could not remove the probe tag "${answer.leftBehind}" from ${subject} — ${answer.why}`)
-    }
+    console.log(
+      `dist-tags: write access confirmed on ${subject.name} ` +
+        `(rewrote ${answer.tag} to ${answer.version}, which it already was).`,
+    )
   }
 
   const behind = []

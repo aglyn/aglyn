@@ -678,8 +678,16 @@ stale second tag and nothing worse. The token expires **2026-12-19**, and on
 that day releases go out exactly as before.
 
 `--probe` exists because a run where every tag already happens to be correct
-writes nothing, and so cannot tell a runner that may write from one that may
-not. It writes a throwaway tag no consumer reads and removes it again.
+writes nothing, and so cannot tell a runner that MAY write from one that may
+not — the automation would look healthy until the first release that needed
+it. It rewrites one existing tag to the value it already has: a real
+authenticated write, a no-op in its effect, nothing to undo.
+
+⛔ It used to write a throwaway tag and delete it, and that was wrong. **The
+publish token may ADD a dist-tag and is refused `403` on DELETE**, so the probe
+proved write access and then could not clean up after itself. A probe that
+needs a second permission to undo its own first one is not a probe; it is a
+second thing that can fail.
 
 ⛔ **`createPackage` is not the same as being configured**, and the check knows
 the difference. A row created after 2026-09-03 carries `createStagedPackage`

@@ -16,7 +16,6 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
 import {
-  PROBE_TAG,
   TAG,
   probeWriteAccess,
   readTags,
@@ -143,47 +142,51 @@ describe('the version it targets (AGL-3201)', () => {
 })
 
 describe('proving this runner may move a tag at all (AGL-3201)', () => {
-  const V = '1.0.0-beta.146'
+  const TAGS = { latest: '1.0.0-beta.146', beta: '1.0.0-beta.146' }
 
-  it('adds a throwaway tag and removes it, reporting yes', () => {
+  it('rewrites an EXISTING tag to the value it already has', () => {
     const calls = []
-    const answer = probeWriteAccess('@aglyn/x', V, (args) => {
+    const answer = probeWriteAccess('@aglyn/x', TAGS, (args) => {
       calls.push(args.join(' '))
       return ''
     })
-    assert.deepEqual(answer, { ok: true })
-    assert.deepEqual(calls, [
-      `dist-tag add @aglyn/x@${V} ${PROBE_TAG}`,
-      `dist-tag rm @aglyn/x ${PROBE_TAG}`,
-    ])
+    assert.equal(answer.ok, true)
+    assert.deepEqual(calls, ['dist-tag add @aglyn/x@1.0.0-beta.146 latest'])
   })
 
-  it('never probes with a tag a consumer reads', () => {
-    // If the run is killed between the add and the remove, whatever this
-    // wrote is left on the package. It must not be able to change what a
-    // single `npm install` hands out.
-    assert.notEqual(PROBE_TAG, 'latest')
-    assert.notEqual(PROBE_TAG, 'beta')
-    assert.match(PROBE_TAG, /probe/)
+  it('writes NOTHING that would have to be undone', () => {
+    /*
+     * The first version of this wrote a throwaway tag and deleted it, and the
+     * publish token is allowed to ADD a dist-tag and refused (403) on DELETE
+     * — so it proved write access and then could not clean up after itself,
+     * leaving `ci-auth-probe` on a real package. A probe that needs a second
+     * permission to undo its own first one is not a probe.
+     *
+     * So the only call it makes sets a tag to what it already was: a real
+     * authenticated write, and a no-op in its effect, with nothing left
+     * behind even if the run is killed immediately after.
+     */
+    const calls = []
+    probeWriteAccess('@aglyn/x', TAGS, (args) => {
+      calls.push(args)
+      return ''
+    })
+    assert.equal(calls.length, 1)
+    assert.ok(!calls.some((args) => args.includes('rm')))
+    const [, , spec, tag] = calls[0]
+    assert.equal(spec, `@aglyn/x@${TAGS[tag]}`, 'the tag is set to its own current value')
   })
 
-  it('reports NO when the add is refused', () => {
-    const answer = probeWriteAccess('@aglyn/x', V, () => {
+  it('reports NO when the write is refused', () => {
+    const answer = probeWriteAccess('@aglyn/x', TAGS, () => {
       throw new Error('E403 Forbidden')
     })
     assert.equal(answer.ok, false)
     assert.match(answer.why, /E403/)
   })
 
-  it('still reports YES when only the cleanup failed, and names the debris', () => {
-    // The answer was already obtained by then. A tag nothing reads, left
-    // behind, is debris rather than a failure to stop a release over.
-    let call = 0
-    const answer = probeWriteAccess('@aglyn/x', V, () => {
-      if (call++ === 0) return ''
-      throw new Error('ETIMEDOUT')
-    })
-    assert.equal(answer.ok, true)
-    assert.equal(answer.leftBehind, PROBE_TAG)
+  it('says so rather than guessing when there is no tag to rewrite', () => {
+    assert.equal(probeWriteAccess('@aglyn/x', {}, () => '').ok, false)
+    assert.equal(probeWriteAccess('@aglyn/x', undefined, () => '').ok, false)
   })
 })
