@@ -193,12 +193,15 @@ describe('the bands', () => {
     )
     expect(assistUsdFromCredits(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth)).toBe(0.75)
     expect(assistBandRefuses({ plan: 'starter' })).toBe(false)
-    // Neither tier carries `aiAssist` — the guided rung stays Pro and up.
-    // Free carries `aiGenerative`, the door the taste exists for. A band is
-    // credits; on neither tier is it the guided assistant.
+    // Each tier has a door its band can be spent through, which is the
+    // AGL-3207 rule: Free's is `aiGenerative`, the door its taste exists
+    // for; Starter's is `aiAssist`, the shape of every paid rung above it.
+    // A band with neither flag is a quantity sold and not deliverable, and
+    // Starter was exactly that for one release.
     expect(PLAN_ENTITLEMENTS.free.features.aiAssist).toBe(false)
     expect(PLAN_ENTITLEMENTS.free.features.aiGenerative).toBe(true)
-    expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(false)
+    expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(true)
+    expect(PLAN_ENTITLEMENTS.starter.features.aiGenerative).toBe(false)
     // The ladder is unbroken from Free upward now, so it is walked from Free
     // THROUGH Starter rather than around it.
     expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBeLessThan(

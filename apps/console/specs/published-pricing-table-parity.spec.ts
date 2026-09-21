@@ -728,7 +728,12 @@ describe('AGL-2469 · the published pricing table is still what the code does', 
       // the feature matrix is now a tracked document: it was published here
       // and drawn in Figma while no pricing document recorded the gate at all.
       ['CDN & responsive images', 'mediaCdn', 0],
-      ['AI assist', 'aiAssist', 2],
+      // Column 1 = Starter since AGL-3207, re-transcribed from the republish
+      // of 2026-09-21 (version `5F_18IZmi9`). AGL-3203 sold Starter a
+      // 750-credit band while both AI doors were shut, so the tier was the
+      // only row on the ladder with a band it could not spend; opening the
+      // guided rung is what made the band deliverable.
+      ['AI assist', 'aiAssist', 1],
       ['Per-screen analytics', 'screenAnalytics', 2],
       ['Sell on the marketplace', 'marketplaceSelling', 2],
       ['Site export & backup', 'siteExport', 2],

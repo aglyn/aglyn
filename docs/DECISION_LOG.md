@@ -92,6 +92,43 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-21 — Starter's guided AI assistant opens: the 750-credit band had no door to spend it through
+
+- **Decided by:** the account owner, 2026-09-21, on being shown that Starter was the only row on the ladder sold an AI band with both AI feature flags off — "Fix this: *Starter now buys 750 credits it can't spend*".
+- **Scope:** packaging
+- **Evidence:** `PLAN_ENTITLEMENTS.starter.features.aiAssist` (false → true) in `libs/aglyn/src/lib/app-utils/plan-entitlements.ts`; `assist-credits.spec.ts`, `plan-entitlements.spec.ts` and `apps/console/specs/tier-margin-floor.spec.ts`, each of which pinned the flag false with the superseded reasoning; `apps/console/specs/published-pricing-table-parity.spec.ts` "AI assist" first ✓ column 2 → 1, re-transcribed from the republish; `tools/marketing/pricing-copy/tables.json` regenerated; `/pricing` republished to version `5F_18IZmi9` of screen `v0clP6xQl-`; AGL-3207.
+
+**No charged price moves, and no cost moves either.** Starter stays $25
+monthly and $16 annual. `tier-margin-floor.spec.ts` already prices this tier's
+assist term at 100% burn of the 750 credits — 75¢/mo — so the modeled cost is
+unchanged: a door does not widen a band, it makes spend that was already
+counted reachable.
+
+**What was wrong.** The 2026-09-20 decision above gave Starter a band and a
+rate. It did not give the tier anything to spend the band on. Across the
+ladder every other row has a door: Free carries `aiGenerative`, the generative
+door its AGL-2925 taste exists for; Pro through Agency carry `aiAssist`, the
+guided rung; Enterprise carries both. Starter carried neither, so its 750
+credits were reachable only by buying the $9 AI add-on — which was also the
+only thing that made them usable. "No plan bands at zero any more" was true of
+the number and false of the capability.
+
+The comment that shipped it said `aiAssist` stays false "exactly as on Free".
+That is where the reasoning slipped: on Free the band **is** spendable. The
+sentence described a shape the tier did not have.
+
+**Why the guided rung and not the generative door.** Opening `aiGenerative`
+would have handed the FIRST paid rung a door that Pro through Agency have to
+buy, inverting the ladder upward. Opening `aiAssist` puts Starter in the shape
+every paid rung above it already has: the included band funds the assistant,
+and generation is the add-on.
+
+**Deliberately not changed.** Free keeps `aiGenerative: true` and Starter does
+not get it, so a Free workspace can still generate where a paying Starter
+cannot. That is the AGL-2925 acquisition taste, a standing decision, and a
+different question from this one — recorded here so the next reader can see it
+was considered rather than missed.
+
 ## 2026-09-20 — Starter includes 750 AI assist credits, sold past at $3.00/1k: a paid plan was including fewer than the free one
 
 - **Decided by:** the account owner, 2026-09-20, reading the live `/pricing` comparison table and seeing the "AI credits / mo" row read `300 / mo` for Free and `—` for Starter; set the figure himself at "at least 750 or something cheap for us". The rate beside it was not a second decision but the rule: a finite band with no rate is silently free past the band.

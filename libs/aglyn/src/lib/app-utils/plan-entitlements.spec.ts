@@ -3045,10 +3045,12 @@ describe('the Aglyn AI add-on (AGL-2896)', () => {
     )
     expect(starter.assistCreditsPerMonth).toBe(4_750)
     expect(starter.features.aiGenerative).toBe(true)
-    // Starter has no `aiAssist` of its own — the add-on brings the guided
-    // rung. It does NOT bring the band: the plan carries 750 either way
-    // (AGL-3203), and the add-on adds to it.
-    expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(false)
+    // Starter carries `aiAssist` on its own since AGL-3207 — the add-on
+    // brings the GENERATIVE door, not the guided rung. It does NOT bring the
+    // band either: the plan carries 750 either way (AGL-3203), and the
+    // add-on adds to it.
+    expect(PLAN_ENTITLEMENTS.starter.features.aiAssist).toBe(true)
+    expect(PLAN_ENTITLEMENTS.starter.features.aiGenerative).toBe(false)
     expect(PLAN_ENTITLEMENTS.starter.assistCreditsPerMonth).toBe(750)
     expect(starter.features.aiAssist).toBe(true)
     // Nothing else moves.
