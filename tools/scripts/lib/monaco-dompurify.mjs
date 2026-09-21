@@ -22,7 +22,7 @@
 //
 // `monaco-editor` vendors DOMPurify into its own source tree and inlines it
 // into the prebuilt AMD bundle that `tools/scripts/lib/sync-monaco-assets.js`
-// copies into `apps/console/public/monaco/vs`. That bundle — not
+// copies into `apps/console/public/_static/monaco/vs`. That bundle — not
 // `node_modules/dompurify`, which is our own patched 3.4.13 — is what the
 // browser executes when someone opens the besigner's Edit -> Raw JSON.
 //

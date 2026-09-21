@@ -52,8 +52,19 @@ describe('MonacoEditor loader configuration', () => {
 
     expect(injected).toHaveLength(1)
     const src = injected[0].getAttribute('src')
-    expect(src).toBe('/monaco/vs/loader.js')
+    expect(src).toBe('/_static/monaco/vs/loader.js')
     expect(src).not.toMatch(/^https?:|\/\//)
     expect(src).not.toContain('jsdelivr')
+    /*
+      And under `_static`, not at the apex (AGL-3208).
+
+      Same origin was never the whole requirement. `apps/console/middleware.ts`
+      reads an unrecognized first path segment as a workspace slug and answers
+      a bare 404 when no org owns it (AGL-3017), so `/monaco/vs/loader.js` was
+      refused by our own router before it could reach the file. The assertions
+      above were green throughout. `_static` is excluded from the middleware
+      matcher, so a path under it is one the router never inspects.
+    */
+    expect(src).toMatch(/^\/_static\//)
   })
 })

@@ -18,8 +18,9 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import { canvas, components } from '@aglyn/aglyn'
 import { JsonEditor } from '@aglyn/shared-ui-json-editor'
-import { toJS } from 'mobx'
-import { useCallback, useMemo } from 'react'
+import { action, observable, toJS } from 'mobx'
+import { observer } from 'mobx-react-lite'
+import { useCallback, useMemo, useRef } from 'react'
 
 export interface SubtreeJsonDialogProps {
   node?: Aglyn.NodeSchema<any> | null
@@ -167,5 +168,58 @@ export function SubtreeJsonDialog(props: SubtreeJsonDialogProps) {
   )
 }
 SubtreeJsonDialog.displayName = 'SubtreeJsonDialog'
+
+/**
+ * The element being edited, held ABOVE the menu that opens it (AGL-3208).
+ *
+ * This dialog used to be rendered inside `NodeContextMenu`'s own `Paper`,
+ * which made it live exactly as long as that menu. Both hosts of the menu end
+ * it on the first interaction with anything else: the Hierarchy panel wraps it
+ * in a `ClickAwayListener`, and the canvas overlay hands it to a `Tooltip` as
+ * its title. A MUI dialog is portalled to `document.body`, so a click inside
+ * it IS "away" from the listener, and a pointer entering it HAS left the
+ * tooltip's anchor. Opening the editor and then touching it dismissed the
+ * menu, unmounted this component with it, and read as the dialog closing
+ * itself — the reported "says loading then auto closes", on top of a Monaco
+ * that could not load at all.
+ *
+ * A module-scoped box rather than a context: the two menus are rendered by
+ * different trees, and what they need to share is one piece of state that
+ * outlives both.
+ */
+const editing = observable.box<Aglyn.NodeSchema<any> | null>(null, {
+  deep: false,
+})
+
+/** Open the subtree editor on `node`. Safe to call as the menu dismisses. */
+export const openSubtreeJson = action(
+  'openSubtreeJson',
+  (node: Aglyn.NodeSchema<any>) => editing.set(node),
+)
+
+/** Close the subtree editor, whatever opened it. */
+export const closeSubtreeJson = action('closeSubtreeJson', () =>
+  editing.set(null),
+)
+
+/**
+ * The single mount for the subtree editor, rendered once per besigner surface
+ * by `BesignerRootProviderComponent` (AGL-3208).
+ */
+export const SubtreeJsonDialogHost = observer(() => {
+  const node = editing.get()
+  // The node is kept for the close transition: clearing the box and the
+  // content in the same frame empties the dialog while it is still on screen.
+  const shown = useRef<Aglyn.NodeSchema<any> | null>(null)
+  if (node) shown.current = node
+  return (
+    <SubtreeJsonDialog
+      node={node ?? shown.current}
+      open={Boolean(node)}
+      onClose={closeSubtreeJson}
+    />
+  )
+})
+SubtreeJsonDialogHost.displayName = 'SubtreeJsonDialogHost'
 
 export default SubtreeJsonDialog

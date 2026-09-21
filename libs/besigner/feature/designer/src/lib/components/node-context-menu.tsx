@@ -66,7 +66,7 @@ import {
   isNodeHiddenOnSite,
   nodePropsWithHiddenOnSite,
 } from '../utils/canvas-reveal'
-import SubtreeJsonDialog from './subtree-json-dialog.component'
+import { openSubtreeJson } from './subtree-json-dialog.component'
 
 export interface NodeContextMenuProps extends PaperProps {
   node: Aglyn.NodeSchema<any>
@@ -87,7 +87,6 @@ export const NodeContextMenu = observer(
     const elementRef = Besigner.refs.get(node?.$id)
     const [moreOpen, setMoreOpen] = useState(false)
     const [moreButton, moreButtonRef] = useState<HTMLButtonElement | null>(null)
-    const [jsonOpen, setJsonOpen] = useState(false)
 
     const closeMore = useCallback(() => setMoreOpen(false), [])
     const openMore = useCallback(() => setMoreOpen(true), [])
@@ -196,6 +195,15 @@ export const NodeContextMenu = observer(
       onAction?.()
       pasteElements(node)
     }, [node, onAction, pasteElements])
+
+    // Dismiss FIRST, then open (AGL-3208). The dialog is no longer a child of
+    // this menu — `SubtreeJsonDialogHost` holds it — so the menu closing can
+    // no longer take the editor with it, and leaving the menu standing behind
+    // a 95vw dialog only leaves something to click away onto.
+    const handleEditJsonClick = useCallback(() => {
+      onAction?.()
+      openSubtreeJson(node)
+    }, [node, onAction])
 
     // Observed, so the item enables the moment something is copied — even
     // from another document, where the entry arrives via localStorage.
@@ -403,7 +411,7 @@ export const NodeContextMenu = observer(
             <ListItemText>Move into element above</ListItemText>
           </MenuItem>
           {multi ? null : (
-            <MenuItem onClick={() => setJsonOpen(true)}>
+            <MenuItem onClick={handleEditJsonClick}>
               <ListItemText inset>Edit JSON</ListItemText>
             </MenuItem>
           )}
@@ -521,14 +529,6 @@ export const NodeContextMenu = observer(
             <ListItemText>{multi ? 'Delete selection' : 'Delete'}</ListItemText>
           </MenuItem>
         </MenuList>
-        <SubtreeJsonDialog
-          node={node}
-          open={jsonOpen}
-          onClose={() => {
-            setJsonOpen(false)
-            onAction?.()
-          }}
-        />
       </Paper>
     )
   }),

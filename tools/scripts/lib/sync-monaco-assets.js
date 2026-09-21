@@ -16,7 +16,8 @@
  */
 
 /**
- * Vendor Monaco's `min/vs` into an app's `public/` at build time (AGL-1779).
+ * Vendor Monaco's `min/vs` into an app's `public/_static/` at build time
+ * (AGL-1779).
  *
  * `@monaco-editor/loader` ships ONE default and no fallback:
  *
@@ -59,6 +60,14 @@
  *     the exact exposure this closes, and would be invisible because the
  *     local path normally wins.
  *
+ * Neither of those guards the URL, and AGL-3208 is what that cost: the copy
+ * ran, the 121 files shipped, and the console's router still answered 404 to
+ * every one of them because the path began with a segment it reads as a
+ * workspace slug. "The bytes are in the deployment" and "the editor can fetch
+ * them" are separate claims, and only the first is checkable from here — which
+ * is why the destination now lives under `_static`, a namespace the router is
+ * defined not to inspect, rather than at a name the router is free to claim.
+ *
  * Re-running is cheap: a stamp file records the version and the file count,
  * and a match short-circuits before any directory walk.
  */
@@ -89,6 +98,31 @@ const REQUIRED_DIRECTORIES = ['assets', 'editor', 'language', 'basic-languages']
 
 /** Name of the stamp written beside `vs/`, used to skip an unchanged copy. */
 const STAMP_FILE = '.monaco-sync.json'
+
+/**
+ * WHY `_static/monaco` AND NOT `monaco` (AGL-3208).
+ *
+ * The first two years of this copy landed at `<public>/monaco`, and the
+ * console's own router answered 404 to every byte of it: an unrecognized first
+ * path segment is looked up as a workspace slug, and an unknown one is refused
+ * with a bare 404 (AGL-3017). The bytes shipped; the URL did not resolve. The
+ * editor's loading state was the only symptom.
+ *
+ * `_static` is the namespace the console already reserves for assets — it sits
+ * in the middleware matcher's exclusion list beside `_next/static`, and
+ * `isConsoleRouteSegment` admits anything beginning `_`. Nesting under it
+ * means this path is not something a future router gate has to remember.
+ */
+const DEST_SEGMENTS = ['_static', 'monaco']
+
+/**
+ * The pre-AGL-3208 destination, removed when it is found.
+ *
+ * `public/` is deployed whole, so a stale 15 MB copy left behind by an older
+ * checkout would keep shipping at a URL nothing requests. It is generated
+ * output, so deleting it costs a rebuild that has already happened.
+ */
+const LEGACY_DEST_SEGMENTS = ['monaco']
 
 // MARK – HELPERS
 
@@ -145,7 +179,7 @@ function assertUsable(vsDir, sourceFileCount) {
 // MARK – MAIN
 
 /**
- * Copy `monaco-editor/min/vs` into `<publicDir>/monaco/vs`.
+ * Copy `monaco-editor/min/vs` into `<publicDir>/_static/monaco/vs`.
  *
  * @param {Object} options
  * @param {string} options.publicDir Absolute path to the app's `public/`.
@@ -217,9 +251,14 @@ function syncMonacoAssets({ publicDir }) {
   }
   const sourceFileCount = countFiles(sourceDir)
 
-  const destRoot = path.join(publicDir, 'monaco')
+  const destRoot = path.join(publicDir, ...DEST_SEGMENTS)
   const vsDir = path.join(destRoot, 'vs')
   const stampPath = path.join(destRoot, STAMP_FILE)
+
+  fs.rmSync(path.join(publicDir, ...LEGACY_DEST_SEGMENTS), {
+    recursive: true,
+    force: true,
+  })
 
   let stamp = null
   try {

@@ -22,10 +22,26 @@ import { useColorScheme, useTheme } from '@mui/material/styles'
  * Where Monaco's AMD bundle is served from — our origin, never a CDN.
  *
  * `apps/console/next.config.js` copies `monaco-editor/min/vs` into
- * `apps/console/public/monaco/vs` at build time and FAILS THE BUILD if it
- * cannot, so this path is either correct or the build never shipped.
+ * `apps/console/public/_static/monaco/vs` at build time and FAILS THE BUILD if
+ * it cannot, so this path is either correct or the build never shipped.
+ *
+ * UNDER `_static`, AND NOT AT THE APEX (AGL-3208).
+ *
+ * This was `/monaco/vs`, and the console's router answered 404 to every byte
+ * of it. `apps/console/middleware.ts` reads an unrecognized first path segment
+ * as a workspace slug and refuses an unknown one with a bare 404 (AGL-3017),
+ * so `monaco` was looked up as an org and was not one; on a workspace
+ * subdomain the same path would instead have been rewritten to
+ * `/{slug}/monaco/vs/...`. Monaco never loaded, and the Edit JSON dialog sat
+ * on its loading state with nothing on screen to say why.
+ *
+ * `_static` is the namespace the console already reserves for assets: it is
+ * excluded from the middleware matcher, and `isConsoleRouteSegment` admits
+ * anything beginning `_`. Vendoring under it is what keeps this fixed —
+ * a fourth top-level exception would only be as durable as the next gate's
+ * memory of it, and three gates have now claimed unmatched first segments.
  */
-export const MONACO_VS_PATH = '/monaco/vs'
+export const MONACO_VS_PATH = '/_static/monaco/vs'
 
 /**
  * Point the loader at our own copy before anything can mount (AGL-1779).

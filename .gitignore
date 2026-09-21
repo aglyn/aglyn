@@ -106,7 +106,12 @@ vite.config.*.timestamp*
 # it would rot silently against the `monaco-editor` pin in package.json. The
 # copy is not optional — the build FAILS if it cannot be produced, because the
 # only alternative is `@monaco-editor/loader`'s jsDelivr default.
+#
+# Under `_static` since AGL-3208: at the apex the console's middleware read
+# `monaco` as a workspace slug and 404'd the whole tree. The first line stays
+# so an older checkout's copy is ignored rather than offered for commit.
 /apps/console/public/monaco/
+/apps/console/public/_static/monaco/
 
 # Next writes these on `next dev` startup — `generate-agent-files.js`, called
 # from `app-info-log.js` in the `next` package. Both files carry a
