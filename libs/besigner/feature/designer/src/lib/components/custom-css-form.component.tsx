@@ -667,9 +667,26 @@ export const CustomCssForm = observer((props: CustomCssFormProps) => {
       {mode === 'json' ? (
         <Stack spacing={1}>
           <Typography variant="caption" color="text.secondary">
-            {'Full sx document — supports responsive objects ' +
+            {(target.isComposed
+              ? 'The effective sx — supports responsive objects '
+              : 'Full sx document — supports responsive objects ') +
               '({ xs, sm, … }) and nested selectors ("&:hover").'}
           </Typography>
+          {target.isComposed ? (
+            // The panel has to say this out loud (AGL-3218). Everything
+            // below is correct and it is also not what the editor looks
+            // like it is doing, and the author only finds out by reading
+            // the stored node somewhere else — where the edit reads as
+            // missing.
+            <Typography variant="caption" color="text.secondary">
+              {'This element stores styles in two places: a props.sx its ' +
+                'component or preset authored, and its own sx. The box ' +
+                'shows both merged, the way the page renders them. Apply ' +
+                'writes only what you changed into the element’s own sx ' +
+                'and leaves the rest where it is, so a property you edit ' +
+                'here will not appear in props.sx.'}
+            </Typography>
+          ) : null}
           <TextField
             multiline
             minRows={6}
