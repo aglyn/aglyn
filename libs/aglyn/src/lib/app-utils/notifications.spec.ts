@@ -17,10 +17,15 @@
 
 import {
   crmDailyDigestEnabled,
+  NOTIFICATION_SELF_SENT_EMAIL_TYPES,
   NOTIFICATION_TYPE_LABELS,
   notificationCategory,
+  notificationChannelEnabled,
   notificationMuted,
+  notificationOverriddenScopes,
+  notificationScopePref,
   type AglynNotificationType,
+  type NotificationSettings,
 } from './notifications'
 
 describe('notification categories (AGL-267)', () => {
@@ -113,5 +118,151 @@ describe('a task falling due is work arriving (AGL-2659)', () => {
     expect(notificationMuted({ billing: false }, 'content.taskReminder')).toBe(false)
     // Default on: no preference at all is a reminder that arrives.
     expect(notificationMuted(undefined, 'content.taskReminder')).toBe(false)
+  })
+})
+
+describe('per-scope, per-channel notification settings (AGL-3223)', () => {
+  const FORM = 'content.formSubmission'
+
+  it('defaults to the console and not the inbox', () => {
+    expect(notificationChannelEnabled(undefined, 'console', FORM)).toBe(true)
+    expect(notificationChannelEnabled(undefined, 'email', FORM)).toBe(false)
+    expect(notificationChannelEnabled({}, 'email', 'billing.invoice')).toBe(false)
+  })
+
+  it('lets the narrowest scope that answered decide', () => {
+    const settings: NotificationSettings = {
+      account: { content: { console: true, email: true } },
+      orgs: { 'org-a': { content: { email: false } } },
+      hosts: { 'host-1': { content: { email: true } } },
+    }
+    // The site overrides its workspace, which overrides the account.
+    expect(
+      notificationChannelEnabled(settings, 'email', FORM, {
+        orgId: 'org-a',
+        hostId: 'host-1',
+      }),
+    ).toBe(true)
+    // A different site in the same workspace takes the workspace's answer.
+    expect(
+      notificationChannelEnabled(settings, 'email', FORM, {
+        orgId: 'org-a',
+        hostId: 'host-2',
+      }),
+    ).toBe(false)
+    // A different workspace takes the account's.
+    expect(
+      notificationChannelEnabled(settings, 'email', FORM, { orgId: 'org-b' }),
+    ).toBe(true)
+  })
+
+  it('treats an absent key as inherit rather than as off', () => {
+    // `hosts['host-1']` answers for email and says nothing about console, so
+    // console must keep falling through to the account's `false` — reading
+    // the missing key as off would silence the feed for a site whose owner
+    // only ever touched the email column.
+    const settings: NotificationSettings = {
+      account: { content: { console: false } },
+      hosts: { 'host-1': { content: { email: true } } },
+    }
+    expect(
+      notificationChannelEnabled(settings, 'console', FORM, { hostId: 'host-1' }),
+    ).toBe(false)
+    expect(
+      notificationChannelEnabled(settings, 'email', FORM, { hostId: 'host-1' }),
+    ).toBe(true)
+  })
+
+  it('keeps honouring the flat mute map nothing has migrated', () => {
+    const muted = { content: false }
+    expect(
+      notificationChannelEnabled(undefined, 'console', FORM, undefined, muted),
+    ).toBe(false)
+    // Console-only: the old map predates the email channel and never said
+    // anything about it, so it must not be read as an opt-in or an opt-out.
+    expect(
+      notificationChannelEnabled(undefined, 'email', FORM, undefined, muted),
+    ).toBe(false)
+    expect(
+      notificationChannelEnabled(
+        { account: { content: { email: true } } },
+        'email',
+        FORM,
+        undefined,
+        muted,
+      ),
+    ).toBe(true)
+    // And the account layer outranks it, so the first thing a person sets on
+    // the new page wins over the mute they set on the old one.
+    expect(
+      notificationChannelEnabled(
+        { account: { content: { console: true } } },
+        'console',
+        FORM,
+        undefined,
+        muted,
+      ),
+    ).toBe(true)
+  })
+
+  it('reads one scope without inheritance, for the settings page', () => {
+    const settings: NotificationSettings = {
+      account: { content: { console: false } },
+      orgs: { 'org-a': { billing: { email: true } } },
+    }
+    expect(
+      notificationScopePref(settings, { kind: 'account' }, 'content', 'console'),
+    ).toBe(false)
+    // Inherit, not off — the page draws these differently and a boolean here
+    // would make an untouched cell look like a decision.
+    expect(
+      notificationScopePref(settings, { kind: 'account' }, 'content', 'email'),
+    ).toBeUndefined()
+    expect(
+      notificationScopePref(
+        settings,
+        { kind: 'org', id: 'org-a' },
+        'billing',
+        'email',
+      ),
+    ).toBe(true)
+    expect(
+      notificationScopePref(
+        settings,
+        { kind: 'host', id: 'host-1' },
+        'billing',
+        'email',
+      ),
+    ).toBeUndefined()
+  })
+
+  it('lists only the scopes that actually hold a decision', () => {
+    const settings: NotificationSettings = {
+      orgs: {
+        'org-b': { content: { email: true } },
+        'org-a': { billing: { console: false } },
+        // An empty husk — a scope somebody opened and set back to Inherit.
+        'org-c': { content: {} },
+      },
+      hosts: { 'host-1': { content: { email: true } } },
+    }
+    expect(notificationOverriddenScopes(settings)).toEqual({
+      orgIds: ['org-a', 'org-b'],
+      hostIds: ['host-1'],
+    })
+    expect(notificationOverriddenScopes(undefined)).toEqual({
+      orgIds: [],
+      hostIds: [],
+    })
+  })
+
+  it('never lets the generic channel mail a digest that mails itself', () => {
+    expect(
+      NOTIFICATION_SELF_SENT_EMAIL_TYPES.has('content.crmDailyDigest'),
+    ).toBe(true)
+    expect(
+      NOTIFICATION_SELF_SENT_EMAIL_TYPES.has('content.insightsDigest'),
+    ).toBe(true)
+    expect(NOTIFICATION_SELF_SENT_EMAIL_TYPES.has('content.order')).toBe(false)
   })
 })
