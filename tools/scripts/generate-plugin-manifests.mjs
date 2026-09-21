@@ -534,10 +534,29 @@ function catalogRows() {
   for (const plugin of config.plugins) {
     for (const source of [plugin, ...(plugin.capabilities ?? [])]) {
       if (!source.catalog) continue
-      const { order, publishedSiteImpact, $comment: _note, ...fields } = source.catalog
+      const { order, publishedSiteImpact, editBarLink, $comment: _note, ...fields } = source.catalog
       const where = `plugins.config.json: "${source.id}" catalog`
       if (!Number.isInteger(order)) throw new Error(`${where} needs an integer "order"`)
       if (typeof fields.label !== 'string' || !fields.label) throw new Error(`${where} needs a "label"`)
+      /*
+       * The edit bar's quick link (AGL-3080). DATA rather than a runtime
+       * registration, like every other row here: the tenant server draws this
+       * bar and never loads a plugin's console code, so a registry it had not
+       * filled would silently drop the link instead of failing — the AGL-3025
+       * shape. The `path` is validated because it is joined onto a console
+       * URL: a leading slash and no query is the whole contract, and a path
+       * that drifts from what the plugin's console route serves is a dead
+       * link nothing compiles against.
+       */
+      if (editBarLink) {
+        const link = `${where} editBarLink`
+        if (!Number.isInteger(editBarLink.order)) throw new Error(`${link} needs an integer "order"`)
+        if (typeof editBarLink.label !== 'string' || !editBarLink.label) throw new Error(`${link} needs a "label"`)
+        if (typeof editBarLink.path !== 'string' || !editBarLink.path.startsWith('/')) {
+          throw new Error(`${link} needs a "path" beginning with "/" — it is joined onto the site's console address`)
+        }
+        if (/[?#]/.test(editBarLink.path)) throw new Error(`${link}: "path" carries no query or fragment`)
+      }
       if (!SITE_IMPACTS.includes(publishedSiteImpact)) {
         throw new Error(`${where} needs "publishedSiteImpact": one of ${SITE_IMPACTS.join(', ')}`)
       }
@@ -545,7 +564,7 @@ function catalogRows() {
       if (source === plugin && Boolean(plugin.register?.site) !== (publishedSiteImpact === 'elements')) {
         throw new Error(`${where}: "publishedSiteImpact" is "elements" exactly when the entry has register.site`)
       }
-      rows.push({ order, impact: publishedSiteImpact, plugin: { id: source.id, ...fields } })
+      rows.push({ order, impact: publishedSiteImpact, editBarLink, plugin: { id: source.id, ...fields } })
     }
   }
   rows.sort((a, b) => a.order - b.order)
@@ -564,6 +583,16 @@ function catalogRows() {
 function catalogContent() {
   const rows = catalogRows()
   const indent = (json) => json.split('\n').join('\n  ')
+  const editBarRows = rows
+    .filter((row) => row.editBarLink)
+    .map((row) => ({ pluginId: row.plugin.id, ...row.editBarLink }))
+    .sort((a, b) => a.order - b.order)
+  const linkOrders = editBarRows.map((row) => row.order)
+  if (new Set(linkOrders).size !== linkOrders.length) {
+    // Two links sharing an order draw in whichever sequence the config
+    // happens to list them, which is not a decision anyone made.
+    throw new Error('plugins.config.json: two editBarLink rows share an "order"')
+  }
   return (
     `/**
  * GENERATED FILE — do not edit. Regenerate with:
@@ -574,7 +603,7 @@ function catalogContent() {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PublishedSiteImpact } from './enabled-plugins'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -583,6 +612,14 @@ ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\
 export const PUBLISHED_SITE_IMPACT: Readonly<Record<string, PublishedSiteImpact>> = {
 ${rows.map((row) => `  ${JSON.stringify(row.plugin.id)}: ${JSON.stringify(row.impact)},`).join('\n')}
 }
+
+/**
+ * The admin edit bar's quick links, in the order they are drawn — each
+ * declared by the plugin whose console page it opens (AGL-3080).
+ */
+export const PLUGIN_EDIT_BAR_LINKS: readonly PluginEditBarLink[] = [
+${editBarRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
 `
   )
 }

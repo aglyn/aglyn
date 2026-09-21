@@ -59,8 +59,16 @@ const CONTEXT_RESPONSE: Record<string, unknown> = {
   editUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/screens/screen-1/versions/v-live/besigner`,
   consoleUrl: `${CONSOLE_ORIGIN}/acme/hosts/www`,
   screensUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/screens`,
-  inboxUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/inbox`,
-  ordersUrl: null,
+  // One per plugin the SITE runs, already resolved and ordered by the server
+  // (AGL-3080). The bar names no plugin, so the fixture is the contract: a
+  // list it draws in order, and nothing it draws for a plugin not in it.
+  quickLinks: [
+    {
+      id: 'inbox',
+      label: 'Inbox',
+      url: `${CONSOLE_ORIGIN}/acme/hosts/www/inbox`,
+    },
+  ],
   analyticsUrl: `${CONSOLE_ORIGIN}/acme/hosts/www/analytics`,
   viewsToday: 128,
   screenViewsToday: 12,
@@ -194,8 +202,8 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(screen.getByText('Draft changes')).toBeTruthy()
     expect(linkByText('Edit this page').href).toBe(CONTEXT_RESPONSE.editUrl)
     expect(linkByText('Screens').href).toBe(CONTEXT_RESPONSE.screensUrl)
-    expect(linkByText('Inbox').href).toBe(CONTEXT_RESPONSE.inboxUrl)
-    // ordersUrl is null — the link must not render at all.
+    expect(linkByText('Inbox').href).toBe(CONTEXT_RESPONSE.quickLinks[0].url)
+    // Commerce is not in this site's links — nothing draws for it at all.
     expect(screen.queryByText('Orders')).toBeNull()
     expect(screen.getByText('editor@aglyn.com')).toBeTruthy()
   })

@@ -28,6 +28,7 @@ import {
   findScreenIdByRoutePath,
   hostCollectionKind,
   parseCollectionRoute,
+  pluginEditBarLinks,
   resolveHostEnabledPlugins,
   resolveMediaSrc,
   Route,
@@ -303,32 +304,38 @@ export async function POST(request: Request): Promise<Response> {
         : null
 
     // Quick links (AGL-1829), server-built via buildRoute like everything
-    // above — the bar never hand-assembles console paths. Each renders only
-    // when the host's effective plugin set justifies it; Orders deep-links the
-    // commerce console's Orders SECTION, which is a path segment beneath the
-    // surface rather than a `?tab=` on it (AGL-2501). The query form still
-    // resolves — it names no section, so the shell redirects it to the
-    // surface's landing section, which is Catalog and not Orders.
+    // above — the bar never hand-assembles console paths.
     const screensUrl = canLink
       ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_SCREENS, {
           orgSlug: orgSlug as string,
           host: hostDoc.subdomain as string,
         })}`
       : null
-    const inboxUrl =
-      canLink && enabledPlugins.includes('inbox')
-        ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_INBOX, {
+
+    /*
+     * The PLUGINS' quick links (AGL-3080). This route named `inbox` and
+     * `commerce` and spelled their console paths, which is one plugin's
+     * address held in another codebase: a section that moves leaves a link
+     * that still resolves, to the wrong place, and a new plugin could not add
+     * a link without editing the tenant app.
+     *
+     * Each plugin declares its own in `plugins.config.json`, compiled into the
+     * catalog. DATA rather than a registration, because this server never
+     * loads a plugin's console code — a registry it had not filled would drop
+     * every link with nothing red (AGL-3025). Already narrowed by the site's
+     * resolved plugin set, so a site with Commerce switched off is not offered
+     * its Orders page.
+     */
+    const quickLinks = canLink
+      ? pluginEditBarLinks(enabledPlugins).map((link) => ({
+          id: link.pluginId,
+          label: link.label,
+          url: `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_DASHBOARD, {
             orgSlug: orgSlug as string,
             host: hostDoc.subdomain as string,
-          })}`
-        : null
-    const ordersUrl =
-      canLink && enabledPlugins.includes('commerce')
-        ? `${CONSOLE_ORIGIN}${buildRoute(Route.HOST_PRODUCTS, {
-            orgSlug: orgSlug as string,
-            host: hostDoc.subdomain as string,
-          })}/orders`
-        : null
+          })}${link.path}`,
+        }))
+      : []
 
     // Analytics on the bar (AGL-1829 follow-on — "make analytics appear").
     // The console's full surface is one click away; the bar itself carries
@@ -413,8 +420,9 @@ export async function POST(request: Request): Promise<Response> {
         editUrl,
         consoleUrl,
         screensUrl,
-        inboxUrl,
-        ordersUrl,
+        // One entry per plugin the site runs, in the order the bar draws
+        // them. `[]` where the links cannot be built at all.
+        quickLinks,
         analyticsUrl,
         // Today's pageview counters (site-wide; per-screen only when the
         // org's plan carries the paid per-screen surface). null = unknown.

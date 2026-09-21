@@ -30,8 +30,39 @@
 
 import {
   FIRST_PARTY_PLUGINS,
+  PLUGIN_EDIT_BAR_LINKS,
   PUBLISHED_SITE_IMPACT,
 } from './first-party-plugins.generated'
+
+/**
+ * One quick link on a live site's admin edit bar, declared by the plugin whose
+ * console page it opens (AGL-3080).
+ *
+ * The bar is drawn by the TENANT server, which never loads a plugin's console
+ * code, so this is DATA compiled from `plugins.config.json` rather than a
+ * runtime registration — a registry that process had not filled would drop the
+ * link silently instead of failing, which is the AGL-3025 shape. It is also
+ * why the label is written here rather than taken from the plugin's nav item:
+ * the nav item lives in the console bundle, and "Orders" is a section of
+ * Commerce rather than the plugin's own name.
+ *
+ * The link is drawn only where the SITE runs the plugin. The bar asks the same
+ * resolved plugin set the rest of the edit context is built from, so a site
+ * with Commerce switched off is not offered its Orders page.
+ */
+export interface PluginEditBarLink {
+  /** The plugin that owns the page — also the id the site's set is checked against. */
+  pluginId: string
+  /** Where it sits in the bar; every declared order is distinct. */
+  order: number
+  /** What the bar says. A SECTION's name where that is the honest one. */
+  label: string
+  /**
+   * Console path beneath the site, beginning with `/` and carrying no query —
+   * `/inbox`, `/products/orders`. Joined onto `/{orgSlug}/hosts/{host}`.
+   */
+  path: string
+}
 
 export interface FirstPartyPlugin {
   /**
@@ -205,6 +236,27 @@ export const FORMS_PLUGIN_ID = 'forms'
  * those bundles had not filled would read as every plugin switched OFF.
  */
 export { FIRST_PARTY_PLUGINS }
+
+/**
+ * The admin edit bar's quick links that THIS SITE runs, in the order the bar
+ * draws them (AGL-3080).
+ *
+ * `enabledPluginIds` is the site's resolved plugin set — the same one the rest
+ * of the edit context is built from, already narrowed by the org's switchboard,
+ * the site's own deny-list and the release flags. A link whose plugin is not
+ * in it is not offered, which is what stops the bar linking a site with
+ * Commerce switched off to its Orders page.
+ *
+ * Compiled in rather than registered, for the reason the catalog above is:
+ * the tenant server draws this bar and never loads a plugin's console code,
+ * so a registry it had not filled would drop every link with nothing red.
+ */
+export function pluginEditBarLinks(
+  enabledPluginIds: readonly string[] | undefined,
+): readonly PluginEditBarLink[] {
+  const enabled = new Set(enabledPluginIds ?? [])
+  return PLUGIN_EDIT_BAR_LINKS.filter((link) => enabled.has(link.pluginId))
+}
 
 /** Ids loaded for orgs that have never touched the switchboard. */
 export const DEFAULT_ENABLED_PLUGINS: readonly string[] =
