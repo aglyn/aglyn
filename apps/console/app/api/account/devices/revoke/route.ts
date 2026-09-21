@@ -89,10 +89,13 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const auth = firebaseAdmin.app().auth()
-    // `checkRevoked` here too: a caller whose own tokens were already revoked
-    // is not signed in, and letting a revoked token drive a revocation would
-    // be a way for the holder of a stolen token to sign the real owner out.
-    const decoded = await auth.verifyIdToken(idToken, true)
+    // The revocation check matters here too: a caller whose own tokens were
+    // already revoked is not signed in, and letting a revoked token drive a
+    // revocation would be a way for the holder of a stolen token to sign the
+    // real owner out. It comes from the handle rather than from the SDK flag
+    // this used to pass, which asked the project pool and so refused every
+    // SSO account outright (AGL-3229).
+    const decoded = await auth.verifyIdToken(idToken)
     const uid = decoded.uid
 
     // Stamp-then-revoke, in the owning pool, with the cache drop — all of it

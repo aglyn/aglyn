@@ -72,6 +72,16 @@ export let fbAdminApp: App
  * Firebase's own round trip here is the honest price of a door that cannot
  * reach the cheap check. It has no callers today, so the price is zero and
  * the next caller inherits the strict behaviour rather than the loose one.
+ *
+ * ⛔ IT IS STRICT, NOT CORRECT, FOR AN SSO ACCOUNT (AGL-3229). Firebase's
+ * `checkRevoked` answers itself with `getUser(sub)` on the handle that
+ * verified the token — here the project pool, where a GCIP tenant uid does
+ * not exist. It throws `auth/user-not-found`, which reads as a bad
+ * credential, so this refuses every SSO user rather than checking them. The
+ * console's own handle routes the lookup to the pool the token names; this
+ * one cannot, which is why it still has no callers. A door that must admit
+ * SSO accounts belongs behind `firebaseAdmin.app().auth()`, above this
+ * boundary.
  */
 export function verifyIdToken(idToken: string) {
   return getAuth(fbAdminApp).verifyIdToken(idToken, true)

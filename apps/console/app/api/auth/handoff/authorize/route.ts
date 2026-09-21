@@ -83,12 +83,13 @@ async function handler(request: Request): Promise<Response> {
   }
 
   try {
-    // `checkRevoked`: a revoked token is not a sign-in, and this route's whole
-    // job is to convert "just signed in" into a session somewhere else.
-    const decoded = await firebaseAdmin
-      .app()
-      .auth()
-      .verifyIdToken(idToken, true)
+    // A revoked token is not a sign-in, and this route's whole job is to
+    // convert "just signed in" into a session somewhere else — so the
+    // revocation check is load-bearing. It comes from the handle (AGL-1881),
+    // which asks the pool the token names; the SDK's own `checkRevoked` flag
+    // that used to be passed here asked the project pool, and refused every
+    // SSO account's handoff with it (AGL-3229).
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     if (!decoded.email_verified && !isImpersonationSession(decoded)) {
       return Response.json(
         { error: 'Verify your email to continue', reason: 'email-unverified' },

@@ -326,15 +326,34 @@ describe('the cost is bounded by a short TTL, not paid per request', () => {
   })
 })
 
-describe("Firebase's own checkRevoked still passes through", () => {
-  it('forwards an explicit `true` to the SDK', async () => {
+/**
+ * This block used to assert the opposite — that an explicit `true` was
+ * forwarded to the SDK — and that pass-through WAS the bug (AGL-3229).
+ * Firebase's own `checkRevoked` looks the uid up in the pool that verified
+ * the token, which for an SSO account is the project pool the uid is not in;
+ * it therefore refused every tenant user, and `POST /api/auth/session` (one
+ * of three callers passing the flag) could not mint a session cookie for any
+ * of them. The flag is stripped now, and the check below it — tenant-aware
+ * and cached — is the only one that runs.
+ */
+describe("Firebase's own checkRevoked never reaches the SDK", () => {
+  it('strips an explicit `true` rather than forwarding it', async () => {
     await firebaseAdmin.app().auth().verifyIdToken('token', true)
-    expect(verifyArgs[0]).toEqual(['token', true])
+    expect(verifyArgs[0]).toEqual(['token'])
   })
 
   it('does not invent a second argument when the caller passed none', async () => {
     await firebaseAdmin.app().auth().verifyIdToken('token')
     expect(verifyArgs[0]).toEqual(['token'])
+  })
+
+  it('still runs the cached check for a caller that passed the flag', async () => {
+    // The flag is now inert, not a skip: a revoked token is refused whether
+    // or not the caller asked for `checkRevoked`.
+    projectRecord = userRecord({ tokensValidAfterTime: validAfter(now + 1) })
+    await expect(
+      firebaseAdmin.app().auth().verifyIdToken('token', true),
+    ).rejects.toMatchObject({ code: 'auth/id-token-revoked' })
   })
 })
 

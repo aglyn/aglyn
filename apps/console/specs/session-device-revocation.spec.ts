@@ -172,7 +172,7 @@ beforeEach(() => {
 })
 
 describe('the mint', () => {
-  it('checks Firebase revocation — a stolen ID token buys no new cookie', async () => {
+  it('verifies through the revocation-checked handle, with no flag of its own', async () => {
     mockDeviceDocs = {}
     mockVerifyIdToken.mockResolvedValue({
       uid: UID,
@@ -182,10 +182,26 @@ describe('the mint', () => {
 
     await POST(request('POST', [`aglyn_device=${DEVICE}`]))
 
-    // The whole point. Without `true`, `revokeRefreshTokens` stops the browser
-    // getting a NEW id token and leaves the one it holds able to buy fourteen
-    // more days.
-    expect(mockVerifyIdToken).toHaveBeenCalledWith('id-token', true)
+    /*
+     * The property is still "a stolen ID token buys no new cookie": without a
+     * revocation check, `revokeRefreshTokens` stops the browser getting a NEW
+     * id token and leaves the one it holds able to buy fourteen more days.
+     *
+     * What changed is WHO checks (AGL-3229). This used to assert the SDK's
+     * `checkRevoked` flag, and that flag asks the pool that verified the
+     * token — the project pool — where an SSO uid does not exist, so it
+     * refused every tenant account instead of checking it.
+     * `firebaseAdmin.app().auth()` runs the check itself against the pool the
+     * token names, which is why the flag is now absent rather than false.
+     *
+     * `firebaseAdmin` is mocked here, so the assertion is that the route asks
+     * for the check the way the codebase provides it. That the handle really
+     * refuses a revoked token is
+     * `libs/tenant/data/admin/.../firebase-admin-sso-revocation.spec.ts`, and
+     * that nothing obtains an unchecked handle is
+     * `token-revocation-coverage.spec.ts`.
+     */
+    expect(mockVerifyIdToken).toHaveBeenCalledWith('id-token')
   })
 
   it('refuses a revoked device presenting a pre-revocation sign-in', async () => {
