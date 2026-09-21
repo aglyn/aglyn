@@ -112,8 +112,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 // one.
 
 let mockStore: any
-let mockOrgMembers: Array<{ $id: string; role: string }> = []
-let mockAuthEmails: Record<string, string> = {}
+/*
+ * Empty, and still here. The publisher fan-out was what filled them, and it
+ * moved to the marketplace plugin with its sender (AGL-3080) — but the mock
+ * above replaces the WHOLE barrel, so dropping either export would break any
+ * sender that reaches it as "X is not a function", which is the closed-world
+ * trap the `shared-util-email` factory is spread to avoid.
+ */
+const mockOrgMembers: Array<{ $id: string; role: string }> = []
+const mockAuthEmails: Record<string, string> = {}
 
 import { emailOrgAdmins, orgAdminEmails } from '../app/api/_lib/usage-alert-email'
 import { POST as usageEmailCron } from '../app/api/billing/usage-email/route'

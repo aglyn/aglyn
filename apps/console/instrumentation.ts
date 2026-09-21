@@ -94,23 +94,19 @@ export async function register(): Promise<void> {
    */
   registerPluginSiteCache(
     {
-      drop: async ({ hostIds, reason }) => {
-        const [{ dropSiteCaches }, { firebaseAdmin }] = await Promise.all([
-          import('./utils/server/tenant-revalidate'),
-          import('@aglyn/tenant-data-admin'),
-        ])
-        const { hosts, hostsDropped } = await dropSiteCaches(
-          firebaseAdmin.app().firestore(),
-          { hostIds, reason },
-        )
-        return {
-          dropped: hosts.length,
-          skipped: hostsDropped,
-          // The fan-out never throws and each site is best effort, so
-          // reaching the end IS the completion this contract means: every
-          // site we were given was attempted.
-          complete: true,
-        }
+      drop: async (request) => {
+        /*
+         * Deferred by RELATIVE path, never as `@aglyn/tenant-data-admin`
+         * (AGL-1921, and AGL-3080 re-learned it): nx treats a lib that is
+         * ever `import()`ed as lazy-loaded EVERYWHERE, and
+         * `@nx/enforce-module-boundaries` then forbids all 181 static
+         * imports of it across this app. `site-cache-drop.ts` holds the
+         * static import; deferring that file keeps firebase-admin out of
+         * the edge bundle just the same, and registers no lib-level lazy
+         * edge.
+         */
+        const { consoleSiteCache } = await import('./utils/server/site-cache-drop')
+        return await consoleSiteCache.drop(request)
       },
     },
     { pluginId: 'console' },
