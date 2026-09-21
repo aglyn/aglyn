@@ -30,7 +30,11 @@
 
 import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { money, MoneyFigure, MoneyPerMessageRow } from './report-figures'
+import {
+  money,
+  MoneyFigure,
+  MoneyPerUnitRow,
+} from './measured-figures.component'
 
 const draw = (node: unknown) => render(node as ReactNode as never)
 
@@ -74,10 +78,10 @@ describe('MoneyFigure', () => {
   })
 })
 
-describe('MoneyPerMessageRow', () => {
+describe('MoneyPerUnitRow', () => {
   it('prints the denominator on the same line as the money', () => {
     draw(
-      <MoneyPerMessageRow
+      <MoneyPerUnitRow
         label="Net revenue per delivered message"
         figure={{
           cents: 50,
@@ -93,7 +97,7 @@ describe('MoneyPerMessageRow', () => {
   })
 
   it('draws the dash and no number at all for an absent figure', () => {
-    draw(<MoneyPerMessageRow label="Net revenue per delivered message" figure={null} />)
+    draw(<MoneyPerUnitRow label="Net revenue per delivered message" figure={null} />)
     expect(screen.getByText('— not enough recorded to compute')).toBeTruthy()
   })
 })

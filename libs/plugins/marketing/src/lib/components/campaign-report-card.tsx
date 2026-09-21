@@ -56,11 +56,11 @@ import {
 import {
   Figure,
   MoneyFigure,
-  MoneyPerMessageRow,
+  MoneyPerUnitRow,
   percent,
   RateRow,
   Section,
-} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
+} from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import {
   emailSendTimeMs,
 } from '@aglyn/shared-ui-email-campaigns/model/email-record'
@@ -492,7 +492,7 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
                       note="of those orders"
                     />
                   </Stack>
-                  <MoneyPerMessageRow
+                  <MoneyPerUnitRow
                     label="Net revenue per delivered message"
                     figure={entry.netPerDelivered}
                   />

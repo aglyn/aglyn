@@ -25,7 +25,7 @@ import {
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { Figure, Section } from '@aglyn/shared-ui-email-campaigns/components/report-figures'
+import { Figure, Section } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import {
   Alert,
   Button,

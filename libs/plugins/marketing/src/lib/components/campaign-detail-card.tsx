@@ -32,7 +32,7 @@ import {
   Figure,
   RateRow,
   Section,
-} from '@aglyn/shared-ui-email-campaigns/components/report-figures'
+} from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import {
   ListRowActions,
   ListTable,
