@@ -36,6 +36,7 @@ import { describe, it } from 'node:test'
 import {
   americanize,
   areaFor,
+  bulletFor,
   cleanSummary,
   isVersionBump,
   renderExcerpt,
@@ -180,6 +181,25 @@ describe('what a commit subject becomes', () => {
     assert.equal(
       cleanSummary("restore Zach's staff claim after the rotation (AGL-2222)"),
       "restore the owner's staff claim after the rotation",
+    )
+  })
+
+  it('drops the label when the commit carries no scope', () => {
+    // Whole months of the pre-2026 history are scopeless. A generic label on
+    // every line of them labels nothing.
+    assert.equal(
+      bulletFor(commit('c0', 'feat: added ability to add new elements in builder')),
+      '- added ability to add new elements in builder',
+    )
+    assert.equal(
+      bulletFor(commit('c0b', 'fix(console): a thing')),
+      '- **Console:** a thing',
+    )
+    // A subject that opens with its own bullet marker — common in the early
+    // history — does not get two.
+    assert.equal(
+      bulletFor(commit('c0c', '- Merged the common and instance directories')),
+      '- Merged the common and instance directories',
     )
   })
 

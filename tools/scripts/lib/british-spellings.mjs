@@ -142,7 +142,8 @@ export const BRITISH_SPELLINGS = {
   pyjamas: 'pajamas', cosy: 'cozy', speciality: 'specialty',
   aeroplane: 'airplane', programme: 'program', programmes: 'programs',
   whilst: 'while', amongst: 'among', learnt: 'learned', spelt: 'spelled',
-  spoilt: 'spoiled', grey: 'gray', greyed: 'grayed', greyscale: 'grayscale',
+  spoilt: 'spoiled', grey: 'gray', greys: 'grays', greyed: 'grayed',
+  greyscale: 'grayscale',
 }
 
 /**

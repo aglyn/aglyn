@@ -347,6 +347,9 @@ export function cleanSummary(summary) {
     // reference is noise to a reader — but an id inside the sentence is the
     // sentence, and cutting it leaves "raise the ceiling to , read from…".
     .replace(/\s*\((?:AGL-\d+(?:,\s*)?)+\)\s*$/g, '')
+    // A subject that already opens with a bullet marker, which the early
+    // history is full of: the entry supplies its own.
+    .replace(/^[-*]\s+/, '')
     .replace(/`/g, '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -382,9 +385,18 @@ export function sectionsFor(commits) {
   })).filter((section) => section.commits.length > 0)
 }
 
-/** `- **Console:** a Tracking tab, and Tag Manager under the same gate` */
+/**
+ * `- **Console:** a Tracking tab, and Tag Manager under the same gate`
+ *
+ * A commit with NO scope gets no label at all rather than a generic one. The
+ * convention arrived in 2026; before it, whole months are scopeless, and
+ * `- **Platform:**` on all 38 lines of September 2021 labels nothing — it just
+ * makes the reader's eye skip a column that never varies.
+ */
 export function bulletFor(commit) {
-  return `- **${areaFor(commit)}:** ${cleanSummary(commit.summary)}`
+  const summary = cleanSummary(commit.summary)
+  if (!(commit.scope ?? '').trim()) return `- ${summary}`
+  return `- **${areaFor(commit)}:** ${summary}`
 }
 
 /**
