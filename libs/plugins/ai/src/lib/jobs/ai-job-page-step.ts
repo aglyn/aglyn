@@ -473,6 +473,13 @@ export function createAiJobPageStep(deps: AiJobPageStepDeps = {}): AiJobStepRunn
         name,
         uid: job.createdBy,
         org: org as Record<string, unknown> | null,
+        // A copy core mints is written under core's id, never `draftId`, so
+        // `written` above cannot find it and this branch would fire on every
+        // pass — and the pass after a refused copy is the common one, since
+        // the review below offers to try again. The job's recorded id is the
+        // claim, so a second pass replays the one copy instead of leaving
+        // another orphan screen behind it (AGL-3024).
+        attemptKey: draftId,
       })
       if (copy.ok) {
         // A copy is not a build (AGL-3024). Nothing is generated here, so

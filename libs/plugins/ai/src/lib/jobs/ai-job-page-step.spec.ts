@@ -1010,6 +1010,20 @@ describe('when a pass stops', () => {
     expect(outcome.review?.message).toContain('"what the inspection covers"')
   })
 
+  it('claims its one copy by the id the job recorded, so a second pass replays instead of minting another screen (AGL-3024)', async () => {
+    // Measured live on 2026-09-21, on test-org / harborline-law: the copy is
+    // refused for showing less than the plan promised, the member presses Try
+    // again, and the step copies the SOURCE again — leaving "Practice Areas
+    // 2", then "Practice Areas 3". The copy is written under an id core mints,
+    // never the id the job recorded, so `written` cannot find it and this
+    // branch fires on every pass. `attemptKey` is what makes core replay the
+    // first copy; without it the retry is both unwinnable and a litter of
+    // orphan screens.
+    const outcome = await step()(copiedScreen(2))
+    expect(outcome.review?.findings.map((finding) => finding.code)).toEqual(['plan-items-short'])
+    expect(duplicate).toHaveBeenCalledWith('screen', expect.objectContaining({ attemptKey: SCREEN_ID }))
+  })
+
   it('stops for a person when the copy cannot be read back at all', async () => {
     duplicate.mockResolvedValueOnce({ ok: true, id: 'scr-gone', versionId: 'v-copy', name: 'Home copy' })
     const outcome = await step()(context({ plan: { ...PLAN, screens: [{ ...SCREEN, duplicateOf: 'scr-home' }] } }))
