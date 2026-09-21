@@ -18,13 +18,14 @@
 // Straight from the SDK, not the admin lib, for the reason `assist-usage.ts`
 // gives at its head: the statics need no app, and the admin lib would drag the
 // default-app initialization into every unit test that touches a counter.
-import { FieldPath, FieldValue } from 'firebase-admin/firestore'
+import { FieldValue } from 'firebase-admin/firestore'
 import {
   AI_USAGE_BY_USER_COLLECTION,
   AI_USAGE_BY_USER_MONTHS_COLLECTION,
   AI_USAGE_BY_USER_RETENTION_MONTHS,
   aiUsageByUserExpiry,
   aiUsageByUserMonthFrom,
+  aiUsageMonthKeys,
   aiUsageShare,
   type AiUsageByUserMonth,
   type AiUsageKind,
@@ -297,25 +298,50 @@ export async function readOrgAiUsageByUser(
 
 /**
  * One person's months in one org, newest first — the member card and the
- * staff page. Ordered on the document id, which IS the month key and so
- * needs no field every writer must remember.
+ * staff page. The document id IS the month key, so no field every writer must
+ * remember carries the order.
+ *
+ * ## Asked for by id, never ordered (AGL-3143 §13)
+ *
+ * This read `.orderBy(documentId(), 'desc').limit(n)`, which looks
+ * like the obvious way to say "newest first" and **500s in production**:
+ * Firestore indexes `__name__` ASCENDING automatically and descending NOT at
+ * all, so the query answers `FAILED_PRECONDITION: the query requires an
+ * index`. `GET /api/ai/usage?uid=…` returned 500 on every call and the member
+ * card read "Could not read this member's AI usage — a failed read, not zero
+ * usage", while the org-wide table beside it, which orders on a real field,
+ * was fine.
+ *
+ * ⛔ The fix is deliberately NOT the index the error offers. A promotion ships
+ * Vercel and nothing else — it deploys no rules and no indexes — so a fix that
+ * needs one would land green, ship, and stay broken until someone remembered a
+ * separate deploy. There is nothing to remember here.
+ *
+ * The whole key space is knowable without a query: `aiUsageMonthKeys` is the
+ * retention window and the TTL reaps everything older, so the thirteen ids are
+ * asked for directly and the ones that exist come back in the order they were
+ * asked. Bounded at thirteen point reads, and it cannot return a month outside
+ * retention, which is what the door promises its callers.
  */
 export async function readUserAiUsageMonths(
   firestore: FirebaseFirestore.Firestore,
   orgId: string,
   uid: string,
   limit: number = AI_USAGE_BY_USER_RETENTION_MONTHS,
+  now: Date = new Date(),
 ): Promise<AiUsageByUserMonth[]> {
-  const snapshot = await firestore
+  const months = firestore
     .collection('orgs')
     .doc(orgId)
     .collection(AI_USAGE_BY_USER_COLLECTION)
     .doc(uid)
     .collection(AI_USAGE_BY_USER_MONTHS_COLLECTION)
-    .orderBy(FieldPath.documentId(), 'desc')
-    .limit(limit)
-    .get()
-  return snapshot.docs.map((doc) => aiUsageByUserMonthFrom(doc.data(), uid, doc.id))
+  const wanted = aiUsageMonthKeys(now)
+  const snapshots = await firestore.getAll(...wanted.map((month) => months.doc(month)))
+  return snapshots
+    .filter((doc) => doc.exists)
+    .slice(0, Math.max(1, limit))
+    .map((doc) => aiUsageByUserMonthFrom(doc.data(), uid, doc.id))
 }
 
 export interface EraseUserAiUsageResult {

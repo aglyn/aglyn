@@ -91,6 +91,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
       firestore: () => ({
         collection: (name: string) => mockMakeCollection(name),
+        // The reader asks for month documents BY ID (AGL-3143 §13). It used to
+        // order on the document id descending, which this double served
+        // happily and production refused for want of an index — which is how
+        // a 500 shipped with this suite green.
+        getAll: async (...refs: { path: string }[]) => refs.map((ref) => mockSnapshotOf(ref.path)),
       }),
     }),
   },
@@ -120,6 +125,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 import { GET } from './ai-admin-user'
+import { aiUsageMonthKeys } from '../model/ai-usage-by-user'
 
 const get = (token: string | null = 'tok', uid = 'user-a') =>
   GET(
@@ -135,14 +141,22 @@ const staff = () =>
     staff: true,
   })
 
+/**
+ * The months the fixture seeds, from the same window the reader asks for
+ * (AGL-3143 §13). Written as literals they would quietly stop being inside
+ * the retention window, and the suite would fail one day for a reason nothing
+ * in it explains.
+ */
+const [THIS_MONTH, LAST_MONTH] = aiUsageMonthKeys()
+
 beforeEach(() => {
   jest.clearAllMocks()
   mockDocs = {
     'users/user-a/orgs/org-1': { orgName: 'Acme', slug: 'acme' },
     'users/user-a/orgs/org-2': { orgName: 'Beta', slug: 'beta' },
-    'orgs/org-1/aiUsageByUser/user-a/months/2026-08': { credits: 40, requests: 4 },
-    'orgs/org-1/aiUsageByUser/user-a/months/2026-09': { credits: 120, requests: 9, refusals: 1 },
-    'orgs/org-2/aiUsageByUser/user-a/months/2026-09': { credits: 300, requests: 12 },
+    [`orgs/org-1/aiUsageByUser/user-a/months/${LAST_MONTH}`]: { credits: 40, requests: 4 },
+    [`orgs/org-1/aiUsageByUser/user-a/months/${THIS_MONTH}`]: { credits: 120, requests: 9, refusals: 1 },
+    [`orgs/org-2/aiUsageByUser/user-a/months/${THIS_MONTH}`]: { credits: 300, requests: 12 },
   }
 })
 
@@ -172,15 +186,15 @@ describe('/api/ai/admin/user (AGL-2928)', () => {
     expect(
       body.rows.map((row: Record<string, unknown>) => [row.orgName, row.month, row.credits]),
     ).toEqual([
-      ['Beta', '2026-09', 300],
-      ['Acme', '2026-09', 120],
-      ['Acme', '2026-08', 40],
+      ['Beta', THIS_MONTH, 300],
+      ['Acme', THIS_MONTH, 120],
+      ['Acme', LAST_MONTH, 40],
     ])
     expect(body.rows[1]).toEqual({
       orgId: 'org-1',
       orgName: 'Acme',
       slug: 'acme',
-      month: '2026-09',
+      month: THIS_MONTH,
       credits: 120,
       requests: 9,
       refusals: 1,
