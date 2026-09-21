@@ -38,6 +38,7 @@ import {
 import { isEmailConfigured } from '@aglyn/shared-util-email'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { registerCommerceMediaPublishGuard } from './server/media-publish-guard'
 import { registerProductCardReader } from './server/product-card'
 import { registerCommerceTaxProfile } from './server/tax-profile'
 import { commerceBillingWebhookHandler } from './server/billing-webhook'
@@ -292,6 +293,11 @@ export function registerCommerceConsoleApi(): void {
   // What a product looks like to a surface that is not this plugin's — a
   // campaign email that features one asks here rather than importing the model.
   registerProductCardReader()
+  // …and why a file somebody is SELLING may not be made public (AGL-3080).
+  // The media library asks before it hands an asset its permanent CDN URL
+  // back; what a product is, and which of its fields hold paid media, is
+  // this plugin's to know.
+  registerCommerceMediaPublishGuard()
   // …and the tax rule, for the webhook that confirms what they charged.
   registerCommerceTaxProfile()
   // Stripe webhook sections (AGL-418): orders/carts/drafts/reservations/

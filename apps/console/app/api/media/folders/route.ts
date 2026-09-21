@@ -39,10 +39,7 @@ import {
   isFolderScopePreviewRequest,
 } from '../../../../utils/server/media-scope'
 import { moveAssetsWithinBudget } from '../../../../utils/server/media-move'
-import {
-  findPaidMediaUses,
-  paidMediaPublishRefusal,
-} from '../../../../utils/server/paid-media-uses'
+import { resolvePluginMediaPublishRefusal } from '@aglyn/aglyn/plugin-manager/plugin-media-publish'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /** Bounded per request — console-triggered admin op, not a batch job. */
@@ -508,26 +505,61 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Unknown media' }, { status: 404 })
       }
       /**
-       * A file a product still sells, as a members video or a paid download,
-       * stays private (AGL-2814, AGL-2847).
+       * A file something still sells stays private (AGL-2814, AGL-2847;
+       * asked rather than known since AGL-3080).
        *
        * Publishing hands the asset back its permanent CDN URL, and that URL
        * names the same asset as every signed link a buyer was ever given:
        * strip `exp` and `sig` off one and it would work for anyone, forever.
-       * So the publish is refused while a product sells the file, and refused
-       * as well when the scan could not read every product — "we did not find
-       * one" is not "there is none".
+       * WHAT sells a file is not this route's knowledge — a product's two
+       * paid-media fields, and the rule that a deleted product sells nothing,
+       * belong to whatever sells things — so the plugins are asked.
+       *
+       * ⛔ A CHECK THAT DID NOT RUN IS NOT PERMISSION. `null` means every
+       * guard ran and none objected, which is only true once the plugins'
+       * console surfaces have been loaded — an unfilled registry answers
+       * "nobody refuses" for a process that simply has not loaded commerce
+       * yet (AGL-3025). So the load is awaited here and its failure refuses
+       * the publish, exactly as an unreadable scan does.
        */
       if (!makePrivate) {
-        const sold = await findPaidMediaUses({
-          firestore: firebaseAdmin.app().firestore(),
-          base: scope.base,
-          mediaId,
-          bucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-        })
-        if (sold.uses.length || !sold.complete) {
+        let refusal: Awaited<
+          ReturnType<typeof resolvePluginMediaPublishRefusal>
+        >
+        try {
+          const { serverPluginLoader } = await import(
+            '../../../../utils/server-plugin-loader'
+          )
+          await serverPluginLoader.ensureAll(['consoleApi'])
+          refusal = await resolvePluginMediaPublishRefusal({
+            base: scope.base,
+            mediaId,
+            bucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+          })
+        } catch (error) {
+          console.error('[media] publish guards failed to load', error)
+          refusal = {
+            reason:
+              'We could not check everything that might be using this file, ' +
+              'so it stays private. Try again in a moment.',
+            blockers: [],
+            complete: false,
+          }
+        }
+        if (refusal) {
           return Response.json(
-            { error: paidMediaPublishRefusal(sold), products: sold.uses },
+            {
+              error: refusal.reason,
+              // The wire name the media library already reads. Every blocker
+              // today is a product; the shape is the plugin's word for the
+              // thing, and renaming the key would be a client change for
+              // nothing.
+              products: refusal.blockers.map((blocker) => ({
+                hostId: blocker.hostId,
+                productId: blocker.refId,
+                productName: blocker.label,
+              })),
+            },
             { status: 409 },
           )
         }

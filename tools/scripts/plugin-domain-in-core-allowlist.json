@@ -988,13 +988,6 @@
       "lane": "data"
     },
     {
-      "path": "apps/console/utils/server/paid-media-uses.ts",
-      "rules": [
-        "plugin-collection:commerce"
-      ],
-      "lane": "commerce"
-    },
-    {
       "path": "apps/console/utils/server/revenue-report.ts",
       "rules": [
         "domain-declares:commerce",
