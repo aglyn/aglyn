@@ -171,17 +171,39 @@ function main(argv) {
   const names = publishablePackages()
   console.log(`trust:packages: ${names.length} package(s); ${REPOSITORY} → .github/workflows/${WORKFLOW_FILE}`)
 
+  /*
+   * ONE PASS, reading and configuring each package in turn (AGL-3201).
+   *
+   * ⚑ npm challenges EVERY trust operation with the account's second factor,
+   * `trust list` included. Reading all 51 first and then writing would ask
+   * for up to 51 approvals before a single package was configured, and the
+   * person approving would have nothing to show for any of them. Interleaved,
+   * the first package proves whether one approval carries the rest — and if
+   * it does not, that is known at package one rather than at fifty-one.
+   *
+   * BOTH permissions on the write, deliberately. A configuration created
+   * after 2026-09-03 allows `npm stage publish` and nothing else unless
+   * publishing is asked for explicitly, and `publish-packages.mjs` runs a
+   * plain `npm publish` — so without `--allow-publish` every one of these
+   * would be configured, look configured, and refuse the release.
+   * `--allow-stage-publish` goes with it because staged publishing is the
+   * path npm is moving everyone to, and permitting it costs nothing today.
+   */
   const missing = []
+  let configured = 0
+  let failed = 0
   for (const name of names) {
     const answer = readTrust(name)
     if (answer.unauthenticated) {
       console.error('')
-      console.error('trust:packages: npm asked for this account\'s second factor, so nothing could be read.')
-      console.error('`npm trust list` is not public — it needs the owner signed in, even for a public package.')
+      console.error("trust:packages: npm asked for this account's second factor and did not get it.")
+      console.error('Every trust operation needs it — `npm trust list` is not public, even for a')
+      console.error('public package. Sign in, approve in the browser npm opens, and run again:')
       console.error('')
-      console.error('  npm login          # approve in the browser it opens')
-      console.error('  npm run trust:packages')
+      console.error('  npm login')
+      console.error(`  npm run trust:packages${set ? ' -- --set' : ''}`)
       console.error('')
+      console.error(`${configured} package(s) were configured before this; re-running skips them.`)
       return 1
     }
     if (trustsThisWorkflow(answer.listing)) {
@@ -189,7 +211,24 @@ function main(argv) {
       continue
     }
     missing.push(name)
-    console.log(`  MISSING ${name}${answer.error ? ` (${answer.error})` : ''}`)
+    if (!set) {
+      console.log(`  MISSING ${name}${answer.error ? ` (${answer.error})` : ''}`)
+      continue
+    }
+    console.log(`  set     ${name}`)
+    try {
+      execFileSync(
+        'npm',
+        ['trust', 'github', name, '--repo', REPOSITORY, '--file', WORKFLOW_FILE, '--allow-publish', '--allow-stage-publish', '--yes'],
+        // Keeps the terminal: npm challenges this with the account's second
+        // factor and cannot ask for it with no stdin.
+        { cwd: ROOT, stdio: 'inherit' },
+      )
+      configured += 1
+    } catch (error) {
+      failed += 1
+      console.error(`    FAILED ${name} — ${error.message}`)
+    }
   }
 
   if (!missing.length) {
@@ -203,36 +242,11 @@ function main(argv) {
     console.log('')
     console.log('  npm run trust:packages -- --set')
     console.log('')
-    console.log('It needs an npm login with the account\'s second factor to hand, and it')
-    console.log('is the owner\'s to run — an agent may not touch an account\'s security settings.')
+    console.log("It needs an npm login with the account's second factor to hand, and it")
+    console.log("is the owner's to run — an agent may not touch an account's security settings.")
     return 1
   }
 
-  /*
-   * BOTH permissions, deliberately. A configuration created after 2026-09-03
-   * allows `npm stage publish` and nothing else unless publishing is asked for
-   * explicitly, and `publish-packages.mjs` runs a plain `npm publish` — so
-   * without `--allow-publish` every one of these would be configured, look
-   * configured, and refuse the release. `--allow-stage-publish` goes with it
-   * because staged publishing is the path npm is moving everyone to, and a
-   * configuration that permits it costs nothing today.
-   */
-  let failed = 0
-  for (const name of missing) {
-    console.log(`  · ${name}`)
-    try {
-      execFileSync(
-        'npm',
-        ['trust', 'github', name, '--repo', REPOSITORY, '--file', WORKFLOW_FILE, '--allow-publish', '--allow-stage-publish', '--yes'],
-        // Keeps the terminal: npm challenges this with the account's second
-        // factor and cannot ask for it with no stdin.
-        { cwd: ROOT, stdio: 'inherit' },
-      )
-    } catch (error) {
-      failed += 1
-      console.error(`    FAILED ${name} — ${error.message}`)
-    }
-  }
   if (failed) {
     console.error(`trust:packages: ${failed} of ${missing.length} could not be configured. Re-run — the ones that worked are skipped.`)
     return 1
