@@ -59,6 +59,46 @@ staged rather than to the whole tree, or a peer's in-flight edit reads as your
 failure. The same applies to git: never `commit -a`, `amend`, `reset --soft`,
 or rebase a branch someone else may be standing on.
 
+### Realigning local `main` is the LAST STEP of a worktree push, not a later chore
+
+Local `main` drifts by a ratchet, one notch per session, and it never heals on
+its own. The loop: you commit on `main` here, `origin` has moved by then so the
+push is rejected, you push from a throwaway worktree instead — which puts your
+work upstream under a DIFFERENT sha — and the original is left on local `main`
+forever. Six sessions did exactly that on 2026-09-21 and left it `ahead 6,
+behind 175`, every one of the six already upstream (AGL-3213 session).
+
+So whenever you push from a worktree, finish the job here:
+
+```bash
+git fetch origin
+git cherry -v origin/main main   # every line must start with '-' (already upstream)
+git status --porcelain           # must be empty — a peer's edit is not yours to move
+git branch main-stale-$(date +%F) main
+git reset --keep origin/main
+```
+
+⚑ `--keep`, never `--hard`. It ABORTS when a file it would overwrite has local
+changes, instead of destroying a peer's uncommitted work — which is the half of
+`reset` that cost two sessions their edits (2026-08-24), and the backup branch
+is the other half: a commit that is on a named branch cannot be orphaned, which
+is what cost two peers six commits (2026-09-03). With both, the standing "never
+`reset` on the shared checkout" has a safe exception, and this is it.
+
+⛔ If `git cherry` prints a `+`, STOP — that commit is not upstream and a reset
+would strand it. Find out whose it is first.
+
+### Do not leave a long edit uncommitted here
+
+The tree is public property: a peer's broad `git add` will sweep your
+half-finished change into their commit, under their issue. Anything that takes
+more than a few minutes belongs in a worktree cut from `origin/main` — which is
+also the only way to test against what actually ships, since this tree can be
+hundreds of commits stale.
+
+Clean your worktree up when it merges. `git worktree remove` without `--force`
+refuses a dirty one, so it can never take a live session's work.
+
 ## Package boundaries
 
 Every `libs/**` project is a future npm package; `docs/PACKAGES.md` is the map
