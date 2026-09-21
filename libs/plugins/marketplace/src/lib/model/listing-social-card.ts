@@ -58,14 +58,13 @@
  * `aglyn:addons`); the marketplace plugin re-exports them unchanged.
  */
 
-import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { resolveSeoTitle } from '@aglyn/aglyn/app-utils/seo-title'
 import { resolveSocialImage } from '@aglyn/aglyn/app-utils/social-image'
 import {
   isListingBrowsable,
   isListingDeleted,
 } from '@aglyn/aglyn/app-utils/marketplace-listing-visibility'
-import type { Metadata } from 'next'
+import type { PluginRouteHead } from '@aglyn/aglyn/plugin-manager/plugin-route-metadata'
 
 /**
  * The title the route has always shipped, and still ships for a listing that
@@ -143,25 +142,34 @@ export function listingCardDescription(value: unknown): string {
 }
 
 /**
- * Builds the route's `Metadata` from the listing document.
+ * What this listing says about itself, or `null` for one nothing may say
+ * anything about.
+ *
+ * ⚠️ `null` IS THE WHOLE FALLBACK (AGL-3080). It used to answer the route's
+ * own generic title, which only worked while a hand-written console route
+ * was the only caller. The shell keeps whatever title it built when a
+ * declaration answers nothing, so saying nothing is how this refuses — and
+ * it is also the answer for a listing that does not exist, a read that
+ * failed, and one that must not be described, none of which the caller
+ * distinguishes.
  *
  * Pure, and separated from the read so the policy above is testable without
- * firebase-admin. `undefined` covers both "no such listing" and "the read
- * failed" — the caller does not distinguish, because the answer is the same
- * generic shell either way.
+ * firebase-admin. The tags themselves are the console shell's
+ * (`pluginRouteMetadataOver`): how a title, a description and an image
+ * become `openGraph` and `twitter` is the same for every plugin's route and
+ * is not this plugin's to decide.
  */
 export function listingSocialCard(
   listing: ListingSocialCardSource | null | undefined,
   options?: { origin?: string },
-): Metadata {
-  const shell: Metadata = { title: LISTING_TITLE_FALLBACK }
-  if (!listing) return shell
+): PluginRouteHead | null {
+  if (!listing) return null
   // The one gate. Deleted has no owner exemption anywhere; browsable has one
   // in the UI, and deliberately none here — see the module docblock.
-  if (isListingDeleted(listing) || !isListingBrowsable(listing)) return shell
+  if (isListingDeleted(listing) || !isListingBrowsable(listing)) return null
 
   const name = clean(listing.displayName)
-  if (!name) return shell
+  if (!name) return null
 
   const description = listingCardDescription(listing.description)
   // Precedence, not `??`: `previewImageUrl` is the card art a publisher chose
@@ -199,25 +207,6 @@ export function listingSocialCard(
   return {
     title,
     ...(description ? { description } : {}),
-    // Defining `openGraph` REPLACES the root layout's wholesale for this
-    // route, so `siteName` and `type` are restated rather than inherited.
-    openGraph: {
-      title,
-      ...(description ? { description } : {}),
-      siteName: PLATFORM_BRAND_NAME,
-      type: 'website',
-      ...(image ? { images: [image] } : {}),
-    },
-    twitter: {
-      // No image means the large card would render a blank slab; degrade to
-      // the small one instead, the same rule the tenant head follows.
-      card: image ? 'summary_large_image' : 'summary',
-      title,
-      ...(description ? { description } : {}),
-      // The DESCRIPTOR, not the bare URL (AGL-2417): `twitter:image:alt` is
-      // emitted only for the object form, and a bare string is what left the
-      // Twitter half of every card undescribed even once the OG half was not.
-      ...(image ? { images: [image] } : {}),
-    },
+    ...(image ? { image } : {}),
   }
 }

@@ -37,65 +37,42 @@ const LISTING = {
 const card = (listing: unknown) =>
   listingSocialCard(listing as never, { origin: ORIGIN })
 
-/**
- * Next types `twitter` as a union discriminated on `card`, so the property is
- * not readable off the union itself. The narrowing is a test-side concern
- * only — the builder writes a literal.
- */
-const twitterCard = (meta: ReturnType<typeof listingSocialCard>) =>
-  (meta.twitter as { card?: string } | undefined)?.card
-
 describe('marketplace listing social card (AGL-876)', () => {
-  describe('what a published listing emits', () => {
+  describe('what a published listing says about itself', () => {
     it('titles the card with the listing, not the route', () => {
       const meta = card(LISTING)
 
       // Non-vacuous: the input carries no title field at all, and the output
       // must differ from the shell the route shipped before this existed.
-      expect(meta.title).toBe('Northwind Pricing Table')
-      expect(meta.title).not.toBe(LISTING_TITLE_FALLBACK)
-      expect(meta.openGraph?.title).toBe('Northwind Pricing Table')
+      expect(meta?.title).toBe('Northwind Pricing Table')
+      expect(meta?.title).not.toBe(LISTING_TITLE_FALLBACK)
     })
 
     it('describes the listing', () => {
       const meta = card(LISTING)
 
-      expect(meta.description).toBe(LISTING.description)
-      expect(meta.openGraph?.description).toBe(LISTING.description)
+      expect(meta?.description).toBe(LISTING.description)
     })
 
     it('prefers the publisher’s preview art over their logo', () => {
       const meta = card(LISTING)
 
-      expect(meta.openGraph?.images).toEqual([
-        {
-          url: 'https://cdn.example/preview.png',
-          alt: 'Preview image for Northwind Pricing Table',
-        },
-      ])
-    })
-
-    /**
-     * `og:image:alt` / `twitter:image:alt` (AGL-2417).
-     *
-     * Derived from the listing rather than stored — neither `previewImageUrl`
-     * nor `logoUrl` has anywhere to hold an authored alt, since a publisher
-     * supplies a URL rather than making a DAM pick. That is the exception to
-     * AGL-1896's "never fabricate an alt", not a breach of it: that rule
-     * refuses a FILE NAME, which says nothing about the picture, and this
-     * says which listing the image belongs to and which role it is playing.
-     */
-    it('gives the Twitter card the DESCRIPTOR, so its alt is emitted too', () => {
-      const meta = card(LISTING)
-
-      // A bare URL string is what left the Twitter half undescribed even
-      // after the OG half was not.
-      expect((meta.twitter as { images?: unknown })?.images).toEqual([
-        {
-          url: 'https://cdn.example/preview.png',
-          alt: 'Preview image for Northwind Pricing Table',
-        },
-      ])
+      /*
+       * The DESCRIPTOR, not a bare URL (AGL-2417), so the shell has an alt
+       * to emit on both halves of the card.
+       *
+       * Derived from the listing rather than stored — neither
+       * `previewImageUrl` nor `logoUrl` has anywhere to hold an authored alt,
+       * since a publisher supplies a URL rather than making a DAM pick. That
+       * is the exception to AGL-1896's "never fabricate an alt", not a breach
+       * of it: that rule refuses a FILE NAME, which says nothing about the
+       * picture, and this says which listing the image belongs to and which
+       * role it is playing.
+       */
+      expect(meta?.image).toEqual({
+        url: 'https://cdn.example/preview.png',
+        alt: 'Preview image for Northwind Pricing Table',
+      })
     })
 
     it('falls back to the logo when there is no preview', () => {
@@ -103,24 +80,20 @@ describe('marketplace listing social card (AGL-876)', () => {
 
       // The alt names the LOGO role, not the preview one — it travels with
       // whichever source won (AGL-2417).
-      expect(meta.openGraph?.images).toEqual([
-        {
-          url: 'https://cdn.example/logo.png',
-          alt: 'Northwind Pricing Table logo',
-        },
-      ])
+      expect(meta?.image).toEqual({
+        url: 'https://cdn.example/logo.png',
+        alt: 'Northwind Pricing Table logo',
+      })
     })
 
     it('treats a CLEARED preview as "use the logo", not "no image"', () => {
       // `''` is how a cleared field is persisted; a `??` chain would keep it.
       const meta = card({ ...LISTING, previewImageUrl: '' })
 
-      expect(meta.openGraph?.images).toEqual([
-        {
-          url: 'https://cdn.example/logo.png',
-          alt: 'Northwind Pricing Table logo',
-        },
-      ])
+      expect(meta?.image).toEqual({
+        url: 'https://cdn.example/logo.png',
+        alt: 'Northwind Pricing Table logo',
+      })
     })
 
     it('absolutises a site-relative image against the console origin', () => {
@@ -129,33 +102,30 @@ describe('marketplace listing social card (AGL-876)', () => {
         previewImageUrl: '/api/media/cdn/org:org-9/preview.png',
       })
 
-      expect(meta.openGraph?.images).toEqual([
-        {
-          url: 'https://app.aglyn.com/api/media/cdn/org:org-9/preview.png',
-          alt: 'Preview image for Northwind Pricing Table',
-        },
-      ])
+      expect(meta?.image).toEqual({
+        url: 'https://app.aglyn.com/api/media/cdn/org:org-9/preview.png',
+        alt: 'Preview image for Northwind Pricing Table',
+      })
     })
 
-    it('upgrades to the large twitter card only with an image', () => {
-      expect(twitterCard(card(LISTING))).toBe('summary_large_image')
-      expect(
-        twitterCard(card({ ...LISTING, previewImageUrl: '', logoUrl: '' })),
-      ).toBe('summary')
-    })
-
-    it('restates siteName, which defining openGraph would otherwise drop', () => {
-      // Next replaces the parent's `openGraph` wholesale rather than merging.
-      expect(card(LISTING).openGraph?.siteName).toBe('Aglyn')
-    })
+    /*
+     * Which card size a missing image degrades to, and that defining
+     * `openGraph` at all replaces the root layout's wholesale, are the
+     * SHELL's rules now and the same for every plugin route — held in
+     * `apps/console/utils/plugin-route-head.spec.ts` (AGL-3080).
+     */
   })
 
   describe('what must not be emitted', () => {
-    // The shell is exactly what the route shipped before AGL-876: the generic
-    // title, and NO `openGraph`/`twitter` key at all, so the root layout's
-    // console card is inherited untouched.
+    /*
+     * Saying NOTHING is the refusal (AGL-3080). The shell keeps the title it
+     * built for itself and inherits the root layout's card untouched, which
+     * is exactly what this route shipped before AGL-876 — and now also what
+     * the generic plugin route would show, without either of them knowing
+     * anything about a listing.
+     */
     const expectShell = (meta: ReturnType<typeof listingSocialCard>) => {
-      expect(meta).toEqual({ title: LISTING_TITLE_FALLBACK })
+      expect(meta).toBeNull()
     }
 
     it('says nothing about a listing that does not exist', () => {
@@ -186,7 +156,7 @@ describe('marketplace listing social card (AGL-876)', () => {
     it('describes a plugin once review has passed', () => {
       for (const reviewStatus of ['listed', 'verified']) {
         expect(
-          card({ ...LISTING, artifactType: 'plugin', reviewStatus }).title,
+          card({ ...LISTING, artifactType: 'plugin', reviewStatus })?.title,
         ).toBe('Northwind Pricing Table')
       }
     })
@@ -212,18 +182,16 @@ describe('marketplace listing social card (AGL-876)', () => {
         logoUrl: undefined,
       })
 
-      expect(meta.openGraph?.images).toBeUndefined()
-      expect(meta.twitter?.images).toBeUndefined()
       // `strictNullChecks` is off repo-wide: assert the KEY is absent, not
-      // that it holds undefined, since a present key emits `content=""`.
-      expect(Object.keys(meta.openGraph ?? {})).not.toContain('images')
+      // that it holds undefined, since a present key reaches the shell as a
+      // present image and emits `content=""`.
+      expect(Object.keys(meta ?? {})).not.toContain('image')
     })
 
     it('omits the description tag entirely when there is none', () => {
       const meta = card({ ...LISTING, description: '   ' })
 
-      expect(Object.keys(meta)).not.toContain('description')
-      expect(Object.keys(meta.openGraph ?? {})).not.toContain('description')
+      expect(Object.keys(meta ?? {})).not.toContain('description')
     })
 
     it('omits the image for a reference the resolver cannot parse', () => {
@@ -233,8 +201,7 @@ describe('marketplace listing social card (AGL-876)', () => {
         logoUrl: undefined,
       })
 
-      expect(meta.openGraph?.images).toBeUndefined()
-      expect(twitterCard(meta)).toBe('summary')
+      expect(Object.keys(meta ?? {})).not.toContain('image')
     })
   })
 
@@ -294,13 +261,11 @@ describe('marketplace listing social card (AGL-876)', () => {
         listingSocialCard({
           ...LISTING,
           previewImageUrl: '/api/media/cdn/org:org-9/preview.png',
-        }).openGraph?.images,
-      ).toEqual([
-        {
-          url: 'https://console.example.com/api/media/cdn/org:org-9/preview.png',
-          alt: 'Preview image for Northwind Pricing Table',
-        },
-      ])
+        })?.image,
+      ).toEqual({
+        url: 'https://console.example.com/api/media/cdn/org:org-9/preview.png',
+        alt: 'Preview image for Northwind Pricing Table',
+      })
     })
 
     it('defaults to the hosted console apex', () => {

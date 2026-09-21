@@ -115,21 +115,8 @@
       "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/layout.tsx",
       "rules": [
         "domain-name",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/listing-social-card.server.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/listing-social-card.ts",
-      "rules": [
-        "domain-name"
+        "domain-declares:marketplace",
+        "plugin-id"
       ],
       "lane": "marketplace"
     },

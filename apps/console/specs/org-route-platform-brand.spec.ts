@@ -84,18 +84,25 @@ const BRAND_CONSTANT = 'PLATFORM_BRAND_NAME'
  * "it renders where no org can be resolved" is the only shape that qualifies,
  * and the staleness test below deletes any row that stops being true.
  */
-const PLATFORM_SCOPED: { file: string; why: string }[] = [
-  {
-    file: 'apps/console/app/(app)/[orgSlug]/marketplace/[listingId]/listing-social-card.ts',
-    why:
-      'The OG `siteName` for a marketplace listing. The marketplace is one ' +
-      'platform-wide catalog, not the org’s product, and this metadata is ' +
-      'generated for an UNAUTHENTICATED crawler — there is no session to ' +
-      'resolve an org from, and no React hook available in a server ' +
-      '`generateMetadata`. AGL-2319 moved this to the platform brand on ' +
-      'purpose.',
-  },
-]
+const PLATFORM_SCOPED: { file: string; why: string }[] = []
+
+/**
+ * A file that DOES read the constant, for the parser's own control below.
+ *
+ * The exemption list is empty, and an empty list makes "the parser can see
+ * what it is looking for" vacuously true — which is how a broken walker
+ * reads as compliance. So the control names a file outside the org routes
+ * that legitimately holds the constant.
+ *
+ * It is this one for a reason worth keeping: it holds the OG `siteName` that
+ * used to sit in the marketplace listing route's own card builder. The
+ * marketplace is one platform-wide catalog rather than the org’s product,
+ * and the card is generated for an UNAUTHENTICATED crawler — no session to
+ * resolve an org from, and no React hook in a server `generateMetadata`
+ * (AGL-2319). AGL-3080 moved the tags to the shell, where every plugin
+ * route's head is built, and out from under `[orgSlug]` entirely.
+ */
+const BRAND_CONSTANT_CONTROL = 'apps/console/utils/plugin-route-head.ts'
 
 /** Every `.ts`/`.tsx` file under a root, excluding specs. */
 function sourceFilesUnder(root: string): string[] {
@@ -166,11 +173,13 @@ describe('org-scoped routes resolve the ORG brand, not the deployment brand', ()
   it('can see the constant it is looking for', () => {
     // A negative control for the parser itself: if `brandConstantLines` were
     // broken, every file would come back clean and the rule below would pass
-    // vacuously. The one exempt file is a live positive.
-    const exemptHits = PLATFORM_SCOPED.map(
-      (row) => brandConstantLines(join(REPO_ROOT, row.file)).length,
-    )
-    expect(exemptHits.every((n) => n > 0)).toBe(true)
+    // vacuously. Every exemption is a live positive, and with none left the
+    // control file is.
+    const hits = [
+      ...PLATFORM_SCOPED.map((row) => row.file),
+      BRAND_CONSTANT_CONTROL,
+    ].map((file) => brandConstantLines(join(REPO_ROOT, file)).length)
+    expect(hits.every((n) => n > 0)).toBe(true)
   })
 
   it('reads a docblock mention as prose, not as an identifier', () => {

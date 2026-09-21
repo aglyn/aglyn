@@ -36,7 +36,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
-import type { ListingSocialCardSource } from './listing-social-card'
+import type { ListingSocialCardSource } from '../model/listing-social-card'
 
 const LISTING_COLLECTION = 'marketplaceListings'
 
