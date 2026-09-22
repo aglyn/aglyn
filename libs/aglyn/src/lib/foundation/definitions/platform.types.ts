@@ -540,6 +540,22 @@ export interface AglynHost extends AglynDocument {
    * unless `defaultLocale` says otherwise. */
   locales?: string[]
   defaultLocale?: string
+  /**
+   * The IANA zone THIS SITE's published dates read in (AGL-3252) — absent
+   * means the workspace's `timeZone`, and absent there means UTC.
+   *
+   * AGL-3237 put the zone on the organization and said a per-site override
+   * was worth its own issue because it would need a second rules change. It
+   * does not: the host document's client branch is a deny-list, so a field
+   * it does not name is already writable, and what the override actually
+   * needed was the classification below. An agency running a Chicago site
+   * and a Berlin site out of one workspace is the case it exists for.
+   *
+   * Read through `resolveSiteTimeZone`, never directly: a stored zone can
+   * predate an IANA rename, and an unusable one has to fall back to the
+   * workspace rather than throw inside a page render.
+   */
+  timeZone?: string
   /** Directory of shared layouts by display name (mirrors `screens`). */
   layouts?: Record<LayoutUid, string>
   theme?: AglynHostTheme
@@ -609,6 +625,15 @@ export const HOST_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> = {
     'Site languages (AGL-164). The `multilingual` entitlement is re-checked ' +
     'server-side at page load, so writing this buys nothing a plan forbids.',
   defaultLocale: 'Which of `locales` serves an unprefixed path. Authoring.',
+  timeZone:
+    'Which calendar day this site attributes a published instant to ' +
+    '(AGL-3252), overriding the workspace zone. Editorial, and it reaches ' +
+    'only this site\'s own rendered dates — nothing bills, gates or routes ' +
+    'on it, and every read validates it through `isSupportedTimeZone`, so ' +
+    'the worst a rewrite can do is move one publisher\'s archive by a day. ' +
+    'The org\'s `timeZone` is denied because /api/orgs/settings owns the ' +
+    'whole org document; this one rides the settings form\'s client write ' +
+    'beside `seo`, which is read by the same renderer for the same reason.',
   theme:
     'The persisted MUI theme for the published site. Authoring — the theme ' +
     'editor writes it directly, and it renders only on this host.',

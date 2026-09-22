@@ -156,27 +156,66 @@ export function isSupportedTimeZone(value: unknown): boolean {
 }
 
 /**
- * The zone a site's dates are read in (AGL-3237).
+ * Every zone this runtime can offer as a choice (AGL-3252).
  *
- * The ORGANIZATION names it and every site it owns inherits it: a customer
- * sets it once for the workspace rather than per site. Unset is UTC — the
- * value every existing site already renders, so nothing moves by a day when
- * this ships.
+ * Read off `Intl` rather than checked in, for the reason
+ * {@link isSupportedTimeZone} asks `Intl` rather than an allowlist: the IANA
+ * database renames zones, and a stored list would offer names the runtime has
+ * stopped accepting while missing ones it has learned. A picker built from
+ * this and a validator built from that cannot disagree about what is
+ * choosable.
  *
- * Validated on the way out rather than trusted: a stored zone can predate an
- * IANA rename, or be whatever a hand-edited document holds, and a bad one has
- * to fall back rather than throw inside a page render.
+ * A memoized FUNCTION rather than a module constant: this module is imported
+ * by the tenant page composer, which never draws a picker, and enumerating
+ * four hundred zone names on import is work nothing there asks for.
  *
- * ⚑ Org only, deliberately. A per-SITE override is a reasonable thing to want
- * — an agency running sites in several regions — but it would make `timeZone`
- * a field of the host document, and the host write-deny guard (AGL-1361)
- * would then require it classified in the host rules too. That is a second
- * rules change, and rules ship by hand rather than with a promotion, so the
- * override is worth its own issue rather than a free ride on this one.
+ * An old runtime without `supportedValuesOf` gets an EMPTY list rather than a
+ * broken control — the callers offer their inherited-default option first, so
+ * a picker with no zones in it still says what the site is doing.
+ */
+let supportedTimeZonesCache: readonly string[] | null = null
+export function supportedTimeZones(): readonly string[] {
+  if (supportedTimeZonesCache) return supportedTimeZonesCache
+  try {
+    supportedTimeZonesCache =
+      (Intl as { supportedValuesOf?: (key: string) => string[] })
+        .supportedValuesOf?.('timeZone') ?? []
+  } catch {
+    supportedTimeZonesCache = []
+  }
+  return supportedTimeZonesCache
+}
+
+/**
+ * The zone a site's dates are read in (AGL-3237, AGL-3252).
+ *
+ * THE SITE WINS, then the workspace, then UTC. The organization names the
+ * zone once and every site it owns inherits it — which is the answer a
+ * customer with one site wants and never has to think about — and a site that
+ * names its own overrides it, for the agency running a Chicago site and a
+ * Berlin site out of one workspace. Neither set is UTC: the value every
+ * existing site already renders, so nothing moves by a day when this ships.
+ *
+ * Each candidate is validated in turn rather than trusted, and an unusable
+ * one FALLS THROUGH rather than terminating the chain: a stored zone can
+ * predate an IANA rename, or be whatever a hand-edited document holds, and a
+ * site whose own zone has gone stale should read in its workspace's rather
+ * than jump to UTC.
+ *
+ * ⚑ AGL-3237 deferred the site half, on the reading that a `timeZone` on the
+ * host document would need a Firestore rules change to go with it. It did
+ * not. The host block's client branch is a `hasAny([…])` DENY list, so a
+ * field it does not name is already writable by an editor; what the override
+ * needed was a classification in `HOST_CLIENT_WRITABLE_FIELDS`, which is a
+ * code change on the same commit rather than a rules deploy. The deferral was
+ * a misreading of the guard, not a cost.
  */
 export function resolveSiteTimeZone(
   org?: { timeZone?: string } | null,
+  host?: { timeZone?: string } | null,
 ): string {
+  const siteZone = String(host?.timeZone ?? '').trim()
+  if (isSupportedTimeZone(siteZone)) return siteZone
   const orgZone = String(org?.timeZone ?? '').trim()
   return isSupportedTimeZone(orgZone) ? orgZone : COLLECTION_ENTRY_DATE_TIME_ZONE
 }

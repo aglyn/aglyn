@@ -94,13 +94,17 @@ export default async function SearchPage({
   if (hostRes.error || !hostRes.host) notFound()
   // The org is read for entitlements further down and is render-cached, so
   // asking for it here costs nothing and lets the result dates carry the
-  // site's zone (AGL-3237) rather than the server's.
+  // site's zone (AGL-3237) rather than the server's. The host is passed with
+  // it because a site may override its workspace's zone (AGL-3252).
   const searchOrg = query ? await getOrgBilling({ hostId: hostRes.host.$id }) : null
   const results = query
     ? await searchContent({
         host: hostRes.host,
         query,
-        timeZone: Aglyn.resolveSiteTimeZone(searchOrg?.org as never),
+        timeZone: Aglyn.resolveSiteTimeZone(
+          searchOrg?.org as never,
+          hostRes.host as never,
+        ),
       })
     : []
   const facets = searchResultFacets(results)

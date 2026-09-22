@@ -17,6 +17,7 @@
 
 'use client'
 
+import { supportedTimeZones } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   Alert,
@@ -37,26 +38,6 @@ import { buildRoute, Route } from '../../constants/route-links'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgScope, useOrgSlug } from '../../hooks/use-org-scope'
 import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
-
-/**
- * Every zone this browser can format in (AGL-3237).
- *
- * Read off `Intl` rather than checked in: the IANA database renames zones,
- * and a stored list would offer names the runtime has stopped accepting while
- * missing ones it has learned. The server validates the same way, so the two
- * cannot disagree about what is choosable. An old browser without
- * `supportedValuesOf` gets UTC alone rather than a broken control.
- */
-const TIME_ZONE_OPTIONS: readonly string[] = (() => {
-  try {
-    return (
-      (Intl as { supportedValuesOf?: (key: string) => string[] })
-        .supportedValuesOf?.('timeZone') ?? []
-    )
-  } catch {
-    return []
-  }
-})()
 
 /**
  * The organization's identity — logo and contact details (AGL-363).
@@ -244,7 +225,7 @@ export function OrgProfileCard() {
         so out loud.
       */}
       <MenuItem value="">UTC (default)</MenuItem>
-      {TIME_ZONE_OPTIONS.map((zone) => (
+      {supportedTimeZones().map((zone) => (
         <MenuItem key={zone} value={zone}>
           {zone.replace(/_/g, ' ')}
         </MenuItem>

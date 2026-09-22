@@ -69,18 +69,32 @@ import SocialImageCard from '../../../../../components/social-image-card.compone
 import type { ThemeEditorProposedDraft } from '../../../../../components/theme-editor/theme-editor.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
+import useCurrentOrg from '../../../../../hooks/use-current-org'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import useHostActivityLogger from '../../../../../hooks/use-host-activity-logger'
 
-const basicSchema: FormSchema = {
+/**
+ * Basic details, built around the zone this site would INHERIT (AGL-3252).
+ *
+ * A function rather than a constant because of one option: the time zone
+ * field's empty choice names the workspace zone it falls back to, and a
+ * schema that could not see the org could only offer "default" — which is the
+ * word a reader has to leave the page to resolve.
+ *
+ * `inheritedTimeZone` is EMPTY while the org doc is still loading, and the
+ * copy below drops the zone rather than guessing at it. The fallback answer
+ * during that window is UTC, which is a claim about the reader's workspace
+ * that nobody has checked — the AGL-1916 rule, applied to a placeholder.
+ */
+const buildBasicSchema = (inheritedTimeZone: string): FormSchema => ({
   id: 'hostDetails',
   title: 'Basic details',
   CardDisplayProps: {
     help: docsHelp('gettingStarted', {
       anchor: '#what-a-site-contains',
       excerpt:
-        'The site name shown across the console and the subdomain it is ' +
-        'served from.',
+        'The site name shown across the console, the subdomain it is served ' +
+        'from, and the zone its published dates read in.',
     }),
   },
   fields: [
@@ -139,8 +153,43 @@ const basicSchema: FormSchema = {
         },
       ],
     },
+    {
+      /*
+        THE SITE'S ZONE (AGL-3252), overriding the workspace's.
+
+        `isSearchable` because the list is every IANA name the runtime knows —
+        four hundred or so — and a reader looking for Chicago should be able
+        to type it rather than scroll to it.
+
+        `clearable` is the way BACK to the workspace's zone, and it is the
+        mapper's corner ✕ rather than an option in the list: an option whose
+        value is `''` renders with an EMPTY label in the closed box
+        (`getOptionLabel` returns '' for it), so the control would say nothing
+        at all in exactly the state that needs explaining. The placeholder
+        carries the inherited zone instead, where it is legible whether or not
+        the list is open.
+      */
+      component: FieldComponentType.SELECT,
+      name: 'timeZone',
+      label: 'Time zone',
+      isSearchable: true,
+      clearable: true,
+      placeholder: inheritedTimeZone
+        ? `Same as the workspace — ${inheritedTimeZone}`
+        : 'Same as the workspace',
+      helperText:
+        'The day a published post is dated on this site. Leave it unset and ' +
+        (inheritedTimeZone
+          ? `the workspace decides, which today means ${inheritedTimeZone}.`
+          : 'the workspace decides.'),
+      options: Aglyn.supportedTimeZones().map((zone) => ({
+        value: zone,
+        label: zone.replace(/_/g, ' '),
+      })),
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
   ],
-}
+})
 
 /**
  * Tracking (AGL-2486) — its own tab, and not part of SEO.
@@ -199,6 +248,20 @@ const CLEARABLE_TRACKING_PATHS = [
  * their empty case never reaches a save and they stay out of this list.
  */
 const CLEARABLE_SEO_PATHS = ['seo.titlePattern'] as const
+
+/**
+ * The Basic details fields that must be able to go back to EMPTY (AGL-3252).
+ *
+ * `timeZone` is the only one, and empty is not "nothing" there — it is "same
+ * as the workspace", the state a site is in until somebody overrides it. The
+ * renderer drops a cleared field from its submitted values, so without this a
+ * site could take a zone and never give it back: the ✕ would clear the box,
+ * the save would report "Saved!", and the override would still be stored.
+ *
+ * `displayName` and `subdomain` are both REQUIRED and never reach a save
+ * empty, so they stay out of this list.
+ */
+const CLEARABLE_HOST_PATHS = ['timeZone'] as const
 
 const trackingSchema: FormSchema = {
   id: 'hostTracking',
@@ -1485,6 +1548,30 @@ export function HostSettingsScopeProvider({
     if (saved) delete draftsRef.current[schemaId]
   }
 
+  /**
+   * The zone this site READS as, before it names one of its own (AGL-3252).
+   *
+   * The workspace's, or UTC where the workspace has not said either — which
+   * is the same question `resolveSiteTimeZone` answers for the published
+   * site, asked here with the host deliberately left out, so the answer is
+   * what this site would fall back TO rather than what it currently does.
+   *
+   * GATED ON `ready`, and this is a claim rather than an action: the org doc
+   * is undefined during the loading window, `resolveSiteTimeZone` answers UTC
+   * for an absent one, and a placeholder reading "Same as the workspace —
+   * UTC" would tell a Chicago workspace something false about itself for as
+   * long as the read takes. Empty until the answer is trustworthy; the schema
+   * drops the zone from its copy rather than guessing (AGL-1916, AGL-1380).
+   */
+  const { org, ready: orgReady } = useCurrentOrg()
+  const inheritedTimeZone = orgReady
+    ? Aglyn.resolveSiteTimeZone(org as never)
+    : ''
+  const basicSchema = useMemo(
+    () => buildBasicSchema(inheritedTimeZone),
+    [inheritedTimeZone],
+  )
+
   const forms = [
     {
       schema: basicSchema,
@@ -1492,7 +1579,8 @@ export function HostSettingsScopeProvider({
       // Wrapped, never passed by reference: the renderer calls
       // `onSubmit(values, formApi, callback)`, and a bare handler would take
       // the form API as its `clearable` argument.
-      onSubmit: (fields: any) => saveAndClearDraft(basicSchema.id, fields),
+      onSubmit: (fields: any) =>
+        saveAndClearDraft(basicSchema.id, fields, CLEARABLE_HOST_PATHS),
     },
     {
       schema: seoSchema,
