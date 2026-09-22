@@ -323,9 +323,17 @@ const HostPluginPage: NextPageWithLayout<Record<string, never>> = () => {
   // for the upgrade notice below. Held until the org has settled
   // (AGL-2851): a landing is a claim about the plan, and an unsettled org
   // locks nothing.
+  // And only a BARE hub URL lands there (AGL-3264): a surface that owns its
+  // subtree resolves an entity id as `segments` with no section, which is the
+  // same shape, so the count is what tells a listing apart from the hub's own
+  // address — as `legacyRedirect` above already does.
   const sectionRedirect =
     legacyRedirect ??
-    (resolved && !resolved.section && resolvedSections?.length && orgReady
+    (resolved &&
+    !resolved.section &&
+    !resolved.segments?.length &&
+    resolvedSections?.length &&
+    orgReady
       ? resolvedSections.find((section) => section.visible && !section.locked)
           ?.href
       : undefined)
