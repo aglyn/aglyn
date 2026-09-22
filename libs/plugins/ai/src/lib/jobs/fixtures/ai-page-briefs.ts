@@ -154,6 +154,51 @@ function cards(prefix: string, input: { name: string; heading: string; intro?: s
   })
 }
 
+/**
+ * The same cards written once (AGL-3024): ONE Grid item holding ONE instance,
+ * `{{n}}` through the values that instance fills, and its copies' values
+ * listed — the shape a workspace that KEEPS reusable components answers a
+ * repeating section in, beside `cards`, which writes every copy out.
+ *
+ * The two draw to the same page. What differs is what the answer spends: a
+ * cell and an instance are written once rather than once a card, which is the
+ * difference between a six-card section that fits a pass's ceiling and one cut
+ * off twice — the live failure of 2026-09-21, where a job ended with no page.
+ */
+function cardsOnce(prefix: string, input: { name: string; heading: string; intro?: string; componentId: string; items: Array<Record<string, string>> }): Built {
+  return section(prefix, input.name, [input.componentId], input.items.length, (add) => {
+    const keys = Object.keys(input.items[0] ?? {})
+    const propValues = Object.fromEntries(keys.map((key, at) => [key, `{{${at + 1}}}`]))
+    const copies = input.items.map((item) => keys.map((key) => item[key]))
+    const instance = add({ componentId: 'reusableInstance', props: { refId: input.componentId, propValues } })
+    const children = [add(typography('h2', input.heading, 'h2'))]
+    if (input.intro) children.push(add(typography('body1', input.intro)))
+    children.push(row(add, [cell(add, input.items.length, instance, copies)]))
+    return framed(add, children, 'lg', 8)
+  })
+}
+
+/**
+ * One section of cards on a workspace that keeps reusable components, written
+ * once and written out, for the check to draw one into the other (AGL-3024).
+ */
+export const AI_INSTANCE_CARDS_FIXTURE = (() => {
+  const input = {
+    name: 'what the inspection covers',
+    heading: 'What the inspection covers',
+    componentId: 'cmp-service-card',
+    items: [
+      { title: 'Shingles and flashing', summary: 'Lifted, cracked or missing shingles, and the seals around chimneys and vents.' },
+      { title: 'Gutters and drainage', summary: 'Clogs, sagging runs and downspouts that send water toward the foundation.' },
+      { title: 'Attic and ventilation', summary: 'Signs of leaks, damp insulation and blocked soffit vents.' },
+      { title: 'Chimneys and skylights', summary: 'Cracked crowns, worn flashing and the seals around every roof opening.' },
+      { title: 'Valleys and eaves', summary: 'Where two roof planes meet, and the ice-damming the eaves take each winter.' },
+      { title: 'Soffits and fascia', summary: 'Rot, pest damage and the vents that keep an attic breathing.' },
+    ],
+  }
+  return { once: cardsOnce('r', input), full: cards('r', input), items: input.items }
+})()
+
 /** A short list: fewer rows than the plan rules count as repeated items. */
 function list(prefix: string, input: { name: string; heading: string; items: Array<{ primary: string; secondary?: string }> }): Built {
   return section(prefix, input.name, [], input.items.length, (add) => {

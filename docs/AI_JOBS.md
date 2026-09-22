@@ -1606,16 +1606,16 @@ Assist panel.
   above it, never their content, and the most elements the section may carry
   (`aiJobPageSectionMaxElements`, [in real tokens](#the-time-budget)). A section
   whose plan line shows items is also told how to repeat one within that budget,
-  and only then: written once where the workspace keeps no reusable components
-  (AGL-3053), and placed as one repeated instance of the component the section
-  places where it keeps them (AGL-3143). Before that second line existed, a paid
-  section was told how many elements to keep under but never how to get there,
-  and a six-card grid measured live on 2026-09-21 was drawn inline, cut off, and
-  cut off again on the re-ask, ending the job with no page. A section with
-  nothing to repeat, or nothing to repeat it from, is told neither. A section
-  cut off at its ceiling is re-asked for a smaller one — fewer elements, shorter
-  copy, a repeated item placed as an instance, or written once where the
-  workspace keeps no reusable components — and one cut off twice stops as
+  and only then: the item written once, around its own subtree where the
+  workspace keeps no reusable components (AGL-3053) and around ONE instance of
+  the component the section places where it keeps them (AGL-3143, AGL-3024).
+  Before that second line existed, a paid section was told how many elements to
+  keep under but never how to get there, and a six-card grid measured live on
+  2026-09-21 was drawn inline, cut off, and cut off again on the re-ask, ending
+  the job with no page. A section with nothing to repeat, or nothing to repeat
+  it from, is told neither. A section cut off at its ceiling is re-asked for a
+  smaller one — fewer elements, shorter copy, and the item written once in
+  whichever of the two shapes its workspace answers in — and one cut off twice stops as
   too large to build in one pass
   ([An answer cut off at its ceiling](#an-answer-cut-off-at-its-ceiling)). The
   check draws a repeated item written once into its copies
@@ -1631,11 +1631,12 @@ Assist panel.
   component's rows are laid out as a Grid container of sized Grid items, each full width
   on a phone and stepping up; [A Grid of columns](#a-grid-of-columns) has the rule and
   its refusals.
-- **A repeated item written once (AGL-3053).** On a workspace that keeps no reusable
-  components a repeated item is drawn where it repeats, and written out card by card
-  every copy repeats its whole subtree inside the escaped JSON of the tool call: a
+- **A repeated item written once (AGL-3053, AGL-3024).** Written out copy by copy,
+  every copy repeats its whole structure inside the escaped JSON of the tool call: a
   live Free About page's four practice areas were cut off at the 1,050-token ceiling
-  on their answer and on their re-ask. So there the answer writes the item once.
+  on their answer and on their re-ask, and so was a paid six-card grid whose copies
+  were six instance nodes. So the answer writes the item once on EITHER workspace —
+  the subtree where it keeps no reusable components, one instance where it keeps them.
   [A repeated item written once](#a-repeated-item-written-once) has the shape, the
   refusals and what it saves.
 - **The last pass.** The whole page against the doctrine (a `doctrine` review,
@@ -1702,14 +1703,34 @@ wall and does not move, so the answer writes the item once (AGL-3053):
   `{{prop.name}}`, `{{entry.field}}` and `{{fn:…}}` carry a dot or a colon
   (`binding-tokens.ts`), so copy that binds a variable keeps its token and nothing a
   placeholder leaves behind can bind.
-- **Asked only where it applies.** Every request on such a workspace carries
-  `AI_PAGE_SECTION_INLINE_LINE` ("write a repeated item once"), and a section whose
-  plan line shows items also carries `AI_PAGE_SECTION_REPEAT_LINE`, which spells the
-  shape with an example. The page instructions every workspace caches say only that a
-  repeated item is written once, so a workspace that places components is never shown
-  how, and a section with nothing to repeat pays nothing for it. A section cut off at
-  its ceiling there is re-asked with the shape spelled out (`aiPageSectionSmaller`),
-  since its first request may not have carried it.
+- **The same shape around an instance, where the workspace keeps components
+  (AGL-3024).** One `reusableInstance` inside the repeated item, `{{n}}` through the
+  values it fills, and one list of values a copy:
+
+  ```json
+  "cell":     { "componentId": "muiGrid", "props": { "size": "xs:12 sm:6 md:4" }, "nodes": ["card"],
+                "repeat": [["Estate planning", "/estate"], ["Real estate", "/real-estate"]] },
+  "card":     { "componentId": "reusableInstance",
+                "props": { "refId": "cmp-service-card", "propValues": { "title": "{{1}}", "href": "{{2}}" } } }
+  ```
+
+  Six cards written as six instance nodes spend their structure six times and run past
+  the same 1,050-token ceiling; written once they spend it once. Measured live on
+  2026-09-21: a four-card grid fitted, a six-card grid was cut off, its re-ask was cut
+  off too, and `AI_GENERATION_MAX_ATTEMPTS` ended the job with no page. The item still
+  **places** the component, so rule 1 is untouched, and the section stays ONE section
+  with one `h2` — splitting it into several would give the page a second heading for
+  one idea and an outline that says something the member did not ask for.
+- **Asked only where it applies.** Every request on a workspace that keeps no reusable
+  components carries `AI_PAGE_SECTION_INLINE_LINE` ("write a repeated item once"), and
+  a section whose plan line shows items also carries `AI_PAGE_SECTION_REPEAT_LINE`,
+  which spells the shape with an example. A section on a workspace that keeps
+  components carries `AI_PAGE_SECTION_INSTANCE_LINE` instead, and only where its plan
+  line shows items AND names a record to place — nothing to repeat, or nothing to
+  repeat it from, and the line is not sent. The page instructions every workspace
+  caches say only that a repeated item is written once, so neither shape is paid for
+  twice. A section cut off at its ceiling is re-asked with its own shape spelled out
+  (`aiPageSectionSmaller`), since its first request may not have carried it.
 - **Drawn before any check.** `expandAiRepeatedItems`
   (`src/lib/runtime/ai-repeated-items.ts`) clones the item once a copy, in order, in
   its place under its parent: the first copy keeps the ids the model wrote, and copy
@@ -1720,7 +1741,9 @@ wall and does not move, so the answer writes the item once (AGL-3053):
   `repeat` or a placeholder. A finding on the copies names the node the model wrote,
   once.
 - **Refused, with a re-ask that names the model's nodes.** On a workspace that keeps
-  reusable components, `repeat-not-inline` (rule 1: place the component as instances).
+  reusable components, a repeated item that places NO instance is `repeat-not-inline`
+  (rule 1: place the component as instances) — it is drawing by hand a component the
+  site has, which is the one shape that rule still refuses there.
   Everywhere else, as an answer that could not be used: `repeat-on-section` (on the
   document wrapper or the Section), `repeat-nested`, `repeat-shape` (not one list of
   values a copy), `repeat-count` (under 2 copies, or over `AI_REPEAT_MAX_COPIES`, 7,

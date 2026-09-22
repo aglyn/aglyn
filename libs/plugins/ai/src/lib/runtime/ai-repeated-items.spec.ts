@@ -155,15 +155,47 @@ describe('drawing a repeated item written once', () => {
     expect(items).toBe(2)
     expect(tree.nodes['grid'].nodes).toEqual(['card', 'card~2', 'step', 'step~2', 'step~3'])
   })
+
+  it('draws one that places an instance where the workspace keeps reusable components (AGL-3024)', () => {
+    // Six cards as six instance nodes spend their structure six times and run
+    // past a section's ceiling; written once they spend it once, and the
+    // section stays one section.
+    const copies = [['Estate planning', '/estate'], ['Real estate', '/real-estate'], ['Probate', '/probate']]
+    const answer = section(copies, {
+      card: {
+        componentId: 'muiGrid',
+        props: { size: 'xs:12 md:4' },
+        nodes: ['instance'],
+        [AI_REPEAT_KEY]: copies,
+      },
+      instance: {
+        componentId: 'reusableInstance',
+        parentId: 'card',
+        props: { refId: 'cmp_practice_card', propValues: { title: '{{1}}', href: '{{2}}' } },
+      },
+    })
+    delete answer.nodes['body']
+    delete answer.nodes['title']
+    delete answer.nodes['text']
+    const result = expandAiRepeatedItems(answer, { inline: false, noun: 'section' })
+    if (result.ok === false) throw new Error(JSON.stringify(result.violations))
+    const tree = result.tree as { nodes: Record<string, Node> }
+    expect(result.items).toBe(1)
+    expect(tree.nodes['grid'].nodes).toEqual(['intro', 'card', 'card~2', 'card~3', 'outro'])
+    expect(tree.nodes['instance'].props?.['propValues']).toEqual({ title: 'Estate planning', href: '/estate' })
+    expect(tree.nodes['instance~3'].props?.['propValues']).toEqual({ title: 'Probate', href: '/probate' })
+    // Every copy leads back to the one node the model wrote.
+    expect(result.sourceIds['instance~3']).toBe('instance')
+  })
 })
 
 describe('refusing a repeated item written once', () => {
-  it('refuses one where the workspace keeps reusable components: place its component as instances (rule 1)', () => {
+  it('refuses one that places no instance where the workspace keeps reusable components (rule 1)', () => {
     expect(refused(section([['A', 'a'], ['B', 'b']]), { inline: false, noun: 'section' })).toEqual([
       {
         rule: 1,
         code: 'repeat-not-inline',
-        detail: 'Remove "repeat", and place each copy as an instance of a component the site has (componentId "reusableInstance").',
+        detail: 'Put one instance of a component the site has (componentId "reusableInstance") inside the repeated item, or remove "repeat" and place each copy as an instance.',
         nodeIds: ['card'],
       },
     ])
