@@ -175,6 +175,12 @@ export async function composeCollectionTemplatePage(options: {
     options.host?.seo?.image,
   ])
   const nodes = await composeScreenNodes({
+    // The site's zone (AGL-3237). This is the TEMPLATE path, which
+    // composes through `composeScreenNodes` rather than
+    // `composeNodesWithChrome` — and that difference is why the first two
+    // passes at this fix reached every page except the one the bug was
+    // reported on.
+    ...(options.timeZone ? { timeZone: options.timeZone } : {}),
     hostId,
     screenId,
     screen: templateRes.screen,

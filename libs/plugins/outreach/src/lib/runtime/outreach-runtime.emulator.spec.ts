@@ -54,6 +54,7 @@ import type { OutreachRuntimeDeps } from './runtime-deps'
 import { runOutreachSendJob } from './send-job'
 import { runOutreachSyncJob } from './sync-job'
 import { createOutreachPersonEraser } from './person-erasure'
+import { outreachClickUrl } from './click-link'
 import { mintOutreachUnsubscribeToken, outreachUnsubscribeUrl } from './unsubscribe-link'
 import { createOutreachUnsubscribeRoute } from './unsubscribe-route'
 
@@ -126,6 +127,8 @@ function deps(overrides: Partial<OutreachRuntimeDeps> = {}): OutreachRuntimeDeps
     },
     unsubscribeUrl: (target) =>
       outreachUnsubscribeUrl({ origin: 'https://console.example.com', target, secret: SECRET }),
+    clickUrl: (target) =>
+      outreachClickUrl({ origin: 'https://console.example.com', target, secret: SECRET }),
     ...overrides,
   }
 }
@@ -188,7 +191,7 @@ const SEQUENCE: OutreachSequence = {
       templateId: null,
     },
   ],
-  settings: { window: null, allowedCountries: ['US'], allowCustomers: false },
+  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false },
   status: 'active',
   createdAtMs: 1,
   updatedAtMs: 1,
@@ -280,6 +283,10 @@ async function mailbox(): Promise<OutreachMailbox> {
   return (await org().collection('outreachMailboxes').doc('gm_rep').get()).data() as OutreachMailbox
 }
 
+async function sequence(): Promise<OutreachSequence> {
+  return (await org().collection('outreachSequences').doc(SEQUENCE.id).get()).data() as OutreachSequence
+}
+
 const tick = (overrides: Partial<OutreachRuntimeDeps> = {}) =>
   runOutreachSendJob(deps(overrides), { nowMs: clock, deadlineMs: clock + 60_000 })
 const sync = () => runOutreachSyncJob(deps(), { nowMs: clock, deadlineMs: clock + 60_000 })
@@ -355,6 +362,57 @@ describeEmulated('the send job (AGL-2981)', () => {
       link: { contactId: 'contact-1' },
       email: { direction: 'outbound', messageId: headers['Message-ID'], to: 'person1@example.org' },
     })
+  })
+
+  it('counts the send on the sequence, and counts a person once however many steps they take (AGL-3239)', async () => {
+    await seedOrg()
+    const one = await enroll(1)
+
+    await tick()
+    expect((await sequence()).stats).toEqual({ sent: 1, people: 1 })
+
+    // A second EMAIL to the same person — step 1 is the sequence's task, so
+    // the enrollment is moved past it. A week on, so the clock lands on a
+    // Tuesday and the mailbox's window is open.
+    clock += 7 * 86_400_000
+    await org()
+      .collection('outreachEnrollments')
+      .doc(one.id)
+      .update({ stepIndex: 2, nextDueAtMs: clock - 60_000 })
+    await tick()
+    const stats = (await sequence()).stats
+    expect(stats).toMatchObject({ sent: 2, people: 1 })
+    // Never stamped by a send that carried no link — the report must read
+    // "not measured" for it rather than publish a 0% click rate.
+    expect(stats).not.toHaveProperty('clickTracked')
+  })
+
+  it('rewrites a tracked step’s links, keeps the footer, and records what it sent (AGL-3239)', async () => {
+    await seedOrg()
+    await org()
+      .collection('outreachSequences')
+      .doc(SEQUENCE.id)
+      .update({
+        'settings.trackClicks': true,
+        steps: [
+          { ...SEQUENCE.steps[0], body: 'Worth a look: https://aglyn.com/pricing\n\n— Rep' },
+          ...SEQUENCE.steps.slice(1),
+        ],
+      })
+    const one = await enroll(1)
+
+    await tick()
+
+    const body = gmail.sent[0].body.replace(/=\r\n/g, '')
+    expect(body).toContain('https://console.example.com/api/outreach/click?t=')
+    expect(body).not.toContain('https://aglyn.com/pricing')
+    // The organization's identification and the way out are appended after
+    // the rewrite, so no tracking link can reach them.
+    expect(body).toContain('This is a sales email from Example Co.')
+
+    const after = await enrollment(one.id)
+    expect(after.stepRecords?.[0].links).toEqual(['https://aglyn.com/pricing'])
+    expect((await sequence()).stats).toMatchObject({ sent: 1, people: 1, clickTracked: true })
   })
 
   it('sends nothing outside the sending window', async () => {

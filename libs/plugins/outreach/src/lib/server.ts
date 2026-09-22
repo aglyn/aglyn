@@ -88,6 +88,17 @@ export function registerOutreachConsoleApi(): void {
     },
     { recipientLink: true },
   )
+  // A link in a tracked sequence email (AGL-3239): a recipient link for the
+  // same reason, and more pressingly — a link already sitting in somebody's
+  // inbox has to keep forwarding them whether or not the rollout is paused.
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.click,
+    {
+      web: async (request, context) =>
+        (await import('./runtime/platform-runtime-deps')).platformOutreachClickRoute()(request, context),
+    },
+    { recipientLink: true },
+  )
 }
 
 // The transport the sending runtime reaches a connected mailbox through

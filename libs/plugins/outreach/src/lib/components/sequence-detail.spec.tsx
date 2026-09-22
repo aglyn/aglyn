@@ -57,6 +57,8 @@ jest.mock('./use-outreach-data', () => ({
     hasMore: false,
     showMore: jest.fn(),
   }),
+  // The report card's own read (AGL-3239); the card has a spec of its own.
+  useOutreachSequenceLinks: () => ({ status: 'ready', data: null }),
 }))
 jest.mock('./sequence-editor', () => ({
   OutreachSequenceEditor: () => (

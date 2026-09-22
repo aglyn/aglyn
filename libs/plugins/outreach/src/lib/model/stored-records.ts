@@ -34,6 +34,7 @@ import {
   type OutreachEnrollmentTarget,
   type OutreachMailbox,
   type OutreachSequence,
+  type OutreachSequenceStats,
   type OutreachSequenceStatus,
   type OutreachStopReason,
 } from './outreach.types'
@@ -55,15 +56,47 @@ export function readStoredOutreachSequence(
   if (!data) return null
   const draft = readOutreachSequenceDraft(data)
   const status = data['status']
+  const stats = readOutreachSequenceStats(data['stats'])
   return {
     id,
     ...draft,
     status: (OUTREACH_SEQUENCE_STATUSES as readonly unknown[]).includes(status)
       ? (status as OutreachSequenceStatus)
       : 'draft',
+    // Absent rather than an empty object for a sequence that has none
+    // (AGL-3239): the report reads an absent counter as "not recorded" and
+    // a present one as a number, and `{}` would be neither.
+    ...(stats ? { stats } : {}),
     createdAtMs: ms(data['createdAtMs']) ?? 0,
     updatedAtMs: ms(data['updatedAtMs']) ?? 0,
   }
+}
+
+/**
+ * A sequence's stored counters (AGL-3239), or `null` when it has none.
+ *
+ * Every field is carried through only when it is READABLE, so an absence
+ * survives the round trip as an absence: the whole of the report's honesty
+ * is that a counter nobody wrote is not a zero, and a normalizer that
+ * defaulted these to `0` would destroy the distinction here, before any
+ * reader could make it.
+ */
+export function readOutreachSequenceStats(
+  raw: unknown,
+): OutreachSequenceStats | null {
+  if (!raw || typeof raw !== 'object') return null
+  const data = raw as Record<string, unknown>
+  const stats: OutreachSequenceStats = {}
+  for (const key of ['sent', 'people', 'clicks', 'uniqueClicks', 'machineClicks'] as const) {
+    const value = data[key]
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      stats[key] = Math.floor(value)
+    }
+  }
+  if (data['clickTracked'] === true) stats.clickTracked = true
+  const last = data['lastClickAtMs']
+  if (typeof last === 'number' && Number.isFinite(last)) stats.lastClickAtMs = last
+  return Object.keys(stats).length ? stats : null
 }
 
 /** A stored enrollment in its model shape, or `null` for no document. */

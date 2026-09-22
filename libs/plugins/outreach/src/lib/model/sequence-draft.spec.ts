@@ -77,6 +77,7 @@ describe('readOutreachSequenceDraft (AGL-2980)', () => {
         window: { days: [1, 2], startMinute: 540, endMinute: 1020 },
         allowedCountries: ['US'],
         allowCustomers: false,
+        trackClicks: false,
       },
     })
     // What the reader could not make sense of is left for the validator to name.
@@ -100,7 +101,15 @@ describe('new steps and sequences (AGL-2980)', () => {
         templateId: null,
       },
     ])
-    expect(draft.settings).toEqual({ window: null, allowedCountries: ['US'], allowCustomers: false })
+    expect(draft.settings).toEqual({
+      window: null,
+      allowedCountries: ['US'],
+      allowCustomers: false,
+      // A NEW sequence tracks nothing either (AGL-3239): a tracked link is
+      // visible in the body a cold recipient reads, so it is turned on
+      // deliberately or not at all.
+      trackClicks: false,
+    })
   })
 
   it('makes a later email a follow-up in the thread, and titles a task for its kind', () => {

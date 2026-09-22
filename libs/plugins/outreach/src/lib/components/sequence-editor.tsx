@@ -474,6 +474,40 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
                 }
                 label="Include customers"
               />
+              {/*
+                * Click tracking (AGL-3239), with its cost stated where it is
+                * chosen rather than in a document nobody opens. Off by
+                * default: it changes the link a cold recipient sees, and the
+                * emails stay plain text either way — there is no open
+                * tracking to turn on, because a tracking image needs an HTML
+                * email and these are not.
+                */}
+              <Stack spacing={0}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={draft.settings.trackClicks}
+                      onChange={(event) =>
+                        update({
+                          settings: {
+                            ...draft.settings,
+                            trackClicks: event.target.checked,
+                          },
+                        })
+                      }
+                      disabled={archived}
+                    />
+                  }
+                  label="Count link clicks"
+                />
+                <Typography variant="caption" color="text.secondary">
+                  Links in these emails are replaced with links of ours that
+                  forward to the same page, so clicks can be counted. The
+                  recipient sees the replacement, not your address. Opens
+                  aren’t counted either way: these emails are plain text, and
+                  counting an open needs a tracking image.
+                </Typography>
+              </Stack>
               <OutreachSendWindowFields
                 window={draft.settings.window}
                 onChange={(window) =>

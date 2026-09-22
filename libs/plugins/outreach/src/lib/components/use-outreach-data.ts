@@ -16,6 +16,7 @@
  */
 'use client'
 
+import type { CampaignLinkRollup } from '@aglyn/shared-ui-email-campaigns/model'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   collection,
@@ -31,6 +32,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import {
   OUTREACH_COLLECTIONS,
+  OUTREACH_LINK_ROLLUP_PATH,
   type OutreachEnrollment,
   type OutreachEnrollmentStatus,
   type OutreachSequence,
@@ -130,6 +132,49 @@ export function useOutreachSequence(
           ),
         }),
       (error) => setResult(failed(null, error, 'the sequence')),
+    )
+  }, [firestore, orgId, sequenceId])
+  return result
+}
+
+/**
+ * A sequence's per-destination click rollup (AGL-3239), or `null` until a
+ * click has been counted.
+ *
+ * One document, whatever the sequence's size: the aggregate exists so the
+ * table is not a read of every enrollment. A sequence that tracks nothing
+ * never has one, and an absent document is not an error.
+ */
+export type OutreachSequenceLinksLoad = OutreachLoad<CampaignLinkRollup | null>
+
+export function useOutreachSequenceLinks(
+  orgId: string | null,
+  sequenceId: string | null,
+): OutreachSequenceLinksLoad {
+  const firestore = useFirestore()
+  const [result, setResult] = useState<OutreachSequenceLinksLoad>({
+    status: 'loading',
+    data: null,
+  })
+  useEffect(() => {
+    setResult({ status: 'loading', data: null })
+    if (!orgId || !sequenceId) return undefined
+    return onSnapshot(
+      doc(
+        firestore,
+        'orgs',
+        orgId,
+        OUTREACH_COLLECTIONS.sequences,
+        sequenceId,
+        OUTREACH_LINK_ROLLUP_PATH[0],
+        OUTREACH_LINK_ROLLUP_PATH[1],
+      ),
+      (snapshot) =>
+        setResult({
+          status: 'ready',
+          data: snapshot.exists() ? (snapshot.data() as CampaignLinkRollup) : null,
+        }),
+      (error) => setResult(failed(null, error, 'the link report')),
     )
   }, [firestore, orgId, sequenceId])
   return result

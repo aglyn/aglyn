@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 3230,
-  "verifiedAt": "2026-09-21",
-  "verifiedBy": "Read from Linear on 2026-09-21: the AGL issues newest-first with archived included, whose first row is AGL-3230 ('Notification settings is a section of Notifications, not a third tab in the app bar'). Supersedes the 3213 read earlier the same day; peer sessions take numbers in between \u2014 3228 and 3229 were taken by other sessions while this one was working \u2014 so this is a floor that only ever rises. Never what a failing check reported.",
+  "highest": 3239,
+  "verifiedAt": "2026-09-22",
+  "verifiedBy": "Read from Linear on 2026-09-22: the AGL issues newest-first with archived included. The read returned AGL-3239 first and AGL-3238 ('The multi-brand site audit\u2019s \u201cTake it with you\u201d band centers on md, like the cost sheet') second, with 3231\u20133237 between it and the 3230 verified on 2026-09-21 \u2014 peer sessions took those while this one was working. 3239 is this session\u2019s own issue, which is exactly the case the note below warns about, so it was NOT taken from the failing check: the whole list was read, and 3238 being a peer\u2019s issue above the old ceiling is what confirms the ceiling was stale rather than the citation wrong. A floor that only ever rises.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace \u2014 never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",

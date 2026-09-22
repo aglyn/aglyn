@@ -245,6 +245,9 @@ export function readOutreachSequenceSettings(
       ? countries
       : [...OUTREACH_DEFAULT_ALLOWED_COUNTRIES],
     allowCustomers: data['allowCustomers'] === true,
+    // Absent is off (AGL-3239). Every sequence written before the setting
+    // existed reads as untracked, which is what it was.
+    trackClicks: data['trackClicks'] === true,
   }
 }
 

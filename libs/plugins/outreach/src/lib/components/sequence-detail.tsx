@@ -59,10 +59,12 @@ import {
   useOutreachNavigate,
 } from './outreach-ui'
 import { OutreachSequenceEditor } from './sequence-editor'
+import { OutreachSequenceReportCard } from './sequence-report-card'
 import { OutreachRouteError, useOutreachApi } from './use-outreach-api'
 import {
   useOutreachEnrollments,
   useOutreachSequence,
+  useOutreachSequenceLinks,
 } from './use-outreach-data'
 import type { OutreachMailboxesResult } from './use-outreach-mailboxes'
 import type { OutreachSettingsLoad } from './use-outreach-settings'
@@ -159,6 +161,9 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
     props.tab === 'enrollments' ? orgId : null,
     sequenceId,
   )
+  // One document however large the sequence, and read on both tabs, because
+  // the report card sits above them (AGL-3239).
+  const links = useOutreachSequenceLinks(orgId, sequenceId)
   const [busy, setBusy] = useState(false)
   const [refusal, setRefusal] = useState<{
     message: string
@@ -387,6 +392,22 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
         </Alert>
       ) : null}
 
+      {/*
+        * Above the tabs, not inside one (AGL-3239): what a sequence is doing
+        * is the question a rep opens it with, and putting it behind a tab
+        * makes the steps the first answer to "how is this going".
+        *
+        * A draft has sent nothing and measured nothing, so it gets no card
+        * rather than a row of zeroes.
+        */}
+      {sequence.status === 'draft' ? null : (
+        <OutreachSequenceReportCard
+          sequence={sequence}
+          links={links}
+          timeZone={mailbox?.timezone ?? null}
+        />
+      )}
+
       <Tabs
         value={props.tab}
         onChange={(_event, next: OutreachSequenceTab) =>
@@ -412,6 +433,7 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
         <OutreachEnrollmentsTable
           enrollments={enrollments}
           steps={sequence.steps}
+          trackClicks={sequence.settings.trackClicks}
           timeZone={mailbox?.timezone ?? null}
           api={api}
           enrollAction={sequence.status === 'active' ? enrollButton : undefined}

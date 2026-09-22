@@ -30,6 +30,8 @@ import { openOutreachMailboxClient } from '../mailboxes/mailbox-transport'
 import { canonicalConsoleOrigin } from '../mailboxes/oauth-redirect'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import type { PluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { outreachClickUrl } from './click-link'
+import { createOutreachClickRoute } from './click-route'
 import { createOutreachPersonEraser } from './person-erasure'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 import { outreachUnsubscribeUrl } from './unsubscribe-link'
@@ -66,12 +68,18 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
       await suppressEmail({ email, reason: 'bounce', context: 'outreach', hostId, firestore: firestore() })
     },
     unsubscribeUrl: (target) => outreachUnsubscribeUrl({ origin: canonicalConsoleOrigin(), target }),
+    clickUrl: (target) => outreachClickUrl({ origin: canonicalConsoleOrigin(), target }),
   }
 }
 
 /** The unsubscribe route on the platform's own reach. */
 export function platformOutreachUnsubscribeRoute(): PluginWebApiHandler {
   return createOutreachUnsubscribeRoute(platformOutreachRuntimeDeps())
+}
+
+/** The click-tracking redirect on the platform's own reach (AGL-3239). */
+export function platformOutreachClickRoute(): PluginWebApiHandler {
+  return createOutreachClickRoute(platformOutreachRuntimeDeps())
 }
 
 /** The person eraser on the platform's own Firestore. */
