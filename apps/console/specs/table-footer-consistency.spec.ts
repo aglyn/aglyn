@@ -1412,6 +1412,16 @@ const NOT_A_LIST: Array<[string, string]> = [
       'not by anything a site accumulates, and the recent proposals above ' +
       'it are the last `RECENT_PROPOSALS_SHOWN` (3).',
   ],
+  [
+    'libs/plugins/outreach/src/lib/components/sequence-report-card.tsx',
+    'The LINK ROLLUP for one sequence (AGL-3239): a row per destination '
+      + 'followed, capped server-side at `CAMPAIGN_LINK_ROLLUP_MAX` before it '
+      + 'ever reaches the card. It is a top-N report rather than a list '
+      + 'anybody pages through, and it does not hide what it left out — the '
+      + 'caption under it counts the clicks that went to destinations past '
+      + 'the ones listed, which is the thing a footer would otherwise be '
+      + 'there to admit.',
+  ],
 ]
 
 /**
@@ -1771,7 +1781,14 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // scope being overridden. The rows are a closed union, so a seventh can
     // only arrive by somebody adding a category, and the second table exists
     // to be read against the first.
-    expect(NOT_A_LIST).toHaveLength(62)
+    //
+    // 63 since sequences count link clicks (AGL-3239): the destinations
+    // followed in one sequence, capped at `CAMPAIGN_LINK_ROLLUP_MAX` server
+    // side before the card ever sees them. A top-N report rather than a list
+    // anybody pages through — and it already admits what it left out, in a
+    // caption counting the clicks that went to destinations past the ones
+    // listed, which is the disclosure a footer would otherwise be making.
+    expect(NOT_A_LIST).toHaveLength(63)
   })
 })
 
