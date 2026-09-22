@@ -45,6 +45,8 @@
 
 import process from 'node:process'
 
+import { fetchProjectDomains } from './lib/upload-cors-drift.mjs'
+
 const COMMIT = process.argv.includes('--commit')
 const WORKSPACE_DOMAIN = process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 const TOKEN = process.env.VERCEL_TOKEN
@@ -89,37 +91,41 @@ async function vercel(path, init) {
  *     Pro         unlimited (soft 100,000)
  *     Enterprise  unlimited (soft 1,000,000)
  *
- * The aglyn team is on **Hobby**, so the real number is 50 — which is close
- * enough to matter, not the comfortable distance it looks from 12.
+ * The aglyn team is on **Pro** — `/v2/teams` reports `plan=pro` — so the
+ * number to watch is the soft 100,000, not 50. This said Hobby, and went on
+ * printing `100/50` with a 70% warning long after the project passed it, at
+ * which point the warning said only that the threshold was wrong (AGL-3236).
  *
- * Why report it here rather than leave it to be discovered: the attach is
+ * Why report it at all rather than leave it to be discovered: the attach is
  * deliberately best-effort. Past the ceiling an org still gets a working
  * workspace on its path route, with a subdomain that silently never resolves
  * — the exact failure AGL-1136 existed to fix, arriving as a wall instead of
  * a missing integration. A number printed every run is what turns that into a
  * thing someone sees coming.
+ *
+ * ⚑ A plan is a thing that changes, and nothing here can read it. Downgrading
+ * to Hobby puts the ceiling back at 50, which the project is already past.
  */
-const DOMAIN_LIMIT_HOBBY = 50
+const DOMAIN_LIMIT_PRO = 100_000
 const WARN_AT_FRACTION = 0.7
 
 function reportHeadroom(count) {
-  const remaining = DOMAIN_LIMIT_HOBBY - count
+  const remaining = DOMAIN_LIMIT_PRO - count
   console.log(
-    `domain headroom    : ${count}/${DOMAIN_LIMIT_HOBBY} on the Hobby plan ` +
+    `domain headroom    : ${count}/${DOMAIN_LIMIT_PRO} on the Pro plan ` +
       `(${remaining} left; grows by orgs AND renames)`,
   )
-  if (count >= DOMAIN_LIMIT_HOBBY * WARN_AT_FRACTION) {
+  if (count >= DOMAIN_LIMIT_PRO * WARN_AT_FRACTION) {
     console.log(
-      `\n  WARNING: past ${Math.round(WARN_AT_FRACTION * 100)}% of the Hobby ` +
+      `\n  WARNING: past ${Math.round(WARN_AT_FRACTION * 100)}% of the Pro ` +
         `domain limit.\n` +
         `  At the ceiling, new orgs get a working workspace with a subdomain ` +
         `that never resolves,\n` +
-        `  and the attach fails quietly. Upgrading to Pro removes the limit ` +
-        `entirely; the alternative\n` +
-        `  is a wildcard on a DEDICATED project (see AGL-1146 — not the console ` +
-        `project, because\n` +
-        `  AGL-1135 removed *.aglyn.com from it so unregistered hostnames stop ` +
-        `serving a sign-in page).`,
+        `  and the attach fails quietly. The fix at this size is a wildcard on ` +
+        `a DEDICATED project\n` +
+        `  (see AGL-1146 — not the console project, because AGL-1135 removed ` +
+        `*.aglyn.com from it\n` +
+        `  so unregistered hostnames stop serving a sign-in page).`,
     )
   }
 }
@@ -143,17 +149,30 @@ async function main() {
     movedTo: doc.get('movedTo') ?? null,
   }))
 
-  const domainsResponse = await vercel(
-    `/v9/projects/${PROJECT}/domains${teamQuery}${teamQuery ? '&' : '?'}limit=200`,
-  )
-  if (!domainsResponse.ok) {
-    console.error('Could not list project domains:', domainsResponse.payload)
+  /*
+   * PAGE UNTIL THE END, via the repo's own reader (AGL-3236).
+   *
+   * This asked for `limit=200`. Vercel caps a page at 100 and hands the rest
+   * back through `pagination.next`, so once the project crossed 100 domains
+   * this read 100 of 159 — and a truncated read is indistinguishable from a
+   * complete one. It reported 10 already-attached domains as missing, and 96
+   * orphans where there were 132. `fetchProjectDomains` already pages, and
+   * already carries the comment explaining what it cost the CORS check to
+   * learn the same lesson.
+   */
+  let attachedDomains
+  try {
+    attachedDomains = await fetchProjectDomains({
+      token: TOKEN,
+      project: PROJECT,
+      teamId: TEAM,
+    })
+  } catch (error) {
+    console.error('Could not list project domains:', String(error))
     process.exit(1)
   }
   const attached = new Set(
-    (domainsResponse.payload?.domains ?? []).map((entry) =>
-      String(entry.name).toLowerCase(),
-    ),
+    attachedDomains.map((entry) => String(entry.name).toLowerCase()),
   )
 
   const expected = slugs.map(({ slug, movedTo }) => ({
