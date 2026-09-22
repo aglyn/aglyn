@@ -1,6 +1,7 @@
 {
   "libs/plugins/crm/src/lib/model/crm-company-import.ts": 1,
   "libs/plugins/crm/src/lib/model/crm-import.ts": 1,
+  "libs/plugins/crm/src/lib/model/crm-lead-import.ts": 1,
   "libs/plugins/marketplace/src/lib/components/marketplace-hub.component.tsx": 2,
   "libs/plugins/marketplace/src/lib/components/plugin-review-detail.component.tsx": 1,
   "libs/plugins/marketplace/src/lib/model/plugin-review-checklist.ts": 1,
