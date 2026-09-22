@@ -223,6 +223,8 @@ export const CRM_MERGE_FIELDS: readonly CrmMergeFieldDefinition[] = [
   { key: 'lead.lastName', label: 'Last name', group: 'Lead' },
   { key: 'lead.name', label: 'Full name', group: 'Lead' },
   { key: 'lead.email', label: 'Email address', group: 'Lead' },
+  { key: 'lead.company', label: 'Company', group: 'Lead' },
+  { key: 'lead.title', label: 'Job title', group: 'Lead' },
   { key: 'deal.name', label: 'Deal name', group: 'Deal' },
   { key: 'deal.amount', label: 'Deal amount', group: 'Deal' },
   { key: 'sender.firstName', label: 'Your first name', group: 'You' },
@@ -376,6 +378,11 @@ function resolveCrmMergeField(key: string, context: CrmMergeContext): string {
           return text(lead['name'])
         case 'email':
           return normalizeContactEmail(lead['email']) ?? ''
+        // The lead's own profile (AGL-3231): the company as text, the title.
+        case 'company':
+          return text(lead['company'])
+        case 'title':
+          return text(lead['jobTitle'])
         default:
           return ''
       }

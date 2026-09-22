@@ -59,9 +59,18 @@ import type { OutreachEnrollmentStatus } from '../model/outreach.types'
 import { lookupOutreachDoNotContact } from '../storage/do-not-contact-store'
 import { outreachOrgCollection } from '../storage/outreach-records'
 
-/** One person to look up: the contact, and the address the steps go to. */
+/**
+ * One person to look up: the record they are, and the address the steps go
+ * to. `personId` keys the answer — the contact's id, or the lead's person
+ * key (AGL-3234); a lead has no contact to look up enrollments or inbound
+ * email by, so those reads go by the lead instead.
+ */
 export interface OutreachGateLookupPerson {
-  contactId: string
+  personId: string
+  /** The contact's id, or `null` for a lead. */
+  contactId: string | null
+  /** The lead's person key, or `null` for a contact. */
+  leadId: string | null
   email: string
 }
 
@@ -102,11 +111,11 @@ async function keyedLookup<T>(
   label: string,
 ): Promise<Map<string, T | null>> {
   const answers = new Map<string, T | null>()
-  const keyed: Array<{ contactId: string; key: string }> = []
+  const keyed: Array<{ personId: string; key: string }> = []
   for (const person of people) {
     const key = personKey(person.email)
-    if (key) keyed.push({ contactId: person.contactId, key })
-    else answers.set(person.contactId, null)
+    if (key) keyed.push({ personId: person.personId, key })
+    else answers.set(person.personId, null)
   }
   if (!keyed.length) return answers
   try {
@@ -114,15 +123,15 @@ async function keyedLookup<T>(
       firestore,
       keyed.map((entry) => collection(entry.key)),
     )
-    keyed.forEach((entry, index) => answers.set(entry.contactId, answer(snapshots[index])))
+    keyed.forEach((entry, index) => answers.set(entry.personId, answer(snapshots[index])))
   } catch (error) {
     console.error(`[outreach] ${label} lookup failed; reading as unchecked`, error)
-    for (const entry of keyed) answers.set(entry.contactId, null)
+    for (const entry of keyed) answers.set(entry.personId, null)
   }
   return answers
 }
 
-/** Every lookup the gates take, for each person, keyed by contact id. */
+/** Every lookup the gates take, for each person, keyed by person id. */
 export async function readOutreachGateLookups(
   firestore: Firestore,
   input: ReadOutreachGateLookupsInput,
@@ -170,7 +179,9 @@ export async function readOutreachGateLookups(
     Promise.all(
       people.map(async (person) => {
         const open = await Promise.all([
-          enrollments.where('contactId', '==', person.contactId).get(),
+          person.contactId
+            ? enrollments.where('contactId', '==', person.contactId).get()
+            : enrollments.where('leadId', '==', person.leadId ?? '').get(),
           enrollments.where('email', '==', person.email).get(),
         ])
           .then(([byContact, byEmail]) => {
@@ -188,8 +199,10 @@ export async function readOutreachGateLookups(
             console.error('[outreach] enrollment lookup failed; reading as unchecked', error)
             return null
           })
+        // An email the person wrote: filed on the contact, or on the lead
+        // while they were one (AGL-3234).
         const inbound = await activities
-          .where('contactId', '==', person.contactId)
+          .where(person.contactId ? 'contactId' : 'leadId', '==', person.contactId ?? person.leadId ?? '')
           .where('direction', '==', 'inbound')
           .limit(1)
           .get()
@@ -198,19 +211,19 @@ export async function readOutreachGateLookups(
             console.error('[outreach] inbound email lookup failed; reading as cold', error)
             return null
           })
-        return { contactId: person.contactId, open, inbound }
+        return { personId: person.personId, open, inbound }
       }),
     ),
   ])
 
-  const byPerson = new Map(perPerson.map((entry) => [entry.contactId, entry]))
+  const byPerson = new Map(perPerson.map((entry) => [entry.personId, entry]))
   const lookups = new Map<string, OutreachGateLookups>()
   for (const person of people) {
-    const own = byPerson.get(person.contactId)
-    lookups.set(person.contactId, {
-      platformSuppressed: platform.get(person.contactId) ?? null,
-      hostSuppressed: site.get(person.contactId) ?? null,
-      salesTopicState: sales.get(person.contactId) ?? null,
+    const own = byPerson.get(person.personId)
+    lookups.set(person.personId, {
+      platformSuppressed: platform.get(person.personId) ?? null,
+      hostSuppressed: site.get(person.personId) ?? null,
+      salesTopicState: sales.get(person.personId) ?? null,
       doNotContact: doNotContact.get(person.email) ?? null,
       workspaceMembers: roster,
       openEnrollments: own?.open ?? null,

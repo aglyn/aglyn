@@ -228,7 +228,9 @@ describe('enrolling', () => {
     ).toEqual({
       id: 'enrollment-1',
       sequenceId: 'sequence-1',
+      target: 'contact',
       contactId: 'contact-1',
+      leadId: null,
       contactName: 'Casey Morgan',
       email: 'casey@example.com',
       hostId: 'host-1',

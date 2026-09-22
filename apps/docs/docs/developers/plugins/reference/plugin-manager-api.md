@@ -509,7 +509,8 @@ caller asks for it:
 ```ts
 const records = pluginRecordTimelineWriter()
 await records?.writer.logActivity({
-  orgId, hostId, link: { contactId }, sourcePluginId: 'acme-mail',
+  orgId, hostId, link: { contactId }, // or { leadId } for a lead not yet converted
+  sourcePluginId: 'acme-mail',
   kind: 'email', atMs, body: excerpt, byUid: '',
   email: { direction: 'inbound', subject, from, to: null, messageId },
 })

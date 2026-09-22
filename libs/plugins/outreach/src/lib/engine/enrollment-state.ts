@@ -46,6 +46,7 @@ import {
   type OutreachAttestations,
   type OutreachEnrollment,
   type OutreachEnrollmentStatus,
+  type OutreachEnrollmentTarget,
   type OutreachMailbox,
   type OutreachSequence,
   type OutreachStopReason,
@@ -242,7 +243,12 @@ export interface OutreachEnrollmentDraft {
   id: string
   sequence: Pick<OutreachSequence, 'id' | 'hostId' | 'mailboxId' | 'steps' | 'settings'>
   mailbox: ScheduleMailbox
+  /** The record the person is (AGL-3234); a contact when absent. */
+  target?: OutreachEnrollmentTarget
+  /** The contact's id; `''` for a lead. */
   contactId: string
+  /** The lead's person key, for an enrollment made on a lead. */
+  leadId?: string | null
   /** The contact's name as the sending site knows it; `''` for none. */
   contactName?: string | null
   /** The address, as the gates normalized it. */
@@ -265,7 +271,9 @@ export function buildOutreachEnrollment(draft: OutreachEnrollmentDraft): Outreac
   return {
     id: draft.id,
     sequenceId: draft.sequence.id,
+    target: draft.target ?? 'contact',
     contactId: draft.contactId,
+    leadId: draft.leadId ?? null,
     contactName: String(draft.contactName ?? '').replace(/\s+/g, ' ').trim().slice(0, 200),
     email: String(draft.email ?? '').trim().toLowerCase(),
     hostId: draft.sequence.hostId,

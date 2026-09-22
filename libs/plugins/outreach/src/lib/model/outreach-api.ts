@@ -142,10 +142,20 @@ export interface OutreachSequenceDeleteRequest {
 /** The most people one preview or one enroll reads. */
 export const OUTREACH_ENROLL_BATCH_MAX = 50
 
-/** Where the people to enroll come from: a saved Contacts view, or contacts picked by search. */
+/**
+ * Which CRM record a person to enroll is (AGL-3234): a contact by its
+ * document id, or a lead the sequence's site holds by its person key.
+ */
+export type OutreachPersonRef = { kind: 'contact'; id: string } | { kind: 'lead'; id: string }
+
+/**
+ * Where the people to enroll come from: a saved Contacts or Leads view,
+ * contacts picked by search, or leads picked from the sequence's site.
+ */
 export type OutreachEnrollSource =
   | { kind: 'view'; viewId: string }
   | { kind: 'contacts'; contactIds: string[] }
+  | { kind: 'leads'; leadIds: string[] }
 
 /** `POST outreach/enroll/preview` */
 export interface OutreachEnrollPreviewRequest {
@@ -171,7 +181,14 @@ export interface OutreachEnrollBlock {
 }
 
 export interface OutreachEnrollPreviewPerson {
+  /** The key the dialog and the confirm name this person by: the record's own id. */
+  personId: string
+  /** The record the person is (AGL-3234). */
+  target: 'contact' | 'lead'
+  /** The contact's id; `''` for a lead. */
   contactId: string
+  /** The lead's person key; `null` for a contact. */
+  leadId: string | null
   name: string
   /** The address the steps would go to, or `null` when the contact has none. */
   email: string | null
@@ -198,9 +215,10 @@ export interface OutreachEnrollPreviewResponse {
   truncated: boolean
 }
 
-/** One person to enroll, with what the rep supplied for them. */
+/** One person to enroll, with what the rep supplied for them: a contact by id, or a lead by key. */
 export interface OutreachEnrollPersonRequest {
-  contactId: string
+  contactId?: string
+  leadId?: string
   personalLine?: string
   attestations?: OutreachAttestationKind[]
 }
@@ -212,9 +230,17 @@ export interface OutreachEnrollRequest {
   people: OutreachEnrollPersonRequest[]
 }
 
+interface OutreachEnrollOutcomePerson {
+  personId: string
+  target: 'contact' | 'lead'
+  contactId: string
+  leadId: string | null
+  email: string | null
+}
+
 export type OutreachEnrollOutcome =
-  | { contactId: string; email: string | null; outcome: 'enrolled'; enrollmentId: string }
-  | { contactId: string; email: string | null; outcome: 'blocked'; blocks: OutreachEnrollBlock[] }
+  | (OutreachEnrollOutcomePerson & { outcome: 'enrolled'; enrollmentId: string })
+  | (OutreachEnrollOutcomePerson & { outcome: 'blocked'; blocks: OutreachEnrollBlock[] })
 
 export interface OutreachEnrollResponse {
   ok: true
@@ -257,6 +283,8 @@ export interface OutreachPreviewRequest {
   sequenceId: string
   /** The contact to write it to; a sample person when absent. */
   contactId?: string
+  /** Or a lead the sequence's site holds (AGL-3234), written to as the contact it would be. */
+  leadId?: string
   personalLine?: string
   /** Which step; the first email when absent. */
   stepIndex?: number

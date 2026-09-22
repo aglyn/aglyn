@@ -58,11 +58,18 @@ import {
  * member it acted for.
  */
 
-/** The record an entry is filed on: any of the three, as the owner links them. */
+/** The record an entry is filed on: any of the four, as the owner links them. */
 export interface PluginRecordLink {
   contactId?: string
   companyId?: string
   dealId?: string
+  /**
+   * A lead not yet converted (AGL-3234) — the record system's own id for
+   * it, addressed under `hostId`. A sequence's emails and tasks land on the
+   * lead's page while the person is one, and follow the lead to the contact
+   * it becomes.
+   */
+  leadId?: string
 }
 
 /** Where an entry is filed, and by which plugin. */

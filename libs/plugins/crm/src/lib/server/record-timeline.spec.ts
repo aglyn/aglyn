@@ -160,6 +160,21 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
     })
   })
 
+  /**
+   * A lead's timeline (AGL-3234): an entry filed on a lead alone carries the
+   * lead and the site's scope, and lands where the lead's page reads.
+   */
+  it('files an entry on a lead, scoped like a record of the site', async () => {
+    const written = await writer.logActivity({ ...INBOUND, link: { leadId: 'lead-key-1' } })
+    expect(written).toMatchObject({ ok: true })
+    const entry = [...mockDocs.entries()].find(
+      ([path, data]) => path.includes('/crmActivities/') && data['leadId'] === 'lead-key-1',
+    )?.[1]
+    expect(entry).toMatchObject({ leadId: 'lead-key-1', hostId: HOST })
+    expect(entry).not.toHaveProperty('contactId')
+    expect(Array.isArray(entry?.['visibleTo']) && (entry?.['visibleTo'] as unknown[]).length > 0).toBe(true)
+  })
+
   it('files the same message once, however many times it is asked', async () => {
     await writer.logActivity(INBOUND)
     const again = await writer.logActivity({ ...INBOUND, body: 'a second read' })

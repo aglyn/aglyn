@@ -40,6 +40,7 @@ import {
   Typography,
   useMediaQuery,
   useTheme,
+  Chip,
 } from '@mui/material'
 import { type ReactNode, useState } from 'react'
 import type { OutreachEnrollmentAction } from '../model/outreach-api'
@@ -168,9 +169,14 @@ function columns(
           spacing={0}
           sx={{ justifyContent: 'center', height: '100%', minWidth: 0 }}
         >
-          <Typography variant="body2" noWrap>
-            {row.enrollment.contactName || row.enrollment.email}
-          </Typography>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', minWidth: 0 }}>
+            <Typography variant="body2" noWrap>
+              {row.enrollment.contactName || row.enrollment.email}
+            </Typography>
+            {row.enrollment.target === 'lead' ? (
+              <Chip size="small" variant="outlined" label="Lead" />
+            ) : null}
+          </Stack>
           {row.enrollment.contactName ? (
             <Typography variant="caption" color="text.secondary" noWrap>
               {row.enrollment.email}
@@ -296,9 +302,14 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
       : '—'
   const person = (enrollment: OutreachEnrollment) => (
     <Stack spacing={0}>
-      <Typography variant="body2">
-        {enrollment.contactName || enrollment.email}
-      </Typography>
+      <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+        <Typography variant="body2">
+          {enrollment.contactName || enrollment.email}
+        </Typography>
+        {enrollment.target === 'lead' ? (
+          <Chip size="small" variant="outlined" label="Lead" />
+        ) : null}
+      </Stack>
       {enrollment.contactName ? (
         <Typography variant="caption" color="text.secondary">
           {enrollment.email}

@@ -22,7 +22,9 @@ import {
 } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CRM_COLLECTIONS,
+  crmLeadDisplayName,
   crmViewIsListed,
+  isCrmLeadOpen,
   normalizeCrmViewFilters,
 } from '@aglyn/aglyn/app-utils/crm'
 import {
@@ -62,10 +64,12 @@ import type { OutreachLoad } from './use-outreach-data'
 const denied = (error: unknown) =>
   (error as { code?: unknown } | null)?.code === 'permission-denied'
 
-/** A saved Contacts view people can be enrolled from. */
+/** A saved Contacts or Leads view people can be enrolled from (AGL-3234). */
 export interface OutreachViewOption {
   id: string
   name: string
+  /** Which list the view is of; a Leads view selects the sequence's site's leads. */
+  section: 'contacts' | 'leads'
 }
 
 /** The most saved views the picker lists. */
@@ -93,7 +97,7 @@ export function useOutreachSavedViews(
     return onSnapshot(
       query(
         collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.views),
-        where('section', '==', 'contacts'),
+        where('section', 'in', ['contacts', 'leads']),
         orderBy('name'),
         limit(OUTREACH_VIEWS_LIMIT),
       ),
@@ -116,11 +120,18 @@ export function useOutreachSavedViews(
                   },
                   uid,
                 ) &&
-                dynamicListDimensionsForCrmView(
-                  normalizeCrmViewFilters(data['filters']),
-                ).unsupported.length === 0,
+                // A Leads view narrows by status alone, which enrolling can
+                // always apply; a Contacts view must be readable as a list.
+                (data['section'] === 'leads' ||
+                  dynamicListDimensionsForCrmView(
+                    normalizeCrmViewFilters(data['filters']),
+                  ).unsupported.length === 0),
             )
-            .map(({ id, data }) => ({ id, name: String(data['name']) })),
+            .map(({ id, data }) => ({
+              id,
+              name: String(data['name']),
+              section: data['section'] === 'leads' ? ('leads' as const) : ('contacts' as const),
+            })),
         }),
       (error) => {
         if (!denied(error))
@@ -284,4 +295,77 @@ export function useOutreachContactSearch(input: {
     }
   }, [firestore, orgId, hostId, contactGroupId, email, token, idle])
   return { ...result, idle }
+}
+
+/** The most leads the picker reads — the Leads list's own window. */
+export const OUTREACH_LEADS_WINDOW = 200
+
+/**
+ * The open leads at `hostId` a search finds (AGL-3234): the site's most
+ * recently seen leads, read once while the tab is open and narrowed in
+ * the browser by a word of the name or the address — a lead carries no
+ * search tokens, and the window is the Leads list's own. Converted and
+ * closed leads are left out: they are a contact's, or a verdict's, to
+ * enroll. `idle` until something is typed.
+ */
+export function useOutreachLeadSearch(input: {
+  hostId: string | null
+  text: string
+  enabled: boolean
+}): OutreachLoad<OutreachContactOption[]> & { idle: boolean } {
+  const { hostId, text, enabled } = input
+  const firestore = useFirestore()
+  const [window, setWindow] = useState<OutreachLoad<OutreachContactOption[]>>({
+    status: 'ready',
+    data: [],
+  })
+  useEffect(() => {
+    if (!enabled || !hostId) {
+      setWindow({ status: 'ready', data: [] })
+      return undefined
+    }
+    let current = true
+    setWindow({ status: 'loading', data: [] })
+    getDocs(
+      query(
+        collection(firestore, 'hosts', hostId, 'leads'),
+        orderBy('lastSeenAtMs', 'desc'),
+        limit(OUTREACH_LEADS_WINDOW),
+      ),
+    )
+      .then((snapshot) => {
+        if (!current) return
+        setWindow({
+          status: 'ready',
+          data: snapshot.docs
+            .map((entry) => ({ id: entry.id, data: entry.data() as Record<string, unknown> }))
+            .filter(({ data }) => isCrmLeadOpen(data as never) && !data['convertedContactId'])
+            .map(({ id, data }) => ({
+              id,
+              name: crmLeadDisplayName(data),
+              email: normalizeContactEmail(data['email']),
+            })),
+        })
+      })
+      .catch((error: unknown) => {
+        if (!current) return
+        if (!denied(error)) console.error('[outreach] the leads could not be read', error)
+        setWindow({ status: denied(error) ? 'refused' : 'error', data: [] })
+      })
+    return () => {
+      current = false
+    }
+  }, [firestore, hostId, enabled])
+  const needle = text.trim().toLowerCase()
+  const idle = !hostId || !needle
+  const data = idle
+    ? []
+    : window.data
+        .filter(
+          (lead) =>
+            lead.name.toLowerCase().includes(needle) ||
+            (lead.email ?? '').includes(needle),
+        )
+        .slice(0, OUTREACH_SEARCH_LIMIT)
+  return { ...window, data, idle }
 }

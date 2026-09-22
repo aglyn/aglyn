@@ -50,7 +50,9 @@
  *==========================================*/
 
 import { normalizeContactEmail, contactDisplayName, readContactFacet } from '@aglyn/aglyn/app-utils/contacts'
+import { crmLeadDisplayName, crmLeadStatus } from '@aglyn/aglyn/app-utils/crm'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import {
   evaluateOutreachGates,
   type OutreachGateBlock,
@@ -63,16 +65,50 @@ import {
   type OutreachAttestations,
   type OutreachSequenceSettings,
 } from '../model/outreach.types'
-import type { OutreachEnrollBlock, OutreachEnrollPreviewPerson } from '../model/outreach-api'
+import type {
+  OutreachEnrollBlock,
+  OutreachEnrollPreviewPerson,
+  OutreachPersonRef,
+} from '../model/outreach-api'
 
 type Firestore = FirebaseFirestore.Firestore
 
-/** One person as the preview and the enroll read them. */
+/**
+ * One person as the preview and the enroll read them: a contact, or a lead
+ * the sequence's site holds (AGL-3234).
+ *
+ * ## A lead is judged as the contact it would be
+ *
+ * The gates, the merge fields and the country rule all read a CONTACT
+ * document — its facet's sources, stage, address, company and title. A lead
+ * carries the same facts in its own shape, so rather than teach every gate
+ * two records, a lead is handed to them as {@link leadAsContact}: a
+ * contact-shaped view whose one facet, under the sequence's group, holds
+ * what the lead holds. An imported lead has no inbound source and is cold;
+ * one that wrote in through a form is not; a lead is never a customer; its
+ * address decides its country; and `{{contact.firstName}}` or
+ * `{{contact.company}}` in a step reads the lead's name and company text,
+ * so a sequence written for contacts sends to leads unchanged — which is
+ * also what lets an enrollment made on a lead keep sending after the lead
+ * converts and the view becomes the real contact.
+ */
 export interface OutreachEnrollCandidate {
+  /** The record's own id: the contact's, or the lead's person key. */
+  personId: string
+  target: 'contact' | 'lead'
+  /** The contact's id; `''` for a lead. */
   contactId: string
-  /** The contact document, or `null` when it no longer exists. */
+  /** The lead's person key; `null` for a contact. */
+  leadId: string | null
+  /**
+   * The contact document (`orgs/{orgId}/contacts/{id}`), or for a lead the
+   * contact-shaped view of it — see the module note. `null` when the record
+   * no longer exists.
+   */
   contact: Record<string, unknown> | null
-  /** Whether the sequence's site may see the contact. */
+  /** The lead document as stored, for a lead; `null` for a contact. */
+  lead: Record<string, unknown> | null
+  /** Whether the sequence's site may see the record. A lead is the site's own. */
   visible: boolean
   /** The name the sequence's site knows them by; `''` for none. */
   name: string
@@ -80,6 +116,43 @@ export interface OutreachEnrollCandidate {
   email: string | null
   /** The company the contact is filed under at that site, when there is one. */
   company: Record<string, unknown> | null
+  /** A lead already converted: the contact it became. Enroll that instead. */
+  convertedContactId: string | null
+  /** A lead whose address the workspace already holds as a contact. Enroll that instead. */
+  heldAsContactId: string | null
+}
+
+/**
+ * A lead as the gates and the merge fields read a contact — see the
+ * module note. The facet is the sequence's group's, which is the one every
+ * reader asks for. The lead's `sources` — `form:{id}`, `booking`, `import`,
+ * `manual`, `api`, `signup` — become the facet's source flags by kind, so
+ * the inbound rule reads them as it reads a contact's.
+ */
+export function leadAsContact(
+  lead: Record<string, unknown>,
+  contactGroupId: string,
+): Record<string, unknown> {
+  const sources: Record<string, true> = {}
+  for (const raw of Array.isArray(lead['sources']) ? lead['sources'] : []) {
+    const source = String(raw)
+    const kind = source.startsWith('form:') ? 'form' : source === 'signup' ? 'member' : source
+    if (kind) sources[kind] = true
+  }
+  return {
+    email: lead['email'],
+    name: lead['name'],
+    facets: {
+      [contactGroupId]: {
+        sources,
+        ...(lead['address'] && typeof lead['address'] === 'object' ? { address: lead['address'] } : {}),
+        ...(typeof lead['company'] === 'string' ? { companyName: lead['company'] } : {}),
+        ...(typeof lead['jobTitle'] === 'string' ? { jobTitle: lead['jobTitle'] } : {}),
+        ...(typeof lead['phone'] === 'string' ? { phone: lead['phone'] } : {}),
+        ...(Array.isArray(lead['tags']) ? { tags: lead['tags'] } : {}),
+      },
+    },
+  }
 }
 
 /** `getAll` takes this many references at most per call. */
@@ -97,30 +170,64 @@ async function getAllChunked(
 }
 
 /**
- * The contacts, as the sequence's site knows them, and the company each is
- * filed under there — two batched reads for everyone.
+ * The people, as the sequence's site knows them, and the company each
+ * contact is filed under there — batched reads for everyone: the contacts
+ * and the leads by id, the companies once, and for each lead one address
+ * lookup, because a lead the workspace already holds as a contact is that
+ * contact's to enroll.
  */
 export async function readOutreachEnrollCandidates(
   firestore: Firestore,
-  input: { orgId: string; hostId: string; contactGroupId: string; contactIds: readonly string[] },
+  input: { orgId: string; hostId: string; contactGroupId: string; people: readonly OutreachPersonRef[] },
 ): Promise<OutreachEnrollCandidate[]> {
-  if (!input.contactIds.length) return []
+  if (!input.people.length) return []
   const org = firestore.collection('orgs').doc(input.orgId)
+  const leads = firestore.collection('hosts').doc(input.hostId).collection('leads')
   const snapshots = await getAllChunked(
     firestore,
-    input.contactIds.map((id) => org.collection('contacts').doc(id)),
+    input.people.map((person) =>
+      person.kind === 'lead' ? leads.doc(person.id) : org.collection('contacts').doc(person.id),
+    ),
   )
-  const read = input.contactIds.map((contactId, index) => {
-    const data = snapshots[index]?.exists ? (snapshots[index].data() as Record<string, unknown>) : null
-    return {
-      contactId,
-      contact: data,
-      visible: data ? visibleToHost(data['visibleTo'] as string[] | undefined, input.hostId) : false,
-      name: data ? contactDisplayName(data, input.contactGroupId).trim() : '',
-      email: data ? normalizeContactEmail(data['email']) : null,
-      companyId: data ? String(readContactFacet(data, input.contactGroupId).companyId ?? '') : '',
-    }
-  })
+  const read = await Promise.all(
+    input.people.map(async (person, index) => {
+      const data = snapshots[index]?.exists ? (snapshots[index].data() as Record<string, unknown>) : null
+      if (person.kind === 'lead') {
+        const email = data ? normalizeContactEmail(data['email']) : null
+        const held =
+          data && email ? await findContactByEmail(org.collection('contacts'), email) : null
+        return {
+          personId: person.id,
+          target: 'lead' as const,
+          contactId: '',
+          leadId: person.id,
+          contact: data ? leadAsContact(data, input.contactGroupId) : null,
+          lead: data,
+          // A lead is the site's own record: no scope to check.
+          visible: data !== null,
+          name: data ? crmLeadDisplayName(data) : '',
+          email,
+          companyId: '',
+          convertedContactId: data && typeof data['convertedContactId'] === 'string' ? data['convertedContactId'] : null,
+          heldAsContactId: held ? held.id : null,
+        }
+      }
+      return {
+        personId: person.id,
+        target: 'contact' as const,
+        contactId: person.id,
+        leadId: null,
+        contact: data,
+        lead: null,
+        visible: data ? visibleToHost(data['visibleTo'] as string[] | undefined, input.hostId) : false,
+        name: data ? contactDisplayName(data, input.contactGroupId).trim() : '',
+        email: data ? normalizeContactEmail(data['email']) : null,
+        companyId: data ? String(readContactFacet(data, input.contactGroupId).companyId ?? '') : '',
+        convertedContactId: null,
+        heldAsContactId: null,
+      }
+    }),
+  )
   const companyIds = [...new Set(read.map((entry) => entry.companyId).filter(Boolean))]
   const companies = new Map<string, Record<string, unknown>>()
   if (companyIds.length) {
@@ -138,15 +245,48 @@ export async function readOutreachEnrollCandidates(
   }))
 }
 
+/** The person as every answer names them. */
+function personOf(candidate: OutreachEnrollCandidate) {
+  return {
+    personId: candidate.personId,
+    target: candidate.target,
+    contactId: candidate.contactId,
+    leadId: candidate.leadId,
+  }
+}
+
 /** What stands in the way before the gates are asked anything. */
 export function outreachCandidateBlocks(
   candidate: OutreachEnrollCandidate,
   facts: { siteName: string; alreadyInSequence: boolean },
 ): OutreachEnrollBlock[] {
   if (!candidate.contact) {
-    return [{ code: 'contact_missing', reason: 'This contact no longer exists in the CRM.' }]
+    return candidate.target === 'lead'
+      ? [{ code: 'lead_missing', reason: "This lead no longer exists in this sequence's site's CRM." }]
+      : [{ code: 'contact_missing', reason: 'This contact no longer exists in the CRM.' }]
   }
   const blocks: OutreachEnrollBlock[] = []
+  if (candidate.target === 'lead') {
+    // A lead that converted, or whose address the workspace already holds
+    // as a contact, is that contact's to enroll — one person, one record.
+    if (candidate.convertedContactId) {
+      blocks.push({
+        code: 'lead_converted',
+        reason: 'This lead was converted into a contact. Enroll the contact instead.',
+      })
+    } else if (candidate.heldAsContactId) {
+      blocks.push({
+        code: 'lead_is_contact',
+        reason: 'This address is already a contact in your CRM. Enroll the contact instead.',
+      })
+    }
+    if (crmLeadStatus(candidate.lead) === 'unqualified') {
+      blocks.push({
+        code: 'lead_unqualified',
+        reason: 'This lead was closed as unqualified. Reopen it before enrolling.',
+      })
+    }
+  }
   if (!candidate.visible) {
     blocks.push({
       code: 'not_in_site',
@@ -188,7 +328,7 @@ export function previewOutreachPerson(
 ): OutreachEnrollPreviewPerson {
   const { candidate } = question
   const person = {
-    contactId: candidate.contactId,
+    ...personOf(candidate),
     name: candidate.name,
     email: candidate.email,
   }

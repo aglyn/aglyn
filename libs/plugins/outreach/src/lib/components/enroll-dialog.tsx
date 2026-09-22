@@ -66,6 +66,7 @@ import type { OutreachApi } from './use-outreach-api'
 import {
   type OutreachContactOption,
   useOutreachContactSearch,
+  useOutreachLeadSearch,
   useOutreachSavedViews,
 } from './use-outreach-crm'
 
@@ -135,10 +136,16 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
   const { orgId, sequence, api } = props
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
-  const [tab, setTab] = useState<'view' | 'search'>('view')
+  const [tab, setTab] = useState<'view' | 'search' | 'leads'>('view')
   const [viewId, setViewId] = useState('')
   const [text, setText] = useState('')
   const [picked, setPicked] = useState<Map<string, OutreachContactOption>>(
+    new Map(),
+  )
+  // The leads picked from the sequence's site (AGL-3234), kept apart from
+  // the contacts: the two are different records and the source names which.
+  const [leadText, setLeadText] = useState('')
+  const [pickedLeads, setPickedLeads] = useState<Map<string, OutreachContactOption>>(
     new Map(),
   )
   const [stage, setStage] = useState<Stage>({ kind: 'source' })
@@ -160,6 +167,11 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     contactGroupId: props.contactGroupId,
     text,
   })
+  const leadSearch = useOutreachLeadSearch({
+    hostId: sequence.hostId,
+    text: leadText,
+    enabled: props.open && tab === 'leads',
+  })
 
   const reset = () => {
     setStage({ kind: 'source' })
@@ -170,7 +182,9 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
   const close = () => {
     reset()
     setPicked(new Map())
+    setPickedLeads(new Map())
     setText('')
+    setLeadText('')
     setViewId('')
     props.onClose()
   }
@@ -183,7 +197,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
       setSupplied(
         Object.fromEntries(
           answer.people.map((person) => [
-            person.contactId,
+            person.personId,
             {
               include: person.status !== 'blocked',
               personalLine: '',
@@ -205,7 +219,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     () =>
       answer
         ? answer.people.filter((person) =>
-            outreachPersonReady(person, supplied[person.contactId]),
+            outreachPersonReady(person, supplied[person.personId]),
           )
         : [],
     [answer, supplied],
@@ -214,8 +228,8 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     ? answer.people.filter(
         (person) =>
           person.status === 'needs_confirmation' &&
-          supplied[person.contactId]?.include &&
-          !outreachPersonReady(person, supplied[person.contactId]),
+          supplied[person.personId]?.include &&
+          !outreachPersonReady(person, supplied[person.personId]),
       ).length
     : 0
 
@@ -227,9 +241,12 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
       const result = await api.enroll(
         sequence.id,
         ready.map((person) => ({
-          contactId: person.contactId,
-          personalLine: supplied[person.contactId]?.personalLine.trim() ?? '',
-          attestations: supplied[person.contactId]?.attestations ?? [],
+          // A contact by id, or a lead by its key (AGL-3234).
+          ...(person.target === 'lead' && person.leadId
+            ? { leadId: person.leadId }
+            : { contactId: person.contactId }),
+          personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
+          attestations: supplied[person.personId]?.attestations ?? [],
         })),
       )
       setStage({
@@ -243,31 +260,33 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     }
   }
 
-  const supply = (contactId: string, next: Partial<Supplied>) =>
+  const supply = (personId: string, next: Partial<Supplied>) =>
     setSupplied((previous) => ({
       ...previous,
-      [contactId]: { ...previous[contactId], ...next } as Supplied,
+      [personId]: { ...previous[personId], ...next } as Supplied,
     }))
 
   const previewEmail = async (person: OutreachEnrollPreviewPerson) => {
     setEmailPreview((previous) => ({
       ...previous,
-      [person.contactId]: { status: 'loading' },
+      [person.personId]: { status: 'loading' },
     }))
     try {
       const result = await api.previewEmail({
         sequenceId: sequence.id,
-        contactId: person.contactId,
-        personalLine: supplied[person.contactId]?.personalLine.trim() ?? '',
+        ...(person.target === 'lead' && person.leadId
+          ? { leadId: person.leadId }
+          : { contactId: person.contactId }),
+        personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
       })
       setEmailPreview((previous) => ({
         ...previous,
-        [person.contactId]: { status: 'ready', answer: result },
+        [person.personId]: { status: 'ready', answer: result },
       }))
     } catch (error) {
       setEmailPreview((previous) => ({
         ...previous,
-        [person.contactId]: {
+        [person.personId]: {
           status: 'failed',
           message: (error as Error).message,
         },
@@ -305,6 +324,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
               >
                 <Tab value="view" label="Saved view" />
                 <Tab value="search" label="Search" />
+                <Tab value="leads" label="Leads" />
               </Tabs>
               {tab === 'view' ? (
                 views.status === 'loading' ? (
@@ -325,12 +345,12 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                     label="Saved Contacts view"
                     value={viewId}
                     onChange={(event) => setViewId(event.target.value)}
-                    helperText={`Enrolls up to ${OUTREACH_ENROLL_BATCH_MAX} of the people the view shows at this sequence’s site.`}
+                    helperText={`Enrolls up to ${OUTREACH_ENROLL_BATCH_MAX} of the people the view shows at this sequence’s site — a Contacts view, or a Leads view of the site’s leads.`}
                     fullWidth
                   >
                     {views.data.map((view) => (
                       <MenuItem key={view.id} value={view.id}>
-                        {view.name}
+                        {view.section === 'leads' ? `${view.name} (Leads)` : view.name}
                       </MenuItem>
                     ))}
                   </TextField>
@@ -340,6 +360,89 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                     the CRM, or search instead.
                   </Alert>
                 )
+              ) : tab === 'leads' ? (
+                <Stack spacing={1.5}>
+                  <TextField
+                    label="Search leads"
+                    placeholder="A name, or an email address"
+                    value={leadText}
+                    onChange={(event) => setLeadText(event.target.value)}
+                    helperText="The open leads at this sequence’s site. A lead is enrolled as it is, and follows itself to the contact it becomes."
+                    fullWidth
+                    autoFocus
+                  />
+                  {leadSearch.status === 'loading' ? (
+                    <OutreachLoading label="Reading leads…" />
+                  ) : null}
+                  {leadSearch.status === 'error' || leadSearch.status === 'refused' ? (
+                    <OutreachLoadProblem
+                      status={leadSearch.status}
+                      what="leads"
+                      message={
+                        leadSearch.status === 'refused'
+                          ? 'Enrolling reads your CRM’s leads, and your role does not include Manage data.'
+                          : 'The leads could not be read. Try again.'
+                      }
+                    />
+                  ) : null}
+                  {leadSearch.status === 'ready' && !leadSearch.idle && !leadSearch.data.length ? (
+                    <Typography variant="body2" color="text.secondary">
+                      No open leads at this sequence’s site match.
+                    </Typography>
+                  ) : null}
+                  {leadSearch.data.length ? (
+                    <List dense aria-label="Lead results">
+                      {leadSearch.data.map((lead) => {
+                        const checked = pickedLeads.has(lead.id)
+                        return (
+                          <ListItem key={lead.id} disablePadding>
+                            <ListItemButton
+                              onClick={() =>
+                                setPickedLeads((previous) => {
+                                  const next = new Map(previous)
+                                  if (checked) next.delete(lead.id)
+                                  else if (next.size < OUTREACH_ENROLL_BATCH_MAX) next.set(lead.id, lead)
+                                  return next
+                                })
+                              }
+                            >
+                              <ListItemIcon>
+                                <Checkbox edge="start" checked={checked} tabIndex={-1} disableRipple />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={lead.name || lead.email || lead.id}
+                                secondary={lead.email}
+                              />
+                            </ListItemButton>
+                          </ListItem>
+                        )
+                      })}
+                    </List>
+                  ) : null}
+                  {pickedLeads.size ? (
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ flexWrap: 'wrap', rowGap: 1 }}
+                      aria-label="Picked leads"
+                    >
+                      {[...pickedLeads.values()].map((lead) => (
+                        <Chip
+                          key={lead.id}
+                          size="small"
+                          label={lead.name || lead.email || lead.id}
+                          onDelete={() =>
+                            setPickedLeads((previous) => {
+                              const next = new Map(previous)
+                              next.delete(lead.id)
+                              return next
+                            })
+                          }
+                        />
+                      ))}
+                    </Stack>
+                  ) : null}
+                </Stack>
               ) : (
                 <Stack spacing={1.5}>
                   <TextField
@@ -460,11 +563,11 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
               >
                 {answer.people.map((person) => (
                   <PersonRow
-                    key={person.contactId}
+                    key={person.personId}
                     person={person}
-                    supplied={supplied[person.contactId]}
-                    onSupply={(next) => supply(person.contactId, next)}
-                    emailPreview={emailPreview[person.contactId]}
+                    supplied={supplied[person.personId]}
+                    onSupply={(next) => supply(person.personId, next)}
+                    emailPreview={emailPreview[person.personId]}
                     onPreviewEmail={() => void previewEmail(person)}
                     disabled={stage.kind === 'enrolling'}
                   />
@@ -511,13 +614,15 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                 variant="contained"
                 disabled={
                   stage.kind === 'previewing' ||
-                  (tab === 'view' ? !viewId : !picked.size)
+                  (tab === 'view' ? !viewId : tab === 'leads' ? !pickedLeads.size : !picked.size)
                 }
                 onClick={() =>
                   void preview(
                     tab === 'view'
                       ? { kind: 'view', viewId }
-                      : { kind: 'contacts', contactIds: [...picked.keys()] },
+                      : tab === 'leads'
+                        ? { kind: 'leads', leadIds: [...pickedLeads.keys()] }
+                        : { kind: 'contacts', contactIds: [...picked.keys()] },
                   )
                 }
               >
@@ -551,7 +656,7 @@ function PersonRow(props: {
   disabled: boolean
 }) {
   const { person, supplied, disabled } = props
-  const name = person.name || person.email || person.contactId
+  const name = person.name || person.email || person.personId
   const line = supplied?.personalLine ?? ''
   const tooLong = line.trim().length > OUTREACH_PERSONAL_LINE_MAX
   return (
@@ -571,6 +676,9 @@ function PersonRow(props: {
             ) : null}
           </Stack>
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {person.target === 'lead' ? (
+              <Chip size="small" variant="outlined" label="Lead" />
+            ) : null}
             {person.cold ? (
               <Chip size="small" variant="outlined" label="Cold" />
             ) : null}
@@ -731,9 +839,9 @@ function DoneSummary(props: {
             Not enrolled, checked again just now:
           </Typography>
           {refused.map((result) => (
-            <Stack key={result.contactId} spacing={0.25}>
+            <Stack key={result.personId} spacing={0.25}>
               <Typography variant="body2">
-                {result.email ?? result.contactId}
+                {result.email ?? result.personId}
               </Typography>
               {result.blocks.map((block) => (
                 <Typography

@@ -1,7 +1,11 @@
 # @aglyn/plugins-outreach
 
 Sequences: one-to-one, multi-step email sequences a rep sends from
-their own connected mailbox, logged on the CRM's records.
+their own connected mailbox, logged on the CRM's records. A sequence
+enrolls a contact or a lead (AGL-3234): an enrollment names which record the
+person is, a lead is judged and merged as the contact it would be, and when
+the lead converts its enrollment follows it to the contact through the
+core's lead-conversion seam.
 
 > Beta. Published from the Aglyn monorepo under the `beta` dist-tag; APIs can change between beta releases.
 
