@@ -44,6 +44,7 @@ import {
 import { MEMBER_EMAIL_ALIASES_COLLECTION } from '@aglyn/aglyn/app-utils/member-email-aliases'
 import type { OrgCrmInbound } from '@aglyn/aglyn/foundation'
 import type { ReceivedEmail } from '@aglyn/shared-util-email'
+import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { findContactByEmail } from './contact-email-index'
 import {
   createCrmEmailActivity,
@@ -223,14 +224,19 @@ export async function matchCrmInboundCorrespondent(
     }
     const key = personKey(candidate.email)
     if (!key) continue
+    /*
+     * ONE ROW, then which of the named sites may see it (AGL-3275).
+     *
+     * This used to read a lead per site because there was one per site. There
+     * is one now, so the read is single and the LOOP is what it always really
+     * was: deciding whose mailbox this reply belongs to. A site that cannot
+     * see the row is not that site, which is what `visibleToHost` answers —
+     * and skipping it is what keeps an agency's clients apart on a shared row.
+     */
+    const lead = await orgRef.collection('leads').doc(key).get()
     for (const hostId of input.hostIds.slice(0, CRM_INBOUND_LEAD_HOST_MAX)) {
-      const lead = await firestore
-        .collection('hosts')
-        .doc(hostId)
-        .collection('leads')
-        .doc(key)
-        .get()
-      if (!lead.exists) continue
+      if (!lead.exists) break
+      if (!visibleToHost(lead.get('visibleTo') as string[] | undefined, hostId)) continue
       const link: CrmActivityLink = { leadId: lead.id }
       // A converted lead's mail belongs on the contact it became as well.
       const converted = String(lead.get('convertedContactId') ?? '').trim()

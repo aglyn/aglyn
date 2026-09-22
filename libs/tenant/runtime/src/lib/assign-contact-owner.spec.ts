@@ -128,7 +128,7 @@ const HOST = 'site-1'
 const EMAIL = 'ada@acme.com'
 const CONTACT = 'orgs/org-1/contacts/c1'
 const ORG = 'orgs/org-1'
-const LEAD = `hosts/${HOST}/leads/${personKey(EMAIL)}`
+const LEAD = `${ORG}/leads/${personKey(EMAIL)}`
 const facetOwner = () => readPath(docs.get(CONTACT) ?? {}, `facets.${HOST}.ownerUid`)
 const pointer = () => readPath(docs.get(ORG) ?? {}, 'crm.roundRobin.lastAssignedUid')
 

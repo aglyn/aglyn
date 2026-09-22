@@ -34,6 +34,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { findContactByEmail } from './contact-email-index'
+import { readLeadForHost } from './org-leads'
 import { countCrmActivitiesForRecord } from './crm-records'
 
 /**
@@ -198,14 +199,14 @@ async function resolveBookingRecord(
     }
   }
   if (ref?.kind === 'lead') {
-    // A lead is host-scoped by path and carries no `visibleTo` of its own.
-    const lead = await firestore
-      .collection('hosts')
-      .doc(hostId)
-      .collection('leads')
-      .doc(ref.id)
-      .get()
-    if (lead.exists) {
+    /*
+     * A lead carries its own `visibleTo` now (AGL-3275) — it used to be
+     * host-scoped by path, and the comment here said so. The seam reads the
+     * org row, and the site has to be allowed to see it before a booking is
+     * filed against it, or one brand's booking would name another's lead.
+     */
+    const lead = await readLeadForHost(hostId, ref.id)
+    if (lead && visibleToHost(lead.get('visibleTo'), hostId)) {
       const ownerUid = String(lead.get('ownerUid') ?? '')
       return {
         link: { leadId: lead.id },

@@ -156,15 +156,15 @@ async function readPersonRecord(
     console.error('[flow-email] contact lookup failed', hostId, error)
   }
   try {
-    const lead = (
-      await db
-        .collection('hosts')
-        .doc(hostId)
-        .collection('leads')
-        .where('email', '==', email)
-        .limit(1)
-        .get()
-    ).docs[0]
+    /*
+     * SCOPED (AGL-3275). The collection is org-wide now, so an unnarrowed
+     * `where('email', ...)` would answer this site with a sibling brand's
+     * lead — and this function decides whether to MAIL the person it finds.
+     * `orgDataQueryForHost` applies the same `visibleTo` clause the contact
+     * lookup above already goes through.
+     */
+    const { query } = await orgDataQueryForHost(hostId, 'leads')
+    const lead = (await query.where('email', '==', email).limit(1).get()).docs[0]
     if (lead) return lead.data() as Record<string, unknown>
   } catch (error) {
     console.error('[flow-email] lead lookup failed', hostId, error)

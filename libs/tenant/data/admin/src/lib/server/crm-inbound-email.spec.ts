@@ -186,9 +186,16 @@ beforeEach(() => {
     visibleTo: ['host:site-1'],
     facets: { 'site-1': { companyId: 'co-1', sources: {}, interactions: [] } },
   })
-  store.set(`hosts/site-2/leads/${personKey('bob@lead.example')}`, {
+  /*
+   * Scoped to the second site, which is the one this lead belongs to
+   * (AGL-3275). A lead with no `visibleTo` is visible to nobody, so the
+   * scope is what decides whose mailbox a reply is filed under now that the
+   * row is shared rather than sitting under one site by path.
+   */
+  store.set(`orgs/${ORG}/leads/${personKey('bob@lead.example')}`, {
     email: 'bob@lead.example',
     name: 'Bob',
+    visibleTo: ['host:site-2'],
   })
 })
 

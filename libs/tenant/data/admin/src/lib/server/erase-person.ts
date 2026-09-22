@@ -251,6 +251,26 @@ export async function erasePerson(
     phone: FieldValue.delete(),
     customerErasedAtMs: now,
   }
+  /*
+   * THE ORG ROW, ONCE (AGL-3275) — and then every legacy row still standing.
+   *
+   * A lead is one document for the whole org now, so the delete leaves the
+   * per-site loop. It is not the caller that may assume the migration is
+   * finished, though: until AGL-3276 has folded every site and AGL-3277 has
+   * removed the fallback, a person can still be held at
+   * `hosts/{hostId}/leads`, and an erasure that deleted only the org row would
+   * leave that copy behind. So both are swept, and `counts.leads` is what was
+   * actually destroyed rather than how many places were looked at.
+   */
+  try {
+    const orgLead = orgRef.collection('leads').doc(key)
+    if ((await orgLead.get()).exists) {
+      await orgLead.delete()
+      counts.leads += 1
+    }
+  } catch (error) {
+    console.error('erasePerson: org lead delete failed', error)
+  }
   for (const hostId of hostIds) {
     const hostRef = db.collection('hosts').doc(hostId)
     try {
@@ -260,7 +280,7 @@ export async function erasePerson(
         counts.leads += 1
       }
     } catch (error) {
-      console.error(`erasePerson: lead delete failed for ${hostId}`, error)
+      console.error(`erasePerson: legacy lead delete failed for ${hostId}`, error)
     }
     counts.orders += await updateWhere(db, hostRef.collection('orders'), 'customerEmail', email, erasedOrder)
     counts.bookings += await updateWhere(db, hostRef.collection('bookings'), 'email', email, erasedBooking)
