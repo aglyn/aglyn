@@ -64,6 +64,7 @@ import type {
   OutreachOrgSettings,
   OutreachSequence,
 } from '../model/outreach.types'
+import { rewriteOutreachBodyLinks } from './click-tracking'
 import { normalizeOutreachPersonalLine } from './gates'
 import {
   isInThreadEmailStep,
@@ -104,6 +105,13 @@ export interface ComposedOutreachEmail {
   listUnsubscribeUrl?: string
   /** A `mailto:` URI for `List-Unsubscribe`. */
   listUnsubscribeMailto?: string
+  /**
+   * The destinations whose links were rewritten for click tracking, in the
+   * order a click token indexes them (AGL-3239). Empty when the sequence
+   * does not track clicks, when the body carries no links, and when no
+   * tracking link could be minted.
+   */
+  trackedLinks: string[]
 }
 
 export type OutreachComposeErrorCode =
@@ -143,6 +151,20 @@ export interface ComposeOutreachEmailInput {
   listUnsubscribeUrl?: string | null
   /** An address, or a `mailto:` URI, that unsubscribes whoever writes to it. */
   listUnsubscribeMailto?: string | null
+  /**
+   * Answers the tracking link for one link in the body, or `null` to leave
+   * that one as it was written (AGL-3239).
+   *
+   * Absent leaves every link alone, which is what a sequence with
+   * `trackClicks` off passes and what every caller that is not the sending
+   * runtime passes — a PREVIEW must show the rep the body their recipient
+   * reads, and minting a live tracking link for a preview would count the
+   * rep's own click against the sequence.
+   *
+   * It runs on the step's rendered body and never on the footer, so the
+   * organization's identification and the way out are never rewritten.
+   */
+  rewriteLink?: ((link: { url: string; index: number }) => string | null) | null
 }
 
 export interface OutreachComposeResult {
@@ -268,7 +290,7 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
     return result.text
   }
 
-  const email: ComposedOutreachEmail = { to, subject: '', text: '' }
+  const email: ComposedOutreachEmail = { to, subject: '', text: '', trackedLinks: [] }
   if (isInThreadEmailStep(steps, stepIndex)) {
     const threadSubject = crmThreadSubject(input.enrollment.threadSubject)
     const messageIds = (input.enrollment.messageIds ?? [])
@@ -305,7 +327,18 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
     .join('\n')
     .replace(/^\n+|\n+$/g, '')
   if (!body.trim()) return refuse('missing_body', 'This email has no body.')
-  email.text = `${body}\n\n${footer}`
+  /*
+   * Click tracking rewrites the STEP'S links and nothing else (AGL-3239):
+   * it runs here, on the rendered body, before the footer is appended. The
+   * footer's opt-out `mailto:` and the organization's own identification are
+   * never rewritten, and the one-click unsubscribe link never appears in a
+   * body at all — it rides in `List-Unsubscribe`.
+   */
+  const tracked = input.rewriteLink
+    ? rewriteOutreachBodyLinks(body, input.rewriteLink)
+    : { text: body, links: [] }
+  email.trackedLinks = tracked.links
+  email.text = `${tracked.text}\n\n${footer}`
 
   const url = unsubscribeUrl(input.listUnsubscribeUrl)
   if (url === null) {

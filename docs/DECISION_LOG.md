@@ -92,6 +92,40 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-22 — Sequences measure clicks only: every sequence email stays plain text, and the report says opens are not measured
+
+- **Decided by:** the account owner, 2026-09-22, on being shown that a tracking pixel can only ride in an HTML part and that giving cold one-to-one email a multipart HTML body is the posture the plugin was built to avoid — "clicks only, keep every email plain text".
+- **Scope:** policy
+- **Evidence:** `libs/plugins/outreach/src/lib/engine/click-tracking.ts` and `model/sequence-report.ts` (the refusal and its wording); `OutreachSequenceSettings.trackClicks`, default `false`; `cloud/firebase-firestore.rules` → `outreachSequences/{id}/reports/{reportId}`; AGL-3239.
+
+**What a marketing campaign gets for free, a sequence cannot get at all.** A
+campaign goes through Resend, which rewrites the links and injects a pixel
+into the HTML part before the message leaves; `email-events.ts` turns the
+webhook into our own vocabulary. A sequence goes out through the rep's own
+Gmail, as plain text, and Gmail reports nothing but the send.
+
+**Clicks need no HTML; opens do.** Link rewriting works in a plain-text body,
+so that is what ships: an opt-in per-sequence setting, off on every existing
+sequence and on every new one, because a tracked link is visible in the body a
+cold recipient reads. Open tracking ships in no form. Reopening it means
+reopening the plain-text decision, not adding a setting.
+
+**The report says so rather than showing a zero.** An open rate of 0% for a
+channel that cannot measure opens is a fact about our sending code published
+as a fact about the recipients — the same substitution `campaign-report.ts`
+refuses for an unrecorded denominator. `outreachSequenceReport` always carries
+the `opens-not-measured` caveat and offers no open figure to misread.
+
+**Scanner clicks are counted apart.** Every corporate mailbox now opens the
+links in an incoming email before the recipient sees it, and on cold B2B mail
+those fetches outnumber the human ones. Counting them is how a sequence
+reports a 60% click rate on an email nobody read, so they are held in
+`stats.machineClicks`, kept out of the rate, and shown beside it — the
+cold-email equivalent of the Apple MPP caveat already recorded about campaign
+opens.
+
+---
+
 ## 2026-09-21 — Starter's guided AI assistant opens: the 750-credit band had no door to spend it through
 
 - **Decided by:** the account owner, 2026-09-21, on being shown that Starter was the only row on the ladder sold an AI band with both AI feature flags off — "Fix this: *Starter now buys 750 credits it can't spend*".

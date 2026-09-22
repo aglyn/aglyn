@@ -297,6 +297,13 @@ export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachS
       id: ref.id,
       ...draft,
       status: existing?.status ?? 'draft',
+      /*
+       * Carried through explicitly, because the write below REPLACES the
+       * document (AGL-3239). The counters are the runtime's and the click
+       * route's, never the editor's, and a member renaming a sequence must
+       * not reset what it measured.
+       */
+      ...(existing?.stats ? { stats: existing.stats } : {}),
       createdAtMs: existing?.createdAtMs || nowMs,
       updatedAtMs: nowMs,
     }

@@ -221,6 +221,10 @@ export function emptyOutreachSequenceDraft(input: {
       window: null,
       allowedCountries: [...input.allowedCountries],
       allowCustomers: false,
+      // Off for a NEW sequence too (AGL-3239), not only for the ones that
+      // predate it: a tracked link is visible in the body a cold recipient
+      // reads, so it is turned on deliberately or not at all.
+      trackClicks: false,
     },
   }
 }

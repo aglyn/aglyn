@@ -71,7 +71,7 @@ const sequence = (overrides: Partial<OutreachSequence> = {}) => ({
   name: 'Agencies, first touch',
   mailboxId: 'mailbox-1',
   steps: [firstEmail(), email(), email({ delayBusinessDays: 5 }), email({ delayBusinessDays: 7 })],
-  settings: { window: null, allowedCountries: ['US'], allowCustomers: false },
+  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false },
   ...overrides,
 })
 
@@ -279,10 +279,17 @@ describe('settings', () => {
       window: null,
       allowedCountries: ['US'],
       allowCustomers: false,
+      // Off unless it was stored on (AGL-3239): a sequence written before
+      // the setting existed tracked nothing, and reads that way.
+      trackClicks: false,
     })
     expect(
-      readOutreachSequenceSettings({ allowedCountries: ['us', 'CA', 'ca', 'Canada'], allowCustomers: 'yes' }),
-    ).toEqual({ window: null, allowedCountries: ['US', 'CA'], allowCustomers: false })
+      readOutreachSequenceSettings({
+        allowedCountries: ['us', 'CA', 'ca', 'Canada'],
+        allowCustomers: 'yes',
+        trackClicks: 'yes',
+      }),
+    ).toEqual({ window: null, allowedCountries: ['US', 'CA'], allowCustomers: false, trackClicks: false })
   })
 
   it('normalizes typed country codes', () => {
@@ -292,11 +299,11 @@ describe('settings', () => {
 
   it('refuses an empty country list and a code that is not two letters', () => {
     const issues = validateOutreachSequence(
-      sequence({ settings: { window: null, allowedCountries: [], allowCustomers: false } }),
+      sequence({ settings: { window: null, allowedCountries: [], allowCustomers: false, trackClicks: false } }),
     )
     expect(codes(issues)).toEqual(['countries_required'])
     const typed = validateOutreachSequence(
-      sequence({ settings: { window: null, allowedCountries: ['US', 'usa'], allowCustomers: false } }),
+      sequence({ settings: { window: null, allowedCountries: ['US', 'usa'], allowCustomers: false, trackClicks: false } }),
     )
     expect(typed.map((issue) => [issue.path, issue.code])).toEqual([
       ['settings.allowedCountries.1', 'country_invalid'],
@@ -322,7 +329,7 @@ describe('settings', () => {
     ])
     const issues = validateOutreachSequence(
       sequence({
-        settings: { window: { days: [], startMinute: 9, endMinute: 5 }, allowedCountries: ['US'], allowCustomers: false },
+        settings: { window: { days: [], startMinute: 9, endMinute: 5 }, allowedCountries: ['US'], allowCustomers: false, trackClicks: false },
       }),
     )
     expect(issues.map((issue) => issue.path)).toEqual(['settings.window.days', 'settings.window'])

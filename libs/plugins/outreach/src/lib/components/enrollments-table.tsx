@@ -43,6 +43,7 @@ import {
   Chip,
 } from '@mui/material'
 import { type ReactNode, useState } from 'react'
+import { readOutreachEngagement } from '../model/enrollment-engagement'
 import type { OutreachEnrollmentAction } from '../model/outreach-api'
 import {
   OUTREACH_TASK_KIND_LABELS,
@@ -62,6 +63,13 @@ import type { OutreachEnrollmentsLoad } from './use-outreach-data'
 export interface OutreachEnrollmentsTableProps {
   enrollments: OutreachEnrollmentsLoad
   steps: readonly OutreachSequenceStep[]
+  /**
+   * Whether this sequence counts link clicks (AGL-3239). The Clicks column
+   * is shown only when it does: a column of dashes for a sequence that
+   * measures nothing reads as "nobody clicked", which is a different claim
+   * and a false one.
+   */
+  trackClicks?: boolean
   /** The mailbox's IANA zone, which next sends are read in; `null` for the reader's own. */
   timeZone: string | null
   api: OutreachApi
@@ -156,6 +164,7 @@ const CONFIRM: Partial<
 /** The table's columns; the person and the actions are drawn from the row's enrollment. */
 function columns(
   rowActions: (enrollment: OutreachEnrollment) => ReactNode,
+  trackClicks: boolean,
 ): NonNullable<ListTableProps['columns']> {
   return [
     {
@@ -201,6 +210,38 @@ function columns(
       width: 190,
       sortable: false,
     },
+    ...(trackClicks
+      ? [
+          {
+            field: 'clicks',
+            headerName: 'Clicks',
+            width: 130,
+            sortable: false,
+            renderCell: ({ row }: { row: { enrollment: OutreachEnrollment } }) => {
+              const engagement = readOutreachEngagement(row.enrollment.engagement)
+              if (!engagement.clicks) {
+                return (
+                  <Typography variant="body2" color="text.secondary">
+                    —
+                  </Typography>
+                )
+              }
+              return (
+                <Stack spacing={0} sx={{ justifyContent: 'center', height: '100%' }}>
+                  <Typography variant="body2">
+                    {engagement.clicks === 1 ? '1 click' : `${engagement.clicks} clicks`}
+                  </Typography>
+                  {engagement.lastClickUrl ? (
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {engagement.lastClickUrl}
+                    </Typography>
+                  ) : null}
+                </Stack>
+              )
+            },
+          },
+        ]
+      : []),
     { field: 'stopReason', headerName: 'Stop reason', flex: 1, minWidth: 170 },
     listActionsColumn((row) => rowActions(row.enrollment), { width: 72 }),
   ]
@@ -214,6 +255,7 @@ function columns(
  */
 export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
   const { enrollments, steps, timeZone, api } = props
+  const trackClicks = props.trackClicks === true
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('md'))
   const { enqueueSnackbar } = useSnackbar()
@@ -358,6 +400,13 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
                   <Typography variant="body2" color="text.secondary">
                     {`Next send: ${nextSend(enrollment)} · Last activity: ${formatOutreachTime(lastActivityMs(enrollment), timeZone)}`}
                   </Typography>
+                  {trackClicks && readOutreachEngagement(enrollment.engagement).clicks ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {`Clicked ${readOutreachEngagement(enrollment.engagement).clicks} ${
+                        readOutreachEngagement(enrollment.engagement).clicks === 1 ? 'time' : 'times'
+                      }`}
+                    </Typography>
+                  ) : null}
                   {outreachStopLabel(enrollment) ? (
                     <Typography variant="body2" color="text.secondary">
                       {outreachStopLabel(enrollment)}
@@ -371,7 +420,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
       ) : (
         <ListTable
           aria-label="Enrollments"
-          columns={columns(rowActions)}
+          columns={columns(rowActions, trackClicks)}
           rows={pageRows.map((enrollment) => ({
             $id: enrollment.id,
             enrollment,

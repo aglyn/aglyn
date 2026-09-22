@@ -145,12 +145,18 @@ describe('the Outreach server entry', () => {
     }
   })
 
-  it('registers the unsubscribe as a recipient link, and nothing else as one (AGL-2981)', () => {
+  it('registers the two links in a recipient’s inbox as recipient links, and nothing else (AGL-2981, AGL-3239)', () => {
     registerOutreachConsoleApi()
-    // A recipient's way out answers whether or not Outreach is released; every
-    // member's door still waits on the release gate.
+    // A recipient's way out and a link they were sent both answer whether or
+    // not Outreach is released: each is already sitting in somebody's inbox
+    // and must go on working through a paused rollout. Every member's door
+    // still waits on the release gate.
+    const recipientLinks: string[] = [OUTREACH_API_ROUTES.unsubscribe, OUTREACH_API_ROUTES.click]
     for (const route of Object.values(OUTREACH_API_ROUTES)) {
-      expect([route, isPluginRecipientLinkRoute(route)]).toEqual([route, route === OUTREACH_API_ROUTES.unsubscribe])
+      expect([route, isPluginRecipientLinkRoute(route)]).toEqual([
+        route,
+        recipientLinks.includes(route),
+      ])
     }
   })
 

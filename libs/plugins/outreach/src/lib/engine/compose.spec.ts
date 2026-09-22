@@ -132,6 +132,7 @@ describe('composeOutreachEmail: the first email', () => {
     expect(composeOutreachEmail(input())).toEqual({
       email: {
         to: 'casey@example.com',
+        trackedLinks: [],
         subject: "Example Agency's client sites",
         text:
           'Hi Casey,\n\nSaw the portfolio launch last week.\n\nWorth 20 minutes?\n\nAvery\n\n' + FOOTER,
@@ -236,6 +237,7 @@ describe('composeOutreachEmail: threading', () => {
       threadId: 'thread-1',
       inReplyTo: '<step-2@example.org>',
       references: '<step-1@example.org> <step-2@example.org>',
+      trackedLinks: [],
     })
   })
 
@@ -310,5 +312,58 @@ describe('composeOutreachEmail: unsubscribe headers', () => {
     for (const listUnsubscribeMailto of ['unsubscribe', 'mailto:nobody', 'mailto:%E0%A4%A@example.org']) {
       expect(composeOutreachEmail(input({ listUnsubscribeMailto })).error?.code).toBe('invalid_unsubscribe_mailto')
     }
+  })
+})
+
+describe('click tracking (AGL-3239)', () => {
+  /** A minter that wraps every link, so the composer's boundary is what is measured. */
+  const wrap = (link: { url: string; index: number }) => `https://console.example.com/api/outreach/click?t=${link.index}`
+
+  const withLink = (body: string): Partial<ComposeOutreachEmailInput> => ({
+    sequence: { steps: [{ ...first, body }] },
+  })
+
+  it('leaves every link alone when no minter is given', () => {
+    // What a PREVIEW passes, and what a sequence with tracking off passes.
+    // A preview that minted live links would count the rep's own click.
+    const result = composeOutreachEmail(input(withLink('Read https://aglyn.com/pricing first.')))
+    expect(result.email?.text).toContain('https://aglyn.com/pricing')
+    expect(result.email?.trackedLinks).toEqual([])
+  })
+
+  it('rewrites the step’s links and reports them in token order', () => {
+    const result = composeOutreachEmail(
+      input({ ...withLink('One https://a.example two https://b.example'), rewriteLink: wrap }),
+    )
+    expect(result.email?.text).toContain('click?t=0')
+    expect(result.email?.text).toContain('click?t=1')
+    expect(result.email?.trackedLinks).toEqual(['https://a.example', 'https://b.example'])
+  })
+
+  it('never rewrites the footer', () => {
+    // The organization's identification and the way out are appended AFTER
+    // the rewrite, so no minter can reach them however a step is written.
+    const result = composeOutreachEmail(
+      input({ ...withLink('Read https://aglyn.com/pricing.'), rewriteLink: wrap }),
+    )
+    expect(result.email?.text.endsWith(FOOTER)).toBe(true)
+    expect(result.email?.text).toContain(OUTREACH_OPT_OUT_LINE)
+  })
+
+  it('does not put a tracking link in the unsubscribe header', () => {
+    // The one-click link is minted by the runtime and rides in
+    // `List-Unsubscribe`; it never appears in a body, so no rewriter can
+    // reach it and route a recipient's opt-out through our own counter.
+    const result = composeOutreachEmail(
+      input({
+        ...withLink('Read https://aglyn.com/pricing.'),
+        rewriteLink: wrap,
+        listUnsubscribeUrl: 'https://console.example.com/api/outreach/unsubscribe?t=abc.def',
+      }),
+    )
+    expect(result.email?.listUnsubscribeUrl).toBe(
+      'https://console.example.com/api/outreach/unsubscribe?t=abc.def',
+    )
+    expect(result.email?.text).not.toContain('outreach/unsubscribe')
   })
 })

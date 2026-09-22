@@ -455,6 +455,34 @@ await check(
     ),
 )
 
+// ── A sequence's click rollup (AGL-3239) ────────────────────────────────────
+// `outreachSequences/{id}/reports/links`: the aggregate the report card reads
+// instead of reading every enrollment. The parent's `match` does NOT reach a
+// subcollection, so this needs its own rule — and its own rows here, because
+// a read the console makes on every sequence page must not be a denied listen
+// (which is billed as well as broken), and a client that could WRITE it could
+// invent the numbers a rep judges a sequence by.
+const rollupOf = (db, orgId = ORG) =>
+  doc(db, 'orgs', orgId, 'outreachSequences', 'seq-outreach-1', 'reports', 'links')
+await env.withSecurityRulesDisabled(async (context) => {
+  await setDoc(rollupOf(context.firestore()), {
+    links: { aHR0cHM6Ly9hZ2x5bi5jb20: { url: 'https://aglyn.com', clicks: 3 } },
+  })
+})
+await check('the click rollup: an entitled OWNER reads it', () =>
+  assertSucceeds(getDoc(rollupOf(as(OWNER)))),
+)
+await check('the click rollup: an OUTSIDER is refused', () =>
+  assertFails(getDoc(rollupOf(as(OUTSIDER)))),
+)
+await check(
+  'the click rollup: the OWNER of an ENTERPRISE org with no override is refused',
+  () => assertFails(getDoc(rollupOf(as(OWNER), ENTERPRISE_ORG))),
+)
+await check('the click rollup: an entitled OWNER cannot write it', () =>
+  assertFails(updateDoc(rollupOf(as(OWNER)), { overflowClicks: 99 })),
+)
+
 // Remove ONLY what this spec seeded — and the documents its write rows would
 // have created had a rule let them, so a regression leaves no residue behind
 // for the next run to read. Deliberately not `clearFirestore()` — the emulator
@@ -465,6 +493,7 @@ await env.withSecurityRulesDisabled(async (context) => {
   await deleteDoc(credentialOf(db, 'mbx-outreach-2'))
   await deleteDoc(pendingStateOf(db))
   await deleteDoc(pendingStateOf(db, 'state-outreach-new'))
+  await deleteDoc(rollupOf(db))
   for (const orgId of [ORG, ENTERPRISE_ORG, OVERRIDE_OFF_ORG]) {
     for (const entry of COLLECTIONS) {
       await deleteDoc(docOf(db, orgId, entry))

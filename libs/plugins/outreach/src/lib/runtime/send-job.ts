@@ -18,6 +18,7 @@
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import { normalizeCrmEmailTemplate } from '@aglyn/aglyn/app-utils/crm-email-templates'
+import { FieldValue } from 'firebase-admin/firestore'
 import { randomUUID } from 'node:crypto'
 import { composeOutreachEmail } from '../engine/compose'
 import { planOutreachStepCompletion, type OutreachEnrollmentEvent } from '../engine/enrollment-state'
@@ -481,7 +482,15 @@ async function completeStep(
   const enrollmentRef = outreachOrgCollection(firestore, run.orgId, 'enrollments').doc(input.enrollment.id)
   const boxRef = mailboxRef(firestore, run.orgId, run.mailbox.id)
   const nowMs = deps.now()
-  return firestore.runTransaction(async (transaction) => {
+  /*
+   * Whether this is the FIRST email this person has had from the sequence
+   * (AGL-3239), decided from the same read the step is recorded against and
+   * so re-decided on every transaction retry. It is what `stats.people`
+   * counts: the denominator of every engagement rate, and the thing
+   * `stats.sent` is not, since one person takes several steps.
+   */
+  let firstEmail = false
+  const completed = await firestore.runTransaction(async (transaction) => {
     const [current, box] = await Promise.all([
       transaction.get(enrollmentRef),
       input.sent ? transaction.get(boxRef) : Promise.resolve(null),
@@ -492,6 +501,9 @@ async function completeStep(
     // The step RAN, whatever happened to the enrollment while it did — a
     // member paused it, a reply stopped it — so it is recorded as run, and a
     // resume never sends it twice.
+    firstEmail =
+      input.sent !== null &&
+      !(stored.stepRecords ?? []).some((record) => record.kind === 'email')
     const plan = planOutreachStepCompletion({
       enrollment: { ...stored, status: 'active' },
       sequence: input.sequence,
@@ -532,6 +544,46 @@ async function completeStep(
     }
     return true
   })
+  if (completed && input.sent) {
+    await bumpOutreachSequenceStats(firestore, {
+      orgId: run.orgId,
+      sequenceId: input.sequence.id,
+      firstEmail,
+      trackedLinks: input.record.links?.length ?? 0,
+    })
+  }
+  return completed
+}
+
+/**
+ * The sequence's send counters (AGL-3239), written outside the enrollment's
+ * transaction.
+ *
+ * One sequence holds every enrollment, so a transaction over it would
+ * serialise every recipient against every other; `FieldValue.increment` is a
+ * blind write with nothing to contend on. It is bookkeeping beside the act,
+ * so a failure is logged and the send stands — the email has already left.
+ *
+ * `clickTracked` is stamped by the first send that actually carried a
+ * rewritten link, never by the SETTING: a sequence with the setting on whose
+ * emails have no links in them measured nothing, and the report must say
+ * "not measured" for it rather than publish a 0% click rate.
+ */
+async function bumpOutreachSequenceStats(
+  firestore: Firestore,
+  input: { orgId: string; sequenceId: string; firstEmail: boolean; trackedLinks: number },
+): Promise<void> {
+  if (!input.sequenceId) return
+  await outreachOrgCollection(firestore, input.orgId, 'sequences')
+    .doc(input.sequenceId)
+    .update({
+      'stats.sent': FieldValue.increment(1),
+      ...(input.firstEmail ? { 'stats.people': FieldValue.increment(1) } : {}),
+      ...(input.trackedLinks > 0 ? { 'stats.clickTracked': true } : {}),
+    })
+    .catch((error: unknown) => {
+      console.warn('[outreach] a send could not be counted on its sequence', error)
+    })
 }
 
 /** One task step: the rep's task on the contact, then the step recorded. */
@@ -679,10 +731,27 @@ async function runEmailStep(
   }
   const step = sequence.steps[enrollment.stepIndex]
   const sender = senderOf(mailbox)
+  /*
+   * Click tracking is the sequence's own setting (AGL-3239) and is read
+   * here, per send, rather than once per run: a member turning it off
+   * applies to the next email, not to the next hour. A link the minter
+   * cannot sign is left exactly as the step wrote it.
+   */
+  const rewriteLink = sequence.settings.trackClicks
+    ? (link: { url: string; index: number }) =>
+        deps.clickUrl({
+          orgId: run.orgId,
+          enrollmentId: enrollment.id,
+          stepIndex: enrollment.stepIndex,
+          linkIndex: link.index,
+          url: link.url,
+        })
+    : null
   const composed = composeOutreachEmail({
     sequence,
     enrollment,
     orgSettings: run.settings,
+    rewriteLink,
     merge: {
       // For a lead, the contact-shaped view of it (`leadAsContact`), so a
       // step written with `{{contact.*}}` reads the lead; `{{lead.*}}` reads
@@ -785,6 +854,7 @@ async function runEmailStep(
     gmailThreadId: sent.threadId,
     messageId: sent.messageId,
     subject: sent.subject,
+    ...(composed.email.trackedLinks.length ? { links: composed.email.trackedLinks } : {}),
   }
   await completeStep(deps, firestore, run, {
     enrollment,

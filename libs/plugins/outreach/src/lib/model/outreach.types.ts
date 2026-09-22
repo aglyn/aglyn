@@ -402,6 +402,92 @@ export interface OutreachSequenceSettings {
   allowedCountries: string[]
   /** Whether a contact who is already a customer may be enrolled. Default `false`. */
   allowCustomers: boolean
+  /**
+   * Whether the links in this sequence's emails are rewritten so clicks are
+   * counted (AGL-3239). Default `false`, and `false` on every sequence
+   * written before the setting existed: turning it on changes what the
+   * recipient sees in the body, which is not a change to make on anyone's
+   * behalf.
+   *
+   * It buys the one engagement number a plain-text sequence can honestly
+   * report. It costs a visible link: the destination in the body becomes a
+   * signed link on the console that forwards to it. There is no equivalent
+   * setting for opens, because a pixel needs an HTML part — see
+   * `../engine/click-tracking.ts`.
+   */
+  trackClicks: boolean
+}
+
+/*==========================================
+ * WHAT A SEQUENCE MEASURED (AGL-3239).
+ *
+ * Counters on the sequence document, incremented by the sending runtime and
+ * by the click route. They are NOT derived from the enrollments on read: the
+ * console lists enrollments a page at a time, so a rollup taken over what is
+ * loaded would report the first page's numbers as the sequence's.
+ *
+ * Every field is optional and every absence means "not recorded", never
+ * zero. The distinction is the whole of `campaign-report.ts`'s honesty and
+ * it is kept here for the same reason: a sequence that ran before this
+ * existed has no counters, and reporting its click rate as 0% would publish
+ * a fact about our schema as a fact about its recipients.
+ *=========================================*/
+
+/**
+ * The per-destination click rollup under one sequence:
+ * `orgs/{orgId}/outreachSequences/{id}/reports/links`.
+ *
+ * One document per sequence, holding a bounded map — the campaign rollup's
+ * own shape and its own cap, so "a link" means the same thing in a rep's
+ * report and a marketer's. Here rather than beside the writer, because the
+ * console's listener is a browser module and the writer is not.
+ */
+export const OUTREACH_LINK_ROLLUP_PATH = ['reports', 'links'] as const
+
+/** The counters one sequence is judged by. */
+export interface OutreachSequenceStats {
+  /** Email steps that left. One person getting four emails counts four. */
+  sent?: number
+  /**
+   * Distinct enrollments that have had at least one email — the denominator
+   * of every engagement rate, and the thing `sent` is not.
+   */
+  people?: number
+  /**
+   * At least one email of this sequence went out with its links rewritten.
+   *
+   * Absent is NOT false; it is "never recorded", which is what every
+   * sequence sent before the setting existed reads as. Either way the report
+   * withholds the click rate rather than showing 0% — see
+   * {@link OutreachSequenceStats} above.
+   */
+  clickTracked?: boolean
+  /** Click EVENTS judged a person's. One reader clicking twice counts two. */
+  clicks?: number
+  /** Enrollments whose FIRST human click was seen: the rate's numerator. */
+  uniqueClicks?: number
+  /**
+   * Clicks a link scanner or a security gateway made, counted apart and
+   * never in the rate (`../engine/click-tracking.ts`). Shown, not hidden:
+   * a large number here is the reader's evidence that the small number
+   * beside it is the real one.
+   */
+  machineClicks?: number
+  /** When a person last followed a link. */
+  lastClickAtMs?: number | null
+}
+
+/** What one enrollment did with the links it was sent (AGL-3239). */
+export interface OutreachEnrollmentEngagement {
+  /** Click events judged this person's, machines excluded. */
+  clicks: number
+  /** The first, which is what makes them one of the sequence's `uniqueClicks`. */
+  firstClickAtMs: number | null
+  lastClickAtMs: number | null
+  /** The destination they followed last, as `campaignLinkKey` reduces it. */
+  lastClickUrl: string | null
+  /** Clicks on this person's links that were a machine's. */
+  machineClicks: number
 }
 
 /** An ordered set of steps sent from one mailbox (`orgs/{orgId}/outreachSequences/{id}`). */
@@ -419,6 +505,11 @@ export interface OutreachSequence extends OutreachTimestamps {
   steps: OutreachSequenceStep[]
   settings: OutreachSequenceSettings
   status: OutreachSequenceStatus
+  /**
+   * What it measured (AGL-3239). Absent until the first email leaves, and
+   * absent forever on a sequence that finished before the counters existed.
+   */
+  stats?: OutreachSequenceStats
 }
 
 /*==========================================
@@ -617,6 +708,12 @@ export interface OutreachEnrollment extends OutreachTimestamps {
   stepRecords?: OutreachStepRecord[]
   /** Gmail ids of this enrollment's thread messages the sync has handled, the last hundred. */
   syncedMessageIds?: string[]
+  /**
+   * What this person did with the links they were sent (AGL-3239). Absent
+   * until their first click, which is why the table reads an absence as
+   * "no clicks" only for a sequence that tracks them at all.
+   */
+  engagement?: OutreachEnrollmentEngagement
 }
 
 /** A sending run's claim on one enrollment's step (AGL-2981). */
@@ -649,6 +746,16 @@ export interface OutreachStepRecord {
   subject?: string
   /** The record system's task for a task step; `null` when none could be filed. */
   taskId?: string | null
+  /**
+   * The destinations this email's links were rewritten to point at, in the
+   * order a click token indexes them (AGL-3239). Absent on a step that
+   * carried no links, and on every step sent before tracking existed.
+   *
+   * Kept so the console can say WHICH link a person followed without the
+   * token having to carry the URL back to us, and so a rewritten body can be
+   * read afterwards for what it actually offered them.
+   */
+  links?: string[]
 }
 
 /*==========================================

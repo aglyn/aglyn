@@ -73,4 +73,13 @@ export const OUTREACH_API_ROUTES = {
   // or not Outreach is released for the organization now.
   /** `GET` and the RFC 8058 one-click `POST` — `?t=<signed token>`. */
   unsubscribe: 'outreach/unsubscribe',
+  /**
+   * `GET` — a link in a tracked sequence email (AGL-3239). `?t=<signed
+   * token>`; answers a redirect to the destination the token names, and
+   * records the click afterwards. A recipient link like the unsubscribe
+   * one: no session, and it answers whether or not Outreach is released to
+   * the organization now, because a link in an email that already left must
+   * not stop working when a rollout is paused.
+   */
+  click: 'outreach/click',
 } as const
