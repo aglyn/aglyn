@@ -30,6 +30,7 @@ content on the marketing site and is written separately.
 - **plugins:** the artifact inventory spec names the type of its empty claims list ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **ai:** a section that keeps components writes its repeated item once ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
 - **ai:** an instance that fills none of its component's props is refused ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **ai:** a copied component, form or template answers for what its plan promised ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
 
 ### Changed
 
