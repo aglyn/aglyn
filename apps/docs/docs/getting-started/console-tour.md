@@ -247,10 +247,10 @@ have given one, otherwise its category's.
 
 Set one and the row is marked **Set**, with **Follow category** beside it to
 put it back. This is how you stop hearing about one thing without silencing its
-neighbours — turning **Payment failed** off leaves the rest of **Billing**
+neighbors — turning **Payment failed** off leaves the rest of **Billing**
 alone.
 
-A digest's **Email** switch is greyed out here, because a digest composes and
+A digest's **Email** switch is grayed out here, because a digest composes and
 sends its own mail under its own switch in **Digests** below.
 
 These are answers for your whole account. **One workspace or one site** stays
