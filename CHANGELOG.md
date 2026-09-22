@@ -9,6 +9,42 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.153 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/276c49b5d...v1.0.0-beta.153)
+
+### Added
+
+- **crm:** a lead carries its own profile, a New lead drawer and `POST /v1/leads` ([AGL-3231](https://linear.app/aglyn/issue/AGL-3231))
+- **crm:** one person is one record — a lead surface files a lead, a relationship makes a contact ([AGL-3232](https://linear.app/aglyn/issue/AGL-3232))
+- **crm:** converting a lead hands its profile, consent, activities, tasks and plugin records to the contact ([AGL-3233](https://linear.app/aglyn/issue/AGL-3233))
+- **crm:** the one-record backfill folds duplicate contacts into their leads and closes open leads onto their contacts ([AGL-3235](https://linear.app/aglyn/issue/AGL-3235))
+- **outreach:** a sequence enrolls a lead or a contact, and follows the lead to the contact it becomes ([AGL-3234](https://linear.app/aglyn/issue/AGL-3234))
+- **plugins:** the plugin that stores the artifacts answers who claims them ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **outreach:** a mailbox's member can switch the warm-up ramp off ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
+- **plugins:** the quota banner meters a capacity the plugin declares ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
+
+### Fixed
+
+- **crm:** the one-record backfill reads a console account as a relationship ([AGL-3235](https://linear.app/aglyn/issue/AGL-3235))
+- **plugins:** the artifact inventory spec names the type of its empty claims list ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **ai:** a section that keeps components writes its repeated item once ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **ai:** an instance that fills none of its component's props is refused ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+- **ai:** a copied component, form or template answers for what its plan promised ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
+
+### Changed
+
+- **marketplace:** two model modules come home now their console reader has ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1217](https://linear.app/aglyn/issue/AGL-1217))
+
+<details>
+<summary>Also in this release: 3 chores</summary>
+
+- **crm:** the lead's domain stays in its plugin — the open-lead close moves to the CRM, the migration module loses the plugin's name ([AGL-3232](https://linear.app/aglyn/issue/AGL-3232), [AGL-3235](https://linear.app/aglyn/issue/AGL-3235))
+- **crm:** the lead import's British header alias joins the spelling baseline ([AGL-3231](https://linear.app/aglyn/issue/AGL-3231))
+- **release:** v1.0.0-beta.153 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+
+</details>
+
 ## v1.0.0-beta.152 — 2026-09-21
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.151...v1.0.0-beta.152)

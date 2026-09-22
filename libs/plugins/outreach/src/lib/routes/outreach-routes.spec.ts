@@ -84,22 +84,27 @@ function fakeFirestore(docs: Docs) {
     delete: (path: string) => void docs.delete(path),
   }
   type Filter = [string, unknown]
-  const query = (path: string, filters: Filter[], order: boolean, max: number, after: string | null): any => ({
+  /** The order a query asked for: by id, or by one field's value (a Leads view reads by `lastSeenAtMs`). */
+  type Order = { field: string; desc: boolean } | null
+  const query = (path: string, filters: Filter[], order: Order, max: number, after: string | null): any => ({
     where: (field: string, op: string, value: unknown) => {
       if (op !== '==') throw new Error(`unsupported operator ${op}`)
       return query(path, [...filters, [field, value]], order, max, after)
     },
-    orderBy: (field: string) => {
-      if (field !== '__name__') throw new Error(`unsupported order ${field}`)
-      return query(path, filters, true, max, after)
-    },
+    orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') =>
+      query(path, filters, { field, desc: direction === 'desc' }, max, after),
     limit: (count: number) => query(path, filters, order, count, after),
     startAfter: (last: { id: string }) => query(path, filters, order, max, last.id),
     get: async () => {
-      const found = [...docs.keys()]
+      const keys = [...docs.keys()]
         .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
         .filter((key) => filters.every(([field, value]) => fieldOf(docs.get(key), field) === value))
         .sort()
+      if (order && order.field !== '__name__') {
+        const value = (key: string) => Number(fieldOf(docs.get(key), order.field) ?? 0)
+        keys.sort((a, b) => (order.desc ? value(b) - value(a) : value(a) - value(b)))
+      }
+      const found = keys
         .filter((key) => after === null || key.slice(path.length + 1) > after)
         .slice(0, max)
         .map(snapshot)
@@ -125,7 +130,7 @@ function fakeFirestore(docs: Docs) {
   function collection(path: string): any {
     const parentPath = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : null
     return {
-      ...query(path, [], false, Number.POSITIVE_INFINITY, null),
+      ...query(path, [], null, Number.POSITIVE_INFINITY, null),
       id: path.slice(path.lastIndexOf('/') + 1),
       path,
       parent: parentPath ? doc(parentPath) : null,
@@ -256,6 +261,13 @@ const cold = (id: string, name: string, email: string) => {
     email,
     facets: { [HOST]: { sources: { manual: true }, companyId: 'co-1' } },
   })
+}
+
+/** A lead the shop holds (AGL-3234), keyed by its person key, at `hosts/{HOST}/leads`. */
+const lead = (email: string, fields: Data) => {
+  const id = personKey(email) as string
+  docs.set(`hosts/${HOST}/leads/${id}`, { email, sources: ['import'], submissionCount: 1, ...fields })
+  return id
 }
 
 beforeEach(() => {
@@ -665,6 +677,75 @@ describe('outreach/enroll/preview (AGL-2980)', () => {
     expect(unreadable.body.error).toContain('Name')
   })
 
+  /**
+   * A LEAD is enrolled as it is (AGL-3234): judged as the contact it would
+   * be — an imported lead is cold, one that wrote in through a form is not,
+   * its address decides its country — and named by its own key. A lead
+   * already converted, already a contact, or closed is blocked with the
+   * reason.
+   */
+  it('reads the leads a source names, judged as the contact each would be', async () => {
+    const sequenceId = await activeSequence()
+    const imported = lead('dana@initech.example', {
+      name: 'Dana Marsh',
+      company: 'Initech',
+      jobTitle: 'CMO',
+      address: { country: 'US' },
+    })
+    const wroteIn = lead('sam@initech.example', {
+      name: 'Sam Rivera',
+      sources: ['form:form-1'],
+      address: { country: 'US' },
+    })
+    const converted = lead('theo@initech.example', { status: 'qualified', convertedContactId: 'c-theo' })
+    warm('c-casey', 'Casey Morgan', 'casey.morgan@example.com')
+    const held = lead('casey.morgan@example.com', { name: 'Casey Morgan', address: { country: 'US' } })
+    const closed = lead('june@initech.example', { status: 'unqualified', unqualifiedReason: 'Not a fit' })
+
+    const { status, body } = await post(enroll().preview, REP, {
+      sequenceId,
+      source: { kind: 'leads', leadIds: [imported, wroteIn, converted, held, closed, 'nope'] },
+    })
+    expect(status).toBe(200)
+    const byId = Object.fromEntries(body.people.map((person: { personId: string }) => [person.personId, person]))
+    expect(byId[imported]).toMatchObject({
+      target: 'lead',
+      leadId: imported,
+      contactId: '',
+      name: 'Dana Marsh',
+      email: 'dana@initech.example',
+      status: 'needs_confirmation',
+      cold: true,
+      country: 'US',
+    })
+    expect(byId[wroteIn]).toMatchObject({ status: 'eligible', cold: false })
+    const codes = (id: string) => byId[id].blocks.map((block: { code: string }) => block.code)
+    expect(codes(converted)).toEqual(['lead_converted'])
+    expect(codes(held)).toEqual(['lead_is_contact'])
+    expect(codes(closed)).toEqual(['lead_unqualified'])
+    expect(codes('nope')).toEqual(['lead_missing'])
+  })
+
+  it('reads the people a saved Leads view selects: the site’s open leads by status', async () => {
+    const sequenceId = await activeSequence()
+    const open = lead('dana@initech.example', { name: 'Dana Marsh', lastSeenAtMs: 3, address: { country: 'US' } })
+    const working = lead('sam@initech.example', { status: 'working', lastSeenAtMs: 2, address: { country: 'US' } })
+    lead('june@initech.example', { status: 'unqualified', unqualifiedReason: 'No', lastSeenAtMs: 1 })
+    docs.set(org('crmViews/view-open-leads'), { section: 'leads', name: 'Open leads', shared: true, ownerUid: OWNER, filters: [] })
+    docs.set(org('crmViews/view-working'), {
+      section: 'leads',
+      name: 'Working',
+      shared: true,
+      ownerUid: OWNER,
+      filters: [{ field: 'status', op: 'equals', value: 'working' }],
+    })
+    const opened = await post(enroll().preview, REP, { sequenceId, source: { kind: 'view', viewId: 'view-open-leads' } })
+    expect(opened.status).toBe(200)
+    expect(opened.body.people.map((person: { personId: string }) => person.personId).sort()).toEqual([open, working].sort())
+    const worked = await post(enroll().preview, REP, { sequenceId, source: { kind: 'view', viewId: 'view-working' } })
+    expect(worked.body.people.map((person: { personId: string }) => person.personId)).toEqual([working])
+  })
+
   it('asks for Manage data, and an active sequence', async () => {
     const refused = await post(enroll().preview, 'uid-reader', { sequenceId: 'x', source: { kind: 'contacts', contactIds: ['c'] } })
     expect(refused).toMatchObject({ status: 403, body: { reason: 'permission' } })
@@ -702,7 +783,10 @@ describe('outreach/enroll (AGL-2980)', () => {
     expect(status).toBe(200)
     expect(body.results).toEqual([
       {
+        personId: 'c-cold',
+        target: 'contact',
         contactId: 'c-cold',
+        leadId: null,
         email: 'avery.quinn@example.org',
         outcome: 'enrolled',
         enrollmentId: `${sequenceId}_c-cold`,
@@ -757,6 +841,43 @@ describe('outreach/enroll (AGL-2980)', () => {
     })
     const again = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-warm' }] })
     expect(again.body.results[0].blocks.map((block: { code: string }) => block.code)).toEqual(['already_in_sequence'])
+  })
+
+  /**
+   * Enrolling a lead (AGL-3234): the enrollment names the lead and no
+   * contact, under the lead's own key; the steps read the lead's fields; and
+   * once the lead has an enrollment in a sequence, the contact it becomes is
+   * refused the same sequence — by address, not by id.
+   */
+  it('enrolls a lead by its own key, and refuses the same address again as a contact', async () => {
+    const sequenceId = await activeSequence()
+    const leadId = lead('sam@initech.example', {
+      name: 'Sam Rivera',
+      sources: ['form:form-1'],
+      address: { country: 'US' },
+      company: 'Initech',
+    })
+    const { status, body } = await post(enroll().confirm, REP, { sequenceId, people: [{ leadId }] })
+    expect(status).toBe(200)
+    expect(body.results[0]).toMatchObject({
+      target: 'lead',
+      leadId,
+      contactId: '',
+      outcome: 'enrolled',
+      enrollmentId: `${sequenceId}_${leadId}`,
+    })
+    expect(docs.get(org(`outreachEnrollments/${sequenceId}_${leadId}`))).toMatchObject({
+      target: 'lead',
+      leadId,
+      contactId: '',
+      contactName: 'Sam Rivera',
+      email: 'sam@initech.example',
+      status: 'active',
+    })
+    // The lead converted; the contact it became is the same person here.
+    warm('c-sam', 'Sam Rivera', 'sam@initech.example')
+    const again = await post(enroll().preview, REP, { sequenceId, source: { kind: 'contacts', contactIds: ['c-sam'] } })
+    expect(again.body.people[0].blocks.map((block: { code: string }) => block.code)).toEqual(['already_in_sequence'])
   })
 
   it('refuses a sequence whose mailbox is gone, and more people than a batch holds', async () => {

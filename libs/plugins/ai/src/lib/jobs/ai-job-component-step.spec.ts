@@ -581,8 +581,53 @@ describe('the component step', () => {
     expect(commits).toHaveLength(1)
   })
 
+  describe('a copy the plan promised more of (AGL-3024)', () => {
+    const plan: AiJobPlan = { ...PLAN, create: [{ ...PLAN.create[0], duplicateOf: 'cmp-avatar' }] }
+    const copies = () =>
+      jest
+        .fn()
+        .mockResolvedValue({ ok: true, id: 'cmp-copy', versionId: 'v-copy', name: 'Testimonial card' })
+
+    it('stops for a person rather than reporting a copy that lacks a property the plan named', async () => {
+      // MEASURED live: practice-area-link-card came out byte-identical to the
+      // practice-area-card it was copied from, while its plan said the source
+      // had no link target. The job reported it as built.
+      mockDocs.set('hosts/host-1/components/cmp-copy', {
+        displayName: 'Testimonial card',
+        props: [{ name: 'quote' }, { name: 'name' }],
+      })
+      const outcome = await createAiJobComponentStep({
+        duplicate: copies() as unknown as typeof duplicateResource,
+      })(context({ plan }))
+      expect(mockRunAiRequest).not.toHaveBeenCalled()
+      expect(outcome.outputs ?? []).toEqual([])
+      expect(outcome.review?.reason).toBe('doctrine')
+      expect(outcome.review?.findings.map((finding) => finding.code)).toEqual(['plan-props-missing'])
+      expect(outcome.review?.findings[0].message).toContain('role, photo')
+    })
+
+    it('stops for a person when the copy cannot be read back at all', async () => {
+      const outcome = await createAiJobComponentStep({
+        duplicate: copies() as unknown as typeof duplicateResource,
+      })(context({ plan }))
+      expect(outcome.outputs ?? []).toEqual([])
+      expect(outcome.review).toEqual({
+        reason: 'doctrine',
+        message:
+          '"Testimonial card" was copied from the component the plan names, and this job could not read the copy back to check it has the properties the plan gives it. Open the component and check it before you place it.',
+        findings: [],
+      })
+    })
+  })
+
   it('copies the component the plan starts from through the duplicate module, and generates nothing', async () => {
     const plan: AiJobPlan = { ...PLAN, create: [{ ...PLAN.create[0], duplicateOf: 'cmp-avatar' }] }
+    // The copy carries every property the plan named, so there is nothing for
+    // the copy review to stop on (AGL-3024).
+    mockDocs.set('hosts/host-1/components/cmp-copy', {
+      displayName: 'Testimonial card',
+      props: [{ name: 'quote' }, { name: 'name' }, { name: 'role' }, { name: 'photo' }],
+    })
     const duplicate = jest
       .fn()
       .mockResolvedValue({ ok: true, id: 'cmp-copy', versionId: 'v-copy', name: 'Testimonial card' })

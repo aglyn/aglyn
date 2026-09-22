@@ -617,6 +617,47 @@ describe('the form step', () => {
     expect(commits).toEqual([`hosts/host-1/forms/${FORM_ID}`])
   })
 
+  describe('a copy the plan promised more of (AGL-3024)', () => {
+    const promises = (fields: string[]): AiJobPlan => {
+      const base = planFor(GOLDENS['roofingQuote'])
+      return { ...base, create: [{ ...base.create[0], duplicateOf: 'frm-contact', fields }] }
+    }
+    const copies = () =>
+      jest
+        .fn()
+        .mockResolvedValue({ ok: true, id: 'frm-copy', versionId: 'v-copy', name: 'Roof quote request' })
+
+    it('stops for a person rather than reporting a copy that collects none of the fields the plan named', async () => {
+      // The one thing duplication HIDES, beside the one it causes: "start
+      // from the consultation form and add a case-type question" getting the
+      // consultation form and nothing else, reported as built.
+      mockDocs.set('hosts/host-1/forms/frm-copy', {
+        displayName: 'Roof quote request',
+        fields: [{ fieldName: 'name' }, { fieldName: 'email' }],
+      })
+      const outcome = await createAiJobFormStep({
+        duplicate: copies() as unknown as typeof duplicateResource,
+      })(context({ plan: promises(['name', 'email', 'roofAge']) }))
+      expect(mockRunAiRequest).not.toHaveBeenCalled()
+      expect(outcome.outputs ?? []).toEqual([])
+      expect(outcome.review?.reason).toBe('doctrine')
+      expect(outcome.review?.findings.map((finding) => finding.code)).toEqual(['plan-fields-missing'])
+      expect(outcome.review?.findings[0].message).toContain('roofage')
+    })
+
+    it('reports the copy once it collects every field the plan named', async () => {
+      mockDocs.set('hosts/host-1/forms/frm-copy', {
+        displayName: 'Roof quote request',
+        fields: [{ fieldName: 'name' }, { fieldName: 'email' }, { fieldName: 'roofAge' }],
+      })
+      const outcome = await createAiJobFormStep({
+        duplicate: copies() as unknown as typeof duplicateResource,
+      })(context({ plan: promises(['name', 'email', 'roofAge']) }))
+      expect(outcome.review).toBeUndefined()
+      expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'form', id: 'frm-copy' })])
+    })
+  })
+
   it('copies the form a confirmed plan starts from through the duplicate module, and generates nothing', async () => {
     const base = planFor(GOLDENS['roofingQuote'])
     const plan: AiJobPlan = { ...base, create: [{ ...base.create[0], duplicateOf: 'frm-contact' }] }

@@ -18,7 +18,9 @@
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
   CRM_COLLECTIONS,
+  crmLeadStatus,
   crmViewIsListed,
+  isCrmLeadOpen,
   normalizeCrmViewFilters,
 } from '@aglyn/aglyn/app-utils/crm'
 import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
@@ -40,6 +42,7 @@ import {
   type OutreachEnrollOutcome,
   type OutreachEnrollPreviewResponse,
   type OutreachEnrollResponse,
+  type OutreachPersonRef,
 } from '../model/outreach-api'
 import type { OutreachSequence } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
@@ -174,13 +177,22 @@ async function enrollContext(
   }
 }
 
-/** The candidates, the enrollments they already have here, and the gates' lookups. */
+/**
+ * The candidates, the enrollments they already have here, and the gates'
+ * lookups — every map keyed by the person's own id.
+ *
+ * "Already in this sequence" is answered two ways (AGL-3234): by the id the
+ * person's enrollment would have, and by any enrollment in this sequence
+ * that carries the person's ADDRESS. The second is what keeps a contact
+ * from being enrolled beside the lead they were converted from: the lead's
+ * enrollment followed them, under the lead's key, and still names them.
+ */
 async function readPeople(
   firestore: Firestore,
   caller: OutreachRouteCaller,
   sequence: OutreachSequence,
   context: EnrollContext,
-  contactIds: readonly string[],
+  people: readonly OutreachPersonRef[],
 ): Promise<{
   candidates: OutreachEnrollCandidate[]
   enrolledHere: Set<string>
@@ -190,25 +202,34 @@ async function readPeople(
     orgId: caller.orgId,
     hostId: sequence.hostId,
     contactGroupId: context.contactGroupId,
-    contactIds,
+    people,
   })
   const enrollments = outreachOrgCollection(firestore, caller.orgId, 'enrollments')
   const existing = candidates.length
     ? await firestore.getAll(
-        ...candidates.map((candidate) => enrollments.doc(outreachEnrollmentId(sequence.id, candidate.contactId))),
+        ...candidates.map((candidate) => enrollments.doc(outreachEnrollmentId(sequence.id, candidate.personId))),
       )
     : []
   const enrolledHere = new Set(
-    candidates.filter((_candidate, index) => existing[index]?.exists).map((candidate) => candidate.contactId),
+    candidates.filter((_candidate, index) => existing[index]?.exists).map((candidate) => candidate.personId),
   )
   const askable = candidates.filter((candidate) => candidate.contact && candidate.visible && candidate.email)
   const lookups = askable.length
     ? await readOutreachGateLookups(firestore, {
         orgId: caller.orgId,
         hostId: sequence.hostId,
-        people: askable.map((candidate) => ({ contactId: candidate.contactId, email: String(candidate.email) })),
+        people: askable.map((candidate) => ({
+          personId: candidate.personId,
+          contactId: candidate.contactId || null,
+          leadId: candidate.leadId,
+          email: String(candidate.email),
+        })),
       })
     : new Map<string, OutreachGateLookups>()
+  for (const candidate of askable) {
+    const open = lookups.get(candidate.personId)?.openEnrollments ?? []
+    if (open.some((entry) => entry.sequenceId === sequence.id)) enrolledHere.add(candidate.personId)
+  }
   return { candidates, enrolledHere, lookups }
 }
 
@@ -217,23 +238,62 @@ const uniqueIds = (values: unknown): string[] =>
     ? [...new Set(values.map(readOutreachDocumentId).filter((id): id is string => id !== null))]
     : []
 
+/** The most leads a saved Leads view reads — the Leads list's own window. */
+const LEADS_VIEW_WINDOW = 200
+
+/**
+ * The people a saved LEADS view selects (AGL-3234): the sequence's site's
+ * most recently seen leads, narrowed by the view's status clause the way
+ * the Leads list narrows its window — open leads when the view names no
+ * status, one status when it does, everything for `all`. A lead is the
+ * site's own, so there is no address to resolve: the person key IS the id.
+ */
+async function leadsViewPeople(
+  firestore: Firestore,
+  sequence: OutreachSequence,
+  filters: ReturnType<typeof normalizeCrmViewFilters>,
+): Promise<{ people: OutreachPersonRef[]; total: number; truncated: boolean }> {
+  const statusClause = filters.find((clause) => clause.field === 'status' && clause.op === 'equals')
+  const wanted = String(statusClause?.value ?? 'open')
+  const window = await firestore
+    .collection('hosts')
+    .doc(sequence.hostId)
+    .collection('leads')
+    .orderBy('lastSeenAtMs', 'desc')
+    .limit(LEADS_VIEW_WINDOW + 1)
+    .get()
+  const matching = window.docs.slice(0, LEADS_VIEW_WINDOW).filter((doc) => {
+    const lead = doc.data() as Record<string, unknown>
+    if (wanted === 'all') return true
+    if (wanted === 'open') return isCrmLeadOpen(lead as never) && !lead['convertedContactId']
+    return crmLeadStatus(lead as never) === wanted
+  })
+  return {
+    people: matching.slice(0, OUTREACH_ENROLL_BATCH_MAX).map((doc) => ({ kind: 'lead', id: doc.id })),
+    total: matching.length,
+    truncated: matching.length > OUTREACH_ENROLL_BATCH_MAX || window.docs.length > LEADS_VIEW_WINDOW,
+  }
+}
+
 export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): OutreachEnrollRoutes {
   /**
-   * The contacts a source names, the batch limit applied: every contact a
-   * search picked, or the people a saved Contacts view selects at the
-   * sequence's site, found by address.
+   * The people a source names, the batch limit applied: every contact a
+   * search picked, every lead picked from the sequence's site, or the
+   * people a saved Contacts or Leads view selects there — contacts found by
+   * address, leads by their own key.
    */
-  async function sourceContactIds(
+  async function sourcePeople(
     firestore: Firestore,
     caller: OutreachRouteCaller,
     sequence: OutreachSequence,
     source: Record<string, unknown>,
-  ): Promise<Response | { contactIds: string[]; total: number; truncated: boolean }> {
-    if (source['kind'] === 'contacts') {
-      const ids = uniqueIds(source['contactIds'])
+  ): Promise<Response | { people: OutreachPersonRef[]; total: number; truncated: boolean }> {
+    if (source['kind'] === 'contacts' || source['kind'] === 'leads') {
+      const kind = source['kind'] === 'leads' ? 'lead' : 'contact'
+      const ids = uniqueIds(kind === 'lead' ? source['leadIds'] : source['contactIds'])
       if (!ids.length) return outreachRefusal(400, 'invalid-request', 'Pick the people to enroll.')
       return {
-        contactIds: ids.slice(0, OUTREACH_ENROLL_BATCH_MAX),
+        people: ids.slice(0, OUTREACH_ENROLL_BATCH_MAX).map((id) => ({ kind, id })),
         total: ids.length,
         truncated: ids.length > OUTREACH_ENROLL_BATCH_MAX,
       }
@@ -255,8 +315,11 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     ) {
       return outreachRefusal(404, 'view-not-found', 'That saved view no longer exists.')
     }
+    if (data['section'] === 'leads') {
+      return leadsViewPeople(firestore, sequence, normalizeCrmViewFilters(data['filters']))
+    }
     if (data['section'] !== 'contacts') {
-      return outreachRefusal(400, 'view-unsupported', 'Enroll from a saved view of Contacts.')
+      return outreachRefusal(400, 'view-unsupported', 'Enroll from a saved view of Contacts or Leads.')
     }
     const { unsupported } = dynamicListDimensionsForCrmView(normalizeCrmViewFilters(data['filters']))
     if (unsupported.length) {
@@ -277,7 +340,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         .map((email) => findContactByEmail(contacts, email, { hostId: sequence.hostId })),
     )
     return {
-      contactIds: [...new Set(found.filter((snapshot) => snapshot).map((snapshot) => String(snapshot?.id)))],
+      people: [...new Set(found.filter((snapshot) => snapshot).map((snapshot) => String(snapshot?.id)))].map(
+        (id) => ({ kind: 'contact', id }),
+      ),
       total: ordered.length,
       truncated: ordered.length > OUTREACH_ENROLL_BATCH_MAX || !complete,
     }
@@ -292,7 +357,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     const sequence = await loadActiveSequence(firestore, caller.orgId, body['sequenceId'])
     if (sequence instanceof Response) return sequence
     const source = body['source'] && typeof body['source'] === 'object' ? (body['source'] as Record<string, unknown>) : {}
-    const named = await sourceContactIds(firestore, caller, sequence, source)
+    const named = await sourcePeople(firestore, caller, sequence, source)
     if (named instanceof Response) return named
     const context = await enrollContext(firestore, caller, sequence)
     const { candidates, enrolledHere, lookups } = await readPeople(
@@ -300,17 +365,17 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       caller,
       sequence,
       context,
-      named.contactIds,
+      named.people,
     )
     const people = candidates.map((candidate) =>
       previewOutreachPerson(
         {
           candidate,
-          lookups: lookups.get(candidate.contactId) ?? UNCHECKED,
+          lookups: lookups.get(candidate.personId) ?? UNCHECKED,
           settings: context.settings,
           contactGroupId: context.contactGroupId,
         },
-        { siteName: context.siteName, alreadyInSequence: enrolledHere.has(candidate.contactId) },
+        { siteName: context.siteName, alreadyInSequence: enrolledHere.has(candidate.personId) },
       ),
     )
     return outreachOk({
@@ -330,12 +395,24 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     const sequence = await loadActiveSequence(firestore, caller.orgId, body['sequenceId'])
     if (sequence instanceof Response) return sequence
 
-    const requested = new Map<string, { personalLine: string; attestations: unknown[] }>()
+    // Each person once, by whichever record they are: a contact by id, or a
+    // lead by its key (AGL-3234). A person named both ways is a contact.
+    const requested = new Map<
+      string,
+      { ref: OutreachPersonRef; personalLine: string; attestations: unknown[] }
+    >()
     for (const entry of Array.isArray(body['people']) ? body['people'] : []) {
       const person = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>
       const contactId = readOutreachDocumentId(person['contactId'])
-      if (!contactId || requested.has(contactId)) continue
-      requested.set(contactId, {
+      const leadId = readOutreachDocumentId(person['leadId'])
+      const ref: OutreachPersonRef | null = contactId
+        ? { kind: 'contact', id: contactId }
+        : leadId
+          ? { kind: 'lead', id: leadId }
+          : null
+      if (!ref || requested.has(ref.id)) continue
+      requested.set(ref.id, {
+        ref,
         personalLine: typeof person['personalLine'] === 'string' ? person['personalLine'] : '',
         attestations: Array.isArray(person['attestations']) ? person['attestations'] : [],
       })
@@ -378,31 +455,39 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       caller,
       sequence,
       context,
-      [...requested.keys()],
+      [...requested.values()].map((entry) => entry.ref),
     )
     const enrollments = outreachOrgCollection(firestore, caller.orgId, 'enrollments')
     const results: OutreachEnrollOutcome[] = await Promise.all(
       candidates.map(async (candidate): Promise<OutreachEnrollOutcome> => {
-        const supplied = requested.get(candidate.contactId) ?? { personalLine: '', attestations: [] }
+        const named = {
+          personId: candidate.personId,
+          target: candidate.target,
+          contactId: candidate.contactId,
+          leadId: candidate.leadId,
+        }
+        const supplied = requested.get(candidate.personId) ?? { personalLine: '', attestations: [] }
         const decision = decideOutreachEnrollment(
           {
             candidate,
-            lookups: lookups.get(candidate.contactId) ?? UNCHECKED,
+            lookups: lookups.get(candidate.personId) ?? UNCHECKED,
             settings: context.settings,
             contactGroupId: context.contactGroupId,
           },
-          { siteName: context.siteName, alreadyInSequence: enrolledHere.has(candidate.contactId) },
-          { ...supplied, uid: caller.uid, nowMs },
+          { siteName: context.siteName, alreadyInSequence: enrolledHere.has(candidate.personId) },
+          { personalLine: supplied.personalLine, attestations: supplied.attestations, uid: caller.uid, nowMs },
         )
         if (!decision.allowed || !decision.email) {
-          return { contactId: candidate.contactId, email: candidate.email, outcome: 'blocked', blocks: decision.blocks }
+          return { ...named, email: candidate.email, outcome: 'blocked', blocks: decision.blocks }
         }
-        const id = outreachEnrollmentId(sequence.id, candidate.contactId)
+        const id = outreachEnrollmentId(sequence.id, candidate.personId)
         const enrollment = buildOutreachEnrollment({
           id,
           sequence,
           mailbox,
+          target: candidate.target,
           contactId: candidate.contactId,
+          leadId: candidate.leadId,
           contactName: candidate.name,
           email: decision.email,
           cold: decision.cold,
@@ -417,7 +502,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         } catch (error) {
           if ((error as { code?: unknown })?.code !== ALREADY_EXISTS) throw error
           return {
-            contactId: candidate.contactId,
+            ...named,
             email: candidate.email,
             outcome: 'blocked',
             blocks: [
@@ -428,7 +513,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
             ],
           }
         }
-        return { contactId: candidate.contactId, email: decision.email, outcome: 'enrolled', enrollmentId: id }
+        return { ...named, email: decision.email, outcome: 'enrolled', enrollmentId: id }
       }),
     )
     const enrolled = results.filter((result) => result.outcome === 'enrolled').length

@@ -42,7 +42,7 @@ export function standInRecordSystem(): PluginContactCaptureRequest[] {
     {
       capture: async (request) => {
         captured.push(request)
-        return { ok: true, contactId: `contact-${captured.length}`, created: true }
+        return { ok: true, record: 'contact', contactId: `contact-${captured.length}`, created: true }
       },
     },
     { pluginId: 'record-system' },

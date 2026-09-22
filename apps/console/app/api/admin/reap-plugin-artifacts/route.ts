@@ -17,6 +17,8 @@
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { pluginArtifactClaims } from '@aglyn/aglyn/plugin-manager/plugin-artifact-inventory'
+import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import { isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
@@ -49,13 +51,10 @@ const MIN_AGE_DAYS = 7
 /** Ceiling on permanent deletions per run. */
 const MAX_DELETES = 200
 
-/** Claim documents read per query while walking the collection group. */
-const CLAIM_SCAN_PAGE = 500
-
 /**
  * The most claims one run will walk before refusing to reap at all.
  *
- * Not a page cap — the walk below is exhaustive by construction. This is the
+ * Not a page cap — the walk is exhaustive by construction. This is the
  * ceiling past which the run declines to draw a conclusion, because the ONE
  * unsafe outcome here is an incomplete claim set: every object this job
  * deletes is deleted precisely because nothing claimed it, and a claim the
@@ -64,6 +63,12 @@ const CLAIM_SCAN_PAGE = 500
  *
  * Refusing is therefore the safe answer, and it is loud: the run reports the
  * ceiling it hit rather than reaping what it managed to see.
+ *
+ * IT STAYS HERE THOUGH THE WALK MOVED (AGL-3080). How far this deployment is
+ * willing to read before it declines to delete is the console's policy about
+ * its own bucket, so the plugin is TOLD the threshold and reports against it
+ * rather than choosing one — a plugin that raised its own ceiling would be
+ * widening the platform's appetite for a permanent delete.
  */
 const MAX_CLAIMS_SCANNED = 100_000
 
@@ -172,78 +177,43 @@ async function handler(request: Request): Promise<Response> {
     }))
 
     /*
-     * Every claim in the platform. The version doc is the ONLY thing that
-     * keeps bytes alive — see the module comment on why install pins
-     * deliberately do not enter this decision.
+     * Every claim in the platform, from the plugin that stores them
+     * (AGL-3080). This route used to walk `pluginVersions` and
+     * `marketplaceListings` itself — a plugin's storage reached around the
+     * plugin, from `/api/admin`.
      *
-     * ## Why this is walked in pages, and why it still must be COMPLETE
+     * ## Why an unowned bucket REFUSES rather than reaps
      *
-     * It was one unbounded `.get()` over the whole collection group, which
-     * materialises every version document on the platform in memory at once
-     * and grows with the marketplace rather than with anything this run does.
-     * That fails eventually, and it fails on a scheduled job nobody is
-     * watching.
+     * A claim nothing reported is indistinguishable from a claim that does
+     * not exist, and this job deletes exactly the objects nothing claims,
+     * permanently, from a bucket with no object versioning. So
+     * `pluginArtifactClaims` never answers an empty list that means "could
+     * not read": nothing registered, a throw inside the walk, and a walk
+     * that passed `MAX_CLAIMS_SCANNED` all arrive as a refusal, and the run
+     * stops here with its reason instead.
      *
-     * Paging fixes the memory and the query timeout. It must not be mistaken
-     * for making the scan optional: a claim the walk never reached is
-     * indistinguishable from a claim that does not exist, and this job
-     * deletes exactly the objects nothing claims. So the loop runs to
-     * exhaustion, a throw anywhere in it aborts the whole request before a
-     * single delete, and passing `MAX_CLAIMS_SCANNED` refuses the run instead
-     * of reaping against a partial set.
-     *
-     * `select('sha256')` because that and the document path are all the join
-     * reads. It does not reduce the number of documents billed — Firestore
-     * charges per document — but a version document carries its manifest, and
-     * none of that needs to cross the wire.
+     * `ensureAll` first, and awaited — the whole reason a runtime registry
+     * is safe for this reader is that it loads the plugins before it asks.
      */
-    const claimed = new Set<string>()
-    const listingIds = new Set<string>()
-    let claimsScanned = 0
-    let claimCursor: FirebaseFirestore.QueryDocumentSnapshot | null = null
-    for (;;) {
-      const base = firestore
-        .collectionGroup('pluginVersions')
-        .orderBy('__name__')
-        .select('sha256')
-        .limit(CLAIM_SCAN_PAGE)
-      const page = await (claimCursor ? base.startAfter(claimCursor) : base).get()
-      if (page.empty) break
-      for (const doc of page.docs) {
-        claimsScanned += 1
-        const listingId = doc.ref.parent.parent?.id
-        const sha256 = doc.get('sha256')
-        if (!listingId || typeof sha256 !== 'string' || !sha256) continue
-        claimed.add(artifactClaimKey(listingId, doc.id, sha256))
-        listingIds.add(listingId)
-      }
-      if (claimsScanned > MAX_CLAIMS_SCANNED) {
-        return Response.json(
-          {
-            error:
-              `Refusing to reap: more than ${MAX_CLAIMS_SCANNED} plugin ` +
-              'version claims. Deleting against a claim set this run could ' +
-              'not finish reading would delete live artifacts permanently.',
-            claimsScanned,
-          },
-          { status: 507 },
-        )
-      }
-      claimCursor = page.docs[page.docs.length - 1] ?? null
-      if (page.docs.length < CLAIM_SCAN_PAGE) break
+    await serverPluginLoader.ensureAll(['consoleApi'])
+    const claims = await pluginArtifactClaims({
+      maxScanned: MAX_CLAIMS_SCANNED,
+    })
+    if (claims.outcome === 'refused') {
+      return Response.json(
+        { error: claims.reason, claimsScanned: claims.scanned },
+        { status: 507 },
+      )
     }
-
-    // Which of those listings still exist — an orphaned subcollection is
-    // reported, never reaped (its installs still load).
+    const claimed = new Set<string>()
     const liveListingIds = new Set<string>()
-    const listingRefs = [...listingIds].map((id) =>
-      firestore.collection('marketplaceListings').doc(id),
-    )
-    if (listingRefs.length) {
-      const snapshots = await firestore.getAll(...listingRefs)
-      for (const snapshot of snapshots) {
-        if (snapshot.exists) liveListingIds.add(snapshot.id)
-      }
+    for (const claim of claims.rows) {
+      claimed.add(
+        artifactClaimKey(claim.listingId, claim.version, claim.sha256),
+      )
+      // Reported, never reaped: the owning record is gone but installs still
+      // resolve the version by path, so the bytes are still being loaded.
+      if (claim.ownerLive) liveListingIds.add(claim.listingId)
     }
 
     const plan = planArtifactReap(objects, claimed, liveListingIds, {

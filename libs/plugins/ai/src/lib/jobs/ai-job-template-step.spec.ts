@@ -77,6 +77,7 @@ import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import type { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
 import type { AiJob, AiJobPlan } from '../model/ai-jobs.types'
 import { emptyAiSiteInventory, type AiSiteInventory } from '../model/ai-site-inventory'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import { AI_TEMPLATE_SUBJECT_DEFINITIONS } from '../model/ai-template-subjects'
 import { AI_DOCTRINE_SYSTEM_BLOCK, aiDoctrineTreeTool } from '../runtime/ai-doctrine'
 import { AI_DOCTRINE_RULES } from '../runtime/ai-doctrine-validators'
@@ -624,6 +625,74 @@ describe('the template step', () => {
       { resource: 'template', id: 'tpl-copy', versionId: null, hostId: 'host-1', hostSubdomain: 'acme', label: 'Blog post page' },
     ])
     expect(commits).toEqual([])
+  })
+
+  describe('a copy the plan promised more of (AGL-3024)', () => {
+    const promises = (fields: string[]): AiJobPlan => ({
+      ...PLAN,
+      create: [{ ...PLAN.create[0], duplicateOf: 'tpl-post', fields }],
+    })
+    const copies = () =>
+      jest.fn().mockResolvedValue({ ok: true, id: 'tpl-copy', versionId: null, name: 'Blog post page' })
+    const inventoryWithSource = () =>
+      mockReadInventory.mockResolvedValue({
+        ...INVENTORY,
+        templates: [{ id: 'tpl-post', name: 'Blog post', kind: 'page' }],
+      })
+
+    it('stops for a person rather than reporting a copy that binds none of the tokens the plan named', async () => {
+      inventoryWithSource()
+      // The generate path already held a built template to its plan's tokens.
+      // The copy path reached none of it, so "duplicate it and bind the
+      // entry's excerpt" got the duplicate and reported Done.
+      mockDocs.set('hosts/host-1/templates/tpl-copy', {
+        displayName: 'Blog post page',
+        nodes: {
+          [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['h'] },
+          h: { componentId: 'muiTypography', props: { variant: 'h1', component: 'h1', children: 'A post' } },
+        },
+      })
+      const outcome = await createAiJobTemplateStep({
+        duplicate: copies() as unknown as typeof duplicateResource,
+      })(context({ plan: promises(['{{entry.excerpt}}']) }))
+      expect(mockRunAiRequest).not.toHaveBeenCalled()
+      expect(outcome.outputs ?? []).toEqual([])
+      expect(outcome.review?.reason).toBe('doctrine')
+      expect(outcome.review?.findings.map((finding) => finding.code)).toEqual(['plan-token-missing'])
+    })
+
+    it('reports the copy once it binds every token the plan named', async () => {
+      inventoryWithSource()
+      mockDocs.set('hosts/host-1/templates/tpl-copy', {
+        displayName: 'Blog post page',
+        nodes: {
+          [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['h'] },
+          h: {
+            componentId: 'muiTypography',
+            props: { variant: 'h1', component: 'h1', children: '{{entry.excerpt}}' },
+          },
+        },
+      })
+      const outcome = await createAiJobTemplateStep({
+        duplicate: copies() as unknown as typeof duplicateResource,
+      })(context({ plan: promises(['{{entry.excerpt}}']) }))
+      expect(outcome.review).toBeUndefined()
+      expect(outcome.outputs).toEqual([expect.objectContaining({ resource: 'template', id: 'tpl-copy' })])
+    })
+
+    it('stops for a person when the copy cannot be read back at all', async () => {
+      inventoryWithSource()
+      const outcome = await createAiJobTemplateStep({
+        duplicate: copies() as unknown as typeof duplicateResource,
+      })(context({ plan: promises(['{{entry.excerpt}}']) }))
+      expect(outcome.outputs ?? []).toEqual([])
+      expect(outcome.review).toEqual({
+        reason: 'doctrine',
+        message:
+          '"Blog post page" was copied from the template the plan names, and this job could not read the copy back to check it shows what the plan gives it. Open the template and check it before you apply it.',
+        findings: [],
+      })
+    })
   })
 })
 

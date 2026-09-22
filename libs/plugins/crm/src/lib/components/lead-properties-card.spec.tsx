@@ -30,15 +30,19 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps, ReactNode } from 'react'
 import { LeadPropertiesCard } from './lead-properties-card'
 
+const updateDoc = jest.fn(async (..._args: unknown[]) => undefined)
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   deleteField: () => ({ op: 'delete' }),
   serverTimestamp: () => ({ op: 'serverTimestamp' }),
-  updateDoc: async () => undefined,
+  updateDoc: (...args: unknown[]) => updateDoc(...(args as [])),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
-  writeGuardedBySeed: async () => ({ ok: true }),
+  writeGuardedBySeed: async (_seed: unknown, run: () => Promise<unknown>) => {
+    await run()
+    return { ok: true }
+  },
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: () => undefined }),
@@ -125,5 +129,49 @@ describe('Convert on the lead page', () => {
     expect(screen.getByLabelText(PENDING_REASON)).not.toBeNull()
     fireEvent.click(convert())
     expect(onConvert).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The lead's own profile (AGL-3231): one Save writes every field through
+ * the record's normalizer, a cleared field is deleted rather than blanked,
+ * and a phone the record cannot hold is refused under the field with
+ * nothing written.
+ */
+describe('the profile on the lead page', () => {
+  beforeEach(() => updateDoc.mockClear())
+
+  it('saves the profile as the record stores it, deleting what was cleared', async () => {
+    renderCard({ lead: { ...lead, jobTitle: 'CMO', tags: ['warm'] } })
+    fireEvent.change(screen.getByLabelText('Company'), { target: { value: ' Acme  Brands ' } })
+    fireEvent.change(screen.getByLabelText('Job title'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Website'), { target: { value: 'acme.com' } })
+    fireEvent.change(screen.getByLabelText('Tags'), { target: { value: 'ICP2, a-list' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByRole('button', { name: 'Save' })
+    expect(updateDoc).toHaveBeenCalledTimes(1)
+    expect(updateDoc.mock.calls[0]?.[1]).toMatchObject({
+      company: 'Acme Brands',
+      jobTitle: { op: 'delete' },
+      website: 'https://acme.com/',
+      tags: ['icp2', 'a-list'],
+      phone: { op: 'delete' },
+      leadSource: { op: 'delete' },
+      address: { op: 'delete' },
+    })
+  })
+
+  it('refuses a phone it cannot read under the field, and writes nothing', async () => {
+    renderCard()
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: 'call me' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText(/could not be read/)).not.toBeNull()
+    expect(updateDoc).not.toHaveBeenCalled()
+  })
+
+  it('is read-only once the lead is converted', () => {
+    renderCard({ lead: { ...lead, status: 'qualified', convertedContactId: 'c-1' } })
+    expect((screen.getByLabelText('Company') as HTMLInputElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
   })
 })

@@ -28,7 +28,7 @@
 import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import { marketplaceMinPriceUsd } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
-import type { ListingVerificationRequest } from '@aglyn/aglyn/app-utils/marketplace-verification'
+import type { ListingVerificationRequest } from './listing-verification'
 import {
   offeredPluginVersion,
   type PluginRevocation,
@@ -557,24 +557,28 @@ export type ListingReviewStatus =
   | 'rejected'
 
 /**
- * Verification requests live in core (AGL-1217), for the same reason
- * `MarketplaceArtifactType` does (AGL-1016): the console's staff review route
- * needs the policy, and `scope:app` may not depend on `aglyn:addons`.
- * Re-exported here so publishing code keeps one import site.
+ * Verification requests lived in core from AGL-1217 because the console's
+ * STAFF REVIEW ROUTE needed the policy and `scope:app` may not depend on
+ * `aglyn:addons`. That route is the plugin's own surface since `38c4b533c`,
+ * so the reason expired with it and the module came home (AGL-3080).
+ *
+ * Still re-exported from here, which is the part that did not change:
+ * publishing code keeps one import site whether the policy is a lib away or
+ * a file away.
  */
 export {
   VERIFICATION_BLOCK_MESSAGES,
   VERIFICATION_DECLINE_COOLDOWN_DAYS,
   timestampMs,
   verificationRequestBlock,
-} from '@aglyn/aglyn/app-utils/marketplace-verification'
+} from './listing-verification'
 export type {
   ListingVerificationRequest,
   TimestampLike,
   VerifiableListing,
   VerificationRequestBlock,
   VerificationRequestState,
-} from '@aglyn/aglyn/app-utils/marketplace-verification'
+} from './listing-verification'
 
 
 /**

@@ -17,7 +17,12 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import type { AglynOrgBilling, CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
+import type {
+  AglynOrgBilling,
+  CrmLeadFields,
+  CrmLeadProfilePatch,
+  CrmLeadStatus,
+} from '@aglyn/aglyn'
 import { mdiAccountCancelOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -42,6 +47,11 @@ import {
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useId, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
+import {
+  addressDraftFrom,
+  ContactAddressFields,
+  type AddressDraft,
+} from './contact-address-fields'
 import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
@@ -49,7 +59,42 @@ import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadStatusChip } from './lead-status-chip'
 
-const NOTES_MAX = 4000
+const NOTES_MAX = Aglyn.CRM_LEAD_NOTES_MAX
+const TEXT_MAX = Aglyn.CRM_LEAD_TEXT_MAX
+
+/** The profile as the form holds it: every field a string, the address a draft. */
+interface ProfileDraft {
+  company: string
+  jobTitle: string
+  phone: string
+  website: string
+  leadSource: string
+  tags: string
+  address: AddressDraft
+}
+
+/** The stored profile as a draft the fields can edit. */
+function profileDraftFrom(lead: Record<string, unknown> & CrmLeadFields): ProfileDraft {
+  return {
+    company: String(lead.company ?? ''),
+    jobTitle: String(lead.jobTitle ?? ''),
+    phone: String(lead.phone ?? lead['phone'] ?? ''),
+    website: String(lead.website ?? ''),
+    leadSource: String(lead.leadSource ?? ''),
+    tags: (lead.tags ?? []).join(', '),
+    address: addressDraftFrom(lead.address ?? null),
+  }
+}
+
+/** The patch as the document takes it: a cleared field is deleted, not blanked. */
+function profileWrite(patch: CrmLeadProfilePatch): Record<string, unknown> {
+  const write: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue
+    write[key] = value === null ? deleteField() : value
+  }
+  return write
+}
 
 /**
  * Why Convert is refused while an erasure waits on the person — the same
@@ -151,6 +196,35 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const statusLabelId = useId()
   const [notesDirty, setNotesDirty] = useState(false)
   const [savingNotes, setSavingNotes] = useState(false)
+  /*
+   * THE LEAD'S OWN PROFILE (AGL-3231) — company, title, phone, website,
+   * address, tags, lead source — edited as one block with one Save, the
+   * way the contact's Properties card saves. Seeded from the document and
+   * guarded on save like the notes: a draft edited over a cached read must
+   * not overwrite a newer profile with an older one.
+   */
+  const [profile, setProfile] = useState<ProfileDraft>(() => profileDraftFrom(lead))
+  const [profileDirty, setProfileDirty] = useState(false)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (!profileDirty) setProfile(profileDraftFrom(lead))
+    // The draft follows the document until it is edited; the fields are
+    // read one by one so a change to any of them reseeds.
+  }, [
+    profileDirty,
+    lead.company,
+    lead.jobTitle,
+    lead.phone,
+    lead.website,
+    lead.leadSource,
+    lead.tags,
+    lead.address,
+  ])
+  const editProfile = <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) => {
+    setProfile((current) => ({ ...current, [key]: value }))
+    setProfileDirty(true)
+  }
   // A newer note from the server replaces an UNEDITED draft; an edited one is
   // the reader's, and the guard on save decides whether it may land.
   useEffect(() => {
@@ -183,6 +257,33 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       return
     }
     setNotesDirty(false)
+  }
+
+  const saveProfile = async () => {
+    const { patch, errors } = Aglyn.normalizeCrmLeadProfile({
+      company: profile.company,
+      jobTitle: profile.jobTitle,
+      phone: profile.phone,
+      website: profile.website,
+      leadSource: profile.leadSource,
+      tags: profile.tags,
+      address: profile.address,
+    })
+    setProfileErrors(errors)
+    if (Object.keys(errors).length) return
+    setSavingProfile(true)
+    const verdict = await writeGuardedBySeed(
+      { subject: 'lead', fromCache, unreadable: leadStatus === 'error' },
+      () => write(profileWrite(patch), 'Lead saved'),
+    )
+    setSavingProfile(false)
+    if (!verdict.ok) {
+      enqueueSnackbar(verdict.message ?? 'The lead could not be saved.', {
+        variant: 'warning',
+      })
+      return
+    }
+    setProfileDirty(false)
   }
 
   const consent = Aglyn.readMarketingBasis(lead, Aglyn.soloConsentGroup(hostId))
@@ -369,6 +470,97 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             ) : null}
           </Stack>
         ) : null}
+        {/*
+          The profile (AGL-3231): what Salesforce keeps on a lead and hands
+          to the contact and the account on convert. Read-only once
+          converted — the contact is the record then, and the links above
+          lead there.
+        */}
+        <Stack spacing={2}>
+          <Typography variant="subtitle2">{'Profile'}</Typography>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <TextField
+              size="small"
+              label="Company"
+              value={profile.company}
+              onChange={(event) => editProfile('company', event.target.value)}
+              disabled={converted}
+              slotProps={{ htmlInput: { maxLength: TEXT_MAX } }}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Job title"
+              value={profile.jobTitle}
+              onChange={(event) => editProfile('jobTitle', event.target.value)}
+              disabled={converted}
+              slotProps={{ htmlInput: { maxLength: TEXT_MAX } }}
+              fullWidth
+            />
+          </Stack>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <TextField
+              size="small"
+              label="Phone"
+              value={profile.phone}
+              onChange={(event) => editProfile('phone', event.target.value)}
+              disabled={converted}
+              error={Boolean(profileErrors['phone'])}
+              helperText={profileErrors['phone'] || 'With the country code, like +1 512 555 0107'}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Website"
+              value={profile.website}
+              onChange={(event) => editProfile('website', event.target.value)}
+              disabled={converted}
+              error={Boolean(profileErrors['website'])}
+              helperText={profileErrors['website'] || 'Like acme.com'}
+              fullWidth
+            />
+          </Stack>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+            <TextField
+              size="small"
+              label="Lead source"
+              value={profile.leadSource}
+              onChange={(event) => editProfile('leadSource', event.target.value)}
+              disabled={converted}
+              slotProps={{ htmlInput: { maxLength: TEXT_MAX } }}
+              fullWidth
+            />
+            <TextField
+              size="small"
+              label="Tags"
+              value={profile.tags}
+              onChange={(event) => editProfile('tags', event.target.value)}
+              disabled={converted}
+              helperText="Comma-separated"
+              fullWidth
+            />
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            {'Address'}
+          </Typography>
+          <ContactAddressFields
+            value={profile.address}
+            onChange={(next) => editProfile('address', next)}
+            disabled={converted}
+          />
+          {converted ? null : (
+            <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => void saveProfile()}
+                disabled={!profileDirty || savingProfile}
+              >
+                {'Save'}
+              </Button>
+            </Stack>
+          )}
+        </Stack>
         <Stack spacing={1}>
           <TextField
             size="small"

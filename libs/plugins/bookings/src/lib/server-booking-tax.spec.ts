@@ -262,6 +262,7 @@ import {
   storefrontProcessingCostCents,
 } from '@aglyn/aglyn'
 import { bookHandler } from './server'
+import { standInRecordSystem } from './testing/stand-in-record-system'
 import { standInTaxProfile } from './testing/stand-in-tax-profile'
 
 /**
@@ -782,28 +783,33 @@ describe('a booking records a usable lead (AGL-2303)', () => {
       cookies: {},
     }) as any
 
-  it('writes the booker’s own name onto the lead', async () => {
+  it('hands the booker’s own name to the record system, as a lead surface', async () => {
+    // The door writes no lead itself since AGL-3232: it reports the capture
+    // as a lead surface and the plugin that keeps people files the lead.
+    // Beside the tax profile the `beforeEach` stood in, not instead of it.
+    const captured = standInRecordSystem({ reset: false })
     const res = makeRes()
     await bookHandler(leadReq('Rae Kowalski', 'rae'), res)
     expect(res.statusCode).toBe(200)
-    const leads = mockAdmin.__state.written['leads'] ?? []
-    expect(leads).toHaveLength(1)
+    expect(captured).toHaveLength(1)
     // The VALUE off the request. A writer storing a constant — or the email,
     // which is right there — passes any "is there a name" check.
-    expect(leads[0]).toMatchObject({
-      email: 'rae@example.com',
-      name: 'Rae Kowalski',
-      source: 'booking',
+    expect(captured[0]).toMatchObject({
+      identity: { email: 'rae@example.com', name: 'Rae Kowalski' },
+      interaction: { source: 'booking' },
+      surface: 'lead',
     })
+    expect(mockAdmin.__state.written['leads'] ?? []).toHaveLength(0)
   })
 
-  it('NEGATIVE CONTROL: a nameless booking never reaches the lead at all', async () => {
+  it('NEGATIVE CONTROL: a nameless booking never reaches the record system at all', async () => {
     // The handler REQUIRES a name, so the defensive `...(name ? …)` spread at
-    // the write is unreachable here — stated rather than left as an untested
+    // the capture is unreachable here — stated rather than left as an untested
     // branch someone later "simplifies" into an empty-string write.
+    const captured = standInRecordSystem({ reset: false })
     const res = makeRes()
     await bookHandler(leadReq('', 'anon'), res)
     expect(res.statusCode).toBe(400)
-    expect(mockAdmin.__state.written['leads'] ?? []).toHaveLength(0)
+    expect(captured).toHaveLength(0)
   })
 })

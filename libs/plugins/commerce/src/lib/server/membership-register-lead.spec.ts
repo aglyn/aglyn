@@ -171,54 +171,39 @@ beforeEach(() => {
   captured = standInRecordSystem()
 })
 
-describe('the lead a sign-up leaves behind (AGL-2303)', () => {
-  it('carries the name the person just typed', async () => {
+/**
+ * A SIGN-UP FILES NO LEAD (AGL-3232).
+ *
+ * A member account is a relationship: the person is a contact from this
+ * moment, the way a portal user is a contact and not a lead in Salesforce.
+ * The door reports the sign-up as a `relationship` capture and writes no
+ * lead of its own; the record system closes an open lead onto the contact.
+ * The `lead` event is the lead surfaces' to emit, so a sign-up emits only
+ * `memberSignUp`.
+ */
+describe('the lead a sign-up no longer leaves behind (AGL-3232)', () => {
+  it('writes no lead', async () => {
     await register({ displayName: 'Dana Reed' })
-    expect(mockState.leads).toHaveLength(1)
-    expect(mockState.leads[0]).toMatchObject({
-      email: 'dana@example.com',
-      name: 'Dana Reed',
-      source: 'signup',
-    })
+    expect(mockState.leads).toEqual([])
   })
 
-  /**
-   * The `lead` event names the row it announces (AGL-2627): the person key
-   * `addHostLead` files the lead under, which is what `/v1/leads/{id}` takes.
-   * A webhook that heard "a lead" and had to guess its id from the address
-   * would have to know the key derivation; the payload says it instead.
-   */
-  it('announces the lead with the id it was filed under', async () => {
+  it('announces the sign-up, and no lead', async () => {
     await register({ email: '  Dana@Example.com ' })
-    const lead = mockState.events.find((entry) => entry.event === 'lead')
-    expect(lead?.payload).toEqual({
-      email: 'dana@example.com',
-      source: 'signup',
-      leadId: personKey('dana@example.com'),
-    })
-    expect(lead?.payload['leadId']).toMatch(/^[0-9a-f]{64}$/)
+    expect(mockState.events.map((entry) => entry.event)).toEqual(['memberSignUp'])
+    expect(mockState.events[0]?.payload).toEqual({ email: 'dana@example.com' })
   })
 
-  it('carries THAT sign-up’s name, not a constant', async () => {
-    // Two sign-ups, two names. A writer echoing a fixed string, or the email,
-    // survives the test above and dies here.
+  it('still carries THAT sign-up’s name on the member document', async () => {
     await register({ displayName: 'Dana Reed' })
     await register({ displayName: 'Sam Okafor', email: 'sam@example.com' })
-    expect(mockState.leads.map((lead) => lead['name'])).toEqual([
+    expect(mockState.members.map((member) => member['displayName'])).toEqual([
       'Dana Reed',
       'Sam Okafor',
     ])
   })
 
-  it('omits the field entirely when no display name was given', async () => {
-    // `displayName` is optional at sign-up. An empty string is not a name, and
-    // storing one would make `collectName` keep the key and resolve it to
-    // nothing — a recipient the sender believes is personalized and is not.
+  it('omits the display name entirely when none was given', async () => {
     await register({})
-    expect(mockState.leads).toHaveLength(1)
-    expect('name' in mockState.leads[0]).toBe(false)
-    // …and the member document is written the same way, which is the field
-    // the members audience now reads.
     expect('displayName' in mockState.members[0]).toBe(false)
   })
 })
@@ -253,6 +238,8 @@ describe('the person a sign-up introduces', () => {
       hostId: 'host-1',
       identity: { email: 'dana@example.com', name: 'Dana Reed' },
       interaction: { source: 'member', summary: 'Joined as a member' },
+      // A relationship (AGL-3232): a contact, and an open lead closed onto it.
+      surface: 'relationship',
       // An account is a subscription to the site, not an enquiry (AGL-2612).
       lifecycleFloor: 'subscriber',
     })

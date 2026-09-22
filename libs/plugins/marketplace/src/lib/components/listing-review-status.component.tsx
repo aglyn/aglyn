@@ -30,7 +30,7 @@ import {
   attestationLabels,
   PUBLISHER_ATTESTATION,
   requiredAttestationIds,
-} from '@aglyn/aglyn/app-utils/publisher-attestation'
+} from '../model/publisher-attestation'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 

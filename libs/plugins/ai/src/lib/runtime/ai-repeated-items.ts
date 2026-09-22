@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { REUSABLE_INSTANCE_COMPONENT_ID } from '@aglyn/aglyn/app-utils/reusable-component-keys'
 import { AI_TYPED_LIST_MIN_ITEMS, type AiDoctrineViolation } from './ai-doctrine-validators'
 
 /**
@@ -39,6 +40,16 @@ import { AI_TYPED_LIST_MIN_ITEMS, type AiDoctrineViolation } from './ai-doctrine
  * `repeat` holds one list of values a copy, and `{{n}}` stands for a copy's
  * n-th value wherever it appears in the item's props or styles.
  *
+ * A workspace that DOES keep reusable components writes the same shape around
+ * an instance (AGL-3024): one `reusableInstance` inside the repeated item,
+ * `{{n}}` through the values it fills, and one list of values a copy. Six
+ * cards written out as six instances spend their structure six times and run
+ * past the ceiling a pass answers within; written once they spend it once, and
+ * the section stays ONE section with one heading, which is what a page's
+ * outline and its search ranking are built on. The item still places the
+ * component — rule 1 is untouched — and an item that places none is refused
+ * here exactly as before.
+ *
  *  - **Positional, because it is the smallest list a copy can be.** Each value
  *    costs its quotes and a comma. A named value repeats its name on every
  *    copy, and a list of columns keeps a copy's values apart from each other.
@@ -56,8 +67,9 @@ import { AI_TYPED_LIST_MIN_ITEMS, type AiDoctrineViolation } from './ai-doctrine
  * `repeat` or a placeholder.
  *
  * Refused, each with a sentence a re-ask can act on and the model's own nodes
- * named: `repeat` where the workspace keeps reusable components (rule 1: place
- * a component's instances), on the document wrapper or what it holds
+ * named: `repeat` on an item that places no instance where the workspace keeps
+ * reusable components (rule 1: place a component's instances), on the document
+ * wrapper or what it holds
  * directly, or inside another repeated item; a list that is not one list of
  * values a copy; fewer than 2 copies or more than `AI_REPEAT_MAX_COPIES`; a
  * placeholder a copy gives no value for, or one outside every repeated item; a
@@ -198,23 +210,6 @@ export function expandAiRepeatedItems(input: unknown, options: AiRepeatedItemsOp
   }
   const marked = order.filter((id) => Object.prototype.hasOwnProperty.call(nodeOf(id), AI_REPEAT_KEY))
 
-  if (!options.inline) {
-    return marked.length
-      ? {
-          ok: false,
-          violations: [
-            {
-              rule: 1,
-              code: 'repeat-not-inline',
-              message: 'This draws a repeated item to be copied, instead of placing it as instances of a component.',
-              detail: `Remove "${AI_REPEAT_KEY}", and place each copy as an instance of a component the site has (componentId "reusableInstance").`,
-              nodeIds: marked,
-            },
-          ],
-        }
-      : unchanged
-  }
-
   /** A node and everything under it, each node once. */
   const subtreeOf = (id: string): string[] => {
     const seen = new Set<string>()
@@ -228,6 +223,32 @@ export function expandAiRepeatedItems(input: unknown, options: AiRepeatedItemsOp
       stack.push(...childIds(nodeOf(next)).reverse())
     }
     return out
+  }
+
+  // Where the workspace keeps reusable components, writing an item once is how
+  // an answer places MANY instances inside one ceiling (AGL-3024), not a way
+  // around placing them: an item that places an instance is drawn into its
+  // copies exactly as a Free one is, and one that places none is still drawing
+  // by hand a component the site has, which rule 1 refuses as it always did.
+  if (!options.inline) {
+    const byHand = marked.filter(
+      (id) => !subtreeOf(id).some((node) => nodeOf(node)?.['componentId'] === REUSABLE_INSTANCE_COMPONENT_ID),
+    )
+    if (byHand.length) {
+      return {
+        ok: false,
+        violations: [
+          {
+            rule: 1,
+            code: 'repeat-not-inline',
+            message: 'This draws a repeated item to be copied, instead of placing it as instances of a component.',
+            detail: `Put one instance of a component the site has (componentId "reusableInstance") inside the repeated item, or remove "${AI_REPEAT_KEY}" and place each copy as an instance.`,
+            nodeIds: byHand,
+          },
+        ],
+      }
+    }
+    if (!marked.length) return unchanged
   }
   const ancestorsOf = (id: string): string[] => {
     const out: string[] = []

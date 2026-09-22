@@ -96,6 +96,7 @@ import { crmTasksImportHandler } from './server/tasks-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { crmEmailSendHandler } from './server/email-send'
 import { leadConvertHandler } from './server/lead-convert'
+import { leadCreateHandler } from './server/lead-create'
 import {
   CONTACT_EMAIL_HISTORY_ROUTE,
   contactEmailHistoryHandler,
@@ -603,6 +604,8 @@ export function registerCrmConsoleApi(): void {
   // write a browser cannot make alone, because only the server may create a
   // contact through the dedupe-and-meter door.
   registerPluginApiRoute('crm/lead-convert', leadConvertHandler)
+  // A lead entered by hand (AGL-3231): the New lead drawer's route.
+  registerPluginApiRoute('crm/leads-create', leadCreateHandler)
   // The one READ behind a route (AGL-2616): the per-recipient delivery log
   // is closed to clients, so a contact's campaign mail is projected here.
   registerPluginApiRoute(CONTACT_EMAIL_HISTORY_ROUTE, contactEmailHistoryHandler)

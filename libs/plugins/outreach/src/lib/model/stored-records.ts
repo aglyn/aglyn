@@ -31,6 +31,7 @@ import {
   OUTREACH_STOP_REASONS,
   type OutreachEnrollment,
   type OutreachEnrollmentStatus,
+  type OutreachEnrollmentTarget,
   type OutreachMailbox,
   type OutreachSequence,
   type OutreachSequenceStatus,
@@ -74,11 +75,21 @@ export function readStoredOutreachEnrollment(
   const status = data['status']
   const stopReason = data['stopReason']
   const stepIndex = Number(data['stepIndex'])
+  // An enrollment written before leads could be sequenced (AGL-3234) names
+  // no target and is a contact's; one that names a lead and no target is a
+  // lead's, whatever else it says.
+  const leadId = text(data['leadId']) || null
+  const target: OutreachEnrollmentTarget =
+    data['target'] === 'lead' || (data['target'] === undefined && leadId && !text(data['contactId']))
+      ? 'lead'
+      : 'contact'
   return {
     ...(data as unknown as OutreachEnrollment),
     id,
     sequenceId: text(data['sequenceId']),
+    target,
     contactId: text(data['contactId']),
+    leadId,
     contactName: text(data['contactName']),
     email: text(data['email']),
     hostId: text(data['hostId']),

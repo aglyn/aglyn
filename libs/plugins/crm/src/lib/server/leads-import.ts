@@ -112,7 +112,12 @@ import {
  */
 const LEAD_IMPORT_SOURCE: ContactSource = 'import'
 
-/** The team's annotations on one row, or nothing when the file named none. */
+/**
+ * The team's annotations on one row and the lead's own profile
+ * (AGL-3231), or nothing when the file named none of either. A profile
+ * value lands as the record's card would write it; the file never clears
+ * one, because a blank cell is a cell nobody filled.
+ */
 function workingState(
   row: LeadImportRow,
   ownerUid: string | undefined,
@@ -122,6 +127,7 @@ function workingState(
     ...(ownerUid ? { ownerUid } : {}),
     ...(row.unqualifiedReason ? { unqualifiedReason: row.unqualifiedReason } : {}),
     ...(row.notes ? { notes: row.notes } : {}),
+    ...row.profile,
   }
   return Object.keys(fields).length ? fields : null
 }

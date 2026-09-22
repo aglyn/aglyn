@@ -343,10 +343,12 @@ offering a Send that would fail.
 The Inbox answers "who is waiting for a reply" for the whole site. **Forms →** a form
 answers a different question: how this one form is doing. Open it from the Forms list.
 
-**CRM routing** says what the CRM does with a submission. Every submission with an
-email address updates the person in **Contacts** at stage Lead, whatever else is set.
-The switch beneath — **Also create a lead from the address someone gives this form** —
-additionally files a lead in **CRM → Leads** for the sales team to work, and the caption
+**CRM routing** says what the CRM does with a submission. The switch — **Also create a
+lead from the address someone gives this form** — makes the form a lead surface: a
+submission files a **lead** in **CRM → Leads** for the sales team to work, and no
+contact, unless the person is already a contact, in which case the submission lands on
+their record instead. With the switch off, a submission updates the open lead this site
+holds for the address, or the contact otherwise. The caption
 under it says what that needs before you flip it: an email field in the published
 design (a submission without an address cannot key a lead) and a **Marketing consent
 field** (a lead nobody opted in with is one the team cannot email). Publishing with the

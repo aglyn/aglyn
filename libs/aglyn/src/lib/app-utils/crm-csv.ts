@@ -509,6 +509,9 @@ export function csvLeadSourceLabel(source: string): string {
   if (source === 'booking') return 'Booking'
   if (source === 'import') return CONTACT_SOURCE_LABELS.import
   if (source === 'form') return CONTACT_SOURCE_LABELS.form
+  // A lead entered by hand or over the REST API (AGL-3231).
+  if (source === 'manual') return 'Added by hand'
+  if (source === 'api') return 'API'
   if (source.startsWith('form:')) return `Form ${source.slice('form:'.length)}`
   return source
 }
@@ -526,7 +529,18 @@ export function csvLeadSources(lead: Record<string, unknown>): string[] {
 export type LeadCsvRow = Record<string, unknown> &
   Pick<
     CrmLeadFields,
-    'status' | 'ownerUid' | 'notes' | 'unqualifiedReason' | 'convertedAtMs'
+    | 'status'
+    | 'ownerUid'
+    | 'notes'
+    | 'unqualifiedReason'
+    | 'convertedAtMs'
+    | 'company'
+    | 'jobTitle'
+    | 'phone'
+    | 'website'
+    | 'address'
+    | 'tags'
+    | 'leadSource'
   > & {
     /** The site the lead lives under — what the `Site` column names. */
     hostId?: string
@@ -542,16 +556,35 @@ export interface LeadCsvOptions {
   siteName?: (hostId: string) => string | undefined
 }
 
-/** The columns every leads file carries, in the list's order. */
+/**
+ * The columns every leads file carries, in the list's order.
+ *
+ * The lead's own profile (AGL-3231) — company, title, phone, website, the
+ * address parts, tags and the lead source — sits where the contacts file
+ * keeps the same facts, under the same headers, so one spreadsheet of
+ * people reads into either import with the same mapping.
+ */
 export const LEAD_CSV_COLUMNS = [
   'Email',
   'Name',
+  'Company',
+  'Job title',
+  'Phone',
+  'Website',
   'Status',
   'Owner',
+  'Lead source',
   'Sources',
   'First seen',
   'Last seen',
   'Captures',
+  'Address line 1',
+  'Address line 2',
+  'City',
+  'State',
+  'Postal code',
+  'Country',
+  'Tags',
   'Unqualified reason',
   'Converted',
   'Notes',
@@ -575,13 +608,25 @@ export function leadCsvCells(
   return [
     String(lead['email'] ?? ''),
     String(lead['name'] ?? ''),
+    lead.company ?? '',
+    lead.jobTitle ?? '',
+    lead.phone ?? '',
+    lead.website ?? '',
     CRM_LEAD_STATUS_LABELS[crmLeadStatus(lead)],
     lead.ownerUid ? (ownerEmail?.(lead.ownerUid) ?? lead.ownerUid) : '',
     ...(siteName ? [siteName(hostId) ?? hostId] : []),
+    lead.leadSource ?? '',
     csvLeadSources(lead).map(csvLeadSourceLabel).join('|'),
     csvStoredInstant(lead['firstSeenAtMs'] ?? lead['createdAt']),
     csvStoredInstant(lead['lastSeenAtMs'] ?? lead['createdAt']),
     Number.isFinite(captures) && captures > 0 ? String(captures) : '',
+    lead.address?.line1 ?? '',
+    lead.address?.line2 ?? '',
+    lead.address?.city ?? '',
+    lead.address?.state ?? '',
+    lead.address?.postalCode ?? '',
+    lead.address?.country ?? '',
+    (lead.tags ?? []).join('|'),
     lead.unqualifiedReason ?? '',
     csvInstant(lead.convertedAtMs),
     lead.notes ?? '',

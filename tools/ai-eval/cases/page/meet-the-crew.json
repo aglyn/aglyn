@@ -84,7 +84,7 @@
   ],
   "controls": [
     {
-      "why": "The customer quotes written once with \"repeat\", on a site that keeps reusable components, where a repeated item is placed as instances of its component (rule 1, AGL-3053).",
+      "why": "The customer quotes DRAWN once with \"repeat\", on a site that keeps reusable components, where a repeated item places an instance of its component (rule 1, AGL-3053, AGL-3024).",
       "answer": {
         "tree": {
           "rootId": "_@_",
@@ -97,13 +97,17 @@
             "words-title": { "componentId": "muiTypography", "props": { "variant": "h2", "component": "h2", "children": "What customers say" } },
             "words-row": { "componentId": "muiStack", "props": { "direction": "row", "flexWrap": "wrap" }, "sx": { "gap": 3 }, "nodes": ["quote"] },
             "quote": {
-              "componentId": "reusableInstance",
-              "props": { "refId": "cmp-testimonial", "propValues": { "quote": "{{1}}", "name": "{{2}}" } },
+              "componentId": "muiCard",
+              "props": { "variant": "outlined" },
+              "nodes": ["quote-body"],
               "repeat": [
                 ["They found the leak two other companies missed.", "Dana, Harbor Point"],
                 ["On time, tidy, and the photos made the invoice easy to trust.", "Luis, Old Mill Road"]
               ]
-            }
+            },
+            "quote-body": { "componentId": "muiCardContent", "parentId": "quote", "nodes": ["quote-text", "quote-name"] },
+            "quote-text": { "componentId": "muiTypography", "parentId": "quote-body", "props": { "variant": "body1", "children": "{{1}}" } },
+            "quote-name": { "componentId": "muiTypography", "parentId": "quote-body", "props": { "variant": "body2", "children": "{{2}}" } }
           }
         }
       },

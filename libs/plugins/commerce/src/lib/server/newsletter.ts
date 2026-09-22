@@ -349,6 +349,10 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
         refId: `newsletter-${now}`,
         summary: 'Subscribed to the newsletter',
       },
+      // A TOUCH (AGL-3232): the opt-in lands on the lead the site is
+      // working for this address when it holds one, and on the contact
+      // otherwise — the consent stays with the one record the person is.
+      surface: 'touch',
       // The stage the name is for (AGL-2612): somebody who asked to hear
       // from the site and nothing more yet. A floor, so a customer who
       // subscribes stays a customer.

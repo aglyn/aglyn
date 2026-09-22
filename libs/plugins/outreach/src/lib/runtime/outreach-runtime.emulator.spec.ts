@@ -241,7 +241,9 @@ async function enroll(n: number, overrides: Partial<OutreachEnrollment> = {}): P
   const enrollment: OutreachEnrollment = {
     id: `${SEQUENCE.id}_${contactId}`,
     sequenceId: SEQUENCE.id,
+    target: 'contact',
     contactId,
+    leadId: null,
     contactName: `Pat${n} Example`,
     email,
     hostId: HOST,

@@ -30,9 +30,17 @@
  *
  * So: real auth check, real request parsing, real `checkPluginBundle` over
  * real bundle bytes. Only the I/O is fake.
+ *
+ * ⚑ The stored versions arrive through `core.plugin-artifact-inventory`
+ * since AGL-3080, so this file stands one up rather than faking a collection
+ * group. The REGISTRAR is the real one — an app spec may not import a plugin
+ * at all (AGL-2282), and the thing worth proving here is the route's half:
+ * that it refuses when the inventory does, and judges the rows when it does
+ * not.
  */
 
 import { PLUGIN_VERIFIER_VERSION } from '@aglyn/aglyn/server'
+import { registerPluginArtifactInventory } from '@aglyn/aglyn/plugin-manager/plugin-artifact-inventory'
 
 const mockNotifyStaff = jest.fn(async (_payload: unknown) => undefined)
 const mockAuditAdd = jest.fn(async (_entry: unknown) => undefined)
@@ -60,52 +68,43 @@ interface VersionSeed {
 
 let mockSeed: VersionSeed = {}
 
-const mockVersionDoc = () => ({
-  id: '1.0.0',
-  ref: {
-    set: mockVersionSet,
-    parent: { parent: { id: 'listing-1' } },
-  },
-  get: (field: string) => {
-    switch (field) {
-      case 'sha256':
-        return 'a'.repeat(64)
-      case 'version':
-        return '1.0.0'
-      case 'activeInstalls':
-        return mockSeed.activeInstalls ?? 0
-      case 'manifest.capabilities.network':
-        return mockSeed.network ?? []
-      case 'verification':
-        return mockSeed.storedOk === undefined
-          ? undefined
-          : {
-              ok: mockSeed.storedOk,
-              sha256: 'a'.repeat(64),
-              verifierVersion: mockSeed.storedVerifierVersion ?? 1,
-            }
-      default:
-        return undefined
-    }
-  },
+/** Whether the stand-in inventory answers rows or refuses, and why. */
+let mockRefusal: string | null = null
+
+/** The one stored version every case below is written against. */
+const standInVersion = () => ({
+  listingId: 'listing-1',
+  version: '1.0.0',
+  sha256: 'a'.repeat(64),
+  ownerLive: true,
+  ownerName: 'Smoke Test Widget',
+  reviewStatus: mockSeed.reviewStatus ?? 'verified',
+  activeInstalls: mockSeed.activeInstalls ?? 0,
+  reviewLink: '/admin/plugin-reviews/listing-1?version=1.0.0',
+  storedVerdict:
+    mockSeed.storedOk === undefined
+      ? undefined
+      : {
+          ok: mockSeed.storedOk,
+          sha256: 'a'.repeat(64),
+          verifierVersion: mockSeed.storedVerifierVersion ?? 1,
+        },
+  declaredNetwork: mockSeed.network ?? [],
+  declaredContributions: null,
+  record: mockVersionSet,
 })
+
+// The loader is a no-op here: what it would load is the plugin registered
+// below, and an app spec may not import one.
+jest.mock('../../../../utils/server-plugin-loader', () => ({
+  serverPluginLoader: { ensureAll: async () => undefined },
+}))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   notifyStaff: (payload: unknown) => mockNotifyStaff(payload),
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
-        collectionGroup: () => ({ get: async () => ({ docs: [mockVersionDoc()] }) }),
-        getAll: async () => [
-          {
-            id: 'listing-1',
-            exists: true,
-            get: (field: string) =>
-              field === 'displayName'
-                ? 'Smoke Test Widget'
-                : mockSeed.reviewStatus ?? 'verified',
-          },
-        ],
         collection: (name: string) =>
           name === 'adminAudit'
             ? { add: mockAuditAdd }
@@ -143,7 +142,46 @@ describe('the plugin-verdict sweep (AGL-1086)', () => {
     process.env.CRON_SECRET = 'test-secret'
     process.env.PLUGIN_ARTIFACTS_BUCKET = 'artifacts-test'
     mockSeed = {}
+    mockRefusal = null
     mockDownload.mockResolvedValue([Buffer.from(CLEAN, 'utf8')])
+    registerPluginArtifactInventory(
+      {
+        listClaims: async () => ({
+          outcome: 'listed' as const,
+          rows: [standInVersion()],
+          scanned: 1,
+        }),
+        listVersions: async () =>
+          mockRefusal
+            ? { outcome: 'refused' as const, reason: mockRefusal, scanned: 7 }
+            : {
+                outcome: 'listed' as const,
+                rows: [standInVersion()],
+                scanned: 1,
+              },
+      },
+      // Named, because this stands in for a plugin and the registry refuses
+      // an ownerless service — the same guard that stops one plugin's
+      // registration answering under another's name.
+      { pluginId: 'stand-in-marketplace' },
+    )
+  })
+
+  it('REFUSES the sweep when the inventory cannot be trusted', async () => {
+    /*
+     * The reassuring failure, refused. A sweep that reported "nothing
+     * regressed" having read none of the platform is indistinguishable, in
+     * the report staff read, from a platform where nothing regressed — and
+     * this report is the only thing that says a live version started
+     * failing.
+     */
+    mockRefusal = 'more than 100000 stored plugin version claims'
+    const { status, payload } = await post()
+    expect(status).toBe(507)
+    expect(payload.error).toContain('100000')
+    expect(payload.scanned).toBe(7)
+    expect(mockDownload).not.toHaveBeenCalled()
+    expect(mockNotifyStaff).not.toHaveBeenCalled()
   })
 
   it('refuses an unauthenticated caller before touching anything', async () => {
@@ -172,11 +210,18 @@ describe('the plugin-verdict sweep (AGL-1086)', () => {
     expect(payload.downloaded).toBe(1)
     expect(payload.unchanged).toBe(1)
     expect(mockVersionSet).toHaveBeenCalledTimes(1)
+    // The VERDICT, handed to the row that was read (AGL-3080). The document
+    // shape around it — the `verification` field, the timestamp — is the
+    // owning plugin's to write, and asserting it here would be this route
+    // asserting a document it no longer touches.
     const written = mockVersionSet.mock.calls[0][0] as {
-      verification: { verifierVersion: number; checks: unknown[] }
+      verifierVersion: number
+      checks: unknown[]
+      sha256: string
     }
-    expect(written.verification.verifierVersion).toBe(PLUGIN_VERIFIER_VERSION)
-    expect(written.verification.checks.length).toBeGreaterThan(0)
+    expect(written.verifierVersion).toBe(PLUGIN_VERIFIER_VERSION)
+    expect(written.checks.length).toBeGreaterThan(0)
+    expect(written.sha256).toBe('a'.repeat(64))
   })
 
   it('NOTIFIES staff and audits when live installed bytes regress', async () => {

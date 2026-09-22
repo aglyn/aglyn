@@ -41,7 +41,7 @@ import {
   missingAttestations,
   missingAttestationSubjects,
   PUBLISHER_ATTESTATION,
-} from '@aglyn/aglyn/app-utils/publisher-attestation'
+} from '../model/publisher-attestation'
 import { createHash } from 'crypto'
 import {
   marketplacePriceRefusal,

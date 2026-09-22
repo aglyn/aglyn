@@ -214,7 +214,9 @@ describe('the sign-up ceiling (AGL-1529)', () => {
     const res = await register({ displayName: 'Dana Reed' })
     expect(res.statusCode).toBe(200)
     expect(mockState.members).toHaveLength(1)
-    expect(mockState.leads).toHaveLength(1)
+    // A sign-up files no lead of its own (AGL-3232); the record system
+    // holds the person as a contact.
+    expect(mockState.leads).toHaveLength(0)
   })
 
   it('CAUSATION: only the count moved across the boundary', async () => {

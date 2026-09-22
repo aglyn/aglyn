@@ -22,7 +22,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import {
   PUBLISHER_ATTESTATION,
   requiredAttestationIds,
-} from '@aglyn/aglyn/app-utils/publisher-attestation'
+} from '../model/publisher-attestation'
 
 /**
  * The publish form (AGL-969 checklist, AGL-1076 subject, AGL-1078 page).

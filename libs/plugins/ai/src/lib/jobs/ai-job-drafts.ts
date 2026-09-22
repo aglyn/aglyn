@@ -474,6 +474,39 @@ export async function readAiDraft(
   return recordOf(input.id, draft, await firestore.collection('hosts').doc(input.hostId).get())
 }
 
+/**
+ * The tree a template draft holds now, decoded; `null` when there is none.
+ *
+ * A template is not a versioned draft — its nodes live on the document
+ * itself, which is why `readAiDraftNodes` refuses its kind.
+ */
+export async function readAiTemplateDraftNodes(
+  firestore: Firestore,
+  input: { hostId: string; id: string },
+): Promise<NodesMap | null> {
+  const draft = await draftCollection(firestore, input.hostId, 'template').doc(input.id).get()
+  if (!draft.exists) return null
+  return decodeStoredNodes<NodesMap>(draft.get('nodes')) ?? null
+}
+
+/**
+ * The property names a component draft declares now; `null` when there is no
+ * such draft. Read from the draft document rather than its version, because a
+ * component's props live beside its tree and a copy carries its source's.
+ */
+export async function readAiDraftComponentProps(
+  firestore: Firestore,
+  input: { hostId: string; id: string },
+): Promise<string[] | null> {
+  const draft = await draftCollection(firestore, input.hostId, 'component').doc(input.id).get()
+  if (!draft.exists) return null
+  const props = draft.get('props')
+  if (!Array.isArray(props)) return []
+  return props
+    .map((prop) => (prop && typeof prop === 'object' ? (prop as Record<string, unknown>)['name'] : null))
+    .filter((name): name is string => typeof name === 'string' && name.length > 0)
+}
+
 /** The tree a versioned draft's first version holds now, decoded; `null` when there is none. */
 export async function readAiDraftNodes(
   firestore: Firestore,

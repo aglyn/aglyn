@@ -70,7 +70,7 @@ function keepsPeople(): void {
       capture: async (request) => {
         captures.push(request)
         ORDER.push('capture')
-        return { ok: true, contactId: 'c1', created: true }
+        return { ok: true, record: 'contact', contactId: 'c1', created: true }
       },
     },
     { pluginId: 'crm' },
@@ -121,7 +121,7 @@ describe('a capture reaches a writer', () => {
     expect(ORDER).toEqual(['boot', 'capture'])
     expect(booted).toBe(1)
     expect(captures).toEqual([REQUEST])
-    expect(verdict).toEqual({ ok: true, contactId: 'c1', created: true })
+    expect(verdict).toEqual({ ok: true, record: 'contact', contactId: 'c1', created: true })
     // Said out loud: a process that had to register its own writer booted
     // wrong, and every capture before this one went nowhere.
     expect(console.warn).toHaveBeenCalledWith(

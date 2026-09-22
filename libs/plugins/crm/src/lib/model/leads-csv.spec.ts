@@ -35,6 +35,13 @@ describe('the leads CSV', () => {
       submissionCount: 3,
       notes: 'Called back',
       hostId: 'site-1',
+      company: 'Acme',
+      jobTitle: 'CMO',
+      phone: '+15125550107',
+      website: 'https://acme.com/',
+      leadSource: 'Sales Navigator',
+      address: { city: 'Austin', state: 'TX', country: 'US' },
+      tags: ['icp2', 'a-list'],
     },
     {
       email: 'june@example.com',
@@ -52,9 +59,12 @@ describe('the leads CSV', () => {
     })
     expect(csv.split('\n')).toEqual([
       LEAD_CSV_COLUMNS.join(','),
-      'maya@example.com,"Maya, Q.",New,owner@example.com,Sign-up|Form contact,' +
-        '2026-08-01T00:00:00.000Z,2026-09-01T09:00:00.000Z,3,,,Called back',
-      `june@example.com,,Unqualified,,Booking,,2026-09-01T09:00:00.000Z,,Not a fit,,`,
+      'maya@example.com,"Maya, Q.",Acme,CMO,+15125550107,https://acme.com/,New,' +
+        'owner@example.com,Sales Navigator,Sign-up|Form contact,' +
+        '2026-08-01T00:00:00.000Z,2026-09-01T09:00:00.000Z,3,,,Austin,TX,,US,' +
+        'icp2|a-list,,,Called back',
+      'june@example.com,,,,,,Unqualified,,,Booking,,2026-09-01T09:00:00.000Z,,' +
+        ',,,,,,,Not a fit,,',
     ])
   })
 
@@ -65,8 +75,8 @@ describe('the leads CSV', () => {
       siteName: (hostId) => (hostId === 'site-1' ? 'Shop' : undefined),
     })
     const [, first, second] = csv.split('\n')
-    expect(first).toContain(',New,uid-1,Shop,Sign-up|Form contact,')
+    expect(first).toContain(',New,uid-1,Shop,Sales Navigator,Sign-up|Form contact,')
     // A site the mount cannot name is written by its id, never blank.
-    expect(second.split(',')[4]).toBe('site-2')
+    expect(second.split(',')[8]).toBe('site-2')
   })
 })

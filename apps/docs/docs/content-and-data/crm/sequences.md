@@ -85,6 +85,10 @@ The **display name** is the name recipients see beside the address.
 - **Warm-up** — a newly connected mailbox ramps up: at most **10** a day in
   its first week, **20** in its second and **30** from its third. The daily
   cap still applies, so a mailbox capped at 20 never sends more than 20.
+  **Warm up gradually** is on for every new connection; the member who owns
+  the mailbox can switch it off for one that has sent mail for years and
+  already has its reputation, and it then sends at its cap from that day.
+  Switching it back on starts a fresh ramp.
 - **Sending window** — the days of the week and the hours the mailbox sends
   in, read in the mailbox's **timezone**. A message that comes due outside the
   window waits for the next opening.
@@ -254,9 +258,21 @@ them.
 ## Enroll people {#enroll}
 
 Select **Enroll people** on an active sequence, and choose them from a saved
-[Contacts view](./views.md) or by searching your contacts at the sequence's
-site — up to 50 at a time. Enrolling reads your contacts, so it takes the
-**Manage data** permission as well as **Use Sequences**.
+[Contacts or Leads view](./views.md), by searching your contacts at the
+sequence's site, or from the **Leads** tab — the site's open
+[leads](./leads.md) — up to 50 at a time. Enrolling reads your contacts and
+leads, so it takes the **Manage data** permission as well as **Use Sequences**.
+
+A **lead** is enrolled as it is, with no contact made: the emails read the
+lead's name, company and title wherever the steps say `{{contact.firstName}}`,
+`{{contact.company}}` or `{{contact.title}}` (and `{{lead.…}}` reads the same
+fields), the sends and replies land on the lead's page, a call step files its
+task on the lead, and a reply moves a lead from **New** to **Working**. When
+the lead [converts](./leads.md#converting-a-lead), its enrollment carries on
+as the contact's — same thread, same place in the steps — so a person is never
+enrolled twice by being two records. A lead that already converted, one whose
+address is already a contact, and one closed as unqualified are blocked with
+the reason: enroll the contact, or reopen the lead.
 
 Before anything is enrolled, each person is marked:
 
@@ -269,12 +285,15 @@ Before anything is enrolled, each person is marked:
   bounce, a complaint or an unsubscribe; opted out of sales email from the
   site; on
   your organization's do-not-contact list; a member of your workspace; a
-  customer, unless the sequence includes customers; or already in a sequence.
+  customer, unless the sequence includes customers; already in a sequence; or
+  a lead that converted, is already a contact, or was closed as unqualified.
 
 ### Cold contacts {#cold-contacts}
 
 A contact is **cold** when nothing on your site shows they came to you: no
-form, sign-up, order or booking, and no email from them. For each cold
+form, sign-up, order or booking, and no email from them. A lead is judged the
+same way: one that wrote in through a form or booked is not cold; one you
+imported or added by hand is. For each cold
 contact you write a **personal line** — one sentence on why you're writing to
 this person now, which the sequence puts where `{{enrollment.personalLine}}`
 is — and confirm three things only you can know:
@@ -295,7 +314,8 @@ same sequence again, even after it finishes.
 
 A sequence's **Enrollments** tab lists everyone in it: their status, the step
 they're on, when the next one is due in the mailbox's timezone, when the last
-one went, and why they stopped when they have. For each one you can:
+one went, and why they stopped when they have. A person enrolled as a lead is
+marked **Lead** until the lead converts. For each one you can:
 
 - **Pause** and **Resume** — nothing is sent while they're paused.
 - **Stop** — they get nothing more from this sequence.

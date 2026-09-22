@@ -420,6 +420,9 @@
       "apiPrefixes": [
         "crm"
       ],
+      "activityMutationPaths": [
+        "libs/plugins/crm/src/lib/server/lead-create.ts"
+      ],
       "catalog": {
         "order": 7,
         "$comment": "The id was contacts until AGL-2595 widened one list into the hub; the release flag kept its key because it is persisted in Remote Config.",
@@ -504,6 +507,7 @@
           "collection": "datasets",
           "addonKind": "datasets",
           "includedEntitlement": "datasetsPerOrg",
+          "purchaseCeilingEntitlement": "maxDatasetsPerOrg",
           "nouns": {
             "one": "dataset",
             "many": "datasets",

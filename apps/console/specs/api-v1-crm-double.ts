@@ -170,6 +170,11 @@ export function mockDocRef(path: string) {
     get parent() {
       return mockCollectionRef(parentPath)
     },
+    // The store a reference belongs to — what `addHostLead` opens its
+    // transaction on (AGL-3231).
+    get firestore() {
+      return mockFirestore
+    },
     collection: (name: string) => mockCollectionRef(`${path}/${name}`),
     get: async () => snapshotOf(path),
     create: async (data: Record<string, unknown>) => {

@@ -116,6 +116,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     orgDataCollectionForHost: async (_hostId: string, name: string) =>
       double.mockFirestore.collection('orgs').doc('org-1').collection(name),
     logHostActivity: (...args: unknown[]) => mockLogActivity(...args),
+    // The real lead door — see the create's note above.
+    ...jest.requireActual(
+      '../../../libs/tenant/data/admin/src/lib/server/host-visitor-records',
+    ),
   }
 })
 
@@ -129,6 +133,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/person-key'),
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/visitor-record-ceiling'),
   ...jest.requireActual(
     '../../../libs/aglyn/src/lib/foundation/definitions/contact.types',
   ),
@@ -156,6 +162,25 @@ jest.mock('firebase-admin/firestore', () => {
  * is "call me, then find the row by email", and a double that returned an
  * id would let the code skip the lookup the real function forces on it.
  */
+/*
+ * The lead door (AGL-3231): `POST /v1/leads` writes through the real
+ * `addHostLead`, so the create is judged on what the door leaves — the
+ * person-key id, the `capturedByHostIds` stamp, no basis. Its two side
+ * effects on the way past are stubbed: no campaign touch travels with an
+ * API create, and nothing here trips the platform ceiling.
+ */
+jest.mock(
+  '../../../libs/tenant/data/admin/src/lib/server/campaign-conversion-attribution',
+  () => ({
+    __esModule: true,
+    attributeCampaignConversion: jest.fn(async () => undefined),
+  }),
+)
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/notifications', () => ({
+  __esModule: true,
+  notifyHostManagers: jest.fn(async () => undefined),
+}))
+
 jest.mock('../../../libs/tenant/runtime/src/lib/capture-host-contact', () => ({
   __esModule: true,
   captureHostContact: (...args: unknown[]) => mockCapture(...args),
@@ -319,12 +344,12 @@ describe('the premise', () => {
   })
 
   it('answers the verbs each path takes, and nothing else', async () => {
-    const create = await call('POST', 'leads', {})
-    expect(create.status).toBe(405)
-    expect(create.headers.get('Allow')).toBe('GET')
-    const remove = await call('DELETE', `leads/lead-a?siteId=${HOST}`)
+    const remove = await call('DELETE', 'leads')
     expect(remove.status).toBe(405)
-    expect(remove.headers.get('Allow')).toBe('GET, PATCH')
+    expect(remove.headers.get('Allow')).toBe('GET, POST')
+    const removeOne = await call('DELETE', `leads/lead-a?siteId=${HOST}`)
+    expect(removeOne.status).toBe(405)
+    expect(removeOne.headers.get('Allow')).toBe('GET, PATCH')
     const read = await call('GET', `leads/lead-a/convert?siteId=${HOST}`)
     expect(read.status).toBe(405)
     expect(read.headers.get('Allow')).toBe('POST')
@@ -341,6 +366,7 @@ describe('the site every request names', () => {
       ['GET', 'leads/lead-a', undefined],
       ['PATCH', 'leads/lead-a', { status: 'working' }],
       ['POST', 'leads/lead-a/convert', {}],
+      ['POST', 'leads', { email: 'new@acme.com' }],
     ] as const) {
       const response = await call(method, path, body)
       expect(`${method} ${path}: ${response.status}`).toBe(`${method} ${path}: 400`)
@@ -390,6 +416,13 @@ describe('GET /v1/leads', () => {
       ownerUid: null,
       notes: null,
       unqualifiedReason: null,
+      company: null,
+      jobTitle: null,
+      phone: null,
+      website: null,
+      address: null,
+      tags: [],
+      leadSource: null,
       sources: ['signup'],
       submissionCount: 1,
       firstSeen: new Date(2_000).toISOString(),
@@ -575,6 +608,142 @@ describe('PATCH /v1/leads/{id}', () => {
 })
 
 // ── Convert ─────────────────────────────────────────────────────────────────
+
+// ── Create ──────────────────────────────────────────────────────────────────
+
+describe('POST /v1/leads', () => {
+  /**
+   * The lead's own record (AGL-3231): the door's id and stamp, the profile
+   * as the model stores it, the working state beside it — and no contact,
+   * no company, no basis.
+   */
+  it('creates a lead through the door, with the profile and the working state', async () => {
+    const response = await call('POST', `leads?siteId=${HOST}`, {
+      email: '  Dana@ACME.com ',
+      name: 'Dana Marsh',
+      company: 'Acme Brands',
+      jobTitle: 'CMO',
+      phone: '(512) 555-0107',
+      website: 'acme.com',
+      address: { city: 'Austin', country: 'us' },
+      tags: ['ICP2', 'a-list'],
+      leadSource: 'Sales Navigator',
+      status: 'working',
+      ownerEmail: 'rep@example.com',
+      notes: 'Met at the show',
+    })
+    expect(response.status).toBe(201)
+    const lead = await json(response)
+    const { personKey } = jest.requireActual('../../../libs/aglyn/src/lib/app-utils/person-key')
+    expect(lead).toMatchObject({
+      id: personKey('dana@acme.com'),
+      object: 'lead',
+      siteId: HOST,
+      email: 'dana@acme.com',
+      name: 'Dana Marsh',
+      status: 'working',
+      ownerUid: 'u-rep',
+      notes: 'Met at the show',
+      company: 'Acme Brands',
+      jobTitle: 'CMO',
+      phone: '+15125550107',
+      website: 'https://acme.com/',
+      address: { city: 'Austin', country: 'US' },
+      tags: ['icp2', 'a-list'],
+      leadSource: 'Sales Navigator',
+      sources: ['api'],
+      submissionCount: 1,
+      marketingConsent: false,
+    })
+    const stored = mockDocs.get(`${LEADS}/${lead.id}`)
+    expect(stored?.capturedByHostIds).toEqual([HOST])
+    expect(stored?.visibleTo).toBeUndefined()
+    expect(all(CONTACTS)).toEqual([])
+    expect(all(COMPANIES)).toEqual([])
+    expect(mockCapture).not.toHaveBeenCalled()
+  })
+
+  it('updates the lead the site already holds for the address, and answers 200', async () => {
+    // Keyed the way the door keys every lead: by the person key.
+    const { personKey } = jest.requireActual('../../../libs/aglyn/src/lib/app-utils/person-key')
+    const id = personKey('ann@acme.com')
+    mockDocs.set(`${LEADS}/${id}`, captured('ann@acme.com', 3_000, { name: 'Ann Lee' }))
+    const response = await call('POST', `leads?siteId=${HOST}`, {
+      email: 'ann@acme.com',
+      company: 'Acme',
+    })
+    expect(response.status).toBe(200)
+    const lead = await json(response)
+    expect(lead.id).toBe(id)
+    expect(lead.company).toBe('Acme')
+    expect(lead.name).toBe('Ann Lee')
+    expect(lead.sources).toEqual(['signup', 'api'])
+    expect(lead.submissionCount).toBe(2)
+  })
+
+  it('refuses a malformed body by the field, before any write', async () => {
+    const response = await call('POST', `leads?siteId=${HOST}`, {
+      email: 'nope',
+      phone: 'call me',
+      website: 'javascript:x',
+      status: 'qualified',
+      unqualifiedReason: 'x',
+      foo: 1,
+    })
+    expect(response.status).toBe(400)
+    const fields = (await json(response)).error.fields
+    expect(Object.keys(fields).sort()).toEqual([
+      'email',
+      'foo',
+      'phone',
+      'status',
+      'unqualifiedReason',
+      'website',
+    ])
+    expect(all(LEADS)).toHaveLength(3)
+  })
+
+  it('replays a settled Idempotency-Key with the original lead', async () => {
+    const first = await call('POST', `leads?siteId=${HOST}`, { email: 'new@acme.com' }, 'k-1')
+    expect(first.status).toBe(201)
+    const again = await call('POST', `leads?siteId=${HOST}`, { email: 'new@acme.com' }, 'k-1')
+    expect(again.status).toBe(201)
+    expect((await json(again)).id).toBe((await json(first)).id)
+    expect(all(LEADS)).toHaveLength(4)
+  })
+})
+
+describe('PATCH /v1/leads/{id} — the profile', () => {
+  it('writes the profile as the model stores it, and clears a field with null', async () => {
+    mockDocs.set(`${LEADS}/lead-a`, {
+      ...captured('ann@acme.com', 3_000, { name: 'Ann Lee', jobTitle: 'CMO', tags: ['warm'] }),
+    })
+    const response = await call('PATCH', `leads/lead-a?siteId=${HOST}`, {
+      company: ' Acme  Brands ',
+      jobTitle: null,
+      phone: '5125550107',
+      tags: 'icp2, a-list',
+    })
+    expect(response.status).toBe(200)
+    const lead = await json(response)
+    expect(lead).toMatchObject({
+      company: 'Acme Brands',
+      jobTitle: null,
+      phone: '+15125550107',
+      tags: ['icp2', 'a-list'],
+    })
+    expect(mockDocs.get(`${LEADS}/lead-a`)).not.toHaveProperty('jobTitle')
+  })
+
+  it('refuses a phone or a website it cannot hold, under the field', async () => {
+    const response = await call('PATCH', `leads/lead-a?siteId=${HOST}`, {
+      phone: 'call me',
+      website: 'javascript:x',
+    })
+    expect(response.status).toBe(400)
+    expect(Object.keys((await json(response)).error.fields).sort()).toEqual(['phone', 'website'])
+  })
+})
 
 describe('POST /v1/leads/{id}/convert', () => {
   const convert = (id: string, body: unknown, key?: string) =>

@@ -22,6 +22,7 @@ import { normalizeCrmEmailTemplate } from '@aglyn/aglyn/app-utils/crm-email-temp
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { firstEmailStepIndex } from '../engine/sequence-validation'
+import { leadAsContact } from '../enrollment/enroll-people'
 import type { OutreachPreviewResponse } from '../model/outreach-api'
 import {
   OUTREACH_SAMPLE_PERSON,
@@ -68,11 +69,16 @@ export function createOutreachPreviewRoute(deps: OutreachRouteDeps): PluginWebAp
     if (body['contactId'] !== undefined && !contactId) {
       return outreachRefusal(400, 'invalid-request', 'Name the contact to preview for.')
     }
+    // A lead the sequence's site holds (AGL-3234), previewed as the contact it would be.
+    const leadId = body['leadId'] === undefined ? null : readOutreachDocumentId(body['leadId'])
+    if (body['leadId'] !== undefined && !leadId) {
+      return outreachRefusal(400, 'invalid-request', 'Name the lead to preview for.')
+    }
     const caller = await outreachRouteGate(
       request,
       body['orgId'],
       deps.gate,
-      contactId ? [OUTREACH_READS_PEOPLE] : [],
+      contactId || leadId ? [OUTREACH_READS_PEOPLE] : [],
     )
     if (caller instanceof Response) return caller
     const sequenceId = readOutreachDocumentId(body['sequenceId'])
@@ -90,14 +96,26 @@ export function createOutreachPreviewRoute(deps: OutreachRouteDeps): PluginWebAp
       return outreachRefusal(400, 'invalid-request', 'That step does not send an email.')
     }
 
-    const [orgSettings, mailboxSnapshot, host, template, contact] = await Promise.all([
+    const [orgSettings, mailboxSnapshot, host, template, contact, lead] = await Promise.all([
       readOutreachComplianceSettingsDoc(firestore, caller.orgId),
       sequence.mailboxId ? outreachOrgCollection(firestore, caller.orgId, 'mailboxes').doc(sequence.mailboxId).get() : null,
       sequence.hostId ? firestore.collection('hosts').doc(sequence.hostId).get() : null,
       step.templateId ? org.collection(CRM_COLLECTIONS.emailTemplates).doc(step.templateId).get() : null,
       contactId ? org.collection('contacts').doc(contactId).get() : null,
+      leadId && sequence.hostId
+        ? firestore.collection('hosts').doc(sequence.hostId).collection('leads').doc(leadId).get()
+        : null,
     ])
-    const contactData = contact?.exists ? (contact.data() as Record<string, unknown>) : null
+    const leadData = lead?.exists ? (lead.data() as Record<string, unknown>) : null
+    if (leadId && !leadData) {
+      return outreachRefusal(404, 'contact-not-found', "That lead isn't in this sequence's site's CRM.")
+    }
+    const contactGroupId = consentGroupForHost(caller.org, sequence.hostId).groupId
+    const contactData = contact?.exists
+      ? (contact.data() as Record<string, unknown>)
+      : leadData
+        ? leadAsContact(leadData, contactGroupId)
+        : null
     if (
       contactId &&
       (!contactData || !visibleToHost(contactData['visibleTo'] as string[] | undefined, sequence.hostId))
@@ -113,7 +131,8 @@ export function createOutreachPreviewRoute(deps: OutreachRouteDeps): PluginWebAp
     const merge = contactData
       ? {
           contact: contactData,
-          contactGroupId: consentGroupForHost(caller.org, sequence.hostId).groupId,
+          contactGroupId,
+          lead: leadData,
           sender,
           site: { name: siteName },
         }

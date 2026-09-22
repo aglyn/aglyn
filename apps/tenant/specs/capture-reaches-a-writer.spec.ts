@@ -62,7 +62,7 @@ jest.mock('../utils/plugins.declarations.server.generated', () => ({
 /** The plugin that keeps people, as the boot step registers it. */
 function mockKeepsPeople(): void {
   registerPluginContactCaptureWriter(
-    { capture: async () => ({ ok: true, contactId: 'c1', created: true }) },
+    { capture: async () => ({ ok: true, record: 'contact', contactId: 'c1', created: true }) },
     { pluginId: 'crm' },
   )
 }
@@ -127,7 +127,7 @@ describe('a capture in this app reaches a writer', () => {
     const verdict = await recordCapturedContact(REQUEST)
 
     expect(mockBootAttempts).toBe(2)
-    expect(verdict).toEqual({ ok: true, contactId: 'c1', created: true })
+    expect(verdict).toEqual({ ok: true, record: 'contact', contactId: 'c1', created: true })
   })
 
   it('does not run the boot step again for a process that booted', async () => {
@@ -136,6 +136,7 @@ describe('a capture in this app reaches a writer', () => {
 
     expect(await recordCapturedContact(REQUEST)).toEqual({
       ok: true,
+      record: 'contact',
       contactId: 'c1',
       created: true,
     })

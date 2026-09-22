@@ -79,6 +79,12 @@ import type { HostEventPayload } from './host-event-listeners'
  * because the created-report carries the identity and not the routing.
  * It never rejects either; a record it could not assign is one somebody
  * assigns by hand, which is what every record was before this existed.
+ *
+ * What this does NOT do is close a lead (AGL-3232): a lead is the CRM's
+ * record, and which relationship closes one is the CRM's rule, answered in
+ * its capture writer for the doors that report through the capture seam.
+ * The order doors call this directly and close nothing — a buyer with an
+ * open lead is a lead the rep converts, as in Salesforce.
  */
 export async function captureHostContact(
   options: Omit<UpsertHostContactOptions, 'onCreated'>,

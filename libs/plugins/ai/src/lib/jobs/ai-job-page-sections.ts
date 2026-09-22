@@ -74,8 +74,10 @@ import { aiPlanItemCountViolations } from './ai-job-plan-conformance'
  * copies before either validator reads the section (`ai-repeated-items.ts`).
  * Both then read the section as the page stores it, so the page's rules hold
  * on every copy exactly as on an item written out in full, and a finding on a
- * copy names the node the model wrote. Where the workspace keeps components,
- * an item written once is refused: it places instances.
+ * copy names the node the model wrote. Where the workspace keeps components
+ * the same shape is written around an instance (AGL-3024), so a section of
+ * many cards costs its structure once on every plan; an item that places no
+ * instance is still refused there.
  */
 
 /** The section root id a pass writes, from the job and the plan section's index. */
@@ -159,8 +161,16 @@ export const AI_PAGE_SECTION_REPEAT_LINE = `Write a repeated item once: ${AI_PAG
 
 /**
  * How a workspace that keeps reusable components writes a repeated item
- * (AGL-3143 §10): as one instance of a component the section already places,
- * repeated, rather than the item's subtree drawn once per copy.
+ * (AGL-3143 §10): the shape a Free section writes, around an instance of a
+ * component the section already places — the instance ONCE, `{{n}}` through
+ * the values it fills, and one list of values a copy — rather than the item's
+ * subtree drawn once per copy, or one instance node written per copy.
+ *
+ * Six cards written as six instance nodes spend their structure six times;
+ * written once they spend it once, which is the difference between a section
+ * that fits its ceiling and one that is cut off. A section stays ONE section
+ * either way: splitting it would give the page a second h2 for the same idea,
+ * which is not what the member asked for and not what its outline should say.
  *
  * It rides the request of a section whose plan line shows items AND names a
  * record to place, on the same terms the repeat line rides a Free one: a
@@ -179,15 +189,17 @@ export const AI_PAGE_SECTION_REPEAT_LINE = `Write a repeated item once: ${AI_PAG
  * past its ceiling, and was cut off; the re-ask then said to place an instance
  * "of a component the site has" without naming one, so it was cut off too, and
  * `AI_GENERATION_MAX_ATTEMPTS` ended the job with no page. A four-card grid on
- * the same site had fitted, which is why this went unseen.
+ * the same site had fitted, which is why this went unseen. Naming the shape
+ * was not enough on its own: `ai-repeated-items.ts` refused `repeat` outright
+ * on such a workspace, so the only shape the request could ask for was the
+ * expensive one.
  *
  * ⛔ This does NOT make the plan and the pass agree about what fits — a plan
  * may still promise more items than any ceiling can carry, and this line only
  * gives the pass its cheapest way to try. That bound belongs on the plan step
  * and is deliberately not taken here.
  */
-export const AI_PAGE_SECTION_INSTANCE_LINE =
-  'Write a repeated item once: place one instance of the component this section places and repeat that instance, rather than drawing the item again for each copy.'
+export const AI_PAGE_SECTION_INSTANCE_LINE = `Write a repeated item once: place ONE instance of the component this section places, ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
 
 /**
  * What a pass whose answer ran past its ceiling is told makes a section
@@ -201,7 +213,7 @@ export const AI_PAGE_SECTION_INSTANCE_LINE =
 export function aiPageSectionSmaller(input: Pick<AiPageSectionPromptInput, 'maxElements' | 'reusableComponents'>): string {
   return input.reusableComponents === false
     ? `Make it smaller: use fewer elements, at most ${input.maxElements}; write shorter copy; and write a repeated item once instead of drawing it again: ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
-    : `Make it smaller: use fewer elements, at most ${input.maxElements}; write shorter copy; and place a repeated item as an instance of a component the site has instead of drawing it again.`
+    : `Make it smaller: use fewer elements, at most ${input.maxElements}; write shorter copy; and write a repeated item once instead of drawing it again: place ONE instance of a component the site has, ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
 }
 
 /** One pass's user turn: the page, the brief, the plan, this section and what is built above it. */

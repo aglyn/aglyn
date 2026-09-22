@@ -76,8 +76,9 @@ Contacts are ingested from across your site:
 - **Bookings** from [scheduling](../../commerce-and-bookings/bookings/overview.md)
 
 Duplicate signals from the same person are unified into one contact. A person
-your site has met but not yet qualified is also a [lead](./leads.md); converting
-the lead joins the same contact rather than making a second one.
+your site has met but not yet qualified is a [lead](./leads.md) instead — a
+record of its own, with no contact beside it — and converting the lead is what
+makes the contact. A person who is already a contact is never filed as a lead.
 
 Every plan with the CRM includes a **CRM records band** — one number for contacts,
 companies and deals together. Paid tiers never drop a record: growth past the band
@@ -92,7 +93,7 @@ under Billing & plans.
 | --- | --- | --- |
 | **The CRM** — Leads, Contacts, Companies, Deals, Tasks, Reports, Fields and Settings; working a lead — status, owner, notes, conversion and import; on Contacts, **New contact**, **Import CSV**, saved views, and every edit to a contact — profile, tags, notes, owner, lifecycle stage, company, custom fields, tasks, deals, files, logged calls and activities and merges — one record at a time or from the bulk bar; CSV export and **Erase this person** from the CRM's own pages; the two CRM dashboard cards; the CRM automation steps; the CRM's REST API resources | None. The **CRM** tab stays in the navigation, and every section is shown locked beside the upgrade notice | Yes |
 | **One-to-one email** from a record | None | A daily cap by tier — see [One-to-one email](../../workspace-and-billing/billing-and-plans/overview.md#one-to-one-email) |
-| **Capture** — form submissions, member sign-ups, orders and bookings updating the person in Contacts, and a lead from a form whose lead routing is on | Yes, up to the 100-record band | Yes |
+| **Capture** — member sign-ups and orders updating the person in Contacts; bookings and forms with lead routing on filing a lead; other forms and newsletter opt-ins landing on whichever record the person is | Yes, up to the 100-record band | Yes |
 | **Privacy requests** — exporting every contact and every lead, and erasing a person, from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests) | Yes | Yes |
 
 The CRM is for a plan that includes it, from **Starter**, while the subscription is
@@ -104,9 +105,9 @@ through its routes, and not over the REST API, whose CRM resources refuse with
 `plan_required`.
 
 Capture does not wait for the plan. Every form submission, sign-up, order or booking
-that carries an email address updates the person in Contacts, and a form files a
-[lead](./leads.md#what-makes-a-lead) only when its lead routing is on — exactly as on a
-paid plan. Those records are kept, up to Free's 100-record band, and are there when the
+that carries an email address updates the person's record — a
+[lead](./leads.md#what-makes-a-lead) from a booking or a form with lead routing on, a
+contact from a sign-up or an order — exactly as on a paid plan. Those records are kept, up to Free's 100-record band, and are there when the
 plan includes the CRM. Workspace owners and admins can export them, or erase a person,
 from [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests)
 on every plan.

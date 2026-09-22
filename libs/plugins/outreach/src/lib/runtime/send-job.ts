@@ -45,6 +45,8 @@ import {
 } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
 import {
+  outreachEnrollmentLink,
+  outreachEnrollmentPerson,
   outreachOrgCollection,
   readStoredOutreachEnrollment,
   readStoredOutreachMailbox,
@@ -305,22 +307,32 @@ async function runMailbox(
   const siteNames = new Map<string, string>()
   for (const [hostId, enrollments] of byHost) {
     const contactGroupId = consentGroupForHost(org, hostId).groupId
+    // Each by the record it names — the contact, or the lead while the
+    // person is one (AGL-3234) — keyed by that record's id.
     const [candidatesRead, lookupsRead, host] = await Promise.all([
       readOutreachEnrollCandidates(firestore, {
         orgId,
         hostId,
         contactGroupId,
-        contactIds: enrollments.map((enrollment) => enrollment.contactId),
+        people: enrollments.map(outreachEnrollmentPerson),
       }),
       readOutreachGateLookups(firestore, {
         orgId,
         hostId,
-        people: enrollments.map((enrollment) => ({ contactId: enrollment.contactId, email: enrollment.email })),
+        people: enrollments.map((enrollment) => {
+          const person = outreachEnrollmentPerson(enrollment)
+          return {
+            personId: person.id,
+            contactId: person.kind === 'contact' ? person.id : null,
+            leadId: person.kind === 'lead' ? person.id : null,
+            email: enrollment.email,
+          }
+        }),
       }),
       firestore.collection('hosts').doc(hostId).get(),
     ])
-    for (const person of candidatesRead) people.set(person.contactId, person)
-    for (const [contactId, answer] of lookupsRead) lookups.set(contactId, answer)
+    for (const person of candidatesRead) people.set(person.personId, person)
+    for (const [personId, answer] of lookupsRead) lookups.set(personId, answer)
     siteNames.set(hostId, host.exists ? String(host.get('name') ?? '') : '')
   }
 
@@ -330,11 +342,12 @@ async function runMailbox(
       continue
     }
     const enrollment = candidate.enrollment as OutreachEnrollment
+    const personId = outreachEnrollmentPerson(enrollment).id
     await runEmailStep(deps, firestore, run, {
       enrollment,
       sequence: candidate.sequence as OutreachSequence,
-      person: people.get(enrollment.contactId) ?? null,
-      lookups: lookups.get(enrollment.contactId) ?? null,
+      person: people.get(personId) ?? null,
+      lookups: lookups.get(personId) ?? null,
       siteName: siteNames.get(enrollment.hostId) ?? '',
     })
   }
@@ -538,7 +551,7 @@ async function runTaskStep(
     const written = await fileOutreachTask(deps, {
       orgId: run.orgId,
       hostId: enrollment.hostId,
-      contactId: enrollment.contactId,
+      link: outreachEnrollmentLink(enrollment),
       dedupeKey: `step:${enrollment.id}:${step.id}`,
       title: step.title,
       notes: `From sequence step ${enrollment.stepIndex + 1}.`,
@@ -603,7 +616,25 @@ async function runEmailStep(
 
   // Every gate again, on the person as they stand now.
   if (!person?.contact) {
-    return stop({ type: 'stop', atMs: nowMs, byUid: null, reason: 'gate', detail: 'This contact no longer exists in the CRM.' }, 'stopped')
+    return stop(
+      {
+        type: 'stop',
+        atMs: nowMs,
+        byUid: null,
+        reason: 'gate',
+        detail:
+          enrollment.target === 'lead'
+            ? "This lead no longer exists in the sequence's site's CRM."
+            : 'This contact no longer exists in the CRM.',
+      },
+      'stopped',
+    )
+  }
+  if (person.convertedContactId && enrollment.target === 'lead') {
+    // The lead converted and the enrollment has not followed it yet: the
+    // conversion's listener re-points it, and the next run sends as the contact.
+    report.held += 1
+    return
   }
   if (!person.visible) {
     return stop(
@@ -653,8 +684,12 @@ async function runEmailStep(
     enrollment,
     orgSettings: run.settings,
     merge: {
+      // For a lead, the contact-shaped view of it (`leadAsContact`), so a
+      // step written with `{{contact.*}}` reads the lead; `{{lead.*}}` reads
+      // the lead's own document beside it.
       contact: person.contact,
       contactGroupId,
+      lead: person.lead,
       sender: { name: mailbox.displayName, email: sender.address },
       site: { name: input.siteName },
     },
@@ -762,7 +797,7 @@ async function runEmailStep(
   await fileOutreachEmail(deps, {
     orgId: run.orgId,
     hostId: enrollment.hostId,
-    contactId: enrollment.contactId,
+    link: outreachEnrollmentLink(enrollment),
     direction: 'outbound',
     subject: sent.subject,
     from: sender.address,

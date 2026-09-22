@@ -71,9 +71,17 @@ import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_STATUSES,
+  CRM_LEAD_TEXT_MAX,
+  type CrmLeadProfile,
   type CrmLeadStatus,
   isCrmLeadStatus,
+  normalizeCrmLeadTags,
+  normalizeCompanyWebsite,
 } from '@aglyn/aglyn/app-utils/crm'
+import {
+  normalizeAddress,
+  normalizePhone,
+} from '@aglyn/aglyn/foundation/definitions/contact.types'
 import {
   CSV_IMPORT_CHUNK_SIZE,
   CSV_IMPORT_MAX_BODY_BYTES,
@@ -113,12 +121,33 @@ const NAME_MAX = 120
 export const LEAD_IMPORT_STATUSES: readonly CrmLeadStatus[] =
   CRM_LEAD_STATUSES.filter((status) => status !== 'qualified')
 
-/** The fields a column may be mapped to, in the order the mapping menu lists them. */
+/**
+ * The fields a column may be mapped to, in the order the mapping menu
+ * lists them.
+ *
+ * The lead's own profile (AGL-3231) — company, title, phone, website, the
+ * lead source, the address parts and tags — is what a list from another
+ * tool actually carries, and the reason a lead can be worked without a
+ * contact beside it. They read under the same labels the contacts import
+ * uses, so one spreadsheet maps the same way into either.
+ */
 export const LEAD_IMPORT_FIELDS = [
   'email',
   'name',
+  'company',
+  'jobTitle',
+  'phone',
+  'website',
+  'leadSource',
   'status',
   'ownerEmail',
+  'addressLine1',
+  'addressLine2',
+  'addressCity',
+  'addressState',
+  'addressPostalCode',
+  'addressCountry',
+  'tags',
   'unqualifiedReason',
   'notes',
 ] as const
@@ -129,8 +158,20 @@ export type LeadImportField = (typeof LEAD_IMPORT_FIELDS)[number]
 export const LEAD_IMPORT_FIELD_LABELS: Record<LeadImportField, string> = {
   email: 'Email (required)',
   name: 'Name',
+  company: 'Company name',
+  jobTitle: 'Job title',
+  phone: 'Phone',
+  website: 'Website',
+  leadSource: 'Lead source',
   status: 'Status (new, working, unqualified)',
   ownerEmail: 'Owner (team member email)',
+  addressLine1: 'Address line 1',
+  addressLine2: 'Address line 2',
+  addressCity: 'City',
+  addressState: 'State or region',
+  addressPostalCode: 'Postal code',
+  addressCountry: 'Country (two-letter code)',
+  tags: 'Tags (comma or | separated)',
   unqualifiedReason: 'Unqualified reason',
   notes: 'Notes',
 }
@@ -146,8 +187,28 @@ export const LEAD_IMPORT_FIELD_LABELS: Record<LeadImportField, string> = {
 const FIELD_ALIASES: Record<LeadImportField, readonly string[]> = {
   email: ['email', 'email address', 'e mail', 'mail', 'contact email', 'work email'],
   name: ['name', 'full name', 'lead', 'lead name', 'contact', 'contact name', 'person'],
-  status: ['status', 'lead status', 'stage', 'lead stage', 'state'],
+  company: [
+    'company',
+    'company name',
+    'organization',
+    'organisation',
+    'account',
+    'account name',
+    'employer',
+  ],
+  jobTitle: ['job title', 'title', 'position', 'role', 'headline'],
+  phone: ['phone', 'phone number', 'mobile', 'mobile phone', 'telephone', 'tel', 'cell'],
+  website: ['website', 'web site', 'url', 'company website', 'company domain', 'domain'],
+  leadSource: ['lead source', 'source', 'origin', 'channel', 'campaign'],
+  status: ['status', 'lead status', 'stage', 'lead stage'],
   ownerEmail: ['owner', 'owner email', 'assigned to', 'assignee', 'rep', 'sales rep'],
+  addressLine1: ['address', 'address line 1', 'street', 'street address', 'address 1'],
+  addressLine2: ['address line 2', 'address 2', 'suite', 'apartment'],
+  addressCity: ['city', 'town', 'locality'],
+  addressState: ['state', 'state or region', 'region', 'province', 'county'],
+  addressPostalCode: ['postal code', 'postcode', 'zip', 'zip code'],
+  addressCountry: ['country', 'country code'],
+  tags: ['tags', 'tag', 'labels', 'lists'],
   unqualifiedReason: [
     'unqualified reason',
     'reason',
@@ -203,6 +264,13 @@ export interface LeadImportRow {
   /** Normalized — the address `personKey` derives the document id from. */
   email: string
   name?: string
+  /**
+   * The lead's own profile, already normalized the way the record stores
+   * it (AGL-3231): a key present is a value to write, a key absent leaves
+   * an existing lead's value alone. Never a clear — a blank cell in a file
+   * is a cell nobody filled, not a decision to erase what the site knows.
+   */
+  profile: CrmLeadProfile
   /** Absent leaves an existing lead's status alone and a new one reading as `new`. */
   status?: CrmLeadStatus
   /** Normalized, for the server to resolve against the org's members. */
@@ -253,10 +321,57 @@ export function normalizeLeadImportRow(raw: LeadImportRawRow): LeadImportRowVerd
   const drop = (field: LeadImportField, value: unknown) => {
     dropped.push({ field, value: String(value ?? '').trim() })
   }
-  const row: LeadImportRow = { email, dropped }
+  const row: LeadImportRow = { email, profile: {}, dropped }
 
   const name = importTextValue(raw.name, NAME_MAX)?.replace(/\s+/g, ' ')
   if (name) row.name = name
+
+  /*
+   * The profile (AGL-3231), field by field, each through the normalizer
+   * the record's own card runs. A phone or a website the normalizer cannot
+   * read is dropped and reported rather than stored as typed, because the
+   * record renders both as links; the country is the one address part the
+   * address normalizer drops silently — a typed name is not a code — so it
+   * is the one part the report has to name.
+   */
+  const company = importTextValue(raw.company, CRM_LEAD_TEXT_MAX)?.replace(/\s+/g, ' ')
+  if (company) row.profile.company = company
+  const jobTitle = importTextValue(raw.jobTitle, CRM_LEAD_TEXT_MAX)?.replace(/\s+/g, ' ')
+  if (jobTitle) row.profile.jobTitle = jobTitle
+  const leadSource = importTextValue(raw.leadSource, CRM_LEAD_TEXT_MAX)?.replace(
+    /\s+/g,
+    ' ',
+  )
+  if (leadSource) row.profile.leadSource = leadSource
+  const phoneText = importTextValue(raw.phone, 64)
+  if (phoneText) {
+    const phone = normalizePhone(phoneText)
+    if (phone) row.profile.phone = phone
+    else drop('phone', phoneText)
+  }
+  const websiteText = importTextValue(raw.website, 320)
+  if (websiteText) {
+    const website = normalizeCompanyWebsite(websiteText)
+    if (website) row.profile.website = website
+    else drop('website', websiteText)
+  }
+  const address = normalizeAddress({
+    line1: importTextValue(raw.addressLine1, 200),
+    line2: importTextValue(raw.addressLine2, 200),
+    city: importTextValue(raw.addressCity, 120),
+    state: importTextValue(raw.addressState, 120),
+    postalCode: importTextValue(raw.addressPostalCode, 32),
+    country: importTextValue(raw.addressCountry, 8),
+  })
+  if (address) row.profile.address = address
+  const countryText = importTextValue(raw.addressCountry, 64)
+  if (countryText && !address?.country) drop('addressCountry', countryText)
+  const tags = normalizeCrmLeadTags(
+    String(raw.tags ?? '')
+      .split(/[,|]/)
+      .map((tag) => tag.trim()),
+  )
+  if (tags.length) row.profile.tags = tags
 
   const statusText = importTextValue(raw.status, 32)
   if (statusText) {

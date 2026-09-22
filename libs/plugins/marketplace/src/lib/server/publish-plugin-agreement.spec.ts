@@ -22,7 +22,7 @@ import {
   publisherAgreementIsPublished,
   publisherAgreementState,
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
-import { requiredAttestationIds } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import { requiredAttestationIds } from '../model/publisher-attestation'
 
 /**
  * The publish route's publisher-agreement gate (AGL-1077).

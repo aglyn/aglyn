@@ -77,6 +77,7 @@ import {
   detectPublishIntent,
   detectRepeatedSubtrees,
   detectTypedData,
+  detectUnfilledInstances,
   detectUnrelatedScreenLinks,
   detectUnresponsiveGrids,
   detectUntemplatedSimilarPages,
@@ -717,6 +718,36 @@ describe('rule 7 — reuse before creating', () => {
     expect(aiNamesMatch('Our services', 'Services page')).toBe(true)
     expect(aiNamesMatch('Contact form', 'Contact')).toBe(false)
     expect(aiNamesMatch('Team members', 'Members of the team')).toBe(true)
+  })
+})
+
+describe('rule 1 — an instance fills the props its component declares (AGL-3024)', () => {
+  const CONTEXT = { componentProps: { 'cmp-card': { title: 'text', image: 'image' } } }
+  const bare = (): Nested => ({ componentId: 'reusableInstance', props: { refId: 'cmp-card' } })
+
+  it('refuses instances that fill nothing, naming every one and the props to fill', () => {
+    // Measured on attorney-profile-template-v2: three instances carrying only
+    // a refId, which render the component's own [Practice area name] default
+    // three times over. Nothing read the second half of rule 1 until now.
+    const found = detectUnfilledInstances(tree(page(section(bare(), bare(), bare()))), CONTEXT)
+    expect(found).toMatchObject([{ rule: 1, code: 'instance-props-unfilled' }])
+    expect(found[0].nodeIds).toHaveLength(3)
+    expect(found[0].message).toContain('title, image')
+  })
+
+  it('passes an instance that fills any of them, and one whose component declares none', () => {
+    expect(detectUnfilledInstances(tree(page(section(instance('Roof repair')))), CONTEXT)).toEqual([])
+    // A partly filled instance is a judgment the doctrine cannot second-guess:
+    // a component may declare a prop whose default is right where it is placed.
+    const partial: Nested = { componentId: 'reusableInstance', props: { refId: 'cmp-card', propValues: { title: 'Only this' } } }
+    expect(detectUnfilledInstances(tree(page(section(partial))), CONTEXT)).toEqual([])
+    expect(detectUnfilledInstances(tree(page(section(bare()))), { componentProps: { 'cmp-card': {} } })).toEqual([])
+    expect(detectUnfilledInstances(tree(page(section(bare()))), {})).toEqual([])
+  })
+
+  it('ignores an instance whose propValues name nothing the component declares', () => {
+    const wrong: Nested = { componentId: 'reusableInstance', props: { refId: 'cmp-card', propValues: { nope: 'x' } } }
+    expect(codes(detectUnfilledInstances(tree(page(section(wrong))), CONTEXT))).toEqual(['instance-props-unfilled'])
   })
 })
 

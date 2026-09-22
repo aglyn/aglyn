@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.152",
+  "version": "1.0.0-beta.153",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -139,6 +139,7 @@
     "test:backfill-core": "node --test tools/scripts/backfills/lib/backfill-core.test.mjs",
     "test:resource-uid": "node --test tools/scripts/lib/resource-uid.test.mjs",
     "test:crm-lifecycle-backfill": "node --test tools/scripts/lib/crm-lifecycle-backfill.test.mjs",
+    "test:one-record-backfill": "node --test tools/scripts/lib/one-record-backfill.test.mjs",
     "test:gated-media-backfill": "node --test tools/scripts/lib/gated-media-backfill.test.mjs",
     "test:pricing-drift": "node --test tools/scripts/lib/pricing-drift.test.mjs",
     "test:decision-log": "node --test tools/scripts/lib/decision-log.test.mjs",

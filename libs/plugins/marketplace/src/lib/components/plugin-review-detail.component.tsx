@@ -61,7 +61,7 @@ import {
   rejectionHeadline,
   rejectionInputError,
 } from '../model/plugin-rejection-categories'
-import { PUBLISHER_ATTESTATION } from '@aglyn/aglyn/app-utils/publisher-attestation'
+import { PUBLISHER_ATTESTATION } from '../model/publisher-attestation'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { reviewStatusMeaning } from '../model/plugin-review-status'
 

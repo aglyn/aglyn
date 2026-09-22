@@ -48,10 +48,14 @@ export interface LeadSurfacesNoteProps {
 
 /** The always-on surfaces, named once wherever the note is drawn. */
 export const LEAD_SURFACES_INTRO =
-  'Leads are created by member sign-ups, bookings, and forms with lead routing on'
-/** What every capture does whether or not it files a lead. */
+  'Leads are created by bookings, forms with lead routing on, imports and New lead'
+/**
+ * The rule that keeps one person one record (AGL-3232): a lead is the
+ * whole record until it converts, and a person the workspace already holds
+ * as a contact is not filed as a lead again.
+ */
 export const LEAD_SURFACES_CONTACTS_TOO =
-  'Every submission with an email address also updates the contact in Contacts at stage Lead.'
+  'A lead is its own record until it converts into a contact. Someone who is already a contact is not filed as a lead again — their submission lands on the contact.'
 
 /** One site's forms, sorted into the two answers the note gives. */
 export interface LeadSurfaceFormsResult {

@@ -37,7 +37,7 @@ import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { NodeType, type NodesMap } from '@aglyn/aglyn/types/nodes'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
-import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
+import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import { aiSiteSubmissions, aiSiteWords, type AiSiteSubmissions } from '../model/ai-site-job'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
@@ -488,6 +488,72 @@ export async function aiFormCopyUnboundFailure(
   return unbound ? `${AI_FORM_COPY_UNBOUND_FAILURE} ${unbound.message}` : null
 }
 
+/**
+ * The fields the confirmed plan gives the form, against the form a COPY
+ * actually produced (AGL-3024); `null` when the copy keeps the plan, or when
+ * the plan promised no field to keep.
+ *
+ * The fourth kind to need this, after the layout, the page and the component.
+ * `aiFormCopyUnboundFailure` above already refuses the one violation
+ * duplication CAUSES; this refuses the one duplication HIDES — a plan reading
+ * "start from the consultation form and add a case-type question" getting the
+ * consultation form and nothing else, reported as built.
+ *
+ * A field the plan names is matched on its name alone: a copy that collects
+ * the answer under a different label is still collecting it, and this check
+ * has no way to tell a renamed field from a missing one without guessing.
+ */
+export async function aiCopiedFormReview(
+  firestore: FirebaseFirestore.Firestore,
+  input: { hostId: string; formId: string; name: string; plan: AiJobPlan | null },
+): Promise<AiJobReview | null> {
+  const promised = (aiPlanCreation(input.plan, 'form')?.fields ?? [])
+    .map((field) => field.split(':')[0]?.trim().toLowerCase())
+    .filter((field): field is string => Boolean(field))
+  if (!promised.length) return null
+  const snapshot = await firestore
+    .collection('hosts')
+    .doc(input.hostId)
+    .collection('forms')
+    .doc(input.formId)
+    .get()
+  if (!snapshot.exists) {
+    return {
+      reason: 'doctrine',
+      message: `"${input.name}" was copied from the form the plan names, and this job could not read the copy back to check it collects what the plan gives it. Open the form and check it before you put it on a page.`,
+      findings: [],
+    }
+  }
+  const fields = (snapshot.get('fields') ?? []) as unknown[]
+  const collected = new Set(
+    fields
+      .map((field) =>
+        field && typeof field === 'object'
+          ? String((field as Record<string, unknown>)['fieldName'] ?? (field as Record<string, unknown>)['name'] ?? '')
+          : '',
+      )
+      .filter(Boolean)
+      .map((name) => name.toLowerCase()),
+  )
+  const missing = promised.filter((name) => !collected.has(name))
+  if (!missing.length) return null
+  const one = missing.length === 1
+  return aiDoctrineReview({
+    message: `"${input.name}" is a copy of the form the plan names, and a copy is all it is: the plan gives it ${
+      one ? 'a field' : 'fields'
+    } the copy does not collect.`,
+    violations: [
+      {
+        rule: null,
+        code: 'plan-fields-missing',
+        message: `The confirmed plan says this form collects ${missing.join(', ')}, and the copy collects ${
+          collected.size ? [...collected].join(', ') : 'nothing'
+        }. Add ${one ? 'it' : 'each of them'}, or the copy is the form it was copied from.`,
+      },
+    ],
+  })
+}
+
 function listOf(items: readonly string[]): string {
   return items.length < 2
     ? items.join('')
@@ -638,6 +704,16 @@ export function createAiJobFormStep(deps: AiJobFormStepDeps = {}): AiJobStepRunn
         const unbound = await aiFormCopyUnboundFailure(firestore, { hostId, formId: copy.id })
         if (unbound) return { ...aiUnspentOutcome(model), failure: unbound }
         const hostSubdomain = await aiSiteSubdomain(firestore, hostId)
+        // And the one duplication hides: what the plan promised of the copy,
+        // read back (AGL-3024). This branch generates nothing, so nothing
+        // else can answer for it.
+        const review = await aiCopiedFormReview(firestore, {
+          hostId,
+          formId: copy.id,
+          name: copy.name,
+          plan,
+        })
+        if (review) return aiUnspentOutcome(model, { review })
         return aiUnspentOutcome(model, {
           outputs: [output({ id: copy.id, versionId: copy.versionId, name: copy.name, hostSubdomain })],
         })

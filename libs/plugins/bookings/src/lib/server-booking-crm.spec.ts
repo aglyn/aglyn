@@ -240,10 +240,12 @@ describe('a free booking made through a CRM booking link', () => {
    * everything a person record is — keying the address, the audience band,
    * the erasure rows — belongs to whichever plugin keeps people.
    *
-   * ⚠️ The floor is `lead` and not `customer`: no money has moved when a
-   * request is made. The payment webhook is the door that makes a customer.
+   * ⚠️ A LEAD SURFACE, not a customer (AGL-3232): no money has moved when
+   * a request is made, so the record system files a lead — or lands the
+   * request on the contact the workspace already holds. The payment webhook
+   * is the door that makes a customer. The door itself writes no lead.
    */
-  it('reports the person it met to whichever plugin keeps people', async () => {
+  it('reports the person it met to whichever plugin keeps people, as a lead surface', async () => {
     const res = makeRes()
     await bookHandler(makeReq(), res)
     expect(res.statusCode).toBe(200)
@@ -253,8 +255,9 @@ describe('a free booking made through a CRM booking link', () => {
       hostId: 'host-1',
       identity: { email: 'dana@example.com' },
       interaction: { source: 'booking', refId: writtenRow().id },
-      lifecycleFloor: 'lead',
+      surface: 'lead',
     })
+    expect(captured[0]).not.toHaveProperty('lifecycleFloor')
   })
 
   it('neither stores nor forwards a value that is not a reference', async () => {

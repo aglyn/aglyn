@@ -293,6 +293,14 @@ UTC) alongside the other scheduled routes, and is in that workflow's
   doc is gone (Firestore doesn't cascade to subcollections, and existing
   installs of a hard-deleted listing still load off the orphaned version
   doc), and anything under `artifacts/` that isn't a canonical path.
+- **Refused outright** if the claims cannot be read completely. The route
+  does not walk the version documents itself — it asks whichever plugin
+  stores them, through `core.plugin-artifact-inventory` (AGL-3080) — and
+  nothing registered, a failed walk, or one past the route's own ceiling
+  all answer a refusal rather than an empty list. It replies `507` and
+  deletes nothing, because "no claims" arriving because nobody answered is
+  indistinguishable at the deletion from a bucket that really is all
+  orphans. The same contract answers the re-verification sweep.
 
 Deletions are permanent — the bucket has no object versioning and a
 publisher's build isn't reproducible from our side — so run it dry first:

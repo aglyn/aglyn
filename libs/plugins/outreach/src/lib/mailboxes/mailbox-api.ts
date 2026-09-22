@@ -118,6 +118,12 @@ export interface OutreachMailboxSettingsRequest {
   dailyCap?: number
   window?: OutreachSendWindow
   timezone?: string
+  /**
+   * Whether the warm-up ramp applies (AGL-3228). `false` clears it, so an
+   * established mailbox sends at its cap from today; `true` starts one now
+   * when none is running.
+   */
+  warmUp?: boolean
 }
 
 /** `POST outreach/mailboxes/status` */

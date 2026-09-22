@@ -16,6 +16,7 @@
  */
 
 import type {
+  PluginRecordLink,
   PluginRecordTaskKind,
   PluginRecordWrite,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
@@ -45,13 +46,14 @@ export const OUTREACH_TASK_KIND_TO_RECORD: Record<OutreachTaskKind, PluginRecord
   todo: 'todo',
 }
 
-/** Files one email on a contact; never throws. */
+/** Files one email on a person's record — the contact, or the lead while they are one (AGL-3234); never throws. */
 export async function fileOutreachEmail(
   deps: Pick<OutreachRuntimeDeps, 'timeline'>,
   input: {
     orgId: string
     hostId: string
-    contactId: string
+    /** The record the entry lands on: `{ contactId }` or `{ leadId }`. */
+    link: PluginRecordLink
     direction: 'outbound' | 'inbound'
     subject: string
     from: string
@@ -70,7 +72,7 @@ export async function fileOutreachEmail(
     const written = await writer.logActivity({
       orgId: input.orgId,
       hostId: input.hostId,
-      link: { contactId: input.contactId },
+      link: input.link,
       sourcePluginId: OUTREACH_PLUGIN_ID,
       kind: 'email',
       atMs: input.atMs,
@@ -104,7 +106,8 @@ export async function fileOutreachTask(
   input: {
     orgId: string
     hostId: string
-    contactId: string
+    /** The record the task lands on: `{ contactId }` or `{ leadId }`. */
+    link: PluginRecordLink
     dedupeKey: string
     title: string
     notes?: string | null
@@ -118,7 +121,7 @@ export async function fileOutreachTask(
   return writer.createTask({
     orgId: input.orgId,
     hostId: input.hostId,
-    link: { contactId: input.contactId },
+    link: input.link,
     sourcePluginId: OUTREACH_PLUGIN_ID,
     dedupeKey: input.dedupeKey,
     title: input.title,

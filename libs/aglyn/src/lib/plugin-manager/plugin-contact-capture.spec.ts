@@ -60,14 +60,14 @@ function rolodexPlugin() {
         // A visit by somebody already held merges; the profile keys given win,
         // and a key the silo did not give is left exactly as it was.
         held.profile = { ...held.profile, ...(request.profile ?? {}) }
-        return { ok: true, contactId: held.id, created: false }
+        return { ok: true, record: 'contact', contactId: held.id, created: false }
       }
       if (people.size >= band) {
         return { ok: false, reason: 'band', error: 'This workspace is at the people it may hold' }
       }
       const id = `p-${people.size + 1}`
       people.set(email, { id, profile: { ...(request.profile ?? {}) } })
-      return { ok: true, contactId: id, created: true }
+      return { ok: true, record: 'contact', contactId: id, created: true }
     },
   }
   return {
@@ -133,6 +133,7 @@ describe('plugin contact capture', () => {
     })
     expect(await capturePluginContact(kioskCapture('Sam@Example.test'))).toEqual({
       ok: true,
+      record: 'contact',
       contactId: 'p-1',
       created: true,
     })
@@ -141,7 +142,7 @@ describe('plugin contact capture', () => {
       await capturePluginContact(
         kioskCapture('sam@example.test', { profile: { phone: '555' } }),
       ),
-    ).toEqual({ ok: true, contactId: 'p-1', created: false })
+    ).toEqual({ ok: true, record: 'contact', contactId: 'p-1', created: false })
     expect(rolodex.people.get('sam@example.test')?.profile).toEqual({ phone: '555' })
   })
 

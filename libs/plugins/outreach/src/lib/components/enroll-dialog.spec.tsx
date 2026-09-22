@@ -46,10 +46,12 @@ import type { OutreachLoad } from './use-outreach-data'
 
 let mockViews: OutreachLoad<OutreachViewOption[]>
 let mockSearch: OutreachLoad<OutreachContactOption[]> & { idle: boolean }
+let mockLeadSearch: OutreachLoad<OutreachContactOption[]> & { idle: boolean }
 
 jest.mock('./use-outreach-crm', () => ({
   useOutreachSavedViews: () => mockViews,
   useOutreachContactSearch: () => mockSearch,
+  useOutreachLeadSearch: () => mockLeadSearch,
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({ HelpTip: () => null }))
 jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => ({ excerpt: '' }) }))
@@ -63,7 +65,10 @@ const sequence = {
 const person = (
   overrides: Partial<OutreachEnrollPreviewPerson>,
 ): OutreachEnrollPreviewPerson => ({
+  personId: overrides.contactId ?? 'c-1',
+  target: 'contact',
   contactId: 'c-1',
+  leadId: null,
   name: 'Casey Morgan',
   email: 'casey.morgan@example.com',
   cold: false,
@@ -134,8 +139,9 @@ const renderDialog = () => {
 const row = (name: string) => screen.getByRole('listitem', { name })
 
 beforeEach(() => {
-  mockViews = { status: 'ready', data: [{ id: 'view-1', name: 'Warm leads' }] }
+  mockViews = { status: 'ready', data: [{ id: 'view-1', name: 'Warm leads', section: 'contacts' }] }
   mockSearch = { status: 'ready', data: [], idle: true }
+  mockLeadSearch = { status: 'ready', data: [], idle: true }
   api = {
     previewEnrollment: jest.fn().mockResolvedValue(PREVIEW),
     enroll: jest.fn(),
@@ -210,6 +216,32 @@ describe('enrolling: the source (AGL-2980)', () => {
       expect(api.previewEnrollment).toHaveBeenCalledWith('seq-1', {
         kind: 'contacts',
         contactIds: ['c-warm'],
+      }),
+    )
+  })
+
+  /**
+   * The Leads tab (AGL-3234): the sequence's site's open leads, picked and
+   * checked as leads — the source says which record they are.
+   */
+  it('checks the leads picked from the sequence’s site', async () => {
+    mockLeadSearch = {
+      status: 'ready',
+      idle: false,
+      data: [{ id: 'lead-key-1', name: 'Dana Marsh', email: 'dana@example.com' }],
+    }
+    renderDialog()
+    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+    fireEvent.change(screen.getByLabelText('Search leads'), { target: { value: 'Dana' } })
+    fireEvent.click(
+      within(screen.getByRole('list', { name: 'Lead results' })).getByText('Dana Marsh'),
+    )
+    expect(within(screen.getByLabelText('Picked leads')).getByText('Dana Marsh')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Check people' }))
+    await waitFor(() =>
+      expect(api.previewEnrollment).toHaveBeenCalledWith('seq-1', {
+        kind: 'leads',
+        leadIds: ['lead-key-1'],
       }),
     )
   })
@@ -290,13 +322,19 @@ describe('enrolling: the gate preview and Confirm (AGL-2980)', () => {
       enrolled: 1,
       results: [
         {
+          personId: 'c-warm',
+          target: 'contact',
           contactId: 'c-warm',
+          leadId: null,
           email: 'casey.morgan@example.com',
           outcome: 'enrolled',
           enrollmentId: 'seq-1_c-warm',
         },
         {
+          personId: 'c-cold',
+          target: 'contact',
           contactId: 'c-cold',
+          leadId: null,
           email: 'avery.quinn@example.org',
           outcome: 'blocked',
           blocks: [

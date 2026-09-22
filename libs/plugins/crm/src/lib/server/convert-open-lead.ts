@@ -1,0 +1,118 @@
+/**
+ * @license
+ * Copyright 2026 Aglyn LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * An open lead, closed as converted because the person became a
+ * relationship on their own (AGL-3232).
+ *
+ * Salesforce closes a lead when somebody converts it. Aglyn has a door that
+ * makes a person a contact without anybody deciding anything — a member
+ * account — and a lead left open behind it is a rep chasing a member. So a
+ * relationship capture asks here, after the contact exists: the site's
+ * lead for the address, if it is still open, is stamped converted onto
+ * that contact, the way the convert dialog stamps one, with `convertedBy`
+ * saying which door did it. The CRM's own module, because a lead is the
+ * CRM's record (docs/PACKAGES.md rule 3): the capture writer beside it
+ * calls it, and the one-record backfill stamps the same shape by hand.
+ *
+ * Only an OPEN lead: one already converted names its contact and must keep
+ * naming it, and one closed as unqualified was a decision — a person the
+ * team judged not real who then buys something is a fact for the contact's
+ * timeline, not a reason to rewrite the team's verdict.
+ *
+ * Once stamped, the lead hands what was filed on it to the contact — its
+ * activities, its tasks, and every plugin's records about it — exactly as
+ * the convert dialog's conversion does (AGL-3233), so a lead closed by a
+ * purchase leaves the same timeline behind as one a rep converted.
+ *
+ * Never throws: the capture that made the contact has already happened,
+ * and a lead that could not be stamped is one somebody converts by hand.
+ */
+
+import {
+  type CrmLeadFields,
+  isCrmLeadOpen,
+  normalizeContactEmail,
+  personKey,
+} from '@aglyn/aglyn/server'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { handOffLeadRecords } from '@aglyn/tenant-runtime/hand-off-lead'
+import { FieldValue } from 'firebase-admin/firestore'
+
+/** Which door closed the lead, recorded on it beside the conversion stamp. */
+export type LeadAutoConvertedBy = 'signup' | 'purchase' | 'backfill'
+
+export interface ConvertOpenLeadOntoContactInput {
+  hostId: string
+  email: unknown
+  /** `orgs/{orgId}/contacts/{contactId}` — the relationship the lead became. */
+  contactId: string
+  by: LeadAutoConvertedBy
+}
+
+/**
+ * Stamp the site's open lead for `email` as converted onto `contactId`.
+ * `true` when a lead was stamped; `false` when the site holds none, holds
+ * one that is not open, or the write failed.
+ */
+export async function convertOpenLeadOntoContact(
+  input: ConvertOpenLeadOntoContactInput,
+): Promise<boolean> {
+  const email = normalizeContactEmail(input.email)
+  const key = email ? personKey(email) : null
+  if (!key || !input.contactId) return false
+  try {
+    const firestore = firebaseAdmin.app().firestore()
+    const leadRef = firestore
+      .collection('hosts')
+      .doc(input.hostId)
+      .collection('leads')
+      .doc(key)
+    const snapshot = await leadRef.get()
+    if (!snapshot.exists) return false
+    const lead = (snapshot.data() ?? {}) as Record<string, unknown> & CrmLeadFields
+    if (lead.convertedContactId || !isCrmLeadOpen(lead)) return false
+    await leadRef.set(
+      {
+        status: 'qualified',
+        convertedContactId: input.contactId,
+        convertedAtMs: Date.now(),
+        convertedBy: input.by,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+    const resolved = await getOrgForHost(input.hostId)
+    if (resolved) {
+      await handOffLeadRecords({
+        firestore,
+        orgId: resolved.orgId,
+        hostId: input.hostId,
+        leadId: key,
+        contactId: input.contactId,
+        email,
+        by: input.by,
+      })
+    }
+    return true
+  } catch (error) {
+    console.error('convertOpenLeadOntoContact failed', input.hostId, error)
+    return false
+  }
+}
+
+export default convertOpenLeadOntoContact

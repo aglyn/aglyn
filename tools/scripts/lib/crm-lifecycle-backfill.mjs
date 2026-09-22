@@ -769,8 +769,14 @@ export function advanceNeverDowngrades(crmSource) {
  * success, so every door is read before a write is allowed.
  */
 export const DOOR_FLOORS = [
-  { path: 'apps/tenant/app/api/forms/submit/route.ts', floor: 'lead' },
-  { path: 'libs/plugins/bookings/src/lib/server.ts', floor: 'lead' },
+  // The two lead surfaces (AGL-3232): since the one-record model they set
+  // no floor at all — they declare `surface: 'lead'` and the capture writer
+  // files a lead, or lands the capture on the contact the workspace already
+  // holds. The guard now holds them to THAT, because a door that went back
+  // to stamping `lead` on a contact would be rebuilding the duplicates the
+  // one-record backfill removes.
+  { path: 'apps/tenant/app/api/forms/submit/route.ts', floor: null, surface: 'lead' },
+  { path: 'libs/plugins/bookings/src/lib/server.ts', floor: null, surface: 'lead' },
   { path: 'libs/plugins/bookings/src/lib/server/billing-webhook.ts', floor: 'customer' },
   { path: 'libs/plugins/commerce/src/lib/server/billing-webhook.ts', floor: 'customer' },
   { path: 'libs/plugins/commerce/src/lib/server/pos-order.ts', floor: 'customer' },
@@ -796,6 +802,17 @@ export function doorSetsFloor(doorSource, floor) {
   return new RegExp(
     `(?:initialLifecycleStage|lifecycleFloor):\\s*'${floor}'`,
   ).test(source)
+}
+
+/**
+ * Whether one lead-surface door still declares itself one (AGL-3232) and
+ * has not gone back to stamping a contact's stage: `surface: 'lead'` on its
+ * capture, and no `lead` floor anywhere in it.
+ */
+export function doorIsLeadSurface(doorSource) {
+  const source = stripComments(doorSource)
+  // `surface: 'lead'`, or the form route's `surface: routed ? 'lead' : 'touch'`.
+  return /surface:[^\n]*'lead'/.test(source) && !doorSetsFloor(source, 'lead')
 }
 
 /**
@@ -868,10 +885,13 @@ export function preconditionsForTree(repoRoot) {
       verdicts.push({ ok: false, why: `${door.path} could not be read` })
       continue
     }
-    if (!doorSetsFloor(source, door.floor)) {
+    if (door.floor === null ? !doorIsLeadSurface(source) : !doorSetsFloor(source, door.floor)) {
       verdicts.push({
         ok: false,
-        why: `${door.path} no longer sets initialLifecycleStage: '${door.floor}'`,
+        why:
+          door.floor === null
+            ? `${door.path} is no longer a lead surface that sets no stage (surface: 'lead')`
+            : `${door.path} no longer sets initialLifecycleStage: '${door.floor}'`,
       })
     }
   }

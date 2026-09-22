@@ -136,6 +136,23 @@ export interface PluginContactCaptureRequest {
    */
   lifecycleFloor?: string
   /**
+   * What kind of door this is, which decides WHICH RECORD the person lands
+   * on (AGL-3232) — the owner's rule is Salesforce's: one person is one
+   * record, a lead until they are qualified and a contact after.
+   *
+   * - `lead`: a lead surface — a form whose author routes it to leads, a
+   *   booking request. The person is filed as a LEAD and nothing else,
+   *   unless the workspace already holds them as a contact, in which case
+   *   the capture lands on the contact and no lead is filed.
+   * - `relationship`: an act that makes the person a known relationship —
+   *   a member account, a purchase. The person is filed as a CONTACT, and
+   *   an open lead the site held for them is stamped converted onto it.
+   * - `touch`, the default: everything else — a form without lead routing,
+   *   a newsletter opt-in. The capture lands on the open lead when the site
+   *   holds one for the address, and on the contact otherwise.
+   */
+  surface?: 'lead' | 'relationship' | 'touch'
+  /**
    * Profile fields the silo knows, keyed by the owner's own field names.
    * Only the keys given are written, so a silo that knows the phone number
    * does not blank a title somebody typed.
@@ -168,7 +185,14 @@ export interface PluginContactCaptureRequest {
  * paid order for a record it could not keep.
  */
 export type PluginContactCaptured =
-  | { ok: true; contactId: string; created: boolean }
+  /** The capture landed on a contact — the record every capture used to make. */
+  | { ok: true; record: 'contact'; contactId: string; created: boolean }
+  /**
+   * The capture landed on a LEAD (AGL-3232): a lead surface met somebody the
+   * workspace does not hold as a contact, or a touch reached an open lead.
+   * `leadId` is the person key the lead is filed under on `hostId`.
+   */
+  | { ok: true; record: 'lead'; leadId: string; created: boolean }
   | {
       ok: false
       /**

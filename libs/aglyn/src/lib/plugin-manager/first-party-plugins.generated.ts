@@ -425,6 +425,7 @@ export const PLUGIN_ORG_CAPACITIES_DECLARED: readonly ResolvedPluginOrgCapacity[
     "collection": "datasets",
     "addonKind": "datasets",
     "includedEntitlement": "datasetsPerOrg",
+    "purchaseCeilingEntitlement": "maxDatasetsPerOrg",
     "nouns": {
       "one": "dataset",
       "many": "datasets",

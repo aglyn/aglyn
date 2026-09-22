@@ -77,6 +77,40 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
 }))
 
+/*
+ * The stored-version walk belongs to the plugin that owns the documents
+ * since AGL-3080 (`core.plugin-artifact-inventory`), so the collection-group
+ * double these two routes used is gone with it. These cases are about the
+ * DOOR — the gate, the beat, the audit row, whether a run did any work — so
+ * the inventory answers an empty listing it is safe to act on and every run
+ * gets as far as finding nothing to do.
+ *
+ * Mocked at the module rather than registered in `beforeEach`, because
+ * `load()` calls `jest.resetModules()` and a registration made out here
+ * would land in a different copy of the registry than the route reads.
+ */
+jest.mock('@aglyn/aglyn/plugin-manager/plugin-artifact-inventory', () => ({
+  __esModule: true,
+  ...jest.requireActual(
+    '@aglyn/aglyn/plugin-manager/plugin-artifact-inventory',
+  ),
+  pluginArtifactClaims: async () => ({
+    outcome: 'listed',
+    rows: [],
+    scanned: 0,
+  }),
+  pluginArtifactVersions: async () => ({
+    outcome: 'listed',
+    rows: [],
+    scanned: 0,
+  }),
+}))
+
+jest.mock('../utils/server-plugin-loader', () => ({
+  __esModule: true,
+  serverPluginLoader: { ensureAll: async () => undefined },
+}))
+
 jest.mock('../utils/cron-beat', () => ({
   __esModule: true,
   recordCronBeat: async (jobId: string) => {
@@ -143,22 +177,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
             }
           }
           return mockEmptyQuery()
-        },
-        /*
-         * The claim walk, modelled rather than stubbed. The reaper pages the
-         * collection group and deletes exactly the objects nothing claims, so
-         * a double that answered `get()` without the ordering and cursor the
-         * real walk uses would let a change that stopped walking pass.
-         */
-        collectionGroup: () => {
-          const page = () => ({
-            orderBy: () => page(),
-            select: () => page(),
-            limit: () => page(),
-            startAfter: () => page(),
-            get: async () => ({ empty: true, docs: [] }),
-          })
-          return page()
         },
         getAll: async () => [],
         batch: () => ({

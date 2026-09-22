@@ -44,6 +44,7 @@ import {
   listPluginSeatAddons,
   pluginSeatAddon,
 } from '../plugin-manager/plugin-entitlements'
+import { pluginOrgCapacity } from '../plugin-manager/plugin-org-capacity'
 
 /** Sentinel for quotas a plan does not cap; `checkQuota` always allows. */
 export const UNLIMITED = Number.POSITIVE_INFINITY
@@ -4718,6 +4719,80 @@ export function checkDatasetQuota(
     maxDatasets,
     upgradeRequired: addonPriceUsd === null || limit >= maxDatasets,
     addonPriceUsd,
+  }
+}
+
+export interface PluginOrgCapacityQuotaResult {
+  /** False once usage meets the effective limit. */
+  allowed: boolean
+  /** Included + purchased, clamped to the plan's ceiling for this capacity. */
+  limit: number
+  remaining: number
+  /** What the plan includes — the figure a downgrade warning quotes. */
+  included: number
+  /** What the org bought on top, 0 on a dead subscription. */
+  purchased: number
+  /** How far buying can raise it on this plan. */
+  ceiling: number
+}
+
+/**
+ * The quota for a capacity a PLUGIN backs (AGL-3080), from its declaration.
+ *
+ * `checkDatasetQuota` is this arithmetic written out for the one capacity
+ * core happened to know the name of. It has a dozen callers on money paths
+ * and keeps its own shape; what moves here is the ability to ask the same
+ * question about a capacity core does not name, which is what a console meter
+ * needs — it draws a row per declared capacity and cannot switch on `datasets`.
+ *
+ * The two must agree, and `plan-entitlements-plugin-capacity.spec.ts` is what
+ * holds that: for every plan, this answers exactly what `checkDatasetQuota`
+ * answers for the declared dataset capacity. A second implementation of a
+ * limit is worth having only while something refuses to let the two drift.
+ *
+ * ⚑ An undeclared kind, or a declaration naming a field no plan carries, is
+ * ZERO — included, ceiling and limit all — which reads as "you are over" and
+ * shows a meter full. That is the same direction `overLimitRows` and
+ * `includedCapacity` already fail in, and for the same reason: the reassuring
+ * answer here would be a meter promising room the create is refused at.
+ */
+export function checkPluginOrgCapacityQuota(
+  org: Partial<AglynOrgBilling> | null | undefined,
+  kind: string,
+  currentUsage: number,
+): PluginOrgCapacityQuotaResult {
+  const capacity = pluginOrgCapacity(kind)
+  const entitlements = resolveOrgEntitlements(org) as unknown as Record<
+    string,
+    unknown
+  >
+  const included = capacity
+    ? Number(entitlements[capacity.includedEntitlement] ?? 0)
+    : 0
+  const ceiling = capacity
+    ? Number(entitlements[capacity.purchaseCeilingEntitlement] ?? 0)
+    : 0
+  // The add-on kind IS the `seatAddons` key it is stored under — the
+  // generator refuses two capacities on one add-on kind, so one purchased
+  // quantity can only ever raise the capacity that sells it.
+  const purchased = capacity
+    ? Math.max(
+        0,
+        Number(
+          (resolvePurchasedAddons(org) as unknown as Record<string, unknown>)[
+            capacity.addonKind
+          ] ?? 0,
+        ),
+      )
+    : 0
+  const limit = Math.min(included + purchased, ceiling)
+  return {
+    allowed: currentUsage < limit,
+    limit,
+    remaining: Math.max(0, limit - currentUsage),
+    included,
+    purchased,
+    ceiling,
   }
 }
 

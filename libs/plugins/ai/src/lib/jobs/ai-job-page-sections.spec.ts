@@ -41,7 +41,12 @@ import {
 import { validateAiDoctrineTree } from '../runtime/ai-doctrine-validators'
 import { AI_PALETTE_CATALOG } from '../runtime/ai-palette.generated'
 import { validateAiSystemBlocks } from '../runtime/ai-runtime'
-import { AI_FREE_PAGE_FIXTURE, AI_PAGE_BRIEF_FIXTURES, type AiPageBriefFixture } from './fixtures/ai-page-briefs'
+import {
+  AI_FREE_PAGE_FIXTURE,
+  AI_INSTANCE_CARDS_FIXTURE,
+  AI_PAGE_BRIEF_FIXTURES,
+  type AiPageBriefFixture,
+} from './fixtures/ai-page-briefs'
 import {
   AI_JOB_PAGE_INSTRUCTIONS,
   AI_PAGE_SECTION_INLINE_LINE,
@@ -607,7 +612,7 @@ describe('a section cut off at its ceiling (AGL-3042)', () => {
         role: 'user',
         content: [
           'Your page-section was not used: it ran past the size one answer may have, and was cut off before it was whole.',
-          'Make it smaller: use fewer elements, at most 15; write shorter copy; and place a repeated item as an instance of a component the site has instead of drawing it again.',
+          'Make it smaller: use fewer elements, at most 15; write shorter copy; and write a repeated item once instead of drawing it again: place ONE instance of a component the site has, put {{1}}, {{2}}… where its copies differ, and give its outermost node "repeat", one list of values a copy, in that order, as [["Title 1", "Text 1"], ["Title 2", "Text 2"]].',
           '',
           'Answer again with submit_section: the whole page-section, smaller than the one that was cut off.',
         ].join('\n'),
@@ -632,8 +637,15 @@ describe('a section cut off at its ceiling (AGL-3042)', () => {
         'put {{1}}, {{2}}… where its copies differ, and give its outermost node "repeat", one list of values a copy, in that order, as [["Title 1", "Text 1"], ["Title 2", "Text 2"]].',
     )
     expect(inline).not.toContain('instance')
-    expect(SMALLER).toContain('instance of a component the site has')
-    expect(SMALLER).not.toContain('"repeat"')
+  })
+
+  it('tells a workspace that keeps reusable components to write the same item once, around ONE instance (AGL-3024)', () => {
+    // The shapes differ in WHAT is repeated, not in whether a repeated item may
+    // be written once: a section of six cards that spends its structure once
+    // fits the ceiling that cuts the same six written out.
+    expect(SMALLER).toContain('place ONE instance of a component the site has')
+    expect(SMALLER).toContain('"repeat"')
+    expect(SMALLER).toContain('{{1}}, {{2}}…')
   })
 })
 
@@ -643,6 +655,68 @@ describe('a section cut off at its ceiling (AGL-3042)', () => {
  * copies' values, the check draws the copies before either validator reads
  * them, and every finding names a node the model wrote.
  */
+describe('a repeated item written once where the workspace keeps components (AGL-3024)', () => {
+  // The live failure of 2026-09-21: a paid plan promised a six-card grid
+  // placing a component, and the only shape the pass could answer in wrote
+  // every card out. It ran past its ceiling, was cut off, was cut off again,
+  // and `AI_GENERATION_MAX_ATTEMPTS` ended the job with no page. The same six
+  // cards written once spend their structure once — and the section stays ONE
+  // section with one h2, which splitting it would not.
+  const fixture = AI_PAGE_BRIEF_FIXTURES.find((entry) =>
+    (entry.inventory?.components ?? []).some((row) => row.id === 'cmp-service-card'),
+  ) as AiPageBriefFixture
+  const screen = fixture.plan.screens[0]
+  const sectionIds = screen.sections.map((_, index) => aiPageSectionNodeId('job-instances', index))
+  const PAID = aiPageCheckContext(fixture.inventory)
+  const heroPage = () =>
+    aiPageWithSection(
+      aiEmptyPage(),
+      aiPageSectionCheck({ page: aiEmptyPage(), sectionIds, index: 0, context: PAID, section: screen.sections[0], inventory: fixture.inventory })({
+        tree: JSON.stringify(fixture.answers[0]),
+      }).value as AiPageSection,
+      sectionIds,
+    )
+  const check = (built: { answer: unknown; section: { name: string; uses: string[]; items: number } }) =>
+    aiPageSectionCheck({ page: heroPage(), sectionIds, index: 1, context: PAID, section: built.section, inventory: fixture.inventory })({
+      tree: JSON.stringify(built.answer),
+    })
+  type Stored = Record<string, { componentId: string; props?: Record<string, unknown>; nodes?: string[] }>
+  const placed = (nodes: Stored) =>
+    Object.values(nodes)
+      .filter((node) => node.componentId === 'reusableInstance')
+      .map((node) => node.props?.['propValues'])
+
+  it('draws the six cards written once into the six the same section writes out: the same instances, the same copy', () => {
+    const once = check(AI_INSTANCE_CARDS_FIXTURE.once)
+    const full = check(AI_INSTANCE_CARDS_FIXTURE.full)
+    expect([once.violations, full.violations]).toEqual([[], []])
+    const onceNodes = once.value?.nodes as unknown as Stored
+    const fullNodes = full.value?.nodes as unknown as Stored
+    expect(placed(onceNodes)).toEqual(AI_INSTANCE_CARDS_FIXTURE.items)
+    expect(placed(onceNodes)).toEqual(placed(fullNodes))
+    expect(Object.keys(onceNodes)).toHaveLength(Object.keys(fullNodes).length)
+    // Nothing downstream ever sees a placeholder or the key that listed them.
+    expect(JSON.stringify(onceNodes)).not.toMatch(/\{\{|"repeat"/)
+  })
+
+  it('costs a fraction of what writing the six out costs, which is the whole point', () => {
+    // The answer as the model would send it, against the pass's ceiling: the
+    // section that was cut off, and the one that is not.
+    const size = (built: { answer: unknown }) => JSON.stringify(built.answer).length
+    expect(size(AI_INSTANCE_CARDS_FIXTURE.once)).toBeLessThan(size(AI_INSTANCE_CARDS_FIXTURE.full) * 0.7)
+  })
+
+  it('places every component the plan line names, counted over the copies and not over the node written', () => {
+    const once = check(AI_INSTANCE_CARDS_FIXTURE.once)
+    expect(once.violations).toEqual([])
+    expect(AI_INSTANCE_CARDS_FIXTURE.once.section).toEqual({
+      name: 'what the inspection covers',
+      uses: ['cmp-service-card'],
+      items: 6,
+    })
+  })
+})
+
 describe('a repeated item written once (AGL-3053)', () => {
   const fixture = AI_FREE_PAGE_FIXTURE
   const screen = fixture.plan.screens[0]
@@ -748,7 +822,7 @@ describe('a repeated item written once (AGL-3053)', () => {
     expect(JSON.stringify(onceNodes)).not.toMatch(/\{\{|"repeat"/)
   })
 
-  it('refuses an item written once where the workspace keeps reusable components, telling the model to place instances (rule 1)', () => {
+  it('refuses an item DRAWN once where the workspace keeps reusable components, telling the model to place instances (rule 1)', () => {
     const result = checkCards(fixture.answers[1], aiPageCheckContext(fixture.inventory))
     expect(result.value).toBeNull()
     expect(result.violations).toEqual([

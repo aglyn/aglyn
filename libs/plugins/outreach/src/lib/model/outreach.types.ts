@@ -529,16 +529,42 @@ export type OutreachAttestations = Partial<
 /** The longest personal line an enrollment keeps: one sentence, not a letter. */
 export const OUTREACH_PERSONAL_LINE_MAX = 300
 
+/**
+ * Which CRM record an enrollment names (AGL-3234). A person is a LEAD until
+ * somebody qualifies them and a CONTACT after, and a sequence works either:
+ * an enrollment made on a lead follows the lead to the contact it becomes,
+ * so the thread and the steps carry on as one enrollment.
+ */
+export const OUTREACH_ENROLLMENT_TARGETS = ['contact', 'lead'] as const
+export type OutreachEnrollmentTarget = (typeof OUTREACH_ENROLLMENT_TARGETS)[number]
+
 /** One person in one sequence (`orgs/{orgId}/outreachEnrollments/{id}`). */
 export interface OutreachEnrollment extends OutreachTimestamps {
   id: string
   sequenceId: string
-  /** The CRM contact the person is. */
+  /**
+   * The record the person is (AGL-3234): `contact` for a CRM contact,
+   * `lead` for a lead the sequence's site holds. A stored enrollment with
+   * no target is a contact's — every enrollment was, before leads could be
+   * sequenced.
+   */
+  target: OutreachEnrollmentTarget
+  /**
+   * The CRM contact the person is — `''` while the enrollment targets a
+   * lead that has not converted. Filled in, beside `target: 'contact'`, the
+   * moment the lead becomes a contact.
+   */
   contactId: string
   /**
-   * The contact's name as the sending site knew it at enrollment, `''` when
+   * `hosts/{hostId}/leads/{leadId}` — the person key — for an enrollment
+   * made on a lead; kept once the lead converts, so the lead's page still
+   * lists the sequence. `null` for an enrollment made on a contact.
+   */
+  leadId: string | null
+  /**
+   * The person's name as the sending site knew it at enrollment, `''` when
    * it had none — what the enrollments table shows beside the address,
-   * without a read of every contact on the page (AGL-2980).
+   * without a read of every record on the page (AGL-2980).
    */
   contactName: string
   /** The address the steps go to, normalized, captured at enrollment. */

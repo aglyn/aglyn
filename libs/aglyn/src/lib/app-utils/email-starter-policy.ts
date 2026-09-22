@@ -20,9 +20,11 @@
  * mailed.
  *
  * In core rather than beside the rest of the marketplace model for the reason
- * `marketplace-provenance` and `marketplace-verification` give: three
- * different projects have to ask these questions and a `scope:app` project may
- * not depend on an `aglyn:addons` lib. The marketplace plugin enforces the
+ * `marketplace-provenance` gives: three different projects have to ask these
+ * questions and a `scope:app` project may not depend on an `aglyn:addons` lib.
+ * `marketplace-verification` used to be cited here too and no longer can be —
+ * its console reader became the plugin's own surface, so the policy went with
+ * it (AGL-3080). A shared reason is only shared while both halves still hold. The marketplace plugin enforces the
  * policy when content is published and installed; the marketing plugin asks
  * the kill question on the send path; the console renders the assurance.
  * Three readings of "is this template safe to mail" is the failure mode this

@@ -37,6 +37,7 @@ import {
 } from '../model/outreach.types'
 import { addOutreachDoNotContact } from '../storage/do-not-contact-store'
 import {
+  outreachEnrollmentLink,
   outreachOrgCollection,
   readStoredOutreachEnrollment,
   readStoredOutreachMailbox,
@@ -51,6 +52,7 @@ import {
   type OutreachMailboxHealthDelta,
 } from './mailbox-health-store'
 import type { OutreachRuntimeDeps } from './runtime-deps'
+import { markOutreachLeadWorking } from './lead-records'
 import { fileOutreachEmail, fileOutreachTask } from './timeline'
 import { outreachUnsubscribeMailbox } from './unsubscribe-link'
 
@@ -363,7 +365,7 @@ async function fileInbound(context: SyncContext, enrollment: OutreachEnrollment,
   await fileOutreachEmail(context.deps, {
     orgId: context.orgId,
     hostId: enrollment.hostId,
-    contactId: enrollment.contactId,
+    link: outreachEnrollmentLink(enrollment),
     direction: 'inbound',
     subject: message.subject,
     from: emailAddressOf(message.from) ?? message.from,
@@ -435,7 +437,7 @@ async function applyMessages(
           await fileOutreachTask(deps, {
             orgId: context.orgId,
             hostId: enrollment.hostId,
-            contactId: enrollment.contactId,
+            link: outreachEnrollmentLink(enrollment),
             dedupeKey: `reply:${messageIdOf(decidingMessage) ?? decidingMessage.id}`,
             title: `Reply from ${enrollment.contactName || enrollment.email}`,
             notes: crmInboundExcerpt(decidingMessage.textBody ?? decidingMessage.snippet ?? '', decidingMessage.htmlBody ?? '').slice(0, 500),
@@ -446,6 +448,10 @@ async function applyMessages(
         } catch (error) {
           console.error('[outreach] the reply task could not be filed', error)
         }
+      }
+      // A lead somebody wrote back to is being worked (AGL-3234).
+      if (enrollment.target === 'lead' && enrollment.leadId) {
+        await markOutreachLeadWorking(firestore, { hostId: enrollment.hostId, leadId: enrollment.leadId })
       }
       context.delta.replies += 1
       event = { type: 'reply', atMs: decidedBy?.atMs || nowMs, detail: decidedBy?.evidence ?? null }

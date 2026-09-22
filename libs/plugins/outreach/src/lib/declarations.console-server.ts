@@ -22,6 +22,10 @@ import {
   listPluginOrgErasers,
   registerPluginOrgEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
+import {
+  listPluginLeadConversionListeners,
+  registerPluginLeadConversionListener,
+} from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { registerPluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
 import {
   listPluginUserErasers,
@@ -81,6 +85,20 @@ export function registerOutreachConsoleServerDeclarations(): void {
     async (request) => (await runtime()).platformOutreachPersonEraser()(request),
     { pluginId: OUTREACH_PLUGIN_ID },
   )
+  // A lead that converts takes its enrollments to the contact it became
+  // (AGL-3234): the same document, now naming the contact.
+  if (!listPluginLeadConversionListeners().includes(OUTREACH_PLUGIN_ID)) {
+    registerPluginLeadConversionListener(
+      async (request) => {
+        const [{ followOutreachLeadToContact }, platform] = await Promise.all([
+          import('./runtime/lead-records'),
+          runtime(),
+        ])
+        return followOutreachLeadToContact(platform.platformOutreachRuntimeDeps().firestore(), request)
+      },
+      { pluginId: OUTREACH_PLUGIN_ID },
+    )
+  }
   // The sending runtime, on the console's fifteen-minute tick.
   registerPluginConsoleCron(
     {

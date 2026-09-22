@@ -146,13 +146,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "apps/console/app/api/admin/reap-plugin-artifacts/route.ts",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/app/api/admin/revenue/route.ts",
       "rules": [
         "plugin-id",
@@ -162,13 +155,6 @@
         "domain-declares:marketplace"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/api/admin/reverify-plugin-versions/route.ts",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
     },
     {
       "path": "apps/console/app/api/admin/tax-return/route.ts",
@@ -371,7 +357,6 @@
       "rules": [
         "plugin-id",
         "plugin-collection:crm",
-        "plugin-collection:data",
         "domain-declares:crm",
         "domain-declares:workflows"
       ],
@@ -472,7 +457,6 @@
     {
       "path": "apps/console/components/quota-warnings-banner.component.tsx",
       "rules": [
-        "plugin-collection:data",
         "domain-declares:ai"
       ],
       "lane": "data"
@@ -1259,13 +1243,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "libs/aglyn/src/lib/app-utils/marketplace-verification.ts",
-      "rules": [
-        "domain-name"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "libs/aglyn/src/lib/app-utils/node-definition-sanitizer.ts",
       "rules": [
         "domain-exports:marketplace",
@@ -1336,14 +1313,6 @@
       "rules": [
         "domain-name",
         "domain-exports:marketplace",
-        "domain-declares:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
-      "path": "libs/aglyn/src/lib/app-utils/publisher-attestation.ts",
-      "rules": [
-        "domain-name",
         "domain-declares:marketplace"
       ],
       "lane": "marketplace"

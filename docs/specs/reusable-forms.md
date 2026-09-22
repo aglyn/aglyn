@@ -520,9 +520,18 @@ duplicating work the platform already did.
 called on the same path. Nothing is inferred from the submission's content.
 
 This is deliberately an author's declaration rather than a heuristic, and it
-follows the existing split: the newsletter block enrolls, the signup handler
-creates a lead, the bookings handler creates a lead — each because the surface
-*is* a lead surface, not because a rule inspected the payload.
+follows the existing split: the newsletter block enrolls, the bookings handler
+files a lead — each because the surface *is* a lead surface, not because a rule
+inspected the payload.
+
+⚠️ **Since AGL-3232 the door only declares; the record system decides.** The
+form hands the capture to the CRM's capture writer with `surface: 'lead'` when
+`routing.lead` is on and `surface: 'touch'` otherwise, and writes no lead
+itself. A lead surface files a lead and *no contact*, unless the workspace
+already holds the address as a contact, in which case the capture lands on the
+contact; a touch lands on the site's open lead when there is one. A member
+sign-up is a relationship, files no lead, and closes any open lead onto the
+contact it makes. One person is one record — the Salesforce model.
 
 ### 4b. What stops one person becoming two records
 
