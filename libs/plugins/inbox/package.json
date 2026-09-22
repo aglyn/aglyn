@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-inbox",
-  "version": "1.0.0-beta.152",
+  "version": "1.0.0-beta.153",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,15 +25,15 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.152",
-    "@aglyn/shared-data-mdi": "1.0.0-beta.152",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.152",
-    "@aglyn/shared-ui-next": "1.0.0-beta.152",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.152",
-    "@aglyn/shared-util-email": "1.0.0-beta.152",
-    "@aglyn/shared-util-http": "1.0.0-beta.152",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.152",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.152",
+    "@aglyn/aglyn": "1.0.0-beta.153",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.153",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.153",
+    "@aglyn/shared-ui-next": "1.0.0-beta.153",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.153",
+    "@aglyn/shared-util-email": "1.0.0-beta.153",
+    "@aglyn/shared-util-http": "1.0.0-beta.153",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.153",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.153",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
