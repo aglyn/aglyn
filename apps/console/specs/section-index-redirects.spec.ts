@@ -66,6 +66,10 @@ const INDEX_PAGES = [
   '(app)/[orgSlug]/team/page.tsx',
   '(app)/[orgSlug]/hosts/[host]/admin/page.tsx',
   '(app)/manage/user/page.tsx',
+  // The staff console (AGL-3241). It had a layout and a page per tab and
+  // nothing for the bare segment, so `/admin` drew the staff tab strip —
+  // which is mounted above the route boundary — over the not-found body.
+  '(app)/admin/page.tsx',
 ]
 
 describe('a hub index redirects on the server (AGL-2501)', () => {
