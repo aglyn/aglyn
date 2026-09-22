@@ -4,7 +4,7 @@ import {
   CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_TEXT_MAX,
   type CrmLeadStatus,
-  normalizeCampaignIds,
+  campaignMembershipValue,
   normalizeCrmLeadTags,
   normalizeContactEmail,
   normalizeCrmLeadProfile,
@@ -175,7 +175,7 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
       status,
       ownerUid,
       tags: patch.tags ?? [],
-      campaignIds: normalizeCampaignIds(campaignIds),
+      campaignIds: campaignMembershipValue(campaignIds),
       address: patch.address ?? null,
       notes: notes.trim().slice(0, NOTES_MAX),
     })
@@ -191,7 +191,12 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
       sx={{ '& .MuiDrawer-paper': { width: { xs: '100%', sm: 480 } } }}
       appBarLeft={
         <>
-          <IconButton color="inherit" edge="start" onClick={onClose} sx={{ mr: 2 }}>
+          <IconButton
+            color="inherit"
+            edge="start"
+            onClick={onClose}
+            sx={{ mr: 2 }}
+          >
             <MdiIcon path={ICON_VARIANT_CLOSE.path} />
             <SrOnly>close drawer</SrOnly>
           </IconButton>
@@ -261,7 +266,9 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
             error={Boolean(phoneError)}
-            helperText={phoneError || 'With the country code, like +1 512 555 0107'}
+            helperText={
+              phoneError || 'With the country code, like +1 512 555 0107'
+            }
             fullWidth
           />
           <TextField
@@ -294,9 +301,15 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
               fullWidth
             >
               <MenuItem value="new">{CRM_LEAD_STATUS_LABELS.new}</MenuItem>
-              <MenuItem value="working">{CRM_LEAD_STATUS_LABELS.working}</MenuItem>
+              <MenuItem value="working">
+                {CRM_LEAD_STATUS_LABELS.working}
+              </MenuItem>
             </TextField>
-            <LeadOwnerSelect value={ownerUid} onChange={setOwnerUid} roster={roster} />
+            <LeadOwnerSelect
+              value={ownerUid}
+              onChange={setOwnerUid}
+              roster={roster}
+            />
           </Stack>
           <TextField
             size="small"

@@ -17,7 +17,11 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
-import type { ConsolePluginPageProps, CrmLeadFields, CrmLeadStatus } from '@aglyn/aglyn'
+import type {
+  ConsolePluginPageProps,
+  CrmLeadFields,
+  CrmLeadStatus,
+} from '@aglyn/aglyn'
 import {
   mdiAccountArrowRight,
   mdiAccountCancelOutline,
@@ -94,7 +98,11 @@ import {
 } from '../model/lead-filters'
 import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
-import { leadSourceLabel, leadSources, leadTimeLabel } from './lead-history-card'
+import {
+  leadSourceLabel,
+  leadSources,
+  leadTimeLabel,
+} from './lead-history-card'
 import { LeadImportButton } from './lead-import-drawer'
 import NewLeadDrawer, { type NewLeadValues } from './new-lead-drawer'
 import { useCrmApi } from './use-crm-api'
@@ -169,7 +177,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const routes = crmRoutes(basePath ?? '')
 
   // Under a site: the site's own window, rows keyed by document id.
-  const site = useFirestoreCollection<Record<string, unknown> & CrmLeadFields & { $id: string }>(
+  const site = useFirestoreCollection<
+    Record<string, unknown> & CrmLeadFields & { $id: string }
+  >(
     () =>
       hostId
         ? query(
@@ -186,7 +196,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     () => (hostId ? [] : (mount?.hosts ?? []).map((host) => host.id)),
     [hostId, mount?.hosts],
   )
-  const orgLeads = useOrgLeads({ hostIds: orgHostIds, windowSize: LEADS_WINDOW })
+  const orgLeads = useOrgLeads({
+    hostIds: orgHostIds,
+    windowSize: LEADS_WINDOW,
+  })
   const leadDocs = useMemo<LeadRow[]>(
     () =>
       hostId
@@ -215,7 +228,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     basePath: basePath ?? '',
   })
   const filter: LeadFilter = useMemo(() => {
-    const value = views.state.filters.find((clause) => clause.field === 'status')?.value
+    const value = views.state.filters.find(
+      (clause) => clause.field === 'status',
+    )?.value
     return (LEAD_FILTERS as readonly string[]).includes(value ?? '')
       ? (value as LeadFilter)
       : 'open'
@@ -226,7 +241,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
    * narrowing to bounced leads does not reopen the unqualified ones.
    */
   const emailFilter: LeadEmailFilter = useMemo(() => {
-    const value = views.state.filters.find((clause) => clause.field === 'emailState')?.value
+    const value = views.state.filters.find(
+      (clause) => clause.field === 'emailState',
+    )?.value
     return (LEAD_EMAIL_FILTERS as readonly string[]).includes(value ?? '')
       ? (value as LeadEmailFilter)
       : 'any'
@@ -235,15 +252,21 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     (next: LeadFilter) =>
       views.setFilters([
         ...views.state.filters.filter((clause) => clause.field !== 'status'),
-        ...(next === 'open' ? [] : [{ field: 'status', op: 'equals', value: next }]),
+        ...(next === 'open'
+          ? []
+          : [{ field: 'status', op: 'equals', value: next }]),
       ]),
     [views.setFilters, views.state.filters],
   )
   const setEmailFilter = useCallback(
     (next: LeadEmailFilter) =>
       views.setFilters([
-        ...views.state.filters.filter((clause) => clause.field !== 'emailState'),
-        ...(next === 'any' ? [] : [{ field: 'emailState', op: 'equals', value: next }]),
+        ...views.state.filters.filter(
+          (clause) => clause.field !== 'emailState',
+        ),
+        ...(next === 'any'
+          ? []
+          : [{ field: 'emailState', op: 'equals', value: next }]),
       ]),
     [views.setFilters, views.state.filters],
   )
@@ -255,20 +278,27 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
    * belongs to one site, and the organization-level list spans them all.
    */
   const campaignFilter = useMemo(
-    () => views.state.filters.find((clause) => clause.field === 'campaignIds')?.value ?? '',
+    () =>
+      views.state.filters.find((clause) => clause.field === 'campaignIds')
+        ?.value ?? '',
     [views.state.filters],
   )
   const setCampaignFilter = useCallback(
     (next: string) =>
       views.setFilters([
-        ...views.state.filters.filter((clause) => clause.field !== 'campaignIds'),
-        ...(next ? [{ field: 'campaignIds', op: 'contains', value: next }] : []),
+        ...views.state.filters.filter(
+          (clause) => clause.field !== 'campaignIds',
+        ),
+        ...(next
+          ? [{ field: 'campaignIds', op: 'contains', value: next }]
+          : []),
       ]),
     [views.setFilters, views.state.filters],
   )
   const campaigns = useHostCampaigns(hostId, { enabled: Boolean(hostId) })
   const campaignName = useCallback(
-    (id: string) => campaigns.options.find((option) => option.value === id)?.label ?? id,
+    (id: string) =>
+      campaigns.options.find((option) => option.value === id)?.label ?? id,
     [campaigns.options],
   )
   // The label's id, so the filter's combobox is named "Show" rather than
@@ -317,7 +347,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
    * rows no longer listed.
    */
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  useEffect(() => setSelectedIds([]), [filter, emailFilter, campaignFilter, search])
+  useEffect(
+    () => setSelectedIds([]),
+    [filter, emailFilter, campaignFilter, search],
+  )
   // How the file names the owner and, at the org level, the site.
   const csvOptions: LeadCsvOptions = useMemo(
     () => ({
@@ -364,14 +397,18 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           ...(values.leadSource ? { leadSource: values.leadSource } : {}),
           ...(values.address ? { address: values.address } : {}),
           ...(values.tags.length ? { tags: values.tags } : {}),
-          ...(values.campaignIds.length ? { campaignIds: values.campaignIds } : {}),
+          ...(values.campaignIds.length
+            ? { campaignIds: values.campaignIds }
+            : {}),
           ...(values.ownerUid ? { ownerUid: values.ownerUid } : {}),
           ...(values.notes ? { notes: values.notes } : {}),
           status: values.status,
         })
         if (!response.ok) {
           // The route's own sentence, shown above the form unchanged.
-          setCreateError(String(payload['error'] ?? 'The lead could not be added.'))
+          setCreateError(
+            String(payload['error'] ?? 'The lead could not be added.'),
+          )
           return
         }
         // The activity entry is the route's: it verified the caller and
@@ -396,14 +433,19 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const writeLead = useCallback(
     async (lead: LeadRow, fields: Record<string, unknown>, done: string) => {
       try {
-        await updateDoc(doc(firestore, 'hosts', lead.hostId, 'leads', lead.leadId), {
-          ...fields,
-          updatedAt: serverTimestamp(),
-        })
+        await updateDoc(
+          doc(firestore, 'hosts', lead.hostId, 'leads', lead.leadId),
+          {
+            ...fields,
+            updatedAt: serverTimestamp(),
+          },
+        )
         enqueueSnackbar(done, { variant: 'success', persist: false })
       } catch (error) {
         enqueueSnackbar(
-          error instanceof Error ? error.message : 'The lead could not be updated.',
+          error instanceof Error
+            ? error.message
+            : 'The lead could not be updated.',
           { variant: 'error' },
         )
       }
@@ -418,9 +460,13 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         headerName: 'Lead',
         flex: 1.4,
         minWidth: 160,
-        valueGetter: (_value, row: LeadRow) => String(row['name'] || row['email'] || ''),
+        valueGetter: (_value, row: LeadRow) =>
+          String(row['name'] || row['email'] || ''),
         renderCell: ({ row }: { row: LeadRow }) => (
-          <Stack spacing={0} sx={{ minWidth: 0, justifyContent: 'center', height: '100%' }}>
+          <Stack
+            spacing={0}
+            sx={{ minWidth: 0, justifyContent: 'center', height: '100%' }}
+          >
             <Typography variant="body2" noWrap>
               {String(row['name'] || row['email'] || row.$id)}
             </Typography>
@@ -593,13 +639,20 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                   {
                     key: 'open',
                     label: 'Open lead',
-                    icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
+                    icon: (
+                      <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />
+                    ),
                     href: routes.lead(row.leadId, hostId ? null : row.hostId),
                   },
                   {
                     key: 'convert',
                     label: 'Convert…',
-                    icon: <MdiIcon path={mdiAccountConvertOutline.path} size={0.8} />,
+                    icon: (
+                      <MdiIcon
+                        path={mdiAccountConvertOutline.path}
+                        size={0.8}
+                      />
+                    ),
                     onClick: () => setConverting(row),
                     disabled: convertRefusal !== null,
                     disabledReason: convertRefusal ?? undefined,
@@ -607,15 +660,21 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                   {
                     key: 'assign',
                     label: 'Assign owner',
-                    icon: <MdiIcon path={mdiAccountTieOutline.path} size={0.8} />,
+                    icon: (
+                      <MdiIcon path={mdiAccountTieOutline.path} size={0.8} />
+                    ),
                     onClick: () => setAssigning(row),
                   },
                   {
                     key: 'unqualify',
                     label: 'Unqualify',
-                    icon: <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />,
+                    icon: (
+                      <MdiIcon path={mdiAccountCancelOutline.path} size={0.8} />
+                    ),
                     onClick: () => setUnqualifying(row),
-                    disabled: !Aglyn.isCrmLeadOpen(row) || Boolean(row.convertedContactId),
+                    disabled:
+                      !Aglyn.isCrmLeadOpen(row) ||
+                      Boolean(row.convertedContactId),
                     disabledReason: row.convertedContactId
                       ? 'This lead was converted'
                       : 'This lead is already closed',
@@ -636,7 +695,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     <>
       <CardDisplay
         header={'Leads'}
-        help={Aglyn.pluginDocsHelp('contacts', { anchor: '#whats-in-the-crm-area' })}
+        help={Aglyn.pluginDocsHelp('contacts', {
+          anchor: '#whats-in-the-crm-area',
+        })}
         actions={
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
             {/* The saved view this list is showing, beside the status it narrows to (AGL-2617). */}
@@ -647,7 +708,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 labelId={filterLabelId}
                 label="Show"
                 value={filter}
-                onChange={(event) => setFilter(event.target.value as LeadFilter)}
+                onChange={(event) =>
+                  setFilter(event.target.value as LeadFilter)
+                }
               >
                 {LEAD_FILTERS.map((option) => (
                   <MenuItem key={option} value={option}>
@@ -663,7 +726,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 labelId={emailFilterLabelId}
                 label="Email"
                 value={emailFilter}
-                onChange={(event) => setEmailFilter(event.target.value as LeadEmailFilter)}
+                onChange={(event) =>
+                  setEmailFilter(event.target.value as LeadEmailFilter)
+                }
               >
                 {LEAD_EMAIL_FILTERS.map((option) => (
                   <MenuItem key={option} value={option}>
@@ -675,12 +740,17 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             {/* The campaign the lead is filed under (AGL-3254): the site's containers, by name. */}
             {hostId ? (
               <FormControl size="small" sx={{ minWidth: 180 }}>
-                <InputLabel id={campaignFilterLabelId}>{'Campaign'}</InputLabel>
+                <InputLabel id={campaignFilterLabelId} shrink>
+                  {'Campaign'}
+                </InputLabel>
                 <Select
                   labelId={campaignFilterLabelId}
                   label="Campaign"
+                  notched
                   value={campaignFilter}
-                  onChange={(event) => setCampaignFilter(String(event.target.value))}
+                  onChange={(event) =>
+                    setCampaignFilter(String(event.target.value))
+                  }
                   displayEmpty
                 >
                   <MenuItem value="">{'Any campaign'}</MenuItem>
@@ -690,7 +760,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                     </MenuItem>
                   ))}
                   {/* A stored filter naming a campaign the site no longer lists stays selectable, by id, so it can be cleared. */}
-                  {campaignFilter && !campaigns.options.some((option) => option.value === campaignFilter) ? (
+                  {campaignFilter &&
+                  !campaigns.options.some(
+                    (option) => option.value === campaignFilter,
+                  ) ? (
                     <MenuItem value={campaignFilter}>{campaignFilter}</MenuItem>
                   ) : null}
                 </Select>
@@ -717,7 +790,11 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             <Button size="small" onClick={handleExport} disabled={!rows.length}>
               {'Export CSV'}
             </Button>
-            <Button size="small" variant="contained" onClick={() => setCreateOpen(true)}>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={() => setCreateOpen(true)}
+            >
               {'New lead'}
             </Button>
           </Stack>
@@ -727,11 +804,17 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       >
         <Stack spacing={2}>
           {/* Which surfaces file a lead, by name (AGL-2612) — under a site its own, at the org level every site's (AGL-2638). */}
-          {hostId ? <LeadSurfacesNote hostId={hostId} /> : <OrgLeadSurfacesNote />}
+          {hostId ? (
+            <LeadSurfacesNote hostId={hostId} />
+          ) : (
+            <OrgLeadSurfacesNote />
+          )}
           {status === 'success' && window.length === 0 ? (
             <EmptyStateComponent
               label={'No leads yet'}
-              description={'Bookings and lead-routed forms on your site become leads on their own — or add one with New lead, or bring a list in with Import CSV.'}
+              description={
+                'Bookings and lead-routed forms on your site become leads on their own — or add one with New lead, or bring a list in with Import CSV.'
+              }
             />
           ) : status === 'success' && rows.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
@@ -755,14 +838,21 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                   rows={pageRows}
                   columns={grid.columns}
                   slots={CRM_LIST_SLOTS}
-                  selectable={{ selected: selectedIds, onChange: setSelectedIds }}
+                  selectable={{
+                    selected: selectedIds,
+                    onChange: setSelectedIds,
+                  }}
                   loading={status === 'loading'}
                   onOpen={(_id, row: LeadRow) =>
-                    router.push(routes.lead(row.leadId, hostId ? null : row.hostId))
+                    router.push(
+                      routes.lead(row.leadId, hostId ? null : row.hostId),
+                    )
                   }
                   // Columns and sort are the view's, controlled (AGL-2617).
                   columnVisibilityModel={grid.columnVisibilityModel}
-                  onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                  onColumnVisibilityModelChange={
+                    grid.onColumnVisibilityModelChange
+                  }
                   sortModel={grid.sortModel}
                   onSortModelChange={grid.onSortModelChange}
                   // The search is the section's, above: the grid's own box
@@ -821,7 +911,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         onClose={() => setUnqualifying(null)}
         hostId={unqualifying?.hostId ?? hostId ?? ''}
         leadId={unqualifying?.leadId ?? ''}
-        leadLabel={String(unqualifying?.['name'] || unqualifying?.['email'] || '')}
+        leadLabel={String(
+          unqualifying?.['name'] || unqualifying?.['email'] || '',
+        )}
       />
       {/* The row's site, not the mounted one: at the organization level a
           lead is its own site's record, and the conversion is that site's
@@ -865,7 +957,12 @@ function InlineStatus(props: {
   return (
     <Box
       onClick={(event) => event.stopPropagation()}
-      sx={{ display: 'flex', alignItems: 'center', height: '100%', width: '100%' }}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        height: '100%',
+        width: '100%',
+      }}
     >
       <Select
         size="small"
@@ -877,7 +974,9 @@ function InlineStatus(props: {
         sx={{ width: '100%' }}
       >
         <MenuItem value="new">{Aglyn.CRM_LEAD_STATUS_LABELS.new}</MenuItem>
-        <MenuItem value="working">{Aglyn.CRM_LEAD_STATUS_LABELS.working}</MenuItem>
+        <MenuItem value="working">
+          {Aglyn.CRM_LEAD_STATUS_LABELS.working}
+        </MenuItem>
         <MenuItem value="unqualified">{`${Aglyn.CRM_LEAD_STATUS_LABELS.unqualified}…`}</MenuItem>
       </Select>
     </Box>
@@ -906,7 +1005,12 @@ function AssignOwnerDialog(props: {
       <DialogTitle>{`Assign ${String(lead?.['name'] || lead?.['email'] || 'lead')}`}</DialogTitle>
       <DialogContent>
         <Box sx={{ pt: 1 }}>
-          <LeadOwnerSelect value={current} onChange={setUid} roster={roster} size="medium" />
+          <LeadOwnerSelect
+            value={current}
+            onChange={setUid}
+            roster={roster}
+            size="medium"
+          />
         </Box>
       </DialogContent>
       <DialogActions>
