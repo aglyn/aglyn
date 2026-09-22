@@ -146,13 +146,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "apps/console/app/api/admin/reap-plugin-artifacts/route.ts",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/app/api/admin/revenue/route.ts",
       "rules": [
         "plugin-id",
@@ -162,13 +155,6 @@
         "domain-declares:marketplace"
       ],
       "lane": "plugin-id"
-    },
-    {
-      "path": "apps/console/app/api/admin/reverify-plugin-versions/route.ts",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
     },
     {
       "path": "apps/console/app/api/admin/tax-return/route.ts",

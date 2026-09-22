@@ -57,6 +57,7 @@ describe('regressionNeedsStaff (AGL-1086)', () => {
     outcome: 'regressed',
     reviewStatus: 'verified',
     activeInstalls: 3,
+    reviewLink: '/admin/plugin-reviews/l1?version=1.0.0',
     problems: ['eval() is not allowed'],
     ...overrides,
   })
@@ -90,6 +91,7 @@ describe('summariseReverify (AGL-1086)', () => {
     outcome,
     reviewStatus: 'verified',
     activeInstalls: 1,
+    reviewLink: `/admin/plugin-reviews/l1?version=${version}`,
     problems: [],
     ...overrides,
   })

@@ -24,8 +24,10 @@ import {
   readPluginContributions,
   type StoredBundleVerdict,
 } from '@aglyn/aglyn/server'
+import { pluginArtifactVersions } from '@aglyn/aglyn/plugin-manager/plugin-artifact-inventory'
 import { firebaseAdmin, notifyStaff } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 import { isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import {
@@ -55,6 +57,17 @@ const JOB = findMaintenanceJob('reverify-plugin-versions') as ReturnType<
 
 /** Artifacts downloaded per run — a ceiling on time and egress, not on truth. */
 const MAX_VERSIONS = 250
+
+/**
+ * The most version documents one run will read before refusing to draw a
+ * conclusion, the same threshold and the same argument as the reaper's.
+ *
+ * This job deletes nothing, so an incomplete read costs a week of unchecked
+ * versions rather than lost bytes — but "we re-verified the platform" said
+ * over a partial sweep is still a claim nobody can act on, and the report it
+ * produces is what tells staff nothing regressed.
+ */
+const MAX_VERSIONS_SCANNED = 100_000
 
 /**
  * Re-runs the static verifier across every stored version (AGL-1086).
@@ -161,30 +174,29 @@ async function handler(request: Request): Promise<Response> {
     }
     const bucket = app.storage().bucket(bucketName)
 
-    const versions = await firestore.collectionGroup('pluginVersions').get()
-
-    // Listing state and name, read once per listing rather than per version.
-    const listingIds = [
-      ...new Set(
-        versions.docs
-          .map((doc) => doc.ref.parent.parent?.id)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ]
-    const listings = new Map<string, { name: string; reviewStatus: string }>()
-    if (listingIds.length) {
-      const snapshots = await firestore.getAll(
-        ...listingIds.map((id) =>
-          firestore.collection('marketplaceListings').doc(id),
-        ),
+    /*
+     * Every stored version, from the plugin that stores them (AGL-3080).
+     * This route used to walk `pluginVersions` and read
+     * `marketplaceListings` for each one's name and review state — a
+     * plugin's storage reached around the plugin, from `/api/admin`.
+     *
+     * A refusal stops the run rather than shrinking it. A sweep that
+     * reported "nothing regressed" having read none of the platform is the
+     * reassuring failure, and this report is the only thing that tells staff
+     * a live version started failing.
+     *
+     * `ensureAll` first, and awaited — a runtime registry is safe for this
+     * reader precisely because it loads the plugins before it asks.
+     */
+    await serverPluginLoader.ensureAll(['consoleApi'])
+    const inventory = await pluginArtifactVersions({
+      maxScanned: MAX_VERSIONS_SCANNED,
+    })
+    if (inventory.outcome === 'refused') {
+      return Response.json(
+        { error: inventory.reason, scanned: inventory.scanned },
+        { status: 507 },
       )
-      for (const snapshot of snapshots) {
-        if (!snapshot.exists) continue
-        listings.set(snapshot.id, {
-          name: String(snapshot.get('displayName') ?? snapshot.id),
-          reviewStatus: String(snapshot.get('reviewStatus') ?? 'unknown'),
-        })
-      }
     }
 
     const entries: ReverifyEntry[] = []
@@ -192,14 +204,10 @@ async function handler(request: Request): Promise<Response> {
     let downloaded = 0
     let deferredByCap = 0
 
-    for (const doc of versions.docs) {
-      const listingId = doc.ref.parent.parent?.id
-      const sha256 = String(doc.get('sha256') ?? '')
-      const version = String(doc.get('version') ?? doc.id)
-      if (!listingId || !sha256) continue
-
-      const stored = doc.get('verification') as StoredBundleVerdict | undefined
-      if (!force && isStoredVerdictCurrent(stored, sha256)) {
+    for (const stored of inventory.rows) {
+      const { listingId, version, sha256 } = stored
+      const cached = stored.storedVerdict as StoredBundleVerdict | undefined
+      if (!force && isStoredVerdictCurrent(cached, sha256)) {
         skipped += 1
         continue
       }
@@ -208,8 +216,6 @@ async function handler(request: Request): Promise<Response> {
         continue
       }
 
-      const listing = listings.get(listingId)
-      const declaredNetwork = doc.get('manifest.capabilities.network')
       let result: ReturnType<typeof checkPluginBundle> | null = null
       let downloadFailure = ''
       try {
@@ -218,15 +224,14 @@ async function handler(request: Request): Promise<Response> {
           .download()
         downloaded += 1
         result = checkPluginBundle(bytes.toString('utf8'), {
-          declaredNetwork: Array.isArray(declaredNetwork)
-            ? declaredNetwork.map((origin: unknown) => String(origin))
-            : [],
+          declaredNetwork: [...stored.declaredNetwork],
           // Compared, never required (AGL-3116): the sweep judges versions
           // published before the contract, which load under its default, so a
           // version that declares nothing is a warning here and never a
           // regression.
-          declaredContributions:
-            readPluginContributions(doc.get('manifest.contributes')) ?? null,
+          declaredContributions: stored.declaredContributions as ReturnType<
+            typeof readPluginContributions
+          > | null,
         })
         downloadFailure = ''
       } catch (error) {
@@ -242,11 +247,12 @@ async function handler(request: Request): Promise<Response> {
 
       entries.push({
         listingId,
-        listingName: listing?.name ?? listingId,
+        listingName: stored.ownerName,
         version,
-        outcome: reverifyOutcome(stored, result),
-        reviewStatus: listing?.reviewStatus ?? 'unknown',
-        activeInstalls: Number(doc.get('activeInstalls') ?? 0),
+        outcome: reverifyOutcome(cached, result),
+        reviewStatus: stored.reviewStatus,
+        activeInstalls: stored.activeInstalls,
+        reviewLink: stored.reviewLink,
         problems:
           result?.problems
             .filter((problem) => problem.level === 'error')
@@ -255,20 +261,16 @@ async function handler(request: Request): Promise<Response> {
       })
 
       if (result && !dryRun) {
-        await doc.ref
-          .set(
-            {
-              verification: {
-                ok: result.ok,
-                problems: result.problems,
-                checks: result.checks,
-                sha256,
-                verifierVersion: PLUGIN_VERIFIER_VERSION,
-                checkedAt: FieldValue.serverTimestamp(),
-              },
-            },
-            { merge: true },
-          )
+        // A verdict that failed to cache is recomputed next run; a sweep that
+        // stopped on one would leave the rest of the platform unchecked.
+        await stored
+          .record({
+            ok: result.ok,
+            problems: result.problems,
+            checks: result.checks,
+            sha256,
+            verifierVersion: PLUGIN_VERIFIER_VERSION,
+          })
           .catch(() => undefined)
       }
     }
@@ -287,7 +289,9 @@ async function handler(request: Request): Promise<Response> {
           (summary.needsStaff.length > 1
             ? ` (and ${summary.needsStaff.length - 1} more)`
             : ''),
-        link: `/admin/plugin-reviews/${first.listingId}?version=${encodeURIComponent(first.version)}`,
+        // The owning plugin's own link, not one composed here — see
+        // `ReverifyEntry.reviewLink`.
+        link: first.reviewLink,
       })
       await firestore
         .collection('adminAudit')

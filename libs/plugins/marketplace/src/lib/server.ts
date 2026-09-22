@@ -23,6 +23,7 @@ import {
 // Its own subpath, never the plugin-manager barrel: what a published page
 // does not need, it must not import.
 import { registerPluginRouteMetadata } from '@aglyn/aglyn/plugin-manager/plugin-route-metadata'
+import { registerPluginArtifactInventory } from '@aglyn/aglyn/plugin-manager/plugin-artifact-inventory'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { marketplaceBillingWebhookHandler } from './server/billing-webhook'
 import { publishPluginHandler } from './server/publish-plugin'
@@ -41,6 +42,7 @@ import { installTemplateHandler } from './server/install-template'
 import { installThemeHandler } from './server/install-theme'
 import { previewImageHandler } from './server/preview-image'
 import { publishHandler } from './server/publish'
+import { marketplaceArtifactInventory } from './server/artifact-inventory'
 import { marketplaceAdminReports } from './server/admin-reports'
 import { marketplaceAdminReviews } from './server/admin-reviews'
 import { marketplaceAdminTrust } from './server/admin-trust'
@@ -103,6 +105,18 @@ export function registerMarketplaceConsoleApi(): void {
     // loader's owner marker would be set.
     { pluginId: BUNDLE_ID },
   )
+  /*
+   * Who claims the bytes in the artifacts bucket (AGL-3080).
+   *
+   * The platform's two scheduled sweeps run from `/api/admin` routes that
+   * used to walk `pluginVersions` and `marketplaceListings` themselves. They
+   * ask here now — and an unregistered inventory REFUSES both runs rather
+   * than reporting an empty bucket, which is the whole point of the
+   * contract's shape.
+   */
+  registerPluginArtifactInventory(marketplaceArtifactInventory, {
+    pluginId: BUNDLE_ID,
+  })
   registerPluginApiRoute('marketplace/checkout', checkoutHandler)
   registerPluginApiRoute('marketplace/connect', connectHandler)
   registerPluginApiRoute('marketplace/install', installHandler)

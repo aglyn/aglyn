@@ -90,6 +90,17 @@ export interface ReverifyEntry {
   outcome: ReverifyOutcome
   reviewStatus: string
   activeInstalls: number
+  /**
+   * Where a human opens this version, supplied by the plugin that stores it
+   * (AGL-3080).
+   *
+   * Carried rather than composed here: the page is the owning plugin's
+   * staff surface, and a link this module built from an id would be a second
+   * copy of that plugin's routing — the class of mistake that sent authors
+   * to the wrong page for three of twenty declared host collections
+   * (`fdddc7c5c`). Empty when the owner has no page to open.
+   */
+  reviewLink: string
   /** Error-level messages from the NEW verdict, for the report. */
   problems: string[]
 }
