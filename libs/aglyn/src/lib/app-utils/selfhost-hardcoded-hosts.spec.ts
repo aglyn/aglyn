@@ -113,6 +113,12 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       "AGL-1452. The upload-CORS reconcile. The literal is the PLATFORM's own console origin, held as the one entry the reconcile refuses to release on detach — a self-host operator's bucket needs their own origin, which is derived from their Vercel project, not this constant. Removing it would let a detach withdraw the platform's own permission to upload.",
   },
   {
+    file: 'tools/scripts/lib/upload-cors-drift.mjs',
+    count: 1,
+    reason:
+      "AGL-3243. The shared module `check:upload-cors`, `reconcile-workspace-domains.mjs` and the signup canary all take their deployment coordinates from. The literal is the `??` default of `NEXT_PUBLIC_WORKSPACE_DOMAIN` and nothing else reads it: every caller resolves that variable first, and a self-host operator points it at the domain their own workspaces are attached under. It belongs here rather than in each reader because the three must name the SAME host for a slug, which three separate defaults cannot guarantee — the same reason `CONSOLE_PROJECT` and `TEAM_SCOPE` sit beside it. Ops tooling run by an operator and never shipped in any app; nothing a tenant site resolves reaches it.",
+  },
+  {
     file: 'tools/scripts/check-upload-cors.mjs',
     count: 1,
     reason:
