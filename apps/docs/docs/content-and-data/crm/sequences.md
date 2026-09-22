@@ -254,6 +254,17 @@ The first step can wait 0 days: it goes at the next opening of the sending
 window. By default a sequence sends in its mailbox's sending hours;
 **Sending hours** sets hours of its own for this sequence.
 
+**Campaigns** files the sequence under one or more of the site's
+[campaigns](../../marketing-and-automation/email-campaigns/overview.md#what-belongs-to-a-campaign),
+the way a form or a landing page is filed under one. Everyone you enroll from
+then on joins those campaigns on their own record — a lead at the top of its
+document, a contact on the site's facet — and what the sequence produces is
+counted on each campaign's page: people enrolled, first emails sent, replies,
+meetings booked from a sequence link, and enrolled leads that converted. A
+campaign the sequence joins later does not claim the people already in it,
+and one it leaves keeps what it was credited with. Filing a sequence under a
+campaign changes nothing about who is enrolled or what is sent.
+
 The **Preview** beside the editor shows each email as it would reach a sample
 contact, with the real footer, and the editor lists anything that stops the
 sequence from being saved beside the field it is about.
@@ -336,6 +347,15 @@ Each confirmation is stored on the enrollment with who made it and when.
 unsubscribed a moment ago is refused even though they were eligible when you
 looked. A person goes through a sequence once: they can't be enrolled in the
 same sequence again, even after it finishes.
+
+Enrolling someone in a sequence that is in a
+[campaign](#build-a-sequence) files them under that campaign too: the
+enrollment records the campaigns as they stood, the lead or contact gains
+them on its own record, and the campaign's page counts the person under
+**Enrolled** from that moment. Their first email, a reply, a meeting booked
+from a link in a sequence email and a lead's conversion are each counted
+there once as they happen, and the person's page says the sequence is
+where they came from when nothing else is credited first.
 
 ## Enrollments {#enrollments}
 

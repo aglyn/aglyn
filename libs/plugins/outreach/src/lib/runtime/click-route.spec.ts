@@ -152,7 +152,10 @@ function fakeFirestore(): FirebaseFirestore.Firestore {
   } as unknown as FirebaseFirestore.Firestore
 }
 
-const deps = (): Pick<OutreachRuntimeDeps, 'firestore' | 'now' | 'timeline'> => ({
+/** The sequence touches the route stamped for the platform's join (AGL-3254). */
+let touches: Array<{ hostId: string; email: string; campaignId: string; sequenceId: string; enrollmentId: string }>
+
+const deps = (): Pick<OutreachRuntimeDeps, 'firestore' | 'now' | 'timeline' | 'campaignCredit'> => ({
   firestore: fakeFirestore,
   now: () => clock,
   timeline: () => ({
@@ -164,6 +167,13 @@ const deps = (): Pick<OutreachRuntimeDeps, 'firestore' | 'now' | 'timeline'> => 
       return { ok: true, id: 't1', created: true }
     },
   }),
+  campaignCredit: {
+    credit: async () => undefined,
+    attributeRecord: async () => undefined,
+    recordTouch: async (input) => {
+      touches.push(input)
+    },
+  },
 })
 
 /** A request as a mail client's browser makes one, hours after the send. */
@@ -200,6 +210,7 @@ const call = (request: Request) =>
 beforeEach(() => {
   clock = SENT_AT + 2 * 60 * 60 * 1000
   filed = []
+  touches = []
   docs = new Map<string, Data>([
     [SEQUENCE_PATH, { id: SEQUENCE, stats: { sent: 3, people: 3, clickTracked: true } }],
     [
@@ -309,6 +320,36 @@ describe('the click route', () => {
     // Keyed WITHOUT the query string, so a per-recipient `utm_source` cannot
     // mint one row per person.
     expect(rows).toEqual([{ url: 'https://aglyn.com/pricing', clicks: 1 }])
+  })
+
+  /*
+   * A person's click on a sequence in a campaign is their last campaign
+   * touch on the site (AGL-3254); a sequence outside every campaign stamps
+   * nothing, and a scanner's fetch never does.
+   */
+  it('stamps a person’s click as a sequence touch under the sequence’s first campaign', async () => {
+    docs.set(ENROLLMENT_PATH, {
+      ...(docs.get(ENROLLMENT_PATH) as Data),
+      campaignIds: ['founder-icp2', 'founder-icp1'],
+    })
+    await call(visit(token()))
+    expect(touches).toEqual([
+      {
+        hostId: 'host-shop',
+        email: 'lee@example.com',
+        campaignId: 'founder-icp2',
+        sequenceId: SEQUENCE,
+        enrollmentId: ENROLLMENT,
+        atMs: clock,
+      },
+    ])
+  })
+
+  it('stamps no touch for a sequence in no campaign, nor for a scanner', async () => {
+    await call(visit(token()))
+    docs.set(ENROLLMENT_PATH, { ...(docs.get(ENROLLMENT_PATH) as Data), campaignIds: ['founder-icp2'] })
+    await call(visit(token(), { method: 'HEAD' }))
+    expect(touches).toEqual([])
   })
 
   it('counts a second click but not a second unique one', async () => {

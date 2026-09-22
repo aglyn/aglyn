@@ -19,6 +19,11 @@ import { EMAIL_TOPIC_SALES } from '@aglyn/aglyn/app-utils/email-topics'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import {
+  attributeCampaignConversion,
+  creditCampaignSequenceOutcome,
+} from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
+import { recordEmailCampaignTouch } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
 import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/email-topic-confirmation'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
@@ -36,9 +41,40 @@ import type { PluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-pers
 import { outreachClickUrl } from './click-link'
 import { createOutreachClickRoute } from './click-route'
 import { createOutreachPersonEraser } from './person-erasure'
-import type { OutreachRuntimeDeps } from './runtime-deps'
+import type { OutreachCampaignCredit, OutreachRuntimeDeps } from './runtime-deps'
 import { outreachUnsubscribeUrl } from './unsubscribe-link'
 import { createOutreachUnsubscribeRoute } from './unsubscribe-route'
+
+/**
+ * The platform's campaign attribution, for what a sequence produced
+ * (AGL-3254): the same join every form, booking and campaign email is
+ * credited through, so a sequence's numbers and a campaign send's are two
+ * readings of one rule. Each writer already never throws.
+ */
+export function platformOutreachCampaignCredit(
+  firestore: () => FirebaseFirestore.Firestore,
+): OutreachCampaignCredit {
+  return {
+    async credit({ hostId, campaignIds, outcome, atMs }) {
+      await creditCampaignSequenceOutcome({ hostId, campaignIds, outcome, atMs }, firestore())
+    },
+    async attributeRecord({ hostId, kind, refId, campaignId, sequenceId, enrollmentId, atMs }) {
+      await attributeCampaignConversion(
+        {
+          hostId,
+          kind,
+          refId,
+          touch: { channel: 'sequence', campaignId, sequenceId, enrollmentId, touchedAtMs: atMs },
+          convertedAtMs: atMs,
+        },
+        firestore(),
+      )
+    },
+    async recordTouch({ hostId, email, campaignId, sequenceId, enrollmentId, atMs }) {
+      await recordEmailCampaignTouch({ email, hostId, campaignId, atMs, sequenceId, enrollmentId }, firestore())
+    },
+  }
+}
 
 /**
  * The platform's own reach for the sending runtime (AGL-2981). Loaded only
@@ -51,6 +87,7 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
     firestore,
     now: Date.now,
     random: Math.random,
+    campaignCredit: platformOutreachCampaignCredit(firestore),
     openMailbox: (mailboxId) => openOutreachMailboxClient(firestore(), { mailboxId }),
     async orgRefusal(orgId, org) {
       if (!isPluginEnabled(org as { enabledPlugins?: string[] }, OUTREACH_PLUGIN_ID)) return 'plugin-disabled'

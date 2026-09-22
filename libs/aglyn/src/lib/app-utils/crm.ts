@@ -2370,6 +2370,14 @@ export interface CrmLeadFields extends CrmLeadProfile {
    * never by a form or the lead's editor. Absent means nothing is known.
    */
   emailState?: EmailState
+  /**
+   * The campaigns the lead is filed under (AGL-3254): container ids from
+   * `hosts/{hostId}/emailCampaigns`, at the top of the document the way a
+   * form carries them (`campaign-membership.ts`), never names. Written by
+   * the New lead drawer, the import, the bulk bar and a sequence's enroll;
+   * handed to the contact's facet when the lead converts.
+   */
+  campaignIds?: string[]
 }
 
 /*==========================================

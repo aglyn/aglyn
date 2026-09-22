@@ -49,9 +49,10 @@ import {
   crmLeadStatus,
   isCrmLeadOpen,
 } from '@aglyn/aglyn'
-import { useFirestore } from '@aglyn/tenant-feature-instance'
+import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
+import { useFirestore, useHostCampaigns } from '@aglyn/tenant-feature-instance'
 import { Button, MenuItem, TextField } from '@mui/material'
-import { deleteField, doc, serverTimestamp } from 'firebase/firestore'
+import { arrayUnion, deleteField, doc, serverTimestamp } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
@@ -100,12 +101,13 @@ export interface LeadsBulkBarProps {
 
 const NOUN: CrmBulkNoun = { singular: 'lead', plural: 'leads' }
 
-type PendingAction = 'owner' | 'status' | 'unqualify'
+type PendingAction = 'owner' | 'status' | 'unqualify' | 'campaign'
 
 const ACTION_TITLES: Record<PendingAction, string> = {
   owner: 'Set the owner',
   status: 'Set the status',
   unqualify: 'Unqualify',
+  campaign: 'Add to campaign',
 }
 
 /** The statuses the bar can set — the open ones; closing goes through Unqualify. */
@@ -135,6 +137,16 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
 
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [value, setValue] = useState('')
+  /*
+   * The campaigns to add the selection to (AGL-3254), and the site's
+   * containers the picker offers — read only while that dialog is open.
+   * Under a site alone: a campaign belongs to one site, and at the
+   * organization level a selection spans them.
+   */
+  const [campaignIds, setCampaignIds] = useState<string[]>([])
+  const campaigns = useHostCampaigns(hostId ?? undefined, {
+    enabled: pending === 'campaign' && Boolean(hostId),
+  })
 
   // The reference a write names is the row's own site and document.
   const writers = useMemo(() => {
@@ -147,6 +159,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
 
   const openAction = (action: PendingAction) => {
     setValue('')
+    setCampaignIds([])
     setPending(action)
   }
 
@@ -179,6 +192,24 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       await runPlan(
         { writes, skipped },
         (count) => (value ? `Owner set on ${countNoun(count, NOUN)}` : `Owner cleared on ${countNoun(count, NOUN)}`),
+      )
+      return
+    }
+    if (action === 'campaign') {
+      // Added to what each lead carries — `arrayUnion`, the way a sequence's
+      // enroll and the import add one — never in place of it.
+      for (const lead of selectedRows) {
+        writes.push({
+          id: lead.$id,
+          label: labelOf(lead),
+          kind: 'update',
+          data: { campaignIds: arrayUnion(...campaignIds), updatedAt: serverTimestamp() },
+        })
+      }
+      await runPlan(
+        { writes, skipped },
+        (count) =>
+          `Added ${countNoun(count, NOUN)} to ${campaignIds.length === 1 ? 'the campaign' : `${campaignIds.length} campaigns`}`,
       )
       return
     }
@@ -236,14 +267,19 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       { writes, skipped },
       (count) => `Marked ${countNoun(count, NOUN)} unqualified`,
     )
-  }, [pending, value, selectedRows, runPlan])
+  }, [pending, value, campaignIds, selectedRows, runPlan])
 
   const handleExport = useCallback(() => {
     downloadTextFile('leads-selected.csv', 'text/csv', leadsCsv(selectedRows, csv))
   }, [selectedRows, csv])
 
   const canApply =
-    pending === 'owner' || (pending === 'status' ? Boolean(value) : Boolean(value.trim()))
+    pending === 'owner' ||
+    (pending === 'campaign'
+      ? campaignIds.length > 0
+      : pending === 'status'
+        ? Boolean(value)
+        : Boolean(value.trim()))
 
   return (
     <CrmBulkBarFrame
@@ -261,7 +297,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
           noun={NOUN}
           busy={busy}
           canApply={canApply}
-          applyLabel={pending === 'unqualify' ? 'Unqualify' : undefined}
+          applyLabel={pending === 'unqualify' ? 'Unqualify' : pending === 'campaign' ? 'Add' : undefined}
           onClose={() => setPending(null)}
           onApply={() => void handleApply()}
         >
@@ -293,6 +329,15 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
               helperText="One reason for every selected lead, kept on each so it can be counted later."
               slotProps={{ htmlInput: { maxLength: UNQUALIFY_REASON_MAX } }}
             />
+          ) : pending === 'campaign' ? (
+            <CampaignPicker
+              options={campaigns.options}
+              value={campaignIds}
+              onChange={setCampaignIds}
+              helperText="Added to the campaigns each selected lead is already in. It does not decide who a campaign mails."
+              empty={campaigns.ready && !campaigns.options.length}
+              emptyText="This site has no campaigns yet. Create one from Marketing to file leads under it."
+            />
           ) : null}
         </CrmBulkValueDialog>
       }
@@ -306,6 +351,11 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       <Button size="small" disabled={busy} onClick={() => openAction('unqualify')}>
         {'Unqualify'}
       </Button>
+      {hostId ? (
+        <Button size="small" disabled={busy} onClick={() => openAction('campaign')}>
+          {'Add to campaign'}
+        </Button>
+      ) : null}
       <Button size="small" disabled={busy} onClick={handleExport}>
         {'Export CSV'}
       </Button>

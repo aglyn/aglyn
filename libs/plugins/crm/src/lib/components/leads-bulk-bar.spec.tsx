@@ -34,6 +34,7 @@ jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   deleteField: () => ({ op: 'delete' }),
   serverTimestamp: () => ({ op: 'serverTimestamp' }),
+  arrayUnion: (...values: unknown[]) => ({ op: 'arrayUnion', values }),
   writeBatch: () => {
     const staged: typeof ops = []
     return {
@@ -53,6 +54,15 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: null }),
+  // The site's campaigns the Add to campaign picker offers (AGL-3254).
+  useHostCampaigns: () => ({
+    options: [
+      { value: 'founder-icp1', label: 'Founder · ICP 1' },
+      { value: 'founder-icp2', label: 'Founder · ICP 2' },
+    ],
+    truncated: false,
+    ready: true,
+  }),
 }))
 
 let notices: string[]
@@ -154,6 +164,41 @@ describe('the owner', () => {
       ['batch', 'hosts/site-1/leads/l-open', 'uid-a'],
       ['batch', 'hosts/site-2/leads/l-working', 'uid-a'],
     ])
+  })
+})
+
+/*
+ * Add to campaign (AGL-3254): under a site, the site's campaigns by name,
+ * ADDED to each selected lead in one batch; nothing offered at the
+ * organization level, where a selection spans sites.
+ */
+describe('the campaign', () => {
+  it('adds the picked campaigns to every selected lead, in one batch', async () => {
+    render(
+      <LeadsBulkBar
+        rows={rows}
+        selected={ALL.slice(0, 2)}
+        onSelectedChange={jest.fn()}
+        roster={roster}
+        hostId="site-1"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add to campaign' }))
+    fireEvent.mouseDown(dialog().getByRole('combobox', { name: 'Campaigns' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Founder · ICP 2' }))
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    fireEvent.click(dialog().getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(notices).toEqual(['Added 2 leads to the campaign']))
+    expect(ops.map((op) => [op.via, op.path, (op.data as any).campaignIds])).toEqual([
+      ['batch', 'hosts/site-1/leads/l-open', { op: 'arrayUnion', values: ['founder-icp2'] }],
+      ['batch', 'hosts/site-2/leads/l-working', { op: 'arrayUnion', values: ['founder-icp2'] }],
+    ])
+  })
+
+  it('is not offered at the organization level', () => {
+    mount(ALL.slice(0, 2))
+    expect(screen.queryByRole('button', { name: 'Add to campaign' })).toBeNull()
   })
 })
 

@@ -251,9 +251,27 @@ describe('enrolling', () => {
       threadSubject: null,
       messageIds: [],
       lastSentAtMs: null,
+      campaignIds: [],
       createdAtMs: nowMs,
       updatedAtMs: nowMs,
     })
+  })
+
+  it('stamps the sequence’s campaigns as they stand at enrollment (AGL-3254)', () => {
+    const enrollment = buildOutreachEnrollment({
+      id: 'enrollment-2',
+      sequence: { ...sequence, campaignIds: [' founder-icp2 ', 'founder-icp2', 'founder-icp1'] },
+      mailbox,
+      contactId: 'contact-1',
+      email: 'casey@example.com',
+      cold: false,
+      personalLine: '',
+      attestations: {},
+      enrolledByUid: 'u-avery',
+      nowMs,
+      random: middle,
+    })
+    expect(enrollment.campaignIds).toEqual(['founder-icp2', 'founder-icp1'])
   })
 })
 

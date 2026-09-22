@@ -187,6 +187,35 @@ describe('an email-channel attribution', () => {
   })
 })
 
+/*
+ * A sequence touch (AGL-3254) names the campaign a rep's sequence is in — a
+ * container with a page — so it links like an email touch and says which
+ * door it came through.
+ */
+describe('a sequence-channel attribution', () => {
+  const RECORD = {
+    kind: 'lead',
+    refId: 'lead_1',
+    channel: 'sequence',
+    campaignId: 'camp_founder',
+    sequenceId: 'seq_1',
+    enrollmentId: 'seq_1_lead_1',
+    touchedAtMs: 1_700_000_000_000,
+    convertedAtMs: 1_700_000_000_000,
+    model: 'last-click',
+    windowDays: 7,
+  }
+
+  it('links to the campaign the sequence is in, and names the door', async () => {
+    await renderAttribution({ kind: 'lead', refId: 'lead_1', record: RECORD })
+    expect(screen.getByText('camp_founder').closest('a')?.getAttribute('href')).toBe(
+      '/acme/hosts/site/marketing/campaigns/camp_founder',
+    )
+    expect(screen.getByText('Sequence')).toBeTruthy()
+    expect(screen.getByText(/Reached by a sequence email on/)).toBeTruthy()
+  })
+})
+
 describe('a web-channel attribution', () => {
   const RECORD = {
     kind: 'form',

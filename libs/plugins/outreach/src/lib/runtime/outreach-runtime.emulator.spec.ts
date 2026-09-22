@@ -92,6 +92,10 @@ interface Filed {
   notices: OutreachMailboxNoticeRequest[]
   /** What became of a filed email (AGL-3245). */
   deliveries: PluginRecordDeliveryRequest[]
+  /** What the runtime credited to a campaign (AGL-3254). */
+  credits: Array<{ hostId: string; campaignIds: readonly string[]; outcome: string; atMs: number }>
+  attributions: Array<{ hostId: string; kind: string; refId: string; campaignId: string; enrollmentId: string }>
+  touches: Array<{ hostId: string; email: string; campaignId: string; enrollmentId: string }>
 }
 let filed: Filed
 
@@ -125,6 +129,17 @@ function deps(overrides: Partial<OutreachRuntimeDeps> = {}): OutreachRuntimeDeps
     orgRefusal: async () => null,
     sendRefusal: async () => null,
     timeline,
+    campaignCredit: {
+      credit: async (input) => {
+        filed.credits.push(input)
+      },
+      attributeRecord: async (input) => {
+        filed.attributions.push(input)
+      },
+      recordTouch: async (input) => {
+        filed.touches.push(input)
+      },
+    },
     logOrgActivity: async (_orgId, _actor, action, target) => {
       filed.feed.push({ action, target })
     },
@@ -324,7 +339,7 @@ beforeAll(() => {
 beforeEach(() => {
   clock = TUESDAY_10AM
   gmail = new FakeGmail({ self: [MAILBOX_EMAIL] })
-  filed = { activities: [], tasks: [], feed: [], notices: [], deliveries: [] }
+  filed = { activities: [], tasks: [], feed: [], notices: [], deliveries: [], credits: [], attributions: [], touches: [] }
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
   jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 })

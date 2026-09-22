@@ -3214,6 +3214,7 @@ service cloud.firestore {
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
               'emailAttributions', 'campaignAttributions',
+              'campaignSequenceReports',
               'flowEnrollments', 'leads']));
         // More names on all THREE lists, each server-written with no client
         // writer to break:
@@ -3238,6 +3239,13 @@ service cloud.firestore {
         //    joins on (the `topicOptOuts` PII footing), so only an erasure may
         //    remove one. READ stays for the site's conversion reporting; the
         //    record holds a hash, never an address.
+        //  - `campaignSequenceReports` (AGL-3254): one document per campaign
+        //    container, counting what the sequences in it produced —
+        //    enrolled, sent, replied, meetings, converted — written only by
+        //    the Outreach runtime through `campaign-conversion-attribution.ts`
+        //    on the Admin SDK. A client that could write one would author
+        //    the numbers a campaign is judged by. READ stays for the
+        //    campaign's page; it holds counts and no address.
         //  - NOT `emailCampaigns`, the campaign CONTAINER (a name, a date
         //    window, its lists), created client-side by the campaigns card's
         //    drawer. It holds no counter and no entitlement input (the send cap
@@ -3311,6 +3319,7 @@ service cloud.firestore {
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
               'emailAttributions', 'campaignAttributions',
+              'campaignSequenceReports',
               'flowEnrollments', 'leads']));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
@@ -3359,6 +3368,7 @@ service cloud.firestore {
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
               'topicOptOuts', 'emailFrequency', 'campaigns',
               'emailAttributions', 'campaignAttributions',
+              'campaignSequenceReports',
               'flowEnrollments']));
       }
       // A site's leads (AGL-2801, AGL-2851). A capture door files one on

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { creditCampaignSequenceOutcome } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
 import { collectDynamicListCandidates } from '@aglyn/tenant-data-admin/server/dynamic-list-materialize'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { lockdownRefusal } from '@aglyn/tenant-data-admin/server/lockdown'
@@ -39,7 +40,13 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
  * static one.
  */
 
-export { lockdownRefusal, logOrgActivity, resolveOrgPermissions, stampRecordEmailState }
+export {
+  creditCampaignSequenceOutcome,
+  lockdownRefusal,
+  logOrgActivity,
+  resolveOrgPermissions,
+  stampRecordEmailState,
+}
 
 /**
  * Whether the member holds a CATALOG permission (`data.manage`) as the

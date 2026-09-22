@@ -32,6 +32,10 @@ import {
   pluginContactCaptureWriter,
   registerPluginContactCaptureWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import {
+  listPluginLeadConversionListeners,
+  resetPluginLeadConversionListenersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -54,6 +58,17 @@ const deferredImports = [...SOURCE.matchAll(/\bimport\('([^']+)'\)/g)].map((m) =
 describe('what the CRM declares at boot', () => {
   beforeEach(() => {
     resetPluginServicesForTests()
+    resetPluginLeadConversionListenersForTests()
+  })
+
+  it('registers its share of a lead conversion — the campaigns the lead carries — under this plugin (AGL-3254)', () => {
+    registerCrmServerDeclarations()
+    expect(listPluginLeadConversionListeners()).toEqual(['crm'])
+    // Deferred like the capture: the writer and the Admin SDK load with the
+    // first conversion, never at boot.
+    expect(deferredImports).toContain('./server/lead-campaign-carry')
+    expect(deferredImports).toContain('@aglyn/tenant-data-admin/server/firebase-admin')
+    expect(staticImports).not.toContain('./server/lead-campaign-carry')
   })
 
   it('registers the workspace’s contact-capture writer, under this plugin', () => {

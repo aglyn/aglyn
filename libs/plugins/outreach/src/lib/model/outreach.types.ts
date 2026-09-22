@@ -512,6 +512,14 @@ export interface OutreachSequence extends OutreachTimestamps {
   settings: OutreachSequenceSettings
   status: OutreachSequenceStatus
   /**
+   * The campaigns the sequence is in (AGL-3254): container ids from the
+   * site's `emailCampaigns`, under the field every campaign member carries
+   * (`CAMPAIGN_MEMBERSHIP_FIELD`). Everyone enrolled gains them on their
+   * own record at enroll time, and what the sequence produces is credited
+   * to them. Absent on a sequence saved before it could join one.
+   */
+  campaignIds?: string[]
+  /**
    * What it measured (AGL-3239). Absent until the first email leaves, and
    * absent forever on a sequence that finished before the counters existed.
    */
@@ -720,6 +728,13 @@ export interface OutreachEnrollment extends OutreachTimestamps {
    * "no clicks" only for a sequence that tracks them at all.
    */
   engagement?: OutreachEnrollmentEngagement
+  /**
+   * The sequence's campaigns as they stood when the person was enrolled
+   * (AGL-3254): what every outcome of this enrollment is credited to. A
+   * campaign the sequence joins later does not claim the people already
+   * in it, and one it leaves keeps what it was credited with.
+   */
+  campaignIds?: string[]
 }
 
 /** A sending run's claim on one enrollment's step (AGL-2981). */

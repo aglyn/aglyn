@@ -140,6 +140,15 @@ jest.mock('./lead-convert-dialog', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreCollection: () => ({ data: siteRows, status: 'success', fromCache: false }),
+  // The site's campaigns, for the Campaign filter and column (AGL-3254).
+  useHostCampaigns: () => ({
+    options: [
+      { value: 'founder-icp1', label: 'Founder · ICP 1' },
+      { value: 'founder-icp2', label: 'Founder · ICP 2' },
+    ],
+    truncated: false,
+    ready: true,
+  }),
 }))
 jest.mock('firebase/firestore', () => ({
   collection: () => ({}),
@@ -410,5 +419,31 @@ describe('The search box narrows the whole loaded window (AGL-3246)', () => {
     )
     expect(listed()).toEqual(['bounced@example.com'])
     expect(screen.getByText('1–1 of 1')).toBeTruthy()
+  })
+
+  /**
+   * The `Campaign` control (AGL-3254): the site's containers by name, the
+   * id in the saved view, and only the leads filed under it listed.
+   */
+  it('narrows to the leads filed under a campaign, by name', async () => {
+    siteRows = [
+      ...fillers,
+      lead('l-icp2', 'icp2@example.com', { campaignIds: ['founder-icp2'] }),
+      lead('l-both', 'both@example.com', { campaignIds: ['founder-icp1', 'founder-icp2'] }),
+    ]
+    const { rerender } = renderSite()
+    const control = screen.getByRole('combobox', { name: 'Campaign' })
+    expect(control.textContent).toBe('Any campaign')
+    fireEvent.mouseDown(control)
+    fireEvent.click(await screen.findByRole('option', { name: 'Founder · ICP 2' }))
+    expect(mockFilters).toEqual([
+      { field: 'status', op: 'equals', value: 'all' },
+      { field: 'campaignIds', op: 'contains', value: 'founder-icp2' },
+    ])
+    rerender(
+      <CrmLeadsSection hostId="site-1" entitled org={ORG} basePath={BASE_PATH} releaseFlag={{} as any} />,
+    )
+    expect(listed()).toEqual(['icp2@example.com', 'both@example.com'])
+    expect(screen.getByText('1–2 of 2')).toBeTruthy()
   })
 })

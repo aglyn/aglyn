@@ -46,6 +46,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
+  useHostCampaigns,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -86,6 +87,7 @@ import {
   LEAD_FILTERS,
   type LeadEmailFilter,
   type LeadFilter,
+  leadMatchesCampaignFilter,
   leadMatchesEmailFilter,
   leadMatchesFilter,
   leadMatchesSearch,
@@ -245,10 +247,35 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       ]),
     [views.setFilters, views.state.filters],
   )
+  /*
+   * The `Campaign` filter (AGL-3254) is the view's too, as a `campaignIds`
+   * clause: the id of one of the site's campaign containers, resolved to
+   * its name from the containers themselves — ids only in storage, so a
+   * renamed campaign keeps its leads. Under a site alone: a campaign
+   * belongs to one site, and the organization-level list spans them all.
+   */
+  const campaignFilter = useMemo(
+    () => views.state.filters.find((clause) => clause.field === 'campaignIds')?.value ?? '',
+    [views.state.filters],
+  )
+  const setCampaignFilter = useCallback(
+    (next: string) =>
+      views.setFilters([
+        ...views.state.filters.filter((clause) => clause.field !== 'campaignIds'),
+        ...(next ? [{ field: 'campaignIds', op: 'contains', value: next }] : []),
+      ]),
+    [views.setFilters, views.state.filters],
+  )
+  const campaigns = useHostCampaigns(hostId, { enabled: Boolean(hostId) })
+  const campaignName = useCallback(
+    (id: string) => campaigns.options.find((option) => option.value === id)?.label ?? id,
+    [campaigns.options],
+  )
   // The label's id, so the filter's combobox is named "Show" rather than
   // after the option it shows — see `LeadOwnerSelect`.
   const filterLabelId = useId()
   const emailFilterLabelId = useId()
+  const campaignFilterLabelId = useId()
   /*
    * The search box is the SECTION'S, not the grid's (AGL-3246). The grid's
    * quick filter runs over the rows the grid holds, and the grid holds one
@@ -265,9 +292,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         (lead) =>
           leadMatchesFilter(lead, filter) &&
           leadMatchesEmailFilter(lead, emailFilter) &&
+          leadMatchesCampaignFilter(lead, campaignFilter) &&
           leadMatchesSearch(lead, search),
       ),
-    [window, filter, emailFilter, search],
+    [window, filter, emailFilter, campaignFilter, search],
   )
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
@@ -276,7 +304,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   // renders empty.
   useEffect(() => {
     setPage(0)
-  }, [filter, emailFilter, search])
+  }, [filter, emailFilter, campaignFilter, search])
   const pageRows = useMemo(
     () => rows.slice(page * pageSize, (page + 1) * pageSize),
     [rows, page, pageSize],
@@ -289,7 +317,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
    * rows no longer listed.
    */
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  useEffect(() => setSelectedIds([]), [filter, emailFilter, search])
+  useEffect(() => setSelectedIds([]), [filter, emailFilter, campaignFilter, search])
   // How the file names the owner and, at the org level, the site.
   const csvOptions: LeadCsvOptions = useMemo(
     () => ({
@@ -336,6 +364,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           ...(values.leadSource ? { leadSource: values.leadSource } : {}),
           ...(values.address ? { address: values.address } : {}),
           ...(values.tags.length ? { tags: values.tags } : {}),
+          ...(values.campaignIds.length ? { campaignIds: values.campaignIds } : {}),
           ...(values.ownerUid ? { ownerUid: values.ownerUid } : {}),
           ...(values.notes ? { notes: values.notes } : {}),
           status: values.status,
@@ -508,6 +537,20 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         minWidth: 140,
         valueGetter: (_value, row: LeadRow) => (row.tags ?? []).join(', '),
       },
+      // The campaigns the lead is filed under (AGL-3254), by name — the
+      // ids are the storage. Under a site only, like the filter.
+      ...(hostId
+        ? [
+            {
+              field: 'campaignIds',
+              headerName: 'Campaign',
+              flex: 1,
+              minWidth: 150,
+              valueGetter: (_value: unknown, row: LeadRow) =>
+                Aglyn.readCampaignIds(row).map(campaignName).join(', '),
+            } satisfies GridColDef,
+          ]
+        : []),
       {
         field: 'lastSeenAtMs',
         headerName: 'Last seen',
@@ -584,7 +627,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         },
       },
     ],
-    [roster, routes, writeLead, hostId, mount],
+    [roster, routes, writeLead, hostId, mount, campaignName],
   )
   /* The column and sort models are the view's (AGL-2617). */
   const grid = useCrmViewGrid(views, columns)
@@ -629,6 +672,30 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 ))}
               </Select>
             </FormControl>
+            {/* The campaign the lead is filed under (AGL-3254): the site's containers, by name. */}
+            {hostId ? (
+              <FormControl size="small" sx={{ minWidth: 180 }}>
+                <InputLabel id={campaignFilterLabelId}>{'Campaign'}</InputLabel>
+                <Select
+                  labelId={campaignFilterLabelId}
+                  label="Campaign"
+                  value={campaignFilter}
+                  onChange={(event) => setCampaignFilter(String(event.target.value))}
+                  displayEmpty
+                >
+                  <MenuItem value="">{'Any campaign'}</MenuItem>
+                  {campaigns.options.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                  {/* A stored filter naming a campaign the site no longer lists stays selectable, by id, so it can be cleared. */}
+                  {campaignFilter && !campaigns.options.some((option) => option.value === campaignFilter) ? (
+                    <MenuItem value={campaignFilter}>{campaignFilter}</MenuItem>
+                  ) : null}
+                </Select>
+              </FormControl>
+            ) : null}
             <TextField
               size="small"
               value={search}

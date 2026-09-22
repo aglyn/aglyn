@@ -55,6 +55,8 @@ describe('readOutreachSequenceDraft (AGL-2980)', () => {
         { id: 'c', kind: 'sms' },
       ],
       settings: { window: { days: [1, '2'], startMinute: 540, endMinute: 1020 }, allowCustomers: 'yes' },
+      // Ids, deduplicated and trimmed; the picker's order (AGL-3254).
+      campaignIds: [' founder-icp2 ', 'founder-icp2', 7, 'founder-icp1'],
     })
     expect(draft).toEqual({
       name: 'Second locations',
@@ -79,6 +81,7 @@ describe('readOutreachSequenceDraft (AGL-2980)', () => {
         allowCustomers: false,
         trackClicks: false,
       },
+      campaignIds: ['founder-icp2', 'founder-icp1'],
     })
     // What the reader could not make sense of is left for the validator to name.
     expect(validateOutreachSequence(draft).map((issue) => issue.code)).toEqual(

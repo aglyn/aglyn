@@ -47,13 +47,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
   campaignRevenueAcrossSends,
+  campaignSequencesReport,
   CAMPAIGN_CONVERSION_KINDS,
   CAMPAIGN_CONVERSION_KIND_COPY,
+  CAMPAIGN_SEQUENCE_REPORTS_COLLECTION,
   EMAIL_ATTRIBUTION_WINDOW_DAYS,
   type CampaignConversionKind,
   type CampaignLinkRollup,
   type CampaignRevenueAcrossSends,
   type CampaignRevenueRollup,
+  type CampaignSequencesRollup,
 } from '@aglyn/shared-ui-email-campaigns/model'
 
 /**
@@ -814,3 +817,79 @@ export function CampaignDestinationsSection(props: CampaignReachProps) {
   )
 }
 CampaignDestinationsSection.displayName = 'CampaignDestinationsSection'
+
+/**
+ * WHAT THE CAMPAIGN'S SEQUENCES PRODUCED (AGL-3254).
+ *
+ * A sequence joins a campaign from its own document, and the Outreach
+ * runtime credits what each enrollment produced to the campaign's one
+ * sequences report — `campaignSequenceReports/{campaignId}` on the host,
+ * server-only like the conversions rollup. One keyed read, joined on the
+ * CONTAINER's id rather than on send ids: a sequence's emails are not the
+ * campaign's sends, so the join the three sections above make does not
+ * exist for it, and the report is written under the campaign directly.
+ *
+ * Absent is not zero: a campaign no sequence was ever in has no document,
+ * and says so in words rather than as five dashes.
+ */
+export function CampaignSequencesSection(props: { hostId: string; campaignId: string }) {
+  const { hostId, campaignId } = props
+  const firestore = useFirestore()
+  const [rollup, setRollup] = useState<CampaignSequencesRollup | undefined | null>(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    setRollup(null)
+    setFailed(false)
+    getDoc(doc(firestore, 'hosts', hostId, CAMPAIGN_SEQUENCE_REPORTS_COLLECTION, campaignId))
+      .then((snapshot) => {
+        if (active) setRollup((snapshot.data() as CampaignSequencesRollup | undefined) ?? undefined)
+      })
+      .catch(() => {
+        // Withheld, never zeroed — the conversions section's reason.
+        if (active) setFailed(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, campaignId])
+
+  const report = rollup === null ? null : campaignSequencesReport(rollup)
+
+  return (
+    <Section title="What its sequences produced">
+      {failed ? (
+        <Alert severity="warning">{'What this campaign’s sequences produced could not be read.'}</Alert>
+      ) : !report ? (
+        <Typography variant="body2" color="text.secondary">
+          {'Reading what this campaign’s sequences produced…'}
+        </Typography>
+      ) : !report.recorded ? (
+        <Typography variant="body2" color="text.secondary">
+          {'No sequence has been in this campaign. Put one in it from the ' +
+            'sequence’s settings, and everyone enrolled from then on counts here.'}
+        </Typography>
+      ) : (
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+            {report.figures.map((figure) => (
+              <Figure key={figure.outcome} label={figure.label} value={figure.value} note={figure.note} />
+            ))}
+          </Stack>
+          {report.caveats.map((caveat) => (
+            <Typography key={caveat.id} variant="caption" color="text.secondary">
+              {caveat.message}
+            </Typography>
+          ))}
+          <Typography variant="caption" color="text.secondary">
+            {'Credited to the campaigns a sequence was in when each person was ' +
+              'enrolled. A meeting counts when it was booked from a link in a ' +
+              'sequence email; a conversion when a lead in a sequence became a contact.'}
+          </Typography>
+        </Stack>
+      )}
+    </Section>
+  )
+}
+CampaignSequencesSection.displayName = 'CampaignSequencesSection'

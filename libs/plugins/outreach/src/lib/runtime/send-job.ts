@@ -56,6 +56,7 @@ import {
 import { GmailTransportError, isReconnectRequired } from '../transport/gmail-errors'
 import { Rfc5322MessageError } from '../transport/rfc5322'
 import { sendComposedOutreachEmail } from '../transport/send-message'
+import { creditOutreachFirstSend } from './campaign-credit'
 import { applyOutreachEvent } from './enrollment-events'
 import { outreachSendDigest, withRecentSend } from './mailbox-health-store'
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
@@ -880,6 +881,10 @@ async function runEmailStep(
     byUid: mailbox.connectedByUid,
     byName: mailbox.displayName || null,
   })
+  // The first email is the touch (AGL-3254): `sent` on the sequence's
+  // campaigns, and the person's record credited to the first of them.
+  // Judged on the enrollment as it was read, before this step's record.
+  await creditOutreachFirstSend(deps, { enrollment, atMs: record.atMs })
 }
 
 /**
@@ -914,14 +919,15 @@ async function recoverClaim(
   const message = await client.getMessage(hit.id, { metadataHeaders: ['Subject'] })
   const subject = message.headers.find((header) => header.name.toLowerCase() === 'subject')?.value ?? ''
   const step = sequence.steps[enrollment.stepIndex]
-  return completeStep(deps, firestore, run, {
+  const atMs = deps.now()
+  const completed = await completeStep(deps, firestore, run, {
     enrollment,
     sequence,
     record: {
       stepIndex: enrollment.stepIndex,
       stepId: step?.id ?? '',
       kind: 'email',
-      atMs: deps.now(),
+      atMs,
       gmailMessageId: hit.id,
       gmailThreadId: hit.threadId,
       messageId: claim.messageId,
@@ -930,4 +936,7 @@ async function recoverClaim(
     sent: { messageId: claim.messageId, threadId: hit.threadId, subject },
     claimMessageId: claim.messageId,
   })
+  // A recovered first email is still the first email (AGL-3254).
+  if (completed) await creditOutreachFirstSend(deps, { enrollment, atMs })
+  return completed
 }

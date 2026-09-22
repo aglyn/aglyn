@@ -113,6 +113,32 @@ import {
 const LEAD_IMPORT_SOURCE: ContactSource = 'import'
 
 /**
+ * How many of the site's campaigns one chunk reads to resolve the names a
+ * file carries (AGL-3254). Well past what a site keeps — the picker offers
+ * fifty — and read once per chunk rather than once per row.
+ */
+const CAMPAIGN_DIRECTORY_CEILING = 200
+
+/**
+ * The site's live campaigns by NAME, lower-cased, for the `campaigns`
+ * column. A name the site does not have is not guessed at: the row is
+ * refused whole and named, because a lead filed under half its campaigns
+ * is a lead nobody asked for. Read only when some row names one.
+ */
+async function campaignDirectory(
+  hostRef: FirebaseFirestore.DocumentReference,
+): Promise<Map<string, string>> {
+  const directory = new Map<string, string>()
+  const containers = await hostRef.collection('emailCampaigns').limit(CAMPAIGN_DIRECTORY_CEILING).get()
+  for (const container of containers.docs) {
+    if (container.get('deletedAt')) continue
+    const name = String(container.get('name') ?? '').trim().toLowerCase()
+    if (name && !directory.has(name)) directory.set(name, container.id)
+  }
+  return directory
+}
+
+/**
  * The team's annotations on one row and the lead's own profile
  * (AGL-3231), or nothing when the file named none of either. A profile
  * value lands as the record's card would write it; the file never clears
@@ -121,6 +147,7 @@ const LEAD_IMPORT_SOURCE: ContactSource = 'import'
 function workingState(
   row: LeadImportRow,
   ownerUid: string | undefined,
+  campaignIds: readonly string[],
 ): Record<string, unknown> | null {
   const fields: Record<string, unknown> = {
     ...(row.status ? { status: row.status } : {}),
@@ -128,6 +155,10 @@ function workingState(
     ...(row.unqualifiedReason ? { unqualifiedReason: row.unqualifiedReason } : {}),
     ...(row.notes ? { notes: row.notes } : {}),
     ...row.profile,
+    // Added to what a lead the site already held carries (AGL-3254): a
+    // file re-imported under a new campaign files the person under one
+    // more, and never takes them out of the last.
+    ...(campaignIds.length ? { campaignIds: FieldValue.arrayUnion(...campaignIds) } : {}),
   }
   return Object.keys(fields).length ? fields : null
 }
@@ -187,12 +218,14 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
     const hostRef = firestore.collection('hosts').doc(context.hostId)
     const leadsRef = hostRef.collection('leads')
     const refs = normalized.map((entry) => leadsRef.doc(entry.key))
-    const [owners, before] = await Promise.all([
+    const namesCampaigns = normalized.some((entry) => entry.row.campaigns?.length)
+    const [owners, before, campaigns] = await Promise.all([
       ownerDirectory(
         context.orgId,
         normalized.map((entry) => entry.row),
       ),
       refs.length ? firestore.getAll(...refs) : Promise.resolve([]),
+      namesCampaigns ? campaignDirectory(hostRef) : Promise.resolve(new Map<string, string>()),
     ])
     const held = new Set(
       before.filter((snapshot) => snapshot.exists).map((snapshot) => snapshot.id),
@@ -204,6 +237,13 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
     let merged = 0
 
     for (const { index, row, key } of normalized) {
+      // The campaigns the row names, every one of them the site's, or the
+      // row is refused whole and named (AGL-3254).
+      const campaignIds = (row.campaigns ?? []).map((name) => campaigns.get(name.toLowerCase()) ?? '')
+      if (campaignIds.some((id) => !id)) {
+        skipped.push({ index, email: row.email, reason: 'campaign-unknown' })
+        continue
+      }
       const isNew = !held.has(key)
       /*
        * The platform lead ceiling, judged the way the deals import judges
@@ -243,7 +283,7 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
         skipped.push({ index, email: row.email, reason: 'write-failed' })
         continue
       }
-      const working = workingState(row, ownerUid)
+      const working = workingState(row, ownerUid, [...new Set(campaignIds)])
       if (working) {
         await leadsRef
           .doc(key)

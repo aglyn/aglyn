@@ -231,6 +231,9 @@ jest.mock('./campaign-reach-sections', () => ({
   CampaignRevenueSection: (props: any) => (
     <div>{`earned by ${props.sendIds.join('|')}`}</div>
   ),
+  CampaignSequencesSection: (props: any) => (
+    <div>{`sequences of ${props.campaignId}`}</div>
+  ),
 }))
 
 import CampaignDetailCard from './campaign-detail-card'

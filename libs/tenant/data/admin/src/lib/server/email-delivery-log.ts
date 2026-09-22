@@ -669,28 +669,55 @@ export const EMAIL_TOUCH_FIELD = 'campaignTouches'
  */
 export const EMAIL_TOUCH_MAX_HOSTS = 10
 
-/** The last campaign one person clicked on one site. */
+/**
+ * The last campaign one person clicked on one site.
+ *
+ * A click on a SEQUENCE email (AGL-3254) is the same touch with two more
+ * facts: the sequence and the enrollment the email went out under. The
+ * campaign is then the container the sequence is in, and the identify
+ * moments this touch is credited to read as the sequence's rather than as
+ * a campaign send's.
+ */
 export interface EmailCampaignTouch {
   hostId: string
   campaignId: string
   /** When the click happened, epoch ms — the provider's instant. */
   clickedAtMs: number
+  sequenceId?: string
+  enrollmentId?: string
+}
+
+/** One host's entry in the touch map, as stored. */
+interface StoredTouch {
+  campaignId: string
+  atMs: number
+  sequenceId?: string
+  enrollmentId?: string
 }
 
 /** Reads the touch map off a person document's data, defensively. */
 function touchesFrom(
   data: Record<string, unknown> | null | undefined,
-): Record<string, { campaignId: string; atMs: number }> {
+): Record<string, StoredTouch> {
   const raw = data?.[EMAIL_TOUCH_FIELD]
   if (!raw || typeof raw !== 'object') return {}
-  const found: Record<string, { campaignId: string; atMs: number }> = {}
+  const found: Record<string, StoredTouch> = {}
   for (const [hostId, entry] of Object.entries(
-    raw as Record<string, { campaignId?: unknown; atMs?: unknown }>,
+    raw as Record<
+      string,
+      { campaignId?: unknown; atMs?: unknown; sequenceId?: unknown; enrollmentId?: unknown }
+    >,
   )) {
     const campaignId = String(entry?.campaignId ?? '')
     const atMs = Number(entry?.atMs ?? 0)
     if (!campaignId || !Number.isFinite(atMs) || atMs <= 0) continue
-    found[hostId] = { campaignId, atMs }
+    const sequenceId = String(entry?.sequenceId ?? '')
+    const enrollmentId = String(entry?.enrollmentId ?? '')
+    found[hostId] = {
+      campaignId,
+      atMs,
+      ...(sequenceId && enrollmentId ? { sequenceId, enrollmentId } : {}),
+    }
   }
   return found
 }
@@ -712,6 +739,9 @@ export async function recordEmailCampaignTouch(
     hostId: string
     campaignId: string
     atMs: number
+    /** Both or neither: a sequence click names the enrollment it came through. */
+    sequenceId?: string
+    enrollmentId?: string
   },
   firestore?: any,
 ): Promise<boolean> {
@@ -721,6 +751,9 @@ export async function recordEmailCampaignTouch(
   const atMs = Number(touch.atMs)
   if (!key || !hostId || !campaignId) return false
   if (!Number.isFinite(atMs) || atMs <= 0) return false
+  const sequenceId = String(touch.sequenceId ?? '')
+  const enrollmentId = String(touch.enrollmentId ?? '')
+  const viaSequence = sequenceId && enrollmentId ? { sequenceId, enrollmentId } : {}
 
   try {
     const db = firestore ?? defaultFirestore()
@@ -737,8 +770,18 @@ export async function recordEmailCampaignTouch(
       // out-of-order or replayed event is the ordinary case this skips.
       if (held && held.atMs >= atMs) return
 
+      /*
+       * A merge-set merges nested maps at depth, so a campaign click after a
+       * sequence click would keep the sequence's ids beside the new campaign
+       * unless they are deleted by name: the two are written as the value
+       * or as `FieldValue.delete()` whenever the held entry carried them.
+       */
+      const dropSequence =
+        held?.sequenceId && !('sequenceId' in viaSequence)
+          ? { sequenceId: FieldValue.delete(), enrollmentId: FieldValue.delete() }
+          : {}
       const update: Record<string, unknown> = {
-        [hostId]: { campaignId, atMs },
+        [hostId]: { campaignId, atMs, ...viaSequence, ...dropSequence },
       }
       /*
        * EVICTION, and only when this host is NEW to the map. Replacing an
@@ -800,6 +843,9 @@ export async function readEmailCampaignTouch(
       hostId,
       campaignId: held.campaignId,
       clickedAtMs: held.atMs,
+      ...(held.sequenceId && held.enrollmentId
+        ? { sequenceId: held.sequenceId, enrollmentId: held.enrollmentId }
+        : {}),
     }
   } catch (error) {
     console.error('[email-delivery-log] campaign touch read failed', error)

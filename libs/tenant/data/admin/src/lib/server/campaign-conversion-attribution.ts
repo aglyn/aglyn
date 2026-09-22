@@ -135,14 +135,32 @@ export const CAMPAIGN_CONVERSIONS_REPORT_DOC = 'conversions'
  */
 export type CampaignConversionKind = 'form' | 'lead' | 'contact' | 'booking'
 
-/** Which channel the credited touch arrived through. */
-export type CampaignTouchChannel = 'email' | 'web'
+/**
+ * Which channel the credited touch arrived through.
+ *
+ * `sequence` (AGL-3254) is a click on, or the sending of, a one-to-one
+ * email a rep's sequence sent. It is read off the same touch map as the
+ * email channel — the Outreach click route stamps it there with the
+ * sequence and the enrollment beside the campaign the sequence is in — so
+ * a booking made from a sequence link is credited by the door that credits
+ * every other booking, and nothing in this join has to know what a
+ * sequence is.
+ */
+export type CampaignTouchChannel = 'email' | 'web' | 'sequence'
 
 /** The touch a conversion is credited to, once both channels have been asked. */
 export interface ResolvedCampaignTouch {
   channel: CampaignTouchChannel
-  /** The campaign document, when the touch was a click on our own mail. */
+  /**
+   * The campaign document, when the touch was a click on our own mail — or
+   * the campaign CONTAINER (`emailCampaigns/{id}`) a sequence is in, for a
+   * sequence touch.
+   */
   campaignId?: string
+  /** The sequence the touch came through, for a `sequence` touch. */
+  sequenceId?: string
+  /** The enrollment the touch came through, for a `sequence` touch. */
+  enrollmentId?: string
   /** `utm_source`, when the touch was a link on the web. */
   source?: string
   /** `utm_medium`, when the touch was a link on the web. */
@@ -259,9 +277,13 @@ export async function resolveCampaignTouch(
     const emailWins =
       emailInWindow && (!web || emailInWindow.clickedAtMs >= web.atMs)
     if (emailWins) {
+      const viaSequence = emailInWindow.sequenceId && emailInWindow.enrollmentId
       return {
-        channel: 'email',
+        channel: viaSequence ? 'sequence' : 'email',
         campaignId: emailInWindow.campaignId,
+        ...(viaSequence
+          ? { sequenceId: emailInWindow.sequenceId, enrollmentId: emailInWindow.enrollmentId }
+          : {}),
         touchedAtMs: emailInWindow.clickedAtMs,
         ...(key ? { personKey: key } : {}),
       }
@@ -340,6 +362,8 @@ export async function attributeCampaignConversion(
       refId,
       channel: touch.channel,
       ...(touch.campaignId ? { campaignId: touch.campaignId } : {}),
+      ...(touch.sequenceId ? { sequenceId: touch.sequenceId } : {}),
+      ...(touch.enrollmentId ? { enrollmentId: touch.enrollmentId } : {}),
       ...(touch.source ? { source: touch.source } : {}),
       ...(touch.medium ? { medium: touch.medium } : {}),
       ...(touch.campaign ? { campaign: touch.campaign } : {}),
@@ -394,9 +418,111 @@ export async function attributeCampaignConversion(
         )
     }
 
+    /*
+     * A SEQUENCE touch rolls up under the campaign's sequences report, and
+     * only a booking does: "meetings booked from a sequence link" is the one
+     * identify moment a sequence's own outcomes do not already count. The
+     * form, lead and contact kinds stand as records — visible on the record
+     * they credit and on the site's conversions list — and never in
+     * `byKind`, whose caveat promises the reader campaign emails only.
+     */
+    if (touch.channel === 'sequence' && touch.campaignId && options.kind === 'booking') {
+      await creditCampaignSequenceOutcome(
+        { hostId, campaignIds: [touch.campaignId], outcome: 'meetings', atMs: convertedAtMs },
+        db,
+      )
+    }
+
     return record
   } catch (error) {
     console.error('attributeCampaignConversion failed', error)
     return null
+  }
+}
+
+/*==========================================
+ * WHAT A CAMPAIGN'S SEQUENCES PRODUCED (AGL-3254).
+ *
+ * A sequence joins a campaign the way a form does, and the Outreach runtime
+ * credits what each enrollment produced — enrolled, first email sent, a
+ * reply, a meeting booked from a sequence link, an enrolled lead converted
+ * — to every campaign the sequence was in when the person was enrolled. The
+ * counts live in `hosts/{hostId}/campaignSequenceReports/{campaignId}`:
+ * one document per campaign, server-only like every other report here, and
+ * never inside the campaign container, which the history list reads.
+ *
+ * Idempotency is the CALLER's: a plugin credits an outcome once per
+ * enrollment from a state change that happens once — the enrollment is
+ * created once, its first email is the first, its status moves to replied
+ * once, its lead converts once — so this writer is a plain increment and
+ * keeps no per-enrollment record of its own.
+ *=========================================*/
+
+/**
+ * The per-host collection of sequence rollups. Restated from the reader
+ * (`campaign-report.ts` in the campaigns UI library, which this package may
+ * not import) and asserted equal by the reader's spec.
+ */
+export const CAMPAIGN_SEQUENCE_REPORTS_COLLECTION = 'campaignSequenceReports'
+
+/** The outcomes the runtime credits, in funnel order. */
+export const CAMPAIGN_SEQUENCE_OUTCOMES = [
+  'enrolled',
+  'sent',
+  'replied',
+  'meetings',
+  'converted',
+] as const
+
+export type CampaignSequenceOutcome = (typeof CAMPAIGN_SEQUENCE_OUTCOMES)[number]
+
+/**
+ * Credits one outcome, for one enrollment, to every campaign named.
+ *
+ * Never throws, and never refuses the batch for one bad id: the outcome
+ * has already happened, and a campaign that is gone gains an orphaned
+ * report rather than blocking the credit to one that is not — the
+ * conversions rollup's own argument for a merge-set that creates.
+ *
+ * @returns how many campaigns were credited.
+ */
+export async function creditCampaignSequenceOutcome(
+  options: {
+    hostId: string
+    /** The campaigns the enrollment carries; unusable ids are skipped. */
+    campaignIds: readonly string[]
+    outcome: CampaignSequenceOutcome
+    /** When the outcome happened. Defaults to now. */
+    atMs?: number
+  },
+  firestore?: any,
+): Promise<number> {
+  try {
+    const hostId = String(options.hostId ?? '')
+    if (!isDocumentId(hostId)) return 0
+    if (!(CAMPAIGN_SEQUENCE_OUTCOMES as readonly string[]).includes(options.outcome)) return 0
+    const atMs = Number(options.atMs ?? Date.now())
+    const ids = [...new Set(options.campaignIds.map((id) => String(id ?? '').trim()))].filter(
+      (id) => isDocumentId(id),
+    )
+    if (!ids.length) return 0
+    const db = firestore ?? defaultFirestore()
+    const reports = db.collection('hosts').doc(hostId).collection(CAMPAIGN_SEQUENCE_REPORTS_COLLECTION)
+    await Promise.all(
+      ids.map((campaignId) =>
+        reports.doc(campaignId).set(
+          {
+            byOutcome: { [options.outcome]: FieldValue.increment(1) },
+            ...(Number.isFinite(atMs) && atMs > 0 ? { updatedAtMs: atMs } : {}),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        ),
+      ),
+    )
+    return ids.length
+  } catch (error) {
+    console.error('creditCampaignSequenceOutcome failed', error)
+    return 0
   }
 }

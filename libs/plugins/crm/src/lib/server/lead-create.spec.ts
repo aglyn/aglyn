@@ -84,6 +84,7 @@ function collectionRef(path: string): any {
 
 const fakeFirestore: any = {
   collection: (name: string) => collectionRef(name),
+  getAll: async (...refs: any[]) => refs.map((ref) => snapshot(ref.path)),
   runTransaction: async (body: (tx: any) => Promise<unknown>) => {
     const tx = {
       get: async (target: any) => target.get(),
@@ -336,6 +337,34 @@ describe('what is written', () => {
       'Added lead',
       { type: 'lead', id: personKey('dana@example.com'), name: 'Dana Marsh' },
     )
+  })
+
+  /*
+   * The campaigns (AGL-3254): the site's live containers pass and are
+   * ADDED to what the lead carries; anything else is refused under the
+   * field before a write.
+   */
+  it('files the lead under the site’s campaigns, and refuses one that is not the site’s', async () => {
+    docs.set(`hosts/${HOST}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
+    docs.set(`hosts/${HOST}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
+    docs.set(`hosts/${HOST}/leads/${personKey('dana@example.com')}`, {
+      email: 'dana@example.com',
+      sources: ['import'],
+      submissionCount: 1,
+      capturedByHostIds: [HOST],
+      campaignIds: ['founder-icp1'],
+    })
+
+    const out = await call({ hostId: HOST, email: 'dana@example.com', campaignIds: ['founder-icp2', 'founder-icp2'] })
+    expect(out.status).toBe(200)
+    expect(leadAt('dana@example.com')?.['campaignIds']).toEqual(['founder-icp1', 'founder-icp2'])
+
+    for (const campaignIds of [['gone'], ['nope'], ['founder-icp2', 'hosts/x']]) {
+      const refused = await call({ hostId: HOST, email: 'new@example.com', campaignIds })
+      expect(refused.status).toBe(400)
+      expect(refused.body).toEqual({ error: expect.stringContaining('campaigns picked'), field: 'campaignIds' })
+    }
+    expect(leadAt('new@example.com')).toBeUndefined()
   })
 
   it('updates the lead the site already holds for the address, and says so', async () => {

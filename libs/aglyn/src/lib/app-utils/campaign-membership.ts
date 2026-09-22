@@ -189,12 +189,22 @@ export function campaignMembershipUnchanged(
  * detach fails the build rather than shipping a campaign whose removal leaves
  * that collection pointing at nothing.
  *
+ * A lead (`hosts/{hostId}/leads/{personKey}`, AGL-3254) carries the field at
+ * the top of its document like a form does: a lead is one site's own record,
+ * captured there and worked there, so there is no second holder to keep the
+ * edge away from. It joins a campaign by hand — the New lead drawer, the CSV
+ * import, the list's bulk bar — or by being enrolled in a sequence that is
+ * in one, and it hands the membership to the contact it converts into.
+ *
  * Contacts are deliberately NOT here. They live on the org
  * (`orgs/{orgId}/contacts`), not the host, and carry the field inside a
  * per-holder facet — so they are detached by their own pass, against a field
- * path that names the group.
+ * path that names the group. Nor are a plugin's own members — a sequence and
+ * its enrollments live under the org, in collections the core does not name
+ * — so a plugin registers a detacher for those
+ * (`plugin-manager/plugin-membership-detach.ts`) and the deletion runs it.
  */
-export const CAMPAIGN_MEMBER_HOST_COLLECTIONS = ['forms', 'screens'] as const
+export const CAMPAIGN_MEMBER_HOST_COLLECTIONS = ['forms', 'screens', 'leads'] as const
 
 export type CampaignMemberHostCollection =
   (typeof CAMPAIGN_MEMBER_HOST_COLLECTIONS)[number]

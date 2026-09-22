@@ -123,6 +123,7 @@ Board / Table control).
 | **Set owner** | Pick a team member, or **Nobody** to clear the owner. The lead alone is assigned; its contact, when there is one, is assigned from its own record. |
 | **Set status** | Pick **New** or **Working**. A lead already at that status is skipped and named, and a converted lead is left alone — its status is its conversion. Setting a closed lead back to Working reopens it and clears its reason, as the row does. |
 | **Unqualify** | Asks for one reason, then closes every open selected lead with it; the reason is kept on each so the [lead funnel](./reports.md#lead-funnel) can count it. Leads already closed or converted are skipped and named. |
+| **Add to campaign** | Pick one or more of the site's [campaigns](../../marketing-and-automation/email-campaigns/overview.md#what-belongs-to-a-campaign); each selected lead is filed under them beside the campaigns it is already in. Under a site only — a campaign belongs to one site. Grouping, not consent: nothing is mailed. |
 | **Export CSV** | Download the selected leads as `leads-selected.csv` — the same file the list's **Export CSV** writes: email, name, status, the owner by email address, the sources by name joined with `\|`, first and last seen, how many times the person was captured, the unqualified reason, when the lead converted, and notes. The list's [Import CSV](./leads.md#import-from-csv) reads the columns a file may set back in; the capture columns are its to write, not yours. |
 | **Clear** | Deselect everything. |
 

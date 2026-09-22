@@ -100,6 +100,7 @@ their company **as text** until it converts:
 | **Job title**, **Phone**, **Website** | As on a business card. The phone is stored with its country code; the website as a full address. |
 | **Lead source** | Where the lead came from, in your words — *Sales Navigator*, *Trade show*, *Referral*. Distinct from **Sources** below, which the site records. |
 | **Tags** | Comma-separated, lower-cased. |
+| **Campaigns** | The site's [campaigns](../../marketing-and-automation/email-campaigns/overview.md#what-belongs-to-a-campaign) the lead is filed under, picked by name. Grouping, not consent: it decides which campaign pages list the lead, never whether anything mails them. Enrolling the lead in a sequence that is in a campaign files it there too. |
 | **Address** | Street, city, state, postal code and a two-letter country code. |
 | **Status**, **Owner**, **Notes** | The working state — see [The Leads list](#the-leads-list). |
 
@@ -134,6 +135,7 @@ Each row carries:
 | **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
 | **Source** | Every surface that captured this person: Booking, the form they submitted, an import, New lead, or the API — and Sign-up on leads filed before sign-ups stopped making leads. |
 | **Tags** | The lead's tags. |
+| **Campaign** | The campaigns the lead is filed under, by name. Under a site only — a campaign belongs to one site. |
 | **Last seen** | When the person last did something on your site. |
 
 The **Show** control at the top of the card picks the view. **Open** — the
@@ -143,7 +145,9 @@ touched yet has no status of its own and reads as **New**, so the leads your
 site collected before the CRM existed are already in the Open view. The
 **Email** control beside it narrows by the address's verdict — **Cannot be
 emailed** for every lead a sender has refused, one verdict on its own, or
-**Nothing known** — and keeps the status you chose.
+**Nothing known** — and keeps the status you chose. The **Campaign** control
+narrows to the leads filed under one of the site's campaigns, by name, and
+keeps the other two; all three are part of the saved view.
 
 The list reads the 200 most recently seen leads and shows them a page at a
 time, with the usual footer to turn the page and pick how many rows it holds.
@@ -168,8 +172,8 @@ Every change here is saved immediately; there is no separate save step.
 
 Every row has a checkbox. Tick one or more — or the header's checkbox for
 the page — and a bar appears over the list with **Set owner**, **Set
-status**, **Unqualify** (one reason for all of them) and **Export CSV** for
-the selection. What each does, and which leads it skips by name, is in
+status**, **Unqualify** (one reason for all of them), **Add to campaign**
+(under a site) and **Export CSV** for the selection. What each does, and which leads it skips by name, is in
 [Bulk actions → Leads](./bulk-actions.md#leads). The selection clears when
 the **Show** view changes.
 
@@ -206,6 +210,7 @@ over no rows.
 | **Company name**, **Job title**, **Phone**, **Website**, **Lead source** | The lead's own profile, as text. A phone is read with its country code (a bare ten-digit number as North American); a website as `acme.com` or a full address. A phone or website that cannot be read is dropped and reported, and the rest of the row is kept. |
 | **Address line 1** … **Country (two-letter code)** | The address, six columns as the contacts import takes them. A country typed as a name rather than a code is dropped and reported. |
 | **Tags** | Comma or `\|` separated, lower-cased. |
+| **Campaigns** | Comma or `\|` separated, by **name**, matched to the site's own campaigns without regard to case and added to the campaigns the lead is already in. A row naming a campaign the site does not have is skipped whole as *Names a campaign this site does not have*, rather than filed under half of them. A column headed `Campaign` alone is read as the **Lead source**, which is what another tool's export means by it. |
 | **Status** | `new`, `working` or `unqualified`, by id or by label. **Qualified** is not a status a file may set — a lead becomes qualified by [converting](#converting-a-lead), beside the contact that conversion created — so a cell naming it is dropped and reported, and the lead keeps the status it has. |
 | **Owner** | The email address of a member of your organization. An address that matches nobody leaves the lead unassigned and is named at the end of the import. |
 | **Unqualified reason** | Kept only on a row whose **Status** is `unqualified`; on any other row it is dropped and reported, because the reason is what an unqualified lead was closed for. |
@@ -287,7 +292,7 @@ from the list in one click. The dialog asks three things:
 
 1. **Contact.** The lead becomes a contact at the **Sales qualified**
    lifecycle stage, carrying the lead's phone, job title, address, tags,
-   notes and company name, owned by whoever you pick — the lead's owner by default.
+   campaigns, notes and company name, owned by whoever you pick — the lead's owner by default.
    Pick nobody and the workspace's [assignment rules](./settings.md#assignment-rules)
    and the site's [default owner](./settings.md#default-owner) decide, and
    failing those the contact is yours. A colleague you pick is notified;

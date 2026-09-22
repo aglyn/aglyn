@@ -16,6 +16,7 @@
  */
 
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
+import { recordOutreachSequenceTouch } from './campaign-credit'
 import { readOutreachClickToken } from './click-link'
 import { recordOutreachClick } from './click-events'
 import type { OutreachRuntimeDeps } from './runtime-deps'
@@ -67,7 +68,7 @@ const REDIRECT_HEADERS = {
 }
 
 export function createOutreachClickRoute(
-  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'now' | 'timeline'>,
+  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'now' | 'timeline' | 'campaignCredit'>,
 ): PluginWebApiHandler {
   return async (request) => {
     // `HEAD` is answered because a gateway often sends one before the `GET`
@@ -97,11 +98,20 @@ export function createOutreachClickRoute(
       headers: { ...REDIRECT_HEADERS, Location: target.url },
     })
     try {
-      await recordOutreachClick(deps, {
+      const outcome = await recordOutreachClick(deps, {
         target,
         method: request.method,
         userAgent: request.headers.get('user-agent'),
       })
+      /*
+       * A person's click — never a scanner's — on a sequence in a campaign
+       * is their last campaign touch on the site (AGL-3254), so the booking
+       * or the form they go on to make is credited to the sequence's
+       * campaign by the door that credits every other one.
+       */
+      if (outcome.human && outcome.enrollment) {
+        await recordOutreachSequenceTouch(deps, { enrollment: outcome.enrollment, atMs: deps.now() })
+      }
     } catch (error) {
       // The visit already has its answer. A click we failed to count is a
       // missing number; a redirect we failed to send is a broken email.

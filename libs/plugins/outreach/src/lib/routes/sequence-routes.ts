@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { applyOutreachEnrollmentEvent } from '../engine/enrollment-state'
@@ -161,10 +162,13 @@ const issue = (
 async function draftPlacementIssues(
   firestore: Firestore,
   caller: OutreachRouteCaller,
-  draft: OutreachSequenceDraft,
+  // A draft, or a stored sequence being activated, which may predate the
+  // campaign field (AGL-3254).
+  draft: Pick<OutreachSequenceDraft, 'hostId' | 'mailboxId' | 'settings'> & Pick<OutreachSequence, 'campaignIds'>,
   options: { activating?: boolean } = {},
 ): Promise<OutreachSequenceIssue[]> {
   const issues: OutreachSequenceIssue[] = []
+  const campaignIds = normalizeCampaignIds(draft.campaignIds)
   if (draft.hostId) {
     const host = readOutreachDocumentId(draft.hostId)
       ? await firestore.collection('hosts').doc(draft.hostId).get()
@@ -200,6 +204,33 @@ async function draftPlacementIssues(
         `${outside.join(', ')} ${outside.length === 1 ? "isn't" : "aren't"} among the countries your organization allows. Add ${outside.length === 1 ? 'it' : 'them'} in Sequences compliance settings first.`,
       ),
     )
+  }
+  /*
+   * The campaigns must be the SITE's live containers (AGL-3254): a request
+   * can claim any id, and a sequence filed under another site's campaign,
+   * or under one the console soft-deleted, would credit its outcomes to a
+   * page nobody at this site can open.
+   */
+  if (campaignIds.length && draft.hostId && readOutreachDocumentId(draft.hostId)) {
+    const containers = firestore.collection('hosts').doc(draft.hostId).collection('emailCampaigns')
+    const found = await firestore.getAll(
+      ...campaignIds.map((campaignId) => containers.doc(readOutreachDocumentId(campaignId) ?? '-')),
+    )
+    const unknown = campaignIds.filter((campaignId, index) => {
+      const snapshot = found[index]
+      return !readOutreachDocumentId(campaignId) || !snapshot?.exists || Boolean(snapshot.get('deletedAt'))
+    })
+    if (unknown.length) {
+      issues.push(
+        issue(
+          'campaignIds',
+          'campaign_unknown',
+          unknown.length === 1
+            ? "One of the campaigns picked isn't a campaign of this sequence's site any more. Pick it again."
+            : "Some of the campaigns picked aren't campaigns of this sequence's site any more. Pick them again.",
+        ),
+      )
+    }
   }
   return issues
 }

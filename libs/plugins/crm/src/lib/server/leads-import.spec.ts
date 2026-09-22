@@ -103,6 +103,10 @@ function collectionRef(path: string): any {
     path,
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoId}`}`),
     count: () => countQuery(path),
+    // The campaign directory's one read (AGL-3254): the collection whole.
+    limit: () => ({
+      get: async () => ({ docs: childPaths(path).map((child) => snapshot(child)) }),
+    }),
   }
 }
 
@@ -393,6 +397,41 @@ describe('what a row becomes', () => {
       address: { city: 'Austin', country: 'US' },
       tags: ['icp2', 'a-list'],
     })
+  })
+
+  /*
+   * The campaigns column (AGL-3254): names resolved against the site's own
+   * live containers, added to what the lead carries, and a row naming a
+   * campaign the site does not have refused whole.
+   */
+  it('files the row under the campaigns it names, by name, and refuses a name the site does not have', async () => {
+    docs.set(`hosts/${HOST_ID}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
+    docs.set(`hosts/${HOST_ID}/emailCampaigns/founder-icp1`, { name: 'Founder · ICP 1' })
+    docs.set(`hosts/${HOST_ID}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
+    docs.set(`hosts/${HOST_ID}/leads/${personKey('held@example.com')}`, {
+      email: 'held@example.com',
+      sources: ['signup'],
+      submissionCount: 1,
+      campaignIds: ['founder-icp1'],
+    })
+    const out = await importRows([
+      { email: 'dana@example.com', campaigns: 'founder · icp 2, FOUNDER · ICP 1' },
+      { email: 'held@example.com', campaigns: 'Founder · ICP 2' },
+      { email: 'sam@example.com', campaigns: 'Founder · ICP 2, Gone' },
+      { email: 'june@example.com', campaigns: 'Nope' },
+    ])
+    expect(out.body).toMatchObject({
+      created: 1,
+      merged: 1,
+      skipped: [
+        { index: 2, email: 'sam@example.com', reason: 'campaign-unknown' },
+        { index: 3, email: 'june@example.com', reason: 'campaign-unknown' },
+      ],
+    })
+    expect(leadAt('dana@example.com')?.['campaignIds']).toEqual(['founder-icp2', 'founder-icp1'])
+    expect(leadAt('held@example.com')?.['campaignIds']).toEqual(['founder-icp1', 'founder-icp2'])
+    expect(leadAt('sam@example.com')).toBeUndefined()
+    expect(leadAt('june@example.com')).toBeUndefined()
   })
 
   it('stamps no visibleTo and no facet map, because the site IS the scope', async () => {

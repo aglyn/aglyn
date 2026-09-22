@@ -119,6 +119,7 @@ import {
   CampaignConversionsSection,
   CampaignDestinationsSection,
   CampaignRevenueSection,
+  CampaignSequencesSection,
 } from './campaign-reach-sections'
 
 const ATTRIBUTIONS = 'hosts/host-1/campaignAttributions'
@@ -793,5 +794,43 @@ describe('what a campaign earned', () => {
     // part. The emptier the answer, the more it needs its population named.
     expect(screen.getByText(/never show a figure here/)).toBeTruthy()
     expect(screen.getByText(/The campaign has sent more\./)).toBeTruthy()
+  })
+})
+
+/*
+ * What a campaign's sequences produced (AGL-3254): one keyed read on the
+ * container's id, five figures in funnel order, absent told from zero.
+ */
+describe('what a campaign’s sequences produced', () => {
+  const SEQUENCES = 'hosts/host-1/campaignSequenceReports/camp-1'
+
+  it('reads the campaign’s one sequences report and draws the funnel', async () => {
+    documents.set(SEQUENCES, { byOutcome: { enrolled: 40, sent: 38, replied: 6 } })
+    render(<CampaignSequencesSection hostId="host-1" campaignId="camp-1" />)
+    await settle()
+
+    expect(docCalls).toEqual([SEQUENCES])
+    expect(figure('Enrolled')).toBe('40')
+    expect(figure('Sent')).toBe('38')
+    expect(figure('Replied')).toBe('6')
+    // A stage nobody reached is a dash, not a zero.
+    expect(figure('Meetings')).toBe('—')
+    expect(figure('Converted')).toBe('—')
+    expect(screen.getByText(/deliberately not added together/)).toBeTruthy()
+  })
+
+  it('says no sequence has been in the campaign when there is no report', async () => {
+    render(<CampaignSequencesSection hostId="host-1" campaignId="camp-1" />)
+    await settle()
+    expect(screen.getByText(/No sequence has been in this campaign/)).toBeTruthy()
+    expect(screen.queryByText('Enrolled')).toBeNull()
+  })
+
+  it('WITHHOLDS the figures when the read is refused', async () => {
+    docRefusals.add(SEQUENCES)
+    render(<CampaignSequencesSection hostId="host-1" campaignId="camp-1" />)
+    await settle()
+    expect(screen.getByText(/could not be read/)).toBeTruthy()
+    expect(screen.queryByText('Enrolled')).toBeNull()
   })
 })

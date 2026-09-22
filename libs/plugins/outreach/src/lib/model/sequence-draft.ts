@@ -35,6 +35,7 @@
  * sequence is the way to change them.
  *==========================================*/
 
+import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
 import {
   readOutreachSequenceSettings,
   type OutreachValidationIssue,
@@ -60,6 +61,12 @@ export interface OutreachSequenceDraft {
   mailboxId: string
   steps: OutreachSequenceStep[]
   settings: OutreachSequenceSettings
+  /**
+   * The site's campaigns the sequence is in (AGL-3254), as the picker holds
+   * them: clean ids, `[]` for none — stored as `[]` too, for the reason
+   * `campaignMembershipValue` gives.
+   */
+  campaignIds: string[]
 }
 
 /** The most steps a draft is read with; the validator refuses past the real limit. */
@@ -139,12 +146,13 @@ export function readOutreachSequenceDraft(input: unknown): OutreachSequenceDraft
       ...settings,
       window: readWindow((raw['settings'] as Record<string, unknown> | undefined)?.['window']),
     },
+    campaignIds: normalizeCampaignIds(raw['campaignIds']),
   }
 }
 
 /** The draft a stored sequence opens as in the editor. */
 export function outreachSequenceDraftOf(
-  sequence: Pick<OutreachSequence, 'name' | 'hostId' | 'mailboxId' | 'steps' | 'settings'>,
+  sequence: Pick<OutreachSequence, 'name' | 'hostId' | 'mailboxId' | 'steps' | 'settings' | 'campaignIds'>,
 ): OutreachSequenceDraft {
   return readOutreachSequenceDraft(sequence)
 }
@@ -226,6 +234,7 @@ export function emptyOutreachSequenceDraft(input: {
       // reads, so it is turned on deliberately or not at all.
       trackClicks: false,
     },
+    campaignIds: [],
   }
 }
 
@@ -240,6 +249,7 @@ export type OutreachSequenceIssueCode =
   | 'mailbox_not_yours'
   | 'mailbox_not_sending'
   | 'country_not_in_org'
+  | 'campaign_unknown'
 
 export interface OutreachSequenceIssue extends Omit<OutreachValidationIssue, 'code'> {
   code: OutreachSequenceIssueCode

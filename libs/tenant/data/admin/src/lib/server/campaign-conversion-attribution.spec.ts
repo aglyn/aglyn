@@ -34,8 +34,10 @@
 
 import { FieldValue } from 'firebase-admin/firestore'
 import {
+  CAMPAIGN_SEQUENCE_REPORTS_COLLECTION,
   campaignConversionId,
   attributeCampaignConversion,
+  creditCampaignSequenceOutcome,
   eraseCampaignAttributionsForPersonKey,
   resolveCampaignTouch,
 } from './campaign-conversion-attribution'
@@ -191,6 +193,9 @@ function fakeFirestore() {
     /** Spec helper: a campaign's conversion rollup. */
     conversions: (hostId: string, campaignId: string) =>
       store.get(`hosts/${hostId}/campaigns/${campaignId}/reports/conversions`),
+    /** Spec helper: a campaign's sequences rollup (AGL-3254). */
+    sequences: (hostId: string, campaignId: string) =>
+      store.get(`hosts/${hostId}/${CAMPAIGN_SEQUENCE_REPORTS_COLLECTION}/${campaignId}`),
     paths: () => [...store.keys()],
   }
 }
@@ -526,6 +531,91 @@ describe('attributeCampaignConversion', () => {
     })
   })
 
+  /*
+   * A SEQUENCE touch (AGL-3254): the Outreach click route stamps the same
+   * touch map with the sequence and the enrollment beside the campaign the
+   * sequence is in, so the booking door credits a meeting made from a
+   * sequence link with no knowledge of what a sequence is.
+   */
+  it('THE SEQUENCE CHANNEL — a click on a sequence email reads as the sequence, under its campaign', async () => {
+    const firestore = fakeFirestore()
+    await recordEmailCampaignTouch(
+      {
+        email: VISITOR,
+        hostId: HOST,
+        campaignId: 'founder-icp2',
+        atMs: LANDED_AT,
+        sequenceId: 'seq-1',
+        enrollmentId: 'seq-1_lead-key',
+      },
+      firestore,
+    )
+
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, email: VISITOR, atMs: LANDED_AT + DAY },
+      firestore,
+    )
+    expect(touch).toMatchObject({
+      channel: 'sequence',
+      campaignId: 'founder-icp2',
+      sequenceId: 'seq-1',
+      enrollmentId: 'seq-1_lead-key',
+    })
+
+    await attributeCampaignConversion(
+      { hostId: HOST, kind: 'booking', refId: 'b1', touch, convertedAtMs: LANDED_AT + DAY },
+      firestore,
+    )
+    await attributeCampaignConversion(
+      { hostId: HOST, kind: 'form', refId: 's1', touch, convertedAtMs: LANDED_AT + DAY },
+      firestore,
+    )
+
+    // The record names the sequence, so the booking's page can say which
+    // rep's outreach it came from.
+    expect(firestore.attribution(HOST, 'booking', 'b1')).toMatchObject({
+      channel: 'sequence',
+      campaignId: 'founder-icp2',
+      sequenceId: 'seq-1',
+      enrollmentId: 'seq-1_lead-key',
+    })
+    // The meeting rolls up under the campaign's SEQUENCES report; the form
+    // stands as a record and never in `byKind`, which promises the reader
+    // campaign emails only.
+    expect(firestore.sequences(HOST, 'founder-icp2')).toMatchObject({
+      byOutcome: { meetings: 1 },
+      updatedAtMs: LANDED_AT + DAY,
+    })
+    expect(firestore.conversions(HOST, 'founder-icp2')).toBeUndefined()
+  })
+
+  it('a later campaign click takes the sequence off the touch', async () => {
+    const firestore = fakeFirestore()
+    await recordEmailCampaignTouch(
+      {
+        email: VISITOR,
+        hostId: HOST,
+        campaignId: 'founder-icp2',
+        atMs: LANDED_AT,
+        sequenceId: 'seq-1',
+        enrollmentId: 'seq-1_lead-key',
+      },
+      firestore,
+    )
+    await clickedMail(firestore, 'spring', LANDED_AT + 1)
+
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, email: VISITOR, atMs: LANDED_AT + DAY },
+      firestore,
+    )
+    expect(touch).toEqual({
+      channel: 'email',
+      campaignId: 'spring',
+      touchedAtMs: LANDED_AT + 1,
+      personKey: personKey(VISITOR),
+    })
+  })
+
   it('THE WEB CHANNEL writes no rollup — a label is not a campaign document', async () => {
     const firestore = fakeFirestore()
 
@@ -587,6 +677,54 @@ describe('attributeCampaignConversion', () => {
         firestore,
       ),
     ).toBe(null)
+    expect(firestore.paths()).toEqual([])
+  })
+})
+
+/*
+ * The Outreach runtime's own credits (AGL-3254): one increment per campaign
+ * per outcome, idempotency being the caller's.
+ */
+describe('creditCampaignSequenceOutcome', () => {
+  it('credits every campaign named, once each, and skips an unusable id', async () => {
+    const firestore = fakeFirestore()
+    const credited = await creditCampaignSequenceOutcome(
+      {
+        hostId: HOST,
+        campaignIds: ['founder-icp2', 'founder-icp1', 'founder-icp2', 'bad/id', ''],
+        outcome: 'enrolled',
+        atMs: LANDED_AT,
+      },
+      firestore,
+    )
+    await creditCampaignSequenceOutcome(
+      { hostId: HOST, campaignIds: ['founder-icp2'], outcome: 'sent', atMs: LANDED_AT + 1 },
+      firestore,
+    )
+
+    expect(credited).toBe(2)
+    expect(firestore.sequences(HOST, 'founder-icp2')).toMatchObject({
+      byOutcome: { enrolled: 1, sent: 1 },
+      updatedAtMs: LANDED_AT + 1,
+    })
+    expect(firestore.sequences(HOST, 'founder-icp1')).toMatchObject({ byOutcome: { enrolled: 1 } })
+    expect(firestore.paths().filter((path) => path.includes('bad'))).toEqual([])
+  })
+
+  it('writes nothing for an outcome it does not name, or a host that is not a document id', async () => {
+    const firestore = fakeFirestore()
+    expect(
+      await creditCampaignSequenceOutcome(
+        { hostId: HOST, campaignIds: ['a'], outcome: 'opened' as never },
+        firestore,
+      ),
+    ).toBe(0)
+    expect(
+      await creditCampaignSequenceOutcome(
+        { hostId: 'hosts/x', campaignIds: ['a'], outcome: 'sent' },
+        firestore,
+      ),
+    ).toBe(0)
     expect(firestore.paths()).toEqual([])
   })
 })
