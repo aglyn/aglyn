@@ -122,7 +122,40 @@ const MARKDOWN_ROOTS = [
  * None of the seven is read by a customer. If one ever becomes prose, fix
  * the prose and drop the row — the list only shrinks.
  */
-const SOURCE_ROOTS = ['apps/console', 'apps/docs/src', 'libs/plugins']
+/*
+ * `apps/tenant` joined in AGL-3259, and it was a hole rather than a decision
+ * — the same shape as `libs/plugins` before AGL-3080, recorded above.
+ *
+ * It renders the PUBLISHED customer sites, which is as customer-facing as
+ * this repo gets, and nothing swept it. What was sitting there: three
+ * British spellings in the abuse/DMCA form a visitor fills in — "not
+ * authorised by the copyright owner", "I am authorised to act", "Your name
+ * or organisation". Not statutory quotation, either; 17 U.S.C. §512(c)(3)(A)
+ * reads "authorized". Plain drift on a page shown to the public.
+ *
+ * ⛔ The OTHER unswept roots stay unswept, and that IS a decision. Measured
+ * with this detector: adding `libs/tenant`, `libs/shared`, `libs/besigner`
+ * and `libs/aglyn` takes the census from 8 occurrences in 7 files to 108 in
+ * 81, and almost every one of the new rows is a spelling that must never
+ * change —
+ *   - `libs/shared/data/mdi/generated/**` — vendor icon search keywords
+ *     (`aeroplane`, `tyre`, `theatre`), British so a British user finds the
+ *     icon, and rewritten by the next regeneration anyway;
+ *   - `libs/besigner/.../style-field-search.ts` — style-field search
+ *     aliases, a list whose own header says it "only ever ADDS reach";
+ *     Americanizing them deletes the feature for the people it is for;
+ *   - `libs/aglyn/.../list-import.ts` — `enquiries` beside `contact` and
+ *     `help`, matching real generic mailboxes.
+ * That is ~100 permanent rows on a ratchet allowed only to shrink, which is
+ * the opposite of what the baseline is for. A root belongs here when a red
+ * in it would mean somebody should change the words.
+ */
+const SOURCE_ROOTS = [
+  'apps/console',
+  'apps/docs/src',
+  'libs/plugins',
+  'apps/tenant',
+]
 
 const MARKDOWN = /\.mdx?$/
 const SOURCE = /\.(?:tsx?|jsx?|mjs|cjs)$/
