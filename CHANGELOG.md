@@ -9,6 +9,33 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.164 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.163...v1.0.0-beta.164)
+
+### Added
+
+- **console:** staff hear when money moves, and the scope card gets the fine grain ([AGL-3267](https://linear.app/aglyn/issue/AGL-3267), [AGL-3251](https://linear.app/aglyn/issue/AGL-3251))
+
+### Fixed
+
+- **console:** the screen-view spec's barrel mock names the avatar hook ([AGL-3270](https://linear.app/aglyn/issue/AGL-3270))
+- **besigner:** a saved draft turns the toolbar into Publish ([AGL-3271](https://linear.app/aglyn/issue/AGL-3271), [AGL-1152](https://linear.app/aglyn/issue/AGL-1152))
+- **console:** presence announces the avatar the console shows, not the auth record's ([AGL-3270](https://linear.app/aglyn/issue/AGL-3270), [AGL-1961](https://linear.app/aglyn/issue/AGL-1961))
+- **brand:** the platform support URL points at a page that exists ([AGL-3262](https://linear.app/aglyn/issue/AGL-3262), [AGL-3265](https://linear.app/aglyn/issue/AGL-3265))
+- **besigner:** the icon picker shows the top of each new search ([AGL-3266](https://linear.app/aglyn/issue/AGL-3266))
+
+### Documentation
+
+- **stripe:** the receipt's support URL is not PLATFORM_SUPPORT_URL ([AGL-3262](https://linear.app/aglyn/issue/AGL-3262))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear ceiling rises to AGL-3273 ([AGL-3273](https://linear.app/aglyn/issue/AGL-3273), [AGL-3271](https://linear.app/aglyn/issue/AGL-3271), [AGL-3272](https://linear.app/aglyn/issue/AGL-3272))
+
+</details>
+
 ## v1.0.0-beta.163 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.162...v1.0.0-beta.163)
