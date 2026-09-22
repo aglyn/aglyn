@@ -325,6 +325,10 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     // an import would silently retype every entry in the collection back to a
     // bare `Article` — invisible until a rich result stops appearing.
     'schemaType',
+    // "List the collection, not its entries" (AGL-3247). An import that lost
+    // it would re-submit every entry of a collection the site had deliberately
+    // withheld — silent until the sitemap grows back.
+    'excludeEntriesFromSearch',
     // Legacy AGL-105 pointer, still honoured when it is the only one set.
     'templateScreenId',
     // Entries reference the stable category id, so losing this orphans the

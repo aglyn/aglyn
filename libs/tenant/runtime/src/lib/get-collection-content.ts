@@ -270,6 +270,12 @@ function mapCollectionDoc(
     // does not define makes a consumer discard the whole node, costing the
     // page every property it publishes rather than just this one.
     schemaType: normalizeContentSchemaType(collectionDoc.get('schemaType')),
+    // "List the collection, not its entries" (AGL-3247). Carried as the
+    // STORED boolean rather than as the resolved answer: the render surface
+    // composes it with the site-level switch itself, and a pre-resolved flag
+    // here would be a second place that has to remember that switch exists.
+    excludeEntriesFromSearch:
+      collectionDoc.get('excludeEntriesFromSearch') === true,
     categories: mapCollectionCategories(collectionDoc.get('categories')),
   }
 }
@@ -524,6 +530,11 @@ export interface CollectionContent {
      * which is what every collection published before the setting existed.
      */
     schemaType?: string
+    /**
+     * Whether this collection withholds its ENTRIES from search (AGL-3247).
+     * The listing and its category listings stay indexable either way.
+     */
+    excludeEntriesFromSearch?: boolean
     /**
      * Category taxonomy (AGL-582): entries reference these by stable
      * `id`; `name` is the renameable display label.

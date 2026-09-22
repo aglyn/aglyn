@@ -16,6 +16,7 @@
  */
 
 import {
+  areCollectionEntriesIndexable,
   collectionCategorySlug,
   collectionListUrl,
   contentAuthorPageUrl,
@@ -334,18 +335,33 @@ async function buildSitemapIndex(
               .count()
               .get()
           ).data().count
-          return { slug: String(raw.slug), entries }
+          return {
+            slug: String(raw.slug),
+            entries,
+            entriesIndexable: areCollectionEntriesIndexable(raw),
+          }
         }),
     )
-    for (const { slug, entries } of counted) {
+    for (const { slug, entries, entriesIndexable } of counted) {
       // No published entry, no child (AGL-3101). The listing on page 1 is not
       // a page until an entry in the collection is published — it 404s until
       // then — so a zero count names no file rather than one holding a dead
       // URL. Only a count that SUCCEEDED can say zero; one that throws lands
       // in the catch below, which degrades the index instead.
+      //
+      // A collection that WITHHOLDS its entries (AGL-3247) is one page while
+      // anything is published and none when nothing is: all it contributes is
+      // the listing and its categories, and those ride page 1. Sizing it by
+      // the entry count would advertise child files that come back empty —
+      // which is how the index ends up naming a hundred URLs for a changelog
+      // whose entries it has just declined to submit.
       sections.push({
         section: contentSitemapSection(slug),
-        pages: sitemapPageCount(entries),
+        pages: entriesIndexable
+          ? sitemapPageCount(entries)
+          : entries > 0
+            ? 1
+            : 0,
       })
     }
   } catch {
@@ -670,6 +686,11 @@ async function buildContentUrls(
     if (!docSnapshot) return { urls, degraded: false }
     const raw = docSnapshot.data() as any
     if (hostCollectionKind(raw) !== 'content') return { urls, degraded: false }
+    // "List the collection, not its entries" (AGL-3247). The read below still
+    // runs: the listing is only a URL while something is published (AGL-3101)
+    // and it is dated by what it lists, so both answers come from the entries
+    // — this decides whether their own URLs are submitted, nothing else.
+    const entriesIndexable = areCollectionEntriesIndexable(raw)
 
     // The projection is an address and a date per entry, and nothing else:
     // an entry document carries the whole post body, and Firestore bills the
@@ -742,7 +763,12 @@ async function buildContentUrls(
         })
       }
     }
-    urls.push(...entryUrls)
+    // The entries' own URLs, unless this collection withholds them
+    // (AGL-3247). A sitemap entry is an explicit submission and the entry
+    // pages carry `noindex` in their own head, so submitting them here would
+    // be the conflicting-directives shape `search-indexing.ts` exists to
+    // prevent — the same reason an UNLISTED screen is filtered above.
+    if (entriesIndexable) urls.push(...entryUrls)
   } catch {
     return { urls, degraded: true }
   }
