@@ -47,8 +47,13 @@ export const CONTACT_LIFECYCLE_STAGES = [
   'other',
 ]
 
-/** The capture sources that make a person a RELATIONSHIP rather than a lead. */
-export const RELATIONSHIP_SOURCES = ['member', 'order', 'newsletter']
+/**
+ * The capture sources that make a person a RELATIONSHIP rather than a lead:
+ * a member of a site, an account on the platform's own console (AGL-3185),
+ * a buyer, a subscriber. Every one is a person who did something a lead has
+ * not; a form, a booking, a file or a hand-typed row is a capture.
+ */
+export const RELATIONSHIP_SOURCES = ['account', 'member', 'order', 'newsletter']
 
 /** The capture sources a lead is filed from, and the word each spells on the lead. */
 export const LEAD_SOURCE_WORDS = { form: 'form', booking: 'booking', import: 'import', manual: 'manual', api: 'api' }

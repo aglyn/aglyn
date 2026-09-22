@@ -57,9 +57,10 @@ describe('classifyContact', () => {
     assert.equal(classifyContact(fromForm).kind, 'duplicate-lead')
   })
 
-  it('reads a member, a buyer, a subscriber, a deal or a stage past Lead as a relationship', () => {
+  it('reads a member, a console account, a buyer, a subscriber, a deal or a stage past Lead as a relationship', () => {
     const cases = [
       [{ sources: { member: true }, lifecycleStage: 'lead' }, ['member']],
+      [{ sources: { account: true }, lifecycleStage: 'lead', interactions: [{ type: 'account', atMs: 1 }] }, ['account']],
       [{ sources: { order: true } }, ['order']],
       [{ sources: { newsletter: true }, lifecycleStage: 'subscriber' }, ['newsletter', 'stage:subscriber']],
       [{ sources: { form: true }, ordersCount: 2 }, ['order']],

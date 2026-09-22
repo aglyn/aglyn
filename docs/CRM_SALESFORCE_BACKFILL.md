@@ -12,8 +12,8 @@ holds contacts that are leads in a contact's clothes. One script moves it:
 
 | Contact | Verdict | What happens |
 | --- | --- | --- |
-| Nothing behind it but a capture — no member account, no order, no newsletter opt-in, no deal, no stage past Lead on any facet | **duplicate of a lead** | Folded onto the lead of every site that captured the person or enrolled them in a sequence — created where the site holds none — then archived to `orgs/{orgId}/crmBackfillArchive/{contactId}` and deleted with its address-index row. Its sequence enrollments re-target the lead; its activities and tasks gain the lead and drop the contact. |
-| A member, a buyer, a subscriber, somebody with a deal or a stage past Lead | **relationship** | Kept. An open lead any site holds for the address is closed as **Qualified**, converted onto the contact (`convertedBy: 'backfill'`); the lead's enrollments, activities and tasks follow to the contact. |
+| Nothing behind it but a capture — no site membership, no account on Aglyn's own console, no order, no newsletter opt-in, no deal, no stage past Lead on any facet | **duplicate of a lead** | Folded onto the lead of every site that captured the person or enrolled them in a sequence — created where the site holds none — then archived to `orgs/{orgId}/crmBackfillArchive/{contactId}` and deleted with its address-index row. Its sequence enrollments re-target the lead; its activities and tasks gain the lead and drop the contact. |
+| A member, a console account holder, a buyer, a subscriber, somebody with a deal or a stage past Lead | **relationship** | Kept. An open lead any site holds for the address is closed as **Qualified**, converted onto the contact (`convertedBy: 'backfill'`); the lead's enrollments, activities and tasks follow to the contact. |
 | A lead already converted onto *another* contact | left, reported as `converted-elsewhere` | Two contacts for one address is the merge tool's case, not this script's. |
 | No usable address | left, reported as `no-email` | Nothing can key it. |
 
