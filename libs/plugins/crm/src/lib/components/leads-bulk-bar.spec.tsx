@@ -200,7 +200,19 @@ describe('the file', () => {
     expect(downloads).toHaveLength(1)
     expect(downloads[0].name).toBe('leads-selected.csv')
     const [header, line] = downloads[0].body.split('\n')
-    expect(header.split(',').slice(0, 5)).toEqual(['Email', 'Name', 'Status', 'Owner', 'Site'])
-    expect(line.startsWith('maya@example.com,maya,New,,Shop,')).toBe(true)
+    // The profile columns (AGL-3231) come before the working state, and
+    // the site sits beside the owner; a lead with no profile leaves them blank.
+    expect(header.split(',').slice(0, 9)).toEqual([
+      'Email',
+      'Name',
+      'Company',
+      'Job title',
+      'Phone',
+      'Website',
+      'Status',
+      'Owner',
+      'Site',
+    ])
+    expect(line.startsWith('maya@example.com,maya,,,,,New,,Shop,')).toBe(true)
   })
 })
