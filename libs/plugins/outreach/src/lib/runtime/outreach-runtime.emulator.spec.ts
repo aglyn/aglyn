@@ -619,10 +619,13 @@ describeEmulated('the sync job (AGL-2981)', () => {
 
     expect(report).toMatchObject({ replies: 1 })
     expect(await enrollment(one.id)).toMatchObject({ status: 'replied', stopReason: 'reply', nextDueAtMs: null })
-    expect(filed.activities.at(-1)).toMatchObject({
+    // The reply is filed first, then the sequence's own line that it ended
+    // (AGL-3274) — so the record reads the reply, then why the sends stopped.
+    expect(filed.activities.at(-2)).toMatchObject({
       email: { direction: 'inbound', messageId: '<reply-1@mail.example.org>', from: 'person1@example.org' },
       body: 'Thanks — can we talk Thursday?',
     })
+    expect(filed.activities.at(-1)).toMatchObject({ body: 'Warm follow-up stopped: they replied' })
     expect(filed.tasks.at(-1)).toMatchObject({
       title: 'Reply from Pat1 Example',
       assigneeUid: REP,
