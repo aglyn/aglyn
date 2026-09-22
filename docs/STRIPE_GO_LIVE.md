@@ -212,7 +212,7 @@ one of them is something the **first paying customer sees**.
 
 | # | Where | Set it to | Why it matters |
 | -- | -- | -- | -- |
-| 1 | Settings → Business → **Public details** | Public business name `Aglyn`, support email, support URL `https://aglyn.com/support`, support phone | These render on the Checkout page, the receipt and the customer portal. Blank support details on a receipt is the single most common trigger for "I don't recognise this charge" → a chargeback. |
+| 1 | Settings → Business → **Public details** | Public business name `Aglyn`, support email, support URL `https://app.aglyn.com/support`, support phone | These render on the Checkout page, the receipt and the customer portal. Blank support details on a receipt is the single most common trigger for "I don't recognise this charge" → a chargeback. |
 | 2 | Settings → **Branding** | Icon + logo (`apps/console/public`), brand colour, accent colour | Checkout and the portal are the only pages in the purchase flow we do not render. Default-styled, they read as a third party. |
 | 3 | Settings → Payments → **Statement descriptor** | `AGLYN` (and a shortened descriptor if prompted) | This is the string on the cardholder's statement. An unrecognised descriptor is a chargeback, and a chargeback on a subscription invoice is the reversal AGL-2120 now handles — better not to cause it. |
 | 4 | Settings → **Emails** | ✅ "Successful payments", ✅ "Refunds" | **Off by default for card payments.** With it off, a customer who pays gets no receipt from Stripe at all. |

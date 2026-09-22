@@ -98,13 +98,34 @@ export const PLATFORM_BRAND_LEGAL_NAME =
  * Read here rather than imported from `operator-identity.ts` so this module
  * stays dependency-free and safe to import from anywhere, including the places
  * that cannot take the operator module's weight.
+ *
+ * ## Why the last fallback is the CONSOLE and not the marketing site
+ *
+ * It was `aglyn.com/support`, which answers 404 and has never existed
+ * (AGL-3262) — MEASURED against the live site, not inferred: `/support`,
+ * `/help` and `/docs` all render the not-found page and none is in the
+ * sitemap. A support URL that 404s is worse than none, because it is printed
+ * on a receipt beside a charge the reader is already unsure about.
+ *
+ * `app.aglyn.com/support` is a real page (AGL-3265): it resolves the
+ * workspace from the session, so a customer with one lands on its support
+ * umbrella and a customer with several picks. That is the whole reason it
+ * exists — it is the one support address that needs nothing interpolated
+ * into it, which is exactly what this constant is.
+ *
+ * ⚠️ The residual, stated rather than hidden: on a SELF-HOSTED install that
+ * configured neither variable above, this now points a stranger's customers
+ * at our console, where they have no account. That was already true of the
+ * old value and is not made worse by fixing it — and the step above is the
+ * real answer, which is why it is the operator's support MAILBOX rather than
+ * a second URL variable they would have to discover.
  */
 export const PLATFORM_SUPPORT_URL: string = (() => {
   const configured = clean(process.env.NEXT_PUBLIC_PLATFORM_SUPPORT_URL)
   if (configured) return configured
   const operatorEmail = clean(process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL)
   if (operatorEmail) return `mailto:${operatorEmail}`
-  return 'https://aglyn.com/support'
+  return 'https://app.aglyn.com/support'
 })()
 
 /** True when this deployment still answers to Aglyn's own brand. */
