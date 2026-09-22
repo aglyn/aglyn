@@ -102,6 +102,7 @@ const { readServiceAccount, getServiceAccountToken, resolveStorageBucket } =
 // owns the read, the conditional write and the prune that refuses `*`.
 const {
   CONSOLE_PROJECT,
+  DEFAULT_WORKSPACE_DOMAIN,
   TEAM_SCOPE,
   fetchBucketCors,
   fetchProjectDomains,
@@ -148,7 +149,7 @@ const CANARY_SLUG_PREFIX = 'signup-canary-'
  * overrides them the way every other Vercel-aware script here lets them.
  */
 const WORKSPACE_DOMAIN =
-  process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'] ?? 'aglyn.com'
+  process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'] ?? DEFAULT_WORKSPACE_DOMAIN
 const VERCEL_TOKEN = process.env['VERCEL_TOKEN'] ?? ''
 const VERCEL_PROJECT =
   process.env['VERCEL_CONSOLE_PROJECT_ID'] || CONSOLE_PROJECT
@@ -213,12 +214,12 @@ function done(detail = '') {
  *
  * `createOrganization` awaits `attachWorkspaceDomain(slug)`, and that call
  * reaches two systems no document delete can touch: it registers
- * `{slug}.aglyn.com` on the console's Vercel project, and it admits
- * `https://{slug}.aglyn.com` into the media bucket's upload CORS. A reap that
- * cleared only documents therefore left both behind on EVERY walk — one of
- * each per hour, collected by nothing. Measured 2026-09-21: 132 orphaned
- * `signup-canary-*` domains on a project holding 159, and the same 132 origins
- * on a bucket holding 154, against 14 real `orgSlugs`.
+ * `{slug}.{WORKSPACE_DOMAIN}` on the console's Vercel project, and it admits
+ * `https://{slug}.{WORKSPACE_DOMAIN}` into the media bucket's upload CORS. A
+ * reap that cleared only documents therefore left both behind on EVERY walk
+ * — one of each per hour, collected by nothing. Measured 2026-09-21: 132
+ * orphaned `signup-canary-*` domains on a project holding 159, and the same
+ * 132 origins on a bucket holding 154, against 14 real `orgSlugs`.
  *
  * The stale origin is the one that matters. It is a standing upload permission
  * for a host nobody serves, on a bucket where the signed URL IS the
