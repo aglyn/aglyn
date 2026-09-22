@@ -23,6 +23,7 @@ import {
   WORKSPACE_DOMAIN,
 } from './constants/workspace-domain'
 import { isConsoleRouteSegment } from './constants/console-routes'
+import { notFoundRefusal } from './constants/not-found-refusal'
 import { enforceSanctionsGeo } from './constants/sanctions-geo'
 // One source of truth for the frame-ancestors allowlist, shared with
 // `with-aglyn.nextjs.config.js` so the two cannot drift (AGL-523).
@@ -141,6 +142,23 @@ const WELL_KNOWN_PREFIX = '/.well-known'
  * it is the one page the COOP header in `applyCsp` does not isolate.
  */
 const EDIT_ACCESS_PATH = '/edit-access'
+
+/**
+ * A 404 with a page in it (AGL-3261).
+ *
+ * All three gates below refuse before Next.js routing, so `app/not-found.tsx`
+ * is unreachable from here and the refusal has to carry its own body — see
+ * `constants/not-found-refusal.ts` for why it is HTML rather than a rewrite.
+ *
+ * Re-wrapped as a `NextResponse` for the same reason the geo refusal above is:
+ * the module stays framework-free, and returning its bare `Response` would
+ * widen this function's inferred return type and break every caller that reads
+ * `.cookies` off it.
+ */
+function refuseNotFound(): NextResponse {
+  const refusal = notFoundRefusal()
+  return new NextResponse(refusal.body, refusal)
+}
 
 /** The first path segment, or `''` for the root. */
 function firstSegment(request: NextRequest): string {
@@ -340,7 +358,7 @@ export async function middleware(request: NextRequest) {
     pathname === WELL_KNOWN_PREFIX ||
     pathname.startsWith(`${WELL_KNOWN_PREFIX}/`)
   ) {
-    return new NextResponse(null, { status: 404 })
+    return refuseNotFound()
   }
 
   // THE AUTH ORIGIN IS SINGLE-PURPOSE, AND ONLY ITS OWN FAMILY IS SERVED
@@ -371,7 +389,7 @@ export async function middleware(request: NextRequest) {
   // the auth origin holds no workspace, so no verdict is worth spending.
   if (hostnameOf(request.headers.get('host')) === `auth.${WORKSPACE_DOMAIN}`) {
     if (!isConsoleRouteSegment(firstSegment(request))) {
-      return new NextResponse(null, { status: 404 })
+      return refuseNotFound()
     }
   }
 
@@ -589,7 +607,7 @@ export async function middleware(request: NextRequest) {
     if (!isConsoleRouteSegment(first)) {
       const verdict = await resolveOrgSlug(first, new URL(request.url).origin)
       if (!verdict.known && !verdict.movedTo) {
-        return new NextResponse(null, { status: 404 })
+        return refuseNotFound()
       }
     }
     return pass()

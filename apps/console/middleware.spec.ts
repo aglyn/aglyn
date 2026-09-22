@@ -1088,3 +1088,42 @@ describe('no console URL is wrong any more (AGL-3017)', () => {
     }
   })
 })
+
+describe('a refused path is a page, not a dead socket (AGL-3261)', () => {
+  /*
+   * All three gates refused with `new NextResponse(null, { status: 404 })`.
+   * A 404 with no body and no `Content-Type` does not render: Chrome answers a
+   * top-level navigation onto one with `ERR_INVALID_RESPONSE` — "This site
+   * can't be reached" — so a typo and an outage look identical, and
+   * `app.aglyn.com/support` was reported as the site being down.
+   *
+   * The status is what the gates are for and is covered above. These assert
+   * the half that decides whether a person can read the answer.
+   */
+  it.each([
+    ['an unknown workspace', 'app.aglyn.com', '/support'],
+    ['the well-known namespace', 'app.aglyn.com', '/.well-known/openid-config'],
+    ['a stray path on the auth origin', 'auth.aglyn.com', '/oauth/authorize'],
+  ])('answers %s with a readable 404', async (_case, host, path) => {
+    const response = await middleware(request(host, path))
+    expect(response.status).toBe(404)
+    expect(response.headers.get('content-type')).toMatch(/^text\/html/)
+    await expect(response.text()).resolves.toContain('Page not found')
+  })
+
+  it('names no company — a white-label console reaches these gates', async () => {
+    // The 451 beside this one interpolates the operator, and had to be taught
+    // not to print `Aglyn` at a self-hosted install's visitor (AGL-2016). This
+    // body sidesteps that trap by naming nobody at all.
+    const refused = await middleware(request('app.aglyn.com', '/support'))
+    await expect(refused.text()).resolves.not.toMatch(/Aglyn/i)
+  })
+
+  it('is never cached, or one probe pins the 404 onto a new org', async () => {
+    // The unknown verdict behind it is trusted for five seconds on purpose.
+    // The CDN in front caches by URL and not by requester, so a cacheable
+    // refusal would outlive the verdict it came from by a wide margin.
+    const refused = await middleware(request('app.aglyn.com', '/support'))
+    expect(refused.headers.get('cache-control')).toContain('no-store')
+  })
+})
