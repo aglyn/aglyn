@@ -18,7 +18,7 @@
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import type { ReusableComponentProp } from '@aglyn/aglyn/foundation/definitions/platform.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
-import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
+import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import { AI_STEP_TIERS } from '../providers/catalog'
 import { AI_ROUTING_TABLE, aiModelForStep } from '../providers/routing'
 import { runValidatedGeneration } from '../runtime/ai-doctrine'
@@ -33,13 +33,14 @@ import {
 } from '../tools/ai-component-tool'
 import { registerAiJobAdmission, type AiJobAdmission } from './ai-job-admission'
 import { aiJobStepBudget } from './ai-job-budget'
-import { aiComponentCheck } from './ai-job-component-checks'
+import { aiComponentCheck, aiPlannedComponentProps } from './ai-job-component-checks'
 import { aiJobDraftId } from './ai-job-draft-ids'
 import {
   aiDraftAdmissionRefusal,
   aiDraftAllowanceRefusal,
   aiSiteSubdomain,
   readAiDraft,
+  readAiDraftComponentProps,
   writeAiDraft,
   type AiDraftRecord,
 } from './ai-job-drafts'
@@ -132,6 +133,61 @@ export function aiJobComponentPrompt(
   return [`Component name: ${name}`, aiJobBriefLine(job), ...aiPlanReferenceLines(plan)].join('\n')
 }
 
+/**
+ * The props the confirmed plan gives the component, against the component a
+ * COPY actually produced (AGL-3024); `null` when the copy keeps the plan, or
+ * when the plan promised no prop to keep.
+ *
+ * The third kind to need this, after the layout (`aiCopiedLayoutReview`) and
+ * the page (`aiCopiedPageReview`), and found the same way: a duplicate branch
+ * generates nothing, so it is the one place a plan's promise can go unmet
+ * with no model to answer for it.
+ *
+ * MEASURED 2026-09-21. A plan read "the existing card has no link target; the
+ * brief needs one", and `practice-area-link-card` came out BYTE-IDENTICAL to
+ * `practice-area-card` — the same seven nodes under the same ids, the same
+ * three props, no link anywhere. Its job reported the copy as built. So did
+ * `practice-area-link-card-v2` the following pass. A component job can
+ * therefore charge a member for a duplicate of something they already had.
+ *
+ * A copy that cannot be read back settles nothing, and a promise this step
+ * cannot settle is reviewed by a person rather than reported as kept.
+ */
+export async function aiCopiedComponentReview(
+  firestore: FirebaseFirestore.Firestore,
+  input: { hostId: string; id: string; name: string; plan: AiJobPlan | null },
+): Promise<AiJobReview | null> {
+  const promised = aiPlannedComponentProps(input.plan)
+  if (!promised.length) return null
+  const declared = await readAiDraftComponentProps(firestore, { hostId: input.hostId, id: input.id })
+  if (declared === null) {
+    return {
+      reason: 'doctrine',
+      message: `"${input.name}" was copied from the component the plan names, and this job could not read the copy back to check it has the properties the plan gives it. Open the component and check it before you place it.`,
+      findings: [],
+    }
+  }
+  const missing = promised.filter((name) => !declared.includes(name))
+  if (!missing.length) return null
+  const one = missing.length === 1
+  return aiDoctrineReview({
+    message: `"${input.name}" is a copy of the component the plan names, and a copy is all it is: the plan gives it ${
+      one ? 'a property' : 'properties'
+    } the copy does not have.`,
+    violations: [
+      {
+        rule: null,
+        code: 'plan-props-missing',
+        message: `The confirmed plan says this component has ${missing.join(', ')}, and the copy has ${
+          declared.length ? declared.join(', ') : 'none of them'
+        }. Add ${one ? 'it' : 'each of them'}, and use ${
+          one ? 'it' : 'them'
+        } in the component, or the copy is the component it was copied from.`,
+      },
+    ],
+  })
+}
+
 /** A component job is admitted for a site of the job's own org whose plan includes reusable components. */
 export const aiComponentJobAdmission: AiJobAdmission = (context) =>
   aiDraftAdmissionRefusal(context.firestore, {
@@ -203,6 +259,17 @@ export function createAiJobComponentStep(deps: AiJobComponentStepDeps = {}): AiJ
       })
       if (copy.ok) {
         const hostSubdomain = await aiSiteSubdomain(firestore, hostId)
+        // The copy is reported with what the plan promised of it read back
+        // (AGL-3024): this branch generates nothing, so without this a plan
+        // reading "duplicate it and add a link" reports Done on a duplicate
+        // that added nothing.
+        const review = await aiCopiedComponentReview(firestore, {
+          hostId,
+          id: copy.id,
+          name: copy.name,
+          plan,
+        })
+        if (review) return aiUnspentOutcome(model, { review })
         return aiUnspentOutcome(model, {
           outputs: [
             output({ id: copy.id, versionId: copy.versionId ?? null, name: copy.name, hostSubdomain }),

@@ -19,7 +19,8 @@ import { hostCollectionKind } from '@aglyn/aglyn/app-utils/collection-kind'
 import { normalizeScreenSlug } from '@aglyn/aglyn/app-utils/screen-route'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { duplicateResource } from '@aglyn/tenant-data-admin/server/duplicate-resource'
-import type { AiJob, AiJobOutput, AiJobPlan } from '../model/ai-jobs.types'
+import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
+import type { AiJob, AiJobOutput, AiJobPlan, AiJobReview } from '../model/ai-jobs.types'
 import {
   AI_TEMPLATE_SUBJECT_DEFINITIONS,
   AI_TEMPLATE_SUBJECTS,
@@ -52,6 +53,7 @@ import {
   aiDraftAllowanceRefusal,
   aiSiteSubdomain,
   readAiDraft,
+  readAiTemplateDraftNodes,
   writeAiDraft,
   type AiDraftRecord,
 } from './ai-job-drafts'
@@ -68,7 +70,7 @@ import {
   aiPlanReuseViolations,
   aiUnspentOutcome,
 } from './ai-job-generation'
-import { aiPlanTemplateTokenViolations } from './ai-job-plan-conformance'
+import { aiPlannedTemplateTokens, aiPlanTemplateTokenViolations } from './ai-job-plan-conformance'
 import type { AiJobStepRunner } from './ai-job-text-step'
 import { aiJobStepBudget } from './ai-job-budget'
 import { registerAiJobStep } from './ai-jobs'
@@ -338,6 +340,55 @@ export interface AiJobTemplateStepDeps {
   examples?: () => AiSystemBlock
 }
 
+/**
+ * The binding tokens the confirmed plan gives the template, against the
+ * template a COPY actually produced (AGL-3024); `null` when the copy keeps
+ * the plan, or when the plan promised no token to keep.
+ *
+ * The same hole as `aiCopiedLayoutReview` and `aiCopiedPageReview`, on the
+ * third kind that can start from a duplicate. The generate path already holds
+ * a built template to `aiPlanTemplateTokenViolations`; the copy path reached
+ * none of it, so a plan reading "duplicate it and bind the author's photo"
+ * got the duplicate and reported Done.
+ *
+ * A copy that cannot be read back settles nothing, and a promise this step
+ * cannot settle is reviewed by a person rather than reported as kept.
+ */
+export async function aiCopiedTemplateReview(
+  firestore: FirebaseFirestore.Firestore,
+  input: {
+    hostId: string
+    id: string
+    name: string
+    plan: AiJobPlan | null
+    definition: AiTemplateSubjectDefinition
+  },
+): Promise<AiJobReview | null> {
+  const { tokens, unreadable } = aiPlannedTemplateTokens(input.plan, input.definition)
+  if (!tokens.length && !unreadable.length) return null
+  const stored = await readAiTemplateDraftNodes(firestore, {
+    hostId: input.hostId,
+    id: input.id,
+  })
+  const nodes = (stored ?? {}) as unknown as Record<string, AiDoctrineNode>
+  if (!nodes[CANVAS_ROOT_ELEMENT_ID]) {
+    return {
+      reason: 'doctrine',
+      message: `"${input.name}" was copied from the template the plan names, and this job could not read the copy back to check it shows what the plan gives it. Open the template and check it before you apply it.`,
+      findings: [],
+    }
+  }
+  const violations = aiPlanTemplateTokenViolations(input.plan, input.definition, {
+    rootId: CANVAS_ROOT_ELEMENT_ID,
+    nodes,
+  })
+  if (!violations.length) return null
+  return aiDoctrineReview({
+    message: `"${input.name}" is a copy of the template the plan names, and a copy is all it is: ${violations[0].message}`,
+    violations,
+  })
+}
+
 export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJobStepRunner {
   const readInventory = deps.readInventory ?? readSiteInventory
   const duplicate = deps.duplicate ?? duplicateResource
@@ -405,6 +456,16 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
       })
       if (copy.ok) {
         const hostSubdomain = await aiSiteSubdomain(firestore, hostId)
+        // The copy is reported with what the plan promised of it read back
+        // (AGL-3024): this branch generates nothing, so nothing else can.
+        const review = await aiCopiedTemplateReview(firestore, {
+          hostId,
+          id: copy.id,
+          name: copy.name,
+          plan,
+          definition,
+        })
+        if (review) return aiUnspentOutcome(model, { review })
         return aiUnspentOutcome(model, {
           outputs: [output({ id: copy.id, versionId: null, name: copy.name, hostSubdomain })],
         })
