@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.159 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.158...v1.0.0-beta.159)
+
+### Fixed
+
+- **canary:** the signup reap hands back the workspace subdomain and its upload origin ([AGL-3236](https://linear.app/aglyn/issue/AGL-3236))
+
 ## v1.0.0-beta.158 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/fea854d18...v1.0.0-beta.158)
