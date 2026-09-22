@@ -71,6 +71,38 @@ The contact's own page links back: **Lead on this site** on the
 [Relationship card](./contact-record.md#where-the-persons-lead-is) opens the
 lead when this site holds one for the address.
 
+## What a lead holds
+
+A lead is a record of its own — the way it is in Salesforce — and carries the person and
+their company **as text** until it converts:
+
+| Field | Notes |
+| --- | --- |
+| **Email** | The identity: a site holds one lead per address. |
+| **Name** | The person's name. |
+| **Company** | The company's name, typed. Not a link — a thousand imported leads must not create a thousand companies. [Converting](#converting-a-lead) is what links or creates the company record, by this name or by the address's domain. |
+| **Job title**, **Phone**, **Website** | As on a business card. The phone is stored with its country code; the website as a full address. |
+| **Lead source** | Where the lead came from, in your words — *Sales Navigator*, *Trade show*, *Referral*. Distinct from **Sources** below, which the site records. |
+| **Tags** | Comma-separated, lower-cased. |
+| **Address** | Street, city, state, postal code and a two-letter country code. |
+| **Status**, **Owner**, **Notes** | The working state — see [The Leads list](#the-leads-list). |
+
+Every one of them is editable on the [lead's page](#a-leads-page), comes in through
+[Import CSV](#import-from-csv), and is handed to the contact when the lead converts.
+
+### Adding a lead by hand
+
+**New lead**, at the top of the Leads list, opens a drawer over the list — the list stays
+exactly where it was. Type what you know: the email is the one required field, and the
+company, title, phone, website, lead source, status, owner, tags, address and notes are
+optional. At the organization level the drawer first asks which site to file the lead
+under, since a lead is private to one site.
+
+It creates a lead and nothing else. No contact and no company are made — that is what
+converting does, once the lead is real. If the site already holds a lead for the address,
+what you typed is written onto it and the page says so. Adding a lead is never marketing
+consent, so none is recorded.
+
 ## The Leads list
 
 The list shows the most recently seen leads first — a person who booked
@@ -80,9 +112,11 @@ Each row carries:
 | Column | What it shows |
 | --- | --- |
 | **Lead** | The name the person gave, with their email beneath it — or the email alone. |
+| **Company**, **Title** | The lead's own company and job title, as text. |
 | **Status** | New, Working, Qualified or Unqualified. Change it in place from the row. |
 | **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
-| **Source** | Every surface that captured this person: Sign-up, Booking, or the form they submitted. |
+| **Source** | Every surface that captured this person: Sign-up, Booking, the form they submitted, an import, or New lead. |
+| **Tags** | The lead's tags. |
 | **Last seen** | When the person last did something on your site. |
 
 The **Show** control at the top of the card picks the view. **Open** — the
@@ -123,10 +157,11 @@ the **Show** view changes.
 
 **Export CSV** at the top of the card downloads the listed leads — every row
 the **Show** view admits, not only the page on screen — as `leads.csv`:
-email, name, status, the owner by email address, the sources by name, first
-and last seen, the number of captures, the unqualified reason, when the lead
-converted, and notes. At the organization level the file also names each
-lead's **Site**.
+email, name, company, job title, phone, website, status, the owner by email
+address, the lead source, the sources by name, first and last seen, the
+number of captures, the address in six columns, tags, the unqualified reason,
+when the lead converted, and notes. At the organization level the file also
+names each lead's **Site**.
 
 ### Import from CSV
 
@@ -148,6 +183,9 @@ over no rows.
 | --- | --- |
 | **Email** | Required, and the identity. A row whose address cannot be read is skipped as *No usable email address*; two rows with the same address skip the second as a duplicate. |
 | **Name** | The person's name, as the list and campaign merge tags read it. |
+| **Company name**, **Job title**, **Phone**, **Website**, **Lead source** | The lead's own profile, as text. A phone is read with its country code (a bare ten-digit number as North American); a website as `acme.com` or a full address. A phone or website that cannot be read is dropped and reported, and the rest of the row is kept. |
+| **Address line 1** … **Country (two-letter code)** | The address, six columns as the contacts import takes them. A country typed as a name rather than a code is dropped and reported. |
+| **Tags** | Comma or `\|` separated, lower-cased. |
 | **Status** | `new`, `working` or `unqualified`, by id or by label. **Qualified** is not a status a file may set — a lead becomes qualified by [converting](#converting-a-lead), beside the contact that conversion created — so a cell naming it is dropped and reported, and the lead keeps the status it has. |
 | **Owner** | The email address of a member of your organization. An address that matches nobody leaves the lead unassigned and is named at the end of the import. |
 | **Unqualified reason** | Kept only on a row whose **Status** is `unqualified`; on any other row it is dropped and reported, because the reason is what an unqualified lead was closed for. |
@@ -186,11 +224,13 @@ alone; the contact, when there is one, is assigned from its own record.
 
 Click a row to open the lead. The page has two cards.
 
-**Lead** holds what the team decides: the status, the owner, and free-text
-**notes** with a **Save notes** button. It also shows the identity the capture
-recorded — email and name, and a phone number when the form that captured
-them took one — and the person's **marketing consent**: whether they opted in
-(and when), declined, or never recorded a choice. A lead with no recorded
+**Lead** holds what the team decides: the status, the owner, the lead's
+**profile** — company, job title, phone, website, lead source, tags and
+address, edited together under one **Save** — and free-text **notes** with a
+**Save notes** button. It also shows the identity the capture recorded —
+email and name — and the person's **marketing consent**: whether they opted
+in (and when), declined, or never recorded a choice. Once the lead converts,
+the profile is read-only here: the contact is the record then. A lead with no recorded
 consent cannot be sent marketing email, which is worth knowing before you
 promise them a newsletter. The card's header carries **Call** and **Log a
 call** beside **Send email** — see
@@ -208,7 +248,8 @@ When a lead is real, click **Convert** on the lead's page, or choose
 from the list in one click. The dialog asks three things:
 
 1. **Contact.** The lead becomes a contact at the **Sales qualified**
-   lifecycle stage, owned by whoever you pick — the lead's owner by default.
+   lifecycle stage, carrying the lead's phone, job title, address, tags,
+   notes and company name, owned by whoever you pick — the lead's owner by default.
    Pick nobody and the workspace's [assignment rules](./settings.md#assignment-rules)
    and the site's [default owner](./settings.md#default-owner) decide, and
    failing those the contact is yours. A colleague you pick is notified;

@@ -356,6 +356,45 @@ describe('what a row becomes', () => {
    * collection does not have. The org above pooled two sites, so the
    * import context really did resolve tokens to drop.
    */
+  /**
+   * The lead's own profile (AGL-3231) lands beside the working state, in
+   * the shape the record's card writes, and never clears a value a blank
+   * cell did not name.
+   */
+  it('writes the profile the file carries, and leaves what it does not', async () => {
+    docs.set(`hosts/${HOST_ID}/leads/${personKey('dana@example.com')}`, {
+      email: 'dana@example.com',
+      sources: ['signup'],
+      submissionCount: 1,
+      firstSeenAtMs: 1,
+      lastSeenAtMs: 1,
+      jobTitle: 'CMO',
+      tags: ['warm'],
+    })
+    const out = await importRows([
+      {
+        email: 'dana@example.com',
+        company: 'Acme Brands',
+        phone: '(512) 555-0107',
+        website: 'acme.com',
+        leadSource: 'Sales Navigator',
+        addressCity: 'Austin',
+        addressCountry: 'US',
+        tags: 'icp2|a-list',
+      },
+    ])
+    expect(out.code).toBe(200)
+    expect(leadAt('dana@example.com')).toMatchObject({
+      company: 'Acme Brands',
+      jobTitle: 'CMO',
+      phone: '+15125550107',
+      website: 'https://acme.com/',
+      leadSource: 'Sales Navigator',
+      address: { city: 'Austin', country: 'US' },
+      tags: ['icp2', 'a-list'],
+    })
+  })
+
   it('stamps no visibleTo and no facet map, because the site IS the scope', async () => {
     await importRows([{ email: 'dana@example.com', status: 'working' }])
     const lead = leadAt('dana@example.com') as Record<string, unknown>

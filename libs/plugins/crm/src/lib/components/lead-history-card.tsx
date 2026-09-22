@@ -41,6 +41,9 @@ export function leadSourceLabel(source: string): string {
   if (source === 'booking') return 'Booking'
   if (source === 'import') return CONTACT_SOURCE_LABELS.import
   if (source === 'form') return CONTACT_SOURCE_LABELS.form
+  // A lead entered by hand or over the REST API (AGL-3231).
+  if (source === 'manual') return 'Added by hand'
+  if (source === 'api') return 'API'
   if (source.startsWith('form:')) return `Form ${source.slice('form:'.length)}`
   return source
 }

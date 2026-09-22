@@ -107,6 +107,18 @@ jest.mock('./lead-history-card', () => ({
 jest.mock('./lead-unqualify-dialog', () => ({
   LeadUnqualifyDialog: () => null,
 }))
+/*
+ * The New lead drawer (AGL-3231) and the route it posts to: the drawer has
+ * a spec of its own, and here it is the thing the button opens.
+ */
+jest.mock('./new-lead-drawer', () => ({
+  __esModule: true,
+  default: (props: { open: boolean }) =>
+    props.open ? <div role="dialog">{'New lead drawer'}</div> : null,
+}))
+jest.mock('./use-crm-api', () => ({
+  useCrmApi: () => jest.fn(),
+}))
 jest.mock('./lead-convert-dialog', () => ({
   LeadConvertDialog: (props: Record<string, unknown> & { open: boolean }) => {
     if (!props.open) return null
@@ -221,6 +233,15 @@ beforeEach(() => {
   orgRows = []
   mount = null
   opened.length = 0
+})
+
+describe('New lead on the Leads list (AGL-3231)', () => {
+  it('opens the drawer from the card header', () => {
+    renderSite()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New lead' }))
+    expect(screen.getByRole('dialog').textContent).toBe('New lead drawer')
+  })
 })
 
 describe('Convert… on the Leads row menu (AGL-2641)', () => {

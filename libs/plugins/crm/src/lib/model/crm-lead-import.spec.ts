@@ -67,10 +67,22 @@ describe('guessLeadImportMapping', () => {
     expect(guessLeadImportMapping(leadCsvHeader())).toEqual({
       0: 'email',
       1: 'name',
-      2: 'status',
-      3: 'ownerEmail',
-      8: 'unqualifiedReason',
-      10: 'notes',
+      2: 'company',
+      3: 'jobTitle',
+      4: 'phone',
+      5: 'website',
+      6: 'status',
+      7: 'ownerEmail',
+      8: 'leadSource',
+      13: 'addressLine1',
+      14: 'addressLine2',
+      15: 'addressCity',
+      16: 'addressState',
+      17: 'addressPostalCode',
+      18: 'addressCountry',
+      19: 'tags',
+      20: 'unqualifiedReason',
+      22: 'notes',
     })
   })
 
@@ -83,7 +95,7 @@ describe('guessLeadImportMapping', () => {
     const mapping = guessLeadImportMapping(
       leadCsvHeader({ siteName: (id: string) => id }),
     )
-    expect(mapping[4]).toBeUndefined()
+    expect(mapping[8]).toBeUndefined()
     expect(Object.values(mapping)).not.toContain('hostId')
   })
 
@@ -96,6 +108,12 @@ describe('guessLeadImportMapping', () => {
         'Assigned To',
         'Lost reason',
         'Comments',
+        'Account Name',
+        'Headline',
+        'Mobile',
+        'Company Domain',
+        'Source',
+        'Labels',
       ]),
     ).toEqual({
       0: 'email',
@@ -104,6 +122,12 @@ describe('guessLeadImportMapping', () => {
       3: 'ownerEmail',
       4: 'unqualifiedReason',
       5: 'notes',
+      6: 'company',
+      7: 'jobTitle',
+      8: 'phone',
+      9: 'website',
+      10: 'leadSource',
+      11: 'tags',
     })
   })
 })
@@ -154,9 +178,54 @@ describe('normalizeLeadImportRow', () => {
         status: 'working',
         ownerEmail: 'rep@example.com',
         notes: 'Met at the trade show',
+        profile: {},
         dropped: [],
       },
     })
+  })
+
+  /**
+   * The lead's own profile (AGL-3231): every field through the normalizer
+   * the record's card runs, so an imported phone dials and an imported
+   * website opens; a value neither can read is dropped and named.
+   */
+  it('normalizes the profile the way the record stores it', () => {
+    const verdict = normalizeLeadImportRow({
+      email: 'dana@example.com',
+      company: ' Acme  Brands ',
+      jobTitle: 'VP Marketing',
+      phone: '(512) 555-0107',
+      website: 'acme.com',
+      leadSource: 'Sales Navigator',
+      addressCity: 'Austin',
+      addressState: 'TX',
+      addressCountry: 'us',
+      tags: 'ICP2, a-list | Icp2',
+    })
+    expect(verdict.ok && verdict.row.profile).toEqual({
+      company: 'Acme Brands',
+      jobTitle: 'VP Marketing',
+      phone: '+15125550107',
+      website: 'https://acme.com/',
+      leadSource: 'Sales Navigator',
+      address: { city: 'Austin', state: 'TX', country: 'US' },
+      tags: ['icp2', 'a-list'],
+    })
+  })
+
+  it('drops a phone, a website or a country it cannot read, and names each', () => {
+    const verdict = normalizeLeadImportRow({
+      email: 'dana@example.com',
+      phone: 'call me',
+      website: 'javascript:alert(1)',
+      addressCountry: 'United States',
+    })
+    expect(verdict.ok && verdict.row.profile).toEqual({})
+    expect(verdict.ok && verdict.row.dropped).toEqual([
+      { field: 'phone', value: 'call me' },
+      { field: 'website', value: 'javascript:alert(1)' },
+      { field: 'addressCountry', value: 'United States' },
+    ])
   })
 
   it('refuses a row whose address cannot be read, and says what it was', () => {

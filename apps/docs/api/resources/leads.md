@@ -1,17 +1,20 @@
 ---
 sidebar_position: 13
 title: Leads
-description: Read a site's work queue over the REST API — every person it has captured, with status, owner and notes — and convert a lead into a contact, a company and a deal.
+description: Create and work a site's leads over the REST API — a record of its own, with the person and their company as text — and convert one into a contact, a company and a deal.
 ---
 
 # Leads
 
-Somebody a site has met but you have not yet qualified: a visitor who signed up, booked,
-or submitted a form. A lead carries what the capture recorded — the address, the name,
-the surfaces it came through, when it was first and last seen, whether it opted in to
-marketing — and the working state the team keeps on it: a [status](#status), an owner
-and notes. Converting a lead is what turns it into a [contact](contacts.md), and
-optionally a [company](companies.md) and a [deal](deals.md).
+Somebody you have heard of and not yet qualified: a visitor who booked or wrote in
+through a lead-routed form, or a person from a list your team sourced elsewhere. A lead
+is a record of its own, the way it is in Salesforce: it carries the person and their
+company **as text** — name, company, title, phone, website, address, tags, where they
+came from — beside what a capture recorded (the surfaces, first and last seen, marketing
+consent) and the working state the team keeps: a [status](#status), an owner and notes.
+Nothing else exists until it converts: converting is what makes the
+[contact](contacts.md), and optionally the [company](companies.md) and a
+[deal](deals.md), from what the lead holds.
 
 Scopes are the CRM's — `crm:read` to read, `crm:write` to work and convert — and the
 resource needs a plan that includes the CRM suite, like every resource on
@@ -47,7 +50,14 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
   "ownerUid": "u_9f1c",
   "notes": "Asked for a demo on Thursday",
   "unqualifiedReason": null,
-  "sources": ["form:contact-us", "signup"],
+  "company": "Acme Brands",
+  "jobTitle": "VP Marketing",
+  "phone": "+15125550107",
+  "website": "https://acme.com/",
+  "address": { "city": "Austin", "state": "TX", "country": "US" },
+  "tags": ["icp2", "a-list"],
+  "leadSource": "Sales Navigator",
+  "sources": ["form:contact-us", "api"],
   "submissionCount": 2,
   "firstSeen": "2026-08-30T15:02:11.000Z",
   "lastSeen": "2026-09-04T09:41:07.000Z",
@@ -67,13 +77,20 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
 | `id` | string | The lead's id within its site. Stable for the address: a person who submits twice is one lead, seen twice. |
 | `object` | string | Always `"lead"`. |
 | `siteId` | string | The site that captured the lead. **Read-only.** |
-| `email` | string \| null | The captured address. **Read-only.** |
-| `name` | string \| null | The name the person typed, when they typed one. **Read-only.** |
+| `email` | string \| null | The address — the lead's identity within its site. Set on [create](#create-a-lead); **read-only** after. |
+| `name` | string \| null | The person's name. Set on create or by a capture; **read-only** on a `PATCH`. |
 | `status` | string | `new`, `working`, `qualified` or `unqualified` — see [Status](#status). Writable, with rules. |
 | `ownerUid` | string \| null | The team member working the lead. Must be a member of your organization. Writable — by uid, or as `ownerEmail` (see [Update a lead](#update-a-lead)). |
 | `notes` | string \| null | Free text, 5,000 characters. Writable. |
 | `unqualifiedReason` | string \| null | Why the lead was closed without converting. Present only while `status` is `unqualified`. Writable, with `status`. |
-| `sources` | string[] | Every surface that produced a capture: `signup`, `booking`, `form:{formId}`. **Read-only.** |
+| `company` | string \| null | The company's name, **as text**. A lead names its company the way a business card does; converting is what links or creates the company record, by this name or by the address's domain. Writable. |
+| `jobTitle` | string \| null | Writable. |
+| `phone` | string \| null | E.164 (`+15125550107`). A number with no country code is read as North American; anything unreadable is a `400` under the field. Writable. |
+| `website` | string \| null | An http(s) URL; `acme.com` is stored as `https://acme.com/`. Writable. |
+| `address` | object \| null | `line1`, `line2`, `city`, `state`, `postalCode`, `country` (two-letter code). Writable; a blank address clears. |
+| `tags` | string[] | Lower-cased, deduplicated, at most 20. Writable — as an array, or a comma-separated string. |
+| `leadSource` | string \| null | Where the lead came from, as text — what Salesforce calls Lead Source. Writable. Distinct from `sources`, which the site records. |
+| `sources` | string[] | Every surface that produced a capture: `signup`, `booking`, `form:{formId}`, `import`, `manual` (the console's New lead), `api` (this resource). **Read-only.** |
 | `submissionCount` | number | How many captures this lead represents. **Read-only.** |
 | `firstSeen` / `lastSeen` | string \| null | ISO 8601 — the first and the latest capture. **Read-only.** |
 | `marketingConsent` | boolean | Whether the person ticked a marketing opt-in on this site; `marketingConsentAt` is when. **Read-only.** |
@@ -116,6 +133,42 @@ can come back [short](../conventions.md#short-pages) — keep following `next_cu
 `has_more` is false. That is deliberate: a lead nobody has touched carries no status at
 all and reads as `new`, which is exactly the lead a query on the stored field would miss.
 
+### Create a lead
+
+`POST /v1/leads?siteId={siteId}` — scope `crm:write`. Accepts an
+[`Idempotency-Key`](../conventions.md#idempotency), scoped to the site.
+
+A lead sourced outside the site — a list, an event, a referral — entered before anyone
+has qualified it. It creates a lead and **nothing else**: no contact, no company. Those
+come from [converting](#convert-a-lead) it, from what the lead holds by then.
+
+| Key | Notes |
+| --- | --- |
+| `email` | **Required.** The lead's identity within its site — one address is one lead per site. |
+| `name` | The person's name. |
+| `company`, `jobTitle`, `phone`, `website`, `address`, `tags`, `leadSource` | The lead's own profile, as [above](#the-lead-object). |
+| `status` | `new` (the default) or `working`. |
+| `ownerUid` / `ownerEmail` | Who works the lead. |
+| `notes` | Free text. |
+| `siteId` | Instead of the query parameter. |
+
+```bash
+curl -X POST "https://app.aglyn.com/api/v1/leads?siteId=site_a1b2c3" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Idempotency-Key: 7c2e…" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ann@acme.com","name":"Ann Lee","company":"Acme Brands","jobTitle":"VP Marketing","leadSource":"Sales Navigator","tags":["icp2"]}'
+```
+
+Returns **`201`** with the lead. A site that **already holds a lead for the address**
+answers **`200`** with that lead, updated: the fields you sent are written onto it, its
+`sources` gain `api`, and its `lastSeen` moves — a second create never mints a second
+row. A blank field in the body is left alone on an update, `null` clears it.
+
+**No marketing consent is recorded.** A create over the API is not a box the person
+ticked; the lead can be included in a campaign audience only if the site already holds a
+consent for the address.
+
 ### Retrieve a lead
 
 `GET /v1/leads/{leadId}?siteId={siteId}` — scope `crm:read`. Returns a lead, or
@@ -133,6 +186,7 @@ An omitted key is left alone, `null` clears an optional field, `{}` is a no-op.
 | `ownerUid` | A member's uid, or `null` to clear. |
 | `ownerEmail` | A member's address, resolved against your organization's roster — for a spreadsheet or a zap that has the address and not the uid. Not with `ownerUid` in the same request. `null` clears. |
 | `notes` | Free text, or `null`. |
+| `company`, `jobTitle`, `phone`, `website`, `address`, `tags`, `leadSource` | The lead's own profile, as [above](#the-lead-object); `null` clears any of them. Writable on a converted lead too — the contact is the record then, but the lead keeps what it knew. |
 
 ```bash
 curl -X PATCH "https://app.aglyn.com/api/v1/leads/5f3c…e9a1?siteId=site_a1b2c3" \
@@ -210,12 +264,12 @@ attributed to the person who made it.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing or foreign `siteId`; a `status` outside its list, or `qualified`; a missing `unqualifiedReason` on an unqualify, or one sent with another status; an `ownerUid` who is not a member, an `ownerEmail` no member has, or both at once; on a conversion, a `company` that is not exactly one of `link`/`create`, a `company.link` that does not exist, a `company.create.domain` that is not a domain, a `deal` with no `title`, a fractional `deal.amountCents` or a malformed `deal.currency`. On the list, a `?status=` outside the four. `fields` names each key — nested ones as `deal.title`. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing or foreign `siteId`; on a create, a missing or unreadable `email`, a `status` other than `new` or `working`, or an `unqualifiedReason`; a `phone` or `website` that cannot be read; a `status` outside its list, or `qualified`; a missing `unqualifiedReason` on an unqualify, or one sent with another status; an `ownerUid` who is not a member, an `ownerEmail` no member has, or both at once; on a conversion, a `company` that is not exactly one of `link`/`create`, a `company.link` that does not exist, a `company.create.domain` that is not a domain, a `deal` with no `title`, a fractional `deal.amountCents` or a malformed `deal.currency`. On the list, a `?status=` outside the four. `fields` names each key — nested ones as `deal.title`. |
 | `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — a conversion would create a record past the band on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such lead"`. |
-| `405` | `method_not_allowed` | `Allow`: `GET` on `/v1/leads`, `GET, PATCH` on one lead, `POST` on `…/convert`. |
-| `409` | `conflict` | `code: "lead_converted"` — a `status` on a converted lead. `code: "lead_not_convertible"` — the lead's address cannot become a contact. `code: "contact_not_created"` — the contact could not be created (the site's audience band may be full); nothing was changed. `code: "person_erased"` — the lead's person was erased from the organization at their request, or an erasure is pending; no contact can be created for the address, and nothing was changed. `code: "pipeline_has_no_stages"` — the default pipeline has no stage to open the deal in. `code: "idempotency_in_progress"`. |
+| `405` | `method_not_allowed` | `Allow`: `GET, POST` on `/v1/leads`, `GET, PATCH` on one lead, `POST` on `…/convert`. |
+| `409` | `conflict` | `code: "lead_ceiling"` — the site is at the platform lead limit; the lead was not created. `code: "lead_converted"` — a `status` on a converted lead. `code: "lead_not_convertible"` — the lead's address cannot become a contact. `code: "contact_not_created"` — the contact could not be created (the site's audience band may be full); nothing was changed. `code: "person_erased"` — the lead's person was erased from the organization at their request, or an erasure is pending; no contact can be created for the address, and nothing was changed. `code: "pipeline_has_no_stages"` — the default pipeline has no stage to open the deal in. `code: "idempotency_in_progress"`. |
 
 See [Conventions → Errors](../conventions.md#errors) for the shared envelope.
 

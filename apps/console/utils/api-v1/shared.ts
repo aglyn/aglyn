@@ -116,6 +116,9 @@ export type ClaimKind =
   | 'activities'
   | 'activity-deletes'
   | 'lead-conversions'
+  // A lead created over the API (AGL-3231) — the door updates an existing
+  // address, so the receipt is the lead's view either way.
+  | 'lead-creates'
   | 'email-templates'
   | 'email-template-deletes'
 

@@ -46,6 +46,19 @@
  * exists to show. The page can come back short, which the conventions page
  * already documents; no composite index is needed and none is shipped.
  *
+ * ## A lead is a record of its own (AGL-3231)
+ *
+ * `POST /v1/leads` creates one — Salesforce's lead, sourced outside the
+ * site and entered before anyone has qualified it: the address, a name,
+ * the company as text, a title, a phone, a website, an address, tags and a
+ * lead source, with the working state beside them. It goes through the one
+ * lead door (`addHostLead`), so a second create for one address updates the
+ * lead the site holds and answers `200` rather than minting a second row;
+ * it writes no contact and no company, which are the conversion's to make;
+ * and it records no marketing basis, because an integration is not a box
+ * the person ticked. The same profile fields are writable on a `PATCH`,
+ * `null` clearing one, and every one of them is published on the lead.
+ *
  * ## What a PATCH may say about a status
  *
  * The same three moves the console offers: `new`, `working`, and
@@ -57,18 +70,24 @@
  * lead being worked again is not "unqualified because …".
  */
 import {
+  checkVisitorRecordCeiling,
   CRM_LEAD_STATUSES,
   type CrmLeadFields,
+  type CrmLeadProfilePatch,
   type CrmLeadStatus,
   crmLeadStatus,
   crmMemberOption,
   findOrgMember,
+  LEADS_MAX_PER_HOST,
   normalizeCompanyDomain,
   normalizeContactEmail,
+  normalizeCrmLeadProfile,
+  personKey,
   readMarketingBasis,
   soloConsentGroup,
 } from '@aglyn/aglyn/server'
 import {
+  addHostLead,
   apiJson,
   ApiErrors,
   decodeCursor,
@@ -133,6 +152,14 @@ function leadView(siteId: string, doc: FirebaseFirestore.DocumentSnapshot) {
     ownerUid: data.ownerUid ?? null,
     notes: data.notes ?? null,
     unqualifiedReason: data.unqualifiedReason ?? null,
+    // The lead's own profile (AGL-3231).
+    company: data.company ?? null,
+    jobTitle: data.jobTitle ?? null,
+    phone: data.phone ?? null,
+    website: data.website ?? null,
+    address: data.address ?? null,
+    tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+    leadSource: data.leadSource ?? null,
     sources: Array.isArray(data['sources']) ? data['sources'].map(String) : [],
     submissionCount:
       typeof data['submissionCount'] === 'number' ? data['submissionCount'] : 0,
@@ -222,6 +249,17 @@ async function readOwner(
 
 // ── PATCH ───────────────────────────────────────────────────────────────────
 
+/** The lead's own fields, writable on a create and a PATCH alike (AGL-3231). */
+const LEAD_PROFILE_KEYS = [
+  'company',
+  'jobTitle',
+  'phone',
+  'website',
+  'address',
+  'tags',
+  'leadSource',
+] as const
+
 const LEAD_WRITABLE = new Set([
   'siteId',
   'status',
@@ -229,20 +267,41 @@ const LEAD_WRITABLE = new Set([
   'ownerEmail',
   'notes',
   'unqualifiedReason',
+  ...LEAD_PROFILE_KEYS,
 ])
 
 interface LeadInput {
   status?: Exclude<CrmLeadStatus, 'qualified'>
   notes?: Clearable<string>
   unqualifiedReason?: Clearable<string>
+  /** The profile as the model read it: a key present and `null` clears. */
+  profile: CrmLeadProfilePatch
+}
+
+/** The profile as an update: a cleared field is deleted, not blanked. */
+function profileUpdate(patch: CrmLeadProfilePatch): Record<string, unknown> {
+  const update: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue
+    update[key] = value === null ? FieldValue.delete() : value
+  }
+  return update
 }
 
 function readLeadInput(
   body: Record<string, unknown>,
 ): { values: LeadInput } | { errors: Record<string, string> } {
   const errors: Record<string, string> = {}
-  const values: LeadInput = {}
+  const values: LeadInput = { profile: {} }
   refuseUnknownKeys(body, LEAD_WRITABLE, 'lead', errors)
+
+  const profileBody: Record<string, unknown> = {}
+  for (const key of LEAD_PROFILE_KEYS) {
+    if (key in body) profileBody[key] = body[key]
+  }
+  const profile = normalizeCrmLeadProfile(profileBody)
+  Object.assign(errors, profile.errors)
+  values.profile = profile.patch
 
   if (body.status !== undefined) {
     if (body.status === 'qualified') {
@@ -284,7 +343,7 @@ async function updateLead(
   }
   const stored = (snap.data() ?? {}) as Record<string, unknown> & CrmLeadFields
 
-  const { status, unqualifiedReason, ...rest } = parsed.values
+  const { status, unqualifiedReason, profile, ...rest } = parsed.values
   if (status !== undefined && stored.convertedContactId) {
     return ApiErrors.conflict({
       message: 'This lead was converted; its status is fixed',
@@ -314,7 +373,10 @@ async function updateLead(
   }
   if (Object.keys(errors).length) return crmValidationFailed(ctx, 'lead', errors)
 
-  const update: Record<string, unknown> = updatePayload({ ...rest, ownerUid })
+  const update: Record<string, unknown> = {
+    ...updatePayload({ ...rest, ownerUid }),
+    ...profileUpdate(profile),
+  }
   if (status !== undefined && status !== current) update.status = status
   if (next === 'unqualified') {
     if (unqualifiedReason !== undefined) update.unqualifiedReason = unqualifiedReason
@@ -326,6 +388,130 @@ async function updateLead(
     await ref.update({ ...update, updatedAt: Timestamp.now() })
   }
   return apiJson(leadView(site.siteId, await ref.get()), { headers: ctx.headers })
+}
+
+// ── Create ──────────────────────────────────────────────────────────────────
+
+const LEAD_CREATE_STATUSES = ['new', 'working'] as const
+const LEAD_NAME_MAX = 120
+
+/** The surface a lead created over the API names, beside `signup`, `booking`, `form:{id}`, `import` and `manual`. */
+const LEAD_API_SOURCE = 'api'
+
+/**
+ * `POST /v1/leads` (AGL-3231). Accepts an `Idempotency-Key`, scoped to the
+ * site. Through the one lead door, so one address is one lead per site: a
+ * second create updates and answers `200`.
+ */
+async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promise<Response> {
+  const body = await readJsonBody(request)
+  const errors: Record<string, string> = {}
+  refuseUnknownKeys(
+    body,
+    new Set([...LEAD_WRITABLE, 'email', 'name']),
+    'lead',
+    errors,
+  )
+  const email = normalizeContactEmail(body.email)
+  if (!email) errors.email = 'Required — an email address'
+  const name = readOptionalText(body, 'name', LEAD_NAME_MAX, errors)
+  const notes = readOptionalText(body, 'notes', CRM_TEXT_MAX, errors)
+  let status: (typeof LEAD_CREATE_STATUSES)[number] | undefined
+  if (body.status !== undefined && body.status !== null) {
+    if (
+      typeof body.status === 'string' &&
+      (LEAD_CREATE_STATUSES as readonly string[]).includes(body.status)
+    ) {
+      status = body.status as (typeof LEAD_CREATE_STATUSES)[number]
+    } else {
+      errors.status = `Must be one of: ${LEAD_CREATE_STATUSES.join(', ')}`
+    }
+  }
+  if (body.unqualifiedReason !== undefined) {
+    errors.unqualifiedReason = 'Not settable on a create — unqualify with a PATCH'
+  }
+  const profileBody: Record<string, unknown> = {}
+  for (const key of LEAD_PROFILE_KEYS) {
+    if (key in body) profileBody[key] = body[key]
+  }
+  const profile = normalizeCrmLeadProfile(profileBody)
+  Object.assign(errors, profile.errors)
+  const site = readLeadSite(ctx, url, body)
+  if ('response' in site) {
+    if (Object.keys(errors).length) {
+      return crmValidationFailed(ctx, 'lead', {
+        ...errors,
+        siteId: 'Required — name the site the lead belongs to',
+      })
+    }
+    return site.response
+  }
+  const ownerUid = await readOwner(ctx, body, errors)
+  if (ownerUid) Object.assign(errors, await memberError(ctx, 'ownerUid', ownerUid))
+  if (Object.keys(errors).length) return crmValidationFailed(ctx, 'lead', errors)
+
+  const claimed = await claimWrite(
+    ctx,
+    site.siteId,
+    request.headers.get('Idempotency-Key'),
+    'lead-creates',
+  )
+  if ('replay' in claimed) return claimed.replay
+  const { claim } = claimed
+  try {
+    const hostRef = ctx.firestore.collection('hosts').doc(site.siteId)
+    const leadsRef = leadsCollection(ctx, site.siteId)
+    // Non-null by construction: the normalizer refused every address this
+    // derivation could not key.
+    const leadId = personKey(email as string) as string
+    const created = !(await leadsRef.doc(leadId).get()).exists
+    if (created) {
+      const used = (await leadsRef.count().get()).data().count
+      if (checkVisitorRecordCeiling(used, LEADS_MAX_PER_HOST).exceeded) {
+        await claim.release()
+        return ApiErrors.conflict({
+          message:
+            'This site is at the platform lead limit, so the lead was not ' +
+            'created. Remove some leads, or contact support if this is real traffic.',
+          code: 'lead_ceiling',
+          headers: ctx.headers,
+        })
+      }
+    }
+    const stored = await addHostLead({
+      hostRef,
+      hostId: site.siteId,
+      lead: {
+        email: email as string,
+        ...(name ? { name } : {}),
+        source: LEAD_API_SOURCE,
+      },
+    })
+    if (!stored) {
+      await claim.release()
+      return ApiErrors.conflict({
+        message: 'The lead could not be stored',
+        code: 'lead_not_stored',
+        headers: ctx.headers,
+      })
+    }
+    const working: Record<string, unknown> = {
+      ...profileUpdate(profile.patch),
+      ...(status ? { status } : {}),
+      ...(ownerUid ? { ownerUid } : {}),
+      ...(notes ? { notes } : {}),
+    }
+    const ref = leadsRef.doc(leadId)
+    if (Object.keys(working).length) {
+      await ref.set({ ...working, updatedAt: Timestamp.now() }, { merge: true })
+    }
+    const view = leadView(site.siteId, await ref.get())
+    await claim.record(created ? 201 : 200, view)
+    return apiJson(view, { status: created ? 201 : 200, headers: ctx.headers })
+  } catch (error) {
+    await claim.release()
+    throw error
+  }
 }
 
 // ── Convert ─────────────────────────────────────────────────────────────────
@@ -635,8 +821,13 @@ export async function handleLeads(
       if (denied) return denied
       return listLeads(ctx, url)
     }
+    if (request.method === 'POST') {
+      const denied = requireScope(ctx, 'crm:write')
+      if (denied) return denied
+      return createLead(request, ctx, url)
+    }
     return ApiErrors.methodNotAllowed({
-      headers: { ...ctx.headers, Allow: 'GET' },
+      headers: { ...ctx.headers, Allow: 'GET, POST' },
     })
   }
 

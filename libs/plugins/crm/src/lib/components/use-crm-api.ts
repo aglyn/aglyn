@@ -27,6 +27,7 @@ import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 /** The routes `registerCrmConsoleApi` registers under `/api/crm/`. */
 export type CrmApiRoute =
   | 'contacts-create'
+  | 'leads-create'
   | 'contact-email-history'
   | 'contact-update'
   | 'company-delete'

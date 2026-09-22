@@ -17,12 +17,101 @@
 
 import {
   CRM_LEAD_OPEN_STATUSES,
+  CRM_LEAD_PROFILE_KEYS,
   CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_STATUSES,
+  CRM_LEAD_TAGS_MAX,
+  crmLeadDisplayName,
   crmLeadStatus,
   isCrmLeadOpen,
   isCrmLeadStatus,
+  normalizeCrmLeadProfile,
+  normalizeCrmLeadTags,
 } from './crm'
+
+/**
+ * The lead's own profile (AGL-3231): every field through the normalizer
+ * the record keeps it in, a key present and empty as a clear, a key absent
+ * as untouched, and a value the record cannot hold refused under its field.
+ */
+describe('normalizeCrmLeadProfile', () => {
+  it('normalizes each field the way the record stores it', () => {
+    expect(
+      normalizeCrmLeadProfile({
+        company: ' Acme   Brands ',
+        jobTitle: 'CMO',
+        phone: '(512) 555-0107',
+        website: 'acme.com',
+        address: { city: ' Austin ', country: 'us' },
+        tags: 'ICP2, a-list, icp2',
+        leadSource: 'Sales Navigator',
+      }),
+    ).toEqual({
+      patch: {
+        company: 'Acme Brands',
+        jobTitle: 'CMO',
+        phone: '+15125550107',
+        website: 'https://acme.com/',
+        address: { city: 'Austin', country: 'US' },
+        tags: ['icp2', 'a-list'],
+        leadSource: 'Sales Navigator',
+      },
+      errors: {},
+    })
+  })
+
+  it('reads an empty value as a clear and an absent key as untouched', () => {
+    expect(
+      normalizeCrmLeadProfile({
+        company: '',
+        phone: null,
+        website: '  ',
+        address: { city: '' },
+        tags: [],
+      }),
+    ).toEqual({
+      patch: { company: null, phone: null, website: null, address: null, tags: null },
+      errors: {},
+    })
+    expect(normalizeCrmLeadProfile({})).toEqual({ patch: {}, errors: {} })
+    expect(normalizeCrmLeadProfile(null)).toEqual({ patch: {}, errors: {} })
+  })
+
+  it('refuses a phone or a website it cannot hold, under the field, and keeps the rest', () => {
+    const { patch, errors } = normalizeCrmLeadProfile({
+      company: 'Acme',
+      phone: 'call me',
+      website: 'javascript:alert(1)',
+    })
+    expect(patch).toEqual({ company: 'Acme' })
+    expect(Object.keys(errors).sort()).toEqual(['phone', 'website'])
+  })
+
+  it('caps tags where the contact caps them, from a list or a string', () => {
+    const many = Array.from({ length: CRM_LEAD_TAGS_MAX + 5 }, (_, i) => `t${i}`)
+    expect(normalizeCrmLeadTags(many)).toHaveLength(CRM_LEAD_TAGS_MAX)
+    expect(normalizeCrmLeadTags(' A , b ,, B ')).toEqual(['a', 'b'])
+    expect(normalizeCrmLeadTags(undefined)).toEqual([])
+  })
+
+  it('lists every profile key once, in the card’s order', () => {
+    expect([...CRM_LEAD_PROFILE_KEYS]).toEqual([
+      'company',
+      'jobTitle',
+      'phone',
+      'website',
+      'address',
+      'tags',
+      'leadSource',
+    ])
+  })
+
+  it('names a lead by its name, else by its address', () => {
+    expect(crmLeadDisplayName({ name: ' Ada ', email: 'ada@example.com' })).toBe('Ada')
+    expect(crmLeadDisplayName({ email: 'ada@example.com' })).toBe('ada@example.com')
+    expect(crmLeadDisplayName(null)).toBe('')
+  })
+})
 
 /**
  * The lead working state (AGL-2608): a status the list filters on, and the

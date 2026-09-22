@@ -45,7 +45,12 @@
  * would otherwise write for itself. No Firestore, no React.
  */
 
-import type { AglynPostalAddress, OrgCrmAssignmentRule } from '../foundation'
+import {
+  type AglynPostalAddress,
+  normalizeAddress,
+  normalizePhone,
+  type OrgCrmAssignmentRule,
+} from '../foundation'
 import { type ConsentGroup, consentGroupScope } from './consent-groups'
 import {
   CONTACT_LIFECYCLE_STAGES,
@@ -2315,7 +2320,7 @@ export function isCrmLeadStatus(value: unknown): value is CrmLeadStatus {
  * says. `unqualifiedReason` travels with `status: 'unqualified'` and is the
  * one free-text field a report will want to read back.
  */
-export interface CrmLeadFields {
+export interface CrmLeadFields extends CrmLeadProfile {
   status?: CrmLeadStatus
   /** The team member working the lead. */
   ownerUid?: string
@@ -2328,6 +2333,195 @@ export interface CrmLeadFields {
   dealId?: string
   /** The company the conversion created or linked, when it named one. */
   companyId?: string
+}
+
+/*==========================================
+ * THE LEAD'S OWN PROFILE (AGL-3231).
+ *
+ * A Salesforce lead is a record of its own: it carries the person AND
+ * their company as text — company, title, phone, website, address, the
+ * source that produced it — and none of it is a contact until the lead
+ * converts, when the convert step hands every field to the contact and the
+ * account it creates. A lead that held only an address and a name could
+ * not be worked without a contact beside it, which is how one person came
+ * to sit in both lists; these fields are what let the lead stand alone.
+ *
+ * ## Text, not links
+ *
+ * `company` is the company's NAME, never a company id. A lead has not been
+ * qualified, so the account it names may not deserve a record yet — a
+ * thousand imported leads must not mint a thousand companies — and the
+ * conversion is where the text becomes a link: it finds the company by
+ * that name or by the address's domain, or creates it. The `companyId` on
+ * `CrmLeadFields` is the conversion's stamp, written once, and never what
+ * a lead carries while it is open.
+ *
+ * ## The same shapes the contact keeps
+ *
+ * The phone is E.164 through `normalizePhone`, the address is
+ * `AglynPostalAddress` through `normalizeAddress`, tags are lower-cased and
+ * capped as the contact's are, and the website is normalized as a
+ * company's is — so the conversion copies values rather than translating
+ * them, and a lead typed in the drawer and a contact typed in its drawer
+ * refuse the same phone number in the same sentence.
+ *
+ * ## `leadSource` beside `sources`
+ *
+ * `sources` is the capture door's record of which SURFACES met the person
+ * — `signup`, `booking`, `form:{id}`, `import` — and no file may rewrite
+ * it. `leadSource` is what Salesforce calls Lead Source: free text the
+ * team or the file supplies ("Sales Navigator", "Trade show"), reported on
+ * and filtered by, and never derived. Two fields because they answer two
+ * questions, and a file that could write the first would be rewriting the
+ * site's own history.
+ *=========================================*/
+
+/** The longest text one profile field holds — the contact's own cap. */
+export const CRM_LEAD_TEXT_MAX = 120
+/** The most tags one lead keeps — the contact's own cap. */
+export const CRM_LEAD_TAGS_MAX = 20
+/** The longest note a lead keeps — the lead page's own cap. */
+export const CRM_LEAD_NOTES_MAX = 4000
+
+export interface CrmLeadProfile {
+  /** The company's name, as text — see the block header. */
+  company?: string
+  jobTitle?: string
+  /** E.164 — `normalizePhone` before writing. */
+  phone?: string
+  /** An http(s) URL — `normalizeCompanyWebsite` before writing. */
+  website?: string
+  address?: AglynPostalAddress | null
+  /** Lower-cased, deduplicated, at most {@link CRM_LEAD_TAGS_MAX}. */
+  tags?: string[]
+  /** Free text naming where the lead came from — Salesforce's Lead Source. */
+  leadSource?: string
+}
+
+/** The profile's keys, in the order a card lists them. */
+export const CRM_LEAD_PROFILE_KEYS = [
+  'company',
+  'jobTitle',
+  'phone',
+  'website',
+  'address',
+  'tags',
+  'leadSource',
+] as const satisfies readonly (keyof CrmLeadProfile)[]
+
+export type CrmLeadProfileKey = (typeof CRM_LEAD_PROFILE_KEYS)[number]
+
+/**
+ * A profile as a writer receives it: a key present is a value to store, a
+ * key present and `null` is a field to clear, a key absent is left alone.
+ * The PATCH semantics every CRM write has.
+ */
+export type CrmLeadProfilePatch = {
+  [K in CrmLeadProfileKey]?: NonNullable<CrmLeadProfile[K]> | null
+}
+
+/** Why one field of a profile could not be read, under the field. */
+export type CrmLeadProfileErrors = Partial<Record<CrmLeadProfileKey, string>>
+
+/** The sentence an unreadable phone number is refused with, under the field. */
+export const CRM_LEAD_PHONE_REFUSAL =
+  'That phone number could not be read. Enter it with its country code, like ' +
+  '+1 512 555 0107.'
+
+/** The sentence an unreadable website is refused with, under the field. */
+export const CRM_LEAD_WEBSITE_REFUSAL = 'Enter a web address, like acme.com'
+
+/**
+ * Tags as a lead stores them: lower-cased, trimmed, deduplicated, capped —
+ * from an array or a comma-separated string, so a file cell and a form
+ * field are one input.
+ */
+export function normalizeCrmLeadTags(value: unknown): string[] {
+  const items = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : []
+  return [
+    ...new Set(
+      items
+        .map((tag) =>
+          String(tag ?? '')
+            .trim()
+            .slice(0, 40)
+            .toLowerCase(),
+        )
+        .filter(Boolean),
+    ),
+  ].slice(0, CRM_LEAD_TAGS_MAX)
+}
+
+/**
+ * Read a profile off an untrusted body, one field at a time.
+ *
+ * Every key the body names is answered: as a normalized value, as `null`
+ * when the body cleared it (an empty string, `null`, an empty list, a blank
+ * address), or as an error under the field when the value cannot be
+ * stored as typed. Keys the body does not name are not in the answer, so
+ * a caller can write exactly what was asked. A `website` is normalized the
+ * way a company's is; a phone the way a contact's is; both refuse rather
+ * than store a value the record would then render as a link to nowhere.
+ */
+export function normalizeCrmLeadProfile(
+  input: Record<string, unknown> | null | undefined,
+): { patch: CrmLeadProfilePatch; errors: CrmLeadProfileErrors } {
+  const body = input ?? {}
+  const patch: CrmLeadProfilePatch = {}
+  const errors: CrmLeadProfileErrors = {}
+  const text = (key: 'company' | 'jobTitle' | 'leadSource') => {
+    if (!(key in body)) return
+    const value = String(body[key] ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .slice(0, CRM_LEAD_TEXT_MAX)
+    patch[key] = value || null
+  }
+  text('company')
+  text('jobTitle')
+  text('leadSource')
+  if ('phone' in body) {
+    const raw = String(body['phone'] ?? '').trim()
+    if (!raw) patch.phone = null
+    else {
+      const phone = normalizePhone(raw)
+      if (phone) patch.phone = phone
+      else errors.phone = CRM_LEAD_PHONE_REFUSAL
+    }
+  }
+  if ('website' in body) {
+    const raw = String(body['website'] ?? '').trim()
+    if (!raw) patch.website = null
+    else {
+      const website = normalizeCompanyWebsite(raw)
+      if (website) patch.website = website
+      else errors.website = CRM_LEAD_WEBSITE_REFUSAL
+    }
+  }
+  if ('address' in body) {
+    const raw = body['address']
+    patch.address =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? normalizeAddress(raw as AglynPostalAddress)
+        : null
+  }
+  if ('tags' in body) {
+    const tags = normalizeCrmLeadTags(body['tags'])
+    patch.tags = tags.length ? tags : null
+  }
+  return { patch, errors }
+}
+
+/** The name a lead is listed under: the name it carries, else its address. */
+export function crmLeadDisplayName(
+  lead: Record<string, unknown> | null | undefined,
+): string {
+  const name = String(lead?.['name'] ?? '').trim()
+  return name || String(lead?.['email'] ?? '').trim()
 }
 
 /**

@@ -53,7 +53,26 @@ describe('the leads vocabulary', () => {
     expect(LEAD_IMPORT_VOCABULARY.route).toBe(LEADS_IMPORT_URL)
     const mapping = LEAD_IMPORT_VOCABULARY.guessMapping(header(LEAD_IMPORT_VOCABULARY.templateCsv()))
     expect(Object.values(mapping).sort()).toEqual(
-      ['email', 'name', 'status', 'ownerEmail', 'unqualifiedReason', 'notes'].sort(),
+      [
+        'email',
+        'name',
+        'company',
+        'jobTitle',
+        'phone',
+        'website',
+        'leadSource',
+        'status',
+        'ownerEmail',
+        'addressLine1',
+        'addressLine2',
+        'addressCity',
+        'addressState',
+        'addressPostalCode',
+        'addressCountry',
+        'tags',
+        'unqualifiedReason',
+        'notes',
+      ].sort(),
     )
   })
 

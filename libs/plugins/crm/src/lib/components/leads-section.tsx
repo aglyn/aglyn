@@ -86,6 +86,8 @@ import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { leadSourceLabel, leadSources, leadTimeLabel } from './lead-history-card'
 import { LeadImportButton } from './lead-import-drawer'
+import NewLeadDrawer, { type NewLeadValues } from './new-lead-drawer'
+import { useCrmApi } from './use-crm-api'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { CONVERT_PENDING_ERASURE_REASON } from './lead-properties-card'
 import { LeadStatusChip } from './lead-status-chip'
@@ -150,7 +152,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
-  const { orgId } = useCrmScope({ hostId, org })
+  const { orgId, createHostId } = useCrmScope({ hostId, org })
   const mount = useCrmOrgMount()
   const roster = useOrgMemberOptions(orgId)
   const routes = crmRoutes(basePath ?? '')
@@ -260,6 +262,60 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   // the lead's page opens, fed the row so the list is one click shorter.
   const [converting, setConverting] = useState<LeadRow | null>(null)
 
+  /*==========================================
+   * NEW LEAD (AGL-3231) — Salesforce's New Lead, in a drawer over the
+   * list. The route files the lead through the one lead door under the
+   * mounted site, or at the organization level under the site the drawer's
+   * picker named; the drawer holds its submit until one is known. It makes
+   * a lead and nothing else — the conversion is what makes the contact.
+   *=========================================*/
+  const crmApi = useCrmApi(createHostId)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createBusy, setCreateBusy] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const handleCreate = useCallback(
+    async (values: NewLeadValues) => {
+      setCreateBusy(true)
+      setCreateError(null)
+      try {
+        const { response, payload } = await crmApi('leads-create', {
+          email: values.email,
+          ...(values.name ? { name: values.name } : {}),
+          ...(values.company ? { company: values.company } : {}),
+          ...(values.jobTitle ? { jobTitle: values.jobTitle } : {}),
+          ...(values.phone ? { phone: values.phone } : {}),
+          ...(values.website ? { website: values.website } : {}),
+          ...(values.leadSource ? { leadSource: values.leadSource } : {}),
+          ...(values.address ? { address: values.address } : {}),
+          ...(values.tags.length ? { tags: values.tags } : {}),
+          ...(values.ownerUid ? { ownerUid: values.ownerUid } : {}),
+          ...(values.notes ? { notes: values.notes } : {}),
+          status: values.status,
+        })
+        if (!response.ok) {
+          // The route's own sentence, shown above the form unchanged.
+          setCreateError(String(payload['error'] ?? 'The lead could not be added.'))
+          return
+        }
+        // The activity entry is the route's: it verified the caller and
+        // performed the write.
+        enqueueSnackbar(
+          payload['created']
+            ? 'Lead added'
+            : 'This site already held a lead for that address — it was updated',
+          { variant: 'success', persist: false },
+        )
+        setCreateOpen(false)
+      } catch (error) {
+        console.error(error)
+        setCreateError('The lead could not be added.')
+      } finally {
+        setCreateBusy(false)
+      }
+    },
+    [crmApi, enqueueSnackbar],
+  )
+
   const writeLead = useCallback(
     async (lead: LeadRow, fields: Record<string, unknown>, done: string) => {
       try {
@@ -298,6 +354,22 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             ) : null}
           </Stack>
         ),
+      },
+      // The lead's own profile (AGL-3231): the two facts a work queue is
+      // scanned by, beside the person.
+      {
+        field: 'company',
+        headerName: 'Company',
+        flex: 1,
+        minWidth: 140,
+        valueGetter: (_value, row: LeadRow) => String(row.company ?? ''),
+      },
+      {
+        field: 'jobTitle',
+        headerName: 'Title',
+        flex: 0.9,
+        minWidth: 130,
+        valueGetter: (_value, row: LeadRow) => String(row.jobTitle ?? ''),
       },
       {
         field: 'status',
@@ -355,6 +427,13 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         minWidth: 140,
         valueGetter: (_value, row: LeadRow) =>
           leadSources(row).map(leadSourceLabel).join(', '),
+      },
+      {
+        field: 'tags',
+        headerName: 'Tags',
+        flex: 0.9,
+        minWidth: 140,
+        valueGetter: (_value, row: LeadRow) => (row.tags ?? []).join(', '),
       },
       {
         field: 'lastSeenAtMs',
@@ -465,6 +544,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             <Button size="small" onClick={handleExport} disabled={!rows.length}>
               {'Export CSV'}
             </Button>
+            <Button size="small" variant="contained" onClick={() => setCreateOpen(true)}>
+              {'New lead'}
+            </Button>
           </Stack>
         }
         contentGutterX
@@ -476,7 +558,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           {status === 'success' && window.length === 0 ? (
             <EmptyStateComponent
               label={'No leads yet'}
-              description={'Sign-ups, bookings and form submissions on your site become leads on their own — or bring a list in with Import CSV.'}
+              description={'Bookings and lead-routed forms on your site become leads on their own — or add one with New lead, or bring a list in with Import CSV.'}
             />
           ) : status === 'success' && rows.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
@@ -532,6 +614,16 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           ) : null}
         </Stack>
       </CardDisplay>
+      <NewLeadDrawer
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        hostId={hostId ?? null}
+        org={org as Record<string, unknown> | undefined}
+        busy={createBusy}
+        error={createError}
+        roster={roster}
+        onSubmit={(values) => void handleCreate(values)}
+      />
       <AssignOwnerDialog
         lead={assigning}
         roster={roster}
