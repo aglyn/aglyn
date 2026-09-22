@@ -1,8 +1,8 @@
 {
   "team": "AGL",
-  "highest": 3248,
+  "highest": 3250,
   "verifiedAt": "2026-09-22",
-  "verifiedBy": "Read from Linear on 2026-09-22: the Product (AGL) issues newest-first by createdAt with archived included. The read returned AGL-3248 (\"The signup canary’s own walk does not announce itself to staff\") first, then AGL-3247, AGL-3246, AGL-3245 and AGL-3244 — all five filed inside forty minutes by concurrent sessions, which is why the number is never the last one you saw plus one. A floor that only ever rises.",
+  "verifiedBy": "Read from Linear on 2026-09-22: the Product (AGL) issues newest-first by createdAt with archived included. AGL-3250 (\"main is red: the export allow-list grew a key the round-trip seed does not carry\") is the newest, filed by this session; AGL-3249 and AGL-3248 came from peers in the minutes before it. Nine ids went in under an hour across concurrent sessions, which is why the number is never the last one you saw plus one. A floor that only ever rises.",
   "note": "The highest issue identifier that EXISTS, and a FLOOR rather than the answer. Any citation above it was never assigned, because Linear numbers issues sequentially per team. check-linear-ids.mjs asks Linear for the real highest on every run and can only ever RAISE this number with the answer, so with LINEAR_API_KEY set there is nothing to maintain here; this value is what the check falls back to when the query cannot be made. Raise it only after reading the workspace — never to whatever number a failing check just reported. See tools/scripts/lib/linear-ids.mjs.",
   "historicalCitations": {
     "note": "Commits already on `main` whose messages cite a fabricated id. History is NOT rewritten (see docs/DECISION_LOG.md, 2026-08-28), so the commit sweep would otherwise be permanently red and the guard would never be wirable into CI. Listed by sha rather than exempted by date: a FIFTEENTH such commit still fails. This list may shrink and must never grow.",

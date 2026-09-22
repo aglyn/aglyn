@@ -667,6 +667,10 @@ const SEEDS: Array<{
       // AGL-2536: a NON-default value, so an import that dropped the field
       // would land on `Article` rather than coincidentally matching.
       schemaType: 'NewsArticle',
+      // AGL-3247, and NON-default for the same reason as `schemaType` above:
+      // absent means "index the entries", so a seed of `false` would pass this
+      // spec while an import that dropped the field entirely looked identical.
+      excludeEntriesFromSearch: true,
       kind: 'content',
       slug: 'blog',
       displayName: 'Blog',
