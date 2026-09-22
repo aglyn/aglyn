@@ -117,6 +117,118 @@ export async function mintSession(
   }
 }
 
+/** A live local user, as much of one as these two paths read. */
+type SessionUser = Parameters<typeof mintSession>[0] & {
+  metadata?: { lastSignInTime?: string | null }
+  providerData?: Array<{ providerId?: string | null; email?: string | null } | null>
+}
+
+/**
+ * Validate the shared cookie against a live local session, and act on the
+ * answer (AGL-236, AGL-624, AGL-664).
+ *
+ * Lifted out of the load-time branch so the focus re-check can run the same
+ * verdict (AGL-3242) — the SAME verdict, deliberately, and that is the
+ * property to preserve if this is ever touched again. Only an explicit
+ * sign-out elsewhere (a tombstone newer than this session's sign-in) or a
+ * revocation ends the session; an absent or expired cookie is ambiguous and
+ * heals by re-minting. Because the conditions are unchanged, a re-checked tab
+ * can only reach a conclusion a reloaded tab would already have reached.
+ *
+ * `isActive` is read after every await rather than passed as a boolean: the
+ * caller's effect may have torn down while a request was in flight, and a
+ * snapshot taken before the await cannot say so.
+ */
+async function validateSharedSession(
+  auth: Parameters<typeof signOut>[0],
+  user: SessionUser,
+  mintedForUid: { current: string | null },
+  isActive: () => boolean,
+): Promise<void> {
+  try {
+    const response = await fetch('/api/auth/session')
+    if (!isActive() || response.ok || response.status !== 401) return
+    const payload = await response.json().catch(() => null)
+    const reason = payload?.reason
+    // A revocation always ends the session. A `signed-out` tombstone only
+    // does when it is NEWER than this session's last sign-in — otherwise it
+    // is stale (a prior sign-out whose re-login mint failed/raced) and would
+    // otherwise log the user out on a plain refresh (AGL-624); heal it by
+    // re-minting.
+    if (reason === 'revoked') {
+      if (isActive()) {
+        // The sign-out stands — a revoked session is deliberately dead and
+        // only a real credential sign-in may follow. The request is what
+        // turns the hard bounce to /signin into an in-place prompt over the
+        // current route (AGL-664); it is raised BEFORE signOut so the layout
+        // never sees a signed-out beat without it and redirects anyway.
+        // Identity is captured now, while there is still a user to ask.
+        requestSessionReauth('revoked', captureReauthIdentity(user))
+        await signOut(auth)
+      }
+      return
+    }
+    if (reason === 'signed-out') {
+      const signedOutAt = Number(payload?.signedOutAt) || 0
+      const lastSignInMs = Date.parse(user.metadata?.lastSignInTime ?? '') || 0
+      if (tombstoneEndsSession(signedOutAt, lastSignInMs)) {
+        if (isActive()) {
+          // Same shape as `revoked` above (AGL-664).
+          requestSessionReauth('signed-out', captureReauthIdentity(user))
+          await signOut(auth)
+        }
+        return
+      }
+    }
+    await mintSession(user, mintedForUid)
+  } catch {
+    // Network trouble never signs anyone out.
+  }
+}
+
+/**
+ * Sign this tab back in from the shared cookie, silently (AGL-543, AGL-1993).
+ *
+ * Also lifted out for the focus re-check (AGL-3242). It cannot resurrect a
+ * session somebody ended: a genuine sign-out elsewhere leaves a tombstone and
+ * the GET answers 401, which falls out at the `!response.ok` line without
+ * touching auth. So the worst a spurious call can do is spend one request.
+ */
+async function restoreFromSharedCookie(
+  auth: Parameters<typeof signInWithPooledCustomToken>[0],
+  restoredSilently: { current: boolean },
+  isActive: () => boolean,
+): Promise<void> {
+  try {
+    const response = await fetch('/api/auth/session')
+    if (!response.ok || !isActive()) return
+    const payload = await response.json()
+    if (payload?.token && isActive()) {
+      // Silent restore — the follow-up auth emission must NOT re-mint the
+      // shared cookie (AGL-804) — and must stay in the token's own pool
+      // (AGL-1993). An SSO session's cookie is re-minted through the GCIP
+      // tenant, so exchanging it on a project-pool instance is a cross-pool
+      // exchange — the failure that hid a staff claim.
+      restoredSilently.current = true
+      await signInWithPooledCustomToken(auth, payload.token, payload.tenantId)
+    }
+  } catch {
+    // Network trouble never signs anyone out; the next re-check or the next
+    // load's restore branch gets another chance.
+  }
+}
+
+/**
+ * How often a tab may re-check its session on being brought forward
+ * (AGL-3242).
+ *
+ * A real recovery lands on the FIRST focus, so this number never delays the
+ * case it exists for; it only stops a person alt-tabbing between two consoles
+ * from issuing a request per switch. Short enough that a second attempt after
+ * a failed one is a beat away, not a wait.
+ */
+export const SESSION_RECHECK_THROTTLE_MS = 10_000
+
 /**
  * Cross-subdomain session sync (AGL-236). Firebase client auth is
  * per-origin, so each {org}.aglyn.com workspace starts signed out even
@@ -201,50 +313,12 @@ export function useSessionCookie(): void {
           // mint that raced a hard navigation, the 14-day TTL lapsing, a
           // blocked fetch — so re-mint from the live local session instead
           // of signing out.
-          try {
-            const response = await fetch('/api/auth/session')
-            if (!active || response.ok || response.status !== 401) return
-            const payload = await response.json().catch(() => null)
-            const reason = payload?.reason
-            // A revocation always ends the session. A `signed-out`
-            // tombstone only does when it is NEWER than this session's last
-            // sign-in — otherwise it is stale (a prior sign-out whose
-            // re-login mint failed/raced) and would otherwise log the user
-            // out on a plain refresh (AGL-624); heal it by re-minting.
-            if (reason === 'revoked') {
-              if (active) {
-                // The sign-out stands — a revoked session is deliberately
-                // dead and only a real credential sign-in may follow. The
-                // request is what turns the hard bounce to /signin into an
-                // in-place prompt over the current route (AGL-664); it is
-                // raised BEFORE signOut so the layout never sees a signed-
-                // out beat without it and redirects anyway. Identity is
-                // captured now, while there is still a user to ask.
-                requestSessionReauth('revoked', captureReauthIdentity(user))
-                await signOut(auth)
-              }
-              return
-            }
-            if (reason === 'signed-out') {
-              const signedOutAt = Number(payload?.signedOutAt) || 0
-              const lastSignInMs =
-                Date.parse(user.metadata?.lastSignInTime ?? '') || 0
-              if (tombstoneEndsSession(signedOutAt, lastSignInMs)) {
-                if (active) {
-                  // Same shape as `revoked` above (AGL-664).
-                  requestSessionReauth(
-                    'signed-out',
-                    captureReauthIdentity(user),
-                  )
-                  await signOut(auth)
-                }
-                return
-              }
-            }
-            await mintSession(user, mintedForUid)
-          } catch {
-            // Network trouble never signs anyone out.
-          }
+          await validateSharedSession(
+            auth,
+            user as SessionUser,
+            mintedForUid,
+            () => active,
+          )
           return
         }
         if (!wasSignedIn && mintedForUid.current !== user.uid) {
@@ -296,48 +370,91 @@ export function useSessionCookie(): void {
         // restore this tab from it instead of tombstoning every
         // workspace's session. A genuine sign-out elsewhere reads back
         // as 401 signed-out, so this can never resurrect one.
-        try {
-          const response = await fetch('/api/auth/session')
-          if (!response.ok || !active) return
-          const payload = await response.json()
-          if (payload?.token && active) {
-            // Silent restore — the follow-up auth emission must NOT re-mint
-            // the shared cookie (AGL-804).
-            restoredSilently.current = true
-            // …and it must land in the pool the token was minted in
-            // (AGL-1993). An SSO session's cookie is re-minted through the
-            // GCIP tenant, so exchanging it on a project-pool instance is a
-            // cross-pool exchange — the failure that hid a staff claim.
-            await signInWithPooledCustomToken(auth, payload.token, payload.tenantId)
-          }
-        } catch {
-          // Network trouble never signs anyone out; the next load's
-          // restore branch gets another chance.
-        }
+        await restoreFromSharedCookie(auth, restoredSilently, () => active)
         return
       }
       if (restoreAttempted.current) return
       restoreAttempted.current = true
-      try {
-        const response = await fetch('/api/auth/session')
-        if (!response.ok || !active) return
-        const payload = await response.json()
-        if (payload?.token && active) {
-          // Silent restore — the follow-up auth emission must NOT re-mint
-          // the shared cookie (AGL-804) — and must stay in the token's own
-          // pool (AGL-1993). This is the branch a staff member signing in
-          // through SSO actually takes on a cold load of app.aglyn.com.
-          restoredSilently.current = true
-          await signInWithPooledCustomToken(auth, payload.token, payload.tenantId)
-        }
-      } catch {
-        // no valid shared session — the sign-in page takes it from here
-      }
+      // The branch a staff member signing in through SSO actually takes on a
+      // cold load of app.aglyn.com.
+      await restoreFromSharedCookie(auth, restoredSilently, () => active)
     })()
     return () => {
       active = false
     }
   }, [auth, user])
+
+  /*==========================================
+   * COMING BACK TO A TAB (AGL-3242)
+   *
+   * Everything above is load-time: the validate-or-restore verdict is reached
+   * on the FIRST auth emission after a page load, and after that the tab only
+   * moves when Firebase emits a new auth state. A tab whose session went bad
+   * therefore had exactly one way back — a manual reload — and with several
+   * consoles open that turned recovery into a race the reader ran by hand,
+   * reloading every tab before any one of them could tombstone the session
+   * again.
+   *
+   * Bringing a tab forward is the moment the reader is asking for it to work,
+   * and it is free: the tab was idle. So re-run the same verdict here.
+   *
+   * ⛔ The verdict is the SAME one, and it has to stay that way. A focused tab
+   * ends its session on exactly the two conditions a reloaded tab ends it on
+   * — a revocation, or a tombstone newer than this session's sign-in — so
+   * this can never sign anyone out that a refresh would not have. If a future
+   * change makes `validateSharedSession` stricter, it gets stricter on both
+   * paths at once, which is the point of there being one function.
+   */
+  const rechecking = useRef(false)
+  const lastRecheckAt = useRef(0)
+
+  useEffect(() => {
+    if (FIREBASE_AUTH_EMULATOR_ENABLED) return undefined
+    let active = true
+    const recheck = () => {
+      // `visibilitychange` fires on the way INTO hidden as well as out of it.
+      if (document.visibilityState !== 'visible') return
+      // Nothing to re-check before the load-time pass has run — and running
+      // first would read a token before `adoptRestoredPool` has repaired the
+      // instance's pool, which is the AGL-2486 trap.
+      if (!sawInitialState.current) return
+      if (rechecking.current) return
+      const at = Date.now()
+      if (at - lastRecheckAt.current < SESSION_RECHECK_THROTTLE_MS) return
+      rechecking.current = true
+      lastRecheckAt.current = at
+      void (async () => {
+        try {
+          const current = auth.currentUser as SessionUser | null
+          if (current) {
+            await validateSharedSession(
+              auth,
+              current,
+              mintedForUid,
+              () => active,
+            )
+          } else {
+            // No local user: this is the tab parked on `/signin` after a
+            // sibling signed in, and the one the reader was reloading by
+            // hand. A tombstone still answers 401 and falls straight out, so
+            // a deliberate sign-out stays signed out.
+            await restoreFromSharedCookie(auth, restoredSilently, () => active)
+          }
+        } finally {
+          rechecking.current = false
+        }
+      })()
+    }
+    document.addEventListener('visibilitychange', recheck)
+    // Coming back from a dropped connection is the other moment a session
+    // that could not be validated can be (`use-is-staff` pairs the same two).
+    window.addEventListener('online', recheck)
+    return () => {
+      active = false
+      document.removeEventListener('visibilitychange', recheck)
+      window.removeEventListener('online', recheck)
+    }
+  }, [auth])
 }
 
 export default useSessionCookie
