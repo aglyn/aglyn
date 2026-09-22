@@ -39,6 +39,8 @@ import {
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { customFieldColumns } from './contact-custom-columns'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import { useOrgLeads } from '../hooks/use-org-leads'
@@ -174,6 +176,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const { orgId, createHostId } = useCrmScope({ hostId, org })
   const mount = useCrmOrgMount()
   const roster = useOrgMemberOptions(orgId)
+  // The org's lead fields, for the optional columns below (AGL-3272).
+  const leadFields = useContactFieldDefinitions(orgId, 'lead')
   const routes = crmRoutes(basePath ?? '')
 
   // Under a site: the site's own window, rows keyed by document id.
@@ -402,6 +406,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             : {}),
           ...(values.ownerUid ? { ownerUid: values.ownerUid } : {}),
           ...(values.notes ? { notes: values.notes } : {}),
+          // The org's own lead fields (AGL-3272), sent only when one was
+          // filled — the route reads the definitions to judge the map, and
+          // a body without it pays for no read.
+          ...(values.custom ? { custom: values.custom } : {}),
           status: values.status,
         })
         if (!response.ok) {
@@ -605,6 +613,11 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         valueGetter: (_value, row: LeadRow) =>
           leadTimeLabel(row['lastSeenAtMs'] ?? row['createdAt']),
       },
+      // The org's lead fields as optional columns (AGL-3272), read off the
+      // row's own `custom` map the way the contacts list reads its own.
+      // Ahead of the row menu, so the overflow stays at the right edge
+      // however many fields the org has defined.
+      ...customFieldColumns(leadFields.active),
       {
         field: 'actions',
         headerName: '',
@@ -686,7 +699,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         },
       },
     ],
-    [roster, routes, writeLead, hostId, mount, campaignName],
+    [roster, routes, writeLead, hostId, mount, campaignName, leadFields.active],
   )
   /* The column and sort models are the view's (AGL-2617). */
   const grid = useCrmViewGrid(views, columns)
@@ -890,6 +903,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         busy={createBusy}
         error={createError}
         roster={roster}
+        orgId={orgId}
         onSubmit={(values) => void handleCreate(values)}
       />
       <AssignOwnerDialog

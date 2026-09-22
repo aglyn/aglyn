@@ -100,6 +100,10 @@ const OBJECT_INTRO: Record<CrmFieldObject, string> = {
   deal:
     'The custom fields on a deal. They show on every deal’s page and ' +
     'its edit form, and as columns on the deals table.',
+  lead:
+    'The custom fields on a lead. They show on every lead’s page and the ' +
+    'New lead drawer, and as columns on the leads list. They stay on the ' +
+    'lead when it converts — a contact’s fields are its own.',
 }
 
 /** The noun each tab's empty state and captions use. */
@@ -107,11 +111,13 @@ const OBJECT_NOUN: Record<CrmFieldObject, string> = {
   contact: 'contact',
   company: 'company',
   deal: 'deal',
+  lead: 'lead',
 }
 
 /**
  * `/crm/fields` — the custom fields a holder keeps on a person (AGL-2601),
- * and since AGL-2661 on a company and a deal too, one tab each.
+ * since AGL-2661 on a company and a deal too, and since AGL-3272 on a lead:
+ * one tab each, and every CRM record describable in the org's own words.
  *
  * Definitions live in `orgs/{orgId}/contactFields`, one document per field,
  * and the VALUES live under each contact facet's `custom` keyed by the

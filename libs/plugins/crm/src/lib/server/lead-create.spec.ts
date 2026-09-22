@@ -37,6 +37,17 @@ function applyWrite(
       next[key] = Number(next[key] ?? 0) + Number(field.__increment)
     } else if (field && typeof field === 'object' && '__delete' in field) {
       delete next[key]
+    } else if (
+      field &&
+      typeof field === 'object' &&
+      !Array.isArray(field) &&
+      next[key] &&
+      typeof next[key] === 'object' &&
+      !Array.isArray(next[key])
+    ) {
+      // A merge is a DEEP one: a map field's untouched keys survive, which
+      // is what the `custom` map (AGL-3272) is written through.
+      next[key] = applyWrite(next[key], field)
     } else {
       next[key] = field
     }
@@ -75,10 +86,20 @@ function countQuery(path: string): any {
 }
 
 function collectionRef(path: string): any {
+  const query = {
+    limit: () => query,
+    get: async () => {
+      const paths = childPaths(path)
+      return { docs: paths.map((child) => snapshot(child)), empty: !paths.length }
+    },
+  }
   return {
     path,
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoId}`}`),
     count: () => countQuery(path),
+    // The whole-collection read the route makes for the org's field
+    // definitions (AGL-3272).
+    ...query,
   }
 }
 
@@ -132,6 +153,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/app-utils/plan-entitlements'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/contacts'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/consent-groups'),
+  // The custom-field reader the route judges a lead's map with (AGL-3272).
+  ...jest.requireActual('@aglyn/aglyn/app-utils/contact-custom-fields'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/crm'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/form-abuse-ceiling'),
   ...jest.requireActual('@aglyn/aglyn/app-utils/marketing-consent'),
@@ -397,5 +420,101 @@ describe('what is written', () => {
     expect(out.status).toBe(409)
     expect(out.body.reason).toBe('lead-ceiling')
     expect(leadAt('second@example.com')).toBeUndefined()
+  })
+})
+
+/*
+ * THE ORG'S OWN LEAD FIELDS (AGL-3272). The definitions are org-wide and
+ * one collection holds every object's, so what this route has to get right
+ * is WHICH of them a lead's map is judged against: a contact field named
+ * `tier` and a lead field named `tier` are two fields, and a value sent to
+ * one must never be stored under the other's type.
+ */
+describe('the custom lead fields', () => {
+  const defineField = (id: string, field: Record<string, unknown>) =>
+    docs.set(`orgs/${ORG}/contactFields/${id}`, field)
+
+  beforeEach(() => {
+    defineField('f-budget', {
+      key: 'budget',
+      label: 'Budget',
+      type: 'number',
+      object: 'lead',
+      order: 1,
+    })
+    defineField('f-retired', {
+      key: 'old_region',
+      label: 'Old region',
+      type: 'text',
+      object: 'lead',
+      order: 2,
+      retiredAt: 1,
+    })
+    // A CONTACT field of the same key — the one this route must not accept
+    // on a lead, whatever its own type would allow.
+    defineField('f-contact-tier', {
+      key: 'tier',
+      label: 'Tier',
+      type: 'text',
+      object: 'contact',
+      order: 3,
+    })
+  })
+
+  it('stores what the org defined on a lead, coerced to the field s type', async () => {
+    const out = await call({ hostId: HOST, email: 'new@example.com', custom: { budget: '5000' } })
+    expect(out.status).toBe(201)
+    expect(leadAt('new@example.com')).toMatchObject({ custom: { budget: 5000 } })
+  })
+
+  it('refuses a contact s field, an unknown key and a retired one, writing nothing', async () => {
+    for (const custom of [{ tier: 'gold' }, { nope: 'x' }, { old_region: 'west' }]) {
+      const refused = await call({ hostId: HOST, email: 'new@example.com', custom })
+      expect(refused.status).toBe(400)
+      expect(refused.body.field).toMatch(/^custom\./)
+      expect(leadAt('new@example.com')).toBeUndefined()
+    }
+  })
+
+  it('refuses a value the field cannot hold', async () => {
+    const refused = await call({
+      hostId: HOST,
+      email: 'new@example.com',
+      custom: { budget: 'a lot' },
+    })
+    expect(refused.status).toBe(400)
+    expect(refused.body.field).toBe('custom.budget')
+    expect(leadAt('new@example.com')).toBeUndefined()
+  })
+
+  it('leaves the keys a second create did not name where they were', async () => {
+    defineField('f-source-note', {
+      key: 'source_note',
+      label: 'Source note',
+      type: 'text',
+      object: 'lead',
+      order: 4,
+    })
+    await call({
+      hostId: HOST,
+      email: 'dana@example.com',
+      custom: { budget: 100, source_note: 'trade show' },
+    })
+    const second = await call({
+      hostId: HOST,
+      email: 'dana@example.com',
+      custom: { budget: 250 },
+    })
+    expect(second.status).toBe(200)
+    expect(leadAt('dana@example.com')?.custom).toEqual({
+      budget: 250,
+      source_note: 'trade show',
+    })
+  })
+
+  it('reads no definitions at all when the body carries no map', async () => {
+    const out = await call({ hostId: HOST, email: 'new@example.com', company: 'Acme' })
+    expect(out.status).toBe(201)
+    expect(leadAt('new@example.com')).not.toHaveProperty('custom')
   })
 })

@@ -75,6 +75,21 @@ const OBJECT_NOUN: Record<CrmFieldObject, string> = {
   contact: 'contact',
   company: 'company',
   deal: 'deal',
+  lead: 'lead',
+}
+
+/**
+ * Which objects a CSV import can fill a custom field on — see
+ * `CUSTOM_FIELD_OBJECT` in `record-facts.ts`, which decides what the
+ * mapping menu offers. The deal and lead files carry the standard columns
+ * only, so their drawers must not promise an import that would silently
+ * drop the column.
+ */
+const IMPORTABLE: Record<CrmFieldObject, boolean> = {
+  contact: true,
+  company: true,
+  deal: false,
+  lead: false,
 }
 
 /**
@@ -82,10 +97,16 @@ const OBJECT_NOUN: Record<CrmFieldObject, string> = {
  * {@link ContactFieldDrawerProps.object}.
  */
 export function fieldDrawerMappingNote(object: CrmFieldObject): string {
-  return object === 'contact'
-    ? 'A website form field can save its answer into this field.'
-    : `A website form field saves into contact fields only; a ${OBJECT_NOUN[object]} ` +
-        'field is filled on the record, by CSV import or over the API.'
+  if (object === 'contact') {
+    return 'A website form field can save its answer into this field.'
+  }
+  const filled = IMPORTABLE[object]
+    ? 'is filled on the record, by CSV import or over the API.'
+    : 'is filled on the record or over the API.'
+  return (
+    `A website form field saves into contact fields only; a ${OBJECT_NOUN[object]} ` +
+    `field ${filled}`
+  )
 }
 
 /** How many choices a select may declare, and how long each may be. */

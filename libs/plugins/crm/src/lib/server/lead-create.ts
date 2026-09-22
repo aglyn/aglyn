@@ -49,6 +49,10 @@
 
 import {
   checkVisitorRecordCeiling,
+  CONTACT_FIELDS_MAX_PER_ORG,
+  type ContactFieldDefinition,
+  CRM_COLLECTIONS,
+  type CrmCustomValue,
   type CrmLeadProfilePatch,
   type CrmLeadStatus,
   LEADS_MAX_PER_HOST,
@@ -56,6 +60,7 @@ import {
   normalizeCrmLeadProfile,
   personKey,
   type PluginApiHandler,
+  readCrmCustomInput,
 } from '@aglyn/aglyn/server'
 import {
   addHostLead,
@@ -95,6 +100,12 @@ export interface LeadCreateRequest {
   notes?: string
   /** The site's campaigns to file the lead under (AGL-3254), by container id. */
   campaignIds?: string[]
+  /**
+   * The org's custom LEAD fields (AGL-3272), keyed by each definition's
+   * `key`. Judged against the definitions whose `object` is `lead`, so a
+   * contact field of the same name cannot be written through this door.
+   */
+  custom?: Record<string, CrmCustomValue>
 }
 
 /** The sentence a campaign that is not the site's is refused with, under the field. */
@@ -221,6 +232,36 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const leadsRef = hostRef.collection('leads')
+    /*
+     * The org's own lead fields (AGL-3272), judged before any write and
+     * only when the body carried a map — a body without `custom` pays for
+     * no definition read. The refusal is the definition reader's own
+     * sentence, so a client learns which key it spelled wrong rather than
+     * that the lead could not be saved.
+     */
+    let custom: Record<string, CrmCustomValue> | undefined
+    if (body.custom !== undefined) {
+      const definitions = await firestore
+        .collection('orgs')
+        .doc(resolved.orgId)
+        .collection(CRM_COLLECTIONS.contactFields)
+        .limit(CONTACT_FIELDS_MAX_PER_ORG)
+        .get()
+      const judged = readCrmCustomInput(
+        body.custom,
+        definitions.docs.map((entry) => entry.data() as ContactFieldDefinition),
+        'lead',
+      )
+      if ('errors' in judged) {
+        const [field, message] = Object.entries(judged.errors)[0] ?? []
+        res.status(400).json({
+          error: message ?? 'A custom value could not be saved.',
+          ...(field ? { field } : {}),
+        })
+        return
+      }
+      custom = judged.values
+    }
     // The campaigns, judged before any write, so a refused pick leaves
     // nothing to retry against (AGL-3254).
     const campaignIds = await siteCampaignIds(hostRef, body.campaignIds)
@@ -273,6 +314,15 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
       // of it: a second "new lead" for an address files it under one more
       // campaign, as the bulk bar would.
       ...(campaignIds.length ? { campaignIds: FieldValue.arrayUnion(...campaignIds) } : {}),
+      /*
+       * The map as a map, because the write below is a `set` with `merge`
+       * and a merge is a DEEP one: the keys this body named land, and a
+       * second "new lead" for an address the site already holds leaves
+       * every other key's value where it was. A dotted path would not do
+       * it — only `update` reads dots as paths, and `set` would file a
+       * field literally called `custom.tier`.
+       */
+      ...(custom && Object.keys(custom).length ? { custom } : {}),
     }
     if (Object.keys(working).length) {
       await leadsRef

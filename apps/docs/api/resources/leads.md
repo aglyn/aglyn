@@ -67,6 +67,7 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
   "convertedAt": null,
   "companyId": null,
   "dealId": null,
+  "custom": { "budget": 25000, "territory": "west" },
   "created": "2026-08-30T15:02:11.000Z",
   "updated": "2026-09-04T10:12:40.000Z"
 }
@@ -96,6 +97,7 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
 | `marketingConsent` | boolean | Whether the person ticked a marketing opt-in on this site; `marketingConsentAt` is when. **Read-only.** |
 | `convertedContactId` | string \| null | The [contact](contacts.md) this lead became, once converted; `convertedAt` is when. **Read-only** — set by [converting](#convert-a-lead). |
 | `companyId`, `dealId` | string \| null | The company the conversion linked or created, and the deal it opened, when it did. **Read-only.** |
+| `custom` | object | The organization's [lead custom fields](/content-and-data/crm/custom-fields#over-the-api), keyed by field key; `{}` when the lead has none. Judged against the **lead** definitions: a key that is not one, a retired field, or a value the type cannot hold is a `400` naming `custom.<key>`. A `PATCH` merges the keys it sends; `null` clears one. These values stay on the lead — [converting](#convert-a-lead) does not copy them onto the contact, whose fields are its own. Writable. |
 | `created` / `updated` | string \| null | ISO 8601. `updated` is stamped by the team's writes and by the conversion, not by a repeat capture — watch `lastSeen` for those. |
 
 ### Status {#status}
@@ -150,6 +152,7 @@ come from [converting](#convert-a-lead) it, from what the lead holds by then.
 | `status` | `new` (the default) or `working`. |
 | `ownerUid` / `ownerEmail` | Who works the lead. |
 | `notes` | Free text. |
+| `custom` | The organization's lead fields, keyed by field key, as [above](#the-lead-object). |
 | `siteId` | Instead of the query parameter. |
 
 ```bash
@@ -187,6 +190,7 @@ An omitted key is left alone, `null` clears an optional field, `{}` is a no-op.
 | `ownerEmail` | A member's address, resolved against your organization's roster — for a spreadsheet or a zap that has the address and not the uid. Not with `ownerUid` in the same request. `null` clears. |
 | `notes` | Free text, or `null`. |
 | `company`, `jobTitle`, `phone`, `website`, `address`, `tags`, `leadSource` | The lead's own profile, as [above](#the-lead-object); `null` clears any of them. Writable on a converted lead too — the contact is the record then, but the lead keeps what it knew. |
+| `custom` | The organization's lead fields, as [above](#the-lead-object). The keys sent are merged into the map; `null` under a key clears it and leaves the rest alone. |
 
 ```bash
 curl -X PATCH "https://app.aglyn.com/api/v1/leads/5f3c…e9a1?siteId=site_a1b2c3" \
@@ -206,7 +210,7 @@ notes and owner stay writable.
 This is the same conversion the console's **Convert** dialog performs, through the same
 code: the lead becomes a [contact](contacts.md) at the **Sales qualified** lifecycle
 stage, carrying the lead's phone, job title, address, tags, notes, company name and
-marketing consent — joining the existing contact if the address is already one, so the
+marketing consent — but not its `custom` map, whose fields are the lead's own — joining the existing contact if the address is already one, so the
 address book stays one row per person — then, optionally, a company is linked or created
 and a deal opened in your default pipeline; the lead is stamped `qualified` once
 everything it names exists; and what was filed on the lead follows it: its
@@ -268,7 +272,7 @@ attributed to the person who made it.
 
 | Status | `type` | When |
 | --- | --- | --- |
-| `400` | `bad_request` | `code: "validation_failed"` — a missing or foreign `siteId`; on a create, a missing or unreadable `email`, a `status` other than `new` or `working`, or an `unqualifiedReason`; a `phone` or `website` that cannot be read; a `status` outside its list, or `qualified`; a missing `unqualifiedReason` on an unqualify, or one sent with another status; an `ownerUid` who is not a member, an `ownerEmail` no member has, or both at once; on a conversion, a `company` that is not exactly one of `link`/`create`, a `company.link` that does not exist, a `company.create.domain` that is not a domain, a `deal` with no `title`, a fractional `deal.amountCents` or a malformed `deal.currency`. On the list, a `?status=` outside the four. `fields` names each key — nested ones as `deal.title`. |
+| `400` | `bad_request` | `code: "validation_failed"` — a missing or foreign `siteId`; on a create, a missing or unreadable `email`, a `status` other than `new` or `working`, or an `unqualifiedReason`; a `phone` or `website` that cannot be read; a `status` outside its list, or `qualified`; a missing `unqualifiedReason` on an unqualify, or one sent with another status; an `ownerUid` who is not a member, an `ownerEmail` no member has, or both at once; a `custom` entry that is not a lead field, is retired, or does not fit its type (named as `custom.<key>`); on a conversion, a `company` that is not exactly one of `link`/`create`, a `company.link` that does not exist, a `company.create.domain` that is not a domain, a `deal` with no `title`, a fractional `deal.amountCents` or a malformed `deal.currency`. On the list, a `?status=` outside the four. `fields` names each key — nested ones as `deal.title`. |
 | `403` | `plan_required` | `code: "crm"` — the plan doesn't include the CRM suite. `code: "crm_records_quota"` — a conversion would create a record past the band on a plan that doesn't meter the overage. |
 | `403` | `insufficient_scope` | Key lacks `crm:read` / `crm:write`. |
 | `404` | `not_found` | `"No such lead"`. |

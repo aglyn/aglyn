@@ -132,6 +132,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/marketing-consent'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/consent-groups'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/crm'),
+  // The custom-field reader both verbs judge a lead's map with (AGL-3272).
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/contact-custom-fields'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/person-key'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/visitor-record-ceiling'),
@@ -433,6 +435,9 @@ describe('GET /v1/leads', () => {
       convertedAt: null,
       companyId: null,
       dealId: null,
+      // The org's own lead fields (AGL-3272) — `{}` on a lead that carries
+      // none, so a client can index it without a guard.
+      custom: {},
       created: null,
       updated: null,
     })
@@ -742,6 +747,106 @@ describe('PATCH /v1/leads/{id} — the profile', () => {
     })
     expect(response.status).toBe(400)
     expect(Object.keys((await json(response)).error.fields).sort()).toEqual(['phone', 'website'])
+  })
+})
+
+/*
+ * THE ORG'S OWN LEAD FIELDS OVER THE WIRE (AGL-3272). One collection holds
+ * every object's definitions, so what both verbs have to get right is
+ * WHICH of them a lead's map is judged against — and that the view
+ * publishes `{}` rather than nothing on a lead that carries none.
+ */
+describe('custom fields on leads (AGL-3272)', () => {
+  const FIELDS = `${ORG}/contactFields`
+  /** Two definitions sharing one key, one per object — a body can only pass against its own. */
+  const seedFields = () => {
+    mockDocs.set(`${FIELDS}/f-contact-region`, {
+      key: 'region',
+      label: 'Region',
+      type: 'text',
+      order: 0,
+      visibleTo: ['org'],
+      hostId: HOST,
+    })
+    mockDocs.set(`${FIELDS}/f-lead-region`, {
+      key: 'region',
+      label: 'Region',
+      type: 'select',
+      options: ['west', 'east'],
+      order: 0,
+      object: 'lead',
+      visibleTo: ['org'],
+      hostId: HOST,
+    })
+    mockDocs.set(`${FIELDS}/f-lead-retired`, {
+      key: 'old_tier',
+      label: 'Old tier',
+      type: 'text',
+      order: 1,
+      object: 'lead',
+      retiredAt: 1,
+      visibleTo: ['org'],
+      hostId: HOST,
+    })
+  }
+
+  it('stores a map judged against the LEAD definitions, and publishes it', async () => {
+    seedFields()
+    const created = await json(
+      await call('POST', `leads?siteId=${HOST}`, {
+        email: 'dana@acme.com',
+        custom: { region: 'west' },
+      }),
+    )
+    expect(created.custom).toEqual({ region: 'west' })
+    expect(mockDocs.get(`${LEADS}/${created.id}`)!.custom).toEqual({ region: 'west' })
+    // A lead without a map publishes `{}`, never `null` — a client can
+    // index it without a guard — and stores no key at all.
+    const bare = await json(await call('POST', `leads?siteId=${HOST}`, { email: 'bare@acme.com' }))
+    expect(bare.custom).toEqual({})
+    expect(mockDocs.get(`${LEADS}/${bare.id}`)).not.toHaveProperty('custom')
+  })
+
+  it('refuses what the CONTACT field would allow, an unknown key and a retired one', async () => {
+    seedFields()
+    // `north` is a fine TEXT value for the contact `region` — and refused
+    // here, because a lead's `region` is a choice of two.
+    const refused = await json(
+      await call('POST', `leads?siteId=${HOST}`, {
+        email: 'dana@acme.com',
+        custom: { region: 'north' },
+      }),
+    )
+    expect(Object.keys(refused.error.fields)).toEqual(['custom.region'])
+    const others = await json(
+      await call('POST', `leads?siteId=${HOST}`, {
+        email: 'dana@acme.com',
+        custom: { nope: 'x', old_tier: 'gold' },
+      }),
+    )
+    expect(Object.keys(others.error.fields).sort()).toEqual(['custom.nope', 'custom.old_tier'])
+    // Nothing was written to retry against: a refused key never reaches
+    // the door, so no lead was filed for the address.
+    const { personKey } = jest.requireActual('../../../libs/aglyn/src/lib/app-utils/person-key')
+    expect(mockDocs.get(`${LEADS}/${personKey('dana@acme.com')}`)).toBeUndefined()
+  })
+
+  it('merges a PATCH into the map rather than replacing it, and clears with null', async () => {
+    seedFields()
+    mockDocs.set(`${LEADS}/lead-a`, {
+      ...captured('ann@acme.com', 3_000, { name: 'Ann Lee' }),
+      custom: { region: 'west', kept: 'yes' },
+    })
+    const patched = await json(
+      await call('PATCH', `leads/lead-a?siteId=${HOST}`, { custom: { region: 'east' } }),
+    )
+    expect(patched.custom).toEqual({ region: 'east', kept: 'yes' })
+    const cleared = await json(
+      await call('PATCH', `leads/lead-a?siteId=${HOST}`, { custom: { region: null } }),
+    )
+    // `null` is an explicit nothing that keeps the key present, which is
+    // the shape a `where` clause can find.
+    expect(cleared.custom).toEqual({ region: null, kept: 'yes' })
   })
 })
 

@@ -73,6 +73,21 @@ jest.mock('./crm-call-actions', () => ({
   CrmCallButton: () => null,
 }))
 jest.mock('./lead-owner-select', () => ({ LeadOwnerSelect: () => null }))
+/*
+ * The org's lead field definitions (AGL-3272), which the real hook reads
+ * off a live Firestore listen. The control under them stays real: what
+ * this spec is about is which values Save writes, and a doubled control
+ * would prove nothing about that.
+ */
+const definitionsFor = jest.fn(() => ({
+  definitions: [] as unknown[],
+  active: [] as unknown[],
+  ready: true,
+  fromCache: false,
+}))
+jest.mock('../hooks/use-contact-field-definitions', () => ({
+  useContactFieldDefinitions: (...args: unknown[]) => definitionsFor(...(args as [])),
+}))
 
 const PENDING_REASON = 'An erasure is pending for this person'
 
@@ -90,6 +105,7 @@ function renderCard(props: Partial<ComponentProps<typeof LeadPropertiesCard>> = 
   render(
     <LeadPropertiesCard
       hostId="host-1"
+      orgId="org-1"
       leadId="lead-1"
       lead={lead}
       leadStatus="success"
@@ -173,5 +189,87 @@ describe('the profile on the lead page', () => {
     renderCard({ lead: { ...lead, status: 'qualified', convertedContactId: 'c-1' } })
     expect((screen.getByLabelText('Company') as HTMLInputElement).disabled).toBe(true)
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
+  })
+})
+
+/**
+ * THE ORG'S OWN LEAD FIELDS ON THE LEAD PAGE (AGL-3272).
+ *
+ * What the card has to get right is the SHAPE of the write: one dotted
+ * path per key the reader touched, never the map whole — a `custom` map
+ * written whole would take out every key the card did not show, which is
+ * where a retired field's values and an integration's writes sit.
+ */
+describe('the custom lead fields on the lead page', () => {
+  const definition = {
+    $id: 'f-budget',
+    key: 'budget',
+    label: 'Budget',
+    type: 'text' as const,
+    order: 0,
+  }
+
+  beforeEach(() => {
+    updateDoc.mockClear()
+    definitionsFor.mockReturnValue({
+      definitions: [definition],
+      active: [definition],
+      ready: true,
+      fromCache: false,
+    })
+  })
+
+  afterEach(() =>
+    definitionsFor.mockReturnValue({
+      definitions: [],
+      active: [],
+      ready: true,
+      fromCache: false,
+    }),
+  )
+
+  it('asks for the LEAD definitions, not the contact ones', () => {
+    renderCard()
+    expect(definitionsFor).toHaveBeenLastCalledWith('org-1', 'lead')
+  })
+
+  it('writes one dotted path per touched key, leaving the rest of the map alone', async () => {
+    renderCard({ lead: { ...lead, custom: { budget: '1000', untouched: 'keep me' } } })
+    fireEvent.change(screen.getByLabelText('Budget'), { target: { value: '5000' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByRole('button', { name: 'Save' })
+    expect(updateDoc).toHaveBeenCalledTimes(1)
+    const written = updateDoc.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(written['custom.budget']).toBe('5000')
+    expect(written).not.toHaveProperty('custom')
+    expect(written).not.toHaveProperty('custom.untouched')
+  })
+
+  it('offers Save for a custom edit alone, and refuses a required field cleared', async () => {
+    const required = { ...definition, required: true }
+    definitionsFor.mockReturnValue({
+      definitions: [required],
+      active: [required],
+      ready: true,
+      fromCache: false,
+    })
+    renderCard({ lead: { ...lead, custom: { budget: '1000' } } })
+    // Nothing on the profile was touched, so Save is offered for the
+    // custom edit or not at all.
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    // A required field's label carries MUI's asterisk, so it is matched
+    // by its text rather than in full.
+    fireEvent.change(screen.getByLabelText(/Budget/), { target: { value: '' } })
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByRole('button', { name: 'Save' })
+    expect(updateDoc).not.toHaveBeenCalled()
+  })
+
+  it('is read-only once the lead is converted', () => {
+    renderCard({
+      lead: { ...lead, status: 'qualified', convertedContactId: 'c-1', custom: { budget: '1' } },
+    })
+    expect((screen.getByLabelText('Budget') as HTMLInputElement).disabled).toBe(true)
   })
 })
