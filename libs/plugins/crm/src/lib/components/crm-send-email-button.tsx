@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { type AglynOrgBilling, type CrmEmailState, crmEmailStateRefusal } from '@aglyn/aglyn'
+import { type AglynOrgBilling, type EmailState, emailStateRefusal } from '@aglyn/aglyn'
 import { Button, Tooltip } from '@mui/material'
 import { useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
@@ -44,7 +44,7 @@ export interface CrmSendEmailButtonProps {
    * or a do-not-contact mark disables the button with the reason, in the
    * words the chip beside it uses.
    */
-  emailState?: CrmEmailState | null
+  emailState?: EmailState | null
   /**
    * The org's plan lacks the CRM, whose act one-to-one email is
    * (AGL-2788): the button stands locked where it would be, and no dialog
@@ -78,7 +78,7 @@ export function CrmSendEmailButton(props: CrmSendEmailButtonProps) {
   const reachable = canSend && (Boolean(address) || Boolean(contactId))
   // The record's own verdict on its address (AGL-3245) outranks reachability:
   // an address that bounced is not one to open a composer for.
-  const stateRefusal = crmEmailStateRefusal(emailState)
+  const stateRefusal = emailStateRefusal(emailState)
   const reason = stateRefusal
     ? stateRefusal
     : !reachable

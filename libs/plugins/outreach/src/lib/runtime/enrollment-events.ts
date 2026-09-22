@@ -158,7 +158,7 @@ export async function recordOutreachOptOut(
     state: {
       status: input.complaint ? 'complained' : input.source === 'unsubscribe' ? 'unsubscribed' : 'do_not_contact',
       atMs: input.nowMs,
-      source: 'outreach',
+      source: 'sequence',
       detail: input.detail,
       ...(input.enrollment?.id ? { enrollmentId: input.enrollment.id } : {}),
     },

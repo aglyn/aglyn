@@ -48,7 +48,6 @@ import type {
 import { EMAIL_TOPIC_SALES, readTopicSubscriptionState } from '@aglyn/aglyn/app-utils/email-topics'
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
 import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/email-topic-confirmation'
-import { stampRecordEmailState } from '@aglyn/tenant-data-admin/server/record-email-state'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import type { OutreachEnrollment, OutreachMailbox, OutreachSequence } from '../model/outreach.types'
 import { FakeGmail } from './fixtures/fake-gmail'
@@ -138,10 +137,17 @@ function deps(overrides: Partial<OutreachRuntimeDeps> = {}): OutreachRuntimeDeps
     notifyMailboxOwner: async (notice) => {
       filed.notices.push(notice)
     },
-    // The real stamp (AGL-3245), against the same emulator: what the record
-    // page reads is what this run wrote.
+    // The record system's stamp (AGL-3245), stood in for: the record system
+    // is another plugin, which this spec may not import, so the verdict is
+    // written onto the contact the address names, as its writer would.
     stampRecordEmailState: async (stamp) => {
-      await stampRecordEmailState({ ...stamp, firestore })
+      const contacts = await firestore
+        .collection('orgs')
+        .doc(stamp.orgId)
+        .collection('contacts')
+        .where('email', '==', stamp.email)
+        .get()
+      for (const doc of contacts.docs) await doc.ref.set({ emailState: stamp.state }, { merge: true })
     },
     unsubscribeUrl: (target) =>
       outreachUnsubscribeUrl({ origin: 'https://console.example.com', target, secret: SECRET }),
@@ -685,7 +691,7 @@ describeEmulated('the sync job (AGL-2981)', () => {
     // The record the person is says so (AGL-3245): the contact carries the
     // verdict, and the send's own timeline entry is marked bounced.
     const contact = (await org().collection('contacts').doc('contact-1').get()).data()
-    expect(contact?.['emailState']).toMatchObject({ status: 'bounced', source: 'outreach', enrollmentId: one.id })
+    expect(contact?.['emailState']).toMatchObject({ status: 'bounced', source: 'sequence', enrollmentId: one.id })
     expect(String(contact?.['emailState']?.['detail'])).not.toContain('person1@example.org')
     expect(filed.deliveries).toEqual([
       expect.objectContaining({ orgId, messageId: one.messageIds[0], state: 'bounced', detail: expect.stringContaining('no such user') }),

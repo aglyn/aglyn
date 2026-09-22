@@ -97,6 +97,7 @@ import {
   TOPIC_OPT_OUTS_SUBCOLLECTION,
 } from '@aglyn/aglyn/app-utils/email-topics'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import firebaseAdmin from './firebase-admin'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
@@ -229,6 +230,11 @@ export interface SuppressEmailInput {
   context?: string | null
   /** The site the failed send was attributed to, when it named one. */
   hostId?: string | null
+  /**
+   * Whether to say so on the person's record too (AGL-3245); on by default.
+   * A sender that stamps a richer verdict of its own passes `false`.
+   */
+  stampRecord?: boolean
   /** Injectable for tests; defaults to the admin app's Firestore. */
   firestore?: any
 }
@@ -276,29 +282,24 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
     { merge: true },
   )
   /*
-   * The same verdict on the record the person reads (AGL-3245): a bounce or
-   * a complaint on a send that named a site stamps the site's leads and the
-   * organization's contact. A send that named none has no records to find,
-   * and an outreach send stamps its own, richer verdict — the domain block,
-   * the enrollment — from the sync job, so it is left to that.
+   * The same verdict on the record the person reads (AGL-3245), through
+   * whichever plugin keeps the workspace's records: a bounce or a complaint
+   * on a send that named a site stamps the site's records. A send that
+   * named none has no records to find, and a caller that stamps its own,
+   * richer verdict — the sequence runtime, with the domain block and the
+   * enrollment — says `stampRecord: false` and is left to it.
    */
-  if (input.hostId && input.context !== 'outreach' && input.reason !== 'staff') {
-    try {
-      const { stampRecordEmailStateForHost } = await import('./record-email-state')
-      await stampRecordEmailStateForHost({
-        hostId: input.hostId,
-        email: input.email,
-        state: {
-          status: input.reason === 'complaint' ? 'complained' : 'bounced',
-          atMs: Date.now(),
-          source: 'campaign',
-          detail: input.context ? `Reported by the ${input.context} send.` : null,
-        },
-        firestore: db,
-      })
-    } catch (error) {
-      console.error('[email-suppression] the record could not be stamped', error)
-    }
+  if (input.hostId && input.stampRecord !== false && input.reason !== 'staff') {
+    await stampRecordEmailState({
+      hostId: input.hostId,
+      email: input.email,
+      state: {
+        status: input.reason === 'complaint' ? 'complained' : 'bounced',
+        atMs: Date.now(),
+        source: 'campaign',
+        detail: input.context ? `Reported by the ${input.context} send.` : null,
+      },
+    })
   }
   return { key, created: !snapshot.exists }
 }

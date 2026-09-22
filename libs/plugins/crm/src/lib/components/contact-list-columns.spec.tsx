@@ -119,7 +119,7 @@ describe('contactListColumns', () => {
    */
   it('reads the email state by its label, and draws nothing for a record with none', () => {
     const blocked = row({
-      emailState: { status: 'blocked', atMs: NOW, source: 'outreach', detail: '550 (the address:blocked)' },
+      emailState: { status: 'blocked', atMs: NOW, source: 'sequence', detail: '550 (the address:blocked)' },
     })
     expect(value('emailState', blocked)).toBe('Blocked by their mail gateway')
     expect(value('emailState', row())).toBe('')

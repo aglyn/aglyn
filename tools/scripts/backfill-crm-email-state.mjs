@@ -23,7 +23,7 @@
 //   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-crm-email-state.mjs --org=<orgId> --apply
 //
 // DRY RUN BY DEFAULT. `--apply` writes. Every decision is
-// `lib/crm-email-state-backfill.mjs`'s and pinned by its test; this file
+// `lib/email-state-backfill.mjs`'s and pinned by its test; this file
 // reads, prints and writes.
 //
 // ## What it does
@@ -47,7 +47,7 @@
 
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { personKey, planRecordEmailState } from './lib/crm-email-state-backfill.mjs'
+import { personKey, planRecordEmailState } from './lib/email-state-backfill.mjs'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
 import { collect, commitAll, connectFirestore, everyDocument } from './lib/firestore-backfill.mjs'
 

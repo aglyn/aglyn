@@ -529,7 +529,7 @@ async function applyMessages(
         state: {
           status: gateway ? 'blocked' : 'bounced',
           atMs: bouncedAtMs,
-          source: 'outreach',
+          source: 'sequence',
           detail: diagnostic,
           enrollmentId: enrollment.id,
         },

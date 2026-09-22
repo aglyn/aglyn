@@ -106,7 +106,7 @@ describe('leadMatchesSearch', () => {
  * member must not email together, and the ones nothing has been said about.
  */
 describe('leadMatchesEmailFilter', () => {
-  const bounced = { emailState: { status: 'bounced', atMs: 1, source: 'outreach', detail: null } }
+  const bounced = { emailState: { status: 'bounced', atMs: 1, source: 'sequence', detail: null } }
   const ok = { emailState: { status: 'ok', atMs: 1, source: 'member', detail: null } }
 
   it('keeps everyone under Any, and only the unemailable under Cannot be emailed', () => {

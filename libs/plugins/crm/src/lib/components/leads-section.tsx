@@ -458,11 +458,11 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         flex: 0.9,
         minWidth: 150,
         valueGetter: (_value, row: LeadRow) => {
-          const state = Aglyn.readCrmEmailState(row)
-          return state ? Aglyn.CRM_EMAIL_STATE_LABELS[state.status] : ''
+          const state = Aglyn.readEmailState(row)
+          return state ? Aglyn.EMAIL_STATE_LABELS[state.status] : ''
         },
         renderCell: ({ row }: { row: LeadRow }) => {
-          const state = Aglyn.readCrmEmailState(row)
+          const state = Aglyn.readEmailState(row)
           return state ? (
             <CrmEmailStateChip state={state} />
           ) : (

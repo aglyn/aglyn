@@ -250,9 +250,6 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ...jest.requireActual(
     '@aglyn/tenant-data-admin/server/email-unsubscribe-link',
   ),
-  // The record stamp (AGL-3245) is the record's own concern, held by its
-  // own spec; here it is a no-op the unsubscribe calls and moves on from.
-  stampRecordEmailStateForHost: async () => ({ contacts: 0, leads: 0 }),
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
 }))
 

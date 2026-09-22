@@ -16,16 +16,16 @@
  */
 
 import {
-  CRM_EMAIL_STATE_LABELS,
-  CRM_EMAIL_STATE_STATUSES,
+  EMAIL_STATE_LABELS,
+  EMAIL_STATE_STATUSES,
   CRM_LEAD_STATUS_LABELS,
-  type CrmEmailStateStatus,
+  type EmailStateStatus,
   type CrmLeadFields,
   type CrmLeadStatus,
-  crmEmailStateForbidsEmail,
+  emailStateForbidsEmail,
   crmLeadStatus,
   isCrmLeadOpen,
-  readCrmEmailState,
+  readEmailState,
 } from '@aglyn/aglyn'
 
 /**
@@ -72,12 +72,12 @@ export function leadMatchesFilter(
  * bounce does not move a lead out of Open, and a queue of bounced leads is
  * a queue of people to reach some other way.
  */
-export type LeadEmailFilter = 'any' | 'problem' | 'none' | CrmEmailStateStatus
+export type LeadEmailFilter = 'any' | 'problem' | 'none' | EmailStateStatus
 
 export const LEAD_EMAIL_FILTERS: readonly LeadEmailFilter[] = [
   'any',
   'problem',
-  ...CRM_EMAIL_STATE_STATUSES,
+  ...EMAIL_STATE_STATUSES,
   'none',
 ]
 
@@ -85,7 +85,7 @@ export const LEAD_EMAIL_FILTER_LABELS: Record<LeadEmailFilter, string> = {
   any: 'Any',
   problem: 'Cannot be emailed',
   none: 'Nothing known',
-  ...CRM_EMAIL_STATE_LABELS,
+  ...EMAIL_STATE_LABELS,
 }
 
 /** Whether a lead belongs in an email filter's view. */
@@ -94,9 +94,9 @@ export function leadMatchesEmailFilter(
   filter: LeadEmailFilter,
 ): boolean {
   if (filter === 'any') return true
-  const state = readCrmEmailState(lead)
+  const state = readEmailState(lead)
   if (filter === 'none') return state === null
-  if (filter === 'problem') return crmEmailStateForbidsEmail(state)
+  if (filter === 'problem') return emailStateForbidsEmail(state)
   return state?.status === filter
 }
 

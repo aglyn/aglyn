@@ -17,11 +17,11 @@
 'use client'
 
 import {
-  CRM_EMAIL_STATE_LABELS,
-  crmEmailStateForbidsEmail,
-  crmEmailStateWhen,
-  type CrmEmailState,
-  type CrmEmailStateStatus,
+  EMAIL_STATE_LABELS,
+  emailStateForbidsEmail,
+  emailStateWhen,
+  type EmailState,
+  type EmailStateStatus,
 } from '@aglyn/aglyn'
 import { Chip, type ChipProps, Tooltip } from '@mui/material'
 
@@ -31,7 +31,7 @@ import { Chip, type ChipProps, Tooltip } from '@mui/material'
  * is a fact, not a fault, and reads neutral; a complaint is the one that
  * scores the sender and reads as the warning it is.
  */
-const STATE_COLOR: Record<CrmEmailStateStatus, ChipProps['color']> = {
+const STATE_COLOR: Record<EmailStateStatus, ChipProps['color']> = {
   ok: 'success',
   bounced: 'error',
   blocked: 'error',
@@ -41,7 +41,7 @@ const STATE_COLOR: Record<CrmEmailStateStatus, ChipProps['color']> = {
 }
 
 export interface CrmEmailStateChipProps {
-  state: CrmEmailState | null | undefined
+  state: EmailState | null | undefined
   size?: ChipProps['size']
 }
 
@@ -54,14 +54,14 @@ export interface CrmEmailStateChipProps {
 export function CrmEmailStateChip(props: CrmEmailStateChipProps) {
   const { state, size = 'small' } = props
   if (!state) return null
-  const when = crmEmailStateWhen(state)
+  const when = emailStateWhen(state)
   const title = [when, state.detail].filter(Boolean).join(' · ')
   const chip = (
     <Chip
       size={size}
-      label={CRM_EMAIL_STATE_LABELS[state.status]}
+      label={EMAIL_STATE_LABELS[state.status]}
       color={STATE_COLOR[state.status]}
-      variant={crmEmailStateForbidsEmail(state) ? 'filled' : 'outlined'}
+      variant={emailStateForbidsEmail(state) ? 'filled' : 'outlined'}
       data-testid="crm-email-state"
     />
   )

@@ -25,7 +25,7 @@ import {
   stateFromSuppression,
   strongestState,
   toMs,
-} from './crm-email-state-backfill.mjs'
+} from './email-state-backfill.mjs'
 
 const AT = 1_790_000_000_000
 
@@ -53,7 +53,7 @@ describe('what each list says', () => {
       detail: 'Reported by the campaign send.',
     })
     assert.equal(stateFromSuppression({ reason: 'complaint', context: 'outreach', suppressedAt: AT }).status, 'complained')
-    assert.equal(stateFromSuppression({ reason: 'complaint', context: 'outreach', suppressedAt: AT }).source, 'outreach')
+    assert.equal(stateFromSuppression({ reason: 'complaint', context: 'outreach', suppressedAt: AT }).source, 'sequence')
     assert.deepEqual(stateFromSuppression({ reason: 'staff', suppressedAt: AT }), {
       status: 'do_not_contact',
       atMs: AT,
@@ -67,7 +67,7 @@ describe('what each list says', () => {
   it('reads a do-not-contact entry by its reason, keeping the member and the enrollment', () => {
     assert.deepEqual(
       stateFromDoNotContact({ reason: 'gateway_block', source: 'runtime', addedAtMs: AT, detail: '550 (the address:blocked)', enrollmentId: 'e1' }),
-      { status: 'blocked', atMs: AT, source: 'outreach', detail: '550 (the address:blocked)', enrollmentId: 'e1' },
+      { status: 'blocked', atMs: AT, source: 'sequence', detail: '550 (the address:blocked)', enrollmentId: 'e1' },
     )
     assert.equal(stateFromDoNotContact({ reason: 'manual', source: 'member', addedAtMs: AT }).source, 'member')
     assert.equal(stateFromDoNotContact({ reason: 'unsubscribe', source: 'runtime', addedAtMs: AT }).status, 'unsubscribed')
@@ -77,7 +77,7 @@ describe('what each list says', () => {
 
   it('keeps the strongest verdict, and the latest of equals', () => {
     const bounced = { status: 'bounced', atMs: AT, source: 'campaign', detail: null }
-    const blocked = { status: 'blocked', atMs: AT - 1, source: 'outreach', detail: null }
+    const blocked = { status: 'blocked', atMs: AT - 1, source: 'sequence', detail: null }
     const later = { ...bounced, atMs: AT + 5 }
     assert.equal(strongestState([bounced, blocked]).status, 'blocked')
     assert.equal(strongestState([bounced, later]).atMs, AT + 5)
@@ -93,7 +93,7 @@ describe('what a record should hold', () => {
     assert.deepEqual(planRecordEmailState({ record: {}, suppression, doNotContact }), {
       status: 'blocked',
       atMs: AT,
-      source: 'outreach',
+      source: 'sequence',
       detail: 'blocked',
     })
   })
@@ -102,7 +102,7 @@ describe('what a record should hold', () => {
     assert.equal(planRecordEmailState({ record: {}, suppression: null, doNotContact: null }), null)
     assert.equal(
       planRecordEmailState({
-        record: { emailState: { status: 'blocked', atMs: AT, source: 'outreach', detail: 'blocked' } },
+        record: { emailState: { status: 'blocked', atMs: AT, source: 'sequence', detail: 'blocked' } },
         suppression,
         doNotContact,
       }),

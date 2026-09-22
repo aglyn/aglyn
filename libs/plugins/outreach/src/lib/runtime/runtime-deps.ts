@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { CrmEmailState } from '@aglyn/aglyn/app-utils/email-state'
+import type { EmailState } from '@aglyn/aglyn/app-utils/email-state'
 import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import type { OutreachMailboxNotice } from '../engine/mailbox-notice'
 import type { OpenedOutreachMailbox } from '../mailboxes/mailbox-transport'
@@ -62,7 +62,7 @@ export interface OutreachMailboxNoticeRequest extends OutreachMailboxNotice {
 export interface OutreachRecordEmailStamp {
   orgId: string
   email: string
-  state: CrmEmailState
+  state: EmailState
 }
 
 export interface OutreachRuntimeDeps {

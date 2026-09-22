@@ -68,7 +68,7 @@ import {
   normalizeContactEmail,
   readContactFacet,
 } from './contacts'
-import type { CrmEmailState } from './email-state'
+import type { EmailState } from './email-state'
 import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
 
 // The fixed vocabularies and their guards live in a leaf module; every name
@@ -2369,7 +2369,7 @@ export interface CrmLeadFields extends CrmLeadProfile {
    * unsubscribed, do-not-contact — written by the platform's senders only,
    * never by a form or the lead's editor. Absent means nothing is known.
    */
-  emailState?: CrmEmailState
+  emailState?: EmailState
 }
 
 /*==========================================

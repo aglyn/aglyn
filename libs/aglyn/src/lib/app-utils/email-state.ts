@@ -39,7 +39,7 @@
  *==========================================*/
 
 /** Every state, weakest first. */
-export const CRM_EMAIL_STATE_STATUSES = [
+export const EMAIL_STATE_STATUSES = [
   /** The address may be emailed: released, or confirmed again. */
   'ok',
   /** Mail to it bounced for good: the mailbox does not exist. */
@@ -54,19 +54,19 @@ export const CRM_EMAIL_STATE_STATUSES = [
   'do_not_contact',
 ] as const
 
-export type CrmEmailStateStatus = (typeof CRM_EMAIL_STATE_STATUSES)[number]
+export type EmailStateStatus = (typeof EMAIL_STATE_STATUSES)[number]
 
 /** Which sender's verdict it is. */
-export type CrmEmailStateSource = 'outreach' | 'campaign' | 'member'
+export type EmailStateSource = 'sequence' | 'campaign' | 'member'
 
 /** The field on the lead and the contact. */
-export const CRM_EMAIL_STATE_FIELD = 'emailState'
+export const EMAIL_STATE_FIELD = 'emailState'
 
-export interface CrmEmailState {
-  status: CrmEmailStateStatus
+export interface EmailState {
+  status: EmailStateStatus
   /** When the verdict was given, epoch ms. */
   atMs: number
-  source: CrmEmailStateSource
+  source: EmailStateSource
   /** The sender's own words: the bounce's diagnostic, a member's note. */
   detail: string | null
   /** The sequence enrollment it came from, when one did. */
@@ -74,7 +74,7 @@ export interface CrmEmailState {
 }
 
 /** How a state reads on the chip — typed so a state cannot ship unlabeled. */
-export const CRM_EMAIL_STATE_LABELS: Record<CrmEmailStateStatus, string> = {
+export const EMAIL_STATE_LABELS: Record<EmailStateStatus, string> = {
   ok: 'Email OK',
   bounced: 'Bounced',
   blocked: 'Blocked by their mail gateway',
@@ -90,7 +90,7 @@ export const CRM_EMAIL_STATE_LABELS: Record<CrmEmailStateStatus, string> = {
  * block over a bounce, since the block names the whole domain; and `ok`
  * over nothing — a release is written on purpose, by a path that forces it.
  */
-const CRM_EMAIL_STATE_RANK: Record<CrmEmailStateStatus, number> = {
+const EMAIL_STATE_RANK: Record<EmailStateStatus, number> = {
   ok: 0,
   bounced: 1,
   blocked: 2,
@@ -99,30 +99,30 @@ const CRM_EMAIL_STATE_RANK: Record<CrmEmailStateStatus, number> = {
   do_not_contact: 5,
 }
 
-export function isCrmEmailStateStatus(value: unknown): value is CrmEmailStateStatus {
-  return typeof value === 'string' && (CRM_EMAIL_STATE_STATUSES as readonly string[]).includes(value)
+export function isEmailStateStatus(value: unknown): value is EmailStateStatus {
+  return typeof value === 'string' && (EMAIL_STATE_STATUSES as readonly string[]).includes(value)
 }
 
 /** The state a record holds, held to its shape, or `null` when it holds none. */
-export function readCrmEmailState(record: Record<string, unknown> | null | undefined): CrmEmailState | null {
-  const raw = record?.[CRM_EMAIL_STATE_FIELD]
+export function readEmailState(record: Record<string, unknown> | null | undefined): EmailState | null {
+  const raw = record?.[EMAIL_STATE_FIELD]
   if (!raw || typeof raw !== 'object') return null
   const state = raw as Record<string, unknown>
-  if (!isCrmEmailStateStatus(state['status'])) return null
+  if (!isEmailStateStatus(state['status'])) return null
   const atMs = Number(state['atMs'])
   const source = state['source']
   const enrollmentId = typeof state['enrollmentId'] === 'string' && state['enrollmentId'] ? state['enrollmentId'] : undefined
   return {
     status: state['status'],
     atMs: Number.isFinite(atMs) && atMs > 0 ? atMs : 0,
-    source: source === 'outreach' || source === 'campaign' || source === 'member' ? source : 'campaign',
+    source: source === 'sequence' || source === 'campaign' || source === 'member' ? source : 'campaign',
     detail: typeof state['detail'] === 'string' && state['detail'] ? state['detail'] : null,
     ...(enrollmentId ? { enrollmentId } : {}),
   }
 }
 
 /** Whether the state means the address must not be emailed by hand. */
-export function crmEmailStateForbidsEmail(state: CrmEmailState | null | undefined): boolean {
+export function emailStateForbidsEmail(state: EmailState | null | undefined): boolean {
   return Boolean(state) && state?.status !== 'ok'
 }
 
@@ -133,17 +133,17 @@ export function crmEmailStateForbidsEmail(state: CrmEmailState | null | undefine
  * the current. `force` writes the incoming state whatever stands, which is
  * how a release lands.
  */
-export function nextCrmEmailState(
-  current: CrmEmailState | null | undefined,
-  incoming: CrmEmailState,
+export function nextEmailState(
+  current: EmailState | null | undefined,
+  incoming: EmailState,
   options: { force?: boolean } = {},
-): CrmEmailState {
+): EmailState {
   if (!current || options.force) return incoming
-  return CRM_EMAIL_STATE_RANK[incoming.status] >= CRM_EMAIL_STATE_RANK[current.status] ? incoming : current
+  return EMAIL_STATE_RANK[incoming.status] >= EMAIL_STATE_RANK[current.status] ? incoming : current
 }
 
 /** When the verdict was given, as the chip's tooltip and the refusal say it. */
-export function crmEmailStateWhen(state: Pick<CrmEmailState, 'atMs'>): string {
+export function emailStateWhen(state: Pick<EmailState, 'atMs'>): string {
   if (!state.atMs) return ''
   try {
     return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(state.atMs)
@@ -156,9 +156,9 @@ export function crmEmailStateWhen(state: Pick<CrmEmailState, 'atMs'>): string {
  * Why the record must not be emailed, in one sentence a disabled button or
  * a refused enrollment can show — or `null` when it may be.
  */
-export function crmEmailStateRefusal(state: CrmEmailState | null | undefined): string | null {
-  if (!state || !crmEmailStateForbidsEmail(state)) return null
-  const when = crmEmailStateWhen(state)
+export function emailStateRefusal(state: EmailState | null | undefined): string | null {
+  if (!state || !emailStateForbidsEmail(state)) return null
+  const when = emailStateWhen(state)
   const since = when ? ` on ${when}` : ''
   const said = state.detail ? ` ${state.detail}` : ''
   switch (state.status) {

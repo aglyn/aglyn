@@ -86,6 +86,7 @@ import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_NEXT_ACTIVITY_ROUTE } from './model/next-activity'
 import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmNextActivityHandler } from './server/next-activity-routes'
+import { registerCrmRecordEmailStateWriter } from './server/record-email-state'
 import { registerCrmRecordTimelineWriter } from './server/record-timeline'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
 import { crmCompaniesImportHandler } from './server/companies-import'
@@ -646,4 +647,8 @@ export function registerCrmConsoleApi(): void {
   // seam (AGL-2981): another plugin files an email, a reply or a task on a
   // record through it, under the CRM's own scope, dedupe and ceiling.
   registerCrmRecordTimelineWriter()
+  // And on the record email-state seam (AGL-3245): a sender that filed a
+  // verdict on an address — a bounce, a complaint, an unsubscribe, a
+  // do-not-contact mark — stamps the lead and the contact through it.
+  registerCrmRecordEmailStateWriter()
 }

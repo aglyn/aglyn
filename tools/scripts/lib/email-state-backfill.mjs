@@ -73,7 +73,7 @@ export function stateFromSuppression(row) {
   return {
     status,
     atMs: toMs(row.suppressedAt) || toMs(row.createdAt),
-    source: reason === 'staff' ? 'member' : outreach ? 'outreach' : 'campaign',
+    source: reason === 'staff' ? 'member' : outreach ? 'sequence' : 'campaign',
     detail: reason === 'staff' ? 'Suppressed by staff.' : context ? `Reported by the ${context} send.` : null,
   }
 }
@@ -94,7 +94,7 @@ export function stateFromDoNotContact(entry) {
   return {
     status,
     atMs: toMs(entry.addedAtMs),
-    source: entry.source === 'member' ? 'member' : 'outreach',
+    source: entry.source === 'member' ? 'member' : 'sequence',
     detail,
     ...(typeof entry.enrollmentId === 'string' && entry.enrollmentId ? { enrollmentId: entry.enrollmentId } : {}),
   }
@@ -123,7 +123,7 @@ export function readState(record) {
   return {
     status: raw.status,
     atMs: toMs(raw.atMs),
-    source: raw.source === 'outreach' || raw.source === 'member' ? raw.source : 'campaign',
+    source: raw.source === 'sequence' || raw.source === 'member' ? raw.source : 'campaign',
     detail: typeof raw.detail === 'string' && raw.detail ? raw.detail : null,
     ...(typeof raw.enrollmentId === 'string' && raw.enrollmentId ? { enrollmentId: raw.enrollmentId } : {}),
   }

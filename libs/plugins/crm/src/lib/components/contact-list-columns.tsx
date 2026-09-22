@@ -20,7 +20,7 @@ import {
   activityTimeLabel,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_SOURCE_LABELS,
-  CRM_EMAIL_STATE_LABELS,
+  EMAIL_STATE_LABELS,
   type ContactSource,
 } from '@aglyn/aglyn'
 import {
@@ -326,7 +326,7 @@ export function contactListColumns(
       minWidth: 140,
       filterable: false,
       valueGetter: (_value, row: ContactRecord) =>
-        row.emailState ? CRM_EMAIL_STATE_LABELS[row.emailState.status] : '',
+        row.emailState ? EMAIL_STATE_LABELS[row.emailState.status] : '',
       renderCell: ({ row }: { row: ContactRecord }) =>
         row.emailState ? (
           <CrmEmailStateChip state={row.emailState} />

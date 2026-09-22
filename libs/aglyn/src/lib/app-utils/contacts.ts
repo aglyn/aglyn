@@ -26,7 +26,7 @@
 import type { AglynPostalAddress } from '../foundation'
 import { consentGroupForHost } from './consent-groups'
 import type { ContactCustomValue, ContactLifecycleStage } from './crm'
-import type { CrmEmailState } from './email-state'
+import type { EmailState } from './email-state'
 import {
   CAPTURED_BY_HOST_FIELD,
   MARKETING_CONSENT_BY_HOST_FIELD,
@@ -234,7 +234,7 @@ export interface HostContact {
    * on the SHARED row because the address is shared. Absent means nothing
    * is known. See `email-state.ts`.
    */
-  emailState?: CrmEmailState
+  emailState?: EmailState
 }
 
 /** Timeline cap: keeps the doc small; older interactions age out. */

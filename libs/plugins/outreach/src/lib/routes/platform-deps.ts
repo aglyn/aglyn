@@ -16,8 +16,8 @@
  */
 
 import { collectDynamicListCandidates } from '@aglyn/tenant-data-admin/server/dynamic-list-materialize'
+import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { lockdownRefusal } from '@aglyn/tenant-data-admin/server/lockdown'
-import { stampRecordEmailState } from '@aglyn/tenant-data-admin/server/record-email-state'
 import {
   logOrgActivity,
   memberHasOrgPermission,

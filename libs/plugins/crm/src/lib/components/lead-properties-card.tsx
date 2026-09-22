@@ -189,7 +189,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const converted = Boolean(lead.convertedContactId)
   const open = Aglyn.isCrmLeadOpen(lead) && !converted
   // The last verdict on the address (AGL-3245), as the platform stamped it.
-  const emailState = Aglyn.readCrmEmailState(lead)
+  const emailState = Aglyn.readEmailState(lead)
   /** What a capture that took a number left on the document (AGL-2661). */
   const leadPhone = String(lead['phone'] ?? '').trim()
 

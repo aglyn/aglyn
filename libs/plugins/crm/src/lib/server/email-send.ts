@@ -28,7 +28,7 @@ import {
   type CrmActivityLink,
   crmActivityLogHasRoom,
   crmEmailDeliveryTags,
-  crmEmailStateRefusal,
+  emailStateRefusal,
   type CrmMergeContext,
   crmMergeFieldsIn,
   crmScopeTokens,
@@ -38,7 +38,7 @@ import {
   type PluginApiRequest,
   type PluginApiResponse,
   readContactFacet,
-  readCrmEmailState,
+  readEmailState,
   readMarketingBasis,
   renderCrmMergeFields,
   resolveOrgEntitlements,
@@ -668,7 +668,7 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
     // The record's own verdict (AGL-3245): what the lists hold, in the words
     // the page shows — a bounce, a gateway block, a do-not-contact mark the
     // suppression lists do not carry.
-    const stateRefusal = crmEmailStateRefusal(readCrmEmailState(recipient.record))
+    const stateRefusal = emailStateRefusal(readEmailState(recipient.record))
     if (stateRefusal) {
       return answer(res, refuse(409, stateRefusal, { reason: 'email-state' }))
     }

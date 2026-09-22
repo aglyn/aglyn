@@ -34,7 +34,7 @@ describe('CrmEmailStateChip', () => {
   it('names the verdict, and carries when and what the server said', () => {
     render(
       <CrmEmailStateChip
-        state={{ status: 'blocked', atMs: AT, source: 'outreach', detail: '550 (the address:blocked)' }}
+        state={{ status: 'blocked', atMs: AT, source: 'sequence', detail: '550 (the address:blocked)' }}
       />,
     )
     const chip = screen.getByTestId('crm-email-state')
@@ -56,7 +56,7 @@ describe('Send email under an email state', () => {
         hostId="host-1"
         leadId="lead-1"
         email="morgan@kcorp.example"
-        emailState={{ status: 'bounced', atMs: AT, source: 'outreach', detail: null }}
+        emailState={{ status: 'bounced', atMs: AT, source: 'sequence', detail: null }}
       />,
     )
     const disabled = screen.getByRole('button', { name: 'Send email' }) as HTMLButtonElement

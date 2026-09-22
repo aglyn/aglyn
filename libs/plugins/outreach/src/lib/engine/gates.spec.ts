@@ -303,7 +303,7 @@ describe('gate 4: every list that says not to', () => {
       input({
         contact: contact(
           {},
-          { emailState: { status: 'blocked', atMs: Date.UTC(2026, 8, 22, 15), source: 'outreach', detail: '550 (the address:blocked)' } },
+          { emailState: { status: 'blocked', atMs: Date.UTC(2026, 8, 22, 15), source: 'sequence', detail: '550 (the address:blocked)' } },
         ),
       }),
     )

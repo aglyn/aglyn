@@ -391,7 +391,7 @@ describe('The search box narrows the whole loaded window (AGL-3246)', () => {
     siteRows = [
       ...fillers,
       lead('l-bounced', 'bounced@example.com', {
-        emailState: { status: 'bounced', atMs: 1_000, source: 'outreach', detail: '550 5.1.1 no such user' },
+        emailState: { status: 'bounced', atMs: 1_000, source: 'sequence', detail: '550 5.1.1 no such user' },
       }),
     ]
     const { rerender } = renderSite()

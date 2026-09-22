@@ -111,7 +111,7 @@ export interface ContactRecord {
    * unsubscribed, do-not-contact — or `null` when nothing is known. SHARED
    * like the address it is about.
    */
-  emailState: Aglyn.CrmEmailState | null
+  emailState: Aglyn.EmailState | null
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -170,7 +170,7 @@ export function contactRecordFromDoc(
         ? facet.lastEmailEngagementAtMs
         : null,
     nextTaskAtMs: Aglyn.readNextTaskAtMs(row as { nextTaskAtMs?: unknown }),
-    emailState: Aglyn.readCrmEmailState(row),
+    emailState: Aglyn.readEmailState(row),
     createdAt: row['createdAt'],
     updatedAt: row['updatedAt'],
   }

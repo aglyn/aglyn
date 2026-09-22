@@ -25,8 +25,8 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import { sendOrgMemberNotice } from '@aglyn/tenant-data-admin/server/org-member-notice'
 import { logOrgActivity } from '@aglyn/tenant-data-admin/server/organizations'
-import { stampRecordEmailState } from '@aglyn/tenant-data-admin/server/record-email-state'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
+import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { OUTREACH_PLUGIN_ID } from '../constants/bundle-common'
 import { composeOutreachMailboxNotice } from '../engine/mailbox-notice'
 import { openOutreachMailboxClient } from '../mailboxes/mailbox-transport'
@@ -68,10 +68,12 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
       await recordTopicOptOut(hostId, email, EMAIL_TOPIC_SALES, { firestore: firestore() })
     },
     async suppressBouncedEmail({ email, hostId }) {
-      await suppressEmail({ email, reason: 'bounce', context: 'outreach', hostId, firestore: firestore() })
+      // The runtime stamps the record itself, with the richer verdict — the
+      // domain block, the enrollment — so the list's own stamp stands down.
+      await suppressEmail({ email, reason: 'bounce', context: 'outreach', hostId, stampRecord: false, firestore: firestore() })
     },
     async stampRecordEmailState(stamp) {
-      await stampRecordEmailState({ ...stamp, firestore: firestore() })
+      await stampRecordEmailState(stamp)
     },
     async notifyMailboxOwner(notice) {
       // The Mailboxes page, by the organization's slug — the page Resume and
