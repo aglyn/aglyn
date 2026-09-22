@@ -40,6 +40,7 @@ function mockDocRef(path: string): Record<string, unknown> {
       mockDocs.set(path, data)
     },
     set: async (data: Data) => void mockDocs.set(path, data),
+    update: async (data: Data) => void mockDocs.set(path, { ...(mockDocs.get(path) ?? {}), ...data }),
     collection: (name: string) => mockCollectionRef(`${path}/${name}`),
   }
 }
@@ -48,7 +49,16 @@ function mockCollectionRef(path: string) {
   return { doc: (id: string) => mockDocRef(`${path}/${id}`) }
 }
 
-const mockFirestore = { collection: (name: string) => mockCollectionRef(name) }
+const mockFirestore = {
+  collection: (name: string) => mockCollectionRef(name),
+  // The delivery write (AGL-3245) is a transaction, as the webhook's is.
+  runTransaction: async (work: (transaction: unknown) => Promise<unknown>) =>
+    work({
+      get: async (ref: { get: () => Promise<unknown> }) => ref.get(),
+      update: (ref: { path: string }, data: Data) =>
+        void mockDocs.set(ref.path, { ...(mockDocs.get(ref.path) ?? {}), ...data }),
+    }),
+}
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const activity = jest.requireActual('@aglyn/tenant-data-admin/server/crm-email-activity')
@@ -59,6 +69,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     crmActivityRef: activity.crmActivityRef,
     crmCapturedEmailActivityRef: activity.crmCapturedEmailActivityRef,
     createCrmEmailActivity: activity.createCrmEmailActivity,
+    recordCrmEmailDelivery: activity.recordCrmEmailDelivery,
     countCrmActivitiesForRecord: jest.fn(async () => mockActivityCount),
     recomputeCrmNextTaskAt: (...args: unknown[]) => mockRecompute(...args),
     firebaseAdmin: { app: () => ({ firestore: () => mockFirestore }) },
@@ -179,6 +190,39 @@ describe('the CRM on the record-timeline seam (AGL-2981)', () => {
     await writer.logActivity(INBOUND)
     const again = await writer.logActivity({ ...INBOUND, body: 'a second read' })
     expect(again).toMatchObject({ ok: true, created: false })
+    expect([...mockDocs.keys()].filter((key) => key.includes('/crmActivities/'))).toHaveLength(1)
+  })
+
+  /**
+   * A bounce lands on the send's own row (AGL-3245): the state the campaign
+   * webhook would set, with what the server said, found by the Message-ID
+   * the send was filed under — and a Message-ID nothing was filed under is
+   * answered, not invented.
+   */
+  it('marks a filed email bounced, on its own row, with what the server said', async () => {
+    const sent = { ...INBOUND, email: { ...INBOUND.email!, direction: 'outbound' as const, messageId: '<sent-9@example.org>' } }
+    const filed = await writer.logActivity(sent)
+    expect(filed).toMatchObject({ ok: true, created: true })
+    const first = await writer.recordEmailDelivery!({
+      orgId: ORG,
+      messageId: '<sent-9@example.org>',
+      state: 'bounced',
+      atMs: 1_750_000_600_000,
+      detail: '550 5.7.1 (the address:blocked)',
+    })
+    expect(first).toEqual({ ok: true, id: (filed as { id: string }).id, created: true })
+    const row = [...mockDocs.entries()].find(([path]) => path.endsWith(`/${(filed as { id: string }).id}`))?.[1]
+    expect(row).toMatchObject({
+      deliveryState: 'bounced',
+      deliveryAtMs: 1_750_000_600_000,
+      deliveryDetail: '550 5.7.1 (the address:blocked)',
+    })
+    // A second read of the same bounce changes nothing.
+    const again = await writer.recordEmailDelivery!({ orgId: ORG, messageId: '<sent-9@example.org>', state: 'bounced', atMs: 1 })
+    expect(again).toMatchObject({ ok: true, created: false })
+    // A message nothing filed is refused, and nothing is minted for it.
+    const unknown = await writer.recordEmailDelivery!({ orgId: ORG, messageId: '<never@example.org>', state: 'bounced', atMs: 1 })
+    expect(unknown).toMatchObject({ ok: false, status: 404 })
     expect([...mockDocs.keys()].filter((key) => key.includes('/crmActivities/'))).toHaveLength(1)
   })
 

@@ -164,6 +164,19 @@ export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     windowOnly: true,
     operators: ['equals', 'isNotEmpty'],
   },
+  /*
+   * The verdict on the address (AGL-3245) — window-only, on the shared row,
+   * and `nullable` because most records carry none: "is empty" is the
+   * filter for people nothing has been said about.
+   */
+  {
+    column: 'emailState',
+    kind: 'exact',
+    path: 'emailState.status',
+    windowOnly: true,
+    presence: 'nullable',
+    operators: ['equals', 'isAnyOf', 'isEmpty', 'isNotEmpty'],
+  },
 ]
 
 /**
@@ -245,4 +258,5 @@ export const CONTACT_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   [CRM_CONTACT_VIEW_FIELDS.stage]: 'Stage',
   [CRM_CONTACT_VIEW_FIELDS.source]: 'Source',
   [CRM_CONTACT_VIEW_FIELDS.company]: 'Company',
+  emailState: 'Email',
 }

@@ -106,6 +106,12 @@ export interface ContactRecord {
    * sees the same next step.
    */
   nextTaskAtMs: number | null
+  /**
+   * The last verdict on the address (AGL-3245) — bounced, blocked,
+   * unsubscribed, do-not-contact — or `null` when nothing is known. SHARED
+   * like the address it is about.
+   */
+  emailState: Aglyn.EmailState | null
   createdAt?: unknown
   updatedAt?: unknown
 }
@@ -164,6 +170,7 @@ export function contactRecordFromDoc(
         ? facet.lastEmailEngagementAtMs
         : null,
     nextTaskAtMs: Aglyn.readNextTaskAtMs(row as { nextTaskAtMs?: unknown }),
+    emailState: Aglyn.readEmailState(row),
     createdAt: row['createdAt'],
     updatedAt: row['updatedAt'],
   }

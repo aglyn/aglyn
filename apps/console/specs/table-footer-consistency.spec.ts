@@ -923,14 +923,29 @@ function tablesWithoutFooters(): string[] {
 const NOT_A_LIST: Array<[string, string]> = [
   [
     'apps/console/app/(app)/manage/notifications/(sections)/settings/page.tsx',
-    'The notification CATEGORIES (AGL-3226) — two tables of the same six ' +
-      'rows, one per `NotificationCategory`, with a channel per column. The ' +
-      'rows are a closed union in the type system rather than a collection ' +
-      'anybody adds to: a seventh row can only arrive by somebody writing a ' +
-      'seventh category, which is a compile error in three places until they ' +
-      'decide what it does. Paging six rows would hide half of a person’s ' +
-      'own settings behind a click, and the whole point of the second table ' +
-      'is to read it against the first.',
+    'The per-WORKSPACE and per-SITE overrides (AGL-3226) — one row per ' +
+      '`NotificationCategory` for the scope on screen, with a channel per ' +
+      'column. The rows are a closed union in the type system rather than a ' +
+      'collection anybody adds to: another row can only arrive by somebody ' +
+      'writing another category, which is a compile error in three places ' +
+      'until they decide what it does. Paging a person’s own settings would ' +
+      'hide half of them behind a click. The account-scope table that used ' +
+      'to sit above this one moved into ' +
+      '`notification-category-table.component.tsx` when it grew its type ' +
+      'rows (AGL-3251); this file keeps the scope table only.',
+  ],
+  [
+    'apps/console/components/notification-category-table.component.tsx',
+    'The ACCOUNT-scope notification settings (AGL-3251) — a row per ' +
+      '`NotificationCategory`, each opening onto a row per type inside it, ' +
+      'with a channel per column. Both are closed unions: a category is a ' +
+      'compile error in three places until somebody says what it does, and ' +
+      'the type rows are derived from `NOTIFICATION_TYPE_LABELS` rather ' +
+      'than read from anywhere. Nothing here is a window over something ' +
+      'that grows, so there is no page to turn — and a footer would be ' +
+      'actively wrong: the expander already hides the type rows until they ' +
+      'are asked for, and hiding the CATEGORIES behind a pager would put ' +
+      'half of a person’s own answers out of sight of the other half.',
   ],
   [
     'libs/plugins/ai/src/lib/components/ai-experiment-cards.component.tsx',
@@ -1788,7 +1803,21 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // anybody pages through — and it already admits what it left out, in a
     // caption counting the clicks that went to destinations past the ones
     // listed, which is the disclosure a footer would otherwise be making.
-    expect(NOT_A_LIST).toHaveLength(63)
+    //
+    // 64 is NOT a new table (AGL-3251). It is 62 SPLIT: the account-scope
+    // half grew a row per notification type — so that a person can stop
+    // hearing about one kind without silencing its six neighbors — and moved
+    // into `notification-category-table.component.tsx`, leaving the scope
+    // half where it was. Two entries for the two tables this console has
+    // always drawn here, and the count of unpaginated tables is unchanged.
+    //
+    // ⚑ Worth knowing the next time this number moves for a refactor: the
+    // ratchet counts FILES, not tables, so extracting a component splits one
+    // entry into two and reads as growth. That is the honest record — both
+    // files really do need classifying — but it is not the thing the ratchet
+    // was built to catch, and an increment for this reason should say so
+    // rather than borrowing the language of a new exemption.
+    expect(NOT_A_LIST).toHaveLength(64)
   })
 })
 

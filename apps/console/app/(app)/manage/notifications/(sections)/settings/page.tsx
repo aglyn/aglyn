@@ -25,10 +25,13 @@ import {
   NOTIFICATION_CATEGORY_LABELS,
   NOTIFICATION_CHANNEL_DEFAULTS,
   NOTIFICATION_SETTINGS_FIELD,
+  notificationAccountTypePref,
+  notificationCategory,
   notificationOverriddenScopes,
   notificationScopePref,
   PLATFORM_BRAND_NAME,
   STAFF_NOTIFICATION_CATEGORIES,
+  type AglynNotificationType,
   type NotificationCategory,
   type NotificationChannel,
   type NotificationSettings,
@@ -58,6 +61,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../../../../../constants/docs-links'
+import NotificationCategoryTable from '../../../../../../components/notification-category-table.component'
 import useIsStaff from '../../../../../../hooks/use-is-staff'
 import useNotificationAlertPrefs from '../../../../../../hooks/use-notification-prefs'
 import useOrgHosts from '../../../../../../hooks/use-org-hosts'
@@ -252,6 +256,60 @@ const ManageNotificationSettings: NextPageWithLayout<
     [firestore, settings, uid],
   )
 
+  /**
+   * The same write, one level finer (AGL-3251): the account's answer for a
+   * single TYPE, which `undefined` clears so the row follows its category
+   * again.
+   *
+   * Its own map on the settings document rather than a key beside the
+   * categories — see {@link NotificationSettings.accountTypes} — and the same
+   * whole-field write as above, so an emptied override leaves no husk behind.
+   */
+  const saveSettings = useCallback(
+    (next: NotificationSettings) => {
+      if (!uid) return
+      setSettings(next)
+      void setDoc(
+        doc(firestore, 'users', uid),
+        { [NOTIFICATION_SETTINGS_FIELD]: next },
+        { merge: true },
+      ).catch(console.error)
+    },
+    [firestore, uid],
+  )
+
+  const writeType = useCallback(
+    (
+      type: AglynNotificationType,
+      channel: NotificationChannel,
+      value: boolean,
+    ) => {
+      const next: NotificationSettings = JSON.parse(JSON.stringify(settings))
+      const types = (next.accountTypes ??= {})
+      ;(types[type] ??= {})[channel] = value
+      saveSettings(next)
+    },
+    [saveSettings, settings],
+  )
+
+  /**
+   * Put a type back on its category — every channel at once (AGL-3251).
+   *
+   * ⚠️ One write, NOT a clear per channel. This rebuilds the whole document
+   * from the `settings` it closed over, so two clears dispatched in the same
+   * tick would both read the value from before either of them and the second
+   * would restore what the first removed. Caught by this page's own test,
+   * which is the only place the two-call version looked wrong.
+   */
+  const resetType = useCallback(
+    (type: AglynNotificationType) => {
+      const next: NotificationSettings = JSON.parse(JSON.stringify(settings))
+      delete next.accountTypes?.[type]
+      saveSettings(next)
+    },
+    [saveSettings, settings],
+  )
+
   /*
    * The digest key comes from the module that reads it, never spelled here
    * (`check:plugin-domain-in-core`, rule 7).
@@ -358,6 +416,23 @@ const ManageNotificationSettings: NextPageWithLayout<
     return NOTIFICATION_CHANNEL_DEFAULTS[category][channel]
   }
 
+  /**
+   * What would actually happen for one type: its own answer if it has one,
+   * otherwise its category's (AGL-3251).
+   *
+   * The same order `notificationChannelEnabled` resolves in at this layer —
+   * type before category — so the switch a person sees and the decision the
+   * fan-out makes cannot disagree.
+   */
+  const typeValue = (
+    type: AglynNotificationType,
+    channel: NotificationChannel,
+  ): boolean => {
+    const own = notificationAccountTypePref(settings, type, channel)
+    if (typeof own === 'boolean') return own
+    return accountValue(notificationCategory(type), channel)
+  }
+
   return (
     <Stack spacing={2}>
       <CardDisplay
@@ -372,46 +447,20 @@ const ManageNotificationSettings: NextPageWithLayout<
         contentGutterY
         contentBordered="all"
       >
-        <ScrollTable size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{'Category'}</TableCell>
-              {CHANNELS.map((channel) => (
-                <TableCell key={channel.key} align="center">
-                  {channel.label}
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {categories.map(([category, label]) => (
-              <TableRow key={category}>
-                <TableCell>{label}</TableCell>
-                {CHANNELS.map((channel) => (
-                  <TableCell key={channel.key} align="center">
-                    <Switch
-                      size="small"
-                      slotProps={{
-                        input: {
-                          'aria-label': `${label} — ${channel.label}`,
-                        },
-                      }}
-                      checked={accountValue(category, channel.key)}
-                      onChange={(event) =>
-                        write(
-                          { kind: 'account' },
-                          category,
-                          channel.key,
-                          event.target.checked,
-                        )
-                      }
-                    />
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </ScrollTable>
+        <NotificationCategoryTable
+          categories={categories}
+          channels={CHANNELS}
+          categoryValue={accountValue}
+          typeValue={typeValue}
+          typePref={(type, channel) =>
+            notificationAccountTypePref(settings, type, channel)
+          }
+          onCategoryChange={(category, channel, value) =>
+            write({ kind: 'account' }, category, channel, value)
+          }
+          onTypeChange={writeType}
+          onTypeReset={resetType}
+        />
       </CardDisplay>
 
       <CardDisplay

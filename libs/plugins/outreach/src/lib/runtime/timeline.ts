@@ -16,6 +16,7 @@
  */
 
 import type {
+  PluginRecordDeliveryRequest,
   PluginRecordLink,
   PluginRecordTaskKind,
   PluginRecordWrite,
@@ -92,6 +93,30 @@ export async function fileOutreachEmail(
     return written
   } catch (error) {
     console.error('[outreach] filing an email on the record failed', error)
+    return null
+  }
+}
+
+/**
+ * Marks a sent email bounced or reported on the record it was filed on
+ * (AGL-3245), so the timeline reads Sent, then Bounced, with what the
+ * server said. Answers `null` when the workspace keeps no records or its
+ * record system keeps no delivery state; never throws.
+ */
+export async function markOutreachEmailDelivery(
+  deps: Pick<OutreachRuntimeDeps, 'timeline'>,
+  input: Omit<PluginRecordDeliveryRequest, 'messageId'> & { messageId: string | null },
+): Promise<PluginRecordWrite | null> {
+  const writer = deps.timeline()
+  if (!writer?.recordEmailDelivery || !input.messageId) return null
+  try {
+    const written = await writer.recordEmailDelivery({ ...input, messageId: input.messageId })
+    if (written.ok === false && written.status !== 404) {
+      console.warn(`[outreach] the record system did not mark the email ${input.state}: ${written.error}`)
+    }
+    return written
+  } catch (error) {
+    console.error('[outreach] marking an email on the record failed', error)
     return null
   }
 }

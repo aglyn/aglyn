@@ -26,6 +26,7 @@
 import type { AglynPostalAddress } from '../foundation'
 import { consentGroupForHost } from './consent-groups'
 import type { ContactCustomValue, ContactLifecycleStage } from './crm'
+import type { EmailState } from './email-state'
 import {
   CAPTURED_BY_HOST_FIELD,
   MARKETING_CONSENT_BY_HOST_FIELD,
@@ -227,6 +228,13 @@ export interface HostContact {
    * holder's view of them.
    */
   nextTaskAtMs?: number | null
+  /**
+   * The last verdict on the address (AGL-3245) — bounced, blocked,
+   * unsubscribed, do-not-contact — written by the platform's senders only,
+   * on the SHARED row because the address is shared. Absent means nothing
+   * is known. See `email-state.ts`.
+   */
+  emailState?: EmailState
 }
 
 /** Timeline cap: keeps the doc small; older interactions age out. */

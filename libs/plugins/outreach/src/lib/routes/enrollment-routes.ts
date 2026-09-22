@@ -134,6 +134,13 @@ export function createOutreachEnrollmentActionRoute(deps: OutreachRouteDeps): Pl
         detail,
       })
       stoppedOthers = await optOutOtherEnrollments(firestore, enrollments, applied.enrollment, caller.uid, nowMs)
+      // The mark on the record the person is (AGL-3245): the member's verdict
+      // stands over every automatic one.
+      await deps.stampRecordEmailState({
+        orgId: caller.orgId,
+        email: applied.enrollment.email,
+        state: { status: 'do_not_contact', atMs: nowMs, source: 'member', detail, enrollmentId },
+      })
     }
     return outreachOk({
       ok: true,

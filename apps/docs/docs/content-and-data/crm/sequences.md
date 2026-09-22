@@ -395,6 +395,12 @@ A reply that arrives after the sequence finished, or after it was stopped,
 is still read: the enrollment moves to **Replied**, or to **Opted out** when
 the reply asks not to be emailed.
 
+Every verdict a list takes is written on the person's record too: the lead
+or the contact carries an [email state](./leads.md#email-state) — Bounced,
+Blocked by their mail gateway, Unsubscribed, Marked as spam, Do not contact
+— and the email the sequence sent reads **Bounced** on their timeline. A
+member marking an enrollment do-not-contact stamps the record the same way.
+
 ## Unsubscribe {#unsubscribe}
 
 Every email a sequence sends carries two ways out beside the footer's

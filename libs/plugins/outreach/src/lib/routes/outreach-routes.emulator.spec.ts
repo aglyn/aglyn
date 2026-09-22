@@ -82,6 +82,7 @@ const deps = (): OutreachEnrollRouteDeps => ({
   random: () => 0.5,
   logOrgActivity: async () => undefined,
   crmViewEmails: async () => ({ emails: [], complete: true }),
+  stampRecordEmailState: async () => undefined,
 })
 
 async function post(handler: ReturnType<typeof createOutreachEnrollmentActionRoute>, body: Record<string, unknown>) {

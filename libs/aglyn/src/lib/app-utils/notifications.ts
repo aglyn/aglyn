@@ -309,6 +309,37 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<
 export const STAFF_NOTIFICATION_CATEGORIES: ReadonlySet<NotificationCategory> =
   new Set<NotificationCategory>(['staff'])
 
+/**
+ * What each category actually covers, in the reader's words (AGL-3251).
+ *
+ * The settings page listed seven bare labels and two switches, so deciding
+ * whether to silence `Product & system` meant guessing what was in it. The
+ * type labels beneath each row now name the contents exactly; this is the
+ * one-line answer for somebody who does not want to expand anything.
+ *
+ * Written as what ARRIVES rather than as what the bucket is called: "someone
+ * joins, a role changes" is checkable against your own feed in a way that
+ * "team and access events" is not. Exhaustive `Record`, like the channel
+ * defaults below — a new category cannot ship without somebody saying in
+ * plain words what lands in it.
+ */
+export const NOTIFICATION_CATEGORY_DESCRIPTIONS: Record<
+  NotificationCategory,
+  string
+> = {
+  billing:
+    'Invoices, failed payments, cancellations, and usage that crosses a plan limit.',
+  team: 'Somebody joins or leaves, a role changes, or a site is shared with you.',
+  content:
+    'Work arriving on your sites: form submissions, bookings, orders, low stock, and the tasks and leads assigned to you.',
+  marketplace: 'Decisions on plugin listings you submitted for review.',
+  support: 'New support tickets and replies on tickets you are following.',
+  system:
+    'Announcements, and the faults the platform finds in your account: sign-in methods removed, traffic limits reached, billing or sharing left in a broken state.',
+  staff:
+    'New accounts and new workspaces across the whole platform. Only staff receive these.',
+}
+
 export function notificationCategory(
   type: AglynNotificationType | string,
 ): NotificationCategory {
@@ -418,6 +449,20 @@ export type NotificationCategoryPrefs = Partial<
 >
 
 /**
+ * One scope's answer for a single notification TYPE (AGL-3251), tri-state on
+ * the same terms as {@link NotificationChannelPrefs}: an absent key falls
+ * through to the category.
+ *
+ * Its own map rather than extra keys in {@link NotificationCategoryPrefs},
+ * because that one is an exhaustive record keyed by category and a type key
+ * inside it would type-check only by widening the thing that makes a missing
+ * category a compile error.
+ */
+export type NotificationTypePrefs = Partial<
+  Record<AglynNotificationType, NotificationChannelPrefs>
+>
+
+/**
  * Per-scope, per-channel notification preferences (AGL-3223), stored at
  * `users/{uid}.notificationSettings`.
  *
@@ -435,6 +480,19 @@ export type NotificationCategoryPrefs = Partial<
  */
 export interface NotificationSettings {
   account?: NotificationCategoryPrefs
+  /**
+   * Per-TYPE answers at the account scope (AGL-3251), consulted before
+   * {@link NotificationSettings.account}'s category answer and never above a
+   * narrower scope — see {@link notificationChannelEnabled}.
+   *
+   * ACCOUNT ONLY, deliberately. The per-workspace and per-site card is
+   * already seven categories by three states by two channels, and a type row
+   * for each of the ~thirty types, per workspace AND per site, is a page
+   * nobody can read — which is the complaint this whole issue started as.
+   * The account scope is where "stop telling me about THIS" belongs anyway:
+   * it is a statement about the kind of thing, and kinds do not vary by site.
+   */
+  accountTypes?: NotificationTypePrefs
   /** Keyed by org id. */
   orgs?: Record<string, NotificationCategoryPrefs>
   /** Keyed by host id — a site's own answer, narrower than its workspace's. */
@@ -516,13 +574,25 @@ export function notificationChannelEnabled(
   legacyPrefs?: Record<string, boolean> | null,
 ): boolean {
   const category = notificationCategory(type)
-  const layers: Array<NotificationCategoryPrefs | undefined> = [
-    scope?.hostId ? settings?.hosts?.[scope.hostId] : undefined,
-    scope?.orgId ? settings?.orgs?.[scope.orgId] : undefined,
-    settings?.account,
+  /*
+   * The account layer answers TWICE, type before category (AGL-3251).
+   *
+   * The minimal extension of the rule above rather than a new one: the layers
+   * keep their order, narrowest scope first, and only what "the account says"
+   * gets finer. A person who switched `Payment failed` off has said something
+   * about that type specifically, so it must beat their own `Billing` answer
+   * — and it must NOT beat a narrower scope, because "quiet down this one
+   * noisy site" is the question the scope layers exist to answer and a
+   * type-level opinion about the kind of thing does not overrule it.
+   */
+  const layers: Array<NotificationChannelPrefs | undefined> = [
+    scope?.hostId ? settings?.hosts?.[scope.hostId]?.[category] : undefined,
+    scope?.orgId ? settings?.orgs?.[scope.orgId]?.[category] : undefined,
+    settings?.accountTypes?.[type as AglynNotificationType],
+    settings?.account?.[category],
   ]
   for (const layer of layers) {
-    const answer = layer?.[category]?.[channel]
+    const answer = layer?.[channel]
     if (typeof answer === 'boolean') return answer
   }
   if (channel === 'console' && notificationMuted(legacyPrefs, type))
@@ -538,6 +608,39 @@ export function notificationChannelEnabled(
  * notification, because the page edits a layer whether or not anything has
  * ever arrived from it.
  */
+/**
+ * What the account scope says about one TYPE, with no inheritance applied
+ * (AGL-3251) — `undefined` means the row follows its category.
+ *
+ * The page needs the unresolved answer to draw the difference between "on
+ * because Billing is on" and "on because you said so": only the second can be
+ * reset, and a switch that cannot show which one it is leaves a person unable
+ * to get back to following the category.
+ */
+export function notificationAccountTypePref(
+  settings: NotificationSettings | null | undefined,
+  type: AglynNotificationType | string,
+  channel: NotificationChannel,
+): boolean | undefined {
+  return settings?.accountTypes?.[type as AglynNotificationType]?.[channel]
+}
+
+/**
+ * Every type in a category, in the order the labels declare them
+ * (AGL-3251) — what the settings page expands a category row into.
+ *
+ * Derived from {@link NOTIFICATION_TYPE_LABELS} rather than held as a second
+ * map, so a type added there appears under its category without anybody
+ * remembering to list it twice.
+ */
+export function notificationTypesInCategory(
+  category: NotificationCategory,
+): AglynNotificationType[] {
+  return (
+    Object.keys(NOTIFICATION_TYPE_LABELS) as AglynNotificationType[]
+  ).filter((type) => notificationCategory(type) === category)
+}
+
 export function notificationScopePref(
   settings: NotificationSettings | null | undefined,
   scope: { kind: 'account' } | { kind: 'org' | 'host'; id: string },

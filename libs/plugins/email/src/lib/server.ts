@@ -43,6 +43,7 @@ import {
   UNSUBSCRIBE_SUPPRESSION_REASON,
   type ConfirmTopicResult,
 } from '@aglyn/tenant-data-admin'
+import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 /*
  * The pure cadence rule from the shared email library, where the SEND path
  * reads it too. The preference page and the gate must agree about what
@@ -416,6 +417,22 @@ async function writeSiteSuppression(
       { merge: true },
     )
   })
+  // The same verdict on the record the person is (AGL-3245), through
+  // whichever plugin keeps the workspace's records, so the record page says
+  // they left. A stamp that failed is logged by the seam and costs the
+  // unsubscribe nothing.
+  if (created) {
+    await stampRecordEmailState({
+      hostId,
+      email: fields.email,
+      state: {
+        status: 'unsubscribed',
+        atMs: Date.now(),
+        source: 'campaign',
+        detail: fields.campaignId ? 'Unsubscribed from a campaign email.' : 'Unsubscribed by the link.',
+      },
+    })
+  }
   return created
 }
 

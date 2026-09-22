@@ -112,13 +112,15 @@ export type OutreachOptOutSource = Extract<OutreachDoNotContactReason, 'opt_out_
  *  2. the `sales` topic of each site named, which the site's own sales
  *     email reads too;
  *  3. every open enrollment of the address in the organization: the one it
- *     came from with the reason given, the others as `do_not_contact`.
+ *     came from with the reason given, the others as `do_not_contact`;
+ *  4. the lead and the contact that carry the address (AGL-3245), so the
+ *     record a person reads says what the lists hold.
  *
  * Each is idempotent, so a second request — the link used twice, a reply
  * read by two runs — changes nothing.
  */
 export async function recordOutreachOptOut(
-  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'optOutOfSalesTopic'>,
+  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'optOutOfSalesTopic' | 'stampRecordEmailState'>,
   input: {
     orgId: string
     email: string
@@ -127,6 +129,8 @@ export async function recordOutreachOptOut(
     hostIds: readonly string[]
     detail: string | null
     nowMs: number
+    /** The reply called the email spam (AGL-3245): the record says so. */
+    complaint?: boolean
   },
 ): Promise<{ stopped: number }> {
   const email = normalizeContactEmail(input.email)
@@ -145,6 +149,20 @@ export async function recordOutreachOptOut(
   for (const hostId of new Set(input.hostIds.filter(Boolean))) {
     await deps.optOutOfSalesTopic({ hostId, email })
   }
+  // 4. the record the person is (AGL-3245): the link and the header say
+  //    "unsubscribed"; a reply that asked is the runtime's own list entry,
+  //    and one that called the email spam is a complaint.
+  await deps.stampRecordEmailState({
+    orgId: input.orgId,
+    email,
+    state: {
+      status: input.complaint ? 'complained' : input.source === 'unsubscribe' ? 'unsubscribed' : 'do_not_contact',
+      atMs: input.nowMs,
+      source: 'sequence',
+      detail: input.detail,
+      ...(input.enrollment?.id ? { enrollmentId: input.enrollment.id } : {}),
+    },
+  })
   let stopped = 0
   if (input.enrollment) {
     const own = await applyOutreachEvent(firestore, {

@@ -653,6 +653,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         value: company.id,
         label: company.name,
       })),
+      // The verdict on the address (AGL-3245): "Email is bounced".
+      emailState: Aglyn.EMAIL_STATE_STATUSES.map((status) => ({
+        value: status,
+        label: Aglyn.EMAIL_STATE_LABELS[status],
+      })),
       ...Object.fromEntries(
         customFields.active
           .filter((definition) => definition.type === 'select' && definition.options?.length)

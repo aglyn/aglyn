@@ -9,6 +9,32 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.162 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.161...v1.0.0-beta.162)
+
+### Added
+
+- **crm:** a lead or contact carries its email state, and a bounce lands on its timeline ([AGL-3245](https://linear.app/aglyn/issue/AGL-3245))
+- **console:** notification settings say what they cover, and switch one kind at a time ([AGL-3251](https://linear.app/aglyn/issue/AGL-3251))
+
+### Changed
+
+- **crm:** the email-state stamp rides a core seam the CRM registers on ([AGL-3245](https://linear.app/aglyn/issue/AGL-3245))
+
+### Documentation
+
+- **getting-started:** the console tour spells neighbors and grayed the American way ([AGL-3251](https://linear.app/aglyn/issue/AGL-3251))
+
+<details>
+<summary>Also in this release: 2 test, 1 style</summary>
+
+- **console:** the comments spell neighbors the American way too ([AGL-3251](https://linear.app/aglyn/issue/AGL-3251))
+- **aglyn:** the rules-drift guard reads a lead's create and update separately ([AGL-3245](https://linear.app/aglyn/issue/AGL-3245))
+- **console:** classify the extracted settings table, and say why the count moved ([AGL-3251](https://linear.app/aglyn/issue/AGL-3251))
+
+</details>
+
 ## v1.0.0-beta.161 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.160...v1.0.0-beta.161)

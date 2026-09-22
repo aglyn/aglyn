@@ -77,10 +77,16 @@ jest.mock('../hooks/use-org-member-options', () => ({
 // The saved view names the `all` filter, so every state below is listed.
 jest.mock('../hooks/use-crm-saved-view', () => ({
   useCrmSavedView: () => ({
-    state: { filters: [{ field: 'status', op: 'equals', value: 'all' }] },
-    setFilters: jest.fn(),
+    state: { filters: mockFilters },
+    setFilters: (next: Array<{ field: string; op: string; value: string }>) => {
+      mockFilters = next
+    },
   }),
 }))
+/** The view's clauses, as the section wrote them last; a re-render reads them back. */
+let mockFilters: Array<{ field: string; op: string; value: string }> = [
+  { field: 'status', op: 'equals', value: 'all' },
+]
 jest.mock('../hooks/use-crm-view-grid', () => ({
   useCrmViewGrid: (_views: unknown, columns: Array<{ field: string }>) => ({
     columns,
@@ -234,6 +240,7 @@ beforeEach(() => {
   orgRows = []
   mount = null
   opened.length = 0
+  mockFilters = [{ field: 'status', op: 'equals', value: 'all' }]
 })
 
 describe('New lead on the Leads list (AGL-3231)', () => {
@@ -374,5 +381,34 @@ describe('The search box narrows the whole loaded window (AGL-3246)', () => {
     expect(
       screen.getByText('No all leads match “nobody” among the 12 most recently seen.'),
     ).toBeTruthy()
+  })
+
+  /**
+   * The `Email` control (AGL-3245): a bounced lead is found by its verdict,
+   * beside the status filter and the search, and the control opens on Any.
+   */
+  it('narrows to the leads whose address bounced', async () => {
+    siteRows = [
+      ...fillers,
+      lead('l-bounced', 'bounced@example.com', {
+        emailState: { status: 'bounced', atMs: 1_000, source: 'sequence', detail: '550 5.1.1 no such user' },
+      }),
+    ]
+    const { rerender } = renderSite()
+    const control = screen.getByRole('combobox', { name: 'Email' })
+    expect(control.textContent).toBe('Any')
+    fireEvent.mouseDown(control)
+    fireEvent.click(await screen.findByRole('option', { name: 'Bounced' }))
+    // The clause is the saved view's; the section reads it back on render,
+    // and keeps the status clause beside it.
+    expect(mockFilters).toEqual([
+      { field: 'status', op: 'equals', value: 'all' },
+      { field: 'emailState', op: 'equals', value: 'bounced' },
+    ])
+    rerender(
+      <CrmLeadsSection hostId="site-1" entitled org={ORG} basePath={BASE_PATH} releaseFlag={{} as any} />,
+    )
+    expect(listed()).toEqual(['bounced@example.com'])
+    expect(screen.getByText('1–1 of 1')).toBeTruthy()
   })
 })

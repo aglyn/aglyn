@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { EmailState } from '@aglyn/aglyn/app-utils/email-state'
 import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import type { OutreachMailboxNotice } from '../engine/mailbox-notice'
 import type { OpenedOutreachMailbox } from '../mailboxes/mailbox-transport'
@@ -53,6 +54,17 @@ export interface OutreachMailboxNoticeRequest extends OutreachMailboxNotice {
   connectedByUid: string
 }
 
+/**
+ * The verdict on an address, for the record the person is (AGL-3245): what
+ * the runtime wrote on a list, said on the lead and the contact that carry
+ * the address. The platform finds the records; the runtime names none.
+ */
+export interface OutreachRecordEmailStamp {
+  orgId: string
+  email: string
+  state: EmailState
+}
+
 export interface OutreachRuntimeDeps {
   firestore(): FirebaseFirestore.Firestore
   now(): number
@@ -83,6 +95,12 @@ export interface OutreachRuntimeDeps {
   optOutOfSalesTopic(input: { hostId: string; email: string }): Promise<void>
   /** Files a hard bounce on the platform's suppression list. */
   suppressBouncedEmail(input: { email: string; hostId: string | null }): Promise<void>
+  /**
+   * Stamps the verdict on the lead and the contact that carry the address
+   * (AGL-3245), beside every write the runtime makes to a list. Never
+   * throws: the list is the control, the stamp is what a person reads.
+   */
+  stampRecordEmailState(stamp: OutreachRecordEmailStamp): Promise<void>
   /**
    * Emails the mailbox's owner, and the organization's admins, that the
    * mailbox paused itself or needs reconnecting (AGL-3244), through the

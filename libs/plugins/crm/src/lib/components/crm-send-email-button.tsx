@@ -16,7 +16,7 @@
  */
 'use client'
 
-import type { AglynOrgBilling } from '@aglyn/aglyn'
+import { type AglynOrgBilling, type EmailState, emailStateRefusal } from '@aglyn/aglyn'
 import { Button, Tooltip } from '@mui/material'
 import { useState } from 'react'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
@@ -40,6 +40,12 @@ export interface CrmSendEmailButtonProps {
   email?: string | null
   name?: string | null
   /**
+   * The record's email state (AGL-3245): a bounce, a block, an unsubscribe
+   * or a do-not-contact mark disables the button with the reason, in the
+   * words the chip beside it uses.
+   */
+  emailState?: EmailState | null
+  /**
    * The org's plan lacks the CRM, whose act one-to-one email is
    * (AGL-2788): the button stands locked where it would be, and no dialog
    * opens.
@@ -58,7 +64,7 @@ export interface CrmSendEmailButtonProps {
  * To field is blank.
  */
 export function CrmSendEmailButton(props: CrmSendEmailButtonProps) {
-  const { hostId, org, contactId, leadId, dealId, email, name, suiteLocked = false } = props
+  const { hostId, org, contactId, leadId, dealId, email, name, emailState, suiteLocked = false } = props
   const [open, setOpen] = useState(false)
   const address = String(email ?? '').trim()
   const orgMount = useCrmOrgMount()
@@ -70,18 +76,23 @@ export function CrmSendEmailButton(props: CrmSendEmailButtonProps) {
   // A contact can be read for its address on open; a deal names one or
   // nothing; a lead carries its own.
   const reachable = canSend && (Boolean(address) || Boolean(contactId))
-  const reason = !reachable
-    ? !canSend
-      ? 'No site has captured this record to send from'
-      : dealId && !contactId
-        ? 'This deal names no contact to email'
-        : 'This record has no email address'
-    : ''
+  // The record's own verdict on its address (AGL-3245) outranks reachability:
+  // an address that bounced is not one to open a composer for.
+  const stateRefusal = emailStateRefusal(emailState)
+  const reason = stateRefusal
+    ? stateRefusal
+    : !reachable
+      ? !canSend
+        ? 'No site has captured this record to send from'
+        : dealId && !contactId
+          ? 'This deal names no contact to email'
+          : 'This record has no email address'
+      : ''
   const button = (
     <Button
       size="small"
       variant="outlined"
-      disabled={!reachable}
+      disabled={!reachable || Boolean(stateRefusal)}
       onClick={() => setOpen(true)}
     >
       {'Send email'}

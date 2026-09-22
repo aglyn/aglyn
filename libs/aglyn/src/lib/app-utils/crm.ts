@@ -68,6 +68,7 @@ import {
   normalizeContactEmail,
   readContactFacet,
 } from './contacts'
+import type { EmailState } from './email-state'
 import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
 
 // The fixed vocabularies and their guards live in a leaf module; every name
@@ -790,6 +791,12 @@ export interface CrmActivity extends CrmScoped {
   deliveryState?: CrmEmailDeliveryState
   /** When the delivery state last moved, epoch ms. */
   deliveryAtMs?: number
+  /**
+   * What the receiving server said when the state moved to a failure
+   * (AGL-3245): a bounce's diagnostic, scrubbed of the address. Absent on a
+   * progression state.
+   */
+  deliveryDetail?: string
   /**
    * `hosts/{hostId}/bookings/{bookingId}` — the booking a `meeting` was
    * filed from (AGL-2660), so a row the Bookings plugin wrote can be told
@@ -2357,6 +2364,12 @@ export interface CrmLeadFields extends CrmLeadProfile {
   dealId?: string
   /** The company the conversion created or linked, when it named one. */
   companyId?: string
+  /**
+   * The last verdict on the lead's address (AGL-3245) — bounced, blocked,
+   * unsubscribed, do-not-contact — written by the platform's senders only,
+   * never by a form or the lead's editor. Absent means nothing is known.
+   */
+  emailState?: EmailState
 }
 
 /*==========================================

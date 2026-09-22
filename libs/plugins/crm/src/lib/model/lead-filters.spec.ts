@@ -16,8 +16,11 @@
  */
 
 import {
+  LEAD_EMAIL_FILTER_LABELS,
+  LEAD_EMAIL_FILTERS,
   LEAD_FILTER_LABELS,
   LEAD_FILTERS,
+  leadMatchesEmailFilter,
   leadMatchesFilter,
   leadMatchesSearch,
 } from './lead-filters'
@@ -95,5 +98,36 @@ describe('leadMatchesSearch', () => {
     expect(leadMatchesSearch(morgan, '   ')).toBe(true)
     expect(leadMatchesSearch({}, '')).toBe(true)
     expect(leadMatchesSearch({ name: null, tags: 'sal-15' }, 'sal')).toBe(false)
+  })
+})
+
+/**
+ * The `Email` control (AGL-3245): every verdict on its own, the ones a
+ * member must not email together, and the ones nothing has been said about.
+ */
+describe('leadMatchesEmailFilter', () => {
+  const bounced = { emailState: { status: 'bounced', atMs: 1, source: 'sequence', detail: null } }
+  const ok = { emailState: { status: 'ok', atMs: 1, source: 'member', detail: null } }
+
+  it('keeps everyone under Any, and only the unemailable under Cannot be emailed', () => {
+    expect(leadMatchesEmailFilter(bounced, 'any')).toBe(true)
+    expect(leadMatchesEmailFilter({}, 'any')).toBe(true)
+    expect(leadMatchesEmailFilter(bounced, 'problem')).toBe(true)
+    expect(leadMatchesEmailFilter(ok, 'problem')).toBe(false)
+    expect(leadMatchesEmailFilter({}, 'problem')).toBe(false)
+  })
+
+  it('matches one verdict exactly, and Nothing known only when nothing is', () => {
+    expect(leadMatchesEmailFilter(bounced, 'bounced')).toBe(true)
+    expect(leadMatchesEmailFilter(bounced, 'blocked')).toBe(false)
+    expect(leadMatchesEmailFilter({}, 'none')).toBe(true)
+    expect(leadMatchesEmailFilter({ emailState: { status: 'whim' } }, 'none')).toBe(true)
+    expect(leadMatchesEmailFilter(ok, 'none')).toBe(false)
+  })
+
+  it('labels every option, Any first and Nothing known last', () => {
+    expect(LEAD_EMAIL_FILTERS[0]).toBe('any')
+    expect(LEAD_EMAIL_FILTERS.at(-1)).toBe('none')
+    for (const option of LEAD_EMAIL_FILTERS) expect(LEAD_EMAIL_FILTER_LABELS[option]).toBeTruthy()
   })
 })

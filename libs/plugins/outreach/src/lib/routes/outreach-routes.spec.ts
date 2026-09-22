@@ -24,6 +24,7 @@ import type { DecodedIdToken } from 'firebase-admin/auth'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import type { OutreachEmailStep, OutreachTaskStep } from '../model/outreach.types'
+import type { OutreachRecordEmailStamp } from '../runtime/runtime-deps'
 import { createOutreachDoNotContactDomainsRoute, OUTREACH_DO_NOT_CONTACT_DOMAIN_ACTIVITY } from './do-not-contact-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
@@ -184,6 +185,8 @@ let docs: Docs
 let members: Record<string, Member>
 let activity: Array<{ action: string; target: unknown }>
 let viewEmails: string[]
+/** What the routes stamped on the person's record (AGL-3245). */
+let stamped: OutreachRecordEmailStamp[]
 
 const gate: OutreachRouteGateDeps = {
   verifyIdToken: async (uid) => ({ uid, email: `${uid}@example.com`, email_verified: true }) as unknown as DecodedIdToken,
@@ -207,6 +210,9 @@ const deps = (): OutreachEnrollRouteDeps => ({
     activity.push({ action, target })
   },
   crmViewEmails: async () => ({ emails: viewEmails, complete: true }),
+  stampRecordEmailState: async (stamp) => {
+    stamped.push(stamp)
+  },
 })
 
 const OFFICE = { days: [1, 2, 3, 4, 5], startMinute: 9 * 60, endMinute: 17 * 60 }
@@ -275,6 +281,7 @@ beforeEach(() => {
   docs = new Map()
   activity = []
   viewEmails = []
+  stamped = []
   members = {
     [OWNER]: {
       role: 'owner',
@@ -978,6 +985,14 @@ describe('outreach/enrollments/action (AGL-2980)', () => {
       enrollmentId: 'seq-1_c-1',
       sequenceId: 'seq-1',
     })
+    // And the record the person is says so (AGL-3245).
+    expect(stamped).toEqual([
+      {
+        orgId: ORG,
+        email: 'casey.morgan@example.com',
+        state: { status: 'do_not_contact', atMs: AT, source: 'member', detail: null, enrollmentId: 'seq-1_c-1' },
+      },
+    ])
   })
 
   it('puts a bounced address on the list without moving its final status', async () => {

@@ -53,6 +53,7 @@ import {
   type AddressDraft,
 } from './contact-address-fields'
 import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
+import { CrmEmailStateChip } from './crm-email-state-chip'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
@@ -187,6 +188,8 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const status = Aglyn.crmLeadStatus(lead)
   const converted = Boolean(lead.convertedContactId)
   const open = Aglyn.isCrmLeadOpen(lead) && !converted
+  // The last verdict on the address (AGL-3245), as the platform stamped it.
+  const emailState = Aglyn.readEmailState(lead)
   /** What a capture that took a number left on the document (AGL-2661). */
   const leadPhone = String(lead['phone'] ?? '').trim()
 
@@ -339,6 +342,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             leadId={leadId}
             email={String(lead['email'] ?? '')}
             name={String(lead['name'] ?? '')}
+            emailState={emailState}
           />
         </>
       }
@@ -359,6 +363,10 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       chips={
         <>
           <LeadStatusChip lead={lead} />
+          {/* The verdict on the address (AGL-3245), beside the status: a
+              bounce does not move New or Working, but it is the first
+              thing a person deciding whether to write must see. */}
+          <CrmEmailStateChip state={emailState} />
           <CrmRecordChip
             label="Owner"
             value={lead.ownerUid ? roster.labelFor(lead.ownerUid) : undefined}
