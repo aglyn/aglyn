@@ -23,6 +23,7 @@ import {
   mdiAccountCancelOutline,
   mdiAccountConvertOutline,
   mdiAccountTieOutline,
+  mdiMagnify,
 } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -55,10 +56,12 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Select,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -81,6 +84,7 @@ import {
   LEAD_FILTERS,
   type LeadFilter,
   leadMatchesFilter,
+  leadMatchesSearch,
 } from '../model/lead-filters'
 import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
@@ -219,30 +223,44 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   // The label's id, so the filter's combobox is named "Show" rather than
   // after the option it shows — see `LeadOwnerSelect`.
   const filterLabelId = useId()
+  /*
+   * The search box is the SECTION'S, not the grid's (AGL-3246). The grid's
+   * quick filter runs over the rows the grid holds, and the grid holds one
+   * PAGE of the window — so a lead on page three answered "no match" while
+   * the footer below went on counting the unfiltered window. The term
+   * narrows the whole loaded window here, beside the status filter and
+   * before the footer's count and the page slice, over the fields a person
+   * types to find a lead: name, email, company, title and tags.
+   */
+  const [search, setSearch] = useState('')
   const rows = useMemo(
-    () => window.filter((lead) => leadMatchesFilter(lead, filter)),
-    [window, filter],
+    () =>
+      window.filter(
+        (lead) => leadMatchesFilter(lead, filter) && leadMatchesSearch(lead, search),
+      ),
+    [window, filter, search],
   )
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  // A new filter starts on page one: page three of the open leads is not a
-  // page of the unqualified ones, and an out-of-range page renders empty.
+  // A new filter or search term starts on page one: page three of the open
+  // leads is not a page of the unqualified ones, and an out-of-range page
+  // renders empty.
   useEffect(() => {
     setPage(0)
-  }, [filter])
+  }, [filter, search])
   const pageRows = useMemo(
     () => rows.slice(page * pageSize, (page + 1) * pageSize),
     [rows, page, pageSize],
   )
 
   /*
-   * The ticked rows, for the bulk bar (AGL-2662). Cleared when the filter
-   * changes: a selection made on the open leads is not a selection of the
-   * unqualified ones, and the bar's count would be over rows no longer
-   * listed.
+   * The ticked rows, for the bulk bar (AGL-2662). Cleared when the filter or
+   * the search term changes: a selection made on the open leads is not a
+   * selection of the unqualified ones, and the bar's count would be over
+   * rows no longer listed.
    */
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  useEffect(() => setSelectedIds([]), [filter])
+  useEffect(() => setSelectedIds([]), [filter, search])
   // How the file names the owner and, at the org level, the site.
   const csvOptions: LeadCsvOptions = useMemo(
     () => ({
@@ -251,7 +269,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     }),
     [roster.emailFor, hostId, mount],
   )
-  // The listed window — every row the filter admits, not just the page.
+  // The listed window — every row the filter and the search admit, not just
+  // the page.
   const handleExport = useCallback(() => {
     downloadTextFile('leads.csv', 'text/csv', leadsCsv(rows, csvOptions))
   }, [rows, csvOptions])
@@ -540,6 +559,23 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 ))}
               </Select>
             </FormControl>
+            <TextField
+              size="small"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search leads"
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <MdiIcon path={mdiMagnify.path} size={0.8} />
+                    </InputAdornment>
+                  ),
+                },
+                htmlInput: { 'aria-label': 'Search leads', type: 'search' },
+              }}
+              sx={{ minWidth: 200 }}
+            />
             <LeadImportButton hostId={hostId} />
             <Button size="small" onClick={handleExport} disabled={!rows.length}>
               {'Export CSV'}
@@ -562,8 +598,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
             />
           ) : status === 'success' && rows.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
-              {`No ${LEAD_FILTER_LABELS[filter].toLowerCase()} leads among the ` +
-                `${window.length.toLocaleString()} most recently seen.`}
+              {`No ${LEAD_FILTER_LABELS[filter].toLowerCase()} leads` +
+                (search.trim() ? ` match “${search.trim()}”` : '') +
+                ` among the ${window.length.toLocaleString()} most recently seen.`}
             </Typography>
           ) : (
             <>
@@ -591,6 +628,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                   onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
                   sortModel={grid.sortModel}
                   onSortModelChange={grid.onSortModelChange}
+                  // The search is the section's, above: the grid's own box
+                  // would search this page alone.
+                  quickFilter={false}
                   // Paged by the footer below, so the grid must not also slice.
                   hideFooter
                 />
@@ -608,7 +648,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           {truncated ? (
             <Alert severity="info">
               {`Showing the ${LEADS_WINDOW.toLocaleString()} most recently seen ` +
-                'leads. The status filter narrows these; older leads are still ' +
+                'leads. The search box and the status filter narrow these ' +
+                `${LEADS_WINDOW.toLocaleString()} only; older leads are still ` +
                 'listed in the Inbox and reached by campaign audiences.'}
             </Alert>
           ) : null}

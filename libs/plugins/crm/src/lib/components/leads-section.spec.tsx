@@ -32,6 +32,10 @@
  *
  * The grid is a plain list that renders the actions cell; the row menu is
  * real, the dialog a stub that records what it was opened for.
+ *
+ * And the search box (AGL-3246): it narrows the WHOLE loaded window, not
+ * the page the grid holds, so a lead on page two is found and the footer —
+ * the real one — counts the matches. The footer is real for that reason.
  */
 
 import { CONTACT_ERASURE_REQUESTED_FIELD } from '@aglyn/aglyn'
@@ -158,9 +162,6 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     </div>
   ),
   MdiIcon: () => null,
-}))
-jest.mock('@aglyn/shared-ui-jsx/components/list-pagination.component', () => ({
-  ListPagination: () => null,
 }))
 jest.mock('@aglyn/shared-ui-jsx/components/empty-state.component', () => ({
   __esModule: true,
@@ -317,5 +318,61 @@ describe('Convert… on the Leads row menu (AGL-2641)', () => {
       orgId: 'org-1',
       basePath: '/acme/crm',
     })
+  })
+})
+
+describe('The search box narrows the whole loaded window (AGL-3246)', () => {
+  // Twelve leads at ten a page: eleven fillers, then Morgan on page two.
+  const fillers = Array.from({ length: 11 }, (_, index) =>
+    lead(`l-${index}`, `person${index}@example.com`),
+  )
+  const morgan = lead('l-morgan', 'morgan@example.com', {
+    name: 'Morgan Lamphere',
+    company: 'Lamphere Coffee',
+    tags: ['sal-15'],
+  })
+  const listed = () => screen.getAllByRole('listitem').map((item) => item.textContent)
+  const searchBox = () => screen.getByRole('searchbox', { name: 'Search leads' })
+
+  beforeEach(() => {
+    siteRows = [...fillers, morgan]
+  })
+
+  it('finds a lead on page two and counts the matches in the footer', () => {
+    renderSite()
+    expect(screen.queryByText('morgan@example.com')).toBeNull()
+    expect(screen.getByText('1–10 of 12')).toBeTruthy()
+
+    fireEvent.change(searchBox(), { target: { value: 'Lamphere' } })
+    expect(listed()).toEqual(['morgan@example.com'])
+    expect(screen.getByText('1–1 of 1')).toBeTruthy()
+
+    fireEvent.change(searchBox(), { target: { value: '' } })
+    expect(listed()).toHaveLength(10)
+    expect(screen.getByText('1–10 of 12')).toBeTruthy()
+  })
+
+  it('starts a new term on page one', () => {
+    renderSite()
+    fireEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
+    expect(listed()).toEqual(['person10@example.com', 'morgan@example.com'])
+    expect(screen.getByText('11–12 of 12')).toBeTruthy()
+
+    // Page two of the twelve would be an empty page of the one match.
+    fireEvent.change(searchBox(), { target: { value: 'lamphere coffee' } })
+    expect(listed()).toEqual(['morgan@example.com'])
+    expect(screen.getByText('1–1 of 1')).toBeTruthy()
+  })
+
+  it('matches a tag, whatever the case, and says so when nothing matches', () => {
+    renderSite()
+    fireEvent.change(searchBox(), { target: { value: 'SAL-15' } })
+    expect(listed()).toEqual(['morgan@example.com'])
+
+    fireEvent.change(searchBox(), { target: { value: 'nobody' } })
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+    expect(
+      screen.getByText('No all leads match “nobody” among the 12 most recently seen.'),
+    ).toBeTruthy()
   })
 })
