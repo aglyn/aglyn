@@ -205,7 +205,7 @@ describe('the default owner (AGL-2618)', () => {
     expect(
       screen.getByRole('combobox', { name: 'Default owner for this site' }).textContent,
     ).toContain('Nobody')
-    pick('Default owner for this site', 'Kim')
+    pick('Default owner for this site', 'Kim (kim@example.com)')
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
     const [ref, path, value] = (updateDoc as jest.Mock).mock.calls[0]
     expect(ref).toEqual(ORG_REF)
@@ -294,7 +294,7 @@ describe('the assignment rules (AGL-2618)', () => {
     pick('Source', 'Form')
     fireEvent.change(screen.getByLabelText('Email domain'), { target: { value: '@Acme.com' } })
     fireEvent.change(screen.getByLabelText('Tag'), { target: { value: ' VIP ' } })
-    pick('Member', 'Sam')
+    pick('Member', 'Sam (sam@example.com)')
     fireEvent.click(drawerButton())
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
     const written = (updateDoc as jest.Mock).mock.calls[0][1]['crm.assignmentRules']
@@ -313,7 +313,7 @@ describe('the assignment rules (AGL-2618)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }))
     fireEvent.change(screen.getByLabelText('Email domain'), { target: { value: 'not a domain' } })
     expect(screen.getByText('That does not look like a domain.')).toBeTruthy()
-    pick('Member', 'Sam')
+    pick('Member', 'Sam (sam@example.com)')
     const buttons = screen.getAllByRole('button', { name: 'Add rule' })
     expect((buttons[buttons.length - 1] as HTMLButtonElement).disabled).toBe(true)
   })
@@ -337,9 +337,9 @@ describe('the round-robin pool (AGL-2618)', () => {
       />,
     )
     const pool = screen.getByRole('region', { name: 'Round robin' })
-    expect((within(pool).getByLabelText('Sam') as HTMLInputElement).checked).toBe(true)
-    expect((within(pool).getByLabelText('Kim') as HTMLInputElement).checked).toBe(true)
-    expect(pool.textContent).toContain('Rotation: Sam → Kim. Next up: Kim.')
+    expect((within(pool).getByLabelText('Sam (sam@example.com)') as HTMLInputElement).checked).toBe(true)
+    expect((within(pool).getByLabelText('Kim (kim@example.com)') as HTMLInputElement).checked).toBe(true)
+    expect(pool.textContent).toContain('Rotation: Sam (sam@example.com) → Kim (kim@example.com). Next up: Kim (kim@example.com).')
   })
 
   it('appends a checked member to the end of the rotation and drops an unchecked one', async () => {
@@ -347,12 +347,12 @@ describe('the round-robin pool (AGL-2618)', () => {
       <CrmSettingsSection hostId="host-1" org={{ crm: { roundRobin: { memberUids: ['uid-sam'] } } }} />,
     )
     const pool = screen.getByRole('region', { name: 'Round robin' })
-    fireEvent.click(within(pool).getByLabelText('Kim'))
+    fireEvent.click(within(pool).getByLabelText('Kim (kim@example.com)'))
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(1))
     expect(updateDoc).toHaveBeenCalledWith(ORG_REF, {
       'crm.roundRobin.memberUids': ['uid-sam', 'uid-kim'],
     })
-    fireEvent.click(within(pool).getByLabelText('Sam'))
+    fireEvent.click(within(pool).getByLabelText('Sam (sam@example.com)'))
     await waitFor(() => expect(updateDoc).toHaveBeenCalledTimes(2))
     expect(updateDoc).toHaveBeenLastCalledWith(ORG_REF, { 'crm.roundRobin.memberUids': [] })
   })
@@ -361,7 +361,7 @@ describe('the round-robin pool (AGL-2618)', () => {
     memberRole = 'editor'
     render(<CrmSettingsSection hostId="host-1" org={{ crm: { assignmentRules: [{ id: 'r', when: {}, assign: { roundRobin: true } }] } }} />)
     const pool = screen.getByRole('region', { name: 'Round robin' })
-    expect((within(pool).getByLabelText('Kim') as HTMLInputElement).disabled).toBe(true)
+    expect((within(pool).getByLabelText('Kim (kim@example.com)') as HTMLInputElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Add rule' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByText('Move rule 1 down').closest('button') as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getAllByText('Only a workspace owner or admin can change this.').length).toBeGreaterThanOrEqual(3)

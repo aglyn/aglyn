@@ -27,6 +27,7 @@ import {
   normalizeAddress,
   normalizeContactEmail,
   normalizePhone,
+  crmMemberPickerLabel,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
@@ -351,7 +352,7 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
             <MenuItem value="">{'Unassigned'}</MenuItem>
             {owners.map((owner) => (
               <MenuItem key={owner.uid} value={owner.uid}>
-                {owner.label}
+                {crmMemberPickerLabel(owner)}
               </MenuItem>
             ))}
           </TextField>

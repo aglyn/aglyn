@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/tenant-runtime",
-  "version": "1.0.0-beta.157",
+  "version": "1.0.0-beta.158",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,8 +25,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.157",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.157",
+    "@aglyn/aglyn": "1.0.0-beta.158",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.158",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {

@@ -640,7 +640,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
         ...(uid ? [{ value: uid, label: 'Me' }] : []),
         ...members.options
           .filter((option) => option.uid !== uid)
-          .map((option) => ({ value: option.uid, label: option.label })),
+          .map((option) => ({ value: option.uid, label: Aglyn.crmMemberPickerLabel(option) })),
       ],
       [CRM_CONTACT_VIEW_FIELDS.stage]: CONTACT_LIFECYCLE_STAGES.map((stage) => ({
         value: stage,

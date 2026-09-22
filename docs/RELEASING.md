@@ -367,6 +367,22 @@ or ADC) and picks up `REVALIDATE_SECRET` when it is set to drop the live
 listing's cache. Without either it reports what it would have done, which is
 also what `--dry-run` would be if it had one.
 
+**CI publishes it too, and that is the one that always has credentials**
+(AGL-3237). `changelog-entry.yml` runs on every `v*` tag push and does the
+same write with the repository's secrets. The local hook stays as it is; when
+it worked, the workflow finds the entry already there and converges it,
+because the publisher is idempotent by slug.
+
+That belt is there because the brace kept slipping. `v1.0.0-beta.149`, `.150`
+and `.154` were each promoted, verified and tagged with **no entry
+published** — three of eight consecutive releases — and nobody noticed until
+a reader spotted the numbers jumping on the live changelog. The failure is
+not carelessness: the publish ran on whichever machine cut the release, a
+machine that needs the `FIREBASE_*` triple to write at all, and one without
+it gets the printed re-run command beside a tag that looks perfectly
+successful. Moving the publish to where the credentials always exist is what
+closes that, rather than asking people to remember.
+
 `CHANGELOG.md` is NOT that entry and is not a substitute for it: the file is cut
 on `main` at bump time and therefore records what a batch was *meant* to
 contain, including versions that were superseded before they promoted and

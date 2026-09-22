@@ -213,7 +213,7 @@ describe('tagging and the owner', () => {
     mount(['c1', 'c2'])
     fireEvent.click(screen.getByRole('button', { name: 'Set owner' }))
     fireEvent.mouseDown(dialog().getByRole('combobox'))
-    fireEvent.click(screen.getByRole('option', { name: 'Ada Lovelace' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Ada Lovelace (ada@example.com)' }))
     fireEvent.click(dialog().getByRole('button', { name: 'Apply' }))
     await waitFor(() => expect(notices).toEqual(['Owner set on 2 companies']))
     expect(ops.map((op) => [op.path, (op.data as any).ownerUid])).toEqual([

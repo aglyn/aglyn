@@ -1,0 +1,108 @@
+name: Changelog entry
+
+# The release's own changelog entry, published where the credentials are
+# (AGL-3237).
+#
+# ---------------------------------------------------------------------------
+# WHY THIS EXISTS
+# ---------------------------------------------------------------------------
+# `release:tag --write --push` already publishes the entry (AGL-3211), and it
+# is deliberately BEST EFFORT: the tag is pushed and correct by the time the
+# publish runs, so a Firestore write that fails must never make a correct
+# release look failed. On failure it prints the one command that finishes the
+# job.
+#
+# Nobody runs it. v1.0.0-beta.149, .150 and .154 were each promoted, verified
+# and tagged with no entry published — three of eight consecutive releases —
+# and the gap was found by a person reading the changelog and noticing the
+# numbers jumped, which is the worst way to find it.
+#
+# The cause is not carelessness, it is WHERE the publish runs: on whichever
+# machine happened to cut the release, which needs the `FIREBASE_*` triple in
+# its environment to write at all. A laptop without it gets the printed
+# re-run command and a tag that looks completely successful.
+#
+# So the publish moves to the one place the credentials always exist. The
+# local hook stays exactly as it is — when it works, this run finds the entry
+# already there and converges it.
+#
+# ---------------------------------------------------------------------------
+# WHY RE-RUNNING IS SAFE
+# ---------------------------------------------------------------------------
+# The publisher is idempotent by SLUG (`changelogEntryId`), so a second run
+# UPDATES the entry the first one wrote rather than publishing a duplicate
+# beside it. That is the property that lets this run unconditionally instead
+# of asking first whether an entry exists.
+#
+# It also REFUSES a version whose console and tenant deployments did not both
+# report success, which is the same evidence the tag rests on — so this can
+# never publish an entry for something that did not serve.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, without the leading v (e.g. 1.0.0-beta.154)'
+        required: true
+        type: string
+
+concurrency:
+  # One publish per version. Two runs racing would both write the same
+  # document, which is harmless but pointless.
+  group: changelog-entry-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # The entry is dated at the instant the version SERVED, which is read from
+  # this repository's deployment records.
+  deployments: read
+
+jobs:
+  publish:
+    name: publish the release's entry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The publisher resolves a release by walking production's
+          # first-parent line and names its compare link with tags, so it
+          # needs the whole history and every tag — not the default shallow
+          # clone of one commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: publish
+        env:
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'aglyn-main' }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+          # Read-only, for the deployment records the `served` date comes from.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Drops the live listing's cached read so the entry appears at once
+          # rather than when the window expires. Absent is fine — the script
+          # says so and the site catches up on its own.
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+          # Through the ENVIRONMENT, never interpolated into the script below.
+          # `${{ … }}` is substituted before bash sees the line, so a dispatch
+          # input spliced straight into `run:` is shell it did not write. Only
+          # a writer can dispatch this, which makes it a small hole rather
+          # than no hole.
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          version="$VERSION_INPUT"
+          if [ -z "$version" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "Publishing the changelog entry for $version"
+          node tools/scripts/release-changelog-entry.mjs \
+            --version "$version" --write

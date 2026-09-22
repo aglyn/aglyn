@@ -36,7 +36,7 @@
  * none of them, and the feed exists to answer "where did Acme go".
  */
 
-import { CRM_COLLECTIONS } from '@aglyn/aglyn'
+import { CRM_COLLECTIONS, crmMemberPickerLabel } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useFirestore, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
 import { Button, MenuItem, TextField } from '@mui/material'
@@ -281,7 +281,7 @@ function CompaniesBulkBarBody(props: CompaniesBulkBarProps) {
               <MenuItem value="">{'Nobody — clear the owner'}</MenuItem>
               {members.options.map((member) => (
                 <MenuItem key={member.uid} value={member.uid}>
-                  {member.label}
+                  {crmMemberPickerLabel(member)}
                 </MenuItem>
               ))}
             </TextField>

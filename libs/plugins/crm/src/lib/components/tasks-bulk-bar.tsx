@@ -34,7 +34,7 @@
  * as reopening is.
  */
 
-import { CRM_COLLECTIONS } from '@aglyn/aglyn'
+import { CRM_COLLECTIONS, crmMemberPickerLabel } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { Button, MenuItem, TextField } from '@mui/material'
@@ -322,7 +322,7 @@ function TasksBulkBarBody(props: TasksBulkBarProps) {
               <MenuItem value="">{'Nobody — clear the assignee'}</MenuItem>
               {directory.members.map((member) => (
                 <MenuItem key={member.uid} value={member.uid}>
-                  {member.label}
+                  {crmMemberPickerLabel(member)}
                 </MenuItem>
               ))}
             </TextField>

@@ -33,6 +33,7 @@ import {
   pluginDocsHelp,
   readCrmAssignmentSettings,
   roundRobinOrder,
+  crmMemberPickerLabel,
 } from '@aglyn/aglyn'
 import { mdiArrowDown, mdiArrowUp, mdiDeleteOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
@@ -384,7 +385,7 @@ function DefaultOwnerPicker(props: {
       <MenuItem value={NO_DEFAULT_OWNER}>{'Nobody — leave unassigned'}</MenuItem>
       {options.map((member) => (
         <MenuItem key={member.uid} value={member.uid}>
-          {member.label}
+          {crmMemberPickerLabel(member)}
         </MenuItem>
       ))}
     </TextField>
@@ -653,6 +654,12 @@ export function RoundRobinCard(props: AssignmentCardProps) {
   const canEdit = ready && canManage && !busy && !roster.loading
   const order = roundRobinOrder(pool.memberUids, pool.lastAssignedUid)
   const nextUp = order[0]
+  // The rotation names people the way the checkboxes above do — with the
+  // address, since two members can share a display name.
+  const rotationName = (uid: string): string => {
+    const member = roster.members.find((row) => row.uid === uid)
+    return member ? crmMemberPickerLabel(member) : roster.nameOf(uid)
+  }
   return (
     <CardDisplay
       header={'Round robin'}
@@ -687,7 +694,7 @@ export function RoundRobinCard(props: AssignmentCardProps) {
                     onChange={(event) => void toggle(member.uid, event.target.checked)}
                   />
                 }
-                label={member.label}
+                label={crmMemberPickerLabel(member)}
               />
             ))}
           </FormGroup>
@@ -695,7 +702,7 @@ export function RoundRobinCard(props: AssignmentCardProps) {
         <Typography variant="caption" color="text.secondary">
           {pool.memberUids.length === 0
             ? 'Nobody is in the rotation; a round-robin rule is skipped until somebody is.'
-            : `Rotation: ${pool.memberUids.map(roster.nameOf).join(' → ')}. Next up: ${roster.nameOf(nextUp)}.`}
+            : `Rotation: ${pool.memberUids.map(rotationName).join(' → ')}. Next up: ${rotationName(nextUp)}.`}
         </Typography>
         <ManagersOnlyNote ready={ready} canManage={canManage} />
       </Stack>

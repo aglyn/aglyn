@@ -9,6 +9,21 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.158 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/fea854d18...v1.0.0-beta.158)
+
+### Fixed
+
+- **crm:** every owner and assignee picker shows the member's address beside the name ([AGL-3240](https://linear.app/aglyn/issue/AGL-3240))
+
+<details>
+<summary>Also in this release: 1 ci</summary>
+
+- **releasing:** the changelog entry publishes where the credentials are ([AGL-3237](https://linear.app/aglyn/issue/AGL-3237), [AGL-3211](https://linear.app/aglyn/issue/AGL-3211))
+
+</details>
+
 ## v1.0.0-beta.157 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/3b182d037...v1.0.0-beta.157)

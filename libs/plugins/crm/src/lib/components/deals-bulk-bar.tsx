@@ -36,7 +36,7 @@
  * refuse one row at a time.
  */
 
-import { CRM_COLLECTIONS, dealStageById } from '@aglyn/aglyn'
+import { CRM_COLLECTIONS, dealStageById, crmMemberPickerLabel } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useFirestore, useHostActivityLogger } from '@aglyn/tenant-feature-instance'
 import { Button, MenuItem, TextField, Typography } from '@mui/material'
@@ -314,7 +314,7 @@ function DealsBulkBarBody(props: DealsBulkBarProps) {
                 <MenuItem value="">{'Nobody — clear the owner'}</MenuItem>
                 {roster.members.map((member) => (
                   <MenuItem key={member.uid} value={member.uid}>
-                    {member.label}
+                    {crmMemberPickerLabel(member)}
                   </MenuItem>
                 ))}
               </TextField>

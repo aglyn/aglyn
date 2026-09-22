@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { type AglynOrgMember, findOrgMember } from '@aglyn/aglyn'
+import { type AglynOrgMember, findOrgMember, crmMemberPickerLabel } from '@aglyn/aglyn'
 import { FormControl, InputLabel, MenuItem, Select } from '@mui/material'
 import { useId } from 'react'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
@@ -99,7 +99,7 @@ export function LeadOwnerSelect(props: LeadOwnerSelectProps) {
         ) : null}
         {roster.options.map((option) => (
           <MenuItem key={option.uid} value={option.uid}>
-            {option.label}
+            {crmMemberPickerLabel(option)}
           </MenuItem>
         ))}
       </Select>

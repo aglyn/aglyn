@@ -2226,6 +2226,23 @@ export function crmMemberOption(
 }
 
 /**
+ * A roster row as a PICKER lists it: the name, and the address in
+ * parentheses when the roster holds one that the name does not already
+ * spell. Two teammates can share a display name — a workspace with two
+ * "Zach Gover" rows cannot tell them apart by name alone, and the address is
+ * the one thing the roster guarantees is unique. A column keeps `label`,
+ * because a column is read at a glance and a picker is chosen from.
+ */
+export function crmMemberPickerLabel(
+  member: Pick<CrmMemberOption, 'label' | 'email'>,
+): string {
+  const label = String(member.label ?? '').trim()
+  const email = String(member.email ?? '').trim()
+  if (!email || email.toLowerCase() === label.toLowerCase()) return label || email
+  return `${label} (${email})`
+}
+
+/**
  * The member a stored reference names: by uid first — the stored shape —
  * and by address second, so a record that carries an address where a uid
  * belongs (an older import, a hand edit) still names the person the roster
