@@ -1050,7 +1050,7 @@ jobs:
       # the lead and never clears, what follows the person between records —
       # and the tree guard that refuses `--apply` on a checkout that does not
       # yet run the one-record model.
-      - run: npm run test:crm-salesforce-backfill
+      - run: npm run test:one-record-backfill
 
       # AGL-2814. The members-video backfill's decisions: which files become
       # private, which download tokens are rotated, which stored links are

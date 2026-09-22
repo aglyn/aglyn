@@ -19,13 +19,15 @@
  * An open lead, closed as converted because the person became a
  * relationship on their own (AGL-3232).
  *
- * Salesforce closes a lead when somebody converts it. Aglyn has two doors
- * that make a person a contact without anybody deciding anything — a
- * member account and a purchase — and a lead left open behind either of
- * them is a rep chasing a customer. So a relationship capture asks here,
- * after the contact exists: the site's lead for the address, if it is
- * still open, is stamped converted onto that contact, the way the convert
- * dialog stamps one, with `convertedBy` saying which door did it.
+ * Salesforce closes a lead when somebody converts it. Aglyn has a door that
+ * makes a person a contact without anybody deciding anything — a member
+ * account — and a lead left open behind it is a rep chasing a member. So a
+ * relationship capture asks here, after the contact exists: the site's
+ * lead for the address, if it is still open, is stamped converted onto
+ * that contact, the way the convert dialog stamps one, with `convertedBy`
+ * saying which door did it. The CRM's own module, because a lead is the
+ * CRM's record (docs/PACKAGES.md rule 3): the capture writer beside it
+ * calls it, and the one-record backfill stamps the same shape by hand.
  *
  * Only an OPEN lead: one already converted names its contact and must keep
  * naming it, and one closed as unqualified was a decision — a person the
@@ -48,8 +50,8 @@ import {
   personKey,
 } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { handOffLeadRecords } from '@aglyn/tenant-runtime/hand-off-lead'
 import { FieldValue } from 'firebase-admin/firestore'
-import { handOffLeadRecords } from './hand-off-lead'
 
 /** Which door closed the lead, recorded on it beside the conversion stamp. */
 export type LeadAutoConvertedBy = 'signup' | 'purchase' | 'backfill'

@@ -30,7 +30,6 @@ import {
   personKey,
 } from '@aglyn/aglyn/server'
 import { captureHostContact } from '@aglyn/tenant-runtime/capture-host-contact'
-import { convertOpenLeadOntoContact } from '@aglyn/tenant-runtime/convert-lead-on-contact'
 import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
 import {
   addHostLead,
@@ -40,6 +39,7 @@ import {
   type UpsertHostContactOptions,
 } from '@aglyn/tenant-data-admin'
 import type { ResolvedCampaignTouch } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
+import { convertOpenLeadOntoContact } from './convert-open-lead'
 
 /**
  * The CRM answering the platform's contact-capture contract (AGL-3080).
@@ -110,7 +110,7 @@ export async function captureContactForCrm(
         hostId: request.hostId,
         email: request.identity.email,
         contactId: verdict.contactId,
-        by: request.interaction.source === 'member' ? 'signup' : 'purchase',
+        by: request.interaction.source === 'order' ? 'purchase' : 'signup',
       })
     }
     return verdict

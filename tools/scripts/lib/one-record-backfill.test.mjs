@@ -17,7 +17,7 @@ import {
   preconditionsForTree,
   repointContactToLead,
   repointLeadToContact,
-} from './crm-salesforce-backfill.mjs'
+} from './one-record-backfill.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, '..', '..', '..')

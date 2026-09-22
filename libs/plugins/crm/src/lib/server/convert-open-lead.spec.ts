@@ -40,7 +40,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 const handOffs: Array<Record<string, unknown>> = []
-jest.mock('./hand-off-lead', () => ({
+jest.mock('@aglyn/tenant-runtime/hand-off-lead', () => ({
   __esModule: true,
   handOffLeadRecords: async (input: Record<string, unknown>) => {
     handOffs.push(input)
@@ -49,7 +49,7 @@ jest.mock('./hand-off-lead', () => ({
 }))
 
 import { personKey } from '@aglyn/aglyn/server'
-import { convertOpenLeadOntoContact } from './convert-lead-on-contact'
+import { convertOpenLeadOntoContact } from './convert-open-lead'
 
 const HOST = 'site-1'
 const EMAIL = 'dana@example.com'

@@ -6,9 +6,9 @@ AGL-3232 a lead-routed form or a booking wrote a lead *and* a contact at stage
 Lead, and the CRM's imports filed unqualified people as contacts, so the corpus
 holds contacts that are leads in a contact's clothes. One script moves it:
 `tools/scripts/backfill-crm-salesforce-model.mjs`. Its decisions live in
-`tools/scripts/lib/crm-salesforce-backfill.mjs` and are pinned by
-`tools/scripts/lib/crm-salesforce-backfill.test.mjs`
-(`npm run test:crm-salesforce-backfill`).
+`tools/scripts/lib/one-record-backfill.mjs` and are pinned by
+`tools/scripts/lib/one-record-backfill.test.mjs`
+(`npm run test:one-record-backfill`).
 
 | Contact | Verdict | What happens |
 | --- | --- | --- |

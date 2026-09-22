@@ -2,7 +2,7 @@
 // duplicates of a lead, what each hands to its lead, and what follows the
 // person from one record to the other. Pure — the script in
 // `backfill-crm-salesforce-model.mjs` reads and writes; this decides — and
-// pinned by `crm-salesforce-backfill.test.mjs`.
+// pinned by `one-record-backfill.test.mjs`.
 //
 // ## The rule
 //

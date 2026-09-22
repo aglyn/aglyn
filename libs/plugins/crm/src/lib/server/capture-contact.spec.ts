@@ -159,7 +159,7 @@ jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
     return { contactId: id, created: true }
   },
 }))
-jest.mock('@aglyn/tenant-runtime/convert-lead-on-contact', () => ({
+jest.mock('./convert-open-lead', () => ({
   __esModule: true,
   convertOpenLeadOntoContact: async (input: Record<string, unknown>) => {
     conversions.push(input)

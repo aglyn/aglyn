@@ -22,7 +22,7 @@
 //   GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-crm-salesforce-model.mjs --org=<orgId> --apply
 //
 // DRY RUN BY DEFAULT. `--apply` writes. Every decision is
-// `lib/crm-salesforce-backfill.mjs`'s and pinned by its test; this file
+// `lib/one-record-backfill.mjs`'s and pinned by its test; this file
 // reads, prints and writes.
 //
 // ## What it does, per org, in one sweep of the contacts
@@ -64,7 +64,7 @@ import {
   FIELDS,
   planContact,
   preconditionsForTree,
-} from './lib/crm-salesforce-backfill.mjs'
+} from './lib/one-record-backfill.mjs'
 import { planCompanyCounts, tallyCompanyMirrors } from './lib/crm-lifecycle-backfill.mjs'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
 import { collect, commitAll, connectFirestore } from './lib/firestore-backfill.mjs'

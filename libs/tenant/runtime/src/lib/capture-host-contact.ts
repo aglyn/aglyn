@@ -23,7 +23,6 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { assignOwnerForCapture } from './assign-contact-owner'
 import { associateCompanyByDomain } from './associate-company-by-domain'
-import { convertOpenLeadOntoContact } from './convert-lead-on-contact'
 import { emitHostEvent } from './emit-host-event'
 import type { HostEventPayload } from './host-event-listeners'
 
@@ -81,32 +80,13 @@ import type { HostEventPayload } from './host-event-listeners'
  * It never rejects either; a record it could not assign is one somebody
  * assigns by hand, which is what every record was before this existed.
  *
- * ## A purchase closes the lead (AGL-3232)
- *
- * The order doors — the POS, the checkout and billing webhooks — call this
- * directly with `initialLifecycleStage: 'customer'`, and a customer is a
- * relationship: an open lead the site held for the address is stamped
- * converted onto the contact once the capture has landed, created or not,
- * so nobody keeps working a lead who already bought. The member door says
- * the same thing through the capture seam's `surface`; this is the one
- * place every purchase passes.
+ * What this does NOT do is close a lead (AGL-3232): a lead is the CRM's
+ * record, and which relationship closes one is the CRM's rule, answered in
+ * its capture writer for the doors that report through the capture seam.
+ * The order doors call this directly and close nothing — a buyer with an
+ * open lead is a lead the rep converts, as in Salesforce.
  */
 export async function captureHostContact(
-  options: Omit<UpsertHostContactOptions, 'onCreated'>,
-): Promise<UpsertHostContactVerdict> {
-  const verdict = await captureHostContactAnnounced(options)
-  if (options.initialLifecycleStage === 'customer' && !('refused' in verdict)) {
-    await convertOpenLeadOntoContact({
-      hostId: options.hostId,
-      email: options.email,
-      contactId: verdict.contactId,
-      by: 'purchase',
-    })
-  }
-  return verdict
-}
-
-async function captureHostContactAnnounced(
   options: Omit<UpsertHostContactOptions, 'onCreated'>,
 ): Promise<UpsertHostContactVerdict> {
   return upsertHostContact({
