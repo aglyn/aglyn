@@ -152,6 +152,12 @@ export interface LeadPropertiesCardProps {
   /** What the page shows above the facts — the erasure-pending state. */
   banner?: React.ReactNode
   /**
+   * Chips the page adds after the owner — the campaigns the lead is filed
+   * under (AGL-3274), named from the containers the page reads once for
+   * this header and the Campaigns card below it.
+   */
+  extraChips?: React.ReactNode
+  /**
    * An erasure request is waiting on this person (AGL-2623). Convert stays
    * on the page but is refused with the reason, the way the overflow's items
    * are: a conversion filed now would reach the capture door only to be
@@ -194,6 +200,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     onUnqualify,
     extraMenuItems = [],
     banner,
+    extraChips,
     erasurePending = false,
     org,
   } = props
@@ -434,6 +441,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             label="Owner"
             value={lead.ownerUid ? roster.labelFor(lead.ownerUid) : undefined}
           />
+          {extraChips}
         </>
       }
     >

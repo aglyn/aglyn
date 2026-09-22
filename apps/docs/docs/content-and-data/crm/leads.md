@@ -253,7 +253,7 @@ alone; the contact, when there is one, is assigned from its own record.
 
 ## A lead's page
 
-Click a row to open the lead. The page has two cards.
+Click a row to open the lead. The page has three cards.
 
 **Lead** holds what the team decides: the status, the owner, the lead's
 **profile** — company, job title, phone, website, lead source, tags and
@@ -266,12 +266,20 @@ the profile is read-only here: the contact is the record then. A lead with no re
 consent cannot be sent marketing email, which is worth knowing before you
 promise them a newsletter. The card's header carries **Call** and **Log a
 call** beside **Send email** — see
-[click to call](./activities.md#click-to-call).
+[click to call](./activities.md#click-to-call). Beside the status, the
+header names every campaign the lead is filed under.
+
+**Campaigns** is the filing: **Filed under campaigns** offers the site's
+campaigns by name, and **Save filing** writes the pick. It is your own
+grouping — it never adds anyone to a send, because a campaign mails its
+lists — and it is the same picker the contact's Relationship card carries,
+so a lead and the contact it becomes are filed the same way.
 
 **Captured history** is read-only: when the person was first and last seen,
 how many times your site captured them, every source that did, and — under
 *Where this lead came from* — the campaign the capture is credited to, when
-there is one.
+there is one. That is attribution, which campaign's link brought the person;
+the filing above is separate, and the card says so.
 
 ### Email state {#email-state}
 

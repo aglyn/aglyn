@@ -62,12 +62,15 @@ const ASSIGNMENT_SURFACES: Record<string, string> = {
   // The record page's Relationship card (AGL-2596); the list's drawer that
   // held the picker before is gone.
   contacts: 'libs/plugins/crm/src/lib/components/contact-associations-card.tsx',
-  // A lead is filed under its campaigns as it is created (AGL-3254). The
-  // record page has no picker: the bulk bar ADDS to a selection with an
-  // arrayUnion, which is not a membership value, and a lead's campaigns
-  // otherwise change only when it converts and they carry to the contact.
-  leads: 'libs/plugins/crm/src/lib/components/new-lead-drawer.tsx',
+  // The lead's page has the contact card's twin (AGL-3274): the record's
+  // own Campaigns card, where the filing is read and changed. The drawer
+  // that files a lead as it is created (AGL-3254) is covered below on its
+  // own, because a kind's page is the surface this list is about.
+  leads: 'libs/plugins/crm/src/lib/components/lead-campaigns-card.tsx',
 }
+
+/** Where a lead is filed as it is created — a second door, beside its page. */
+const LEAD_CREATE_SURFACE = 'libs/plugins/crm/src/lib/components/new-lead-drawer.tsx'
 
 /** The one place a campaign's removal walks its members. */
 const DELETE_PATH = 'libs/plugins/marketing/src/lib/server/campaign-manage.ts'
@@ -105,6 +108,15 @@ describe('every assignable record kind has a picker on its own page', () => {
       expect(read(path)).toContain('campaignMembershipValue')
     },
   )
+
+  it('a lead is also filed as it is created, by the same control and helper', () => {
+    const source = read(LEAD_CREATE_SURFACE)
+    expect(source).toContain('<CampaignPicker')
+    expect(source).toContain(
+      '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component',
+    )
+    expect(source).toContain('campaignMembershipValue')
+  })
 })
 
 describe('the campaign’s removal walks every collection a picker writes', () => {
