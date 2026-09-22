@@ -159,7 +159,7 @@ describe('the artifact inventory', () => {
     // every week with nothing to point at.
     expect(() =>
       registerPluginArtifactInventory(
-        { listClaims: async () => ({ outcome: 'listed', rows: [], scanned: 0 }) } as never,
+        { listClaims: async () => ({ outcome: 'listed', rows: [] as never[], scanned: 0 }) } as never,
         { pluginId: 'test-owner' },
       ),
     ).toThrow(/listClaims and listVersions/)
