@@ -329,6 +329,16 @@ const loadPageDataCached = cache(
     // branches below, as before.
     const orgRes = await getOrgBilling({ hostId })
     timer.mark('getOrgBilling')
+    /*
+     * The zone this site's dates read in (AGL-3237).
+     *
+     * Resolved ONCE, here, because this is the only place holding both the
+     * org and the host — and because every render of this page, server and
+     * client, has to format an instant into the same string. A composed date
+     * that two sides disagree about is the React #418 crash AGL-1926 fixed.
+     */
+    const siteTimeZone = Aglyn.resolveSiteTimeZone(orgRes.org as never)
+
     // BOTH SCOPE READS AT ONCE. They were sequential `await`s inside the
     // object literal, so a cold 15s window paid two Firestore round trips
     // back to back for reads that share no input. Each is independently
@@ -509,6 +519,7 @@ const loadPageDataCached = cache(
         })
         if (unavailable.screen) {
           const unavailableNodes = await composeScreenNodes({
+            timeZone: siteTimeZone,
             host: hostRes.host as any,
             hostId,
             screenId: unavailableId,
@@ -654,6 +665,7 @@ const loadPageDataCached = cache(
         })
         if (designated.screen) {
           const designatedNodes = await composeScreenNodes({
+            timeZone: siteTimeZone,
             host: hostRes.host as any,
             hostId,
             screenId: designatedScreenId,
@@ -1053,6 +1065,7 @@ const loadPageDataCached = cache(
           // — theme, shared layout, {{entry.*}}/{{collection.*}} tokens,
           // Collection entries blocks — mirroring commerce PDP templates.
           const templated = await composeCollectionTemplatePage({
+            timeZone: siteTimeZone,
             hostId,
             // The site default is the card's last source, so its document is
             // read in the page's batch with the entry's and the template's
@@ -1097,6 +1110,7 @@ const loadPageDataCached = cache(
           // (AGL-551). Only if that fails does the legacy plain article
           // render (nodes: null).
           const fallback = await composeCollectionFallbackPage({
+            timeZone: siteTimeZone,
             hostId,
             host: hostRes.host,
             content,
@@ -1175,11 +1189,13 @@ const loadPageDataCached = cache(
           )
           const composedAuthor =
             (await composeAuthorTemplatePage({
+            timeZone: siteTimeZone,
               hostId,
               host: hostRes.host,
               content: authorContent,
             })) ??
             (await composeAuthorFallbackPage({
+            timeZone: siteTimeZone,
               hostId,
               host: hostRes.host,
               content: authorContent,
@@ -1333,6 +1349,7 @@ const loadPageDataCached = cache(
         })
         if (unauthorized.screen) {
           unauthorizedNodes = await composeScreenNodes({
+            timeZone: siteTimeZone,
             host: hostRes.host as any,
             hostId,
             screenId: unauthorizedId,
@@ -1428,6 +1445,7 @@ const loadPageDataCached = cache(
       hostRes.host.seo?.image,
     ])
     const denormalized = await composeScreenNodes({
+            timeZone: siteTimeZone,
       host: hostRes.host as any,
       hostId,
       screenId,
@@ -1625,6 +1643,15 @@ export async function loadNotFoundScreen(
     // entitlement gates every enricher applies (AGL-2511). `getOrgBilling`
     // is cached per host, so this is one read either way.
     const orgRes = await getOrgBilling({ hostId })
+    /*
+     * The zone this site's dates read in (AGL-3237).
+     *
+     * Resolved ONCE, here, because this is the only place holding both the
+     * org and the host — and because every render of this page, server and
+     * client, has to format an instant into the same string. A composed date
+     * that two sides disagree about is the React #418 crash AGL-1926 fixed.
+     */
+    const siteTimeZone = Aglyn.resolveSiteTimeZone(orgRes.org as never)
     const lockdownState = Aglyn.resolveLockdown(
       {
         platform: await getPlatformLockdown(),
@@ -1646,6 +1673,7 @@ export async function loadNotFoundScreen(
     })
     if (!screenRes.screen) return null
     const nodes = await composeScreenNodes({
+            timeZone: siteTimeZone,
       host: hostRes.host as any,
       hostId,
       screenId: screenId as Aglyn.ScreenUid,

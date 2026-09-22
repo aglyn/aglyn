@@ -154,15 +154,29 @@ describe('the org profile card', () => {
       'contactPhone',
       'contactWebsite',
       'logoUrl',
+      // The workspace time zone (AGL-3237). Enumerated like the rest, so the
+      // guard still fails on a field added back under any other name.
+      'timeZone',
     ])
   })
 
-  it('offers no select at all, so the sharing default cannot be set here', () => {
+  it('offers no sharing select, so the default cannot be set here', () => {
     render(<OrgProfileCard />)
-    // Structural rather than textual: every control this card has left is a
-    // text field. A returning `defaultResourceScope` dropdown — under any
-    // label — puts a combobox back.
-    expect(screen.queryAllByRole('combobox')).toHaveLength(0)
+    /*
+     * Structural rather than textual, and still counted rather than searched
+     * by label: a returning `defaultResourceScope` dropdown puts a SECOND
+     * combobox on the card whatever it calls itself, and this fails on it.
+     *
+     * It read `toHaveLength(0)` while every control here was a text field.
+     * AGL-3237 added the workspace time zone, which is legitimately a select,
+     * so the assertion names the one that belongs instead of asserting none
+     * exist — the weaker form, "no combobox labelled sharing", would pass for
+     * a scope dropdown under any other label, which is the exact hole the
+     * original was written broad to close.
+     */
+    const selects = screen.queryAllByRole('combobox')
+    expect(selects).toHaveLength(1)
+    expect(screen.getByLabelText(/time zone/i)).toBe(selects[0])
   })
 })
 

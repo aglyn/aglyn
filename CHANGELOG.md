@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.155 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/edeba2fc4...v1.0.0-beta.155)
+
+### Fixed
+
+- **tenant:** a post is dated in its publisher's zone, not the server's ([AGL-3237](https://linear.app/aglyn/issue/AGL-3237), [AGL-1926](https://linear.app/aglyn/issue/AGL-1926), [AGL-1361](https://linear.app/aglyn/issue/AGL-1361))
+
 ## v1.0.0-beta.154 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.153...v1.0.0-beta.154)

@@ -126,6 +126,11 @@ export interface ComposedCollectionPage {
  */
 export async function composeCollectionTemplatePage(options: {
   hostId: string
+  /**
+   * The zone this site's dates read in (AGL-3237); UTC when a site has not
+   * named one. Resolved once by the caller that holds the org and the host.
+   */
+  timeZone?: string
   content: CollectionContent
   /**
    * The site, whose default card the head falls back to after the entry's
@@ -266,6 +271,11 @@ export async function composeCollectionTemplatePage(options: {
  */
 export async function composeCollectionFallbackPage(options: {
   hostId: string
+  /**
+   * The zone this site's dates read in (AGL-3237); UTC when a site has not
+   * named one. Resolved once by the caller that holds the org and the host.
+   */
+  timeZone?: string
   host: Aglyn.AglynHost
   content: CollectionContent
 }): Promise<Omit<ComposedCollectionPage, 'screen'> | null> {
@@ -280,6 +290,7 @@ export async function composeCollectionFallbackPage(options: {
     // site cannot end up in different chrome.
     const layoutId = await resolveBuiltInPageLayoutId({ hostId, host })
     const screenNodes = buildCollectionFallbackNodes({
+      ...(options.timeZone ? { timeZone: options.timeZone } : {}),
       collection,
       entries: content.entries,
       entry: content.entry,
@@ -297,6 +308,7 @@ export async function composeCollectionFallbackPage(options: {
       host?.seo?.image,
     ])
     const nodes = await composeNodesWithChrome({
+      ...(options.timeZone ? { timeZone: options.timeZone } : {}),
       hostId,
       layoutId,
       screenNodes,
