@@ -289,12 +289,25 @@ async function handler(request: Request): Promise<Response> {
      * trade in the route.
      */
     try {
-      await notifyStaff({
-        type: 'staff.orgCreated',
-        title: `New workspace: ${name}`,
-        body: `${decoded.email ?? 'An account'} created ${name} (/${slug}).`,
-        link: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }),
-      })
+      /*
+       * ⚠️ Except the canary's own (AGL-3248), for the same reason the
+       * attempt marker above excludes it — and with the same one-line test.
+       *
+       * It walks hourly and REAPS what it made, so each announcement is a
+       * workspace that no longer exists behind a link to an admin page that
+       * 404s. Nine of the ten most recent staff rows were canary on
+       * 2026-09-22, which is how a feed meant to carry the platform's growth
+       * stops being read at all. The walk's own health has a channel that is
+       * supposed to page — `signupCanaryHealth` — and this is not it.
+       */
+      if (!isSignupCanaryOrgSlug(slug)) {
+        await notifyStaff({
+          type: 'staff.orgCreated',
+          title: `New workspace: ${name}`,
+          body: `${decoded.email ?? 'An account'} created ${name} (/${slug}).`,
+          link: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }),
+        })
+      }
     } catch (staffError) {
       console.error('staff new-workspace notification skipped', staffError)
     }

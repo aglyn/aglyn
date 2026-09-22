@@ -141,6 +141,18 @@ const EMAIL_BASE = process.env['SIGNUP_CANARY_EMAIL'] ?? ''
 const CANARY_SLUG_PREFIX = 'signup-canary-'
 
 /**
+ * The plus tag `SIGNUP_CANARY_EMAIL` must carry, checked in `main` below.
+ *
+ * `isSignupCanaryEmail` in `libs/aglyn/src/lib/app-utils/health-report.ts`
+ * reads the same tag to keep a walk out of the staff sign-up feed. This file
+ * cannot import it — it runs outside the workspace, on a CI runner with the
+ * admin SDK — so the two are declared separately and held together by
+ * `apps/console/specs/signup-canary-marker-wiring.spec.ts`, the same
+ * arrangement the slug prefix above lives under.
+ */
+const CANARY_EMAIL_TAG = 'signup-canary'
+
+/**
  * Where the workspace subdomain a walk creates actually lives.
  *
  * Same resolution as `workspace-domains.ts` and the reconcile script, so all
@@ -731,6 +743,27 @@ async function main() {
   if (!EMAIL_BASE.includes('+')) {
     throw new Error(
       `SIGNUP_CANARY_EMAIL must be a plus-address (name+tag@domain); got ${EMAIL_BASE}`,
+    )
+  }
+  /*
+   * AND THE TAG MUST BE THE ONE THE CONSOLE READS (AGL-3248).
+   *
+   * `/api/auth/session` suppresses the staff "New account" announcement for
+   * an address carrying this tag, because at the moment a walk's account is
+   * first seen there is no org yet and nothing else to recognize it by. The
+   * tag is operator-supplied, so nothing makes it true except this line: set
+   * a base address with some other tag and the walk starts announcing itself
+   * to staff again, hourly, with no error anywhere.
+   *
+   * Refused at the top of `main` rather than fixed up silently — a canary
+   * whose address does not match the estate's expectation is a configuration
+   * question, and answering it by rewriting the operator's mailbox would send
+   * every verification mail somewhere nobody is reading.
+   */
+  const tag = EMAIL_BASE.toLowerCase().split('@')[0].split('+')[1] ?? ''
+  if (!tag.startsWith(CANARY_EMAIL_TAG)) {
+    throw new Error(
+      `SIGNUP_CANARY_EMAIL must be tagged +${CANARY_EMAIL_TAG} (name+${CANARY_EMAIL_TAG}@domain); got ${EMAIL_BASE}`,
     )
   }
   if (process.env['SIGNUP_CANARY_ENABLE'] !== '1') {

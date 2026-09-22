@@ -17,6 +17,7 @@
 
 import {
   isLockdownActive,
+  isSignupCanaryEmail,
   resolveIdpAddress,
   resolveIdpDisplayName,
   resolveIdpPhone,
@@ -521,7 +522,22 @@ async function handler(request: Request): Promise<Response> {
              * to hear about sign-ups switches the category off and nothing
              * here has to know.
              */
-            if (created) {
+            /*
+             * ⚠️ Except the canary's own (AGL-3248).
+             *
+             * The hourly signup walk creates a real account through this
+             * exact path and then deletes it, so every announcement it raises
+             * is a person who no longer exists behind a link to an admin page
+             * that 404s. Nine of the ten most recent staff rows were canary
+             * on 2026-09-22.
+             *
+             * Matched on the ADDRESS because there is nothing else here yet:
+             * no org, no claim, nothing on the token that says CI — the org
+             * comes later, and `/api/orgs/create` excludes itself by its slug.
+             * `tools/e2e/signup-canary.mjs` refuses to start unless its base
+             * address carries the tag this reads.
+             */
+            if (created && !isSignupCanaryEmail(decoded.email)) {
               await notifyStaff({
                 type: 'staff.userSignedUp',
                 title: 'New account',

@@ -40,7 +40,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import {
+  SIGNUP_CANARY_EMAIL_TAG,
   SIGNUP_CANARY_ORG_SLUG_PREFIX,
+  isSignupCanaryEmail,
   isSignupCanaryOrgSlug,
 } from '@aglyn/aglyn/server'
 
@@ -284,6 +286,78 @@ describe('the canary is excluded from the drought it would otherwise trip', () =
     expect(isSignupCanaryOrgSlug('')).toBe(false)
     expect(isSignupCanaryOrgSlug(null)).toBe(false)
     expect(isSignupCanaryOrgSlug(undefined)).toBe(false)
+  })
+})
+
+/**
+ * The canary is excluded from the staff feed it would otherwise fill
+ * (AGL-3248).
+ *
+ * AGL-3225 gave staff two growth notifications and the walk trips both every
+ * hour — then reaps the account and the org, so each row links to an admin
+ * page that 404s. Nine of the ten most recent rows were canary on 2026-09-22.
+ *
+ * Two different exclusions, because the two emit sites know different things.
+ * `/api/orgs/create` holds the requested slug and reuses the check above.
+ * `/api/auth/session` fires the moment `seedUserProfile` reports a first
+ * sighting — before any org exists — so the ADDRESS is the only signal there
+ * is, and the tag on it is a convention that only the script's own refusal
+ * makes true. That refusal is the load-bearing assertion in this block: drop
+ * it and the exclusion goes quiet the first time the operator's mailbox
+ * changes.
+ */
+describe('the canary does not announce itself to staff', () => {
+  it('the workspace announcement is guarded by the slug', () => {
+    expect(CREATE_ROUTE).toMatch(
+      /if \(!isSignupCanaryOrgSlug\(slug\)\) \{\s*await notifyStaff\(\{\s*type: 'staff\.orgCreated'/,
+    )
+  })
+
+  it('the account announcement is guarded by the address', () => {
+    const SESSION_ROUTE = readFileSync(
+      join(REPO_ROOT, 'apps/console/app/api/auth/session/route.ts'),
+      'utf8',
+    )
+    expect(SESSION_ROUTE).toMatch(
+      /if \(created && !isSignupCanaryEmail\(decoded\.email\)\) \{\s*await notifyStaff\(\{\s*type: 'staff\.userSignedUp'/,
+    )
+  })
+
+  it('the tag the console reads is the tag the canary refuses to start without', () => {
+    // The same arrangement as the slug prefix above, and it matters more:
+    // an address tag is operator-supplied, so nothing but this refusal makes
+    // the console's check true.
+    expect(SIGNUP_CANARY_EMAIL_TAG).toBe('signup-canary')
+    expect(CANARY).toContain(
+      `const CANARY_EMAIL_TAG = '${SIGNUP_CANARY_EMAIL_TAG}'`,
+    )
+    expect(CANARY).toContain('tag.startsWith(CANARY_EMAIL_TAG)')
+    // Thrown, not warned: a walk that quietly kept announcing itself is the
+    // failure this whole block exists to prevent.
+    expect(CANARY).toMatch(
+      /if \(!tag\.startsWith\(CANARY_EMAIL_TAG\)\) \{\s*throw new Error\(/,
+    )
+  })
+
+  it('recognizes a canary address and leaves everything else alone', () => {
+    // What the walk actually mints, and the base it is stamped from.
+    expect(isSignupCanaryEmail('ops+signup-canary-m2rso9ab12@example.com')).toBe(
+      true,
+    )
+    expect(isSignupCanaryEmail('ops+signup-canary@example.com')).toBe(true)
+    // Address comparison is case-insensitive in the local part here on
+    // purpose: the console reads whatever the token carries.
+    expect(isSignupCanaryEmail('Ops+Signup-Canary-A1B2@Example.com')).toBe(true)
+    // A customer must still be announced.
+    expect(isSignupCanaryEmail('ops@example.com')).toBe(false)
+    expect(isSignupCanaryEmail('ops+newsletter@example.com')).toBe(false)
+    // The tag has to be in the LOCAL part. A domain that merely contains it
+    // is somebody else's mail.
+    expect(isSignupCanaryEmail('ops@signup-canary.example.com')).toBe(false)
+    expect(isSignupCanaryEmail('signup-canary@example.com')).toBe(false)
+    expect(isSignupCanaryEmail('')).toBe(false)
+    expect(isSignupCanaryEmail(null)).toBe(false)
+    expect(isSignupCanaryEmail(undefined)).toBe(false)
   })
 })
 
