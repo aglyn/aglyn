@@ -700,16 +700,29 @@ describe('FLAT PLATFORM CEILINGS on visitor-created records (AGL-1529)', () => {
   )
 
   it('EVERY lead writer goes through the one bounded writer', () => {
-    // A cap enforced at two of three call sites is not a cap. The three lead
-    // writes in the repo are the sign-up handler and the two bookings paths;
-    // none of them may reach the collection directly any more.
+    // A cap enforced at two of three call sites is not a cap. Since
+    // AGL-3232 no door writes a lead itself: the sign-up handler, the
+    // bookings paths and the form route hand the capture to the CRM through
+    // `recordCapturedContact`, and the CRM's writer, its import and its New
+    // lead route are the three places a lead is filed — each through
+    // `addHostLead`, the one writer the ceiling lives in.
+    for (const file of [
+      'libs/plugins/crm/src/lib/server/capture-contact.ts',
+      'libs/plugins/crm/src/lib/server/leads-import.ts',
+      'libs/plugins/crm/src/lib/server/lead-create.ts',
+    ]) {
+      const code = codeOf(file)
+      expect(`${file}: ${code.includes('addHostLead(') ? 'bounded' : 'UNBOUNDED'}`)
+        .toBe(`${file}: bounded`)
+    }
     for (const file of [
       'libs/plugins/commerce/src/lib/server/membership-register.ts',
       'libs/plugins/bookings/src/lib/server.ts',
+      'apps/tenant/app/api/forms/submit/route.ts',
     ]) {
       const code = codeOf(file)
-      expect(`${file}: ${code.includes('addHostLead') ? 'bounded' : 'UNBOUNDED'}`)
-        .toBe(`${file}: bounded`)
+      expect(`${file}: ${code.includes('recordCapturedContact(') ? 'captures through the seam' : 'NO CAPTURE'}`)
+        .toBe(`${file}: captures through the seam`)
       // The instrument, aimed at the thing it replaced: a direct
       // `collection('leads')` write is what the ceiling cannot see.
       expect(`${file}: ${/collection\('leads'\)/.test(code) ? 'DIRECT WRITE' : 'routed'}`)
