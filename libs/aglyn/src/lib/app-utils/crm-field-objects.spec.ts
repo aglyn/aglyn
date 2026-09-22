@@ -45,17 +45,17 @@ describe('fieldDefinitionObject (AGL-2661)', () => {
     expect(fieldDefinitionObject({ object: 'company' })).toBe('company')
     expect(fieldDefinitionObject({ object: 'deal' })).toBe('deal')
     expect(fieldDefinitionObject({ object: 'contact' })).toBe('contact')
-    expect(fieldDefinitionObject({ object: 'lead' as never })).toBe('contact')
+    expect(fieldDefinitionObject({ object: 'lead' })).toBe('lead')
     expect(fieldDefinitionObject({ object: 42 as never })).toBe('contact')
   })
 
   it('names every object exactly once, with a label', () => {
-    expect([...CRM_FIELD_OBJECTS]).toEqual(['contact', 'company', 'deal'])
+    expect([...CRM_FIELD_OBJECTS]).toEqual(['contact', 'company', 'deal', 'lead'])
     for (const object of CRM_FIELD_OBJECTS) {
       expect(isCrmFieldObject(object)).toBe(true)
       expect(CRM_FIELD_OBJECT_LABELS[object]).toEqual(expect.any(String))
     }
-    expect(isCrmFieldObject('lead')).toBe(false)
+    expect(isCrmFieldObject('leads')).toBe(false)
     expect(isCrmFieldObject('')).toBe(false)
   })
 })

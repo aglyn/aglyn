@@ -764,9 +764,18 @@ export interface CrmActivity extends CrmScoped {
   sourceActionId?: string
   /**
    * The plugin that filed it on the record-timeline seam (AGL-2981) — an
-   * email a sequence sent, a reply it read.
+   * email a sequence sent, a reply it read — or the CRM's own id on an
+   * entry it wrote about a filing (AGL-3274), so a reader can tell the
+   * bookkeeping entries from what a person logged.
    */
   sourcePluginId?: string
+  /**
+   * The campaign a filing entry is about (AGL-3274): "Filed under" and
+   * "Removed from" name it in the body and carry the container's id here,
+   * so a campaign's own page can one day list what happened under it
+   * without parsing a sentence.
+   */
+  campaignId?: string
   contactId?: string
   companyId?: string
   dealId?: string
@@ -1133,9 +1142,12 @@ export interface ContactFieldDefinition extends CrmScoped {
 
 /**
  * The records a custom field may describe, in the order the Fields
- * section tabs them (AGL-2661).
+ * section tabs them (AGL-2661), with `lead` since AGL-3272.
+ *
+ * A lead is last because it is the record a person leaves: the three
+ * before it are what a lead becomes, and the tabs read in that order.
  */
-export const CRM_FIELD_OBJECTS = ['contact', 'company', 'deal'] as const
+export const CRM_FIELD_OBJECTS = ['contact', 'company', 'deal', 'lead'] as const
 
 export type CrmFieldObject = (typeof CRM_FIELD_OBJECTS)[number]
 
@@ -1144,6 +1156,7 @@ export const CRM_FIELD_OBJECT_LABELS: Record<CrmFieldObject, string> = {
   contact: 'Contacts',
   company: 'Companies',
   deal: 'Deals',
+  lead: 'Leads',
 }
 
 export function isCrmFieldObject(value: unknown): value is CrmFieldObject {
@@ -2378,6 +2391,20 @@ export interface CrmLeadFields extends CrmLeadProfile {
    * handed to the contact's facet when the lead converts.
    */
   campaignIds?: string[]
+  /**
+   * The org's custom LEAD fields, keyed by each definition's `key`
+   * (AGL-3272) — the same map a contact facet, a company and a deal keep,
+   * judged against the definitions whose `object` is `lead`.
+   *
+   * It does NOT travel to the contact on convert. Keys are unique per
+   * object, so a lead's `budget` and a contact's `budget` are two
+   * definitions that may hold two types, and copying one map into the
+   * other would write a value the receiving definition never agreed to.
+   * Salesforce answers this with an explicit lead field mapping; until
+   * there is one here the values stay on the lead, which a converted lead
+   * is still read back for.
+   */
+  custom?: Record<string, CrmCustomValue>
 }
 
 /*==========================================

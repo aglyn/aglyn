@@ -140,7 +140,7 @@ export const PLUGIN_DOCS = {
   contactFields: {
     path: '/content-and-data/crm/custom-fields',
     title: 'Custom fields',
-    excerpt: 'Define your own properties on contacts, companies and deals — text, number, date, choice, checkbox or link — show them on every record and its list, and save form answers straight into a contact\'s.',
+    excerpt: 'Define your own properties on contacts, companies, deals and leads — text, number, date, choice, checkbox or link — show them on every record and its list, and save form answers straight into a contact\'s.',
   },
   contactRecord: {
     path: '/content-and-data/crm/contact-record',

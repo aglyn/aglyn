@@ -82,7 +82,7 @@ export const DOCS_HELP_EXCERPTS = {
   crm: 'One place for the people who interact with your sites — contacts captured from forms, members, orders and bookings, with leads, companies, a deals pipeline, tasks, a timeline, reports and custom fields.',
   crmByAi: 'An AI CRM for small business: a short summary and a suggested next step on a contact, company, deal or lead, a one-to-one email drafted into the composer, and an import\'s columns matched to fields.',
   customDomains: 'Connect your own domain — subdomain or bare apex — with one-click DNS verification.',
-  customFields: 'Define your own properties on contacts, companies and deals — text, number, date, choice, checkbox or link — show them on every record and its list, and save form answers straight into a contact\'s.',
+  customFields: 'Define your own properties on contacts, companies, deals and leads — text, number, date, choice, checkbox or link — show them on every record and its list, and save form answers straight into a contact\'s.',
   customRoles: 'Define roles with unique permission sets and fine-tune access per member.',
   datasets: 'Model structured content with typed fields and relations, then bind it into repeatable components.',
   datasetsAndSchema: 'Field ids vs display names, the typed model, per-plan record quotas, import/export, repeatables with item bindings, and every writer that can append records.',

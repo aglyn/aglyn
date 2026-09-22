@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
@@ -76,6 +77,10 @@ export function defaultOutreachRouteDeps(): OutreachEnrollRouteDeps {
         firebaseAdmin.app().firestore(),
       )
     },
+    // The record system's writer (AGL-3274), resolved per call the way the
+    // runtime resolves it: the CRM registers at boot, and a request that
+    // arrives before it did files nothing rather than caching a `null`.
+    timeline: () => pluginRecordTimelineWriter()?.writer ?? null,
   }
 }
 

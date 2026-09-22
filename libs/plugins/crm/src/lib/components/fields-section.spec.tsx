@@ -117,6 +117,7 @@ describe('the Fields section tabs (AGL-2661)', () => {
     expect(screen.getByRole('tab', { name: 'Contacts' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByRole('tab', { name: 'Companies' })).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Deals' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'Leads' })).toBeTruthy()
     expect(definitionsFor).toHaveBeenLastCalledWith('org-1', 'contact')
     expect(screen.getByText('No custom contact fields yet')).toBeTruthy()
   })
@@ -141,5 +142,36 @@ describe('the Fields section tabs (AGL-2661)', () => {
     const [ref, data] = (setDoc as jest.Mock).mock.calls[0]
     expect(ref.path).toMatch(/^orgs\/org-1\/contactFields\//)
     expect(data).toMatchObject({ key: 'tier', label: 'Tier', object: 'deal', hostId: 'host-1' })
+  })
+
+  /*
+   * THE LEADS TAB (AGL-3272). A lead is a record of its own and was the
+   * one CRM record an org could not describe in its own words; these two
+   * hold the seam the other tabs hold — the hook is asked for `lead`
+   * alone, and what is created is STAMPED `object: 'lead'` rather than
+   * filed as a contact field by a tab that forgot to say which.
+   */
+  it('switches the list and the copy to leads', () => {
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+    expect(definitionsFor).toHaveBeenLastCalledWith('org-1', 'lead')
+    expect(screen.getByText('No custom lead fields yet')).toBeTruthy()
+  })
+
+  it('stamps a field created on the Leads tab with object: lead, and promises no import', () => {
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'New field' })[0])
+    expect(screen.getByText('New lead field')).toBeTruthy()
+    // The leads file carries the standard columns only, so the drawer must
+    // not offer a CSV import that would silently drop the column.
+    expect(screen.getByText(/filled on the record or over the API/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'Budget' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create field' }))
+    return waitFor(() => {
+      expect(setDoc).toHaveBeenCalledTimes(1)
+      const [, data] = (setDoc as jest.Mock).mock.calls[0]
+      expect(data).toMatchObject({ key: 'budget', label: 'Budget', object: 'lead' })
+    })
   })
 })

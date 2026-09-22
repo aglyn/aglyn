@@ -25,16 +25,19 @@ import {
 import {
   useFirestore,
   useFirestoreDoc,
+  useHostCampaigns,
   useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useState } from 'react'
+import { useCampaignFilingLog } from '../hooks/use-campaign-filing-log'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
-import { CrmRecordHeader } from './crm-record-header'
+import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { useErasePersonAction } from './erase-person-action'
+import { LeadCampaignsCard, leadCampaignNames } from './lead-campaigns-card'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import { LeadHistoryCard } from './lead-history-card'
 import { LeadPropertiesCard } from './lead-properties-card'
@@ -67,6 +70,20 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
   )
   const { orgId } = useOrgDataScope({ hostId })
   const roster = useOrgMemberOptions(orgId)
+  /*
+   * The site's campaigns, read once for the page (AGL-3274): the header
+   * names the ones the lead is filed under and the Campaigns card offers
+   * them. One listener, not one per surface — a lead belongs to one site,
+   * so the containers are that site's.
+   */
+  const campaigns = useHostCampaigns(hostId, { enabled: true })
+  // A saved filing is written on the lead's Activity too (AGL-3274), one
+  // entry per campaign added or removed, by the member who saved it.
+  const logFiling = useCampaignFilingLog({
+    orgId,
+    hostId,
+    org: org as Record<string, unknown> | undefined,
+  })
   const [converting, setConverting] = useState(false)
   const [unqualifying, setUnqualifying] = useState(false)
   // The privacy erasure (AGL-2623), offered from the lead as from the
@@ -119,6 +136,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
       <Stack spacing={3}>
         <LeadPropertiesCard
           hostId={hostId}
+          orgId={orgId}
           leadId={id}
           lead={lead}
           leadStatus={status}
@@ -131,6 +149,12 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           banner={erase.banner}
           erasurePending={erase.pendingSinceMs !== null}
           org={org}
+          // The campaigns the lead is filed under (AGL-3274), by name
+          // beside the status. An id no container answers for draws no
+          // chip: the card below keeps it, the header only names.
+          extraChips={leadCampaignNames(lead, campaigns.options).map((name) => (
+            <CrmRecordChip key={name} label="Campaign" value={name} />
+          ))}
         />
         {/* What an assistant says about where the lead stands (AGL-2917): read on its own site. */}
         <CrmRecordInsightsZone
@@ -139,6 +163,23 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           kind="lead"
           recordId={id}
           name={label ?? ''}
+        />
+        <LeadCampaignsCard
+          hostId={hostId}
+          leadId={id}
+          lead={lead}
+          leadStatus={status}
+          fromCache={fromCache}
+          options={campaigns.options}
+          optionsReady={campaigns.ready}
+          onFiled={({ added, removed }) => {
+            const named = (ids: string[]) =>
+              ids.map((campaignId) => ({
+                id: campaignId,
+                name: campaigns.options.find((option) => option.value === campaignId)?.label ?? '',
+              }))
+            void logFiling({ leadId: id }, { filed: named(added), removed: named(removed) })
+          }}
         />
         <LeadHistoryCard hostId={hostId} leadId={id} lead={lead} />
         <RecordActivityCard hostId={hostId} org={org} leadId={id} />

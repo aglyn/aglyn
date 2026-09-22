@@ -20,6 +20,7 @@
 import { activityTypeLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { isPluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
+import type { PluginRecordActivityRequest } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
@@ -247,7 +248,20 @@ const deps = (): OutreachEnrollRouteDeps => ({
   stampRecordEmailState: async (stamp) => {
     stamped.push(stamp)
   },
+  // The record system (AGL-3274): what the enroll files on the person.
+  timeline: () => ({
+    async logActivity(request) {
+      filed.push(request)
+      return { ok: true, id: `a${filed.length}`, created: true }
+    },
+    async createTask() {
+      return { ok: true, id: 't1', created: true }
+    },
+  }),
 })
+
+/** What the enroll route filed on the person's record (AGL-3274). */
+let filed: PluginRecordActivityRequest[] = []
 
 const OFFICE = { days: [1, 2, 3, 4, 5], startMinute: 9 * 60, endMinute: 17 * 60 }
 
@@ -315,6 +329,7 @@ beforeEach(() => {
   docs = new Map()
   activity = []
   credits = []
+  filed = []
   viewEmails = []
   stamped = []
   members = {
@@ -957,6 +972,33 @@ describe('outreach/enroll (AGL-2980)', () => {
       { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
       { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
     ])
+    /*
+     * And each person's record says so (AGL-3274): one note by "Sequences",
+     * keyed once per enrollment, naming the sequence and the campaigns it
+     * carried them into — on the contact by id, on the lead by its key.
+     */
+    const entries = [...filed]
+      .sort((a, b) => a.dedupeKey!.localeCompare(b.dedupeKey!))
+      .map((entry) => [entry.link, entry.dedupeKey, entry.body, entry.byName, entry.kind])
+    expect(entries).toEqual(
+      [
+        [
+          { contactId: 'c-warm' },
+          `enrolled:${sequenceId}_c-warm`,
+          'Enrolled in Second locations\nFiled under Founder · ICP 2, Founder · ICP 1',
+          'Sequences',
+          'note',
+        ],
+        [
+          { leadId },
+          `enrolled:${sequenceId}_${leadId}`,
+          'Enrolled in Second locations\nFiled under Founder · ICP 2, Founder · ICP 1',
+          'Sequences',
+          'note',
+        ],
+      ].sort((a, b) => String(a[1]).localeCompare(String(b[1]))),
+    )
+    expect(filed.every((entry) => entry.sourcePluginId === 'outreach' && entry.hostId === HOST && entry.atMs === AT)).toBe(true)
   })
 
   it('stamps and credits nothing for a sequence in no campaign', async () => {

@@ -145,6 +145,13 @@ export function LeadHistoryCard(props: LeadHistoryCardProps) {
               recordKind="lead"
               recordId={leadId}
             />
+            {/* Attribution is which campaign brought the person; the
+                filing on the Campaigns card is the team's own (AGL-3274),
+                and a reader who sees one campaign here and another there
+                is owed the difference. */}
+            <Typography variant="caption" color="text.secondary">
+              {'Filing is separate — see Filed under campaigns.'}
+            </Typography>
           </Stack>
         ) : null}
       </Stack>

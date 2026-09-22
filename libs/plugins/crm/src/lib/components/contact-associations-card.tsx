@@ -260,11 +260,18 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           </Stack>
         ) : null}
         {hostId ? (
-          <CrmRecordAttributionZone
-            hostId={hostId}
-            recordKind="contact"
-            recordId={record.$id}
-          />
+          <Stack spacing={0.5}>
+            <CrmRecordAttributionZone
+              hostId={hostId}
+              recordKind="contact"
+              recordId={record.$id}
+            />
+            {/* Attribution is the campaign that brought the person; the
+                picker below is the team's own filing (AGL-3274). */}
+            <Typography variant="caption" color="text.secondary">
+              {'Filing is separate — see Filed under campaigns.'}
+            </Typography>
+          </Stack>
         ) : null}
         <Stack spacing={0.5}>
           <Typography variant="subtitle2">{'Marketing email'}</Typography>

@@ -3,6 +3,7 @@
 import {
   CRM_LEAD_STATUS_LABELS,
   CRM_LEAD_TEXT_MAX,
+  type CrmCustomValue,
   type CrmLeadStatus,
   campaignMembershipValue,
   normalizeCrmLeadTags,
@@ -25,6 +26,7 @@ import {
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import { useHostCampaigns } from '@aglyn/tenant-feature-instance'
 import { useEffect, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import {
@@ -33,6 +35,12 @@ import {
   type AddressDraft,
 } from './contact-address-fields'
 import { CrmSitePicker } from './crm-site-picker'
+import { CrmCustomFieldControl } from './crm-custom-field-control'
+import {
+  type CrmCustomDraft,
+  crmCustomDraftDocument,
+  crmCustomDraftMissingRequired,
+} from '../model/crm-custom-draft'
 import { LeadOwnerSelect } from './lead-owner-select'
 
 /** What the drawer hands back — already normalized where the route would. */
@@ -51,6 +59,12 @@ export interface NewLeadValues {
   campaignIds: string[]
   address: AglynPostalAddress | null
   notes: string
+  /**
+   * The org's custom lead fields (AGL-3272), keyed by each definition's
+   * `key`. Absent when the org has defined none, or none was filled — the
+   * route stores a `custom` map only when there is one.
+   */
+  custom?: Record<string, CrmCustomValue>
 }
 
 export interface NewLeadDrawerProps {
@@ -69,6 +83,13 @@ export interface NewLeadDrawerProps {
   error?: string | null
   /** The team, for the owner picker. */
   roster: OrgMemberOptions
+  /**
+   * The org the custom lead fields belong to (AGL-3272), as the list
+   * already resolved it. `null` while it is in flight — the drawer then
+   * shows the standard fields and no custom ones, which is what an org
+   * with none defined shows anyway.
+   */
+  orgId?: string | null
   onSubmit: (values: NewLeadValues) => void
 }
 
@@ -94,7 +115,7 @@ const NOTES_MAX = 4000
  * is at the platform ceiling.
  */
 export function NewLeadDrawer(props: NewLeadDrawerProps) {
-  const { open, onClose, hostId, org, busy, error, roster, onSubmit } = props
+  const { open, onClose, hostId, org, busy, error, roster, orgId, onSubmit } = props
   // The site the route files the lead under: the mounted site, or at the
   // organization level the picked one. `null` until it is known.
   const { createHostId } = useCrmScope({ hostId, org: org as never })
@@ -112,6 +133,14 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
   const [campaignIds, setCampaignIds] = useState<string[]>([])
   const [address, setAddress] = useState<AddressDraft>(EMPTY_ADDRESS)
   const [notes, setNotes] = useState('')
+  /*
+   * The org's own lead fields (AGL-3272). A CREATE holds only a draft —
+   * there is no stored map to diff against — and `crmCustomDraftDocument`
+   * turns it into the `custom` the route stores, or nothing.
+   */
+  const fields = useContactFieldDefinitions(orgId ?? null, 'lead')
+  const [custom, setCustom] = useState<CrmCustomDraft>({})
+  const [customError, setCustomError] = useState('')
   const [emailError, setEmailError] = useState('')
   const [phoneError, setPhoneError] = useState('')
   const [websiteError, setWebsiteError] = useState('')
@@ -142,6 +171,8 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
     setCampaignIds([])
     setAddress(EMPTY_ADDRESS)
     setNotes('')
+    setCustom({})
+    setCustomError('')
     setEmailError('')
     setPhoneError('')
     setWebsiteError('')
@@ -160,10 +191,18 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
       address,
       tags: normalizeCrmLeadTags(tags),
     })
+    // Every required lead field counts on a create: the record is being
+    // made whole, and nothing has been written to come back and fill.
+    const missing = crmCustomDraftMissingRequired(fields.active, {}, custom, 'create')
     setEmailError(normalizedEmail ? '' : 'Enter a valid email address.')
     setPhoneError(errors.phone ?? '')
     setWebsiteError(errors.website ?? '')
-    if (!normalizedEmail || errors.phone || errors.website) return
+    setCustomError(
+      missing.length
+        ? `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required.`
+        : '',
+    )
+    if (!normalizedEmail || errors.phone || errors.website || missing.length) return
     onSubmit({
       email: normalizedEmail,
       name: name.trim().replace(/\s+/g, ' ').slice(0, CRM_LEAD_TEXT_MAX),
@@ -178,6 +217,7 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
       campaignIds: campaignMembershipValue(campaignIds),
       address: patch.address ?? null,
       notes: notes.trim().slice(0, NOTES_MAX),
+      custom: crmCustomDraftDocument(custom),
     })
   }
 
@@ -338,6 +378,25 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
           ) : null}
           <Typography variant="subtitle2">{'Address'}</Typography>
           <ContactAddressFields value={address} onChange={setAddress} />
+          {/* The org's own lead fields (AGL-3272), the same controls the
+              lead's page edits them with. */}
+          {fields.active.length ? (
+            <>
+              <Typography variant="subtitle2">{'Custom fields'}</Typography>
+              {customError ? <Alert severity="warning">{customError}</Alert> : null}
+              {fields.active.map((definition) => (
+                <CrmCustomFieldControl
+                  key={definition.$id}
+                  definition={definition}
+                  value={custom[definition.key]}
+                  onChange={(value) =>
+                    setCustom((current) => ({ ...current, [definition.key]: value }))
+                  }
+                  disabled={Boolean(busy)}
+                />
+              ))}
+            </>
+          ) : null}
           <TextField
             size="small"
             label="Notes"

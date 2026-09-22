@@ -26,6 +26,8 @@ import type {
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { consentGroupForSite } from '@aglyn/tenant-data-admin/server/organizations'
 import { FieldValue } from 'firebase-admin/firestore'
+import { CAMPAIGN_FILING_CARRY_BY_NAME } from '../model/campaign-filing-activity'
+import { fileCampaignFilingActivities, siteCampaignRefs } from './campaign-filing-activity'
 
 /**
  * WHAT A LEAD'S CAMPAIGNS BECOME WHEN IT CONVERTS (AGL-3254).
@@ -77,6 +79,27 @@ export async function carryLeadCampaignsToContact(
         ),
         updatedAt: FieldValue.serverTimestamp(),
       })
+    /*
+     * The carry on the contact's Activity (AGL-3274): one "Filed under"
+     * per campaign, by the conversion rather than a member, keyed once per
+     * lead and contact so a door that converts twice files once. After the
+     * membership has landed, and never failing the carry that is done.
+     */
+    await fileCampaignFilingActivities(firestore, {
+      orgId: request.orgId,
+      hostId: request.hostId,
+      link: { contactId: request.contactId },
+      action: 'filed',
+      // Named where the containers answer; by id where a read fails, so a
+      // name lookup can never unmake a carry that has landed.
+      campaigns: await siteCampaignRefs(firestore, request.hostId, campaignIds).catch(() =>
+        campaignIds.map((id) => ({ id, name: id })),
+      ),
+      atMs: Date.now(),
+      byUid: '',
+      byName: CAMPAIGN_FILING_CARRY_BY_NAME,
+      dedupeKey: `carry:${request.leadId}:${request.contactId}`,
+    })
     return { campaigns: campaignIds.length }
   } catch (error) {
     console.error(

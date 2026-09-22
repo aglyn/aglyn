@@ -109,10 +109,13 @@ import {
   CRM_LABEL_MAX,
   CRM_TEXT_MAX,
   CRM_TITLE_MAX,
+  crmCustomUpdate,
+  crmCustomView,
   crmTimes,
   crmValidationFailed,
   isoFromMs,
   memberError,
+  readCrmCustomBody,
   readOptionalText,
   refuseUnknownKeys,
   updatePayload,
@@ -171,6 +174,9 @@ function leadView(siteId: string, doc: FirebaseFirestore.DocumentSnapshot) {
     convertedAt: isoFromMs(data.convertedAtMs),
     companyId: data.companyId ?? null,
     dealId: data.dealId ?? null,
+    // The org's own lead fields (AGL-3272) — `{}` on a lead that carries
+    // none, so a client can index it without a guard.
+    custom: crmCustomView(data as FirebaseFirestore.DocumentData),
     ...crmTimes(data as FirebaseFirestore.DocumentData),
   }
 }
@@ -267,6 +273,11 @@ const LEAD_WRITABLE = new Set([
   'ownerEmail',
   'notes',
   'unqualifiedReason',
+  // The org's own lead fields (AGL-3272), judged against the definitions
+  // whose object is `lead` — never read by `readLeadInput`, which knows
+  // nothing about the org's definitions, but named here so a body that
+  // carries one is not refused as an unknown key.
+  'custom',
   ...LEAD_PROFILE_KEYS,
 ])
 
@@ -372,10 +383,17 @@ async function updateLead(
     errors.unqualifiedReason = 'Only an unqualified lead carries a reason'
   }
   if (Object.keys(errors).length) return crmValidationFailed(ctx, 'lead', errors)
+  // The org's own lead fields (AGL-3272), judged against the definitions
+  // whose object is `lead` — a contact field of the same key is a
+  // different field with a possibly different type.
+  const custom = await readCrmCustomBody(ctx, body, 'lead')
+  if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'lead', custom.errors)
 
   const update: Record<string, unknown> = {
     ...updatePayload({ ...rest, ownerUid }),
     ...profileUpdate(profile),
+    // One dotted path per key, so the map is merged rather than replaced.
+    ...(custom && 'values' in custom ? crmCustomUpdate(custom.values) : {}),
   }
   if (status !== undefined && status !== current) update.status = status
   if (next === 'unqualified') {
@@ -449,6 +467,11 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
   const ownerUid = await readOwner(ctx, body, errors)
   if (ownerUid) Object.assign(errors, await memberError(ctx, 'ownerUid', ownerUid))
   if (Object.keys(errors).length) return crmValidationFailed(ctx, 'lead', errors)
+  // Judged above the claim (AGL-3272), so a refused field costs no
+  // idempotency key — the shape the companies resource writes.
+  const custom = await readCrmCustomBody(ctx, body, 'lead')
+  if (custom && 'errors' in custom) return crmValidationFailed(ctx, 'lead', custom.errors)
+  const customValues = custom && 'values' in custom ? custom.values : {}
 
   const claimed = await claimWrite(
     ctx,
@@ -500,6 +523,16 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
       ...(status ? { status } : {}),
       ...(ownerUid ? { ownerUid } : {}),
       ...(notes ? { notes } : {}),
+      /*
+       * The map as a map. The write below is a `set` with `merge`, and a
+       * merge is a DEEP one: a second create for an address the site
+       * already holds fills in the keys this body named and leaves the
+       * rest of the map alone. A dotted path would NOT do it — only
+       * `update` reads dots as paths, and `set` would file a field
+       * literally called `custom.tier`. An explicit `null` is kept, which
+       * is how a create clears a key a first create had set.
+       */
+      ...(Object.keys(customValues).length ? { custom: customValues } : {}),
     }
     const ref = leadsRef.doc(leadId)
     if (Object.keys(working).length) {

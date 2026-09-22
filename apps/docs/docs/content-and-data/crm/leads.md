@@ -107,13 +107,22 @@ their company **as text** until it converts:
 Every one of them is editable on the [lead's page](#a-leads-page), comes in through
 [Import CSV](#import-from-csv), and is handed to the contact when the lead converts.
 
+Beside them, your organization can define its own lead properties — a budget, a
+territory, a renewal date — on the **Leads** tab of
+[**CRM → Fields**](./custom-fields.md). They show on every lead's page and in the **New
+lead** drawer, and as optional columns on the list. They are **not** filled by the leads
+CSV import, and they stay on the lead when it converts: a lead field and a contact field
+are two fields even when they share a key.
+
 ### Adding a lead by hand
 
 **New lead**, at the top of the Leads list, opens a drawer over the list — the list stays
 exactly where it was. Type what you know: the email is the one required field, and the
 company, title, phone, website, lead source, status, owner, tags, address and notes are
-optional. At the organization level the drawer first asks which site to file the lead
-under, since a lead is private to one site.
+optional. Any [custom lead fields](./custom-fields.md) your organization has defined are
+offered here too, and a required one has to be filled. At the organization level the
+drawer first asks which site to file the lead under, since a lead is private to one
+site.
 
 It creates a lead and nothing else. No contact and no company are made — that is what
 converting does, once the lead is real. If the site already holds a lead for the address,
@@ -244,11 +253,12 @@ alone; the contact, when there is one, is assigned from its own record.
 
 ## A lead's page
 
-Click a row to open the lead. The page has two cards.
+Click a row to open the lead. The page has three cards.
 
 **Lead** holds what the team decides: the status, the owner, the lead's
 **profile** — company, job title, phone, website, lead source, tags and
-address, edited together under one **Save** — and free-text **notes** with a
+address, with any [custom lead fields](./custom-fields.md) under it, all edited
+together under one **Save** — and free-text **notes** with a
 **Save notes** button. It also shows the identity the capture recorded —
 email and name — and the person's **marketing consent**: whether they opted
 in (and when), declined, or never recorded a choice. Once the lead converts,
@@ -256,12 +266,20 @@ the profile is read-only here: the contact is the record then. A lead with no re
 consent cannot be sent marketing email, which is worth knowing before you
 promise them a newsletter. The card's header carries **Call** and **Log a
 call** beside **Send email** — see
-[click to call](./activities.md#click-to-call).
+[click to call](./activities.md#click-to-call). Beside the status, the
+header names every campaign the lead is filed under.
+
+**Campaigns** is the filing: **Filed under campaigns** offers the site's
+campaigns by name, and **Save filing** writes the pick. It is your own
+grouping — it never adds anyone to a send, because a campaign mails its
+lists — and it is the same picker the contact's Relationship card carries,
+so a lead and the contact it becomes are filed the same way.
 
 **Captured history** is read-only: when the person was first and last seen,
 how many times your site captured them, every source that did, and — under
 *Where this lead came from* — the campaign the capture is credited to, when
-there is one.
+there is one. That is attribution, which campaign's link brought the person;
+the filing above is separate, and the card says so.
 
 ### Email state {#email-state}
 
@@ -299,7 +317,10 @@ from the list in one click. The dialog asks three things:
    you are not told about a contact you kept. If this email address is
    already a contact, the conversion joins that contact rather than creating
    a second one — the address book stays one row per person — and a contact
-   that already has an owner keeps them.
+   that already has an owner keeps them. [Custom lead fields](./custom-fields.md)
+   are **not** carried: a lead field and a contact field are two fields even
+   when they share a key, so their values stay on the lead, which you can
+   still open.
 2. **Company.** *No company*, *Link an existing company*, or *Create a
    company*. The dialog proposes from the lead's own **Company** text first:
    a company your workspace already files under that name is preselected,

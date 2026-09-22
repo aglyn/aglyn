@@ -48,12 +48,14 @@ import {
   type CrmLeadStatus,
   crmLeadStatus,
   isCrmLeadOpen,
+  readCampaignIds,
 } from '@aglyn/aglyn'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import { useFirestore, useHostCampaigns } from '@aglyn/tenant-feature-instance'
 import { Button, MenuItem, TextField } from '@mui/material'
 import { arrayUnion, deleteField, doc, serverTimestamp } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
+import { useCampaignFilingLog } from '../hooks/use-campaign-filing-log'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { downloadTextFile } from '../model/contacts-csv'
@@ -97,6 +99,12 @@ export interface LeadsBulkBarProps {
    * where the complete export spans every site (AGL-2662).
    */
   hostId?: string | null
+  /**
+   * The org the shell passed, for the scope a filing entry carries
+   * (AGL-3274): Add to campaign writes one on each lead's Activity, and
+   * the entry is visible to whoever sees a record made on this site.
+   */
+  org?: Record<string, unknown> | null
 }
 
 const NOUN: CrmBulkNoun = { singular: 'lead', plural: 'leads' }
@@ -147,6 +155,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
   const campaigns = useHostCampaigns(hostId ?? undefined, {
     enabled: pending === 'campaign' && Boolean(hostId),
   })
+  const logFiling = useCampaignFilingLog({ orgId, hostId, org: props.org })
 
   // The reference a write names is the row's own site and document.
   const writers = useMemo(() => {
@@ -206,11 +215,26 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
           data: { campaignIds: arrayUnion(...campaignIds), updatedAt: serverTimestamp() },
         })
       }
-      await runPlan(
+      const outcome = await runPlan(
         { writes, skipped },
         (count) =>
           `Added ${countNoun(count, NOUN)} to ${campaignIds.length === 1 ? 'the campaign' : `${campaignIds.length} campaigns`}`,
       )
+      // What landed is written on each lead's Activity (AGL-3274): one
+      // "Filed under" per campaign the lead was not already in, and none
+      // for a lead the store refused — the row's own document is the
+      // membership, and the entry only records the act.
+      const refused = new Set(outcome.refused.map((entry) => entry.label))
+      const named = campaignIds.map((campaignId) => ({
+        id: campaignId,
+        name: campaigns.options.find((option) => option.value === campaignId)?.label ?? '',
+      }))
+      for (const lead of selectedRows) {
+        if (refused.has(labelOf(lead))) continue
+        const already = readCampaignIds(lead)
+        const filed = named.filter((campaign) => !already.includes(campaign.id))
+        if (filed.length) await logFiling({ leadId: lead.leadId }, { filed })
+      }
       return
     }
     if (action === 'status') {
@@ -267,7 +291,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       { writes, skipped },
       (count) => `Marked ${countNoun(count, NOUN)} unqualified`,
     )
-  }, [pending, value, campaignIds, selectedRows, runPlan])
+  }, [pending, value, campaignIds, campaigns.options, selectedRows, runPlan, logFiling])
 
   const handleExport = useCallback(() => {
     downloadTextFile('leads-selected.csv', 'text/csv', leadsCsv(selectedRows, csv))

@@ -45,7 +45,16 @@ import {
   Typography,
 } from '@mui/material'
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import {
+  crmCustomDraftChanges,
+  type CrmCustomDraft,
+  crmCustomDraftMissingRequired,
+  crmCustomDraftValue,
+  crmCustomDraftWrites,
+} from '../model/crm-custom-draft'
+import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { crmRoutes } from '../model/crm-routes'
 import {
   addressDraftFrom,
@@ -119,6 +128,12 @@ function Fact(props: { label: string; children: React.ReactNode }) {
 
 export interface LeadPropertiesCardProps {
   hostId: string
+  /**
+   * The org the site belongs to, as the page already resolved it — the
+   * custom lead fields are ORG-wide (AGL-3272), and a second lookup here
+   * would be one more read per record page for an answer already in hand.
+   */
+  orgId: string | null
   leadId: string
   lead: Record<string, unknown> & CrmLeadFields
   leadStatus: FirestoreDocStatus
@@ -136,6 +151,12 @@ export interface LeadPropertiesCardProps {
   extraMenuItems?: RowActionsMenuItem[]
   /** What the page shows above the facts — the erasure-pending state. */
   banner?: React.ReactNode
+  /**
+   * Chips the page adds after the owner — the campaigns the lead is filed
+   * under (AGL-3274), named from the containers the page reads once for
+   * this header and the Campaigns card below it.
+   */
+  extraChips?: React.ReactNode
   /**
    * An erasure request is waiting on this person (AGL-2623). Convert stays
    * on the page but is refused with the reason, the way the overflow's items
@@ -168,6 +189,7 @@ export interface LeadPropertiesCardProps {
 export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const {
     hostId,
+    orgId,
     leadId,
     lead,
     leadStatus,
@@ -178,6 +200,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     onUnqualify,
     extraMenuItems = [],
     banner,
+    extraChips,
     erasurePending = false,
     org,
   } = props
@@ -224,6 +247,20 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     lead.tags,
     lead.address,
   ])
+  /*
+   * THE ORG'S OWN LEAD FIELDS (AGL-3272), edited under the same Save as
+   * the profile: one button over one card, so a person filling a lead in
+   * does not have to find two.
+   *
+   * The draft holds only the keys the reader touched, and Save writes the
+   * difference as dotted paths — a `custom` map written whole would take
+   * out every key this card did not show, which is what a retired field's
+   * values and an integration's writes sit under.
+   */
+  const fields = useContactFieldDefinitions(orgId, 'lead')
+  const storedCustom = useMemo(() => lead.custom ?? {}, [lead.custom])
+  const [custom, setCustom] = useState<CrmCustomDraft>({})
+
   const editProfile = <K extends keyof ProfileDraft>(key: K, value: ProfileDraft[K]) => {
     setProfile((current) => ({ ...current, [key]: value }))
     setProfileDirty(true)
@@ -262,6 +299,15 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     setNotesDirty(false)
   }
 
+  /*
+   * What Save is offered for: a profile field edited, or a custom value
+   * that differs from the stored map. Touched-and-put-back does not count
+   * — the draft keeps the key either way, and a Save that wrote nothing
+   * would still bump `updatedAt`.
+   */
+  const dirty =
+    profileDirty || crmCustomDraftChanges(storedCustom, custom).length > 0
+
   const saveProfile = async () => {
     const { patch, errors } = Aglyn.normalizeCrmLeadProfile({
       company: profile.company,
@@ -274,10 +320,31 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     })
     setProfileErrors(errors)
     if (Object.keys(errors).length) return
+    /*
+     * A required field the reader CLEARED is refused; one the lead has
+     * always lacked is not this save's to demand, or a field added after
+     * the lead was captured would block every later edit to its company.
+     */
+    const missing = crmCustomDraftMissingRequired(
+      fields.active,
+      storedCustom,
+      custom,
+      'edit',
+    )
+    if (missing.length) {
+      enqueueSnackbar(`${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required.`, {
+        variant: 'warning',
+      })
+      return
+    }
     setSavingProfile(true)
     const verdict = await writeGuardedBySeed(
       { subject: 'lead', fromCache, unreadable: leadStatus === 'error' },
-      () => write(profileWrite(patch), 'Lead saved'),
+      () =>
+        write(
+          { ...profileWrite(patch), ...crmCustomDraftWrites(storedCustom, custom) },
+          'Lead saved',
+        ),
     )
     setSavingProfile(false)
     if (!verdict.ok) {
@@ -287,6 +354,9 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
       return
     }
     setProfileDirty(false)
+    // The draft is spent: what it held is stored, and the controls read
+    // the document again.
+    setCustom({})
   }
 
   const consent = Aglyn.readMarketingBasis(lead, Aglyn.soloConsentGroup(hostId))
@@ -371,6 +441,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             label="Owner"
             value={lead.ownerUid ? roster.labelFor(lead.ownerUid) : undefined}
           />
+          {extraChips}
         </>
       }
     >
@@ -556,13 +627,36 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             onChange={(next) => editProfile('address', next)}
             disabled={converted}
           />
+          {/*
+            The org's own lead fields (AGL-3272), under the profile because
+            they describe the same record and save with it. A converted
+            lead's are read-only with the rest of the card.
+          */}
+          {fields.active.length ? (
+            <>
+              <Typography variant="caption" color="text.secondary">
+                {'Custom fields'}
+              </Typography>
+              {fields.active.map((definition) => (
+                <CrmCustomFieldControl
+                  key={definition.$id}
+                  definition={definition}
+                  value={crmCustomDraftValue(storedCustom, custom, definition.key)}
+                  onChange={(value) =>
+                    setCustom((current) => ({ ...current, [definition.key]: value }))
+                  }
+                  disabled={converted || savingProfile}
+                />
+              ))}
+            </>
+          ) : null}
           {converted ? null : (
             <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
               <Button
                 size="small"
                 variant="contained"
                 onClick={() => void saveProfile()}
-                disabled={!profileDirty || savingProfile}
+                disabled={!dirty || savingProfile}
               >
                 {'Save'}
               </Button>

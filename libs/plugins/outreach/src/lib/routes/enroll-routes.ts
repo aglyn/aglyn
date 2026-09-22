@@ -29,9 +29,11 @@ import {
   normalizeCrmViewFilters,
 } from '@aglyn/aglyn/app-utils/crm'
 import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
+import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { FieldValue } from 'firebase-admin/firestore'
+import { outreachEnrolledEntry } from '../engine/enrollment-activity'
 import { buildOutreachEnrollment, planOutreachFirstDue } from '../engine/enrollment-state'
 import type { OutreachGateLookups } from '../engine/gates'
 import {
@@ -52,8 +54,10 @@ import {
 } from '../model/outreach-api'
 import type { OutreachSequence } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
+import { fileOutreachNote } from '../runtime/timeline'
 import {
   outreachEnrollmentId,
+  outreachEnrollmentLink,
   outreachOrgCollection,
   readStoredOutreachMailbox,
   readStoredOutreachSequence,
@@ -104,6 +108,12 @@ export interface OutreachEnrollRouteDeps extends OutreachRouteDeps {
    * reached the whole view before its budget.
    */
   crmViewEmails(input: { hostId: string; viewId: string }): Promise<{ emails: string[]; complete: boolean }>
+  /**
+   * The workspace's record system on the timeline seam (AGL-3274), when a
+   * plugin keeps one: the enroll files "Enrolled in" on the person's record
+   * — the runtime's `timeline`, reached the same way.
+   */
+  timeline(): PluginRecordTimelineWriter | null
 }
 
 export interface OutreachEnrollRoutes {
@@ -326,6 +336,25 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
   }
 
   /**
+   * The names of the sequence's campaigns as they stand, for the entry the
+   * enroll files on the person's record (AGL-3274). Read once per request,
+   * not per person; a container that is gone answers nothing and the entry
+   * names the rest.
+   */
+  async function sequenceCampaignNames(firestore: Firestore, sequence: OutreachSequence): Promise<string[]> {
+    const campaignIds = normalizeCampaignIds(sequence.campaignIds)
+    if (!campaignIds.length) return []
+    try {
+      const containers = firestore.collection('hosts').doc(sequence.hostId).collection('emailCampaigns')
+      const found = await firestore.getAll(...campaignIds.map((id) => containers.doc(id)))
+      return found.map((snapshot) => String(snapshot.get('name') ?? '').trim()).filter(Boolean)
+    } catch (error) {
+      console.error('[outreach] the sequence’s campaigns could not be named for the record', error)
+      return []
+    }
+  }
+
+  /**
    * The people a source names, the batch limit applied: every contact a
    * search picked, every lead picked from the sequence's site, or the
    * people a saved Contacts or Leads view selects there — contacts found by
@@ -507,6 +536,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       [...requested.values()].map((entry) => entry.ref),
     )
     const enrollments = outreachOrgCollection(firestore, caller.orgId, 'enrollments')
+    const campaignNames = await sequenceCampaignNames(firestore, sequence)
     const results: OutreachEnrollOutcome[] = await Promise.all(
       candidates.map(async (candidate): Promise<OutreachEnrollOutcome> => {
         const named = {
@@ -563,6 +593,17 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
           }
         }
         await joinSequenceCampaigns(firestore, caller.orgId, sequence, context.contactGroupId, candidate, nowMs)
+        // The person's record says so (AGL-3274): "Enrolled in <sequence>",
+        // with the campaigns it carried them into, once per enrollment.
+        const entry = outreachEnrolledEntry({ enrollmentId: id, sequenceName: sequence.name, campaignNames })
+        await fileOutreachNote(deps, {
+          orgId: caller.orgId,
+          hostId: sequence.hostId,
+          link: outreachEnrollmentLink(enrollment),
+          dedupeKey: entry.dedupeKey,
+          body: entry.body,
+          atMs: nowMs,
+        })
         return { ...named, email: decision.email, outcome: 'enrolled', enrollmentId: id }
       }),
     )
