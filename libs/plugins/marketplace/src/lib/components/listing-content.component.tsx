@@ -33,6 +33,7 @@ import {
   resolvePluginInstallState,
   resolveUninstallTargets,
   safePublisherHref,
+  safePublisherImageSrc,
   type InstallTargeting,
   type UninstallTarget,
 } from '../model/marketplace'
@@ -2061,11 +2062,14 @@ export function MarketplaceListingContent({
                         contentGutterY
                       >
                         <Stack spacing={0.5}>
-                          {/* Logo (AGL-1009): https-guarded at render even
-                              though the save route enforces it — the doc
-                              predates the guard. Falls back to an initial. */}
+                          {/* Logo (AGL-1009): guarded at render even though
+                              the save route enforces it — the doc predates
+                              the guard. The IMAGE guard, not the href one
+                              (AGL-3260): what the library hands the picker
+                              is a root-relative CDN path, and the href guard
+                              turned every one of those into the initial. */}
                           <Avatar
-                            src={safePublisherHref(profile?.avatarUrl)}
+                            src={safePublisherImageSrc(profile?.avatarUrl)}
                             alt={profile?.displayName ?? 'Publisher'}
                             variant="rounded"
                             sx={{ width: 40, height: 40, mb: 0.5 }}

@@ -26,6 +26,10 @@ import {
   mdiWeb,
 } from '@aglyn/shared-data-mdi'
 import { pluginDocsHelp, PageHeaderHelp, PageHeaderRecord } from '@aglyn/aglyn'
+import {
+  isFirstPartyMediaSrc,
+  MEDIA_REF_PREFIX,
+} from '@aglyn/aglyn/app-utils/media-ref'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Alert, Avatar, IconButton, Stack, Tooltip, Typography } from '@mui/material'
 import { collection, doc, limit, query, where } from 'firebase/firestore'
@@ -63,6 +67,22 @@ const PUBLISHER_HANDLES = 'publisherHandles'
 const safeHref = (url: unknown): string | undefined =>
   typeof url === 'string' && /^https:\/\//i.test(url) && url.length <= 500
     ? url
+    : undefined
+
+/**
+ * The LOGO's guard (AGL-3260), which is not the link guard above.
+ *
+ * `avatarUrl` holds what the media picker returned — since AGL-1215 the
+ * media-id-keyed CDN path, which is root-relative and so failed `safeHref`
+ * on every profile that had a logo at all. The predicates are imported here
+ * rather than restated: `media-ref` is a leaf module with no dependencies,
+ * which is what kept `safeHref` hand-written and is no obstacle to these.
+ */
+const safeImageSrc = (src: unknown): string | undefined =>
+  isFirstPartyMediaSrc(src) &&
+  src.length <= 500 &&
+  !src.startsWith(MEDIA_REF_PREFIX)
+    ? src
     : undefined
 
 export function PublisherProfilePage(props: {
@@ -166,10 +186,11 @@ export function PublisherProfilePage(props: {
                 'deciding to trust a listing.',
             })} contentGutterX contentGutterY>
             <Stack direction="row" spacing={2}>
-              {/* Logo (AGL-1009) — only an https URL is ever emitted; a
-                  profile without one falls back to the initial. */}
+              {/* Logo (AGL-1009) — only a first-party image is ever emitted
+                  (AGL-3260); a profile without one falls back to the
+                  initial. */}
               <Avatar
-                src={safeHref(profile?.avatarUrl)}
+                src={safeImageSrc(profile?.avatarUrl)}
                 alt={title}
                 variant="rounded"
                 sx={{ width: 64, height: 64 }}
