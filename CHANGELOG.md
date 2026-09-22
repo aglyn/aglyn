@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.160 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.159...v1.0.0-beta.160)
+
+### Fixed
+
+- **aglyn:** the moved workspace-domain default gets its ratchet row ([AGL-3243](https://linear.app/aglyn/issue/AGL-3243))
+- **canary:** the workspace-domain default lives where the ratchet allows it ([AGL-3243](https://linear.app/aglyn/issue/AGL-3243), [AGL-3236](https://linear.app/aglyn/issue/AGL-3236))
+- **console:** the staff gate stops spinning at a session it knows is dead ([AGL-3242](https://linear.app/aglyn/issue/AGL-3242))
+- **console:** a tab re-checks its session when you come back to it ([AGL-3242](https://linear.app/aglyn/issue/AGL-3242), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-624](https://linear.app/aglyn/issue/AGL-624))
+- **console:** /admin lands on the staff overview instead of a 404 ([AGL-3241](https://linear.app/aglyn/issue/AGL-3241), [AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **releasing:** the cache drop names the paths cursor pagination left ([AGL-3219](https://linear.app/aglyn/issue/AGL-3219))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear ceiling is 3243, read from the workspace ([AGL-3243](https://linear.app/aglyn/issue/AGL-3243), [AGL-3236](https://linear.app/aglyn/issue/AGL-3236))
+- **tools:** the Linear ceiling is 3242, read from the workspace ([AGL-3242](https://linear.app/aglyn/issue/AGL-3242))
+
+</details>
+
 ## v1.0.0-beta.159 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.158...v1.0.0-beta.159)

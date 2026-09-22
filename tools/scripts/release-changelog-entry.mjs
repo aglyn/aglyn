@@ -341,10 +341,12 @@ async function revalidate(hostId, subdomain, slug, collectionSlug) {
   if (!secret) return 'skipped (no REVALIDATE_SECRET) — the site picks it up when its window expires'
   const origin =
     process.env['TENANT_ORIGIN'] ?? `https://${subdomain}.aglyn.app`
+  // The entry and the listing's first page, and nothing else. Listings
+  // paginate on a cursor now (AGL-3219), so `/{collection}/page/{n}` is a 301
+  // rather than a cached page — and the pages past the first no longer shift
+  // when something is published above them, which is the whole reason the
+  // positional ones had to be dropped.
   const paths = [`/${collectionSlug}/${slug}`, `/${collectionSlug}`]
-  for (let page = 2; page <= 10; page += 1) {
-    paths.push(`/${collectionSlug}/page/${page}`)
-  }
   try {
     const response = await fetch(`${origin}/api/revalidate`, {
       method: 'POST',

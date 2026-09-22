@@ -69,6 +69,22 @@
 export const CONSOLE_PROJECT = 'aglyn-console'
 export const TEAM_SCOPE = 'team_JFfQodGE8VhCAZM6usYTu54M'
 
+/**
+ * The parent domain a workspace subdomain hangs off, when nothing overrides
+ * it (AGL-3243).
+ *
+ * Here beside the other two deployment coordinates rather than in the script
+ * that wanted it, because `signup-canary.mjs` is on the self-host ratchet:
+ * `signup-canary-marker-wiring.spec.ts` refuses ANY Aglyn hostname in that
+ * file, so a self-hoster reading it finds no default of ours to mistake for a
+ * requirement. This module is already where that script takes its
+ * `CONSOLE_PROJECT` and `TEAM_SCOPE` from, and for the same reason.
+ *
+ * `NEXT_PUBLIC_WORKSPACE_DOMAIN` overrides it, exactly as it does for every
+ * other reader of this value.
+ */
+export const DEFAULT_WORKSPACE_DOMAIN = 'aglyn.com'
+
 /** Mirrors `UPLOAD_CORS_*` in `libs/aglyn/src/lib/app-utils/upload-cors.ts`. */
 export const UPLOAD_CORS_METHOD = 'PUT'
 export const UPLOAD_CORS_RESPONSE_HEADERS = ['Content-Type', 'x-goog-resumable']

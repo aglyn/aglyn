@@ -102,6 +102,7 @@ const { readServiceAccount, getServiceAccountToken, resolveStorageBucket } =
 // owns the read, the conditional write and the prune that refuses `*`.
 const {
   CONSOLE_PROJECT,
+  DEFAULT_WORKSPACE_DOMAIN,
   TEAM_SCOPE,
   fetchBucketCors,
   fetchProjectDomains,
@@ -140,40 +141,15 @@ const EMAIL_BASE = process.env['SIGNUP_CANARY_EMAIL'] ?? ''
 const CANARY_SLUG_PREFIX = 'signup-canary-'
 
 /**
- * `https://app.example.com` -> `example.com`: a host without its first label.
- *
- * The console is a subdomain of the domain workspaces are attached under, so
- * the console origin already names that domain. Returns the host unchanged
- * when there is no label to drop, which is what `localhost` wants.
- */
-function parentDomainOf(origin) {
-  let host
-  try {
-    host = new URL(origin).hostname
-  } catch {
-    return ''
-  }
-  const labels = host.split('.')
-  return labels.length > 2 ? labels.slice(1).join('.') : host
-}
-
-/**
  * Where the workspace subdomain a walk creates actually lives.
  *
  * Same resolution as `workspace-domains.ts` and the reconcile script, so all
  * three name the same host for a slug. The Vercel coordinates default to the
  * console project's own constants rather than to literals, and a self-hoster
  * overrides them the way every other Vercel-aware script here lets them.
- *
- * DERIVED from the console rather than defaulted to a literal, for the reason
- * `SIGNUP_CANARY_ORIGIN` has no default either: a hostname of ours written
- * here is one a self-hoster's canary would reach for, and it puts this file on
- * the self-host ratchet. Whoever set the console to their own deployment has
- * already said what the domain is. `NEXT_PUBLIC_WORKSPACE_DOMAIN` still wins,
- * for a deployment whose console is not a sibling of its workspaces.
  */
 const WORKSPACE_DOMAIN =
-  process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'] || parentDomainOf(CONSOLE)
+  process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'] ?? DEFAULT_WORKSPACE_DOMAIN
 const VERCEL_TOKEN = process.env['VERCEL_TOKEN'] ?? ''
 const VERCEL_PROJECT =
   process.env['VERCEL_CONSOLE_PROJECT_ID'] || CONSOLE_PROJECT
@@ -238,12 +214,12 @@ function done(detail = '') {
  *
  * `createOrganization` awaits `attachWorkspaceDomain(slug)`, and that call
  * reaches two systems no document delete can touch: it registers
- * `{slug}.{workspace domain}` on the console's Vercel project, and it admits
- * that name's `https://` origin into the media bucket's upload CORS. A reap that
- * cleared only documents therefore left both behind on EVERY walk — one of
- * each per hour, collected by nothing. Measured 2026-09-21: 132 orphaned
- * `signup-canary-*` domains on a project holding 159, and the same 132 origins
- * on a bucket holding 154, against 14 real `orgSlugs`.
+ * `{slug}.{WORKSPACE_DOMAIN}` on the console's Vercel project, and it admits
+ * `https://{slug}.{WORKSPACE_DOMAIN}` into the media bucket's upload CORS. A
+ * reap that cleared only documents therefore left both behind on EVERY walk
+ * — one of each per hour, collected by nothing. Measured 2026-09-21: 132
+ * orphaned `signup-canary-*` domains on a project holding 159, and the same
+ * 132 origins on a bucket holding 154, against 14 real `orgSlugs`.
  *
  * The stale origin is the one that matters. It is a standing upload permission
  * for a host nobody serves, on a bucket where the signed URL IS the
