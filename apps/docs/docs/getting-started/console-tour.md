@@ -223,7 +223,9 @@ Everything about *what* reaches you lives on the second section,
 **Settings**.
 
 **What you are told about** is a table: one row per category, one column for
-**In console** and one for **Email**.
+**In console** and one for **Email**. Each row says what arrives in that
+category, so you are never switching off a bucket you would have to guess the
+contents of.
 
 - **In console** is on for every category. Switching it off stops that
   category appearing in the feed and in the bell.
@@ -232,6 +234,28 @@ Everything about *what* reaches you lives on the second section,
   touch the mail Aglyn already sends you — invites, verification, receipts,
   password resets and dunning are separate, and are not affected by anything on
   this page.
+
+Rows marked **Staff only** are Aglyn's own — they are shown to staff and reach
+nobody else.
+
+#### One kind at a time
+
+Open a category with the arrow beside its name and it lists the individual
+notifications inside it, each with its own **In console** and **Email**
+switches. A switch here shows what would actually happen: its own answer if you
+have given one, otherwise its category's.
+
+Set one and the row is marked **Set**, with **Follow category** beside it to
+put it back. This is how you stop hearing about one thing without silencing its
+neighbours — turning **Payment failed** off leaves the rest of **Billing**
+alone.
+
+A digest's **Email** switch is greyed out here, because a digest composes and
+sends its own mail under its own switch in **Digests** below.
+
+These are answers for your whole account. **One workspace or one site** stays
+at the category level, and a narrower scope still wins: a workspace or site
+answer overrides what you said about the kind of notification here.
 
 ### Workspace and site overrides
 
@@ -256,9 +280,10 @@ digest's console notification but not its email. What it counts, and when, is in
 them on. See [Insights](../marketing-and-automation/analytics/insights.md#weekly-insights).
 
 **Task reminders** — the notification and email a CRM task sends at its own due time —
-have no switch of their own. They are **Forms & bookings** notifications, beside **Task
-assigned to you**, and switching that category off stops both the notification and the
-email; a single task is silenced by clearing its **Remind me** field. See
+are **Forms & bookings** notifications, beside **Task assigned to you**. Open that
+category to switch **Task reminder** on or off by itself, or switch the whole category
+off to stop both the notification and the email for everything in it; a single task is
+silenced by clearing its **Remind me** field. See
 [Reminders](../content-and-data/crm/tasks.md#reminders).
 
 ### Alerts on this device

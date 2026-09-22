@@ -182,6 +182,30 @@ describe('the notification settings page (AGL-3226)', () => {
     expect(lastWrite()?.account?.content?.email).toBe(true)
   })
 
+  /**
+   * The seam between the expander and the page's writer (AGL-3251). The
+   * component's own spec proves the callback fires; this proves where the
+   * answer lands, and that it lands somewhere the category map cannot be
+   * confused with.
+   */
+  it('writes a single type under its own map, and clears it back to the category', async () => {
+    render(<Page />)
+    fireEvent.click(await screen.findByLabelText('Show what Billing covers'))
+    fireEvent.click(
+      screen.getByRole('switch', { name: 'Payment failed — In console' }),
+    )
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
+    expect(lastWrite()?.accountTypes?.['billing.paymentFailed']?.console).toBe(false)
+    // The category it sits in is untouched — that is the whole point of the
+    // finer control.
+    expect(lastWrite()?.account?.billing).toBeUndefined()
+
+    fireEvent.click(screen.getByText('Follow category'))
+    await waitFor(() =>
+      expect(lastWrite()?.accountTypes?.['billing.paymentFailed']).toBeUndefined(),
+    )
+  })
+
   it('keeps honouring a mute from the map nothing has migrated', async () => {
     mockStoredUser = { notificationPrefs: { billing: false } }
     render(<Page />)

@@ -17,14 +17,17 @@
 
 import {
   crmDailyDigestEnabled,
+  NOTIFICATION_CATEGORY_DESCRIPTIONS,
   NOTIFICATION_SELF_SENT_EMAIL_TYPES,
   NOTIFICATION_TYPE_LABELS,
   STAFF_NOTIFICATION_CATEGORIES,
+  notificationAccountTypePref,
   notificationCategory,
   notificationChannelEnabled,
   notificationMuted,
   notificationOverriddenScopes,
   notificationScopePref,
+  notificationTypesInCategory,
   type AglynNotificationType,
   type NotificationSettings,
 } from './notifications'
@@ -294,10 +297,121 @@ describe('the platform-growth category (AGL-3225)', () => {
     expect(notificationChannelEnabled(undefined, 'email', 'staff.orgCreated')).toBe(false)
   })
 
+  it('describes itself in words a reader can check against their own feed', () => {
+    // The settings page drew seven bare labels, so deciding whether to
+    // silence a category meant guessing what was in it (AGL-3251).
+    for (const category of [
+      'billing',
+      'team',
+      'content',
+      'marketplace',
+      'support',
+      'system',
+      'staff',
+    ] as const) {
+      expect(NOTIFICATION_CATEGORY_DESCRIPTIONS[category].length).toBeGreaterThan(20)
+    }
+    // And the staff one says so in its own words, not only in a badge the
+    // page draws — a reader who exports or reads this elsewhere still learns
+    // that nobody outside staff receives it.
+    expect(NOTIFICATION_CATEGORY_DESCRIPTIONS.staff).toContain('staff')
+  })
+
   it('is marked staff-only, so no customer is shown a switch for it', () => {
     expect(STAFF_NOTIFICATION_CATEGORIES.has('staff')).toBe(true)
     for (const category of ['billing', 'team', 'content', 'marketplace', 'support', 'system'] as const) {
       expect(STAFF_NOTIFICATION_CATEGORIES.has(category)).toBe(false)
     }
+  })
+})
+
+/**
+ * Per-TYPE answers at the account scope (AGL-3251).
+ *
+ * The complaint was that the bucket was the only granularity there was, so
+ * quietening one noisy type took its six neighbours with it.
+ */
+describe('a type can answer for itself', () => {
+  const settings = {
+    account: { billing: { console: true, email: true } },
+    accountTypes: { 'billing.usage': { console: false } },
+  } as const
+
+  it('beats its own category', () => {
+    expect(
+      notificationChannelEnabled(settings, 'console', 'billing.usage'),
+    ).toBe(false)
+    // Its neighbours are untouched, which is the entire point.
+    expect(
+      notificationChannelEnabled(settings, 'console', 'billing.invoice'),
+    ).toBe(true)
+  })
+
+  it('answers only the channel it was set on', () => {
+    // The map is tri-state per channel: an absent `email` key still falls
+    // through to the category rather than reading the console answer.
+    expect(notificationChannelEnabled(settings, 'email', 'billing.usage')).toBe(
+      true,
+    )
+  })
+
+  /**
+   * The load-bearing one, and the reason this is not simply "most specific
+   * wins". The scope layers answer a different question — "quiet down this
+   * one noisy site" — and a type-level opinion about the KIND of thing must
+   * not overrule it, or the site override silently stops working for any type
+   * the person ever touched.
+   */
+  it('does not overrule a narrower scope', () => {
+    const scoped = {
+      ...settings,
+      orgs: { 'org-a': { billing: { console: true } } },
+      hosts: { 'host-1': { billing: { console: true } } },
+    }
+    expect(
+      notificationChannelEnabled(scoped, 'console', 'billing.usage', {
+        orgId: 'org-a',
+      }),
+    ).toBe(true)
+    expect(
+      notificationChannelEnabled(scoped, 'console', 'billing.usage', {
+        hostId: 'host-1',
+      }),
+    ).toBe(true)
+    // …and still answers where no scope has spoken.
+    expect(
+      notificationChannelEnabled(scoped, 'console', 'billing.usage', {
+        orgId: 'org-unspoken',
+      }),
+    ).toBe(false)
+  })
+
+  it('reads back unresolved, so the page can offer to clear it', () => {
+    // A switch drawn from the EFFECTIVE answer cannot say which of the two it
+    // is reading, and a person who cannot see that they set something cannot
+    // unset it.
+    expect(notificationAccountTypePref(settings, 'billing.usage', 'console')).toBe(
+      false,
+    )
+    expect(
+      notificationAccountTypePref(settings, 'billing.usage', 'email'),
+    ).toBeUndefined()
+    expect(
+      notificationAccountTypePref(settings, 'billing.invoice', 'console'),
+    ).toBeUndefined()
+  })
+
+  it('groups the types under the category that governs them', () => {
+    const billing = notificationTypesInCategory('billing')
+    expect(billing).toContain('billing.invoice')
+    expect(billing).toContain('billing.usage')
+    expect(billing).not.toContain('team.invite')
+    // Derived from the labels rather than a second list, so every type the
+    // product has is reachable from exactly one category row.
+    const everyType = Object.keys(NOTIFICATION_TYPE_LABELS)
+    const grouped = (
+      ['billing', 'team', 'content', 'marketplace', 'support', 'system', 'staff'] as const
+    ).flatMap((category) => notificationTypesInCategory(category))
+    expect(grouped.sort()).toEqual(everyType.sort())
   })
 })
