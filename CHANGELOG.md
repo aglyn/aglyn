@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.156 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/6104b07f0...v1.0.0-beta.156)
+
+### Fixed
+
+- **tenant:** the site zone reaches the card, not just the formatter ([AGL-3237](https://linear.app/aglyn/issue/AGL-3237), [AGL-1926](https://linear.app/aglyn/issue/AGL-1926))
+
 ## v1.0.0-beta.155 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/edeba2fc4...v1.0.0-beta.155)

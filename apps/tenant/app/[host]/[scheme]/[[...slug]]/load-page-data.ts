@@ -893,6 +893,7 @@ const loadPageDataCached = cache(
           hostId,
           collectionSlug: route.collectionSlug,
           entrySlug,
+          timeZone: siteTimeZone,
           ...(previewGranted ? { previewUnpublishedEntry: true } : {}),
           ...(isList
             ? {

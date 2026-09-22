@@ -92,8 +92,16 @@ export default async function SearchPage({
   const facetKey = String(sp?.in ?? SEARCH_FACET_ALL).slice(0, 100)
   const hostRes = await getHostCached(host)
   if (hostRes.error || !hostRes.host) notFound()
+  // The org is read for entitlements further down and is render-cached, so
+  // asking for it here costs nothing and lets the result dates carry the
+  // site's zone (AGL-3237) rather than the server's.
+  const searchOrg = query ? await getOrgBilling({ hostId: hostRes.host.$id }) : null
   const results = query
-    ? await searchContent({ host: hostRes.host, query })
+    ? await searchContent({
+        host: hostRes.host,
+        query,
+        timeZone: Aglyn.resolveSiteTimeZone(searchOrg?.org as never),
+      })
     : []
   const facets = searchResultFacets(results)
   const filtered = filterSearchResults(results, facetKey)

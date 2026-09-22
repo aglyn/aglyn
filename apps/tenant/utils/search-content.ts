@@ -94,12 +94,22 @@ const DATASET_RESULTS_PER_SET = 5
 export async function searchContent(options: {
   host: Aglyn.AglynHost
   query: string
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string
 }): Promise<SearchResult[]> {
   const needle = options.query.trim().toLowerCase()
   if (!needle || needle.length > 100) return []
   try {
     return await withRenderCache({
-      key: ['tenant-site-search', options.host.$id, needle],
+      // The zone is part of the KEY (AGL-3237): it decides the dates in the
+      // rows below, so a cache entry written under one must not be served
+      // under another.
+      key: [
+        'tenant-site-search',
+        options.host.$id,
+        needle,
+        options.timeZone ?? 'UTC',
+      ],
       revalidate: SEARCH_TTL_SECONDS,
       tags: [tenantDataTag(options.host.$id)],
       read: () => readSearchContent(options),
@@ -122,6 +132,8 @@ export async function searchContent(options: {
 async function readSearchContent(options: {
   host: Aglyn.AglynHost
   query: string
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string
 }): Promise<SearchResult[]> {
   const { host, query } = options
   const needle = query.trim().toLowerCase()
@@ -227,7 +239,14 @@ async function readSearchContent(options: {
         kind: 'entry',
         collection: { slug: String(slug ?? ''), title: collectionTitle },
         ...(entry.publishedAt?.seconds
-          ? { date: Aglyn.formatCollectionEntryDate(entry.publishedAt) }
+          ? {
+              date: Aglyn.formatCollectionEntryDate(
+                entry.publishedAt,
+                undefined,
+                undefined,
+                options.timeZone,
+              ),
+            }
           : {}),
       })
     }
