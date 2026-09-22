@@ -22,7 +22,6 @@ import {
   type PluginContactCaptureWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { registerPluginLeadConversionListener } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
-import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -71,19 +70,16 @@ export function registerCrmServerDeclarations(): void {
   // The CRM's own share of a lead conversion (AGL-3254): the lead's
   // campaigns go onto the contact's facet. Through the seam every door
   // that converts a lead reaches, and deferred like the capture: the
-  // module that writes is loaded when the first conversion arrives. The
-  // admin app is imported statically, as the rest of the plugin imports it:
-  // a library loaded lazily in one file and statically in thirty others is
-  // what `enforce-module-boundaries` refuses, and the admin module is
-  // already resident in every server process this registers in.
+  // module that writes is loaded when the first conversion arrives, and
+  // it brings the Admin SDK with it — this file defers the plugin's OWN
+  // module only. A library imported statically across the plugin cannot
+  // also be lazy-loaded here: `enforce-module-boundaries` refuses every
+  // static import of a library the project lazy-loads anywhere.
   registerPluginLeadConversionListener(
     async (request) => {
-      const { carryLeadCampaignsToContact } =
+      const { carryLeadCampaignsOnConversion } =
         await import('./server/lead-campaign-carry')
-      return carryLeadCampaignsToContact(
-        firebaseAdmin.app().firestore(),
-        request,
-      )
+      return carryLeadCampaignsOnConversion(request)
     },
     { pluginId: BUNDLE_ID },
   )

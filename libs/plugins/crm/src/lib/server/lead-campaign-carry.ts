@@ -15,11 +15,15 @@
  * limitations under the License.
  */
 
-import { contactCampaignFieldPath, readCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
+import {
+  contactCampaignFieldPath,
+  readCampaignIds,
+} from '@aglyn/aglyn/app-utils/campaign-membership'
 import type {
   PluginLeadConversionReport,
   PluginLeadConversionRequest,
 } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
+import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { consentGroupForSite } from '@aglyn/tenant-data-admin/server/organizations'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -45,7 +49,10 @@ import { FieldValue } from 'firebase-admin/firestore'
  */
 export async function carryLeadCampaignsToContact(
   firestore: FirebaseFirestore.Firestore,
-  request: Pick<PluginLeadConversionRequest, 'orgId' | 'hostId' | 'leadId' | 'contactId'>,
+  request: Pick<
+    PluginLeadConversionRequest,
+    'orgId' | 'hostId' | 'leadId' | 'contactId'
+  >,
 ): Promise<PluginLeadConversionReport> {
   try {
     const lead = await firestore
@@ -54,7 +61,9 @@ export async function carryLeadCampaignsToContact(
       .collection('leads')
       .doc(request.leadId)
       .get()
-    const campaignIds = readCampaignIds(lead.exists ? (lead.data() as Record<string, unknown>) : null)
+    const campaignIds = readCampaignIds(
+      lead.exists ? (lead.data() as Record<string, unknown>) : null,
+    )
     if (!campaignIds.length) return { campaigns: 0 }
     const group = await consentGroupForSite(request.hostId)
     await firestore
@@ -63,12 +72,39 @@ export async function carryLeadCampaignsToContact(
       .collection('contacts')
       .doc(request.contactId)
       .update({
-        [contactCampaignFieldPath(group.groupId)]: FieldValue.arrayUnion(...campaignIds),
+        [contactCampaignFieldPath(group.groupId)]: FieldValue.arrayUnion(
+          ...campaignIds,
+        ),
         updatedAt: FieldValue.serverTimestamp(),
       })
     return { campaigns: campaignIds.length }
   } catch (error) {
-    console.error('[crm] the lead’s campaigns could not be carried to the contact', request.hostId, request.leadId, error)
+    console.error(
+      '[crm] the lead’s campaigns could not be carried to the contact',
+      request.hostId,
+      request.leadId,
+      error,
+    )
     return { campaigns: null }
   }
+}
+
+/**
+ * The carry as the lead-conversion seam calls it: on the Admin SDK's own
+ * Firestore. The SDK is resolved HERE, not in `declarations.server.ts`, for
+ * two reasons that point the same way. That file must stay light — it runs
+ * at the boot of every server process — so it defers this module and must
+ * not import the data layer itself. And a library the plugin imports
+ * statically in thirty files cannot also be lazy-loaded in one:
+ * `enforce-module-boundaries` refuses every static import of a library the
+ * project lazy-loads anywhere. This module is the deferred one; the SDK
+ * comes with it, the way `capture-contact` brings its own.
+ */
+export function carryLeadCampaignsOnConversion(
+  request: Pick<
+    PluginLeadConversionRequest,
+    'orgId' | 'hostId' | 'leadId' | 'contactId'
+  >,
+): Promise<PluginLeadConversionReport> {
+  return carryLeadCampaignsToContact(firebaseAdmin.app().firestore(), request)
 }
