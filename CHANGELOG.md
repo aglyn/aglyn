@@ -11,39 +11,57 @@ content on the marketing site and is written separately.
 
 ## v1.0.0-beta.153 — 2026-09-22
 
-[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.151...v1.0.0-beta.153)
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/276c49b5d...v1.0.0-beta.153)
 
 ### Added
 
+- **crm:** a lead carries its own profile, a New lead drawer and `POST /v1/leads` ([AGL-3231](https://linear.app/aglyn/issue/AGL-3231))
+- **crm:** one person is one record — a lead surface files a lead, a relationship makes a contact ([AGL-3232](https://linear.app/aglyn/issue/AGL-3232))
+- **crm:** converting a lead hands its profile, consent, activities, tasks and plugin records to the contact ([AGL-3233](https://linear.app/aglyn/issue/AGL-3233))
+- **crm:** the one-record backfill folds duplicate contacts into their leads and closes open leads onto their contacts ([AGL-3235](https://linear.app/aglyn/issue/AGL-3235))
+- **outreach:** a sequence enrolls a lead or a contact, and follows the lead to the contact it becomes ([AGL-3234](https://linear.app/aglyn/issue/AGL-3234))
+- **plugins:** the plugin that stores the artifacts answers who claims them ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
 - **outreach:** a mailbox's member can switch the warm-up ramp off ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
 - **plugins:** the quota banner meters a capacity the plugin declares ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-3025](https://linear.app/aglyn/issue/AGL-3025))
-- **outreach:** a mailbox test can go to an address the member names ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
-- **marketplace:** the marketplace decides what to sign, the shell signs it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-966](https://linear.app/aglyn/issue/AGL-966))
 
 ### Fixed
 
+- **crm:** the one-record backfill reads a console account as a relationship ([AGL-3235](https://linear.app/aglyn/issue/AGL-3235))
 - **ai:** a section that keeps components writes its repeated item once ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024))
-- **outreach:** the preview spec reads the footer as it is now worded ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
-- **console:** the permission provider re-reads when a plugin registers a key ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
-- **outreach:** the OAuth redirect's console fallback is an argued row ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
-- **tools:** the spelling census sweeps plugin consoles too ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
-- **outreach:** the footer says "sales email", not "business solicitation" ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
-- **outreach:** the OAuth redirect falls back to the production console, and availability names its gate ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
-- **ai:** every copying step claims its copy, so a second pass replays it ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024), [AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
 
 ### Changed
 
 - **marketplace:** two model modules come home now their console reader has ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080), [AGL-1217](https://linear.app/aglyn/issue/AGL-1217))
-- **notifications:** settings is a section of Notifications, not a third app-bar tab ([AGL-3230](https://linear.app/aglyn/issue/AGL-3230), [AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
 
 <details>
-<summary>Also in this release: 3 chore</summary>
+<summary>Also in this release: 3 chores</summary>
 
-- **release:** the v1.0.0-beta.152 notes name the test-address feature ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
-- **release:** carry the four later commits into the v1.0.0-beta.152 notes ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
-- **release:** v1.0.0-beta.152 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
+- **crm:** the lead's domain stays in its plugin — the open-lead close moves to the CRM, the migration module loses the plugin's name ([AGL-3232](https://linear.app/aglyn/issue/AGL-3232), [AGL-3235](https://linear.app/aglyn/issue/AGL-3235))
+- **crm:** the lead import's British header alias joins the spelling baseline ([AGL-3231](https://linear.app/aglyn/issue/AGL-3231))
+- **release:** v1.0.0-beta.153 ([AGL-2089](https://linear.app/aglyn/issue/AGL-2089))
 
 </details>
+
+## v1.0.0-beta.152 — 2026-09-21
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.151...v1.0.0-beta.152)
+
+### Added
+
+- **marketplace:** the marketplace decides what to sign, the shell signs it ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **outreach:** a mailbox test can go to an address the member names, so an outside inbox can show the sender authentication results ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
+
+### Fixed
+
+- **console:** the permission provider re-reads when a plugin registers a key, so a cold load of a plugin deep link no longer refuses its owner ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
+- **outreach:** the footer says "sales email", not "business solicitation" ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
+- **outreach:** the OAuth redirect falls back to the production console, and availability names its gate; the fallback is an argued row in the self-host ratchet ([AGL-3228](https://linear.app/aglyn/issue/AGL-3228))
+- **tools:** the spelling census sweeps plugin consoles too ([AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **ai:** every copying step claims its copy, so a second pass replays it ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024), [AGL-3143](https://linear.app/aglyn/issue/AGL-3143))
+
+### Changed
+
+- **notifications:** settings is a section of Notifications, not a third app-bar tab ([AGL-3230](https://linear.app/aglyn/issue/AGL-3230), [AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
 
 ## v1.0.0-beta.151 — 2026-09-21
 
