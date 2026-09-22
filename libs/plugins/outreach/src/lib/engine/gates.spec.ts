@@ -298,6 +298,24 @@ describe('gate 4: every list that says not to', () => {
     ])
   })
 
+  it('quotes the record’s own verdict when it carries one (AGL-3245)', () => {
+    const result = evaluateOutreachGates(
+      input({
+        contact: contact(
+          {},
+          { emailState: { status: 'blocked', atMs: Date.UTC(2026, 8, 22, 15), source: 'outreach', detail: '550 (the address:blocked)' } },
+        ),
+      }),
+    )
+    expect(result.blocks).toEqual([
+      {
+        code: 'email_state',
+        reason: 'Their mail gateway blocked email to this address on Sep 22, 2026. 550 (the address:blocked)',
+      },
+    ])
+    expect(codesOf({ contact: contact({}, { emailState: { status: 'ok', atMs: 1, source: 'member', detail: null } }) })).toEqual([])
+  })
+
   it('refuses a domain on the list on its own, whatever the address list says (AGL-3244)', () => {
     expect(codesOf({ lookups: cleanLookups({ doNotContactDomain: true }) })).toEqual(['do_not_contact_domain'])
   })

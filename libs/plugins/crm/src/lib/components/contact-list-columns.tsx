@@ -20,6 +20,7 @@ import {
   activityTimeLabel,
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_SOURCE_LABELS,
+  CRM_EMAIL_STATE_LABELS,
   type ContactSource,
 } from '@aglyn/aglyn'
 import {
@@ -33,6 +34,7 @@ import {
   CONTACT_LIST_FILTER_HEADERS,
 } from '../constants/contact-filters'
 import type { ContactRecord } from '../model/contact-record'
+import { CrmEmailStateChip } from './crm-email-state-chip'
 import { nextActivityColumn } from './crm-next-activity-column'
 
 /**
@@ -54,6 +56,7 @@ export const CONTACT_FILTER_COLUMNS = [
   'tags',
   'updatedAt',
   'nextTaskAtMs',
+  'emailState',
 ]
 
 /**
@@ -304,6 +307,29 @@ export function contactListColumns(
               {activityTimeLabel(row.lastEmailEngagementAtMs, nowMs)}
             </Typography>
           </Tooltip>
+        ) : (
+          <Typography variant="caption" color="text.secondary">
+            {'—'}
+          </Typography>
+        ),
+    },
+    {
+      /*
+       * The verdict on the address (AGL-3245): the same chip the record page
+       * carries, so a bounced or blocked person is told apart in the list a
+       * member picks recipients from. Sorted and exported by its label;
+       * filtered through the bar's `emailState` clause, not the panel.
+       */
+      field: 'emailState',
+      headerName: 'Email',
+      flex: 0.8,
+      minWidth: 140,
+      filterable: false,
+      valueGetter: (_value, row: ContactRecord) =>
+        row.emailState ? CRM_EMAIL_STATE_LABELS[row.emailState.status] : '',
+      renderCell: ({ row }: { row: ContactRecord }) =>
+        row.emailState ? (
+          <CrmEmailStateChip state={row.emailState} />
         ) : (
           <Typography variant="caption" color="text.secondary">
             {'—'}

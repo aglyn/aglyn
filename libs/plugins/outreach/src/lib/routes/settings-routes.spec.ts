@@ -112,6 +112,7 @@ const deps = (): OutreachRouteDeps => ({
   logOrgActivity: async (orgId, actor, action, target) => {
     activity.push({ orgId, actor, action, target })
   },
+  stampRecordEmailState: async () => undefined,
 })
 
 const SETTINGS_PATH = `orgs/${ORG}/outreachSettings/compliance`

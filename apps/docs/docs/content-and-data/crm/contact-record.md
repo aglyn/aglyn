@@ -59,7 +59,13 @@ record links to. The page opens with the person's name, their lifecycle stage,
 their owner, when they [last engaged](#last-engaged) with one of your
 campaigns, and — for a buyer — how many orders they have placed and what they
 have spent; the order count is a link to the site's orders list narrowed to the
-person's address. Beside **Send email** it carries **Call**, which dials the
+person's address. When a sender has given a verdict on the address — a
+bounce, a gateway block, an unsubscribe, a spam complaint, a do-not-contact
+mark — it leads the chip row, with the date and the server's words on
+hover, and **Send email** is disabled with the reason; the Contacts list
+carries the same verdict in its **Email** column and filter. It is the
+[lead's email state](./leads.md#email-state), on the contact the lead became
+or was always. Beside **Send email** it carries **Call**, which dials the
 person's number, and **Log a call** — see
 [click to call](./activities.md#click-to-call). Under it, one card per aspect
 of the record:

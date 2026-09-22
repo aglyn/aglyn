@@ -128,6 +128,20 @@ describe('recordCrmEmailDelivery', () => {
     })
   })
 
+  it('keeps what the server said beside a failure (AGL-3245)', async () => {
+    seedEmail('sent')
+    await expect(
+      recordCrmEmailDelivery(firestore, {
+        orgId: ORG,
+        activityId: 'act-1',
+        state: 'bounced',
+        atMs: 5_000,
+        detail: '  550 5.7.1   (the address:blocked) ',
+      }),
+    ).resolves.toBe('advanced')
+    expect(docs.get(ROW)).toMatchObject({ deliveryState: 'bounced', deliveryDetail: '550 5.7.1 (the address:blocked)' })
+  })
+
   it('writes nothing for an event the row is already past', async () => {
     seedEmail('opened')
     await expect(deliver('delivered')).resolves.toBe('unchanged')

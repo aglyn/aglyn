@@ -81,8 +81,12 @@ import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import {
   LEAD_FILTER_LABELS,
+  LEAD_EMAIL_FILTER_LABELS,
+  LEAD_EMAIL_FILTERS,
   LEAD_FILTERS,
+  type LeadEmailFilter,
   type LeadFilter,
+  leadMatchesEmailFilter,
   leadMatchesFilter,
   leadMatchesSearch,
 } from '../model/lead-filters'
@@ -94,6 +98,7 @@ import NewLeadDrawer, { type NewLeadValues } from './new-lead-drawer'
 import { useCrmApi } from './use-crm-api'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { CONVERT_PENDING_ERASURE_REASON } from './lead-properties-card'
+import { CrmEmailStateChip } from './crm-email-state-chip'
 import { LeadStatusChip } from './lead-status-chip'
 import LeadSurfacesNote from './lead-surfaces-note'
 import { LeadUnqualifyDialog } from './lead-unqualify-dialog'
@@ -213,16 +218,37 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       ? (value as LeadFilter)
       : 'open'
   }, [views.state.filters])
+  /*
+   * The `Email` filter (AGL-3245) is the view's too, as an `emailState`
+   * clause beside the status one. Each setter keeps the other's clause:
+   * narrowing to bounced leads does not reopen the unqualified ones.
+   */
+  const emailFilter: LeadEmailFilter = useMemo(() => {
+    const value = views.state.filters.find((clause) => clause.field === 'emailState')?.value
+    return (LEAD_EMAIL_FILTERS as readonly string[]).includes(value ?? '')
+      ? (value as LeadEmailFilter)
+      : 'any'
+  }, [views.state.filters])
   const setFilter = useCallback(
     (next: LeadFilter) =>
-      views.setFilters(
-        next === 'open' ? [] : [{ field: 'status', op: 'equals', value: next }],
-      ),
-    [views.setFilters],
+      views.setFilters([
+        ...views.state.filters.filter((clause) => clause.field !== 'status'),
+        ...(next === 'open' ? [] : [{ field: 'status', op: 'equals', value: next }]),
+      ]),
+    [views.setFilters, views.state.filters],
+  )
+  const setEmailFilter = useCallback(
+    (next: LeadEmailFilter) =>
+      views.setFilters([
+        ...views.state.filters.filter((clause) => clause.field !== 'emailState'),
+        ...(next === 'any' ? [] : [{ field: 'emailState', op: 'equals', value: next }]),
+      ]),
+    [views.setFilters, views.state.filters],
   )
   // The label's id, so the filter's combobox is named "Show" rather than
   // after the option it shows — see `LeadOwnerSelect`.
   const filterLabelId = useId()
+  const emailFilterLabelId = useId()
   /*
    * The search box is the SECTION'S, not the grid's (AGL-3246). The grid's
    * quick filter runs over the rows the grid holds, and the grid holds one
@@ -236,9 +262,12 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const rows = useMemo(
     () =>
       window.filter(
-        (lead) => leadMatchesFilter(lead, filter) && leadMatchesSearch(lead, search),
+        (lead) =>
+          leadMatchesFilter(lead, filter) &&
+          leadMatchesEmailFilter(lead, emailFilter) &&
+          leadMatchesSearch(lead, search),
       ),
-    [window, filter, search],
+    [window, filter, emailFilter, search],
   )
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
@@ -247,7 +276,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   // renders empty.
   useEffect(() => {
     setPage(0)
-  }, [filter, search])
+  }, [filter, emailFilter, search])
   const pageRows = useMemo(
     () => rows.slice(page * pageSize, (page + 1) * pageSize),
     [rows, page, pageSize],
@@ -260,7 +289,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
    * rows no longer listed.
    */
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  useEffect(() => setSelectedIds([]), [filter, search])
+  useEffect(() => setSelectedIds([]), [filter, emailFilter, search])
   // How the file names the owner and, at the org level, the site.
   const csvOptions: LeadCsvOptions = useMemo(
     () => ({
@@ -419,6 +448,31 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         ),
       },
       {
+        /*
+         * The verdict on the address (AGL-3245): the chip the lead's page
+         * carries, so a bounced lead is told apart in the queue it is worked
+         * from; its label for the sort and the export.
+         */
+        field: 'emailState',
+        headerName: 'Email',
+        flex: 0.9,
+        minWidth: 150,
+        valueGetter: (_value, row: LeadRow) => {
+          const state = Aglyn.readCrmEmailState(row)
+          return state ? Aglyn.CRM_EMAIL_STATE_LABELS[state.status] : ''
+        },
+        renderCell: ({ row }: { row: LeadRow }) => {
+          const state = Aglyn.readCrmEmailState(row)
+          return state ? (
+            <CrmEmailStateChip state={state} />
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              {'—'}
+            </Typography>
+          )
+        },
+      },
+      {
         field: 'ownerUid',
         headerName: 'Owner',
         flex: 1,
@@ -555,6 +609,22 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 {LEAD_FILTERS.map((option) => (
                   <MenuItem key={option} value={option}>
                     {LEAD_FILTER_LABELS[option]}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {/* The verdict on the address (AGL-3245): the bounced, the blocked, the ones who left. */}
+            <FormControl size="small" sx={{ minWidth: 160 }}>
+              <InputLabel id={emailFilterLabelId}>{'Email'}</InputLabel>
+              <Select
+                labelId={emailFilterLabelId}
+                label="Email"
+                value={emailFilter}
+                onChange={(event) => setEmailFilter(event.target.value as LeadEmailFilter)}
+              >
+                {LEAD_EMAIL_FILTERS.map((option) => (
+                  <MenuItem key={option} value={option}>
+                    {LEAD_EMAIL_FILTER_LABELS[option]}
                   </MenuItem>
                 ))}
               </Select>

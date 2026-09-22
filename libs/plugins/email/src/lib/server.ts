@@ -40,6 +40,7 @@ import {
   firebaseAdmin,
   resolveOrgIdForHost,
   setMarketingCadence,
+  stampRecordEmailStateForHost,
   UNSUBSCRIBE_SUPPRESSION_REASON,
   type ConfirmTopicResult,
 } from '@aglyn/tenant-data-admin'
@@ -416,6 +417,22 @@ async function writeSiteSuppression(
       { merge: true },
     )
   })
+  // The same verdict on the lead and the contact the person is (AGL-3245),
+  // so the record page says they left. A stamp that failed is logged by the
+  // stamp and costs the unsubscribe nothing.
+  if (created) {
+    await stampRecordEmailStateForHost({
+      hostId,
+      email: fields.email,
+      state: {
+        status: 'unsubscribed',
+        atMs: Date.now(),
+        source: 'campaign',
+        detail: fields.campaignId ? 'Unsubscribed from a campaign email.' : 'Unsubscribed by the link.',
+      },
+      firestore,
+    })
+  }
   return created
 }
 

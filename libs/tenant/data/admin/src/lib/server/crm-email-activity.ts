@@ -141,11 +141,18 @@ export async function recordCrmEmailDelivery(
     state: CrmEmailDeliveryState
     /** When the provider says it happened, epoch ms. */
     atMs: number
+    /**
+     * What the receiving server said (AGL-3245), for a failure: the bounce's
+     * diagnostic, scrubbed of the address. Kept beside the state as
+     * `deliveryDetail`, so the timeline can say why the message did not land.
+     */
+    detail?: string | null
   },
 ): Promise<CrmEmailDeliveryOutcome> {
   const { orgId, activityId, state } = input
   if (!orgId || !activityId) return 'missing'
   const ref = crmActivityRef(firestore, orgId, activityId)
+  const detail = String(input.detail ?? '').replace(/\s+/g, ' ').trim().slice(0, 500)
   try {
     return await firestore.runTransaction(async (transaction) => {
       const snapshot = await transaction.get(ref)
@@ -156,6 +163,7 @@ export async function recordCrmEmailDelivery(
       transaction.update(ref, {
         deliveryState: next,
         deliveryAtMs: Number.isFinite(input.atMs) ? input.atMs : Date.now(),
+        ...(detail ? { deliveryDetail: detail } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       })
       return 'advanced'

@@ -61,6 +61,7 @@ const row = (overrides: Partial<ContactRecord> = {}): ContactRecord => ({
   lifecycleStage: '',
   lastEmailEngagementAtMs: null,
   nextTaskAtMs: null,
+  emailState: null,
   ...overrides,
 })
 
@@ -79,7 +80,7 @@ const value = (field: string, record: ContactRecord) =>
 describe('contactListColumns', () => {
   it('keeps the v1 grammar and adds Owner and Stage between Contact and Sources', () => {
     // The shown columns lead; the hidden filter-only columns follow them.
-    expect(columns.slice(0, 8).map((definition) => definition.field)).toEqual([
+    expect(columns.slice(0, 9).map((definition) => definition.field)).toEqual([
       'name',
       'ownerUid',
       'lifecycleStage',
@@ -88,6 +89,7 @@ describe('contactListColumns', () => {
       'updatedAt',
       'nextTaskAtMs',
       'lastEmailEngagementAtMs',
+      'emailState',
     ])
     for (const field of CONTACT_FILTER_COLUMNS) {
       expect(column(field)).toBeDefined()
@@ -108,6 +110,22 @@ describe('contactListColumns', () => {
     expect(CONTACT_OPTIONAL_COLUMNS).toEqual(['lastEmailEngagementAtMs'])
     const cell = (column('lastEmailEngagementAtMs').renderCell as any)({ row: engaged })
     expect(JSON.stringify(cell)).toContain('3 days ago')
+  })
+
+  /*
+   * "Email" (AGL-3245): the verdict on the address, by its label for the
+   * sort and the export, as the record page's chip in the cell, and
+   * filtered through the bar rather than the panel.
+   */
+  it('reads the email state by its label, and draws nothing for a record with none', () => {
+    const blocked = row({
+      emailState: { status: 'blocked', atMs: NOW, source: 'outreach', detail: '550 (the address:blocked)' },
+    })
+    expect(value('emailState', blocked)).toBe('Blocked by their mail gateway')
+    expect(value('emailState', row())).toBe('')
+    expect(column('emailState').filterable).toBe(false)
+    expect(CONTACT_FILTER_COLUMNS).toContain('emailState')
+    expect(JSON.stringify((column('emailState').renderCell as any)({ row: blocked }))).toContain('blocked')
   })
 
   it('names the owner through the roster, and never offers the column as a query', () => {

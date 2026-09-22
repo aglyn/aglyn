@@ -41,12 +41,14 @@ import { getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
 import type {
   PluginRecordActivityRequest,
+  PluginRecordDeliveryRequest,
   PluginRecordTaskRequest,
   PluginRecordTimelineWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { EMAIL_TOPIC_SALES, readTopicSubscriptionState } from '@aglyn/aglyn/app-utils/email-topics'
 import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression'
 import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/email-topic-confirmation'
+import { stampRecordEmailState } from '@aglyn/tenant-data-admin/server/record-email-state'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import type { OutreachEnrollment, OutreachMailbox, OutreachSequence } from '../model/outreach.types'
 import { FakeGmail } from './fixtures/fake-gmail'
@@ -89,6 +91,8 @@ interface Filed {
   feed: Array<{ action: string; target: { type: string; id: string } }>
   /** What the mailbox's owner was told (AGL-3244). */
   notices: OutreachMailboxNoticeRequest[]
+  /** What became of a filed email (AGL-3245). */
+  deliveries: PluginRecordDeliveryRequest[]
 }
 let filed: Filed
 
@@ -101,6 +105,10 @@ function timeline(): PluginRecordTimelineWriter {
     async createTask(request) {
       filed.tasks.push(request)
       return { ok: true, id: `t${filed.tasks.length}`, created: true }
+    },
+    async recordEmailDelivery(request) {
+      filed.deliveries.push(request)
+      return { ok: true, id: `d${filed.deliveries.length}`, created: true }
     },
   }
 }
@@ -129,6 +137,11 @@ function deps(overrides: Partial<OutreachRuntimeDeps> = {}): OutreachRuntimeDeps
     },
     notifyMailboxOwner: async (notice) => {
       filed.notices.push(notice)
+    },
+    // The real stamp (AGL-3245), against the same emulator: what the record
+    // page reads is what this run wrote.
+    stampRecordEmailState: async (stamp) => {
+      await stampRecordEmailState({ ...stamp, firestore })
     },
     unsubscribeUrl: (target) =>
       outreachUnsubscribeUrl({ origin: 'https://console.example.com', target, secret: SECRET }),
@@ -305,7 +318,7 @@ beforeAll(() => {
 beforeEach(() => {
   clock = TUESDAY_10AM
   gmail = new FakeGmail({ self: [MAILBOX_EMAIL] })
-  filed = { activities: [], tasks: [], feed: [], notices: [] }
+  filed = { activities: [], tasks: [], feed: [], notices: [], deliveries: [] }
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
   jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 })
@@ -669,6 +682,14 @@ describeEmulated('the sync job (AGL-2981)', () => {
     // The diagnostic is kept without the address it named.
     expect(String(entry?.['detail'])).not.toContain('person1@example.org')
     expect((await mailbox()).health.bounces).toBe(1)
+    // The record the person is says so (AGL-3245): the contact carries the
+    // verdict, and the send's own timeline entry is marked bounced.
+    const contact = (await org().collection('contacts').doc('contact-1').get()).data()
+    expect(contact?.['emailState']).toMatchObject({ status: 'bounced', source: 'outreach', enrollmentId: one.id })
+    expect(String(contact?.['emailState']?.['detail'])).not.toContain('person1@example.org')
+    expect(filed.deliveries).toEqual([
+      expect.objectContaining({ orgId, messageId: one.messageIds[0], state: 'bounced', detail: expect.stringContaining('no such user') }),
+    ])
   })
 
   it('pauses the mailbox itself after two hard bounces in a day, and says so on the feed', async () => {
@@ -768,6 +789,8 @@ describeEmulated('the sync job (AGL-2981)', () => {
     expect(String(domain?.['detail'])).toContain('(the address:blocked)')
     // One bounce in one send is under the rate floor: the mailbox keeps sending.
     expect((await mailbox()).status).toBe('connected')
+    // The record reads "blocked", not "bounced" (AGL-3245).
+    expect((await org().collection('contacts').doc('contact-1').get()).get('emailState')).toMatchObject({ status: 'blocked' })
 
     // The next person at that domain is refused before the send, with the domain named.
     const two = await enroll(2)

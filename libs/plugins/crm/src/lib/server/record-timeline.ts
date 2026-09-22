@@ -18,6 +18,7 @@
 import {
   registerPluginRecordTimelineWriter,
   type PluginRecordActivityRequest,
+  type PluginRecordDeliveryRequest,
   type PluginRecordEntryContext,
   type PluginRecordTaskRequest,
   type PluginRecordTimelineWriter,
@@ -46,6 +47,7 @@ import {
   crmCapturedEmailActivityRef,
   firebaseAdmin,
   recomputeCrmNextTaskAt,
+  recordCrmEmailDelivery,
 } from '@aglyn/tenant-data-admin'
 import { createHash } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -70,7 +72,11 @@ import { CRM_SUITE_FEATURE } from './suite-gate'
  *  4. anything else — a note, a task — is filed under the caller's own key,
  *     hashed with the caller's plugin id, and written once the same way;
  *  5. a record at its activity ceiling is refused with the sentence every
- *     CRM writer answers with, before anything is written.
+ *     CRM writer answers with, before anything is written;
+ *  6. a bounce or a complaint on a filed email (AGL-3245) advances that
+ *     email's own delivery state — the row the send was filed under, found
+ *     by its `Message-ID` — exactly as the campaign webhook advances one,
+ *     so the timeline reads Sent, then Bounced, with what the server said.
  *
  * Each entry names the plugin that filed it (`sourcePluginId`), and a task's
  * `nextTaskAtMs` is recomputed on the records it names, as every server
@@ -261,6 +267,27 @@ export function createCrmRecordTimelineWriter(deps: CrmRecordTimelineDeps): Plug
         })
       }
       return { ok: true, id: ref.id, created }
+    },
+
+    async recordEmailDelivery(request: PluginRecordDeliveryRequest): Promise<PluginRecordWrite> {
+      const orgId = String(request.orgId ?? '').trim()
+      const key = crmCapturedEmailKey(request.messageId, null)
+      if (!orgId || !key) return refuse(400, 'A delivery names its organization and the email’s Message-ID.')
+      if (request.state !== 'bounced' && request.state !== 'complained') {
+        return refuse(400, `"${String(request.state)}" isn't a delivery failure.`)
+      }
+      const firestore = deps.firestore()
+      const ref = crmCapturedEmailActivityRef(firestore, orgId, key)
+      const outcome = await recordCrmEmailDelivery(firestore, {
+        orgId,
+        activityId: ref.id,
+        state: request.state,
+        atMs: request.atMs,
+        detail: request.detail ?? null,
+      })
+      if (outcome === 'missing') return refuse(404, 'No email by that Message-ID is filed here.')
+      if (outcome === 'failed') return refuse(409, 'The delivery state could not be written.')
+      return { ok: true, id: ref.id, created: outcome === 'advanced' }
     },
   }
 }

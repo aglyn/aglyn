@@ -56,7 +56,7 @@ import {
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 import { markOutreachLeadWorking } from './lead-records'
-import { fileOutreachEmail, fileOutreachTask } from './timeline'
+import { fileOutreachEmail, fileOutreachTask, markOutreachEmailDelivery } from './timeline'
 import { outreachUnsubscribeMailbox } from './unsubscribe-link'
 
 /*==========================================
@@ -79,6 +79,11 @@ import { outreachUnsubscribeMailbox } from './unsubscribe-link'
  *   reads as the domain's mail gateway refusing the sender rather than one
  *   address being unknown (`engine/gateway-block`, AGL-3244), files the
  *   DOMAIN on the do-not-contact list too, and says so on the enrollment.
+ *
+ * Every verdict a list takes is said on the record the person is as well
+ * (AGL-3245): the lead and the contact carry `emailState` through the
+ * platform's stamp, and a bounce or a complaint lands on the send's own
+ * timeline entry, so a member reading the record sees what the runtime saw.
  *
  * Four reads find those, each narrowed by Gmail rather than read in full:
  * the threads of this mailbox's enrollments that have new mail; delivery
@@ -427,6 +432,7 @@ async function applyMessages(
   switch (decision.outcome) {
     case 'opted_out': {
       if (decidingMessage) await fileInbound(context, enrollment, decidingMessage)
+      const complaint = decidedBy?.complaint === true
       await recordOutreachOptOut(deps, {
         orgId: context.orgId,
         email: enrollment.email,
@@ -435,7 +441,19 @@ async function applyMessages(
         hostIds: [enrollment.hostId],
         detail: decidedBy?.evidence ?? null,
         nowMs,
+        complaint,
       })
+      // A reply that called the email spam marks the send it answered
+      // (AGL-3245), as the campaign webhook would mark a reported one.
+      if (complaint) {
+        await markOutreachEmailDelivery(deps, {
+          orgId: context.orgId,
+          messageId: lastSentMessageId,
+          state: 'complained',
+          atMs: decidedBy?.atMs || nowMs,
+          detail: decidedBy?.evidence ?? null,
+        })
+      }
       report.optOuts += 1
       break
     }
@@ -486,7 +504,8 @@ async function applyMessages(
       // Never a public mailbox provider's domain — Gmail refusing one
       // message on policy is not a reason to stop writing to Gmail.
       const domain = outreachEmailDomain(enrollment.email)
-      if (domain && !isPublicMailboxDomain(domain) && isOutreachGatewayBlock(decidedBy?.bounce ?? null)) {
+      const gateway = isOutreachGatewayBlock(decidedBy?.bounce ?? null)
+      if (domain && !isPublicMailboxDomain(domain) && gateway) {
         await addOutreachDoNotContactDomain(firestore, {
           orgId: context.orgId,
           domain,
@@ -500,7 +519,29 @@ async function applyMessages(
         detail = outreachGatewayBlockDetail(domain, diagnostic)
         report.gatewayBlocks += 1
       }
-      event = { type: 'bounce', atMs: decidedBy?.atMs || nowMs, detail }
+      const bouncedAtMs = decidedBy?.atMs || nowMs
+      // The record the person is says so too (AGL-3245): the verdict on the
+      // lead and the contact, and the bounce on the send's own timeline
+      // entry, so the record reads Sent, then Bounced.
+      await deps.stampRecordEmailState({
+        orgId: context.orgId,
+        email: enrollment.email,
+        state: {
+          status: gateway ? 'blocked' : 'bounced',
+          atMs: bouncedAtMs,
+          source: 'outreach',
+          detail: diagnostic,
+          enrollmentId: enrollment.id,
+        },
+      })
+      await markOutreachEmailDelivery(deps, {
+        orgId: context.orgId,
+        messageId: lastSentMessageId,
+        state: 'bounced',
+        atMs: bouncedAtMs,
+        detail: diagnostic,
+      })
+      event = { type: 'bounce', atMs: bouncedAtMs, detail }
       report.bounces += 1
       break
     }

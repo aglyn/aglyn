@@ -142,6 +142,9 @@ export function leadAsContact(
   return {
     email: lead['email'],
     name: lead['name'],
+    // The verdict on the address (AGL-3245) is the lead's own top-level
+    // field, as it is the contact's, so the gates quote it either way.
+    ...(lead['emailState'] && typeof lead['emailState'] === 'object' ? { emailState: lead['emailState'] } : {}),
     facets: {
       [contactGroupId]: {
         sources,

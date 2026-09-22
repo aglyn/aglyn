@@ -9623,6 +9623,33 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
     await mustAllow('an editor deleting a lead on Starter', deleteDoc(lead(EDITOR, 'lead-new')))
   })
 
+  it("keeps a lead's email state the platform's (AGL-3245): no client writes, clears or creates it", async () => {
+    await setOrg({ plan: 'starter' })
+    const verdict = { status: 'bounced', atMs: 1, source: 'outreach', detail: null }
+    await mustDeny(
+      'an editor creating a lead with an email state',
+      setDoc(lead(EDITOR, 'lead-verdict'), { email: 'new@example.test', emailState: verdict }),
+    )
+    await mustDeny(
+      'the owner stamping an email state on a lead',
+      updateDoc(lead(OWNER, 'lead-held'), { emailState: verdict }),
+    )
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), 'hosts', HOST, 'leads', 'lead-held'),
+        { email: 'lead@example.test', status: 'new', emailState: verdict },
+      )
+    })
+    await mustDeny(
+      'the owner clearing a lead’s email state',
+      updateDoc(lead(OWNER, 'lead-held'), { emailState: deleteField() }),
+    )
+    await mustAllow(
+      'the owner still setting the status beside a stamped email state',
+      updateDoc(lead(OWNER, 'lead-held'), { status: 'working' }),
+    )
+  })
+
   /** A saved segment, stamped org-wide as the Contacts list saves one. */
   const segment = (uid, id) => doc(authed(uid), 'orgs', ORG, 'contactSegments', id)
   const seedSegment = () =>

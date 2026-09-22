@@ -3375,10 +3375,20 @@ service cloud.firestore {
       // this block would narrow nothing. Read and delete stay with the
       // catch-all on every plan: an export reads a lead, and removing one is
       // the workspace's own act.
+      //
+      // `emailState` (AGL-3245) is the platform's verdict on the address —
+      // a bounce, a gateway block, a do-not-contact mark — written by the
+      // senders through the Admin SDK and never from a client: a member who
+      // could clear it could email a person who asked not to be.
       match /leads/{leadId} {
-        allow create, update: if isStaff() ||
+        allow create: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
-            hostOrgCarriesCrmSuite(hostId));
+            hostOrgCarriesCrmSuite(hostId) &&
+            !('emailState' in request.resource.data));
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            hostOrgCarriesCrmSuite(hostId) &&
+            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState']));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only

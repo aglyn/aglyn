@@ -50,6 +50,7 @@ import { useBookingDoor } from './crm-booking-zone'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmCallButton } from './crm-call-actions'
+import { CrmEmailStateChip } from './crm-email-state-chip'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { CrmSuiteNotice, crmSuiteIncluded, crmSuiteLockedReason } from './crm-suite-lock'
@@ -398,6 +399,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
                 contactId={id}
                 email={record.email}
                 name={record.name}
+                emailState={record.emailState}
                 suiteLocked={!suiteIncluded}
               />
             </>
@@ -411,6 +413,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
         chips={
           record ? (
             <>
+              {/* The verdict on the address (AGL-3245), first: a bounce or a
+                  do-not-contact mark is what a person deciding to write must see. */}
+              <CrmEmailStateChip state={record.emailState} />
               <CrmRecordChip
                 label="Stage"
                 value={

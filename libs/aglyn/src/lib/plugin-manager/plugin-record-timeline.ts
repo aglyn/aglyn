@@ -145,9 +145,32 @@ export type PluginRecordWrite =
       error: string
     }
 
+/**
+ * What became of an email a plugin filed (AGL-3245): the receiving server
+ * bounced it, or the recipient reported it. Addressed by the `Message-ID`
+ * the send was filed under, so the verdict lands on the send's own entry
+ * and the record reads Sent, then Bounced.
+ */
+export interface PluginRecordDeliveryRequest {
+  orgId: string
+  /** The `Message-ID` header of the send, angle brackets included. */
+  messageId: string
+  state: 'bounced' | 'complained'
+  /** When it happened, epoch ms. */
+  atMs: number
+  /** What the server said, scrubbed of the address; the owner bounds it. */
+  detail?: string | null
+}
+
 export interface PluginRecordTimelineWriter {
   logActivity(request: PluginRecordActivityRequest): Promise<PluginRecordWrite>
   createTask(request: PluginRecordTaskRequest): Promise<PluginRecordWrite>
+  /**
+   * Marks a filed email bounced or reported (AGL-3245). Optional: a record
+   * system that keeps no delivery state answers nothing, and the caller's
+   * entry stands as filed.
+   */
+  recordEmailDelivery?(request: PluginRecordDeliveryRequest): Promise<PluginRecordWrite>
 }
 
 export const PLUGIN_RECORD_TIMELINE = definePluginServiceContract<PluginRecordTimelineWriter>(

@@ -16,11 +16,16 @@
  */
 
 import {
+  CRM_EMAIL_STATE_LABELS,
+  CRM_EMAIL_STATE_STATUSES,
   CRM_LEAD_STATUS_LABELS,
+  type CrmEmailStateStatus,
   type CrmLeadFields,
   type CrmLeadStatus,
+  crmEmailStateForbidsEmail,
   crmLeadStatus,
   isCrmLeadOpen,
+  readCrmEmailState,
 } from '@aglyn/aglyn'
 
 /**
@@ -58,6 +63,41 @@ export function leadMatchesFilter(
   if (filter === 'all') return true
   if (filter === 'open') return isCrmLeadOpen(lead)
   return crmLeadStatus(lead) === filter
+}
+
+/**
+ * The Leads section's `Email` control (AGL-3245): every lead, the ones a
+ * member must not email — any verdict but `ok` — the ones nothing has been
+ * said about, or one verdict on its own. Beside `Show`, not inside it: a
+ * bounce does not move a lead out of Open, and a queue of bounced leads is
+ * a queue of people to reach some other way.
+ */
+export type LeadEmailFilter = 'any' | 'problem' | 'none' | CrmEmailStateStatus
+
+export const LEAD_EMAIL_FILTERS: readonly LeadEmailFilter[] = [
+  'any',
+  'problem',
+  ...CRM_EMAIL_STATE_STATUSES,
+  'none',
+]
+
+export const LEAD_EMAIL_FILTER_LABELS: Record<LeadEmailFilter, string> = {
+  any: 'Any',
+  problem: 'Cannot be emailed',
+  none: 'Nothing known',
+  ...CRM_EMAIL_STATE_LABELS,
+}
+
+/** Whether a lead belongs in an email filter's view. */
+export function leadMatchesEmailFilter(
+  lead: Readonly<Record<string, unknown>>,
+  filter: LeadEmailFilter,
+): boolean {
+  if (filter === 'any') return true
+  const state = readCrmEmailState(lead)
+  if (filter === 'none') return state === null
+  if (filter === 'problem') return crmEmailStateForbidsEmail(state)
+  return state?.status === filter
 }
 
 /**

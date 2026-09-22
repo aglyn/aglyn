@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { OutreachRecordEmailStamp } from '../runtime/runtime-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
 
 /**
@@ -48,4 +49,9 @@ export interface OutreachRouteDeps {
     action: string,
     target: OutreachActivityTarget,
   ): Promise<void>
+  /**
+   * Stamps a member's do-not-contact mark on the lead and the contact that
+   * carry the address (AGL-3245); the runtime's twin is on its own deps.
+   */
+  stampRecordEmailState(stamp: OutreachRecordEmailStamp): Promise<void>
 }

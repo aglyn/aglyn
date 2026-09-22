@@ -130,6 +130,7 @@ Each row carries:
 | **Lead** | The name the person gave, with their email beneath it — or the email alone. |
 | **Company**, **Title** | The lead's own company and job title, as text. |
 | **Status** | New, Working, Qualified or Unqualified. Change it in place from the row. |
+| **Email** | The last verdict on the lead's address — see [Email state](#email-state) — or a dash when nothing is known. |
 | **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
 | **Source** | Every surface that captured this person: Booking, the form they submitted, an import, New lead, or the API — and Sign-up on leads filed before sign-ups stopped making leads. |
 | **Tags** | The lead's tags. |
@@ -139,7 +140,10 @@ The **Show** control at the top of the card picks the view. **Open** — the
 default — is every lead that still needs working (New and Working). The other
 views are one status each, and **All** shows everything. A lead nobody has
 touched yet has no status of its own and reads as **New**, so the leads your
-site collected before the CRM existed are already in the Open view.
+site collected before the CRM existed are already in the Open view. The
+**Email** control beside it narrows by the address's verdict — **Cannot be
+emailed** for every lead a sender has refused, one verdict on its own, or
+**Nothing known** — and keeps the status you chose.
 
 The list reads the 200 most recently seen leads and shows them a page at a
 time, with the usual footer to turn the page and pick how many rows it holds.
@@ -253,6 +257,27 @@ call** beside **Send email** — see
 how many times your site captured them, every source that did, and — under
 *Where this lead came from* — the campaign the capture is credited to, when
 there is one.
+
+### Email state {#email-state}
+
+Beside the status, a lead carries the last verdict on its address, when a
+sender has given one: **Bounced** (the mailbox does not exist), **Blocked by
+their mail gateway** (the company's mail filter refused the sender), **Unsubscribed**,
+**Marked as spam**, or **Do not contact** (on your organization's
+[do-not-contact list](./sequences.md#do-not-contact-domains), by a member's
+mark or a reply asking to be left alone). Hover the chip for the date and
+what the server said. The verdict is written by the senders themselves — a
+sequence's bounce, a campaign's unsubscribe, a member's do-not-contact mark —
+never by a form, an import or the lead's editor, so a bounce cannot be
+edited away; it is lifted when the address is released. While the state
+forbids email, **Send email** is disabled with the reason, and the sequence
+enroll step refuses the lead in the same words. A bounce does not change
+the lead's status — you may still call — but the chip is the first thing
+the page shows.
+
+The email a sequence sent is on the lead's timeline as **Sent**; when it
+bounces, the same entry reads **Bounced** with the server's words on hover,
+so the record reads Sent, then Bounced.
 
 ## Converting a lead
 

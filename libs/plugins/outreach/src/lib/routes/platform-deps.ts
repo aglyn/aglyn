@@ -17,6 +17,7 @@
 
 import { collectDynamicListCandidates } from '@aglyn/tenant-data-admin/server/dynamic-list-materialize'
 import { lockdownRefusal } from '@aglyn/tenant-data-admin/server/lockdown'
+import { stampRecordEmailState } from '@aglyn/tenant-data-admin/server/record-email-state'
 import {
   logOrgActivity,
   memberHasOrgPermission,
@@ -38,7 +39,7 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
  * static one.
  */
 
-export { lockdownRefusal, logOrgActivity, resolveOrgPermissions }
+export { lockdownRefusal, logOrgActivity, resolveOrgPermissions, stampRecordEmailState }
 
 /**
  * Whether the member holds a CATALOG permission (`data.manage`) as the

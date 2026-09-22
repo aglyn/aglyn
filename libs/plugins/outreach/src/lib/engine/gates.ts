@@ -56,6 +56,7 @@ import {
   readContactFacet,
 } from '@aglyn/aglyn/app-utils/contacts'
 import { isPublicMailboxDomain } from '@aglyn/aglyn/app-utils/crm'
+import { crmEmailStateRefusal, readCrmEmailState } from '@aglyn/aglyn/app-utils/email-state'
 import type { TopicSubscriptionState } from '@aglyn/aglyn/app-utils/email-topics'
 import {
   findMemberByEmailAddress,
@@ -174,6 +175,7 @@ export type OutreachGateCode =
   | 'country_unknown'
   | 'platform_suppressed'
   | 'host_suppressed'
+  | 'email_state'
   | 'sales_opted_out'
   | 'do_not_contact'
   | 'do_not_contact_domain'
@@ -354,7 +356,11 @@ export function evaluateOutreachGates(input: OutreachGateInput): OutreachGateRes
     )
   }
 
-  // 4. Every list that says not to.
+  // 4. Every list that says not to — the record's own verdict first
+  //    (AGL-3245), in the words the record page shows: what the lists below
+  //    hold, said by the reason it is held.
+  const recordRefusal = crmEmailStateRefusal(readCrmEmailState(contact))
+  if (recordRefusal) block('email_state', recordRefusal)
   if (lookups?.platformSuppressed === true) {
     block(
       'platform_suppressed',

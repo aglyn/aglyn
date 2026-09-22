@@ -59,6 +59,9 @@ export * from './screen-link-value'
 export * from './link-references'
 export * from './analytics-path-key'
 export * from './contacts'
+// A lead's or a contact's email state (AGL-3245): the last verdict on its
+// address, in words a person can act on, mirrored from the senders' lists.
+export * from './email-state'
 // The records that sit beside a contact — companies, pipelines, deals, tasks,
 // activities, field definitions (AGL-2595). Pure like `contacts`, and beside
 // it because `ContactFacet` names its lifecycle stage and custom-value types;
