@@ -207,7 +207,12 @@ describe('every client-written suite collection asks the plan (AGL-2801)', () =>
   it("asks for a lead's create and update under its site, and the catch-all cannot re-grant them", () => {
     const hosts = rawBlockBody(RULES, 'match /hosts/<hostId> {')
     const leads = rawBlockBody(hosts, 'match /leads/<leadId> {')
-    expect(allowStatement(leads, 'create, update')).toContain('hostOrgCarriesCrmSuite(hostId)')
+    // Create and update are separate statements: each carries its own
+    // `emailState` clause (a create may not set it, an update may not touch
+    // it — AGL-3245), so the plan check is asserted on each rather than on a
+    // shared `create, update` verb list.
+    expect(allowStatement(leads, 'create')).toContain('hostOrgCarriesCrmSuite(hostId)')
+    expect(allowStatement(leads, 'update')).toContain('hostOrgCarriesCrmSuite(hostId)')
     // Sibling matches are OR'd: without the exclusions the block narrows nothing.
     const catchAll = parseHostSubcollectionRules(SOURCE)
     expect(catchAll.excluded.create).toContain('leads')
