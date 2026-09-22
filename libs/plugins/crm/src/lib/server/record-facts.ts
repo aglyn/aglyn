@@ -39,6 +39,7 @@ import {
   firebaseAdmin,
   getOrgDoc,
   memberHasOrgPermission,
+  readLeadForHost,
   resolveOrgIdForHost,
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin'
@@ -288,8 +289,8 @@ export const crmLeadFactsReader = reader(async (scope, request) => {
   if (!scope.hostId) return { ok: false, status: 400, error: CRM_FACTS_LEAD_NEEDS_SITE }
   const id = String(request.id ?? '').trim()
   if (!id) return refused('lead')
-  const snapshot = await firestore().collection('hosts').doc(scope.hostId).collection('leads').doc(id).get()
-  if (!snapshot.exists) return refused('lead')
+  const snapshot = await readLeadForHost(scope.hostId, id)
+  if (!snapshot) return refused('lead')
   const activities = await rowsNaming<CrmActivity>(scope, {
     field: 'leadId',
     id,

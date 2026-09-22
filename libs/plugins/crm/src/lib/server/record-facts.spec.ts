@@ -67,6 +67,19 @@ function mockCollection(path: string) {
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => ({ collection: (name: string) => mockCollection(name) }) }) },
+  // A lead is read through the seam now (AGL-3275); this file's claim is what
+  // the facts reader RETURNS, so the double just resolves the org row.
+  readLeadForHost: async (hostId: string, id: string) => {
+    const path = `orgs/${mockHostOrgs.get(hostId) ?? 'org-1'}/leads/${id}`
+    return mockDocs.has(path)
+      ? {
+          exists: true,
+          id,
+          data: () => mockDocs.get(path),
+          get: (f: string) => (mockDocs.get(path) as any)?.[f],
+        }
+      : null
+  },
   resolveOrgIdForHost: async (hostId: string) => mockHostOrgs.get(hostId) ?? null,
   getOrgDoc: async (orgId: string) => {
     const org = mockDocs.get(`orgs/${orgId}`)
@@ -164,7 +177,7 @@ function seed() {
     ],
     visibleTo: ['org'],
   })
-  mockDocs.set('hosts/host-1/leads/lead-1', { name: 'Sam Rivera', status: 'new', sources: ['form:quote'], submissionCount: 1 })
+  mockDocs.set('orgs/org-1/leads/lead-1', { name: 'Sam Rivera', status: 'new', sources: ['form:quote'], submissionCount: 1 })
   mockDocs.set('orgs/org-1/contactFields/f-1', { key: 'budget', label: 'Budget', type: 'number', order: 0, visibleTo: ['org'] })
   mockDocs.set('orgs/org-1/contactFields/f-2', { key: 'hidden', label: 'Hidden', type: 'text', order: 1, visibleTo: ['host:host-2'] })
 }

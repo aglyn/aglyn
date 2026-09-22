@@ -128,6 +128,8 @@ function fakeLeadStore() {
     doc: (id?: string) => leadDoc(id ?? `auto-${(autoId += 1)}`),
     count: () => ({ __count: true }),
   }
+  // What the org seam hands `addHostLead` for this harness (AGL-3275).
+  mockLeadsCollection = leadsCollection
 
   const hostRef: any = {
     firestore: {
@@ -192,6 +194,32 @@ function fakeLeadStore() {
 
   return { leads, counts, hostRef, seed: write }
 }
+
+let mockLeadsCollection: any = null
+
+/*
+ * The lead silo is org-scoped now (AGL-3275). `addHostLead` resolves it
+ * through these two modules, so they are doubled onto the SAME store this
+ * file already drives — the claims here are about dedupe and contention, not
+ * about where the collection lives, which is `org-leads.spec.ts`'s.
+ */
+jest.mock('./org-leads', () => ({
+  __esModule: true,
+  orgLeadsForHost: async () => mockLeadsCollection,
+  leadForWrite: async (_hostId: string, key: string) => ({
+    ref: mockLeadsCollection.doc(key),
+    existed: false,
+    carried: false,
+  }),
+  leadScopeForHost: async (hostId: string) => [`host:${hostId}`],
+}))
+
+jest.mock('./organizations', () => ({
+  __esModule: true,
+  consentGroupForSite: async (hostId: string) =>
+    jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
+  scopedToHost: (ref: any) => ref,
+}))
 
 import { addHostLead } from './host-visitor-records'
 

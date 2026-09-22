@@ -25,6 +25,7 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { consentGroupForSite } from '@aglyn/tenant-data-admin/server/organizations'
+import { readLeadForHost } from '@aglyn/tenant-data-admin/server/org-leads'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CAMPAIGN_FILING_CARRY_BY_NAME } from '../model/campaign-filing-activity'
 import { fileCampaignFilingActivities, siteCampaignRefs } from './campaign-filing-activity'
@@ -57,14 +58,9 @@ export async function carryLeadCampaignsToContact(
   >,
 ): Promise<PluginLeadConversionReport> {
   try {
-    const lead = await firestore
-      .collection('hosts')
-      .doc(request.hostId)
-      .collection('leads')
-      .doc(request.leadId)
-      .get()
+    const lead = await readLeadForHost(request.hostId, request.leadId)
     const campaignIds = readCampaignIds(
-      lead.exists ? (lead.data() as Record<string, unknown>) : null,
+      lead ? (lead.data() as Record<string, unknown>) : null,
     )
     if (!campaignIds.length) return { campaigns: 0 }
     const group = await consentGroupForSite(request.hostId)

@@ -137,6 +137,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionRef(`orgs/${ORG}/${name}`),
+  // The org lead silo (AGL-3275), reached through the barrel by the CRM's own
+  // capture door; the relative doubles above are what `addHostLead` reaches.
+  orgLeadsForHost: async () => collectionRef(`orgs/${ORG}/leads`),
+  readLeadForHost: async (_hostId: string, key: string) => {
+    const row = docs.get(`orgs/${ORG}/leads/${key}`)
+    return row
+      ? { exists: true, id: key, data: () => row, get: (f: string) => (row as any)?.[f] }
+      : null
+  },
+  scopedToHost: (ref: any) => ref,
   // The real address lookup, over the fake's `where` — no index beside the fake's collections.
   ...jest.requireActual('../../../../../tenant/data/admin/src/lib/server/contact-email-index'),
   // The real lead door — see the file docblock.
@@ -174,11 +184,43 @@ jest.mock('@aglyn/tenant-runtime/emit-host-event', () => ({
   },
 }))
 
+/*
+ * The lead silo is org-scoped (AGL-3275), and the real capture door this file
+ * drives reaches it by RELATIVE path — doubled here as well as on the barrel,
+ * or the door would resolve a live org read. Where a lead lives is
+ * `org-leads.spec.ts`'s claim; this file keeps its own, which is WHICH RECORD
+ * a capture lands on.
+ */
+jest.mock('../../../../../tenant/data/admin/src/lib/server/org-leads', () => ({
+  __esModule: true,
+  orgLeadsForHost: async () => collectionRef(`orgs/${ORG}/leads`),
+  readLeadForHost: async (_hostId: string, key: string) => {
+    const path = `orgs/${ORG}/leads/${key}`
+    const row = docs.get(path)
+    return row
+      ? { exists: true, id: key, data: () => row, get: (f: string) => (row as any)?.[f] }
+      : null
+  },
+  leadForWrite: async (_hostId: string, key: string) => ({
+    ref: collectionRef(`orgs/${ORG}/leads`).doc(key),
+    existed: docs.has(`orgs/${ORG}/leads/${key}`),
+    carried: false,
+  }),
+  leadScopeForHost: async (hostId: string) => [`host:${hostId}`],
+}))
+
+jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  consentGroupForSite: async (hostId: string) =>
+    jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
+  scopedToHost: (ref: any) => ref,
+}))
+
 import { personKey, readMarketingBasis, soloConsentGroup } from '@aglyn/aglyn/server'
 import { captureContactForCrm } from './capture-contact'
 
 const EMAIL = 'dana@example.com'
-const leadPath = (email = EMAIL) => `hosts/${HOST}/leads/${personKey(email)}`
+const leadPath = (email = EMAIL) => `orgs/${ORG}/leads/${personKey(email)}`
 
 const request = (
   overrides: Partial<PluginContactCaptureRequest> = {},

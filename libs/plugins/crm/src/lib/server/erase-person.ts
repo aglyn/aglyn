@@ -32,6 +32,7 @@ import {
   logHostActivity,
   logOrgActivity,
   orgDataCollectionForHost,
+  readLeadForHost,
   suppressEmailForHostErasure,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
@@ -208,13 +209,8 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
       }
       recordEmail = normalizeContactEmail(contact.get('email'))
     } else {
-      const lead = await firestore
-        .collection('hosts')
-        .doc(hostId)
-        .collection('leads')
-        .doc(leadId)
-        .get()
-      if (!lead.exists) {
+      const lead = await readLeadForHost(hostId, leadId)
+      if (!lead) {
         res.status(404).json({ error: 'Unknown lead' })
         return
       }
@@ -283,21 +279,49 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
     )
 
     const hostIds = await orgHostIds(firestore, orgId)
+    /*
+     * Suppression stays PER SITE — it is that site's sending list — while the
+     * lead marker below is written once, because the lead is one org row now
+     * (AGL-3275) rather than one row per site.
+     */
     for (const siteId of hostIds) {
       await suppressEmailForHostErasure({ hostId: siteId, email: recordEmail }).catch(
         (error: unknown) => {
           console.error('[crm] erase-person suppression write failed', siteId, error)
         },
       )
-      const lead = firestore.collection('hosts').doc(siteId).collection('leads').doc(key)
-      await lead
+    }
+    /*
+     * THE ORG ROW, AND EVERY LEGACY ROW STILL STANDING.
+     *
+     * An erasure may not be the one caller that trusts the migration to be
+     * finished: until AGL-3276 has folded every site and AGL-3277 has deleted
+     * the fallback, a person can still be held at `hosts/{siteId}/leads`, and
+     * a marker that reached only the org row would leave that copy unmarked.
+     * So this marks whatever exists, in both homes, and the sweep costs one
+     * read per site exactly as it did before.
+     */
+    const eraseLeadAt = async (
+      ref: FirebaseFirestore.DocumentReference,
+      where: string,
+    ) => {
+      await ref
         .get()
-        .then((snapshot: { exists: boolean }) =>
-          snapshot.exists ? lead.update({ [CONTACT_ERASURE_REQUESTED_FIELD]: now }) : undefined,
+        .then((snapshot) =>
+          snapshot.exists
+            ? ref.update({ [CONTACT_ERASURE_REQUESTED_FIELD]: now })
+            : undefined,
         )
         .catch((error: unknown) => {
-          console.error('[crm] erase-person lead marker failed', siteId, error)
+          console.error('[crm] erase-person lead marker failed', where, error)
         })
+    }
+    await eraseLeadAt(firestore.collection('orgs').doc(orgId).collection('leads').doc(key), orgId)
+    for (const siteId of hostIds) {
+      await eraseLeadAt(
+        firestore.collection('hosts').doc(siteId).collection('leads').doc(key),
+        siteId,
+      )
     }
     try {
       const contacts = await firestore

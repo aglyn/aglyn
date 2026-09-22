@@ -37,6 +37,24 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
     }),
   },
+  /*
+   * The seam hands back the ORG row (AGL-3275). Where a lead LIVES is
+   * `org-leads.spec.ts`'s claim; what a conversion does to it is this file's,
+   * so the double resolves the path and asserts nothing about the carry.
+   */
+  leadForWrite: async (_hostId: string, key: string) => {
+    const path = `orgs/org-1/leads/${key}`
+    return {
+      ref: {
+        get: async () => ({ exists: docs.has(path), data: () => docs.get(path) }),
+        set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
+          docs.set(path, options?.merge ? { ...(docs.get(path) ?? {}), ...value } : value)
+        },
+      },
+      existed: docs.has(path),
+      carried: false,
+    }
+  },
 }))
 
 const handOffs: Array<Record<string, unknown>> = []
@@ -53,7 +71,7 @@ import { convertOpenLeadOntoContact } from './convert-open-lead'
 
 const HOST = 'site-1'
 const EMAIL = 'dana@example.com'
-const path = `hosts/${HOST}/leads/${personKey(EMAIL)}`
+const path = `orgs/org-1/leads/${personKey(EMAIL)}`
 
 beforeEach(() => {
   docs.clear()

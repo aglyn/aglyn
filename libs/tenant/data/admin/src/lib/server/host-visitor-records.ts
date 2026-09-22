@@ -32,7 +32,6 @@ import {
   marketingConsentFieldsForGroup,
   personKey,
   readMarketingBasis,
-  soloConsentGroup,
   submissionMonthKey,
   visitorRecordRefusedCounterId,
   type VisitorRecordKind,
@@ -43,6 +42,8 @@ import {
   type ResolvedCampaignTouch,
 } from './campaign-conversion-attribution'
 import { notifyHostManagers } from './notifications'
+import { leadForWrite, leadScopeForHost, orgLeadsForHost } from './org-leads'
+import { consentGroupForSite, scopedToHost } from './organizations'
 
 /**
  * Make a tripped ceiling OBSERVABLE rather than a silent drop — the * standing rule that a control which is not visible in the console does not
@@ -211,7 +212,7 @@ export async function addHostLead(options: {
   const { hostRef, hostId, lead } = options
   const maxPerHost = options.ceiling ?? LEADS_MAX_PER_HOST
   try {
-    const leadsRef = hostRef.collection('leads')
+    const leadsRef = await orgLeadsForHost(hostId)
     const firestore = hostRef.firestore
     /*
      * `null` for anything that is not a usable address — a lead captured
@@ -220,7 +221,26 @@ export async function addHostLead(options: {
      * different people, which is worse than two rows for one.
      */
     const key = personKey(lead.email)
-    const leadRef = key ? leadsRef.doc(key) : leadsRef.doc()
+    /*
+     * A lead the org has not taken over yet is carried across BEFORE the
+     * transaction opens (AGL-3275). It has to happen outside: the carry is
+     * itself a read-then-write, and a transaction that also counted the
+     * collection would be reading a row it was about to create. Two doors
+     * carrying the same person in the same second both write the legacy
+     * fields under `merge`, so the race is a no-op rather than a conflict.
+     */
+    const leadRef = key
+      ? (await leadForWrite(hostId, key)).ref
+      : leadsRef.doc()
+    /*
+     * The scope this capture stamps, and the group whose terms its consent is
+     * recorded under. Both resolved HERE rather than in the transaction body:
+     * a contended transaction re-runs that body, and neither of these can
+     * change between attempts, so resolving them inside would pay for the org
+     * read again on every retry.
+     */
+    const scope = await leadScopeForHost(hostId)
+    const group = await consentGroupForSite(hostId)
     const now = Date.now()
     const seen = {
       // `arrayUnion`, so a person who books twice has `['booking']` and one
@@ -253,7 +273,23 @@ export async function addHostLead(options: {
        * which is the case that can move it.
        */
       if (!existing.exists) {
-        const used = (await tx.get(leadsRef.count())).data().count
+        /*
+         * COUNTED OVER WHAT THIS SITE MAY SEE, not over the org (AGL-3275).
+         *
+         * The collection is org-wide now, and `LEADS_MAX_PER_HOST` is a
+         * per-SITE ceiling. An unfiltered count would charge every brand in
+         * an agency's account for every other brand's leads, and the first
+         * client to fill its allowance would refuse captures on sites that
+         * had taken none. `scopedToHost` is the same narrowing every other
+         * org-owned read uses, so a single-site org counts exactly what it
+         * counted before this moved.
+         *
+         * A lead shared by two brands in one consent group is counted by
+         * both, which is the honest answer: each of them holds it.
+         */
+        const used = (
+          await tx.get(scopedToHost(leadsRef, hostId).count())
+        ).data().count
         if (checkVisitorRecordCeiling(used, maxPerHost).exceeded) return true
       }
       /*
@@ -273,15 +309,25 @@ export async function addHostLead(options: {
        * at send time.
        */
       /*
-       * THE GROUP OF ONE, and deliberately so on this silo.
+       * THE SITE'S REAL GROUP, because the silo that justified a group of one
+       * is gone (AGL-3275).
        *
-       * `hosts/{hostId}/leads` is private by path — no sibling site can sweep
-       * it, declared group or not — so pooling a lead's basis would record a
-       * disclosure that reaches nothing. The contact written by the same
-       * capture door IS org-shared and IS pooled, which is where a declared
-       * group's disclosure is honored.
+       * This read `soloConsentGroup(hostId)` for as long as a lead lived at
+       * `hosts/{hostId}/leads`, and the reason was the path: private by
+       * construction, so pooling a lead's basis would have recorded a
+       * disclosure that reached nothing, while the contact written by the
+       * same capture door was org-shared and pooled.
+       *
+       * A lead is now org-shared on exactly the terms the contact is, so the
+       * premise is false and keeping the group of one would leave a
+       * multi-brand org holding a lead its sibling brand can SEE but may not
+       * MAIL — a narrower basis than the one `consentGroupDisclosure` named
+       * beside the checkbox this person ticked. Pooling here records what
+       * they were actually told; an undeclared group is still a group of one,
+       * so an agency is unchanged and configures nothing.
+       *
+       * Resolved above the transaction — see `group`'s declaration.
        */
-      const group = soloConsentGroup(hostId)
       const prior = readMarketingBasis(existing.data() ?? null, group)
       const consentAtMs =
         prior.basis === 'granted' && prior.basisAtMs !== null
@@ -293,24 +339,41 @@ export async function addHostLead(options: {
         {
           email: lead.email,
           ...seen,
+          /*
+           * WIDENED BY THE CAPTURE, NEVER BY THE LOOKUP (AGL-3275).
+           *
+           * `arrayUnion` rather than a replace, exactly as `upsert-contact`
+           * stamps a contact: this site just collected this person, so it may
+           * see the row. A site that merely FOUND them — the unscoped dedupe
+           * lookup in `readLeadForHost` — gains nothing, which is what keeps
+           * an agency's clients apart on a record they share.
+           */
+          visibleTo: FieldValue.arrayUnion(...scope),
+          /*
+           * EVERY SITE THAT CAPTURED THIS PERSON, not just the first
+           * (AGL-3275).
+           *
+           * This was written once, on create, and that was sound while the
+           * collection sat under one host and could hold only that host's
+           * name. On the org the row is shared, so a sibling brand capturing
+           * a person the first brand already holds has to be recorded here or
+           * the "Known by" answer silently omits it — the same `arrayUnion`
+           * the contact door has always used for this field, now that a lead
+           * has the same question to answer.
+           */
+          [CAPTURED_BY_HOST_FIELD]: FieldValue.arrayUnion(hostId),
           ...(existing.exists
             ? {}
             : {
                 firstSeenAtMs: now,
                 createdAt: FieldValue.serverTimestamp(),
-                [CAPTURED_BY_HOST_FIELD]: [hostId],
               }),
           /*
-           * Recorded under THIS host even though the collection already sits
-           * under it.
-           *
-           * A lead cannot be swept by another site — `hosts/{hostId}/leads`
-           * is private by path — so the host key adds no enforcement here.
-           * It is written anyway because {@link readMarketingBasis} is one
-           * function over four silos, and a silo whose basis lived somewhere
-           * else would need the reader to know which collection it was
-           * handed. A reader that has to be told the shape is a reader that
-           * can be told the wrong one.
+           * The basis is recorded under the GROUP, keyed by its host, because
+           * {@link readMarketingBasis} is one function over four silos and a
+           * silo whose basis lived somewhere else would need the reader to
+           * know which collection it was handed. A reader that has to be told
+           * the shape is a reader that can be told the wrong one.
            */
           ...(lead.marketingConsent
             ? marketingConsentFieldsForGroup(group, consentAtMs)

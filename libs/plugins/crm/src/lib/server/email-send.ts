@@ -63,6 +63,7 @@ import {
   memberHasOrgPermission,
   newCrmActivityRef,
   orgDataCollectionForHost,
+  readLeadForHost,
   readOrgEmailRamp,
   recordEmailSends,
   releaseCrmEmailSend,
@@ -423,13 +424,8 @@ async function resolveRecipient(
 
   if (ids.leadId) {
     if (!hostId) return refuse(400, 'Name the site the lead lives under.')
-    const lead = await firestore
-      .collection('hosts')
-      .doc(hostId)
-      .collection('leads')
-      .doc(ids.leadId)
-      .get()
-    if (!lead.exists) return refuse(404, 'Unknown lead')
+    const lead = await readLeadForHost(hostId, ids.leadId)
+    if (!lead) return refuse(404, 'Unknown lead')
     const email = normalizeContactEmail(lead.get('email'))
     if (!email) return refuse(400, 'This lead has no email address.')
     const record = (lead.data() ?? {}) as Record<string, unknown>
