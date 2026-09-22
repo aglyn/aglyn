@@ -44,6 +44,7 @@ import { useOrgScope, useOrgSlug } from '../../../../../hooks/use-org-scope'
 import {
   normalizeNotificationLink,
   resolveNotificationOrgSlug,
+  resolveNotificationWorkspace,
 } from '../../../../../utils/notification-links'
 
 /**
@@ -145,6 +146,31 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     }
   }
 
+  /**
+   * Which workspace a row is ABOUT, for the feed's column (AGL-3249).
+   *
+   * The same two sources the link rewrite walks, and deliberately NOT its
+   * third: `resolveNotificationWorkspace` refuses to fall back to the open
+   * workspace, so a row that recorded no org reads as unattributed instead of
+   * borrowing whichever one happens to be selected.
+   *
+   * `orgName` comes off the membership row the console already holds, so the
+   * column costs no read of its own.
+   */
+  const workspaceOf = useCallback(
+    (notification: any) =>
+      resolveNotificationWorkspace(notification, {
+        nameForOrgId: (orgId) => {
+          const org = (orgs ?? []).find((entry) => entry.$id === orgId)
+          return org?.orgName ?? org?.slug
+        },
+        indexedOrgId: notification.hostId
+          ? indexedHosts.get(notification.hostId)?.orgId
+          : undefined,
+      }),
+    [orgs, indexedHosts],
+  )
+
   const handleOpen = (notification: any) => {
     if (!uid) return
     if (!notification.readAt) {
@@ -208,6 +234,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
         <NotificationsTable
           rows={rows}
           onOpen={handleOpen}
+          workspaceOf={workspaceOf}
           page={page}
           pageSize={pageSize}
           hasMore={hasMore}

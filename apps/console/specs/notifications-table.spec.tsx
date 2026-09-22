@@ -53,6 +53,15 @@ const read = {
   readAt: at('2026-09-15T13:00:00Z'),
 }
 
+const staffRow = {
+  $id: 'n-3',
+  type: 'staff.orgCreated',
+  title: 'New workspace: Acme Co',
+  body: 'someone@example.com created Acme Co (/acme-co).',
+  createdAt: at('2026-09-14T12:00:00Z'),
+  readAt: null,
+}
+
 const renderTable = (props: Partial<Parameters<typeof NotificationsTable>[0]> = {}) => {
   const handlers = {
     onOpen: jest.fn(),
@@ -83,11 +92,71 @@ describe('NotificationsTable (AGL-3045)', () => {
     const headers = within(grid)
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
-    expect(headers).toEqual(expect.arrayContaining(['Notification', 'Type', 'When', 'Status']))
+    expect(headers).toEqual(
+      expect.arrayContaining(['Notification', 'Type', 'Workspace', 'When', 'Status']),
+    )
     // The type reads as its label, and only the unread row is marked new.
     expect(within(rowOf('Your payment failed')).getByText('Payment failed')).toBeTruthy()
     expect(within(rowOf('Your payment failed')).getByText('New')).toBeTruthy()
     expect(within(rowOf('Your invoice is ready')).queryByText('New')).toBeNull()
+  })
+
+  /**
+   * The column used to draw the chip for an unread row and NOTHING for a read
+   * one, so the steady state of a feed anybody keeps up with was a header over
+   * an empty strip — reported as "always empty, idk what it does".
+   */
+  it('says Read rather than nothing once a row has been read (AGL-3249)', () => {
+    renderTable()
+    expect(within(rowOf('Your invoice is ready')).getByText('Read')).toBeTruthy()
+    // And the two readings stay distinguishable — this is the column's whole
+    // job, and "always says something" must not become "always says the same".
+    expect(within(rowOf('Your payment failed')).queryByText('Read')).toBeNull()
+  })
+
+  describe('the Workspace column (AGL-3249)', () => {
+    const workspaceOf = (notification: any) =>
+      notification.$id === 'n-1'
+        ? ({ kind: 'workspace', label: 'Acme Co' } as const)
+        : ({ kind: 'unknown' } as const)
+
+    it('names the workspace a row is about', () => {
+      renderTable({ workspaceOf })
+      expect(within(rowOf('Your payment failed')).getByText('Acme Co')).toBeTruthy()
+    })
+
+    it('marks a staff row as the platform rather than a workspace', () => {
+      renderTable({
+        rows: [staffRow],
+        workspaceOf: () => ({ kind: 'staff' }) as const,
+      })
+      expect(within(rowOf('New workspace: Acme Co')).getByText('Platform')).toBeTruthy()
+    })
+
+    /**
+     * The load-bearing one. `resolveNotificationOrgSlug` ends at the workspace
+     * currently open, which is right for rewriting a link and a lie in a
+     * column: a row that recorded no org would name whichever workspace the
+     * reader happened to have selected, and name a different one after they
+     * switched. An em dash is the honest reading, and most of the stored
+     * backlog predates the emitters stamping an org at all.
+     */
+    it('says nothing rather than borrowing the open workspace', () => {
+      renderTable({ workspaceOf })
+      const cells = within(rowOf('Your invoice is ready')).getAllByRole('gridcell')
+      expect(cells.some((cell) => cell.textContent === '—')).toBe(true)
+      expect(within(rowOf('Your invoice is ready')).queryByText('Acme Co')).toBeNull()
+    })
+
+    /**
+     * No resolver is the table used without a page that has one — the feed
+     * must not invent an attribution to fill the column.
+     */
+    it('leaves every row unattributed when the caller resolves nothing', () => {
+      renderTable()
+      expect(screen.queryByText('Acme Co')).toBeNull()
+      expect(screen.queryByText('Platform')).toBeNull()
+    })
   })
 
   it('opens a notification from its row', () => {

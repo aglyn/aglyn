@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { notificationCategory } from '@aglyn/aglyn/app-utils/notifications'
 import { buildRoute, Route } from '../constants/route-links'
 
 /**
@@ -121,4 +122,51 @@ export function resolveNotificationOrgSlug(
     : undefined
   const indexed = indexedOrgId ? slugForOrgId(indexedOrgId) : undefined
   return stamped ?? indexed ?? currentOrgSlug ?? undefined
+}
+
+/**
+ * What a notification is ABOUT, for the feed's Workspace column (AGL-3249).
+ *
+ * ⛔ NOT {@link resolveNotificationOrgSlug}, though it walks the same two
+ * sources. That one ends at the workspace currently open, which is the right
+ * answer for a link — a stored path has to be rewritten against something,
+ * and the open workspace is no worse than leaving it broken. As TEXT the same
+ * fallback is a lie: a row that recorded no org would print whichever
+ * workspace the reader happened to have open, and print a different one after
+ * they switched. That is AGL-1773 returning as a column.
+ *
+ * So this one stops where the evidence stops, and `unknown` is a real answer
+ * rather than a failure — most of the stored backlog predates the emitters
+ * stamping `orgId` at all.
+ *
+ * Staff rows are settled before either source is consulted: `staff.*` is
+ * about the platform, and AGL-3225's two types are emitted with no `orgId`
+ * precisely because no workspace owns them.
+ */
+export type NotificationWorkspace =
+  | { kind: 'staff' }
+  | { kind: 'workspace'; label: string }
+  | { kind: 'unknown' }
+
+export function resolveNotificationWorkspace(
+  notification: { type?: string | null; orgId?: string | null },
+  context: {
+    /** Display name of an org the signed-in user belongs to, or undefined. */
+    nameForOrgId: (orgId: string) => string | undefined
+    /** `hostIndex.orgId` for the notification's host, once resolved. */
+    indexedOrgId?: string | null
+  },
+): NotificationWorkspace {
+  if (notification.type && notificationCategory(notification.type) === 'staff') {
+    return { kind: 'staff' }
+  }
+  const { nameForOrgId, indexedOrgId } = context
+  const stamped = notification.orgId
+    ? nameForOrgId(notification.orgId)
+    : undefined
+  // The host's owning org, which repairs the backlog written before the
+  // emitters stamped anything — the same second source the link resolver has.
+  const indexed = indexedOrgId ? nameForOrgId(indexedOrgId) : undefined
+  const label = stamped ?? indexed
+  return label ? { kind: 'workspace', label } : { kind: 'unknown' }
 }
