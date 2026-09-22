@@ -146,6 +146,11 @@ function authorComposeContext(content: AuthorContent) {
  */
 export async function composeAuthorTemplatePage(options: {
   hostId: string
+  /**
+   * The zone this site's dates read in (AGL-3237); UTC when a site has not
+   * named one. Resolved once by the caller that holds the org and the host.
+   */
+  timeZone?: string
   host: any
   content: AuthorContent
 }): Promise<ComposedAuthorPage | null> {
@@ -216,6 +221,11 @@ export async function composeAuthorTemplatePage(options: {
  */
 export async function composeAuthorFallbackPage(options: {
   hostId: string
+  /**
+   * The zone this site's dates read in (AGL-3237); UTC when a site has not
+   * named one. Resolved once by the caller that holds the org and the host.
+   */
+  timeZone?: string
   host: any
   content: AuthorContent
 }): Promise<ComposedAuthorPage | null> {
@@ -225,6 +235,7 @@ export async function composeAuthorFallbackPage(options: {
     const { cardImages, tokens, collection } = authorComposeContext(content)
     const card = collectSocialImageFacts(cardImages)
     const nodes = await composeNodesWithChrome({
+      ...(options.timeZone ? { timeZone: options.timeZone } : {}),
       hostId,
       layoutId,
       socialImages: card.socialImages,

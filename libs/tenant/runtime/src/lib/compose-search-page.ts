@@ -38,6 +38,11 @@ import {
  */
 export async function composeSearchPage(options: {
   hostId: string
+  /**
+   * The zone this site's dates read in (AGL-3237); UTC when a site has not
+   * named one. Resolved once by the caller that holds the org and the host.
+   */
+  timeZone?: string
   host: any
   results: SearchResultsNodesOptions
 }): Promise<{ nodes: Record<string, any>; layoutId?: string } | null> {
@@ -45,6 +50,7 @@ export async function composeSearchPage(options: {
   try {
     const layoutId = await resolveBuiltInPageLayoutId({ hostId, host })
     const nodes = await composeNodesWithChrome({
+      ...(options.timeZone ? { timeZone: options.timeZone } : {}),
       hostId,
       layoutId,
       screenNodes: buildSearchResultsNodes(results),

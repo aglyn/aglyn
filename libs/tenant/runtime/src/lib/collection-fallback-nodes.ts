@@ -57,8 +57,8 @@ interface FallbackEntry {
 // mismatch — but it was a THIRD spelling of "the entry's published date",
 // free to drift from the byline and the related-post card that quote the
 // same instant. Pinned locale and zone, so all three agree by construction.
-const formatDate = (value?: { seconds: number } | null) =>
-  Aglyn.formatCollectionEntryDate(value)
+const formatDate = (value?: { seconds: number } | null, timeZone?: string) =>
+  Aglyn.formatCollectionEntryDate(value, undefined, undefined, timeZone)
 
 /**
  * What may be interpolated into the cover block's CSS `url("…")` (AGL-1407).
@@ -298,6 +298,8 @@ export function buildCollectionEntryFallbackNodes(
    * lets an asset restricted to this site resolve at all.
    */
   hostId?: string,
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): NodesMap {
   const entries: AglynNodeEntry[] = [
     typography('title', {
@@ -306,7 +308,7 @@ export function buildCollectionEntryFallbackNodes(
       children: entry.title ?? '',
     }),
   ]
-  const date = formatDate(entry.publishedAt)
+  const date = formatDate(entry.publishedAt, timeZone)
   const tags = (entry.tags ?? []).filter(Boolean)
   // Category name resolves against the collection's taxonomy (AGL-582):
   // `categoryId` lookup first, legacy free-typed string fallback.
@@ -681,12 +683,15 @@ export function buildCollectionFallbackNodes(content: {
   category?: FallbackListCategory | null
   /** The composing site, for host-qualifying a media reference (AGL-1407). */
   hostId?: string
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string
 }): NodesMap {
   return content.entry
     ? buildCollectionEntryFallbackNodes(
         content.collection,
         content.entry,
         content.hostId,
+        content.timeZone,
       )
     : buildCollectionListFallbackNodes(
         content.collection,

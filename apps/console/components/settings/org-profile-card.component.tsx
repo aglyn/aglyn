@@ -23,6 +23,7 @@ import {
   AlertTitle,
   Avatar,
   Button,
+  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -36,6 +37,26 @@ import { buildRoute, Route } from '../../constants/route-links'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgScope, useOrgSlug } from '../../hooks/use-org-scope'
 import useOrgSettingsRequest from '../../hooks/use-org-settings-request'
+
+/**
+ * Every zone this browser can format in (AGL-3237).
+ *
+ * Read off `Intl` rather than checked in: the IANA database renames zones,
+ * and a stored list would offer names the runtime has stopped accepting while
+ * missing ones it has learned. The server validates the same way, so the two
+ * cannot disagree about what is choosable. An old browser without
+ * `supportedValuesOf` gets UTC alone rather than a broken control.
+ */
+const TIME_ZONE_OPTIONS: readonly string[] = (() => {
+  try {
+    return (
+      (Intl as { supportedValuesOf?: (key: string) => string[] })
+        .supportedValuesOf?.('timeZone') ?? []
+    )
+  } catch {
+    return []
+  }
+})()
 
 /**
  * The organization's identity — logo and contact details (AGL-363).
@@ -74,6 +95,7 @@ export function OrgProfileCard() {
     contactEmail: '',
     contactPhone: '',
     contactWebsite: '',
+    timeZone: '',
   })
   useEffect(() => {
     setProfile({
@@ -81,6 +103,7 @@ export function OrgProfileCard() {
       contactEmail: String((org as any)?.contact?.email ?? ''),
       contactPhone: String((org as any)?.contact?.phone ?? ''),
       contactWebsite: String((org as any)?.contact?.website ?? ''),
+      timeZone: String((org as any)?.timeZone ?? ''),
     })
   }, [org])
   // The stored billing address, shown but not edited. Structured since
@@ -202,6 +225,31 @@ export function OrgProfileCard() {
         }))
       }
     />
+    <TextField
+      select
+      label="Time zone"
+      value={profile.timeZone}
+      helperText={
+        'The day a published post is dated on every site this workspace ' +
+        'owns. Leave it on UTC and a post published at 7pm Central is dated ' +
+        'the next day.'
+      }
+      onChange={(event) =>
+        setProfile((prev) => ({ ...prev, timeZone: event.target.value }))
+      }
+    >
+      {/*
+        Empty is the default rather than a missing choice: an org that has
+        never set one renders its dates in UTC, and this row is how it says
+        so out loud.
+      */}
+      <MenuItem value="">UTC (default)</MenuItem>
+      {TIME_ZONE_OPTIONS.map((zone) => (
+        <MenuItem key={zone} value={zone}>
+          {zone.replace(/_/g, ' ')}
+        </MenuItem>
+      ))}
+    </TextField>
     <Stack direction="row">
       <Button
         variant="contained"

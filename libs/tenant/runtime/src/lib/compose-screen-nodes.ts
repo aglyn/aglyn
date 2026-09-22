@@ -229,6 +229,8 @@ async function expandCollectionEntryBlocks(
   nodes: Record<string, any>,
   collection?: ComposeCollectionContext,
   prefetched?: Record<string, Promise<PublishedCollectionSource>>,
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): Promise<Record<string, any>> {
   const { slugs, hasRelated, hasCategories, hasSearch } = scanCollectionBlocks(
     nodes,
@@ -278,6 +280,7 @@ async function expandCollectionEntryBlocks(
     nodes,
     sources,
     collection?.slug,
+    timeZone,
   )
   const withCategories = hasCategories
     ? Aglyn.expandCollectionCategories(
@@ -313,6 +316,7 @@ async function expandCollectionEntryBlocks(
     withSearch,
     sources[collection.slug],
     collection.entry,
+    timeZone,
   )
 }
 
@@ -328,6 +332,16 @@ async function expandCollectionEntryBlocks(
  */
 export async function composeNodesWithChrome(options: {
   hostId: string
+  /**
+   * The zone this site's dates read in (AGL-3237) — `resolveSiteTimeZone` of
+   * the org and the host, resolved ONCE by the caller that holds both.
+   *
+   * A string rather than the two documents, because the value has to be
+   * identical on the server render and the client re-render, and the surest
+   * way to guarantee that is for only one place to decide it. Absent is UTC,
+   * which is what every site rendered before this existed.
+   */
+  timeZone?: string
   /**
    * The layout binding, or a PROMISE of it.
    *
@@ -598,6 +612,7 @@ export async function composeNodesWithChrome(options: {
     repeated,
     options.collection,
     prefetchedSources,
+    options.timeZone,
   )
   // Entry Meta blocks (AGL-1385): fill in the routed entry's date/category/
   // tags. Needs no source fetch — the routed entry and its taxonomy are
@@ -609,6 +624,7 @@ export async function composeNodesWithChrome(options: {
     withEntries as any,
     options.collection?.entry,
     options.collection?.categories,
+    options.timeZone,
   )
   // Entry Author cards (AGL-2486): the same fill, one block over. Its values
   // come off the author RECORD the routed entry resolved to, which the
@@ -716,6 +732,16 @@ export async function composeScreenNodes(options: {
   versionId?: string
   /** The host document, for `host.*` tokens (AGL-1022). */
   host?: Aglyn.HostTokenSource | null
+  /**
+   * The zone this site's dates read in (AGL-3237) — `resolveSiteTimeZone` of
+   * the org and the host, resolved ONCE by the caller that holds both.
+   *
+   * A string rather than the two documents, because the value has to be
+   * identical on the server render and the client re-render, and the surest
+   * way to guarantee that is for only one place to decide it. Absent is UTC,
+   * which is what every site rendered before this existed.
+   */
+  timeZone?: string
   /** The social card the head shares this page as (AGL-2850). */
   socialImages?: ComposeSocialImages
 }): Promise<Record<string, any> | null> {
@@ -767,6 +793,7 @@ export async function composeScreenNodes(options: {
    * did when this function awaited the version directly.
    */
   const composed = composeNodesWithChrome({
+    ...(options.timeZone ? { timeZone: options.timeZone } : {}),
     hostId,
     // Version-first (key-present wins, null = explicitly no layout), screen
     // fallback — resolved as a promise so only the layout-chain walk waits on

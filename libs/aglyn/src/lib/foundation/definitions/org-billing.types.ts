@@ -1157,6 +1157,24 @@ export interface AglynOrgBilling extends AglynDocument {
   name?: string
   /** Free-text workspace description; nothing gates on it. */
   description?: string
+  /**
+   * The IANA zone this workspace's published dates read in (AGL-3237) —
+   * `America/Chicago`, `Europe/Berlin`. Absent is UTC.
+   *
+   * What it decides is which CALENDAR DAY an instant is attributed to on a
+   * published site, which is an editorial fact about the publisher: a post
+   * that went out at 19:30 in Chicago is dated the 21st here and was dated
+   * the 22nd while UTC decided it. Sites inherit it; see
+   * `resolveSiteTimeZone`.
+   *
+   * SERVER-OWNED: written through /api/orgs/settings and denied to the
+   * client SDK, because `resolveSiteTimeZone` reads it in `app-utils` and
+   * the write-deny guard treats a resolver input as server-owned.
+   * Nothing bills, gates or routes on it, and it is validated at every read
+   * through `isSupportedTimeZone`, so an unusable value renders as UTC rather
+   * than throwing inside a page render.
+   */
+  timeZone?: string
   /** The workspace URL segment, reserved through `orgSlugs/{slug}`. */
   slug?: string
   /**

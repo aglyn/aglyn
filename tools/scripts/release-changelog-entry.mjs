@@ -288,6 +288,31 @@ function refFor(release) {
   return tagged ? tag : release.merges[release.merges.length - 1].sha.slice(0, 12)
 }
 
+/**
+ * The zone this site's org publishes in (AGL-3237) — `resolveSiteTimeZone`'s
+ * answer, read here rather than imported because this script talks to
+ * Firestore with the Admin SDK and the lib that resolves it is browser-safe.
+ *
+ * Any failure is UTC: no credentials on this machine, an org document that
+ * cannot be read, a zone this runtime does not know. The entry still
+ * publishes, dated the way every entry before it was.
+ */
+async function readSiteTimeZone(host) {
+  try {
+    const database = firestore()
+    const hostSnapshot = await database.collection('hosts').doc(host).get()
+    const orgId = hostSnapshot.get('orgId')
+    if (!orgId) return 'UTC'
+    const orgSnapshot = await database.collection('orgs').doc(orgId).get()
+    const zone = String(orgSnapshot.get('timeZone') ?? '').trim()
+    if (!zone) return 'UTC'
+    new Intl.DateTimeFormat('en-US', { timeZone: zone })
+    return zone
+  } catch {
+    return 'UTC'
+  }
+}
+
 function firestore() {
   if (!getApps().length) {
     const clientEmail = process.env['FIREBASE_CLIENT_EMAIL']
@@ -398,8 +423,19 @@ async function main() {
     carriedVersions.unshift(candidate.version)
   }
 
+  /*
+   * The publishing org's zone (AGL-3237), so the entry's own "Released to
+   * production on …" line names the same calendar day the site's index does.
+   *
+   * Fail-soft to UTC, which is also what a run with no credentials reports:
+   * a changelog entry is worth publishing even when the org document cannot
+   * be read, and UTC is what the whole archive was written in before this.
+   */
+  const timeZone = await readSiteTimeZone(options.host)
+
   const entry = renderReleaseEntry({
     version,
+    timeZone,
     commits: [
       ...carried,
       ...release.merges.flatMap((merge) => merge.commits),

@@ -52,6 +52,13 @@ let mockLockdownCalls: string[] = []
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL site time zone (AGL-3237), reached by file path for the same
+  // reason as the modules beside it: absent, the loader's
+  // `resolveSiteTimeZone` call throws into its catch and 404s every case
+  // in this file for a reason unrelated to its subject.
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entry-date',
+  ),
   registerPluginJob: (job: { handler: () => Promise<void> }) => {
     mockRegistered = job.handler
   },
