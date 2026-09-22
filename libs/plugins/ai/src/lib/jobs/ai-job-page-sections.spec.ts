@@ -612,7 +612,7 @@ describe('a section cut off at its ceiling (AGL-3042)', () => {
         role: 'user',
         content: [
           'Your page-section was not used: it ran past the size one answer may have, and was cut off before it was whole.',
-          'Make it smaller: use fewer elements, at most 15; write shorter copy; and write a repeated item once instead of drawing it again: place ONE instance of a component the site has, put {{1}}, {{2}}… where its copies differ, and give its outermost node "repeat", one list of values a copy, in that order, as [["Title 1", "Text 1"], ["Title 2", "Text 2"]].',
+          'Make it smaller: use fewer elements, at most 15; write shorter copy; and write a repeated item once instead of drawing it again: put ONE instance of a component the site has inside ONE Grid item sized like "xs:12 sm:6 md:4", and repeat that Grid item — put {{1}}, {{2}}… where its copies differ, and give its outermost node "repeat", one list of values a copy, in that order, as [["Title 1", "Text 1"], ["Title 2", "Text 2"]].',
           '',
           'Answer again with submit_section: the whole page-section, smaller than the one that was cut off.',
         ].join('\n'),
@@ -643,9 +643,14 @@ describe('a section cut off at its ceiling (AGL-3042)', () => {
     // The shapes differ in WHAT is repeated, not in whether a repeated item may
     // be written once: a section of six cards that spends its structure once
     // fits the ceiling that cuts the same six written out.
-    expect(SMALLER).toContain('place ONE instance of a component the site has')
+    expect(SMALLER).toContain('put ONE instance of a component the site has inside ONE Grid item')
     expect(SMALLER).toContain('"repeat"')
     expect(SMALLER).toContain('{{1}}, {{2}}…')
+    // The wrapper is named, because "outermost node" alone reads as the
+    // instance and a bare instance under a Grid container is refused by
+    // rule 12 — measured live on 2026-09-22.
+    expect(AI_PAGE_SECTION_INSTANCE_LINE).toContain('inside ONE Grid item sized like')
+    expect(AI_PAGE_SECTION_INSTANCE_LINE).toContain('repeat THAT GRID ITEM rather than the instance')
   })
 })
 

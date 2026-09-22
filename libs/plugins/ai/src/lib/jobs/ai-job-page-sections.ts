@@ -172,6 +172,15 @@ export const AI_PAGE_SECTION_REPEAT_LINE = `Write a repeated item once: ${AI_PAG
  * either way: splitting it would give the page a second h2 for the same idea,
  * which is not what the member asked for and not what its outline should say.
  *
+ * ⛔ The repeated item is the GRID ITEM, not the instance. Measured live on
+ * 2026-09-22: told only to "place ONE instance … and give its outermost node
+ * repeat", the model made the instance itself the repeated node and hung it
+ * straight off the Grid container. The section fitted — the ceiling failure
+ * was gone — and the page was then refused by rule 12, which requires every
+ * child of a Grid container to be a sized Grid item (AGL-3055). The line has
+ * to name the wrapper, because "outermost node" reads as the instance when
+ * the instance is all the request mentions.
+ *
  * It rides the request of a section whose plan line shows items AND names a
  * record to place, on the same terms the repeat line rides a Free one: a
  * section with nothing to repeat, or nothing to repeat it FROM, pays nothing
@@ -199,7 +208,7 @@ export const AI_PAGE_SECTION_REPEAT_LINE = `Write a repeated item once: ${AI_PAG
  * gives the pass its cheapest way to try. That bound belongs on the plan step
  * and is deliberately not taken here.
  */
-export const AI_PAGE_SECTION_INSTANCE_LINE = `Write a repeated item once: place ONE instance of the component this section places, ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
+export const AI_PAGE_SECTION_INSTANCE_LINE = `Write a repeated item once: put ONE instance of the component this section places inside ONE Grid item sized like "xs:12 sm:6 md:4", and repeat THAT GRID ITEM rather than the instance — every child of a Grid container is itself a Grid item. Put {{1}}, {{2}}… where the copies differ, and give the Grid item "${AI_REPEAT_KEY}", one list of values a copy, in that order, as [["Title 1", "Text 1"], ["Title 2", "Text 2"]].`
 
 /**
  * What a pass whose answer ran past its ceiling is told makes a section
@@ -213,7 +222,7 @@ export const AI_PAGE_SECTION_INSTANCE_LINE = `Write a repeated item once: place 
 export function aiPageSectionSmaller(input: Pick<AiPageSectionPromptInput, 'maxElements' | 'reusableComponents'>): string {
   return input.reusableComponents === false
     ? `Make it smaller: use fewer elements, at most ${input.maxElements}; write shorter copy; and write a repeated item once instead of drawing it again: ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
-    : `Make it smaller: use fewer elements, at most ${input.maxElements}; write shorter copy; and write a repeated item once instead of drawing it again: place ONE instance of a component the site has, ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
+    : `Make it smaller: use fewer elements, at most ${input.maxElements}; write shorter copy; and write a repeated item once instead of drawing it again: put ONE instance of a component the site has inside ONE Grid item sized like "xs:12 sm:6 md:4", and repeat that Grid item — ${AI_PAGE_SECTION_REPEAT_SHAPE}.`
 }
 
 /** One pass's user turn: the page, the brief, the plan, this section and what is built above it. */
