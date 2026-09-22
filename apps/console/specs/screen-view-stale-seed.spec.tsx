@@ -93,6 +93,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
   return {
     useFirestore: () => ({}),
     useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
+    // Presence announces the console's avatar answer (AGL-3270); this
+    // closed-world mock has to name it. No photo — initials, as before.
+    useUserPhoto: () => undefined,
     useAuthPersistence: () => authPersistence,
     // The site's campaigns, which fill the picker on the page's Campaigns
     // card. Empty: what is under test is the rename's seed guard.
