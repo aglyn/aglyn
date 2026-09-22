@@ -26,27 +26,22 @@
  * workspace's billing page.
  *
  * `/billing` closes that gap by resolving the workspace from the SESSION
- * rather than from the URL. This module is that resolution, kept separate
- * from the page so every branch is drivable without a DOM.
+ * rather than from the URL. The three cases, and the reasoning that says a
+ * delinquent workspace is never filtered out of them, are `utils/org-entry` —
+ * shared with `/support` since AGL-3265, because the decision was identical
+ * and a second copy would have had to restate that reasoning.
  *
- * WHAT THIS DELIBERATELY DOES NOT DO: filter suspended, past-due or
- * otherwise delinquent workspaces out of the answer. A lock caused by
- * non-payment that also hides the page where payment happens is a deadlock,
- * and this entry point is precisely the surface a locked customer arrives
- * on. The billing SURFACE stays reachable through a lock by design —
- * `apps/console/app/api/billing/subscription/route.ts` carries the
- * `lockdown-423: exempt` marker for the same reason — so a filter here would
- * be the one line that re-closes the door.
+ * `kind: 'billing'` rather than the shared `'one'`, and that is a deliberate
+ * hold rather than an oversight: this module's shape is what the page and
+ * `billing-entry.spec.ts` are written against, and renaming a branch to match
+ * an extraction is churn in the files that were already correct.
  */
 
 import { buildRoute, Route } from '../constants/route-links'
+import { type OrgEntryOrg, resolveOrgEntry } from './org-entry'
 
 /** One workspace the signed-in account can reach, as the picker needs it. */
-export interface BillingEntryOrg {
-  $id?: string
-  slug?: string
-  orgName?: string
-}
+export type BillingEntryOrg = OrgEntryOrg
 
 export type BillingEntryDestination =
   /** Exactly one reachable workspace — go there, no picker. */
@@ -61,31 +56,14 @@ export type BillingEntryDestination =
    */
   | { kind: 'no-workspace' }
 
-/**
- * A membership row with no `slug` cannot be linked to — `buildRoute` would
- * emit `/undefined/billing`. Such a row is a broken projection rather than a
- * workspace the customer can act on, so it is dropped before the count is
- * taken. Dropping it BEFORE counting is the point: one good org beside one
- * broken row must still be a straight-through redirect, not a picker with a
- * dead card in it.
- */
+/** Which workspace's billing the session resolves to, if any. */
 export function resolveBillingEntry(
   orgs: readonly BillingEntryOrg[] | null | undefined,
 ): BillingEntryDestination {
-  const linkable = (orgs ?? []).filter(
-    (org): org is BillingEntryOrg & { slug: string } =>
-      typeof org?.slug === 'string' && org.slug.length > 0,
-  )
-  if (linkable.length === 0) return { kind: 'no-workspace' }
-  if (linkable.length === 1) {
-    const org = linkable[0]
-    return {
-      kind: 'billing',
-      href: buildRoute(Route.MANAGE_BILLING, { orgSlug: org.slug }),
-      org,
-    }
-  }
-  return { kind: 'choose', orgs: linkable }
+  const entry = resolveOrgEntry(orgs, billingHrefFor)
+  return entry.kind === 'one'
+    ? { kind: 'billing', href: entry.href, org: entry.org }
+    : entry
 }
 
 /** The billing page for one workspace, for the picker's links. */

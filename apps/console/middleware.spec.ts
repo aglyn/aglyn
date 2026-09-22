@@ -1095,13 +1095,14 @@ describe('a refused path is a page, not a dead socket (AGL-3261)', () => {
    * A 404 with no body and no `Content-Type` does not render: Chrome answers a
    * top-level navigation onto one with `ERR_INVALID_RESPONSE` — "This site
    * can't be reached" — so a typo and an outage look identical, and
-   * `app.aglyn.com/support` was reported as the site being down.
+   * `app.aglyn.com/support` was reported as the site being down. (That URL
+   * is a real route since AGL-3265; the gate it tripped was never about it.)
    *
    * The status is what the gates are for and is covered above. These assert
    * the half that decides whether a person can read the answer.
    */
   it.each([
-    ['an unknown workspace', 'app.aglyn.com', '/support'],
+    ['an unknown workspace', 'app.aglyn.com', '/nobodys-workspace'],
     ['the well-known namespace', 'app.aglyn.com', '/.well-known/openid-config'],
     ['a stray path on the auth origin', 'auth.aglyn.com', '/oauth/authorize'],
   ])('answers %s with a readable 404', async (_case, host, path) => {
@@ -1115,7 +1116,7 @@ describe('a refused path is a page, not a dead socket (AGL-3261)', () => {
     // The 451 beside this one interpolates the operator, and had to be taught
     // not to print `Aglyn` at a self-hosted install's visitor (AGL-2016). This
     // body sidesteps that trap by naming nobody at all.
-    const refused = await middleware(request('app.aglyn.com', '/support'))
+    const refused = await middleware(request('app.aglyn.com', '/nobodys-workspace'))
     await expect(refused.text()).resolves.not.toMatch(/Aglyn/i)
   })
 
@@ -1123,7 +1124,38 @@ describe('a refused path is a page, not a dead socket (AGL-3261)', () => {
     // The unknown verdict behind it is trusted for five seconds on purpose.
     // The CDN in front caches by URL and not by requester, so a cacheable
     // refusal would outlive the verdict it came from by a wide margin.
-    const refused = await middleware(request('app.aglyn.com', '/support'))
+    const refused = await middleware(request('app.aglyn.com', '/nobodys-workspace'))
     expect(refused.headers.get('cache-control')).toContain('no-store')
+  })
+})
+
+describe('the org-agnostic support entry point (AGL-3265)', () => {
+  it('is served at the apex rather than read as a workspace nobody claims', async () => {
+    // Without `support` in `CONSOLE_TOP_LEVEL_SEGMENTS` the AGL-3017 gate asks
+    // Firestore about a workspace called "support", is told no such org exists,
+    // and 404s a route that is right there in `app/`.
+    const response = await middleware(request('app.aglyn.com', '/support'))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+    // And it costs no verdict lookup, because the segment is known to be ours.
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  it('becomes the org OWN support page on a host that already names the org', async () => {
+    // The reason `support` is deliberately NOT in `APEX_PATH_SEGMENTS`
+    // (AGL-627): on `acme.aglyn.com` the host carries the workspace, so asking
+    // which workspace the reader meant would be asking a question the address
+    // already answered.
+    const response = await middleware(request('zgover.aglyn.com', '/support'))
+    const rewritten = response.headers.get('x-middleware-rewrite')
+    expect(new URL(rewritten ?? '').pathname).toBe('/zgover/support')
+  })
+
+  it('does the same on a custom console domain', async () => {
+    const response = await middleware(
+      request('console.acme-agency.com', '/support'),
+    )
+    const rewritten = response.headers.get('x-middleware-rewrite')
+    expect(new URL(rewritten ?? '').pathname).toBe('/acme/support')
   })
 })

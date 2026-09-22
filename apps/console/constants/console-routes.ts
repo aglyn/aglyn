@@ -45,6 +45,7 @@ export const CONSOLE_TOP_LEVEL_SEGMENTS = new Set([
   'signout',
   'signup',
   'sso',
+  'support',
   'verify-email',
 ])
 

@@ -77,6 +77,12 @@ const ALLOWED = new Map<string, string>([
   // of one page; splitting it moved the word across four new files, and this
   // map is the record that each one means the FORUM.
   [
+    'apps/console/app/(app)/support/page.tsx',
+    'The org-agnostic Support entry point (AGL-3265) — it names the two ' +
+      'channels a chosen workspace gets, and reaches the docs topic by the ' +
+      'key the docs generate, exactly as its org-scoped twin below does.',
+  ],
+  [
     'apps/console/app/(app)/[orgSlug]/support/page.tsx',
     'The Support umbrella — names both channels while explaining which one ' +
       'it forwards a workspace to.',

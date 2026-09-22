@@ -163,13 +163,20 @@ describe('buildRoute', () => {
     // segment. A new route that forgets it is the exact regression this
     // sweep was cleaning up after.
     //
-    // `/billing` is the fourth category and the newest (AGL-2430): a route
-    // that is apex-level BECAUSE it cannot be org-scoped. Stripe's
-    // subscription emails store one custom link for the whole account with
-    // nothing to interpolate a workspace into, so the org has to come from
-    // the session instead of the URL. It is the only member of that category
-    // and should stay that way — anything else that "just needs a shorter
-    // URL" belongs under `[orgSlug]`.
+    // The fourth category: a route that is apex-level BECAUSE it cannot be
+    // org-scoped. `/billing` opened it (AGL-2430) — Stripe's subscription
+    // emails store one custom link for the whole account with nothing to
+    // interpolate a workspace into, so the org has to come from the session
+    // instead of the URL. `/support` is the second and was added on the
+    // owner's instruction (AGL-3265), for the same reason and not a weaker
+    // one: a receipt, an email footer and a self-host runbook each carry ONE
+    // support link for every customer.
+    //
+    // The bar for a third stays exactly where it was. Membership is "no
+    // caller can template a workspace into this URL", never "this URL would
+    // be shorter" — anything in the second category belongs under
+    // `[orgSlug]`. Each member also needs its segment in `RESERVED_SUBDOMAINS`,
+    // or it shadows the address of any org that claims the slug.
     const apexPrefixes = [
       '/manage',
       '/admin',
@@ -178,6 +185,7 @@ describe('buildRoute', () => {
       '/signup',
       '/verify-email',
       '/billing',
+      '/support',
     ]
     for (const template of Object.values(Route)) {
       if (apexPrefixes.some((prefix) => template.startsWith(prefix))) continue
