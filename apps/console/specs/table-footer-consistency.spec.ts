@@ -1806,7 +1806,7 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     //
     // 64 is NOT a new table (AGL-3251). It is 62 SPLIT: the account-scope
     // half grew a row per notification type — so that a person can stop
-    // hearing about one kind without silencing its six neighbours — and moved
+    // hearing about one kind without silencing its six neighbors — and moved
     // into `notification-category-table.component.tsx`, leaving the scope
     // half where it was. Two entries for the two tables this console has
     // always drawn here, and the count of unpaginated tables is unchanged.

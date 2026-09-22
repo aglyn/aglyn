@@ -90,14 +90,14 @@ describe('NotificationCategoryTable (AGL-3251)', () => {
     expect(screen.queryByText('Payment failed')).toBeNull()
   })
 
-  it('switches one type without its neighbours', () => {
+  it('switches one type without its neighbors', () => {
     const { onTypeChange, onCategoryChange } = renderTable()
     fireEvent.click(screen.getByLabelText('Show what Billing covers'))
     fireEvent.click(
       within(rowOf('Payment failed')).getByLabelText('Payment failed — In console'),
     )
     expect(onTypeChange).toHaveBeenCalledWith('billing.paymentFailed', 'console', false)
-    // The category is untouched — silencing one type took its six neighbours
+    // The category is untouched — silencing one type took its six neighbors
     // with it before this existed.
     expect(onCategoryChange).not.toHaveBeenCalled()
   })
@@ -150,7 +150,7 @@ describe('NotificationCategoryTable (AGL-3251)', () => {
     expect(disabled(within(digest).getByLabelText('Daily CRM digest — Email'))).toBe(
       true,
     )
-    // Its console switch is a real control, and the neighbours keep both.
+    // Its console switch is a real control, and the neighbors keep both.
     expect(
       disabled(within(digest).getByLabelText('Daily CRM digest — In console')),
     ).toBe(false)

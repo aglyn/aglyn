@@ -329,7 +329,7 @@ describe('the platform-growth category (AGL-3225)', () => {
  * Per-TYPE answers at the account scope (AGL-3251).
  *
  * The complaint was that the bucket was the only granularity there was, so
- * quietening one noisy type took its six neighbours with it.
+ * quietening one noisy type took its six neighbors with it.
  */
 describe('a type can answer for itself', () => {
   const settings = {
@@ -341,7 +341,7 @@ describe('a type can answer for itself', () => {
     expect(
       notificationChannelEnabled(settings, 'console', 'billing.usage'),
     ).toBe(false)
-    // Its neighbours are untouched, which is the entire point.
+    // Its neighbors are untouched, which is the entire point.
     expect(
       notificationChannelEnabled(settings, 'console', 'billing.invoice'),
     ).toBe(true)

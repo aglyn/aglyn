@@ -94,7 +94,7 @@ export interface NotificationCategoryTableProps {
  * covered, so silencing `Product & system` meant guessing what was in it;
  * nothing marked `Platform growth` as staff-only, though it is hidden from
  * everyone who is not; and the bucket was the only granularity there was, so
- * quietening one noisy type took its six neighbours with it.
+ * quietening one noisy type took its six neighbors with it.
  *
  * Three things fix that, in the order a reader meets them: a line saying what
  * arrives in the category, a badge on the staff ones, and an expander holding
