@@ -1460,7 +1460,12 @@ export function expandCollectionEntries<
         next,
         resolveNamedTokens(
           cloned,
-          collectionEntryTokens(entry, source.slug, source.categories),
+          collectionEntryTokens(
+            entry,
+            source.slug,
+            source.categories,
+            timeZone,
+          ),
         ),
       )
     })
@@ -1481,6 +1486,7 @@ export function expandCollectionEntries<
               windowed,
               source.slug,
               source.categories,
+              timeZone,
             ),
             // How many entries the window above was drawn FROM (AGL-1516).
             //
@@ -1605,6 +1611,8 @@ export function expandCollectionSearch<
   nodes: Record<NodeId, N>,
   sourcesBySlug: Record<string, CollectionEntriesSource | undefined>,
   defaultSlug?: string,
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): Record<NodeId, N> {
   const containers = Object.entries(nodes).filter(
     ([id, node]) =>
@@ -1635,6 +1643,7 @@ export function expandCollectionSearch<
           source.entries,
           source.slug,
           source.categories,
+          timeZone,
         ),
         searchTotal: source.entries.length,
         ...(collectionSourceIsBounded(source) ? { searchCapped: true } : {}),

@@ -3134,3 +3134,50 @@ describe('cursor addressing (AGL-3219)', () => {
     })
   })
 })
+
+/**
+ * A listing card is dated in the SITE's zone (AGL-3237).
+ *
+ * This covers the WIRING, not the formatter. `formatCollectionEntryDate`
+ * learned a `timeZone` argument and every signature between it and the loader
+ * grew one to match — and the call on the way into `{{entry.date}}` was left
+ * on the default. Every unit test passed, the deploy went out, and the cards
+ * still read the server's day, because a defaulted argument is invisible.
+ *
+ * So the assertion is made from the OUTSIDE: expand a real Collection entries
+ * block and read the text a card would render.
+ */
+describe('a listing card is dated in the site zone (AGL-3237)', () => {
+  /** 00:30 UTC on the 22nd — 7:30 PM on the 21st in Chicago. */
+  const EVENING = { seconds: Date.UTC(2026, 8, 22, 0, 30) / 1000 }
+  const evening = {
+    slug: 'blog',
+    entries: [
+      { $id: 'e1', title: 'Shipped', slug: 'shipped', publishedAt: EVENING },
+    ],
+  }
+  const cardText = (nodes: Record<string, any>) =>
+    Object.values(nodes)
+      .map((node) => String(node?.props?.children ?? ''))
+      .join(' | ')
+
+  it('stamps the zone the caller resolved, not the runtime default', () => {
+    const nodes = expandCollectionEntries(
+      baseNodes(),
+      { blog: evening },
+      'blog',
+      'America/Chicago',
+    )
+    expect(cardText(nodes)).toContain('9/21/2026')
+    // The exact symptom: a release that went out at half past seven on the
+    // 21st, filed on the site under the 22nd.
+    expect(cardText(nodes)).not.toContain('9/22/2026')
+  })
+
+  it('still reads UTC when the caller names no zone', () => {
+    // Back-compat, stated as a test: a site that has never set a zone keeps
+    // the dates it has always rendered.
+    const nodes = expandCollectionEntries(baseNodes(), { blog: evening }, 'blog')
+    expect(cardText(nodes)).toContain('9/22/2026')
+  })
+})

@@ -73,8 +73,14 @@ export function CollectionFallback({
   // share a locale. It is also the same function the canvas path stamps
   // into `{{entry.date}}`, so the legacy surface and the composed one can
   // no longer print one entry two ways.
+  //
+  // The zone comes off the CONTENT (AGL-3237), never off this runtime: this
+  // component renders in the browser as well as on the server, and a zone
+  // read here would be the visitor's on one side and the server's on the
+  // other — the mismatch above, reintroduced. `content.timeZone` is the one
+  // the server resolved, so both renders format the same string.
   const formatDate = (value?: { seconds: number } | null) =>
-    formatCollectionEntryDate(value)
+    formatCollectionEntryDate(value, undefined, undefined, content.timeZone)
   // The cover through the ONE shared resolver (AGL-1407). A `media:`
   // reference becomes the CDN path for THIS site; a raw storage URL, an
   // AGL-175 relative CDN path and an author's own hotlinked URL all pass

@@ -163,6 +163,7 @@ export async function composeCollectionTemplatePage(options: {
           entry,
           collection.slug,
           collection.categories,
+          options.timeZone,
         ),
       }
     : collectionTokens(collection, content.category, content.pagination)

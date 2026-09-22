@@ -309,7 +309,12 @@ async function expandCollectionEntryBlocks(
       )
     : expanded
   const withSearch = hasSearch
-    ? Aglyn.expandCollectionSearch(withCategories, sources, collection?.slug)
+    ? Aglyn.expandCollectionSearch(
+        withCategories,
+        sources,
+        collection?.slug,
+        timeZone,
+      )
     : withCategories
   if (!hasRelated || !collection?.entry) return withSearch
   return Aglyn.expandCollectionRelated(

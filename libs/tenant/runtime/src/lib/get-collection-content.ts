@@ -491,6 +491,17 @@ function flipDueEntry(
 }
 
 export interface CollectionContent {
+  /**
+   * The zone this site's dates read in (AGL-3237), carried on the CONTENT so
+   * it reaches the client.
+   *
+   * `collection-fallback.tsx` renders through `next/dynamic` from
+   * `catch-all-client`, so it formats dates in the browser as well as on the
+   * server. A zone it read from its own runtime would be the visitor's, which
+   * is precisely the hydration mismatch AGL-1926 fixed — so the server
+   * decides it once and it travels here, in the props both renders read.
+   */
+  timeZone?: string
   collection: {
     $id: string
     displayName: string
@@ -1367,6 +1378,12 @@ export async function getCollectionContent(options: {
   /** Continue BEFORE this entry's document id — the newer direction. */
   before?: string
   /**
+   * The site's zone (AGL-3237). Stamped onto the returned content so every
+   * reader downstream — including the client fallback renderer — formats from
+   * the same string rather than from its own runtime.
+   */
+  timeZone?: string
+  /**
    * Category segment of `/{collection}/category/{slug}` (AGL-1321). Filters
    * the listing before pagination is computed, so page counts and the page
    * windows describe the FILTERED set rather than the whole collection.
@@ -1399,6 +1416,9 @@ export async function getCollectionContent(options: {
   // read this must stay out of.
   const preview = Boolean(options.previewUnpublishedEntry) && Boolean(entrySlug)
   const data: CollectionContent = {
+    // Stamped before any early return, so every shape this function can hand
+    // back carries it — including the empty one a 404 renders from.
+    ...(options.timeZone ? { timeZone: options.timeZone } : {}),
     collection: null,
     entries: [],
     entry: null,
