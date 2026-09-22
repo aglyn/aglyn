@@ -941,6 +941,66 @@ export function detectTypedData(tree: AiDoctrineTree): AiDoctrineViolation[] {
   return violations
 }
 
+/**
+ * An instance that fills none of the props its component declares (AGL-3024).
+ *
+ * Rule 1 says an instance is `"reusableInstance"` whose `refId` names the
+ * component and whose `propValues` FILL its props, and until now nothing read
+ * the second half back. A placed instance with no `propValues` is not empty on
+ * the page: it renders the component's own `defaultValue` for every prop, so
+ * three of them render three identical cards of placeholder text.
+ *
+ * MEASURED 2026-09-21 on `attorney-profile-template-v2` (`sak5ei_9Wv`), whose
+ * three instances of `practice-area-card` each carried `{"refId": …}` and
+ * nothing else. It was recorded as the component shipping placeholder content;
+ * the component is correct and declares `title`, `description` and `icon` with
+ * labels and descriptions. The template placed it three times and filled
+ * nothing, so every attorney's page showed the same `[Practice area name]`.
+ *
+ * Only an instance filling NOTHING is refused. A component may declare a prop
+ * whose default is right for most placements, and a partly filled instance is
+ * a judgment the doctrine does not have the information to second-guess.
+ */
+export function detectUnfilledInstances(
+  tree: AiDoctrineTree,
+  context: Pick<AiDoctrineTreeContext, 'componentProps'>,
+): AiDoctrineViolation[] {
+  const declared = context.componentProps ?? {}
+  const unfilled: string[] = []
+  for (const [id, node] of Object.entries(tree.nodes)) {
+    if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) continue
+    const ref = node.props?.[AI_INSTANCE_REF_PROP]
+    if (typeof ref !== 'string') continue
+    const props = declared[ref]
+    if (!props || !Object.keys(props).length) continue
+    const values = node.props?.['propValues']
+    const filled =
+      typeof values === 'object' && values !== null && !Array.isArray(values)
+        ? Object.keys(values as Record<string, unknown>).filter((name) => name in props)
+        : []
+    if (!filled.length) unfilled.push(id)
+  }
+  if (!unfilled.length) return []
+  const first = tree.nodes[unfilled[0]]
+  const ref = first?.props?.[AI_INSTANCE_REF_PROP] as string
+  const names = Object.keys(declared[ref] ?? {})
+  const one = unfilled.length === 1
+  return [
+    {
+      rule: 1,
+      code: 'instance-props-unfilled',
+      message: `${
+        one ? 'An instance places' : `${unfilled.length} instances place`
+      } a component and fill none of its props, so ${
+        one ? 'it shows' : 'they all show'
+      } the placeholder text the component falls back to. Fill "propValues" with what ${
+        one ? 'this one' : 'each one'
+      } should say: ${names.join(', ')}.`,
+      nodeIds: unfilled,
+    },
+  ]
+}
+
 /** The media-role props of a node, with the declared image props of an instance. */
 function mediaValues(
   node: AiDoctrineNode,
@@ -2567,6 +2627,7 @@ export function validateAiDoctrineTree(
     ...detectInvisibleLinks(tree, outputKind),
     ...detectOffBrandEmail(tree, outputKind, context.brand),
     ...detectTypedData(tree),
+    ...detectUnfilledInstances(tree, context),
     ...detectImageSources(tree, context),
     ...detectUnrelatedScreenLinks(tree, outputKind, context),
     ...detectLinksWithoutDestination(tree, outputKind, context, writtenOf, storedOf),
