@@ -60,6 +60,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL site time zone (AGL-3237), reached by file path for the same
+  // reason as the modules above: absent, the loader's `resolveSiteTimeZone`
+  // call throws into its catch and 404s every case in this file for a reason
+  // that has nothing to do with its subject.
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entry-date',
+  ),
   // The REAL lockdown, bandwidth-cap and abuse-ceiling modules, reached by file
   // path exactly as `template-screen-routing.spec.ts` reaches them. Stubbing
   // them by hand is how this suite first went green for the wrong reason: a

@@ -501,9 +501,16 @@ export function collectionEntryMetaValues(
   entry: CollectionEntryRecord,
   categories?: readonly CollectionCategory[],
   dateFormat?: CollectionEntryDateFormat,
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): { date: string; author: string; category: string; tags: string } {
   return {
-    date: formatCollectionEntryDate(entry.publishedAt, dateFormat),
+    date: formatCollectionEntryDate(
+      entry.publishedAt,
+      dateFormat,
+      undefined,
+      timeZone,
+    ),
     // The per-entry byline the editor already collects (AGL-686). It was
     // reachable in the entry's JSON-LD and nowhere on the page, which is what
     // made the frame's byline unauthorable (AGL-1459).
@@ -580,8 +587,15 @@ export function collectionEntryTokens(
   entry: CollectionEntryRecord,
   collectionSlug: string,
   categories?: CollectionCategory[],
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): Record<string, string> {
-  const meta = collectionEntryMetaValues(entry, categories)
+  const meta = collectionEntryMetaValues(
+    entry,
+    categories,
+    undefined,
+    timeZone,
+  )
   const author = collectionEntryAuthorValues(entry)
   // The entry's OWN collection wins over the routed one (AGL-2518) — see
   // `CollectionEntryRecord.collectionSlug`. Unset on every single-collection
@@ -1139,6 +1153,8 @@ export function buildCollectionSearchIndex(
   entries: readonly CollectionEntryRecord[],
   collectionSlug: string,
   categories?: readonly CollectionCategory[],
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): CollectionEntrySearchItem[] {
   return entries.map((entry): CollectionEntrySearchItem => {
     const categoryName = resolveEntryCategoryName(entry, categories)
@@ -1159,7 +1175,14 @@ export function buildCollectionSearchIndex(
           }
         : {}),
       ...(entry.publishedAt?.seconds
-        ? { date: formatCollectionEntryDate(entry.publishedAt) }
+        ? {
+            date: formatCollectionEntryDate(
+              entry.publishedAt,
+              undefined,
+              undefined,
+              timeZone,
+            ),
+          }
         : {}),
       ...(categoryName ? { category: categoryName } : {}),
     }
@@ -1253,6 +1276,8 @@ export function expandCollectionEntries<
   nodes: Record<NodeId, N>,
   sourcesBySlug: Record<string, CollectionEntriesSource | undefined>,
   defaultSlug?: string,
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): Record<NodeId, N> {
   const containers = Object.entries(nodes).filter(
     ([, node]) => node?.componentId === COLLECTION_ENTRIES_COMPONENT_ID,
@@ -1421,7 +1446,7 @@ export function expandCollectionEntries<
       for (const [cloneId, cloneNode] of Object.entries(cloned)) {
         const fill =
           cloneNode?.componentId === COLLECTION_ENTRY_META_COMPONENT_ID
-            ? entryMetaFill(cloneNode, entry, source.categories)
+            ? entryMetaFill(cloneNode, entry, source.categories, timeZone)
             : cloneNode?.componentId === COLLECTION_ENTRY_AUTHOR_COMPONENT_ID
               ? entryAuthorFill(cloneNode, entry)
               : undefined
@@ -1669,6 +1694,8 @@ export function expandCollectionEntryMeta<
   nodes: Record<NodeId, N>,
   entry: CollectionEntryRecord | null | undefined,
   categories?: readonly CollectionCategory[],
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): Record<NodeId, N> {
   if (!entry) return nodes
   const containers = Object.entries(nodes).filter(
@@ -1680,7 +1707,7 @@ export function expandCollectionEntryMeta<
 
   const next: Record<NodeId, N> = { ...nodes }
   for (const [containerId, container] of containers) {
-    const filled = entryMetaFill(container, entry, categories)
+    const filled = entryMetaFill(container, entry, categories, timeZone)
     if (!Object.keys(filled).length) continue
     next[containerId] = {
       ...container,
@@ -1706,13 +1733,20 @@ function entryMetaFill(
   container: { props?: unknown },
   entry: CollectionEntryRecord,
   categories?: readonly CollectionCategory[],
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): Record<string, string> {
   {
     const props = (container.props ?? {}) as Record<string, unknown>
     // Per node: the format is a prop, so two blocks on one template can read
     // their dates differently.
     const dateFormat = normalizeCollectionEntryDateFormat(props['dateFormat'])
-    const values = collectionEntryMetaValues(entry, categories, dateFormat)
+    const values = collectionEntryMetaValues(
+      entry,
+      categories,
+      dateFormat,
+      timeZone,
+    )
     const filled: Record<string, string> = {}
     for (const key of ['date', 'author', 'category', 'tags'] as const) {
       const authored = String(props[key] ?? '').trim()
@@ -2009,6 +2043,8 @@ export function expandCollectionRelated<
   nodes: Record<NodeId, N>,
   source: CollectionEntriesSource | undefined,
   currentEntry: CollectionEntryRecord | null | undefined,
+  /** The site's zone (AGL-3237); UTC when a site has not named one. */
+  timeZone?: string,
 ): Record<NodeId, N> {
   if (!source || !currentEntry) return nodes
   const containers = Object.entries(nodes).filter(
@@ -2050,7 +2086,14 @@ export function expandCollectionRelated<
         // construction — `8/9/2026` is 9 August under `en-US` and 8 September
         // under `en-GB`. The timestamp only exists on this side.
         ...(entry.publishedAt?.seconds
-          ? { date: formatCollectionEntryDate(entry.publishedAt, dateFormat) }
+          ? {
+              date: formatCollectionEntryDate(
+                entry.publishedAt,
+                dateFormat,
+                undefined,
+                timeZone,
+              ),
+            }
           : {}),
         ...(entry.excerpt ? { excerpt: entry.excerpt } : {}),
         // AGL-1457: the block owns its markup, so there is no template to

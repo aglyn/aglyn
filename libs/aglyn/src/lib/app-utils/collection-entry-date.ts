@@ -121,21 +121,84 @@ export function normalizeCollectionEntryDateFormat(
 export const COLLECTION_ENTRY_DATE_LOCALE = 'en-US'
 
 /**
- * The zone the calendar day is read in. Entry timestamps are absolute
- * instants; the day they are ATTRIBUTED to has to be one both sides agree on,
- * and UTC is the only zone a server and an unknown visitor share.
+ * The zone a calendar day is read in when a site has not named one.
+ *
+ * Entry timestamps are absolute instants; the day they are ATTRIBUTED to is
+ * an editorial fact about the PUBLISHER, and `timeZone` below is how a site
+ * states it. UTC remains the default because it is the answer every existing
+ * site is already rendering — a site that never sets a zone must not have its
+ * archive move by a day on deploy.
+ *
+ * ⚑ What AGL-1926 needed was not UTC, it was a zone BOTH SIDES AGREE ON. A
+ * per-site zone is still that: it is resolved once, server-side, and travels
+ * in the node props, so the client re-render reads the same string. What
+ * would reopen the React #418 crash is reading the VISITOR's zone, because
+ * only one side of the render knows it.
  */
 export const COLLECTION_ENTRY_DATE_TIME_ZONE = 'UTC'
+
+/**
+ * Is this a zone the runtime can actually format in (AGL-3237)?
+ *
+ * `Intl` is the only authority worth asking — an allowlist of IANA names goes
+ * stale, and `toLocaleDateString` throws a RangeError on a name it does not
+ * know, which would take down a composing page rather than mis-date one post.
+ */
+export function isSupportedTimeZone(value: unknown): boolean {
+  const name = String(value ?? '').trim()
+  if (!name) return false
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: name })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The zone a site's dates are read in (AGL-3237).
+ *
+ * The ORGANIZATION names it and every site it owns inherits it: a customer
+ * sets it once for the workspace rather than per site. Unset is UTC — the
+ * value every existing site already renders, so nothing moves by a day when
+ * this ships.
+ *
+ * Validated on the way out rather than trusted: a stored zone can predate an
+ * IANA rename, or be whatever a hand-edited document holds, and a bad one has
+ * to fall back rather than throw inside a page render.
+ *
+ * ⚑ Org only, deliberately. A per-SITE override is a reasonable thing to want
+ * — an agency running sites in several regions — but it would make `timeZone`
+ * a field of the host document, and the host write-deny guard (AGL-1361)
+ * would then require it classified in the host rules too. That is a second
+ * rules change, and rules ship by hand rather than with a promotion, so the
+ * override is worth its own issue rather than a free ride on this one.
+ */
+export function resolveSiteTimeZone(
+  org?: { timeZone?: string } | null,
+): string {
+  const orgZone = String(org?.timeZone ?? '').trim()
+  return isSupportedTimeZone(orgZone) ? orgZone : COLLECTION_ENTRY_DATE_TIME_ZONE
+}
 
 export function formatCollectionEntryDate(
   publishedAt: { seconds: number } | null | undefined,
   format?: CollectionEntryDateFormat,
   locale: string = COLLECTION_ENTRY_DATE_LOCALE,
+  /**
+   * The site's zone (AGL-3237) — resolved once per render and passed down, so
+   * server and client format the same instant into the same string.
+   */
+  timeZoneName: string = COLLECTION_ENTRY_DATE_TIME_ZONE,
 ): string {
   const seconds = publishedAt?.seconds
   if (!seconds) return ''
   const date = new Date(seconds * 1000)
-  const timeZone = COLLECTION_ENTRY_DATE_TIME_ZONE
+  // An unknown zone formats in UTC rather than throwing: this runs while a
+  // page composes, and a RangeError here is a site that does not render.
+  const timeZone = isSupportedTimeZone(timeZoneName)
+    ? timeZoneName
+    : COLLECTION_ENTRY_DATE_TIME_ZONE
   switch (normalizeCollectionEntryDateFormat(format)) {
     case 'monthYear':
       return date.toLocaleDateString(locale, {
@@ -157,17 +220,22 @@ export function formatCollectionEntryDate(
         year: 'numeric',
         timeZone,
       })
-    case 'iso':
-      // The calendar day in the pinned zone, not `toISOString()`'s slice by
+    case 'iso': {
+      // The calendar day IN THE SITE'S ZONE, not `toISOString()`'s slice by
       // luck and not the RUNTIME's local day: `getFullYear`/`getMonth`/
       // `getDate` read the host's zone, so this branch moved an entry by a
-      // day depending on who rendered it. The UTC accessors are the same
-      // reading the three `toLocaleDateString` branches above now take.
-      return (
-        `${date.getUTCFullYear()}-` +
-        `${String(date.getUTCMonth() + 1).padStart(2, '0')}-` +
-        `${String(date.getUTCDate()).padStart(2, '0')}`
-      )
+      // day depending on who rendered it. Read through the same formatter the
+      // branches above use, so all four shapes name one day.
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(date)
+      const part = (type: string) =>
+        parts.find((entry) => entry.type === type)?.value ?? ''
+      return `${part('year')}-${part('month')}-${part('day')}`
+    }
     default:
       return date.toLocaleDateString(locale, { timeZone })
   }

@@ -446,15 +446,60 @@ export function renderBody({ intro, notes = [], commits }) {
 }
 
 /** `September 10, 2026` */
-export function longDate(iso) {
-  const date = new Date(iso)
-  return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`
+export function longDate(iso, timeZone = 'UTC') {
+  const parts = zonedParts(iso, timeZone)
+  return `${MONTHS[parts.month - 1]} ${parts.day}, ${parts.year}`
 }
 
-/** `17:37`, always UTC: a release instant has no local time. */
-export function clockUtc(iso) {
-  const date = new Date(iso)
-  return `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}`
+/**
+ * `17:37` in the site's zone, with the label that says which (AGL-3237).
+ *
+ * It used to be UTC with no choice, on the reasoning that a release instant
+ * has no local time. True of the INSTANT and false of the SENTENCE: a release
+ * served at 00:30 UTC went out at half past seven the previous evening in
+ * Chicago, and an entry dated the 21st by its own site while its body said
+ * September 22 disagreed with itself on the page.
+ */
+export function clockZoned(iso, timeZone = 'UTC') {
+  const parts = zonedParts(iso, timeZone)
+  return `${pad(parts.hour)}:${pad(parts.minute)}`
+}
+
+/**
+ * The zone's own abbreviation for that instant — `CDT`, `UTC`, `GMT+8`.
+ *
+ * Read from `Intl` rather than mapped, so it is right across a daylight-saving
+ * boundary without this file knowing where any of them are.
+ */
+export function zoneLabel(iso, timeZone = 'UTC') {
+  const formatted = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'short',
+  }).formatToParts(new Date(iso))
+  return formatted.find((part) => part.type === 'timeZoneName')?.value ?? 'UTC'
+}
+
+/** One instant's calendar fields in a given zone. */
+function zonedParts(iso, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(iso))
+  const value = (type) =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0)
+  return {
+    year: value('year'),
+    month: value('month'),
+    day: value('day'),
+    // `hour12: false` spells midnight `24` in some ICU versions.
+    hour: value('hour') % 24,
+    minute: value('minute'),
+  }
 }
 
 /**
@@ -498,6 +543,11 @@ export function renderReleaseEntry({
   carriedVersions = [],
   skippedVersions = [],
   deployedAt = [],
+  /**
+   * The zone the entry's dates read in (AGL-3237) — the publishing org's, so
+   * the body cannot name a different day than the site's own index does.
+   */
+  timeZone = 'UTC',
 }) {
   const listed = commits.filter((commit) => !isVersionBump(commit))
   const notes = []
@@ -519,13 +569,15 @@ export function renderReleaseEntry({
     const last = deployedAt[deployedAt.length - 1]
     notes.push(
       `This version reached production in ${deployedAt.length} deploys; ` +
-        `the last landed on ${longDate(last)} at ${clockUtc(last)} UTC.`,
+        `the last landed on ${longDate(last, timeZone)} at ` +
+          `${clockZoned(last, timeZone)} ${zoneLabel(last, timeZone)}.`,
     )
   }
 
   const intro =
-    `Released to production on ${longDate(servedAt)} at ` +
-    `${clockUtc(servedAt)} UTC. [See every commit in this release on GitHub]` +
+    `Released to production on ${longDate(servedAt, timeZone)} at ` +
+    `${clockZoned(servedAt, timeZone)} ${zoneLabel(servedAt, timeZone)}. ` +
+    `[See every commit in this release on GitHub]` +
     `(https://github.com/aglyn/aglyn/compare/${previousRef}...${ref})`
 
   return {

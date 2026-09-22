@@ -24,6 +24,7 @@ import {
   nameSearchReversed,
   nameSearchTokens,
 } from '@aglyn/aglyn/app-utils/name-search'
+import { isSupportedTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
@@ -319,12 +320,30 @@ async function handler(request: Request): Promise<Response> {
       if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) {
         return Response.json({ error: 'Enter a valid contact email' }, { status: 400 })
       }
+      /*
+       * The workspace's time zone (AGL-3237), which every site it owns reads
+       * its published dates in.
+       *
+       * Validated against `Intl` rather than a checked-in list of IANA names:
+       * the list goes stale as zones are renamed, and the only question that
+       * matters is whether THIS runtime can format in it. Empty clears the
+       * field back to the UTC default, which is what an org that never set
+       * one already renders.
+       */
+      const timeZone = clean(body?.timeZone, 64)
+      if (timeZone && !isSupportedTimeZone(timeZone)) {
+        return Response.json(
+          { error: 'Choose a time zone from the list' },
+          { status: 400 },
+        )
+      }
       const orgFirestore = firebaseAdmin.app().firestore()
       const orgDocRef = orgFirestore.collection('orgs').doc(orgId)
       await orgDocRef.set(
         {
           logoUrl: logoUrl || firebaseAdmin.firestore.FieldValue.delete(),
           contact,
+          timeZone: timeZone || firebaseAdmin.firestore.FieldValue.delete(),
           updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true },

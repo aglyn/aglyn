@@ -64,6 +64,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
+  // The REAL site time zone (AGL-3237), reached by file path for the same
+  // reason as the modules beside it: absent, the loader's
+  // `resolveSiteTimeZone` call throws into its catch and 404s every case
+  // in this file for a reason unrelated to its subject.
+  ...jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/collection-entry-date',
+  ),
   // The REAL lockdown resolver (AGL-1501), reached by file path like the
   // parsers below: with no suspension fields in these fixtures it answers
   // null, and faking it would re-implement the precedence table here.

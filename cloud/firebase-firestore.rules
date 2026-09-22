@@ -664,6 +664,15 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
              'erasureRequestedAt',
+             // AGL-3237. The workspace's IANA time zone, which decides which
+             // calendar day a published entry is attributed to on every site
+             // the org owns. `resolveSiteTimeZone` reads it in
+             // `libs/aglyn/src/lib/app-utils`, so it is a resolver input by
+             // this guard's rule 1 and server-owned by the same argument as
+             // the rest of this list: the console writes it through
+             // /api/orgs/settings, Admin SDK, and denying the direct client
+             // write therefore costs the product nothing.
+             'timeZone',
              // AGL-2501. The SEARCH KEYS behind the staff organization list.
              // Derived from `name` by `nameSearchFields` on every writer, so
              // there is no state in which a client should set one — and a
