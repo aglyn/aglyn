@@ -29,6 +29,7 @@ import {
   notificationCategory,
   notificationOverriddenScopes,
   notificationScopePref,
+  notificationScopeTypePref,
   PLATFORM_BRAND_NAME,
   STAFF_NOTIFICATION_CATEGORIES,
   type AglynNotificationType,
@@ -45,23 +46,15 @@ import {
   MenuItem,
   Stack,
   Switch,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-// Never a raw `Table` (AGL-3045): a card clips whatever is wider than it is,
-// and the scope table is six rows of three-button groups.
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import NotificationCategoryTable from '../../../../../../components/notification-category-table.component'
+import NotificationScopeTable from '../../../../../../components/notification-scope-table.component'
 import useIsStaff from '../../../../../../hooks/use-is-staff'
 import useNotificationAlertPrefs from '../../../../../../hooks/use-notification-prefs'
 import useOrgHosts from '../../../../../../hooks/use-org-hosts'
@@ -189,6 +182,24 @@ const ManageNotificationSettings: NextPageWithLayout<
     [isStaff],
   )
 
+  /**
+   * The scope card's rows — the account's categories MINUS the staff ones
+   * (AGL-3267).
+   *
+   * ⛔ Not a tidy-up. A staff notification is platform-wide and carries no
+   * workspace, so `notificationChannelEnabled` refuses to read a scope layer
+   * for one at all: every "Platform growth" row this card used to draw was a
+   * control that could be set and could never do anything. The resolver is
+   * where that is now true; this is only the UI agreeing with it.
+   */
+  const scopeCategories = useMemo(
+    () =>
+      categories.filter(
+        ([category]) => !STAFF_NOTIFICATION_CATEGORIES.has(category),
+      ),
+    [categories],
+  )
+
   const scopes = useMemo<Scope[]>(() => {
     const workspaces = (orgs ?? []).map((org) => ({
       kind: 'org' as const,
@@ -287,6 +298,37 @@ const ManageNotificationSettings: NextPageWithLayout<
       const next: NotificationSettings = JSON.parse(JSON.stringify(settings))
       const types = (next.accountTypes ??= {})
       ;(types[type] ??= {})[channel] = value
+      saveSettings(next)
+    },
+    [saveSettings, settings],
+  )
+
+  /**
+   * One scope's answer for one TYPE (AGL-3267) — the scope-aware sibling of
+   * {@link writeType}, which stays as the account card's writer.
+   *
+   * Tri-state like the rest of the scope card: `undefined` deletes the key so
+   * the row inherits again, and an emptied map is deleted whole rather than
+   * left as a husk the "scopes you have changed" list would keep reporting.
+   */
+  const writeScopeType = useCallback(
+    (
+      target: Scope,
+      type: AglynNotificationType,
+      channel: NotificationChannel,
+      value: boolean | undefined,
+    ) => {
+      const next: NotificationSettings = JSON.parse(JSON.stringify(settings))
+      const layer =
+        target.kind === 'account'
+          ? (next.accountTypes ??= {})
+          : target.kind === 'org'
+            ? ((next.orgTypes ??= {})[target.id] ??= {})
+            : ((next.hostTypes ??= {})[target.id] ??= {})
+      const cell = (layer[type] ??= {})
+      if (value === undefined) delete cell[channel]
+      else cell[channel] = value
+      if (!Object.keys(cell).length) delete layer[type]
       saveSettings(next)
     },
     [saveSettings, settings],
@@ -506,65 +548,25 @@ const ManageNotificationSettings: NextPageWithLayout<
                 : 'You have not changed any of these yet.'}
             </Typography>
           ) : (
-            <ScrollTable size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Category'}</TableCell>
-                  {CHANNELS.map((channel) => (
-                    <TableCell key={channel.key} align="center">
-                      {channel.label}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {categories.map(([category, label]) => (
-                  <TableRow key={category}>
-                    <TableCell>{label}</TableCell>
-                    {CHANNELS.map((channel) => {
-                      const value = notificationScopePref(
-                        settings,
-                        scope,
-                        category,
-                        channel.key,
-                      )
-                      return (
-                        <TableCell key={channel.key} align="center">
-                          <ToggleButtonGroup
-                            exclusive
-                            size="small"
-                            value={
-                              value === undefined ? 'inherit' : String(value)
-                            }
-                            onChange={(_event, next) => {
-                              // `null` is the group refusing to
-                              // deselect — a re-click on the active
-                              // button, which must change nothing.
-                              if (next === null) return
-                              write(
-                                scope,
-                                category,
-                                channel.key,
-                                next === 'inherit'
-                                  ? undefined
-                                  : next === 'true',
-                              )
-                            }}
-                            aria-label={`${label} — ${channel.label}`}
-                          >
-                            <ToggleButton value="inherit">
-                              {'Inherit'}
-                            </ToggleButton>
-                            <ToggleButton value="true">{'On'}</ToggleButton>
-                            <ToggleButton value="false">{'Off'}</ToggleButton>
-                          </ToggleButtonGroup>
-                        </TableCell>
-                      )
-                    })}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </ScrollTable>
+            <NotificationScopeTable
+              categories={scopeCategories}
+              // Narrowed to a workspace or a site by the branch above — the
+              // account scope is the card ABOVE this one.
+              scopeLabel={scope.label}
+              channels={CHANNELS}
+              categoryPref={(category, channel) =>
+                notificationScopePref(settings, scope, category, channel)
+              }
+              typePref={(type, channel) =>
+                notificationScopeTypePref(settings, scope, type, channel)
+              }
+              onCategoryChange={(category, channel, value) =>
+                write(scope, category, channel, value)
+              }
+              onTypeChange={(type, channel, value) =>
+                writeScopeType(scope, type, channel, value)
+              }
+            />
           )}
         </Stack>
       </CardDisplay>

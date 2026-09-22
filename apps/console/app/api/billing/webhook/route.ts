@@ -34,6 +34,7 @@ import {
   classifyDeliveryLag,
   classifyWebhookDelivery,
   createWebhookEffectLedger,
+  NOTIFICATION_TYPE_LABELS,
   observeWrites,
   Route,
   runBillingWebhookHandlers,
@@ -902,6 +903,61 @@ async function handler(request: Request): Promise<Response> {
             // asserting a write that had silently stopped landing. The
             // delivery is already `acted` — this branch runs only when the
             // org mirror committed through the observed handle.
+
+            /*
+             * AND TELL STAFF, on the same transition (AGL-3267).
+             *
+             * Hung off `entry` deliberately rather than off the event type.
+             * `subscriptionActivityEntry` is the thing that already knows a
+             * renewal from a real move — Stripe re-delivers
+             * `customer.subscription.updated` for every renewal, metered
+             * attach and card change — so keying staff off the raw event
+             * would put a "plan changed" in the feed every month for a
+             * workspace whose plan had not moved since it signed up. Nothing
+             * else here has to learn that rule, and the two records cannot
+             * drift into disagreeing about what happened.
+             *
+             * The org is named in the BODY, not carried as `orgId`: a staff
+             * notification is platform-wide, and giving it a scope would make
+             * it answerable to a per-workspace preference that has nothing to
+             * do with it (see `notificationChannelEnabled`).
+             *
+             * Its own `catch`, like the welcome mail and the workspace
+             * announcement: a billing mirror that failed because we could not
+             * tell ourselves about it would be the worst trade in the route.
+             */
+            try {
+              const staffType =
+                entry.kind === 'started'
+                  ? 'staff.subscriptionStarted'
+                  : entry.kind === 'canceled'
+                    ? 'staff.subscriptionCanceled'
+                    : 'staff.planChanged'
+              const workspace = (orgSnapshot.get('name') as string) ?? String(orgId)
+              const body =
+                entry.kind === 'started'
+                  ? `${workspace} subscribed on ${entry.plan}.`
+                  : entry.kind === 'canceled'
+                    ? // WHY it ended, in the sentence — the same distinction
+                      // AGL-1877 put on the org doc. A workspace Stripe gave
+                      // up on after a month of retries and one that clicked
+                      // Cancel need different follow-up, and a feed that
+                      // renders them identically sends staff to the wrong one.
+                      `${workspace} canceled${
+                        object?.cancellation_details?.reason === 'payment_failed'
+                          ? ' after failed payments'
+                          : ''
+                      }, from ${previousPlan}.`
+                    : `${workspace} moved from ${previousPlan} to ${entry.plan}.`
+              await notifyStaff({
+                type: staffType,
+                title: NOTIFICATION_TYPE_LABELS[staffType],
+                body,
+                link: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: String(orgId) }),
+              })
+            } catch (staffError) {
+              console.error('staff subscription notification skipped', staffError)
+            }
           }
         }
 
@@ -1394,6 +1450,34 @@ async function handler(request: Request): Promise<Response> {
             })
           }
           if (type === 'invoice.payment_failed') {
+            /*
+             * AND STAFF HEAR IT TOO (AGL-3267), beside the workspace's own
+             * dunning notice above and deliberately not instead of it.
+             *
+             * Same event, two audiences, two different actions: the customer
+             * is told to fix their card, staff are told a paying workspace is
+             * about to stop paying. That is why this is `staff.paymentFailed`
+             * and not a second recipient on `billing.paymentFailed` — one
+             * switch must not silence both, and the staff feed must not
+             * inherit a customer's billing preferences.
+             *
+             * The amount is in the body because it is the whole triage: a
+             * failed $12 invoice and a failed $1,200 one get different
+             * attention on the same morning.
+             */
+            try {
+              await notifyStaff({
+                type: 'staff.paymentFailed',
+                title: NOTIFICATION_TYPE_LABELS['staff.paymentFailed'],
+                // `orgSlug` is already in hand from the read above, so the
+                // line costs no extra Firestore hit; the id is the fallback
+                // when the workspace has no slug.
+                body: `${orgSlug ?? orgId} failed a $${dollars} payment.`,
+                link: buildRoute(Route.ADMIN_ORG_DETAIL, { orgId: String(orgId) }),
+              })
+            } catch (staffError) {
+              console.error('staff payment-failed notification skipped', staffError)
+            }
             await runPluginEventHandlers('billing.invoice.failed', {
               orgId,
               invoiceId: String(object?.id ?? ''),

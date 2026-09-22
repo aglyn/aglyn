@@ -206,6 +206,60 @@ describe('the notification settings page (AGL-3226)', () => {
     )
   })
 
+  /**
+   * A staff notification is platform-wide and carries no workspace, so the
+   * scope layers can never match one (AGL-3267). Every "Platform growth" row
+   * this card used to draw was a control that could be set and could never do
+   * anything.
+   */
+  it('offers no staff row on a workspace or site', async () => {
+    mockIsStaff = true
+    render(<Page />)
+    await screen.findByLabelText('Workspace or site')
+    // Positive control first: the row IS offered at the account scope, so
+    // this cannot pass by the category having vanished everywhere.
+    expect(
+      screen.getByRole('switch', { name: 'Platform growth — In console' }),
+    ).toBeTruthy()
+    fireEvent.mouseDown(
+      screen.getByRole('combobox', { name: 'Workspace or site' }),
+    )
+    fireEvent.click(await screen.findByRole('option', { name: /^Acme$/ }))
+    await screen.findByRole('group', { name: 'Billing — In console' })
+    // …and not offered here, where it could never mean anything.
+    expect(
+      screen.queryByRole('group', { name: 'Platform growth — In console' }),
+    ).toBeNull()
+    // A real category still is.
+    expect(
+      screen.getByRole('group', { name: 'Billing — In console' }),
+    ).toBeTruthy()
+  })
+
+  it('writes one type under one workspace, and Inherit removes it (AGL-3267)', async () => {
+    render(<Page />)
+    await screen.findByLabelText('Workspace or site')
+    fireEvent.mouseDown(
+      screen.getByRole('combobox', { name: 'Workspace or site' }),
+    )
+    fireEvent.click(await screen.findByRole('option', { name: /^Acme$/ }))
+    await screen.findByRole('group', { name: 'Billing — In console' })
+    fireEvent.click(screen.getByLabelText('Show what Billing covers for Acme'))
+    const group = screen.getByRole('group', { name: 'Payment failed — In console' })
+    fireEvent.click(within(group).getByText('Off'))
+    await waitFor(() => expect(mockSetDoc).toHaveBeenCalled())
+    expect(
+      lastWrite()?.orgTypes?.['org-1']?.['billing.paymentFailed']?.console,
+    ).toBe(false)
+    // The category at that scope is untouched — the whole point of the grain.
+    expect(lastWrite()?.orgs?.['org-1']?.billing).toBeUndefined()
+
+    fireEvent.click(within(group).getByText('Inherit'))
+    await waitFor(() =>
+      expect(lastWrite()?.orgTypes?.['org-1']?.['billing.paymentFailed']).toBeUndefined(),
+    )
+  })
+
   it('keeps honouring a mute from the map nothing has migrated', async () => {
     mockStoredUser = { notificationPrefs: { billing: false } }
     render(<Page />)
