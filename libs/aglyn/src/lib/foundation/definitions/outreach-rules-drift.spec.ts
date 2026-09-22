@@ -82,6 +82,8 @@ const OUTREACH_COLLECTIONS: ReadonlyArray<readonly [string, string]> = [
   // The compliance settings and the do-not-contact list (AGL-2980).
   ['outreachSettings', 'settingsId'],
   ['outreachDoNotContact', 'key'],
+  // The domain half of the do-not-contact list (AGL-3244).
+  ['outreachDoNotContactDomains', 'domain'],
 ]
 
 /** Whitespace collapsed, so a re-wrapped expression reads the same. */

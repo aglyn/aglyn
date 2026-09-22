@@ -22,6 +22,9 @@ import { useCallback, useMemo } from 'react'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
 import type { OutreachComplianceIssue } from '../model/compliance-settings'
 import type {
+  OutreachDoNotContactDomainRequest,
+  OutreachDoNotContactDomainResponse,
+  OutreachDoNotContactDomainsResponse,
   OutreachEnrollmentAction,
   OutreachEnrollmentActionResponse,
   OutreachEnrollPersonRequest,
@@ -114,6 +117,14 @@ export interface OutreachApi {
   previewEmail(
     input: Omit<OutreachPreviewRequest, 'orgId'>,
   ): Promise<OutreachPreviewResponse>
+  /** The domains on the do-not-contact list (AGL-3244). */
+  readDoNotContactDomains(): Promise<OutreachDoNotContactDomainsResponse>
+  /** Puts a domain on the list, or takes one off. */
+  changeDoNotContactDomain(
+    action: OutreachDoNotContactDomainRequest['action'],
+    domain: string,
+    detail?: string,
+  ): Promise<OutreachDoNotContactDomainResponse>
 }
 
 /**
@@ -222,6 +233,13 @@ export function useOutreachApi(orgId: string | null): OutreachApi {
         call(OUTREACH_API_ROUTES.preview, {
           method: 'POST',
           body: { ...input },
+        }),
+      readDoNotContactDomains: () =>
+        call(OUTREACH_API_ROUTES.doNotContactDomains, { method: 'GET' }),
+      changeDoNotContactDomain: (action, domain, detail) =>
+        call(OUTREACH_API_ROUTES.doNotContactDomains, {
+          method: 'POST',
+          body: { action, domain, ...(detail ? { detail } : {}) },
         }),
     }),
     [call],

@@ -67,6 +67,12 @@ export const OUTREACH_COLLECTIONS = {
    */
   doNotContact: 'outreachDoNotContact',
   /**
+   * `orgs/{orgId}/outreachDoNotContactDomains/{domain}` — the domains
+   * Outreach never emails for this organization (AGL-3244), keyed by the
+   * domain itself: a domain names a company, not a person.
+   */
+  doNotContactDomains: 'outreachDoNotContactDomains',
+  /**
    * `outreachMailboxCredentials/{mailboxId}` — the provider grant behind a
    * mailbox. TOP-LEVEL and closed to every client, staff included, so the
    * token material never shares a readable path with the mailbox it serves.
@@ -837,6 +843,12 @@ export const OUTREACH_DO_NOT_CONTACT_REASONS = [
   'unsubscribe',
   /** Mail to it bounced for good. */
   'hard_bounce',
+  /**
+   * The recipient organization's mail gateway refused the sender outright
+   * (AGL-3244) — a Barracuda, Proofpoint or Mimecast policy block — which is
+   * a verdict on the whole domain, and is filed against it.
+   */
+  'gateway_block',
 ] as const
 export type OutreachDoNotContactReason =
   (typeof OUTREACH_DO_NOT_CONTACT_REASONS)[number]
@@ -860,5 +872,32 @@ export interface OutreachDoNotContactEntry {
   /** That enrollment's sequence. */
   sequenceId: string | null
   /** Plain-language detail: why the member added it, the bounce's diagnostic. */
+  detail: string | null
+}
+
+/**
+ * One domain on the list (`orgs/{orgId}/outreachDoNotContactDomains/{domain}`)
+ * (AGL-3244): no address at it is emailed, whoever enrolls them.
+ *
+ * Unlike an address entry it CARRIES THE DOMAIN, in clear, because the
+ * Compliance page lists it and a member takes it off by name; a domain is a
+ * company's, not a person's, and a person erasure leaves it alone. A member
+ * adds one by hand; the sending runtime adds one when a hard bounce reads
+ * as the domain's mail gateway refusing the sender rather than one address
+ * being unknown.
+ */
+export interface OutreachDoNotContactDomainEntry {
+  /** The domain, lower-cased, which is also the document id. */
+  domain: string
+  reason: OutreachDoNotContactReason
+  source: OutreachDoNotContactSource
+  /** The member who added it; `null` when the runtime did. */
+  addedByUid: string | null
+  addedAtMs: number
+  /** The enrollment whose bounce led here, when one did. */
+  enrollmentId: string | null
+  /** That enrollment's sequence. */
+  sequenceId: string | null
+  /** Plain-language detail: the member's note, or the bounce's diagnostic. */
   detail: string | null
 }

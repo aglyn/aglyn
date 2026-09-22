@@ -30,6 +30,7 @@ import type { OutreachComplianceIssue } from './compliance-settings'
 import type {
   OutreachAttestationKind,
   OutreachComplianceSettingsDocument,
+  OutreachDoNotContactDomainEntry,
   OutreachEnrollment,
   OutreachSequence,
 } from './outreach.types'
@@ -46,6 +47,7 @@ export type OutreachRouteRefusalReason =
   | 'entitlement'
   | 'method-not-allowed'
   | 'invalid-request'
+  | 'invalid-domain'
   | 'invalid-settings'
   | 'invalid-sequence'
   | 'sequence-not-found'
@@ -271,6 +273,34 @@ export interface OutreachEnrollmentActionResponse {
   enrollment: OutreachEnrollment
   /** Other open enrollments of the same address a do-not-contact stopped. */
   stoppedOthers: number
+}
+
+/*==========================================
+ * DO NOT CONTACT: DOMAINS (AGL-3244)
+ *==========================================*/
+
+/** `GET outreach/do-not-contact/domains?orgId` — and the answer to a change. */
+export interface OutreachDoNotContactDomainsResponse {
+  ok: true
+  /** Every domain on the list, alphabetically. */
+  domains: OutreachDoNotContactDomainEntry[]
+}
+
+/** `POST outreach/do-not-contact/domains` */
+export interface OutreachDoNotContactDomainRequest {
+  orgId: string
+  action: 'add' | 'remove'
+  /** The domain, or an address at it. */
+  domain: string
+  /** Why, for an add. */
+  detail?: string
+}
+
+/** The answer to a change: the list as it stands, and whether anything changed. */
+export interface OutreachDoNotContactDomainResponse extends OutreachDoNotContactDomainsResponse {
+  changed: boolean
+  /** The domain as the list spells it. */
+  domain: string
 }
 
 /*==========================================

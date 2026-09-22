@@ -20,10 +20,14 @@
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import {
   addOutreachDoNotContact,
+  addOutreachDoNotContactDomain,
   getOutreachDoNotContactEntry,
   isOutreachDoNotContact,
+  listOutreachDoNotContactDomains,
   lookupOutreachDoNotContact,
+  lookupOutreachDoNotContactDomains,
   readOutreachDoNotContactEntry,
+  removeOutreachDoNotContactDomain,
 } from './do-not-contact-store'
 
 /**
@@ -38,7 +42,11 @@ type Docs = Map<string, Record<string, unknown>>
 function fakeFirestore(docs: Docs, options: { failReads?: boolean } = {}) {
   const snapshot = (path: string) => {
     const data = docs.get(path)
-    return { exists: data !== undefined, data: () => (data ? structuredClone(data) : undefined) }
+    return {
+      id: path.slice(path.lastIndexOf('/') + 1),
+      exists: data !== undefined,
+      data: () => (data ? structuredClone(data) : undefined),
+    }
   }
   const doc = (path: string): any => ({
     path,
@@ -48,8 +56,18 @@ function fakeFirestore(docs: Docs, options: { failReads?: boolean } = {}) {
       if (docs.has(path)) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 })
       docs.set(path, structuredClone(data))
     },
+    delete: async () => void docs.delete(path),
   })
-  const collection = (path: string): any => ({ doc: (id: string) => doc(`${path}/${id}`) })
+  const collection = (path: string): any => ({
+    doc: (id: string) => doc(`${path}/${id}`),
+    get: async () => {
+      if (options.failReads) throw new Error('UNAVAILABLE')
+      const found = [...docs.keys()]
+        .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
+        .map(snapshot)
+      return { docs: found, size: found.length, empty: !found.length }
+    },
+  })
   return {
     collection,
     getAll: async (...refs: Array<{ path: string }>) => {
@@ -202,5 +220,100 @@ describe('reading the list (AGL-2980)', () => {
       detail: null,
     })
     expect(readOutreachDoNotContactEntry('k', undefined)).toBeNull()
+  })
+})
+
+describe('the domain list (AGL-3244)', () => {
+  const domainPath = (domain: string) => `orgs/${ORG}/outreachDoNotContactDomains/${domain}`
+
+  it('files a domain in clear under its own name, spelled one way', async () => {
+    const result = await addOutreachDoNotContactDomain(fakeFirestore(docs), {
+      orgId: ORG,
+      domain: ' @KCorp.Kendal.org ',
+      reason: 'gateway_block',
+      source: 'runtime',
+      nowMs: AT,
+      enrollmentId: 'enr-1',
+      sequenceId: 'seq-1',
+      detail: '550 permanent failure for one or more recipients (the address:blocked)',
+    })
+    expect(result).toMatchObject({ domain: 'kcorp.kendal.org', created: true })
+    expect(docs.get(domainPath('kcorp.kendal.org'))).toEqual({
+      domain: 'kcorp.kendal.org',
+      reason: 'gateway_block',
+      source: 'runtime',
+      addedByUid: null,
+      addedAtMs: AT,
+      enrollmentId: 'enr-1',
+      sequenceId: 'seq-1',
+      detail: '550 permanent failure for one or more recipients (the address:blocked)',
+    })
+  })
+
+  it('keeps the first entry, and refuses what is not a domain or has no member behind it', async () => {
+    const firestore = fakeFirestore(docs)
+    await addOutreachDoNotContactDomain(firestore, {
+      orgId: ORG,
+      domain: 'example.net',
+      reason: 'manual',
+      source: 'member',
+      addedByUid: 'uid-rep',
+      nowMs: AT,
+    })
+    const again = await addOutreachDoNotContactDomain(firestore, {
+      orgId: ORG,
+      domain: 'EXAMPLE.NET',
+      reason: 'gateway_block',
+      source: 'runtime',
+      nowMs: AT + 1,
+    })
+    expect(again.created).toBe(false)
+    expect(again.entry).toMatchObject({ reason: 'manual', source: 'member', addedByUid: 'uid-rep' })
+    await expect(
+      addOutreachDoNotContactDomain(firestore, { orgId: ORG, domain: 'not a domain', reason: 'manual', source: 'runtime', nowMs: AT }),
+    ).rejects.toThrow('not a domain')
+    await expect(
+      addOutreachDoNotContactDomain(firestore, { orgId: ORG, domain: 'example.org', reason: 'manual', source: 'member', nowMs: AT }),
+    ).rejects.toThrow('names the member')
+  })
+
+  it('answers every address by the domain it is at, in one lookup, and a failed read as unchecked', async () => {
+    docs.set(domainPath('example.net'), { domain: 'example.net', reason: 'gateway_block', source: 'runtime', addedAtMs: AT })
+    const answers = await lookupOutreachDoNotContactDomains(fakeFirestore(docs), ORG, [
+      'Riley@Example.NET',
+      'other@example.net',
+      'casey@example.com',
+      'not an address',
+    ])
+    expect([...answers.entries()]).toEqual([
+      ['not an address', null],
+      ['Riley@Example.NET', true],
+      ['other@example.net', true],
+      ['casey@example.com', false],
+    ])
+    const failed = await lookupOutreachDoNotContactDomains(fakeFirestore(docs, { failReads: true }), ORG, ['riley@example.net'])
+    expect(failed.get('riley@example.net')).toBeNull()
+  })
+
+  it('lists the domains alphabetically, and takes one off by name', async () => {
+    const firestore = fakeFirestore(docs)
+    for (const domain of ['zeta.example', 'alpha.example']) {
+      await addOutreachDoNotContactDomain(firestore, { orgId: ORG, domain, reason: 'manual', source: 'member', addedByUid: 'uid-rep', nowMs: AT })
+    }
+    expect((await listOutreachDoNotContactDomains(firestore, ORG)).map((entry) => entry.domain)).toEqual([
+      'alpha.example',
+      'zeta.example',
+    ])
+    expect(await removeOutreachDoNotContactDomain(firestore, ORG, 'ZETA.example')).toBe(true)
+    expect(await removeOutreachDoNotContactDomain(firestore, ORG, 'zeta.example')).toBe(false)
+    expect(await removeOutreachDoNotContactDomain(firestore, ORG, 'nonsense')).toBe(false)
+    expect((await listOutreachDoNotContactDomains(firestore, ORG)).map((entry) => entry.domain)).toEqual(['alpha.example'])
+  })
+
+  it('leaves the address list alone: a domain entry and an address entry are different documents', async () => {
+    const firestore = fakeFirestore(docs)
+    await addOutreachDoNotContactDomain(firestore, { orgId: ORG, domain: 'example.com', reason: 'manual', source: 'member', addedByUid: 'uid-rep', nowMs: AT })
+    expect(await isOutreachDoNotContact(firestore, ORG, EMAIL)).toBe(false)
+    expect((await lookupOutreachDoNotContactDomains(firestore, ORG, [EMAIL])).get(EMAIL)).toBe(true)
   })
 })

@@ -118,6 +118,7 @@ const UNCHECKED: OutreachGateLookups = {
   hostSuppressed: null,
   salesTopicState: null,
   doNotContact: null,
+  doNotContactDomain: null,
   workspaceMembers: null,
   openEnrollments: null,
   hasInboundEmail: null,

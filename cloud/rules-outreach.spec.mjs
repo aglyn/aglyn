@@ -136,6 +136,19 @@ const COLLECTIONS = [
       addedAtMs: 1,
     },
   },
+  // The domain half of the list (AGL-3244): a client that could write it
+  // could email a company that blocked the sender.
+  {
+    name: 'outreachDoNotContactDomains',
+    id: 'kcorp.example',
+    data: {
+      domain: 'kcorp.example',
+      reason: 'gateway_block',
+      source: 'runtime',
+      addedByUid: null,
+      addedAtMs: 1,
+    },
+  },
 ]
 
 // `firebase emulators:exec` exports the emulator's address; a run on other

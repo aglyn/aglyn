@@ -43,6 +43,7 @@ import {
   type OutreachCountryOption,
 } from '../model/compliance-settings'
 import type { OutreachComplianceSettings } from '../model/outreach.types'
+import { OutreachDoNotContactDomainsCard } from './do-not-contact-domains'
 import { OutreachLoading, OutreachLoadProblem } from './outreach-ui'
 import { OutreachRouteError, useOutreachApi } from './use-outreach-api'
 import { useOutreachComplianceSettings } from './use-outreach-settings'
@@ -65,8 +66,9 @@ const EMPTY: OutreachComplianceSettings = {
 }
 
 /**
- * Sequences → Compliance (AGL-2980): who every email says sent it, and the
- * countries a sequence may send to at all.
+ * Sequences → Compliance (AGL-2980): who every email says sent it, the
+ * countries a sequence may send to at all, and — below the settings, with
+ * no Save of its own — the domains no sequence emails (AGL-3244).
  *
  * The footer is previewed from what is typed, by the engine's own
  * `composeOutreachFooter`, so the page shows the lines every email will end
@@ -316,6 +318,9 @@ export function OutreachComplianceSection(
           {saving ? 'Saving…' : 'Save'}
         </Button>
       </Stack>
+
+      {/* Its own list, saved as it is edited (AGL-3244): no Save above it. */}
+      <OutreachDoNotContactDomainsCard orgId={orgId} />
     </Stack>
   )
 }

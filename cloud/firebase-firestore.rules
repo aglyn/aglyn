@@ -879,6 +879,12 @@ service cloud.firestore {
         allow read: if canReadOutreach();
         allow write: if false;
       }
+      // The domain half of the list (AGL-3244): read by the Compliance page,
+      // written only by the route and the sending runtime.
+      match /outreachDoNotContactDomains/{domain} {
+        allow read: if canReadOutreach();
+        allow write: if false;
+      }
 
       /**
        * Per-user AI usage (AGL-2928): one document per person per month,

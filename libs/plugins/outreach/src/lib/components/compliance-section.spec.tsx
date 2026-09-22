@@ -60,6 +60,10 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   }) => <section aria-label={String(header)}>{children}</section>,
 }))
 jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => undefined }))
+// The domain list is its own card with its own spec (AGL-3244).
+jest.mock('./do-not-contact-domains', () => ({
+  OutreachDoNotContactDomainsCard: () => <section aria-label="Do not contact domains" />,
+}))
 
 const stored: OutreachComplianceSettingsDocument = {
   legalName: 'Example Co LLC',

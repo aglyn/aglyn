@@ -33,7 +33,7 @@ import { readOutreachEnrollCandidates, type OutreachEnrollCandidate } from '../e
 import { readOutreachGateLookups } from '../enrollment/gate-lookups'
 import { mailboxRef } from '../mailboxes/mailbox-credentials'
 import { outreachEffectiveDailyCap, outreachLocalDay } from '../mailboxes/mailbox-settings'
-import { markOutreachMailboxReconnectRequired, type OpenedOutreachMailbox } from '../mailboxes/mailbox-transport'
+import type { OpenedOutreachMailbox } from '../mailboxes/mailbox-transport'
 import { effectiveOutreachAllowedCountries } from '../model/compliance-settings'
 import {
   OUTREACH_COLLECTIONS,
@@ -58,6 +58,7 @@ import { Rfc5322MessageError } from '../transport/rfc5322'
 import { sendComposedOutreachEmail } from '../transport/send-message'
 import { applyOutreachEvent } from './enrollment-events'
 import { outreachSendDigest, withRecentSend } from './mailbox-health-store'
+import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 import { fileOutreachEmail, fileOutreachTask, OUTREACH_TASK_KIND_TO_RECORD } from './timeline'
 import { outreachUnsubscribeMailbox } from './unsubscribe-link'
@@ -372,12 +373,12 @@ const senderOf = (mailbox: OutreachMailbox) => ({
   name: mailbox.displayName || null,
 })
 
-async function openClient(deps: OutreachRuntimeDeps, firestore: Firestore, run: MailboxRun) {
+async function openClient(deps: OutreachRuntimeDeps, run: MailboxRun) {
   const opened = (run.opened ??= await deps.openMailbox(run.mailbox.id))
   if (opened.ok === true) return opened.client
   run.stopped = true
   if (opened.reason !== 'not-configured') {
-    await markOutreachMailboxReconnectRequired(firestore, {
+    await noteOutreachMailboxReconnectRequired(deps, {
       orgId: run.orgId,
       mailboxId: run.mailbox.id,
       errorCode: opened.reason,
@@ -803,7 +804,7 @@ async function runEmailStep(
     report.held += 1
     return
   }
-  const client = await openClient(deps, firestore, run)
+  const client = await openClient(deps, run)
   if (!client) {
     await releaseClaim(deps, firestore, run, enrollment, true)
     report.held += 1
@@ -830,7 +831,7 @@ async function runEmailStep(
     run.stopped = true
     const code = error instanceof GmailTransportError ? error.code : 'unexpected'
     if (isReconnectRequired(error)) {
-      await markOutreachMailboxReconnectRequired(firestore, {
+      await noteOutreachMailboxReconnectRequired(deps, {
         orgId: run.orgId,
         mailboxId: mailbox.id,
         errorCode: code,
@@ -901,7 +902,7 @@ async function recoverClaim(
     await releaseClaim(deps, firestore, run, enrollment, false)
     return true
   }
-  const client = await openClient(deps, firestore, run)
+  const client = await openClient(deps, run)
   if (!client) return false
   const bare = claim.messageId.replace(/^<|>$/g, '')
   const found = await client.listMessages({ q: `rfc822msgid:${bare}`, maxResults: 1, includeSpamTrash: true })

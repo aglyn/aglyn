@@ -27,10 +27,13 @@
  * - it collects {@link OUTREACH_PAUSE_BOUNCES_PER_DAY} hard bounces in one
  *   of its own days; or
  * - more than {@link OUTREACH_PAUSE_BOUNCE_RATE} of its last
- *   {@link OUTREACH_BOUNCE_RATE_WINDOW_SENDS} sends hard-bounced. A mailbox
- *   with fewer sends than that is judged on the sends it has, which is
- *   deliberate: a young mailbox's reputation is the most fragile, and one
- *   bounce in its first ten sends is a list problem, not bad luck; or
+ *   {@link OUTREACH_BOUNCE_RATE_WINDOW_SENDS} sends hard-bounced, once the
+ *   window holds at least {@link OUTREACH_BOUNCE_RATE_MIN_SENDS} of them
+ *   (AGL-3244). Under that floor one bounce IS the rate — 1 of 21 is 4.8% —
+ *   and a single gateway block on a cold day closed a whole sending window
+ *   on the strength of one address. A mailbox with fewer sends is still
+ *   judged on the sends it has by the first rule: a second bounce in one
+ *   day pauses it whatever the window holds; or
  * - a reply called its email spam in the last week — a complaint is worth a
  *   week of review, and the pause lasts until the week is out.
  *
@@ -46,6 +49,12 @@ export const OUTREACH_BOUNCE_RATE_WINDOW_SENDS = 50
 
 /** The bounce rate a mailbox may not exceed over that window. */
 export const OUTREACH_PAUSE_BOUNCE_RATE = 0.03
+
+/**
+ * The fewest sends the window must hold before its bounce rate is judged
+ * (AGL-3244). Below it the daily rule alone pauses the mailbox.
+ */
+export const OUTREACH_BOUNCE_RATE_MIN_SENDS = 25
 
 /** How long a spam complaint keeps a mailbox paused. */
 export const OUTREACH_COMPLAINT_PAUSE_MS = 7 * 24 * 60 * 60 * 1000
@@ -96,7 +105,7 @@ export function decideOutreachMailboxHealth(
   }
   const sends = Math.min(count(input.recentSends), OUTREACH_BOUNCE_RATE_WINDOW_SENDS)
   const bounces = Math.min(count(input.recentHardBounces), sends)
-  if (sends > 0 && bounces / sends > OUTREACH_PAUSE_BOUNCE_RATE) {
+  if (sends >= OUTREACH_BOUNCE_RATE_MIN_SENDS && bounces / sends > OUTREACH_PAUSE_BOUNCE_RATE) {
     const percent = ((bounces / sends) * 100).toFixed(1)
     return {
       pause: true,

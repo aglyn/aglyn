@@ -50,7 +50,7 @@ import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/email-topic-c
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import type { OutreachEnrollment, OutreachMailbox, OutreachSequence } from '../model/outreach.types'
 import { FakeGmail } from './fixtures/fake-gmail'
-import type { OutreachRuntimeDeps } from './runtime-deps'
+import type { OutreachMailboxNoticeRequest, OutreachRuntimeDeps } from './runtime-deps'
 import { runOutreachSendJob } from './send-job'
 import { runOutreachSyncJob } from './sync-job'
 import { createOutreachPersonEraser } from './person-erasure'
@@ -87,6 +87,8 @@ interface Filed {
   activities: PluginRecordActivityRequest[]
   tasks: PluginRecordTaskRequest[]
   feed: Array<{ action: string; target: { type: string; id: string } }>
+  /** What the mailbox's owner was told (AGL-3244). */
+  notices: OutreachMailboxNoticeRequest[]
 }
 let filed: Filed
 
@@ -124,6 +126,9 @@ function deps(overrides: Partial<OutreachRuntimeDeps> = {}): OutreachRuntimeDeps
     },
     suppressBouncedEmail: async ({ email, hostId }) => {
       await suppressEmail({ email, reason: 'bounce', context: 'outreach', hostId, firestore })
+    },
+    notifyMailboxOwner: async (notice) => {
+      filed.notices.push(notice)
     },
     unsubscribeUrl: (target) =>
       outreachUnsubscribeUrl({ origin: 'https://console.example.com', target, secret: SECRET }),
@@ -300,7 +305,7 @@ beforeAll(() => {
 beforeEach(() => {
   clock = TUESDAY_10AM
   gmail = new FakeGmail({ self: [MAILBOX_EMAIL] })
-  filed = { activities: [], tasks: [], feed: [] }
+  filed = { activities: [], tasks: [], feed: [], notices: [] }
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
   jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 })
@@ -703,10 +708,133 @@ describeEmulated('the sync job (AGL-2981)', () => {
         target: expect.objectContaining({ type: 'outreach:mailbox', id: 'gm_rep' }),
       }),
     ])
-
-    // A paused mailbox sends nothing.
+    // The owner is told by the write that paused it (AGL-3244): the engine's
+    // sentence, the mailbox, and how many enrollments are waiting on it.
     await enroll(3)
+    expect(filed.notices).toEqual([
+      {
+        orgId,
+        mailboxId: 'gm_rep',
+        connectedByUid: REP,
+        kind: 'auto_pause',
+        mailbox: { email: MAILBOX_EMAIL, sendAs: MAILBOX_EMAIL, displayName: 'Rep Example' },
+        message: box.autoPause?.message,
+        waiting: 0,
+      },
+    ])
+
+    // A paused mailbox sends nothing, and a later run tells nobody again.
     expect((await tick()).sent).toBe(0)
+    await sync()
+    expect(filed.notices).toHaveLength(1)
+  })
+
+  it('files the domain beside the address when the bounce is the gateway’s block, and refuses the next person there (AGL-3244)', async () => {
+    await seedOrg()
+    const one = await sentTo(1)
+    clock += 600_000
+    gmail.deliver({
+      threadId: String(one.gmailThreadId),
+      from: 'Mail Delivery Subsystem <mailer-daemon@googlemail.com>',
+      to: MAILBOX_EMAIL,
+      subject: 'Delivery Status Notification (Failure)',
+      atMs: clock - 60_000,
+      contentType: 'multipart/report; report-type=delivery-status; boundary="b"',
+      parts: [
+        {
+          mimeType: 'message/delivery-status',
+          body: {
+            data: Buffer.from(
+              'Reporting-MTA: dns; googlemail.com\n\nFinal-Recipient: rfc822; person1@example.org\nAction: failed\nStatus: 5.7.1\n' +
+                'Diagnostic-Code: smtp; 550 permanent failure for one or more recipients (person1@example.org:blocked)',
+            ).toString('base64url'),
+          },
+        },
+      ],
+    })
+
+    const report = await sync()
+
+    expect(report).toMatchObject({ bounces: 1, gatewayBlocks: 1 })
+    const stopped = await enrollment(one.id)
+    expect(stopped).toMatchObject({ status: 'bounced', stopReason: 'hard_bounce' })
+    expect(stopped.stopDetail).toMatch(/^The mail gateway at example\.org blocked the email, so example\.org is on your organization's do-not-contact list/)
+    expect(stopped.stopDetail).not.toContain('person1@example.org')
+    // The address is filed as it always was, and the domain beside it.
+    const key = String(outreachDoNotContactKey(one.email))
+    expect((await org().collection('outreachDoNotContact').doc(key).get()).data()).toMatchObject({ reason: 'hard_bounce' })
+    const domain = (await org().collection('outreachDoNotContactDomains').doc('example.org').get()).data()
+    expect(domain).toMatchObject({ domain: 'example.org', reason: 'gateway_block', source: 'runtime', enrollmentId: one.id })
+    expect(String(domain?.['detail'])).toContain('(the address:blocked)')
+    // One bounce in one send is under the rate floor: the mailbox keeps sending.
+    expect((await mailbox()).status).toBe('connected')
+
+    // The next person at that domain is refused before the send, with the domain named.
+    const two = await enroll(2)
+    const next = await tick()
+    expect(next).toMatchObject({ sent: 0, stopped: 1 })
+    expect(await enrollment(two.id)).toMatchObject({
+      status: 'stopped',
+      stopReason: 'gate',
+      stopDetail: expect.stringContaining("person2@example.org is at example.org, which is on your organization's do-not-contact list"),
+    })
+  })
+
+  it('leaves the domain alone when the bounce names the address as unknown', async () => {
+    await seedOrg()
+    const one = await sentTo(1)
+    clock += 600_000
+    gmail.deliver({
+      threadId: String(one.gmailThreadId),
+      from: 'mailer-daemon@googlemail.com',
+      to: MAILBOX_EMAIL,
+      subject: 'Delivery Status Notification (Failure)',
+      atMs: clock - 60_000,
+      contentType: 'multipart/report; report-type=delivery-status; boundary="b"',
+      parts: [
+        {
+          mimeType: 'message/delivery-status',
+          body: {
+            data: Buffer.from(
+              'Final-Recipient: rfc822; person1@example.org\nAction: failed\nStatus: 5.1.1\nDiagnostic-Code: smtp; 550 5.1.1 no such user',
+            ).toString('base64url'),
+          },
+        },
+      ],
+    })
+    expect(await sync()).toMatchObject({ bounces: 1, gatewayBlocks: 0 })
+    expect((await org().collection('outreachDoNotContactDomains').doc('example.org').get()).exists).toBe(false)
+  })
+
+  it('tells the owner once when Google stops accepting the mailbox, and says so on the feed (AGL-3244)', async () => {
+    await seedOrg()
+    await enroll(1)
+    const refused = { openMailbox: async () => ({ ok: false as const, reason: 'sealed-token-unreadable' as const }) }
+
+    expect((await tick(refused)).sent).toBe(0)
+
+    expect((await mailbox()).status).toBe('reconnect_required')
+    expect(filed.feed).toEqual([
+      expect.objectContaining({
+        action: expect.stringMatching(/needs reconnecting.*sealed-token-unreadable/),
+        target: expect.objectContaining({ type: 'outreach:mailbox', id: 'gm_rep' }),
+      }),
+    ])
+    expect(filed.notices).toEqual([
+      expect.objectContaining({
+        kind: 'reconnect_required',
+        mailboxId: 'gm_rep',
+        connectedByUid: REP,
+        message: expect.stringContaining('(sealed-token-unreadable)'),
+        waiting: 1,
+      }),
+    ])
+
+    // A second run finds it already marked, and tells nobody again.
+    await tick(refused)
+    await runOutreachSyncJob(deps(refused), { nowMs: clock, deadlineMs: clock + 60_000 })
+    expect(filed.notices).toHaveLength(1)
+    expect(filed.feed).toHaveLength(1)
   })
 
   it('opts out a person who writes to the unsubscribe address, on every list', async () => {

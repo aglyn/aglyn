@@ -16,10 +16,13 @@
  */
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import { isPublicMailboxDomain } from '@aglyn/aglyn/app-utils/crm'
 import { crmInboundExcerpt, emailAddressOf } from '@aglyn/aglyn/app-utils/crm-inbound'
 import { outreachMessageIdHeader } from '../engine/compose'
 import { readOutreachDeliveryReport } from '../engine/delivery-status'
+import { outreachEmailDomain } from '../engine/do-not-contact-domain'
 import type { OutreachEnrollmentEvent } from '../engine/enrollment-state'
+import { isOutreachGatewayBlock, outreachGatewayBlockDetail } from '../engine/gateway-block'
 import { effectiveOutreachWindow, postponeOutreachForAutoReply } from '../engine/schedule'
 import {
   decideOutreachThread,
@@ -28,14 +31,13 @@ import {
 } from '../engine/thread-classification'
 import { outreachHeader, outreachThreadMessageFromGmail, type OutreachThreadMessage } from '../engine/thread-message'
 import { mailboxRef } from '../mailboxes/mailbox-credentials'
-import { markOutreachMailboxReconnectRequired } from '../mailboxes/mailbox-transport'
 import {
   OUTREACH_COLLECTIONS,
   type OutreachEnrollment,
   type OutreachMailbox,
   type OutreachSequence,
 } from '../model/outreach.types'
-import { addOutreachDoNotContact } from '../storage/do-not-contact-store'
+import { addOutreachDoNotContact, addOutreachDoNotContactDomain } from '../storage/do-not-contact-store'
 import {
   outreachEnrollmentLink,
   outreachOrgCollection,
@@ -51,6 +53,7 @@ import {
   emptyOutreachHealthDelta,
   type OutreachMailboxHealthDelta,
 } from './mailbox-health-store'
+import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 import { markOutreachLeadWorking } from './lead-records'
 import { fileOutreachEmail, fileOutreachTask } from './timeline'
@@ -72,7 +75,10 @@ import { outreachUnsubscribeMailbox } from './unsubscribe-link'
  *   organization's do-not-contact list and off the site's `sales` topic,
  *   and stops every open enrollment of it;
  * - a HARD BOUNCE stops the enrollment, files the address on the platform's
- *   suppression list and the do-not-contact list.
+ *   suppression list and the do-not-contact list — and, when its diagnostic
+ *   reads as the domain's mail gateway refusing the sender rather than one
+ *   address being unknown (`engine/gateway-block`, AGL-3244), files the
+ *   DOMAIN on the do-not-contact list too, and says so on the enrollment.
  *
  * Four reads find those, each narrowed by Gmail rather than read in full:
  * the threads of this mailbox's enrollments that have new mail; delivery
@@ -118,6 +124,8 @@ export interface OutreachSyncReport {
   replies: number
   optOuts: number
   bounces: number
+  /** Hard bounces that read as a gateway block, each filing its domain (AGL-3244). */
+  gatewayBlocks: number
   postponed: number
   paused: number
 }
@@ -148,6 +156,7 @@ export async function runOutreachSyncJob(
     replies: 0,
     optOuts: 0,
     bounces: 0,
+    gatewayBlocks: 0,
     postponed: 0,
     paused: 0,
   }
@@ -173,7 +182,7 @@ export async function runOutreachSyncJob(
         // One mailbox's failure is its own; the next mailbox is read. A grant
         // Google refused is the mailbox's to reconnect.
         if (isReconnectRequired(error)) {
-          await markOutreachMailboxReconnectRequired(firestore, {
+          await noteOutreachMailboxReconnectRequired(deps, {
             orgId,
             mailboxId: mailbox.id,
             errorCode: error instanceof GmailTransportError ? error.code : 'invalid_grant',
@@ -212,7 +221,7 @@ async function syncMailbox(
   const opened = await deps.openMailbox(mailbox.id)
   if (opened.ok === false) {
     if (opened.reason !== 'not-configured') {
-      await markOutreachMailboxReconnectRequired(firestore, {
+      await noteOutreachMailboxReconnectRequired(deps, {
         orgId,
         mailboxId: mailbox.id,
         errorCode: opened.reason,
@@ -471,7 +480,27 @@ async function applyMessages(
         sequenceId: enrollment.sequenceId,
         detail: diagnostic,
       })
-      event = { type: 'bounce', atMs: decidedBy?.atMs || nowMs, detail: diagnostic }
+      let detail = diagnostic
+      // A gateway block is the domain's verdict on the sender (AGL-3244):
+      // the domain is filed beside the address, and the enrollment says so.
+      // Never a public mailbox provider's domain — Gmail refusing one
+      // message on policy is not a reason to stop writing to Gmail.
+      const domain = outreachEmailDomain(enrollment.email)
+      if (domain && !isPublicMailboxDomain(domain) && isOutreachGatewayBlock(decidedBy?.bounce ?? null)) {
+        await addOutreachDoNotContactDomain(firestore, {
+          orgId: context.orgId,
+          domain,
+          reason: 'gateway_block',
+          source: 'runtime',
+          nowMs,
+          enrollmentId: enrollment.id,
+          sequenceId: enrollment.sequenceId,
+          detail: diagnostic,
+        })
+        detail = outreachGatewayBlockDetail(domain, diagnostic)
+        report.gatewayBlocks += 1
+      }
+      event = { type: 'bounce', atMs: decidedBy?.atMs || nowMs, detail }
       report.bounces += 1
       break
     }

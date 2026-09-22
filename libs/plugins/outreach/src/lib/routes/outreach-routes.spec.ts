@@ -24,6 +24,7 @@ import type { DecodedIdToken } from 'firebase-admin/auth'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import type { OutreachEmailStep, OutreachTaskStep } from '../model/outreach.types'
+import { createOutreachDoNotContactDomainsRoute, OUTREACH_DO_NOT_CONTACT_DOMAIN_ACTIVITY } from './do-not-contact-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
@@ -583,12 +584,25 @@ describe('outreach/enroll/preview (AGL-2980)', () => {
     })
     contact('c-hidden', { name: 'Hidden', email: 'hidden@example.com', visibleTo: [`host:${OTHER_HOST}`] })
     docs.set(org(`outreachDoNotContact/${outreachDoNotContactKey('jordan.lee@example.net')}`), { reason: 'manual' })
+    // A whole domain on the list (AGL-3244): the gateway at kcorp.example blocked the sender.
+    warm('c-blocked-domain', 'Sam Park', 'sam.park@kcorp.example')
+    docs.set(org('outreachDoNotContactDomains/kcorp.example'), { domain: 'kcorp.example', reason: 'gateway_block', source: 'runtime' })
 
     const { status, body } = await post(enroll().preview, REP, {
       sequenceId,
       source: {
         kind: 'contacts',
-        contactIds: ['c-warm', 'c-cold', 'c-freemail', 'c-dnc', 'c-member', 'c-unknown-country', 'c-hidden', 'c-gone'],
+        contactIds: [
+          'c-warm',
+          'c-cold',
+          'c-freemail',
+          'c-dnc',
+          'c-member',
+          'c-unknown-country',
+          'c-hidden',
+          'c-gone',
+          'c-blocked-domain',
+        ],
       },
     })
     expect(status).toBe(200)
@@ -611,11 +625,15 @@ describe('outreach/enroll/preview (AGL-2980)', () => {
     expect(codes('c-freemail')).toEqual(['free_mail'])
     expect(codes('c-dnc')).toEqual(['do_not_contact'])
     expect(byId['c-dnc'].blocks[0].reason).toBe("jordan.lee@example.net is on your organization's do-not-contact list.")
+    expect(codes('c-blocked-domain')).toEqual(['do_not_contact_domain'])
+    expect(byId['c-blocked-domain'].blocks[0].reason).toBe(
+      "sam.park@kcorp.example is at kcorp.example, which is on your organization's do-not-contact list: no address there is emailed.",
+    )
     expect(codes('c-member')).toEqual(['workspace_member'])
     expect(codes('c-hidden')).toEqual(['not_in_site'])
     expect(byId['c-hidden'].blocks[0].reason).toBe("This contact isn't in Example Shop's CRM.")
     expect(codes('c-gone')).toEqual(['contact_missing'])
-    expect(body).toMatchObject({ total: 8, truncated: false })
+    expect(body).toMatchObject({ total: 9, truncated: false })
   })
 
   it('blocks a person already in another sequence, or already through this one', async () => {
@@ -1023,5 +1041,72 @@ describe('outreach/preview (AGL-2980)', () => {
     expect((await post(preview(), 'uid-reader', { sequenceId, contactId: 'c-1' })).status).toBe(403)
     contact('c-hidden', { name: 'Hidden', email: 'hidden@example.com', visibleTo: [`host:${OTHER_HOST}`] })
     expect((await post(preview(), REP, { sequenceId, contactId: 'c-hidden' })).body.reason).toBe('contact-not-found')
+  })
+})
+
+// ── Do not contact: domains ─────────────────────────────────────────────────
+
+describe('outreach/do-not-contact/domains (AGL-3244)', () => {
+  const route = () => createOutreachDoNotContactDomainsRoute(deps())
+  const list = async (uid: string) => {
+    const response = await route()(
+      new Request(`https://console.example.com/api/outreach?orgId=${ORG}`, {
+        headers: { authorization: `Bearer ${uid}` },
+      }),
+      { params: {} },
+    )
+    return { status: response.status, body: (await response.json()) as Record<string, any> }
+  }
+
+  it('adds a domain with the member as its author, spelled one way, and lists it', async () => {
+    const added = await post(route(), REP, { action: 'add', domain: ' @KCorp.Example ', detail: 'Their gateway blocks us.' })
+    expect(added.status).toBe(200)
+    expect(added.body).toMatchObject({ changed: true, domain: 'kcorp.example' })
+    expect(docs.get(org('outreachDoNotContactDomains/kcorp.example'))).toMatchObject({
+      domain: 'kcorp.example',
+      reason: 'manual',
+      source: 'member',
+      addedByUid: REP,
+      addedAtMs: AT,
+      detail: 'Their gateway blocks us.',
+    })
+    expect(activity).toEqual([
+      { action: OUTREACH_DO_NOT_CONTACT_DOMAIN_ACTIVITY.add('kcorp.example'), target: { type: 'org', id: ORG } },
+    ])
+    const listed = await list(REP)
+    expect(listed.status).toBe(200)
+    expect(listed.body.domains.map((entry: { domain: string }) => entry.domain)).toEqual(['kcorp.example'])
+    // Adding it again changes nothing and logs nothing.
+    const again = await post(route(), OWNER, { action: 'add', domain: 'kcorp.example' })
+    expect(again.body.changed).toBe(false)
+    expect(activity).toHaveLength(1)
+  })
+
+  it('removes a domain, and says so on the feed', async () => {
+    docs.set(org('outreachDoNotContactDomains/kcorp.example'), { domain: 'kcorp.example', reason: 'gateway_block', source: 'runtime' })
+    const removed = await post(route(), REP, { action: 'remove', domain: 'KCORP.example' })
+    expect(removed.body).toMatchObject({ changed: true, domain: 'kcorp.example', domains: [] })
+    expect(docs.has(org('outreachDoNotContactDomains/kcorp.example'))).toBe(false)
+    expect(activity.at(-1)?.action).toBe(OUTREACH_DO_NOT_CONTACT_DOMAIN_ACTIVITY.remove('kcorp.example'))
+    expect((await post(route(), REP, { action: 'remove', domain: 'kcorp.example' })).body.changed).toBe(false)
+  })
+
+  it('refuses what is not a domain, an action it does not know, and a reader without Use Sequences', async () => {
+    expect((await post(route(), REP, { action: 'add', domain: 'not a domain' })).body.reason).toBe('invalid-domain')
+    expect((await post(route(), REP, { action: 'forget', domain: 'example.com' })).body.reason).toBe('invalid-request')
+    expect((await post(route(), 'uid-nobody', { action: 'add', domain: 'example.com' })).status).toBe(403)
+    expect(docs.size).toBeGreaterThan(0)
+    expect([...docs.keys()].some((key) => key.includes('outreachDoNotContactDomains'))).toBe(false)
+  })
+
+  it('a listed domain refuses every address at it before a send, as the gates read it', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-1', 'Sam Park', 'sam.park@kcorp.example')
+    await post(route(), REP, { action: 'add', domain: 'kcorp.example' })
+    const { body } = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-1' }] })
+    expect(body.results[0].outcome).toBe('blocked')
+    expect(body.results[0].blocks.map((block: { code: string }) => block.code)).toEqual(['do_not_contact_domain'])
+    expect(body.enrolled).toBe(0)
+    expect(docs.has(org(`outreachEnrollments/${sequenceId}_c-1`))).toBe(false)
   })
 })

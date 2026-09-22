@@ -19,6 +19,7 @@
 
 import {
   decideOutreachMailboxHealth,
+  OUTREACH_BOUNCE_RATE_MIN_SENDS,
   OUTREACH_COMPLAINT_PAUSE_MS,
   type OutreachMailboxHealthInput,
 } from './mailbox-health'
@@ -67,7 +68,16 @@ describe('decideOutreachMailboxHealth', () => {
     expect(health({ recentSends: 400, recentHardBounces: 2 })).toMatchObject({ pause: true, reason: 'bounce_rate' })
   })
 
-  it('judges a young mailbox on the sends it has', () => {
+  it('judges the rate only once the window holds 25 sends (AGL-3244)', () => {
+    // 1 of 21 is 4.8%, and was the pause that closed a whole sending window
+    // on one gateway block; under the floor a single bounce is not a rate.
+    expect(health({ recentSends: 21, recentHardBounces: 1 }).pause).toBe(false)
+    expect(health({ recentSends: OUTREACH_BOUNCE_RATE_MIN_SENDS - 1, recentHardBounces: 1 }).pause).toBe(false)
+    expect(health({ recentSends: OUTREACH_BOUNCE_RATE_MIN_SENDS, recentHardBounces: 1 })).toMatchObject({
+      pause: true,
+      reason: 'bounce_rate',
+      message: expect.stringContaining('1 of the last 25 emails hard-bounced (4.0%)'),
+    })
     expect(health({ recentSends: 33, recentHardBounces: 1 })).toMatchObject({
       pause: true,
       reason: 'bounce_rate',
@@ -75,6 +85,13 @@ describe('decideOutreachMailboxHealth', () => {
     })
     expect(health({ recentSends: 34, recentHardBounces: 1 }).pause).toBe(false)
     expect(health({ recentSends: 0, recentHardBounces: 0 }).pause).toBe(false)
+  })
+
+  it('still pauses a young mailbox on its second bounce of the day', () => {
+    expect(health({ bouncesToday: 2, recentSends: 3, recentHardBounces: 2 })).toMatchObject({
+      pause: true,
+      reason: 'bounces_today',
+    })
   })
 
   it('pauses for a week after a reply called an email spam', () => {

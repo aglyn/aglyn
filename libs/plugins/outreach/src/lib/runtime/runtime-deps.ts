@@ -16,6 +16,7 @@
  */
 
 import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import type { OutreachMailboxNotice } from '../engine/mailbox-notice'
 import type { OpenedOutreachMailbox } from '../mailboxes/mailbox-transport'
 import type { OutreachClickTarget } from './click-link'
 import type { OutreachUnsubscribeTarget } from './unsubscribe-link'
@@ -37,6 +38,19 @@ export interface OutreachRuntimeActivityTarget {
   type: `${string}:${string}`
   id: string
   name: string
+}
+
+/**
+ * What the runtime tells a mailbox's owner (AGL-3244): the notice the
+ * engine composes the email from, and who it is for — the member who
+ * connected the mailbox, and the organization's owners and admins beside
+ * them, since a paused mailbox is the organization's problem too.
+ */
+export interface OutreachMailboxNoticeRequest extends OutreachMailboxNotice {
+  orgId: string
+  mailboxId: string
+  /** The member whose mailbox it is. */
+  connectedByUid: string
 }
 
 export interface OutreachRuntimeDeps {
@@ -69,6 +83,14 @@ export interface OutreachRuntimeDeps {
   optOutOfSalesTopic(input: { hostId: string; email: string }): Promise<void>
   /** Files a hard bounce on the platform's suppression list. */
   suppressBouncedEmail(input: { email: string; hostId: string | null }): Promise<void>
+  /**
+   * Emails the mailbox's owner, and the organization's admins, that the
+   * mailbox paused itself or needs reconnecting (AGL-3244), through the
+   * platform's transactional sender. Called once per pause and once per
+   * reconnect, by the code path that wrote it; a failure to send is the
+   * platform's to log and never the runtime's to retry.
+   */
+  notifyMailboxOwner(notice: OutreachMailboxNoticeRequest): Promise<void>
   /** The signed one-click link for an enrollment, or `null` when none can be minted. */
   unsubscribeUrl(target: OutreachUnsubscribeTarget): string | null
   /**

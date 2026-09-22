@@ -37,6 +37,10 @@ import { outreachOrgCollection } from '../storage/outreach-records'
  * detail — a member's note, a bounce's diagnostic — and the enrollment it
  * came from, which no longer exists.
  *
+ * The DOMAIN list (`outreachDoNotContactDomains`, AGL-3244) is not touched:
+ * a domain names a company, not a person, and an entry there carries the
+ * bounce's diagnostic already scrubbed of the address it named.
+ *
  * A dry run counts both and writes nothing.
  */
 
