@@ -397,6 +397,11 @@ export function createAiJobTemplateStep(deps: AiJobTemplateStepDeps = {}): AiJob
         name,
         uid: job.createdBy,
         org: org as Record<string, unknown> | null,
+        // The same claim the page step makes (AGL-3024): a copy core mints is
+        // written under core's own id, never `draftId`, so a step that runs
+        // again — a pass resumed, a run cut off after the copy — would mint a
+        // second. The job's recorded id makes core replay the one it made.
+        attemptKey: draftId,
       })
       if (copy.ok) {
         const hostSubdomain = await aiSiteSubdomain(firestore, hostId)

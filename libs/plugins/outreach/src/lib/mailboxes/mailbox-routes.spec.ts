@@ -420,9 +420,11 @@ describe('the member gate every authenticated mailbox route climbs (AGL-2978)', 
       canManageAll: true,
     })
     configured = false
+    // Not configured names the gate, with the variables the Google gate wants.
     expect((await run('availability', get(`outreach/mailboxes/availability?orgId=${ORG}`))).body).toEqual({
       configured: false,
       canManageAll: false,
+      missing: [{ gate: 'google', missing: ['OUTREACH_TOKEN_KEY'] }],
     })
     const refused = await run('connect', post('outreach/mailboxes/connect', { orgId: ORG }))
     expect(refused.status).toBe(503)
@@ -761,6 +763,26 @@ describe('send a test to myself (AGL-2978)', () => {
     // The refresh token minted an access token; it was never sent anywhere else.
     const refresh = new URLSearchParams(googleCalls.find((call) => call.url === GOOGLE_OAUTH_ENDPOINTS.token)?.body ?? '')
     expect(refresh.get('refresh_token')).toBe(REFRESH_TOKEN)
+  })
+
+  it('goes to an address the member names, and refuses one that is not an address (AGL-3228)', async () => {
+    const mailbox = await connectMailbox()
+    googleCalls = []
+    const sent = await run('test', post('outreach/mailboxes/test', { orgId: ORG, mailboxId: mailbox.id, to: ' Outside@Example.org ' }))
+    expect(sent.status).toBe(200)
+    expect(sent.body).toMatchObject({ ok: true, sentTo: 'outside@example.org' })
+    const request = googleCalls.find((call) => call.url === `${GMAIL_API_BASE}/messages/send`)
+    const raw = Buffer.from(JSON.parse(request?.body ?? '{}').raw, 'base64url').toString('utf8')
+    expect(raw).toContain('To: outside@example.org\r\n')
+    // An outside receiver is told where to read the authentication results
+    // (the body is quoted-printable, so unfold its soft line breaks first).
+    expect(raw.replace(/=\r\n/g, '')).toContain('Authentication-Results')
+    const refused = await run('test', post('outreach/mailboxes/test', { orgId: ORG, mailboxId: mailbox.id, to: 'not an address' }))
+    expect(refused.status).toBe(400)
+    expect(refused.body.reason).toBe('invalid-request')
+    // Blank means oneself, as before.
+    const own = await run('test', post('outreach/mailboxes/test', { orgId: ORG, mailboxId: mailbox.id, to: '  ' }))
+    expect(own.body.sentTo).toBe('avery@rep.example.com')
   })
 
   it('is its member’s alone, even for an org admin, and rate-limited', async () => {

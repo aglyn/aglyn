@@ -22,6 +22,7 @@
 // firebase-admin, so the edge bundle is unaffected.
 import { registerPluginDeclarationsRepair } from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import { registerPluginSiteCache } from '@aglyn/aglyn/plugin-manager/plugin-site-cache'
+import { registerPluginTrustSigner } from '@aglyn/aglyn/plugin-manager/plugin-trust-signing'
 
 /**
  * Server-side error reporting for the console runtime (AGL-1921).
@@ -107,6 +108,30 @@ export async function register(): Promise<void> {
          */
         const { consoleSiteCache } = await import('./utils/server/site-cache-drop')
         return await consoleSiteCache.drop(request)
+      },
+    },
+    { pluginId: 'console' },
+  )
+
+  /*
+   * And the platform's trust key (AGL-3080). Realm trust is the strongest
+   * grant there is — it drops a marketplace bundle into the app realm — and
+   * the key that makes one is deployed HERE and nowhere else, never to a
+   * tenant runtime and never to a published package. The marketplace owns
+   * the queue, the review precondition and the documents; this owns the
+   * signature.
+   *
+   * Deferred by RELATIVE path for the same reason the cache above is:
+   * `node:crypto` has no business in the edge bundle, and deferring the LIB
+   * specifier would make nx treat it as lazy-loaded everywhere.
+   */
+  registerPluginTrustSigner(
+    {
+      sign: async (sha256) => {
+        const { consolePluginTrustSigner } = await import(
+          './utils/server/plugin-trust-signer'
+        )
+        return await consolePluginTrustSigner.sign(sha256)
       },
     },
     { pluginId: 'console' },

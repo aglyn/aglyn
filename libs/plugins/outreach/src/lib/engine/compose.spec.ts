@@ -36,7 +36,7 @@ const ORG = {
 
 const FOOTER =
   'Example Co LLC · PO Box 12345, Anytown, TX 75001\n' +
-  'This is a business solicitation from Example Co. Not relevant? Reply "no" and I won\'t email again.'
+  'This is a sales email from Example Co. Not interested? Reply "no" and I won\'t email again.'
 
 const first: OutreachEmailStep = {
   id: 'email-1',
@@ -99,7 +99,7 @@ describe('the footer', () => {
   it('uses the legal name in the solicitation sentence when there is no brand name', () => {
     expect(composeOutreachFooter({ ...ORG, brandName: '  ' }).footer).toBe(
       'Example Co LLC · PO Box 12345, Anytown, TX 75001\n' +
-        `This is a business solicitation from Example Co LLC. ${OUTREACH_OPT_OUT_LINE}`,
+        `This is a sales email from Example Co LLC. ${OUTREACH_OPT_OUT_LINE}`,
     )
   })
 
@@ -159,7 +159,7 @@ describe('composeOutreachEmail: the first email', () => {
     )
     expect(result.email?.text.endsWith(
       '{{contact.email}} LLC · PO Box 12345, Anytown, TX 75001\n' +
-        `This is a business solicitation from Example Co. ${OUTREACH_OPT_OUT_LINE}`,
+        `This is a sales email from Example Co. ${OUTREACH_OPT_OUT_LINE}`,
     )).toBe(true)
   })
 

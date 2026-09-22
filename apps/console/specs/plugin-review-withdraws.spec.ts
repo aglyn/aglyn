@@ -67,11 +67,18 @@ describe('a rejection withdraws realm trust (AGL-2306)', () => {
   )
 
   it('clears the SAME four fields sign-plugin clears, and no others', () => {
-    // One shape of "untrusted", not two. `sign-plugin`'s revoke branch is the
-    // definition; a rejection that cleared three of the four would leave a
-    // version that reads as signed-but-untrusted to somebody.
+    // One shape of "untrusted", not two. The realm-trust route's revoke
+    // branch is the definition; a rejection that cleared three of the four
+    // would leave a version that reads as signed-but-untrusted to somebody.
+    // Both files are the marketplace plugin's since AGL-3080.
     const signRoute = readFileSync(
-      join(__dirname, '..', 'app/api/admin/sign-plugin/route.ts'),
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        'libs/plugins/marketplace/src/lib/server/admin-trust.ts',
+      ),
       'utf8',
     )
     const cleared = (source: string) =>

@@ -870,7 +870,7 @@ describe('outreach/preview (AGL-2980)', () => {
     expect(body.text).toContain('I saw Example Co just opened its second location.')
     expect(body.text).toContain('Avery')
     expect(body.text).toContain(
-      'Example Shop LLC · 100 Example St, Springfield, IL 62701\nThis is a business solicitation from Example Shop.',
+      'Example Shop LLC · 100 Example St, Springfield, IL 62701\nThis is a sales email from Example Shop.',
     )
     expect(body.error).toBeNull()
   })

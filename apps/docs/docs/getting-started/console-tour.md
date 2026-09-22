@@ -211,15 +211,16 @@ for finding and installing new ones, not for administering what you already run:
 ### The notifications feed
 
 Your in-app notification feed — billing, publishing, workflow failures —
-lives under **Notifications**. The page shows what arrived, newest first, with
-**Mark all read** and a **Notification settings** button beside it:
+lives under **Notifications**, which has two sections in the rail on the left:
+**All notifications** and **Settings**. The first shows what arrived, newest
+first, with **Mark all read** above it:
 
-![The Notifications page: a Mark all read action, a Notification settings button, and the paginated feed of notifications below](/img/getting-started/notifications-page.png)
+![The Notifications page: a Navigation rail listing All notifications and Settings, beside a Mark all read action and the paginated feed of notifications](/img/getting-started/notifications-page.png)
 
 ### Notification settings
 
-Everything about *what* reaches you lives on its own page, **Notification
-settings**, reachable from that button or from the **Manage** tab strip.
+Everything about *what* reaches you lives on the second section,
+**Settings**.
 
 **What you are told about** is a table: one row per category, one column for
 **In console** and one for **Email**.
@@ -262,8 +263,8 @@ email; a single task is silenced by clearing its **Remind me** field. See
 
 ### Alerts on this device
 
-At the foot of the settings page, three switches control how a new notification
-reaches you in **this browser**:
+At the foot of the **Settings** section, three switches control how a new
+notification reaches you in **this browser**:
 
 - **Unread count in tab title** — badges the browser tab, e.g. `(3) Aglyn`,
   so you can see new activity from another tab. On by default.

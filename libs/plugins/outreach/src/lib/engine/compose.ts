@@ -26,8 +26,9 @@
  * ## The footer is not optional
  *
  * Every email ends with the organization's legal name, its postal address,
- * a sentence saying the email is a business solicitation, and the way out —
- * reply "no". Those are what CAN-SPAM requires of a commercial email, and
+ * a sentence saying the email is a sales email, and the way out — reply
+ * "no". Those are what CAN-SPAM requires of a commercial email (16 CFR 316:
+ * identifiable as a solicitation, no fixed phrase), and
  * the composer appends them itself, after the merge, as literal text: no
  * template can leave them off, and no merge field can rewrite them. With no
  * postal address or no legal name, it refuses to compose at all.
@@ -71,11 +72,16 @@ import {
 } from './sequence-validation'
 
 /** The way out every email offers, word for word. */
-export const OUTREACH_OPT_OUT_LINE = 'Not relevant? Reply "no" and I won\'t email again.'
+export const OUTREACH_OPT_OUT_LINE = 'Not interested? Reply "no" and I won\'t email again.'
 
-/** The sentence that says what the email is. */
+/**
+ * The sentence that says what the email is. "Sales email", not "business
+ * solicitation": an inbox-placement test on 2026-09-19 named the latter
+ * phrase as a spam trigger, and the law asks that the email be identifiable
+ * as a solicitation, not for any particular words (AGL-3228).
+ */
 export function outreachSolicitationStatement(senderName: string): string {
-  return `This is a business solicitation from ${senderName}.`
+  return `This is a sales email from ${senderName}.`
 }
 
 /**

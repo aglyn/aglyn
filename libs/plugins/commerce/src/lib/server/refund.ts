@@ -101,7 +101,7 @@ async function retireLicenseKeys(
     }
     return retired
   } catch (error) {
-    console.error('Licence key retirement failed', orderId, error)
+    console.error('License key retirement failed', orderId, error)
     return 0
   }
 }

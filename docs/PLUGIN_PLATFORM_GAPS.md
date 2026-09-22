@@ -61,7 +61,7 @@ docs: `docs/PLUGIN_LOADING.md` (current architecture),
   has nothing for a buyer to read.
 - **No review workflow surface.** Strapi: submission form → business
   review → security review → listed, with a ✅ verified badge and explicit
-  unverified-risk disclaimers. Aglyn: trust granting exists (sign-plugin
+  unverified-risk disclaimers. Aglyn: trust granting exists (realm-trust
   API) but there is no submission status, review queue UI, checklist, or
   badge rendering.
 - **No compatibility declarations.** Strapi plugins pin peer-dependency

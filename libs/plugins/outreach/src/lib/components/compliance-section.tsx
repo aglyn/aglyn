@@ -178,7 +178,7 @@ export function OutreachComplianceSection(
         <Stack spacing={2}>
           <Typography variant="body2" color="text.secondary">
             {'Every email a sequence sends ends with a footer naming your organization, its postal ' +
-              'address, that the email is a business solicitation, and how to stop more of them. The law ' +
+              'address, that the email is a sales email, and how to stop more of them. The law ' +
               'requires these on commercial email, so every email gets the footer automatically.'}
           </Typography>
           <TextField

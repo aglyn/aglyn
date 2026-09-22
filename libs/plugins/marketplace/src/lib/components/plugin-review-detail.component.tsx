@@ -274,7 +274,7 @@ export function PluginReviewDetail({
       try {
         const response = await authorizedFetch(
           user,
-          '/api/admin/sign-plugin',
+          '/api/marketplace/admin/trust',
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1767,7 +1767,7 @@ export function PluginReviewDetail({
                           : ''}
                       </Typography>
                       {/* Realm trust bypasses the plugin sandbox's CSP, so
-                          /api/admin/sign-plugin is super-only. The button was
+                          /api/marketplace/admin/trust is super-only. The button was
                           live for support staff (AGL-2131). */}
                       <BlockedControl
                         blocked={superGate.blocked}

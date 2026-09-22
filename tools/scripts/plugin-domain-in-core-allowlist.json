@@ -171,13 +171,6 @@
       "lane": "marketplace"
     },
     {
-      "path": "apps/console/app/api/admin/sign-plugin/route.ts",
-      "rules": [
-        "plugin-collection:marketplace"
-      ],
-      "lane": "marketplace"
-    },
-    {
       "path": "apps/console/app/api/admin/tax-return/route.ts",
       "rules": [
         "plugin-collection:marketplace",

@@ -21,6 +21,12 @@ import { buildRoute, Route } from './route-links'
  * The personal Manage area's tab strip (AGL-351): user-scoped surfaces —
  * notifications and profile — as their own console section in the
  * secondary app bar, mirroring orgNavTabItems/hostNavTabItems.
+ *
+ * AREAS, and only areas (AGL-3230). Notification settings briefly sat here as
+ * a third tab, which listed an area and that area's own settings side by side
+ * at the same rank — the one relationship a flat strip cannot express. Each
+ * area's internal pages are its own section rail, the way Manage Account's six
+ * sections already are.
  */
 export function manageNavTabItems() {
   return [
@@ -28,11 +34,6 @@ export function manageNavTabItems() {
       id: 'nav-tab-manage-notifications',
       label: 'Notifications',
       href: buildRoute(Route.MANAGE_NOTIFICATIONS),
-    },
-    {
-      id: 'nav-tab-manage-notification-settings',
-      label: 'Notification settings',
-      href: buildRoute(Route.MANAGE_NOTIFICATION_SETTINGS),
     },
     {
       id: 'nav-tab-manage-user',

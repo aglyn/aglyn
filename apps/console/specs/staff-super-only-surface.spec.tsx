@@ -198,22 +198,18 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     via: /StaffRoleOnly/,
   },
   /*
-   * The control that grants realm trust lives in the marketplace plugin
-   * since AGL-3080, while `sign-plugin/route.ts` — the key holder — stayed
-   * in this app. So this row reads ACROSS: the paths below are joined onto
-   * `CONSOLE_ROOT`, and `../../libs/...` climbs out of the app to the repo.
+   * `sign-plugin/route.ts` was HERE. Realm-trust granting is the marketplace
+   * plugin's since AGL-3080 — route AND control — so it is out of this
+   * sweep's scope, which derives its subjects from `app/api/admin/`. The
+   * signing KEY stayed this app's, behind `core.plugin-trust-signer`; the
+   * route only asks for a signature.
    *
-   * `BlockedControl` rather than `SuperStaffOnly`: the wrapper moved to
-   * `shared-ui-jsx` so a plugin could use it, and the console's own
-   * `SuperStaffOnly` renders it. The verdict is the same
-   * `resolveStaffRoleGate(role, ['super'])` either side.
+   * The property it held is pinned where both halves now live:
+   * `libs/plugins/marketplace/src/lib/server/admin-trust-is-super-only.spec.ts`
+   * asserts the route refuses a non-super caller AND that the control that
+   * calls it is wrapped in the super gate — a pairing this row could only
+   * approximate by matching a string in a file.
    */
-  'sign-plugin/route.ts': {
-    ui: [
-      '../../libs/plugins/marketplace/src/lib/components/plugin-review-detail.component.tsx',
-    ],
-    via: /BlockedControl/,
-  },
   // Staff refunds (AGL-2486). The only entry here whose gate is not "which
   // role are you" but "how much is this": support may refund up to a cap and
   // escalates above it, so a `SuperStaffOnly` wrapper would refuse every

@@ -37,6 +37,40 @@ export interface PluginPermission {
 
 const pluginPermissions = new Map<string, PluginPermission>()
 
+/*
+ * Whoever resolved a permission map before a plugin registered holds a map
+ * without that plugin's keys, and a key that is absent reads as refused
+ * (AGL-3228). The console's permission provider resolved its map when the
+ * member document arrived; on a cold load of a plugin's deep link the
+ * plugin's chunk can register AFTER that, so the owner was refused a surface
+ * they hold by default until the next full render. So registration is
+ * observable, the way `subscribePluginEntitlements` makes the org catalog's
+ * registrations observable, and the provider re-reads on every change.
+ */
+let registrationVersion = 0
+const listeners = new Set<() => void>()
+
+/** Calls `listener` after every registration; answers the unsubscribe. */
+export function subscribePluginPermissions(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+/**
+ * A number that changes whenever the registry does — the snapshot for a
+ * `useSyncExternalStore` over `subscribePluginPermissions`.
+ */
+export function pluginPermissionsVersion(): number {
+  return registrationVersion
+}
+
+function notifyListeners(): void {
+  registrationVersion += 1
+  for (const listener of [...listeners]) listener()
+}
+
 /**
  * Idempotent per key FOR ITS OWNER — the declaring plugin may re-register
  * (hot reload, a second surface, a repeated init) and its entry is replaced.
@@ -69,6 +103,7 @@ export function registerPluginPermissions(
     }
     pluginPermissions.set(permission.key, permission)
   }
+  notifyListeners()
 }
 
 export function listPluginPermissions(): PluginPermission[] {

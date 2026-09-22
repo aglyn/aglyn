@@ -922,7 +922,7 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
-    'apps/console/app/(app)/manage/notifications/settings/page.tsx',
+    'apps/console/app/(app)/manage/notifications/(sections)/settings/page.tsx',
     'The notification CATEGORIES (AGL-3226) — two tables of the same six ' +
       'rows, one per `NotificationCategory`, with a channel per column. The ' +
       'rows are a closed union in the type system rather than a collection ' +

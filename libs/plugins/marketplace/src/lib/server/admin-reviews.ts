@@ -86,7 +86,7 @@ import { dropCachesForListing } from './revoke-cache-drop'
  *   verify → verified (✅ badge)     reject → rejected (+ reason,
  *                                    notification to the publisher)
  *
- * Realm trust stays a SEPARATE, super-staff grant (sign-plugin route) —
+ * Realm trust stays a SEPARATE, super-staff grant (`admin-trust.ts`) —
  * listing/verifying here never signs anything. Every action lands in
  * adminAudit.
  */
@@ -974,7 +974,7 @@ async function handler(request: Request): Promise<Response> {
                 reviewRejectionCategory: category,
                 // REALM TRUST IS WITHDRAWN WITH THE APPROVAL (AGL-2306).
                 //
-                // `sign-plugin` refuses to grant `trust: 'realm'` unless the
+                // `admin-trust` refuses to grant `trust: 'realm'` unless the
                 // version is approved — approval gates the grant. Nothing
                 // ungated it: the realm load path checks `hiddenAt`, the sha,
                 // the signature and the revocation, and never re-reads
@@ -984,7 +984,7 @@ async function handler(request: Request): Promise<Response> {
                 // user data, until staff separately reached for the kill
                 // switch.
                 //
-                // The same four fields `sign-plugin`'s own revoke branch
+                // The same four fields `admin-trust`'s own revoke branch
                 // clears, so there is one shape of "untrusted" rather than
                 // two. This does NOT stop the bundle running as a sandboxed
                 // plugin — that is what the per-version revocation beside

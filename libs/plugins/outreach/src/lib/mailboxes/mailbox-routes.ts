@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import type {
   OutreachMailbox,
@@ -39,6 +40,7 @@ import {
   type OutreachApiRefusalReason,
   type OutreachConnectReturn,
   type OutreachMailboxAvailability,
+  type OutreachMailboxAvailabilityGate,
   type OutreachMailboxDisconnectResponse,
 } from './mailbox-api'
 import {
@@ -237,9 +239,18 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     if (request.method !== 'GET') return methodNotAllowed('GET')
     const gate = await outreachMemberGate(request, new URL(request.url).searchParams.get('orgId'), deps.gate)
     if (gate instanceof Response) return gate
-    const configured =
-      deps.readConfig().configured && deps.stateSigningConfigured() && Boolean(deps.redirectUri(request.url))
-    return ok({ configured, canManageAll: gate.isOrgAdmin } satisfies OutreachMailboxAvailability)
+    // Every gate is named, not the first: an operator fixing a deployment
+    // should see the whole list once rather than one variable per redeploy.
+    const missing: OutreachMailboxAvailabilityGate[] = []
+    const config = deps.readConfig()
+    if (config.configured === false) missing.push({ gate: 'google', missing: config.missing })
+    if (!deps.stateSigningConfigured()) missing.push({ gate: 'state' })
+    if (!deps.redirectUri(request.url)) missing.push({ gate: 'redirect' })
+    return ok({
+      configured: missing.length === 0,
+      canManageAll: gate.isOrgAdmin,
+      ...(missing.length ? { missing } : {}),
+    } satisfies OutreachMailboxAvailability)
   }
 
   const connect: PluginWebApiHandler = async (request) => {
@@ -636,6 +647,23 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     if (!limited.allowed) {
       return refusal(429, 'rate-limited', `A mailbox can send ${OUTREACH_TEST_SENDS_PER_HOUR} tests an hour. Try again later.`)
     }
+    /*
+     * To the member's own address unless they name another (AGL-3228). A
+     * test to oneself never leaves Google, so it arrives with no
+     * Authentication-Results at all and cannot show whether the send-as
+     * domain's DKIM and DMARC hold; an outside mailbox the member can read
+     * is the only place that can be seen. The rate limit above is the
+     * whole guard on who may be written to — it is the member's own
+     * account sending, as it could from its own compose window.
+     */
+    const named = body['to']
+    const to =
+      named === undefined || named === null || String(named).trim() === ''
+        ? mailbox.email
+        : normalizeContactEmail(String(named))
+    if (!to) {
+      return refusal(400, 'invalid-request', `"${String(named).trim()}" isn't a valid email address.`)
+    }
     const firestore = deps.firestore()
     const nowMs = deps.now()
     const opened = await openOutreachMailboxClient(
@@ -656,16 +684,23 @@ export function createOutreachMailboxRoutes(deps: OutreachMailboxRouteDeps): Out
     try {
       const sent = await sendOutreachMessage(opened.client, {
         from: { address: mailbox.sendAs, name: mailbox.displayName },
-        to: mailbox.email,
+        to,
         subject: 'Sequences test message',
         text: [
           'This is a test message from Sequences.',
           '',
-          `It was sent through your connected mailbox as ${mailbox.sendAs}. ` +
-            'If it reached your inbox, this mailbox can send.',
+          `It was sent through the connected mailbox ${mailbox.email} as ${mailbox.sendAs}. ` +
+            'If it reached the inbox, this mailbox can send.',
+          ...(to === mailbox.email
+            ? []
+            : [
+                '',
+                'To read whether the sender is authenticated, open this message\u2019s original source ' +
+                  'and look for dkim=pass, spf=pass and dmarc=pass in Authentication-Results.',
+              ]),
         ].join('\n'),
       })
-      return ok({ ok: true, sentTo: mailbox.email, gmailMessageId: sent.gmailMessageId, sentAtMs: nowMs })
+      return ok({ ok: true, sentTo: to, gmailMessageId: sent.gmailMessageId, sentAtMs: nowMs })
     } catch (error) {
       if (error instanceof GmailTransportError && error.reconnectRequired) {
         await markOutreachMailboxReconnectRequired(firestore, {

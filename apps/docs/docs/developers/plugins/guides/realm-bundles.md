@@ -42,7 +42,7 @@ not to the listing — a newer version stays sandboxed until it is reviewed and 
 in turn.
 
 Both actions are super-staff only and adminAudit'd. The equivalent API is
-`POST /api/admin/sign-plugin { listingId, version }`, with `{ action: 'revoke' }` to
+`POST /api/marketplace/admin/trust { listingId, version }`, with `{ action: 'revoke' }` to
 revoke; a hard-kill still needs a revocation doc. Signing requires
 `PLUGIN_TRUST_PRIVATE_KEY` on the console deployment — generate the pair with
 `tools/scripts/generate-plugin-trust-key.mjs`.

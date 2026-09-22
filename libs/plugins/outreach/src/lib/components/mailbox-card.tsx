@@ -96,6 +96,8 @@ export const MAILBOX_ACTION_LABELS = {
   pause: 'Pause',
   resume: 'Resume',
   test: 'Send a test to myself',
+  testElsewhere: 'Send a test',
+  testAddress: 'Test address',
   disconnect: 'Disconnect',
   reconnect: 'Reconnect',
 } as const
@@ -157,6 +159,9 @@ export function MailboxCard(props: MailboxCardProps) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [busy, setBusy] = useState<'status' | 'test' | 'disconnect' | null>(null)
+  // Where a test goes when not to the member themself (AGL-3228): a test to
+  // one's own address never leaves Google and shows no authentication result.
+  const [testAddress, setTestAddress] = useState('')
 
   // A save here, a change made from another tab, or a reconnect rewrites the
   // stored settings; the form follows them, unless the member has unsaved
@@ -225,8 +230,14 @@ export function MailboxCard(props: MailboxCardProps) {
   const sendTest = async () => {
     setBusy('test')
     try {
-      const sent = await api.sendTest(mailbox.id)
-      enqueueSnackbar(`Test sent to ${sent.sentTo}. Check your inbox.`, { variant: 'success' })
+      const to = testAddress.trim()
+      const sent = await api.sendTest(mailbox.id, to || undefined)
+      enqueueSnackbar(
+        to
+          ? `Test sent to ${sent.sentTo}. Its original source shows whether the sender authenticated.`
+          : `Test sent to ${sent.sentTo}. Check your inbox.`,
+        { variant: 'success' },
+      )
     } catch (error) {
       enqueueSnackbar((error as Error).message, { variant: 'error', allowDuplicate: true })
     } finally {
@@ -460,6 +471,22 @@ export function MailboxCard(props: MailboxCardProps) {
           </Typography>
         )}
 
+        {isMine && !needsReconnect ? (
+          <TextField
+            label={MAILBOX_ACTION_LABELS.testAddress}
+            value={testAddress}
+            onChange={(event) => setTestAddress(event.target.value)}
+            disabled={busy !== null}
+            size="small"
+            type="email"
+            helperText={
+              'Leave empty to send the test to yourself. A test to an outside mailbox you can ' +
+              'read is the only one whose original source shows the sender authentication results.'
+            }
+            fullWidth
+          />
+        ) : null}
+
         {canManage || isMine ? (
           <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
             {canManage && !needsReconnect ? (
@@ -469,7 +496,7 @@ export function MailboxCard(props: MailboxCardProps) {
             ) : null}
             {isMine && !needsReconnect ? (
               <Button variant="outlined" disabled={busy !== null} onClick={() => void sendTest()}>
-                {MAILBOX_ACTION_LABELS.test}
+                {testAddress.trim() ? MAILBOX_ACTION_LABELS.testElsewhere : MAILBOX_ACTION_LABELS.test}
               </Button>
             ) : null}
             {canManage ? (

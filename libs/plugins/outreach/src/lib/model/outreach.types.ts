@@ -640,7 +640,7 @@ export interface OutreachOrgSettings {
   legalName: string
   /**
    * The name the solicitation sentence uses when it is not the legal name:
-   * "This is a business solicitation from Example Co." `''` uses the legal
+   * "This is a sales email from Example Co." `''` uses the legal
    * name.
    */
   brandName: string

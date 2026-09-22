@@ -32,7 +32,7 @@ const QUOTED_STEP = [
   '> Saw the portfolio launch last week. Worth 20 minutes?',
   '>',
   '> Example Co LLC · PO Box 12345, Anytown, TX 75001',
-  '> This is a business solicitation from Example Co. Not relevant? Reply "no" and I won\'t email again.',
+  '> This is a sales email from Example Co. Not interested? Reply "no" and I won\'t email again.',
 ].join('\n')
 
 const reply = (words: string) => `${words}\n${QUOTED_STEP}`
@@ -53,9 +53,17 @@ describe('the words a reply adds', () => {
       'Reply STOP to opt out of our newsletter',
     ].join('\r\n')
     expect(outreachFreshReplyText(outlookStyle)).toBe('Happy to talk next week.')
+    // The footer as it read before AGL-3228 — a prospect replying to an
+    // older email quotes the sentence they were sent.
     const unmarked = 'Thanks!\nThis is a business solicitation from Example Co. Not relevant? Reply “no” and I won’t email again.'
     expect(outreachFreshReplyText(unmarked)).toBe('Thanks!')
     expect(detectOutreachOptOutIntent(unmarked).optOut).toBe(false)
+    // The footer as it reads since AGL-3228, and as a client may re-quote it
+    // with the "sales email" sentence alone.
+    const current = 'Sounds good.\nThis is a sales email from Example Co. Not interested? Reply "no" and I won\'t email again.'
+    expect(outreachFreshReplyText(current)).toBe('Sounds good.')
+    expect(detectOutreachOptOutIntent(current).optOut).toBe(false)
+    expect(outreachFreshReplyText('Sure\n> This is a sales email from Example Co.')).toBe('Sure')
   })
 
   it('reads nothing into an empty reply', () => {

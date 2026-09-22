@@ -61,7 +61,8 @@ export interface OutreachOptOutIntent {
 const NONE: OutreachOptOutIntent = { optOut: false, complaint: false, matched: null }
 
 /** A line of the footer every Outreach email carries, however a client re-quoted it. */
-const FOOTER_LINE = /reply\s+["“”'‘’]?no["“”'‘’]?\s+and\s+i\s+won['’]?t\s+email|business\s+solicitation\s+from/i
+const FOOTER_LINE =
+  /reply\s+["“”'‘’]?no["“”'‘’]?\s+and\s+i\s+won['’]?t\s+email|(?:business\s+solicitation|sales\s+email)\s+from/i
 
 /**
  * The words a reply adds to its thread: the text above the quoted history,

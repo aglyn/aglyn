@@ -1740,8 +1740,8 @@ export const collectionRelatedSchema: Aglyn.ComponentSchema<CollectionRelatedPro
         label: 'Title style',
         description:
           'Which type step from the site theme each post’s title reads at. ' +
-          'Default Subtitle 1; the title takes the surrounding text colour ' +
-          'rather than the link colour.',
+          'Default Subtitle 1; the title takes the surrounding text color ' +
+          'rather than the link color.',
         component: Aglyn.FieldComponentType.SELECT,
         options: [...typographyVariants],
       },

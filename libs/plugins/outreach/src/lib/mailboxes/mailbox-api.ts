@@ -59,9 +59,22 @@ export interface OutreachApiRefusal {
   reason: OutreachApiRefusalReason
 }
 
+/** A reason `GET outreach/mailboxes/availability` answers `configured: false`. */
+export type OutreachMailboxAvailabilityGate =
+  | { gate: 'google'; missing: string[] }
+  | { gate: 'state' }
+  | { gate: 'redirect' }
+
 /** `GET outreach/mailboxes/availability` */
 export interface OutreachMailboxAvailability {
   configured: boolean
+  /**
+   * When not configured, which gates refused, so an operator reading the
+   * response knows what to set: the Google client (`google`, with the names
+   * of the missing variables), the state signing secret (`state`), or the
+   * console origin to register (`redirect`). Absent when configured.
+   */
+  missing?: OutreachMailboxAvailabilityGate[]
   /**
    * Whether the viewer is an organization owner or admin, who may change,
    * pause and disconnect any member's mailbox. The routes decide this on
@@ -119,10 +132,13 @@ export interface OutreachMailboxResponse {
   mailbox: OutreachMailbox
 }
 
-/** `POST outreach/mailboxes/test` */
+/**
+ * `POST outreach/mailboxes/test` — `{ mailboxId, to? }`. `to` is the address
+ * the test goes to; left off, the account's own (AGL-3228).
+ */
 export interface OutreachMailboxTestResponse {
   ok: true
-  /** The account's own address the test went to. */
+  /** The address the test went to. */
   sentTo: string
   gmailMessageId: string
   sentAtMs: number

@@ -135,7 +135,7 @@ describe('Sequences → Compliance: what it shows (AGL-2980)', () => {
     expect(screen.getByText(OUTREACH_POSTAL_ADDRESS_HELP)).toBeTruthy()
     expect(screen.getByTestId('outreach-footer-preview').textContent).toBe(
       'Example Co LLC · 100 Example St, Springfield, IL 62701\n' +
-        'This is a business solicitation from Example Co. Not relevant? Reply "no" and I won\'t email again.',
+        'This is a sales email from Example Co. Not interested? Reply "no" and I won\'t email again.',
     )
     expect(screen.getByText('United States')).toBeTruthy()
     expect(screen.getByText(/require a consent basis/)).toBeTruthy()

@@ -633,6 +633,8 @@ describe('the form step', () => {
       name: 'Roof quote request',
       uid: 'uid-1',
       org: STARTER_ORG,
+      // The claim that makes a second pass replay this copy (AGL-3024).
+      attemptKey: FORM_ID,
     })
     expect(mockRunAiRequest).not.toHaveBeenCalled()
     expect(outcome).toEqual({

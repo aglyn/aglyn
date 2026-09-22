@@ -5,14 +5,14 @@
  *
  * Prints the env values the trust chain consumes:
  * - PLUGIN_TRUST_PRIVATE_KEY — base64 PKCS8 DER private key. Console app
- *   ONLY (the staff sign-plugin route). Treat like any signing secret.
+ *   ONLY (the staff realm-trust route). Treat like any signing secret.
  * - PLUGIN_TRUST_PUBLIC_KEY / NEXT_PUBLIC_PLUGIN_TRUST_PUBLIC_KEY —
  *   base64 RAW 32-byte public key (WebCrypto `importKey('raw', …)`
  *   format). Safe to publish; deploy to every runtime that loads realm
  *   bundles (tenant + console, client and server).
  *
  * Rotating: generate a new pair, re-sign every granted version through
- * the sign-plugin route, then swap the public key everywhere.
+ * the realm-trust route, then swap the public key everywhere.
  */
 import { generateKeyPairSync } from 'node:crypto'
 

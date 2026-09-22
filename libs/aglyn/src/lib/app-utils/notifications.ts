@@ -234,45 +234,44 @@ export interface AglynNotification {
   readAt?: ITimestamp | null
 }
 
-export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> =
-  {
-    'billing.invoice': 'Invoice available',
-    'billing.paymentFailed': 'Payment failed',
-    'billing.subscriptionCanceled': 'Subscription canceled',
-    'billing.usage': 'Usage threshold',
-    'team.invite': 'Team invite',
-    'team.roleChanged': 'Role changed',
-    'team.hostAccessGranted': 'Site access granted',
-    'content.formSubmission': 'Form submission',
-    'content.booking': 'New booking',
-    'content.order': 'New order',
-    'content.lowStock': 'Low stock',
-    'content.taskAssigned': 'Task assigned to you',
-    'content.taskReminder': 'Task reminder',
-    'content.contactAssigned': 'Contact assigned to you',
-    'content.leadAssigned': 'Lead assigned to you',
-    'content.crmDailyDigest': 'Daily CRM digest',
-    'content.insightsDigest': 'Weekly insights',
-    'marketplace.review': 'Listing review',
+export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
+  'billing.invoice': 'Invoice available',
+  'billing.paymentFailed': 'Payment failed',
+  'billing.subscriptionCanceled': 'Subscription canceled',
+  'billing.usage': 'Usage threshold',
+  'team.invite': 'Team invite',
+  'team.roleChanged': 'Role changed',
+  'team.hostAccessGranted': 'Site access granted',
+  'content.formSubmission': 'Form submission',
+  'content.booking': 'New booking',
+  'content.order': 'New order',
+  'content.lowStock': 'Low stock',
+  'content.taskAssigned': 'Task assigned to you',
+  'content.taskReminder': 'Task reminder',
+  'content.contactAssigned': 'Contact assigned to you',
+  'content.leadAssigned': 'Lead assigned to you',
+  'content.crmDailyDigest': 'Daily CRM digest',
+  'content.insightsDigest': 'Weekly insights',
+  'marketplace.review': 'Listing review',
 
-    'support.ticketOpened': 'New support ticket',
-    'support.ticketReply': 'Support ticket reply',
-    'system.announcement': 'Announcement',
-    'system.pluginVerifierRegression': 'Plugin verifier regression',
-    'system.signInMethodRemoved': 'Sign-in method removed',
-    'system.scopeDrift': 'Resources missing a sharing scope',
-    'system.ssoDomainUnverified': 'SSO domain no longer proves ownership',
-    'system.formSubmissionsPaused': 'Form submissions paused',
-    'system.visitorRecordsPaused': 'Sign-ups or leads paused',
-    'system.abuseReportUrgent': 'Urgent abuse report',
-    'system.dmcaCounterNotice': 'DMCA counter-notice',
-    'system.bandwidthCeilingTripped': 'Bandwidth ceiling reached',
-    'system.bandwidthCapEngaged': 'Monthly traffic limit reached',
-    'system.billingWebhookHalfApplied': 'Billing webhook half applied',
-    'system.disputeUnattributed': 'Card dispute with no owner',
-    'staff.userSignedUp': 'New account',
-    'staff.orgCreated': 'New workspace',
-  }
+  'support.ticketOpened': 'New support ticket',
+  'support.ticketReply': 'Support ticket reply',
+  'system.announcement': 'Announcement',
+  'system.pluginVerifierRegression': 'Plugin verifier regression',
+  'system.signInMethodRemoved': 'Sign-in method removed',
+  'system.scopeDrift': 'Resources missing a sharing scope',
+  'system.ssoDomainUnverified': 'SSO domain no longer proves ownership',
+  'system.formSubmissionsPaused': 'Form submissions paused',
+  'system.visitorRecordsPaused': 'Sign-ups or leads paused',
+  'system.abuseReportUrgent': 'Urgent abuse report',
+  'system.dmcaCounterNotice': 'DMCA counter-notice',
+  'system.bandwidthCeilingTripped': 'Bandwidth ceiling reached',
+  'system.bandwidthCapEngaged': 'Monthly traffic limit reached',
+  'system.billingWebhookHalfApplied': 'Billing webhook half applied',
+  'system.disputeUnattributed': 'Card dispute with no owner',
+  'staff.userSignedUp': 'New account',
+  'staff.orgCreated': 'New workspace',
+}
 
 /** Preference buckets (AGL-267): the prefix before the dot. */
 export type NotificationCategory =
@@ -351,10 +350,22 @@ export function notificationMuted(
  */
 export const DIGEST_PREFS_FIELD = 'digestPrefs'
 
+/**
+ * The key the daily CRM digest keeps inside {@link DIGEST_PREFS_FIELD}.
+ *
+ * Exported so the console writes the switch through a name rather than a
+ * second copy of the string (AGL-3230). The reader below and the page that
+ * flips it were spelling the same literal in two files, which is how a
+ * preference comes to be written under one key and read under another — and
+ * it kept the plugin's vocabulary in a console page, where
+ * `check:plugin-domain-in-core` rightly refuses it.
+ */
+export const CRM_DAILY_DIGEST_KEY = 'crmDaily'
+
 export function crmDailyDigestEnabled(
   prefs: Record<string, boolean> | null | undefined,
 ): boolean {
-  return prefs?.['crmDaily'] !== false
+  return prefs?.[CRM_DAILY_DIGEST_KEY] !== false
 }
 
 /**
@@ -474,9 +485,11 @@ export const NOTIFICATION_CHANNEL_DEFAULTS: Record<
  * digest twice: once as the digest, once as a one-line "Daily CRM digest"
  * notification saying that the digest happened.
  */
-export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> = new Set<
-  AglynNotificationType
->(['content.crmDailyDigest', 'content.insightsDigest'])
+export const NOTIFICATION_SELF_SENT_EMAIL_TYPES: ReadonlySet<string> =
+  new Set<AglynNotificationType>([
+    'content.crmDailyDigest',
+    'content.insightsDigest',
+  ])
 
 /**
  * Whether a channel is on for one notification, at its own scope.
@@ -512,7 +525,8 @@ export function notificationChannelEnabled(
     const answer = layer?.[category]?.[channel]
     if (typeof answer === 'boolean') return answer
   }
-  if (channel === 'console' && notificationMuted(legacyPrefs, type)) return false
+  if (channel === 'console' && notificationMuted(legacyPrefs, type))
+    return false
   return NOTIFICATION_CHANNEL_DEFAULTS[category][channel]
 }
 
@@ -552,7 +566,9 @@ export function notificationScopePref(
 export function notificationOverriddenScopes(
   settings: NotificationSettings | null | undefined,
 ): { orgIds: string[]; hostIds: string[] } {
-  const named = (layers: Record<string, NotificationCategoryPrefs> | undefined) =>
+  const named = (
+    layers: Record<string, NotificationCategoryPrefs> | undefined,
+  ) =>
     Object.entries(layers ?? {})
       .filter(([, prefs]) =>
         Object.values(prefs ?? {}).some((channels) =>

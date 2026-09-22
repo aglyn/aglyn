@@ -87,27 +87,42 @@ const MARKDOWN_ROOTS = [
 ]
 
 /**
- * Ships as UI: the console, and the docs site's own React components.
+ * Ships as UI: the console, the docs site's own React components, and every
+ * plugin console.
  *
- * ⚠️ `libs/plugins` is NOT swept, and that is a hole rather than a decision
- * (noticed by AGL-3080). Plugin consoles ship as UI exactly as the console
- * does, and surfaces keep MOVING there — this sweep lost four occurrences
- * the day the marketplace's console routes became plugin components, and the
- * ratchet recorded their departure as a cleanup.
+ * `libs/plugins` was NOT swept until AGL-3080, and that was a hole rather
+ * than a decision. Plugin consoles ship as UI exactly as the console does,
+ * and surfaces keep MOVING there — the marketplace's console routes became
+ * plugin components and took four occurrences out of this census, then its
+ * review queue took two more, and the ratchet recorded both departures as a
+ * cleanup. A shrinking baseline is the one direction nobody audits.
  *
- * It has now happened TWICE in one lane: four occurrences left with the
- * marketplace's console surfaces, and two more with its review queue. The
- * baseline is empty as a result, which reads as a clean console and is only
- * half true — `apps/console` genuinely has none left, and six went somewhere
- * nothing looks.
+ * Widening it surfaced 18 occurrences across five plugins. Eleven were real
+ * debt and are fixed; the seven below are persisted values, recorded here
+ * because JSON carries no comments and a baseline row with no reason is a
+ * row nobody can retire.
  *
- * Widening it is its own change, not a line here: `libs/plugins` holds ~20
- * occurrences across five plugins today, and each needs a per-plugin verdict
- * on whether it is a persisted value (a besigner emphasis id, an import
- * column header, a `licences` URL segment) or real debt. Recording twenty of
- * those blind is how a ratchet baseline becomes a place things hide.
+ * ## Why each remaining row stays
+ *
+ * `crm/model/crm-import.ts`, `crm/model/crm-company-import.ts` — `organisation`
+ * is a CSV HEADER ALIAS. The importer accepts both spellings so a file
+ * exported from a British CRM matches without a hand mapping; deleting it
+ * breaks real imports and helps nobody's prose.
+ *
+ * `marketplace/plugin.ts`, `marketplace/components/marketplace-hub.component.tsx`
+ * — `licences` is the hub's SECTION ID, which is a URL segment. It is in
+ * links people keep, and the declaration that carries it says to treat it as
+ * persisted. The tab is labelled "Licenses"; only the address is British.
+ *
+ * `marketplace/model/plugin-review-checklist.ts`,
+ * `marketplace/components/plugin-review-detail.component.tsx` — `behaviour`
+ * is a CHECKLIST ITEM ID, stored against every review a staff member has
+ * ticked. Renaming it orphans those ticks.
+ *
+ * None of the seven is read by a customer. If one ever becomes prose, fix
+ * the prose and drop the row — the list only shrinks.
  */
-const SOURCE_ROOTS = ['apps/console', 'apps/docs/src']
+const SOURCE_ROOTS = ['apps/console', 'apps/docs/src', 'libs/plugins']
 
 const MARKDOWN = /\.mdx?$/
 const SOURCE = /\.(?:tsx?|jsx?|mjs|cjs)$/

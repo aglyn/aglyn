@@ -123,8 +123,12 @@ again.
 ### Test, pause and disconnect {#mailbox-actions}
 
 - **Send a test to myself** sends a short plain-text message from the mailbox
-  to its own address, so you can check it arrives. Only the member who
-  connected the mailbox can send one.
+  to its own address, so you can check it arrives. Type another address in
+  **Test address** to send it there instead: a test to your own address never
+  leaves Google, so it carries no authentication result — a test to an
+  outside mailbox you can read is the one whose original source shows
+  whether the send-as domain's DKIM, SPF and DMARC pass. Only the member who
+  connected the mailbox can send one, and at most five an hour.
 - **Pause** stops the mailbox sending; **Resume** starts it again.
 - **Disconnect** removes the mailbox and deletes its stored access, and tells
   Google to revoke that access. If another connected mailbox still uses the
@@ -145,12 +149,12 @@ mailbox, as with a disconnect.
 ## Compliance settings {#compliance-settings}
 
 Every email a sequence sends ends with a footer saying who sent it, where they
-can be reached by post, that the email is a business solicitation, and how to
-stop more of them:
+can be reached by post, that the email is a sales email, and how to stop more
+of them:
 
 ```text
 Example Co LLC · 100 Example St, Springfield, IL 62701
-This is a business solicitation from Example Co. Not relevant? Reply "no" and I won't email again.
+This is a sales email from Example Co. Not interested? Reply "no" and I won't email again.
 ```
 
 The United States' CAN-SPAM Act requires those things of a commercial email,
