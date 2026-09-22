@@ -124,8 +124,8 @@ beforeEach(() => {
 describe('OrgLeadSurfacesNote', () => {
   it('groups the forms by site, naming the always-on surfaces once', () => {
     render(<OrgLeadSurfacesNote />, { wrapper: mountWith(HOSTS) })
-    // Sign-ups and bookings are named at the top and nowhere else.
-    expect(screen.getAllByText(/member sign-ups, bookings/)).toHaveLength(1)
+    // Bookings are named at the top and nowhere else.
+    expect(screen.getAllByText(/Leads are created by bookings/)).toHaveLength(1)
     // Every site is a group; its forms sit under it and link into the site.
     expect(screen.getByRole('link', { name: 'Site A' }).getAttribute('href')).toBe(
       '/acme/hosts/a/crm/leads',

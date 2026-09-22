@@ -18,7 +18,6 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { extractEmailFromFields } from '@aglyn/aglyn/server'
 import {
-  addHostLead,
   attributeCampaignConversion,
   consumeRateLimit,
   dataStorageRefusal,
@@ -607,12 +606,14 @@ export async function POST(request: Request): Promise<Response> {
     /*
      * Whether this submission was filed to the site's Leads.
      *
-     * A CAPTURE, not a person. `addHostLead` keys one person to one document,
+     * A CAPTURE, not a person. The lead silo keys one person to one document,
      * so a returning visitor's second submission updates the lead it created
      * the first time — and both submissions did route. The counter this feeds
      * is therefore "submissions this form filed as a lead", which is the
      * numerator the form's own lead rate needs; how many distinct people are
-     * on the list is the Leads list's count and is a different number.
+     * on the list is the Leads list's count and is a different number. A
+     * routed submission by somebody the workspace already holds as a contact
+     * lands on the contact and files no lead (AGL-3232), and is not counted.
      */
     let leadStored = false
     /*
@@ -650,7 +651,26 @@ export async function POST(request: Request): Promise<Response> {
       convertedAtMs: submittedAtMs,
     })
     if (contactEmail) {
-      void recordCapturedContact({
+      /*
+       * WHICH RECORD THE PERSON LANDS ON is the record system's decision
+       * (AGL-3232), and the form says only what kind of surface it is: a
+       * lead surface when its author switched lead routing on
+       * (`docs/specs/reusable-forms.md` §4a), a touch otherwise. The writer
+       * files a lead — through `addHostLead`, keyed on the person and
+       * counted against the ceiling — unless the workspace already holds the
+       * address as a contact, and answers which record it wrote.
+       *
+       * AWAITED, unlike the capture of every other door, and only because
+       * the answer is counted: the form's `stats.leads` rides the same
+       * `update` the submission counters ride below, and a `void` call with
+       * the counter chained onto its `then` would put the one figure on this
+       * page that is about routing on a promise the runtime is free to
+       * abandon once the response is sent. The posture is unchanged —
+       * `recordCapturedContact` never throws — so awaiting it cannot fail the
+       * submission any more than voiding it could.
+       */
+      const routed = form?.get('routing')?.lead === true
+      const captured = await recordCapturedContact({
         /*
          * Not gated on the org resolving. The record system keys a person on
          * the SITE they were met on, so an org lookup that came back empty
@@ -669,10 +689,7 @@ export async function POST(request: Request): Promise<Response> {
           refId: submissionRef.id,
           summary: `Submitted "${resolvedFormName.slice(0, 60)}"`,
         },
-        // A submission is the earliest sign of interest a record system names
-        // (AGL-2612): a lead, whether or not the form also files one to the
-        // Leads list below. A floor, so a customer who writes in stays one.
-        lifecycleFloor: 'lead',
+        surface: routed ? 'lead' : 'touch',
         ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
         // Filed under the form's campaigns, inside this site's own facet on a
         // row the whole org shares. Membership is not consent, and this passes
@@ -706,62 +723,7 @@ export async function POST(request: Request): Promise<Response> {
           ...(campaignTouch ? { campaignTouch } : {}),
         },
       })
-      /*
-       * A lead, when the FORM says it is one (`docs/specs/reusable-forms.md`
-       * §4a).
-       *
-       * The endpoint's own docblock has called itself a "lead-capture
-       * submissions endpoint" since AGL-76 and it had never created a lead:
-       * `addHostLead`'s three callers were the sign-up handler and the two
-       * bookings paths, and this route was not among them.
-       *
-       * `routing.lead` is an author's declaration, not a heuristic on the
-       * payload. That follows the existing split — the newsletter block
-       * enrolls, the sign-up handler creates a lead, the bookings handler
-       * creates a lead — each because the SURFACE is a lead surface, not
-       * because a rule inspected what the visitor typed.
-       *
-       * Through `addHostLead` rather than beside it: the ceiling cannot see a
-       * direct `collection('leads')` write, and the dedupe that stops one
-       * person becoming two records lives in there too.
-       *
-       * `void`, like the contact upsert above. A refused or failed lead must
-       * never fail the submission that produced it.
-       */
-      if (form?.get('routing')?.lead === true) {
-        /*
-         * AWAITED, unlike the contact upsert beside it, and only because the
-         * answer is counted.
-         *
-         * The form's `stats.leads` rides the SAME `update` the submission
-         * counters ride a few lines below — one write, not two — and that
-         * update has to know whether a lead was really filed. A `void` call
-         * with the counter chained onto its `then` would put the one figure
-         * on this page that is about routing on a promise the runtime is free
-         * to abandon once the response is sent, so the lead rate would
-         * under-report by however often that happened and would look like
-         * forms quietly failing to route.
-         *
-         * The posture is unchanged: `addHostLead` catches everything and
-         * answers `false`, so awaiting it cannot fail the submission any more
-         * than voiding it could.
-         */
-        leadStored = await addHostLead({
-          hostRef,
-          hostId,
-          lead: {
-            email: contactEmail,
-            ...(sanitizedFields['name']
-              ? { name: sanitizedFields['name'] }
-              : {}),
-            // Names the form, so a lead's provenance survives the form being
-            // renamed — the same reason the submission carries the id.
-            source: `form:${form.id}`,
-            ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
-          },
-          ...(campaignTouch ? { touch: campaignTouch } : {}),
-        })
-      }
+      leadStored = captured?.ok === true && captured.record === 'lead'
     }
     /*
      * THE DATASET A SUBMISSION ALSO WRITES A RECORD TO (AGL-141/556), decided

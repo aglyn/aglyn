@@ -23,6 +23,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { assignOwnerForCapture } from './assign-contact-owner'
 import { associateCompanyByDomain } from './associate-company-by-domain'
+import { convertOpenLeadOntoContact } from './convert-lead-on-contact'
 import { emitHostEvent } from './emit-host-event'
 import type { HostEventPayload } from './host-event-listeners'
 
@@ -79,8 +80,33 @@ import type { HostEventPayload } from './host-event-listeners'
  * because the created-report carries the identity and not the routing.
  * It never rejects either; a record it could not assign is one somebody
  * assigns by hand, which is what every record was before this existed.
+ *
+ * ## A purchase closes the lead (AGL-3232)
+ *
+ * The order doors — the POS, the checkout and billing webhooks — call this
+ * directly with `initialLifecycleStage: 'customer'`, and a customer is a
+ * relationship: an open lead the site held for the address is stamped
+ * converted onto the contact once the capture has landed, created or not,
+ * so nobody keeps working a lead who already bought. The member door says
+ * the same thing through the capture seam's `surface`; this is the one
+ * place every purchase passes.
  */
 export async function captureHostContact(
+  options: Omit<UpsertHostContactOptions, 'onCreated'>,
+): Promise<UpsertHostContactVerdict> {
+  const verdict = await captureHostContactAnnounced(options)
+  if (options.initialLifecycleStage === 'customer' && !('refused' in verdict)) {
+    await convertOpenLeadOntoContact({
+      hostId: options.hostId,
+      email: options.email,
+      contactId: verdict.contactId,
+      by: 'purchase',
+    })
+  }
+  return verdict
+}
+
+async function captureHostContactAnnounced(
   options: Omit<UpsertHostContactOptions, 'onCreated'>,
 ): Promise<UpsertHostContactVerdict> {
   return upsertHostContact({

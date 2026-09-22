@@ -100,7 +100,6 @@ registerPluginJob({
   },
 })
 import {
-  addHostLead,
   firebaseAdmin,
   getOrgForHost,
   meterHostEmail,
@@ -565,7 +564,17 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
      * record is belongs to the plugin that models it, and a workspace that
      * keeps none is a quiet, correct answer here.
      */
-    void recordCapturedContact({
+    /*
+     * A booking request is a LEAD SURFACE (AGL-3232): interest, not a sale
+     * — no money has moved, and the payment webhook is the door that makes
+     * a customer. The record system files the person as a lead, or lands
+     * the request on the contact the workspace already holds for the
+     * address; which record, and the lead's ceiling and dedupe, are its to
+     * decide. Awaited rather than voided so the lead is there before the
+     * response, as it was when this door wrote it itself; the seam never
+     * throws, so a refused capture still cannot fail the booking.
+     */
+    await recordCapturedContact({
       /*
        * Not resolved here. The record system keys a person on the SITE they
        * were met on, so this costs the capture nothing — and resolving it
@@ -580,10 +589,7 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         refId: bookingId,
         summary: `Booked "${String(service.name ?? 'a service').slice(0, 60)}"`,
       },
-      // A request is interest, not a sale (AGL-2612): no money has moved at
-      // this point, so the stage is `lead`. A floor — the payment webhook is
-      // the door that makes a customer, once the charge has actually cleared.
-      lifecycleFloor: 'lead',
+      surface: 'lead',
       ...(marketingConsent ? { marketingConsent: true } : {}),
       // Where the visitor ARRIVED from — a fact about this visit and not
       // about the person, which is what `detail` carries.
@@ -714,42 +720,12 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
           .catch(() => undefined)
         return res.status(502).json({ error: 'Payment setup failed' })
       }
-      // Lead lands now; the confirmation email + workflow event fire from
-      // the payment webhook. Through the one writer that enforces
-      // `LEADS_MAX_PER_HOST` (AGL-1529) — a refused lead never fails the
-      // booking, and the trip is recorded for the site's owner either way.
-      await addHostLead({
-        hostRef,
-        hostId,
-        lead: {
-          email,
-          // AGL-2303 — `campaign-send` reads `leads.name` and nothing wrote
-          // it, so the leads audience was addressed by nobody's name.
-          ...(name ? { name } : {}),
-          source: 'booking',
-          ...(marketingConsent ? { marketingConsent: true } : {}),
-        },
-        ...(campaignTouch ? { touch: campaignTouch } : {}),
-      })
+      // The lead landed above; the confirmation email + workflow event fire
+      // from the payment webhook.
       return res
         .status(200)
         .json({ bookingId, startsAtMs, endsAtMs, checkoutUrl: session.url })
     }
-
-    // Bookings double as leads for the site owner (mirrors sign-ups), through
-    // the one bounded writer (AGL-1529), same as the checkout branch above.
-    await addHostLead({
-      hostRef,
-      hostId,
-      lead: {
-        email,
-        // AGL-2303, same as the checkout branch above.
-        ...(name ? { name } : {}),
-        source: 'booking',
-        ...(marketingConsent ? { marketingConsent: true } : {}),
-      },
-      ...(campaignTouch ? { touch: campaignTouch } : {}),
-    })
 
     // Event trigger (AGL-128/148/159).
     // In-app notification to the site's managers (AGL-259).

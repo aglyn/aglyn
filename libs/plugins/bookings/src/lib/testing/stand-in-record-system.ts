@@ -35,14 +35,23 @@ import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-
  *
  * Returns the list the writer fills, in the order the doors reported them.
  */
-export function standInRecordSystem(): PluginContactCaptureRequest[] {
-  resetPluginServicesForTests()
+export function standInRecordSystem(
+  options: {
+    /**
+     * Start from no plugin services at all — the default. `false` keeps
+     * whatever a spec already stood in beside it (a tax profile), because
+     * the registry is one slot per service and a reset takes every slot.
+     */
+    reset?: boolean
+  } = {},
+): PluginContactCaptureRequest[] {
+  if (options.reset !== false) resetPluginServicesForTests()
   const captured: PluginContactCaptureRequest[] = []
   registerPluginContactCaptureWriter(
     {
       capture: async (request) => {
         captured.push(request)
-        return { ok: true, contactId: `contact-${captured.length}`, created: true }
+        return { ok: true, record: 'contact', contactId: `contact-${captured.length}`, created: true }
       },
     },
     { pluginId: 'record-system' },

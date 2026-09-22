@@ -53,7 +53,7 @@ The CRM events, and the capture event that precedes them:
 
 | `event` | Fires when | `payload` keys |
 | --- | --- | --- |
-| `lead` | A site captures a lead — a member sign-up. | `email` · `source` · `leadId` — the id to read the lead back with, over [`/v1/leads/{leadId}`](../resources/leads.md) (empty when the address could not be keyed). |
+| `lead` | A site files a **new** lead — a booking or a lead-routed form by somebody it does not hold as a contact; a repeat capture on a lead the site already holds does not fire it. | `email` · `source` · `leadId` — the id to read the lead back with, over [`/v1/leads/{leadId}`](../resources/leads.md) · `name` (present when the capture carried one) |
 | `contactCreated` | A capture makes a **new** contact; a repeat visit by somebody already on the list does not fire it. | `contactId` · `email` · `name` · `source` · `hostId` · `lifecycleStage` · `campaignIds` (present only when the capture came through a campaign) |
 | `contactStageChanged` | A contact's lifecycle stage is moved — from the console, a `PATCH` on [`/v1/contacts`](../resources/contacts.md), or an automation step. | `contactId` · `email` · `lifecycleStage` · `previousStage` |
 | `dealStageChanged` | A [deal](../resources/deals.md) moves between open stages, or is reopened. | `dealId` · `title` · `amountCents` · `currency` · `stageId` · `previousStageId` · `ownerUid` · `contactId` · `companyId` |

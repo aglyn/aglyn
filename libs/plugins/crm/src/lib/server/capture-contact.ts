@@ -23,8 +23,22 @@ import {
   CONTACT_SOURCE_LABELS,
   type ContactSource,
 } from '@aglyn/aglyn/app-utils/contacts'
+import {
+  type CrmLeadFields,
+  isCrmLeadOpen,
+  normalizeContactEmail,
+  personKey,
+} from '@aglyn/aglyn/server'
 import { captureHostContact } from '@aglyn/tenant-runtime/capture-host-contact'
-import type { UpsertHostContactOptions } from '@aglyn/tenant-data-admin'
+import { convertOpenLeadOntoContact } from '@aglyn/tenant-runtime/convert-lead-on-contact'
+import { emitHostEvent } from '@aglyn/tenant-runtime/emit-host-event'
+import {
+  addHostLead,
+  findContactByEmail,
+  firebaseAdmin,
+  orgDataCollectionForHost,
+  type UpsertHostContactOptions,
+} from '@aglyn/tenant-data-admin'
 import type { ResolvedCampaignTouch } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
 
 /**
@@ -49,7 +63,150 @@ import type { ResolvedCampaignTouch } from '@aglyn/tenant-data-admin/server/camp
  * is RETURNED and costs the silo nothing. A throw here would lose an order
  * for a contact that could not be filed.
  */
+/**
+ * WHICH RECORD A CAPTURE LANDS ON (AGL-3232) — the Salesforce rule, decided
+ * here because the CRM is the plugin that models both records.
+ *
+ * One person is one record: a LEAD until somebody qualifies them, a CONTACT
+ * after. Every door used to write both — a lead-routed form filed a lead
+ * AND a contact at stage Lead — so one person sat in two lists and the Leads
+ * queue was never the whole story. Now a door says what kind of surface it
+ * is (`request.surface`) and this decides:
+ *
+ *  - a LEAD surface files a lead, unless the workspace already holds the
+ *    address as a contact — a customer who books a demo is a customer's
+ *    interaction, not a new lead — in which case the capture lands on the
+ *    contact and no lead is filed;
+ *  - a RELATIONSHIP (a member account, a purchase) makes the contact, and
+ *    an open lead the site held for the address is stamped converted onto
+ *    it, so nobody keeps working a lead who already joined or bought;
+ *  - a TOUCH (an unrouted form, a newsletter opt-in) lands on the open lead
+ *    when the site holds one — its consent and its history stay on the one
+ *    record the rep is working — and on the contact otherwise.
+ *
+ * A lead is filed through `addHostLead`, the one writer of the leads silo,
+ * so it is keyed on the person, counted against the ceiling and carries the
+ * campaign touch the door resolved. A NEW lead announces itself with the
+ * `lead` host event, which is what a "new lead" automation listens for; a
+ * repeat capture on a lead the site already held announces nothing, the
+ * way a repeat visit by a contact is an interaction and not a creation.
+ */
 export async function captureContactForCrm(
+  request: PluginContactCaptureRequest,
+): Promise<PluginContactCaptured> {
+  const surface = request.surface ?? 'touch'
+  // The one refusal every surface shares, answered before any read: an
+  // address nothing can key is a person nothing can record.
+  if (!normalizeContactEmail(request.identity.email)) return refusedEmail()
+  try {
+    if (surface === 'lead') {
+      if (!(await heldAsContact(request))) return await fileLead(request)
+    } else if (surface === 'touch') {
+      if (await openLeadFor(request)) return await fileLead(request)
+    }
+    const verdict = await captureOnContact(request)
+    if (verdict.ok && verdict.record === 'contact' && surface === 'relationship') {
+      await convertOpenLeadOntoContact({
+        hostId: request.hostId,
+        email: request.identity.email,
+        contactId: verdict.contactId,
+        by: request.interaction.source === 'member' ? 'signup' : 'purchase',
+      })
+    }
+    return verdict
+  } catch (error) {
+    console.error('crm contact capture failed', error)
+    return {
+      ok: false,
+      reason: 'error',
+      error: 'The contact could not be recorded. Nothing else was affected.',
+    }
+  }
+}
+
+/** The refusal every door gets for an address nothing can key. */
+function refusedEmail(): PluginContactCaptured {
+  return { ok: false, reason: 'invalid-email', error: refusalText('invalid-email') }
+}
+
+/**
+ * Whether the workspace already holds the address as a contact — the
+ * address index first, then the query, the same lookup every dedupe uses.
+ * ORG-wide, not scoped to the capturing site: the contact door dedupes
+ * across every site in the org, so a person any site holds as a contact
+ * is a contact, whichever site met them this time.
+ */
+async function heldAsContact(request: PluginContactCaptureRequest): Promise<boolean> {
+  const contacts = await orgDataCollectionForHost(request.hostId, 'contacts')
+  return (await findContactByEmail(contacts, request.identity.email)) !== null
+}
+
+/** Whether the site holds an OPEN lead for the address — neither converted nor closed. */
+async function openLeadFor(request: PluginContactCaptureRequest): Promise<boolean> {
+  const key = personKey(request.identity.email) as string
+  const snapshot = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection('hosts')
+    .doc(request.hostId)
+    .collection('leads')
+    .doc(key)
+    .get()
+  if (!snapshot.exists) return false
+  const lead = (snapshot.data() ?? {}) as Record<string, unknown> & CrmLeadFields
+  return !lead.convertedContactId && isCrmLeadOpen(lead)
+}
+
+/**
+ * The capture as a LEAD. The source string is the lead silo's own
+ * vocabulary — `form:{formId}` for a form, the door's word otherwise — so
+ * a lead's provenance survives the form being renamed, as the submission's
+ * does.
+ */
+async function fileLead(request: PluginContactCaptureRequest): Promise<PluginContactCaptured> {
+  const email = normalizeContactEmail(request.identity.email) as string
+  const key = personKey(email) as string
+  const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(request.hostId)
+  const leadRef = hostRef.collection('leads').doc(key)
+  const created = !(await leadRef.get()).exists
+  const { formId } = entryPointOf(request.detail)
+  const source =
+    request.interaction.source === 'form' && formId
+      ? `form:${formId}`
+      : request.interaction.source
+  const stored = await addHostLead({
+    hostRef,
+    hostId: request.hostId,
+    lead: {
+      email,
+      ...(request.identity.name ? { name: request.identity.name } : {}),
+      source,
+      ...(request.marketingConsent ? { marketingConsent: true } : {}),
+    },
+    ...(campaignTouchOf(request.detail).campaignTouch
+      ? { touch: campaignTouchOf(request.detail).campaignTouch }
+      : {}),
+  })
+  if (!stored) {
+    return {
+      ok: false,
+      reason: 'band',
+      error: 'This site is at the number of leads it may hold, so the lead was not recorded.',
+    }
+  }
+  if (created) {
+    await emitHostEvent(request.hostId, 'lead', {
+      email,
+      source,
+      leadId: key,
+      ...(request.identity.name ? { name: request.identity.name } : {}),
+    })
+  }
+  return { ok: true, record: 'lead', leadId: key, created }
+}
+
+/** The capture as a CONTACT — what every capture was before the rule above. */
+async function captureOnContact(
   request: PluginContactCaptureRequest,
 ): Promise<PluginContactCaptured> {
   try {
@@ -88,7 +245,12 @@ export async function captureContactForCrm(
     if ('refused' in verdict) {
       return { ok: false, reason: verdict.refused, error: refusalText(verdict.refused) }
     }
-    return { ok: true, contactId: verdict.contactId, created: verdict.created }
+    return {
+      ok: true,
+      record: 'contact',
+      contactId: verdict.contactId,
+      created: verdict.created,
+    }
   } catch (error) {
     /*
      * The contract's `error` is the last state, not a channel for a stack:

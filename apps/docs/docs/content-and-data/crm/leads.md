@@ -6,11 +6,13 @@ description: Work the people your site has captured — a status, an owner and n
 
 # Leads
 
-A **lead** is somebody your site has met but you have not yet qualified: a
-visitor who signed up, booked, or submitted a form that routes leads. The
-**Leads** section of the CRM is where the team works them — decides who owns
-each one, keeps notes, and either converts the lead into a contact or closes
-it with a reason.
+A **lead** is somebody you have heard of but not yet qualified: a visitor who
+booked or wrote in through a form that routes leads, a person from a list you
+imported, or one you added by hand. It is a record of its own — the way it is
+in Salesforce — and it becomes a [contact](./contact-record.md) only when you
+convert it. The **Leads** section of the CRM is where the team works them —
+decides who owns each one, keeps notes, and either converts the lead into a
+contact or closes it with a reason.
 
 Leads live under the site that captured them, so each site's list is its own.
 Open **CRM → Leads** in the console, or use **Open in CRM** on a lead row in
@@ -26,22 +28,36 @@ See [What each plan includes](./overview.md#what-each-plan-includes).
 
 ## What makes a lead
 
-Every capture lands in [Contacts](./contact-record.md) — one row per person,
-at the earliest [lifecycle stage](./contact-record.md#lifecycle-stages) that
-describes what happened. A **lead** is created in addition, and only by a
-**lead surface**:
+One person is one record: a **lead** until somebody qualifies them, a
+**contact** after. A lead is created by a **lead surface**, and by nothing
+else:
 
-- a **member sign-up**;
 - a **booking**;
 - a **form** whose own page has **Also create a lead from the address someone
-  gives this form** switched on. A form without it still updates the contact
-  at stage Lead; it just files nothing here.
+  gives this form** switched on;
+- [Import CSV](#import-from-csv), [New lead](#adding-a-lead-by-hand), and
+  [`POST /v1/leads`](/api/resources/leads#create-a-lead) over the REST API.
+
+A lead surface files a lead and **no contact**. The one exception is a person
+the workspace already holds as a contact — a customer who books a demo, say:
+their booking lands on the contact's timeline, and no lead is filed, because a
+contact is what a lead becomes and a person cannot be both.
+
+The other doors work the other way round:
+
+- A **form without lead routing** and a **newsletter opt-in** update the open
+  lead when this site holds one for the address — its consent and its history
+  stay on the one record the team is working — and the contact otherwise.
+- A **member sign-up** and an **order** make the person a contact, because an
+  account or a purchase is a relationship. An open lead the site held for the
+  address is closed as **Qualified**, converted onto that contact, so nobody
+  keeps working a lead who already joined or bought.
 
 The plan changes none of this. On Free too, a form files a lead only when its lead
 routing is on, and the lead is kept, though the Leads section that lists it is locked
 with the rest of the CRM.
 
-So Contacts is the address book and Leads is the working list. The Leads
+So Contacts is the people you have a relationship with and Leads is the working list. The Leads
 section opens with which surfaces create leads on this site — sign-ups,
 bookings, and the lead-routed forms by name, each linking to the form's page
 — and offers **Turn on lead routing** beside a form that could route. A form
@@ -115,7 +131,7 @@ Each row carries:
 | **Company**, **Title** | The lead's own company and job title, as text. |
 | **Status** | New, Working, Qualified or Unqualified. Change it in place from the row. |
 | **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
-| **Source** | Every surface that captured this person: Sign-up, Booking, the form they submitted, an import, or New lead. |
+| **Source** | Every surface that captured this person: Booking, the form they submitted, an import, New lead, or the API — and Sign-up on leads filed before sign-ups stopped making leads. |
 | **Tags** | The lead's tags. |
 | **Last seen** | When the person last did something on your site. |
 
@@ -208,14 +224,11 @@ already holds a consent for that person from an earlier capture — see
 
 ### Who owns a lead
 
-A lead starts unassigned unless the workspace decided otherwise. When the
-same capture creates a **contact** and the [assignment rules](./settings.md#assignment-rules)
-or the site's [default owner](./settings.md#default-owner) give that
-contact an owner, the lead is given the same owner, and the owner gets a
-console notification — **Lead assigned to you**, linking to the lead's page.
-A lead somebody already assigned by hand keeps that owner. An automation
-that [reassigns the contact](./automations.md#assigning-an-owner-or-rotating-one)
-moves the lead's owner with it.
+A lead starts unassigned unless somebody assigns it — from the row, the
+lead's page, the import file, or the **New lead** drawer. When a lead is
+converted, the contact takes the lead's owner unless you pick another. An
+automation that [reassigns the contact](./automations.md#assigning-an-owner-or-rotating-one)
+moves a converted lead's owner with it.
 
 Assigning an owner from the row menu or the lead's page changes the lead
 alone; the contact, when there is one, is assigned from its own record.

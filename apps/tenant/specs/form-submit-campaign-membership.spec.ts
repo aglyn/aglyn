@@ -97,6 +97,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   resolveCampaignTouch: async () => mockResolved,
   attributeCampaignConversion: async () => null,
+  // The CRM's capture writer asks whether the workspace already holds the
+  // address as a contact before it files a lead (AGL-3232). Nobody, here.
+  findContactByEmail: async () => null,
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
@@ -158,6 +161,16 @@ jest.mock('@aglyn/tenant-runtime', () => ({
  * this one loses nothing — which is the half of this move that could fail
  * silently.
  */
+/*
+ * The `lead` host event a NEW lead announces itself with (AGL-3232), by the
+ * leaf the CRM's writer imports it from. Recorded as nothing: what a lead
+ * sets off is the automation engine's own spec.
+ */
+jest.mock('@aglyn/tenant-runtime/emit-host-event', () => ({
+  __esModule: true,
+  emitHostEvent: async () => ({ alerts: [] }),
+}))
+
 jest.mock('@aglyn/tenant-runtime/capture-host-contact', () => ({
   captureHostContact: (...args: unknown[]) =>
     (

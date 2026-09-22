@@ -21,13 +21,11 @@ import {
   checkVisitorRecordCeiling,
   HOST_TOKENS,
   marketingConsentFieldsForHost,
-  personKey,
   SITE_MEMBER_CEILING_CODE,
   SITE_MEMBER_UNAVAILABLE_MESSAGE,
   SITE_MEMBERS_MAX_PER_HOST,
 } from '@aglyn/aglyn/server'
 import {
-  addHostLead,
   firebaseAdmin,
   recordVisitorRecordCeilingTrip,
   resolveCampaignTouch,
@@ -212,26 +210,18 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       email,
       atMs: signedUpAtMs,
     })
-    await addHostLead({
-      hostRef,
-      hostId,
-      lead: {
-        email,
-        // The name the person just typed (AGL-2303). `campaign-send` reads
-        // `leads.name` for merge tags and NOTHING wrote it, so every campaign
-        // to the leads audience addressed a blank — with the name sitting one
-        // line above, already stored on the member document.
-        ...(displayName ? { name: displayName } : {}),
-        source: 'signup',
-        ...(marketingConsent ? { marketingConsent: true } : {}),
-      },
-      ...(campaignTouch ? { touch: campaignTouch } : {}),
-    })
     /*
      * Contacts ingestion (AGL-197), reported to whichever plugin keeps people
      * rather than written by this one (AGL-3080). Commerce knows it just met
      * somebody; what a person record is belongs to the plugin that models it,
      * and a workspace that keeps none is a quiet, correct answer here.
+     */
+    /*
+     * A member account is a RELATIONSHIP (AGL-3232): the person is a
+     * contact from this moment, and an open lead the site held for the
+     * address is closed as converted onto that contact by the record
+     * system — a sign-up files no lead of its own any more, the way a
+     * portal user is a contact and not a lead in Salesforce.
      */
     void recordCapturedContact({
       /*
@@ -248,26 +238,19 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
         refId: memberRef.id,
         summary: 'Joined as a member',
       },
+      surface: 'relationship',
       // An account is a subscription to the site, not an enquiry (AGL-2612):
-      // the lead this sign-up also files is the sales record, and the stage
-      // on the contact says only that the person asked to be kept. A floor,
-      // so a customer who opens an account stays a customer.
+      // the stage on the contact says only that the person asked to be
+      // kept. A floor, so a customer who opens an account stays a customer.
       lifecycleFloor: 'subscriber',
       ...(marketingConsent ? { marketingConsent: true } : {}),
       // Where the visitor ARRIVED from — a fact about this visit and not
       // about the person, which is what `detail` carries.
       ...(campaignTouch ? { detail: { campaignTouch } } : {}),
     })
-    // Event triggers (AGL-128/148): sign-ups double as leads here too. The
-    // lead's id is the person key `addHostLead` filed it under, so a webhook
-    // can read the row back over `/v1/leads/{leadId}` (AGL-2627); empty for
-    // an address that could not be keyed, as every optional payload key is.
+    // Event trigger (AGL-128/148). A sign-up is no longer a lead (AGL-3232),
+    // so the `lead` event is the lead surfaces' to emit.
     await emitHostEvent(hostId, 'memberSignUp', { email })
-    await emitHostEvent(hostId, 'lead', {
-      email,
-      source: 'signup',
-      leadId: personKey(email) ?? '',
-    })
     setMemberCookie(res, hostId, mintMemberSession(hostId, memberRef.id))
     return res.status(200).json({ ok: true })
   } catch (error) {

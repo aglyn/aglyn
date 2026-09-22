@@ -91,7 +91,7 @@ describe('LeadSurfacesNote', () => {
   it('names the routed forms in one sentence, each linked through the site route', () => {
     render(<LeadSurfacesNote hostId="host-1" />)
     expect(
-      screen.getByText(/Leads are created by member sign-ups, bookings, and forms with lead routing on:/),
+      screen.getByText(/Leads are created by bookings, forms with lead routing on, imports and New lead:/),
     ).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Contact' }).getAttribute('href')).toBe(
       '/acme/hosts/site/forms/contact',
