@@ -74,7 +74,7 @@ export function outreachUnsubscribePage(input: { title: string; body: string }, 
 }
 
 export function createOutreachUnsubscribeRoute(
-  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'now' | 'optOutOfSalesTopic' | 'stampRecordEmailState'>,
+  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'now' | 'optOutOfSalesTopic' | 'stampRecordEmailState' | 'timeline'>,
 ): PluginWebApiHandler {
   return async (request) => {
     if (request.method !== 'GET' && request.method !== 'POST') {

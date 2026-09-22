@@ -69,8 +69,10 @@ import {
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
-import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
+import { normalizeCampaignIds, readCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
 import { FieldValue } from 'firebase-admin/firestore'
+import type { CampaignFilingRef } from '../model/campaign-filing-activity'
+import { fileCampaignFilingActivities } from './campaign-filing-activity'
 import { holdsDataManage } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 
@@ -113,24 +115,37 @@ export const LEAD_CAMPAIGN_REFUSAL =
   "One of the campaigns picked isn't a campaign of this site any more. Pick it again."
 
 /**
- * The campaign ids a request may file a lead under: the site's own live
+ * The campaigns a request may file a lead under: the site's own live
  * containers, and nothing else. A request can claim any id, and a lead
  * filed under another site's campaign — or one the console soft-deleted —
- * would sit on a page nobody at this site can open.
+ * would sit on a page nobody at this site can open. Answered with the
+ * names as they stand, for the timeline entries the filing writes
+ * (AGL-3274).
  *
- * @returns the clean ids, or `null` when one of them is not the site's.
+ * @returns the clean ids with their names, or `null` when one is not the site's.
  */
-export async function siteCampaignIds(
+export async function siteCampaigns(
   hostRef: FirebaseFirestore.DocumentReference,
   raw: unknown,
-): Promise<string[] | null> {
+): Promise<CampaignFilingRef[] | null> {
   const ids = normalizeCampaignIds(raw)
   if (!ids.length) return []
   if (ids.some((id) => id.includes('/'))) return null
   const containers = hostRef.collection('emailCampaigns')
   const found = await hostRef.firestore.getAll(...ids.map((id) => containers.doc(id)))
   const live = found.every((snapshot) => snapshot.exists && !snapshot.get('deletedAt'))
-  return live ? ids : null
+  return live
+    ? ids.map((id, index) => ({ id, name: String(found[index]?.get('name') ?? '').trim() || id }))
+    : null
+}
+
+/** The ids alone — see {@link siteCampaigns}. */
+export async function siteCampaignIds(
+  hostRef: FirebaseFirestore.DocumentReference,
+  raw: unknown,
+): Promise<string[] | null> {
+  const campaigns = await siteCampaigns(hostRef, raw)
+  return campaigns ? campaigns.map((campaign) => campaign.id) : null
 }
 
 /** What the route answers on success. */
@@ -264,11 +279,12 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     }
     // The campaigns, judged before any write, so a refused pick leaves
     // nothing to retry against (AGL-3254).
-    const campaignIds = await siteCampaignIds(hostRef, body.campaignIds)
-    if (campaignIds === null) {
+    const campaigns = await siteCampaigns(hostRef, body.campaignIds)
+    if (campaigns === null) {
       res.status(400).json({ error: LEAD_CAMPAIGN_REFUSAL, field: 'campaignIds' })
       return
     }
+    const campaignIds = campaigns.map((campaign) => campaign.id)
     // Non-null by construction: the normalizer refused every address this
     // derivation could not key.
     const leadId = personKey(email) as string
@@ -329,6 +345,24 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
         .doc(leadId)
         .set({ ...working, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
     }
+    /*
+     * The filing on the lead's Activity (AGL-3274): one "Filed under" per
+     * campaign the lead was not already in, by the member who added it.
+     * After the write and never before, and never failing it — the
+     * membership is on the document; the entry records the act.
+     */
+    const already = readCampaignIds(before.exists ? (before.data() as Record<string, unknown>) : null)
+    await fileCampaignFilingActivities(firestore, {
+      orgId: resolved.orgId,
+      org: resolved.org as Record<string, unknown>,
+      hostId,
+      link: { leadId },
+      action: 'filed',
+      campaigns: campaigns.filter((campaign) => !already.includes(campaign.id)),
+      atMs: Date.now(),
+      byUid: decoded.uid,
+      byName: String(decoded['name'] ?? decoded.email ?? '').trim() || null,
+    })
     /*
      * The audit line, written by the route that verified the caller and
      * performed the write — the one writer that cannot record an add that

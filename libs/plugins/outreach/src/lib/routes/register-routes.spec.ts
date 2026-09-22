@@ -90,6 +90,7 @@ function deps(): OutreachEnrollRouteDeps {
     crmViewEmails: unused,
     stampRecordEmailState: unused,
     creditCampaign: unused,
+    timeline: unused,
     gate: {
       verifyIdToken: async () =>
         ({ uid: 'member-1', email: 'casey.morgan@example.com', email_verified: true }) as never,

@@ -26,13 +26,28 @@ const docs = new Map<string, Record<string, any>>()
 const updates: Array<{ path: string; patch: Record<string, unknown> }> = []
 let failUpdate = false
 
+/** The entries the carry filed on the contact's timeline (AGL-3274), by path. */
+const filed = (): Array<Record<string, any>> =>
+  [...docs.entries()]
+    .filter(([path]) => path.startsWith('orgs/org-1/crmActivities/'))
+    .map(([path, data]) => ({ path, ...data }))
+
 /** A document reference: one read, and an update that applies the two sentinels at a dotted path. */
 const docRef = (path: string): any => ({
   path,
   collection: (sub: string) => ({
     doc: (id: string) => docRef(`${path}/${sub}/${id}`),
   }),
-  get: async () => ({ exists: docs.has(path), data: () => docs.get(path) }),
+  get: async () => ({
+    exists: docs.has(path),
+    data: () => docs.get(path),
+    get: (field: string) => docs.get(path)?.[field],
+  }),
+  // A keyed entry is written once: the second create finds the first.
+  create: async (value: Record<string, unknown>) => {
+    if (docs.has(path)) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 })
+    docs.set(path, { ...value })
+  },
   update: async (patch: Record<string, unknown>) => {
     if (failUpdate) throw new Error('refused')
     const next = { ...(docs.get(path) ?? {}) }
@@ -60,7 +75,14 @@ const firestore: any = {
   collection: (name: string) => ({
     doc: (id: string) => docRef(`${name}/${id}`),
   }),
+  getAll: async (...refs: Array<{ path: string }>) => Promise.all(refs.map((ref) => docRef(ref.path).get())),
 }
+
+// The record's activity ceiling (AGL-3274), never reached here.
+jest.mock('@aglyn/tenant-data-admin/server/crm-records', () => ({
+  __esModule: true,
+  countCrmActivitiesForRecord: async () => 0,
+}))
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -129,6 +151,28 @@ describe('carryLeadCampaignsToContact', () => {
     expect(updates.map((write) => write.path)).toEqual([
       'orgs/org-1/contacts/c-1',
     ])
+  })
+
+  it('files "Filed under" on the contact per campaign carried, by the conversion, once across runs (AGL-3274)', async () => {
+    docs.set('hosts/site-1/emailCampaigns/founder-icp2', { name: 'Founder · ICP 2' })
+    docs.set('hosts/site-1/leads/lead-key', { campaignIds: ['founder-icp2', 'gone'] })
+    docs.set('orgs/org-1/contacts/c-1', { facets: {} })
+    await carryLeadCampaignsToContact(firestore, request)
+    const entries = filed()
+    expect(entries.map((entry) => entry.body).sort()).toEqual(['Filed under Founder · ICP 2', 'Filed under gone'])
+    expect(entries[0]).toMatchObject({
+      kind: 'note',
+      contactId: 'c-1',
+      hostId: 'site-1',
+      visibleTo: ['host:site-1'],
+      byUid: '',
+      byName: 'Lead conversion',
+      sourcePluginId: 'crm',
+    })
+    expect(entries.map((entry) => entry.campaignId).sort()).toEqual(['founder-icp2', 'gone'])
+    // A door that converts twice files once: the keyed create finds its own.
+    await carryLeadCampaignsToContact(firestore, request)
+    expect(filed()).toHaveLength(2)
   })
 
   it('writes nothing on the contact for a lead in no campaign, or one that is gone', async () => {

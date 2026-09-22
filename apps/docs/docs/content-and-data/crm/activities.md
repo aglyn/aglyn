@@ -47,6 +47,13 @@ things and are drawn differently: the first is a message somebody on your team
 wrote, sent or recorded, the second is a mailing the platform sent to an
 audience the person was in.
 
+A few **Note** entries are bookkeeping rather than something a person typed,
+and each is signed by what did it: *Filed under* and *Removed from* a campaign,
+by the member who changed the record's filing — or by **Lead conversion**, when
+a lead's campaigns were carried onto the contact it became — and *Enrolled in*
+a sequence and *stopped*, by **Sequences**. They read on the lead and the
+contact alike, above the emails they explain.
+
 ## Campaign email on the timeline {#campaign-email}
 
 Every campaign email sent to the person from this site — or from a site

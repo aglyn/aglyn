@@ -764,9 +764,18 @@ export interface CrmActivity extends CrmScoped {
   sourceActionId?: string
   /**
    * The plugin that filed it on the record-timeline seam (AGL-2981) — an
-   * email a sequence sent, a reply it read.
+   * email a sequence sent, a reply it read — or the CRM's own id on an
+   * entry it wrote about a filing (AGL-3274), so a reader can tell the
+   * bookkeeping entries from what a person logged.
    */
   sourcePluginId?: string
+  /**
+   * The campaign a filing entry is about (AGL-3274): "Filed under" and
+   * "Removed from" name it in the body and carry the container's id here,
+   * so a campaign's own page can one day list what happened under it
+   * without parsing a sentence.
+   */
+  campaignId?: string
   contactId?: string
   companyId?: string
   dealId?: string

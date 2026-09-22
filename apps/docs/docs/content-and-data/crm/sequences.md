@@ -403,7 +403,7 @@ Each connected mailbox is read every 15 minutes for what came back:
 
 | What happens | What it does |
 | --- | --- |
-| **The person replies** | Stops the sequence (**Replied**), files the reply on the contact's timeline, and gives the rep the task **Reply from** *their name*. |
+| **The person replies** | Stops the sequence (**Replied**), files the reply on the contact's timeline with a line saying the sequence stopped, and gives the rep the task **Reply from** *their name*. |
 | **An out-of-office reply** | Keeps the sequence going, and moves the next step to at least five business days after the reply. |
 | **They ask not to be emailed** — a reply such as "no" or "unsubscribe", the unsubscribe link, or a message to the unsubscribe address | Stops the sequence (**Opted out**), puts the address on your do-not-contact list, unsubscribes it from the site's **Sales outreach** email, and stops it in every other sequence. |
 | **The email hard-bounces** | Stops the sequence (**Bounced**) and puts the address on your do-not-contact list and on the platform's suppression list. When the bounce says the recipient's mail gateway refused it rather than that the address is unknown, the whole [domain](#do-not-contact-domains) goes on the list too, and the enrollment says so. |
@@ -420,6 +420,12 @@ or the contact carries an [email state](./leads.md#email-state) — Bounced,
 Blocked by their mail gateway, Unsubscribed, Marked as spam, Do not contact
 — and the email the sequence sent reads **Bounced** on their timeline. A
 member marking an enrollment do-not-contact stamps the record the same way.
+
+The sequence's own turns are on the record's **Activity** as well, signed
+**Sequences**: *Enrolled in* the sequence when a person is enrolled, with
+the campaigns the enrollment filed them under, and *stopped: they replied*
+or *stopped: they opted out* under the last email it sent. A bounce adds no
+line of its own — the sent email already reads **Bounced**.
 
 ## Unsubscribe {#unsubscribe}
 

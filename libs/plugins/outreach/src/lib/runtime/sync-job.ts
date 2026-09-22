@@ -21,6 +21,7 @@ import { crmInboundExcerpt, emailAddressOf } from '@aglyn/aglyn/app-utils/crm-in
 import { outreachMessageIdHeader } from '../engine/compose'
 import { readOutreachDeliveryReport } from '../engine/delivery-status'
 import { outreachEmailDomain } from '../engine/do-not-contact-domain'
+import { outreachStoppedEntry } from '../engine/enrollment-activity'
 import type { OutreachEnrollmentEvent } from '../engine/enrollment-state'
 import { isOutreachGatewayBlock, outreachGatewayBlockDetail } from '../engine/gateway-block'
 import { effectiveOutreachWindow, postponeOutreachForAutoReply } from '../engine/schedule'
@@ -57,7 +58,7 @@ import {
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 import { markOutreachLeadWorking } from './lead-records'
-import { fileOutreachEmail, fileOutreachTask, markOutreachEmailDelivery } from './timeline'
+import { fileOutreachEmail, fileOutreachNote, fileOutreachTask, markOutreachEmailDelivery } from './timeline'
 import { outreachUnsubscribeMailbox } from './unsubscribe-link'
 
 /*==========================================
@@ -581,6 +582,26 @@ async function applyMessages(
     nowMs,
   })
   if (postponedTo !== null && outcome.enrollment?.nextDueAtMs === postponedTo) report.postponed += 1
+  // The person's record says the sequence ended (AGL-3274), once, under the
+  // reply that ended it — after the transaction moved the status, so a run
+  // that reads the same reply again finds nothing to file. An opt-out's
+  // line is `recordOutreachOptOut`'s, beside the lists it writes.
+  if (event?.type === 'reply' && outcome.changed) {
+    const sequence = await sequenceOf(context, enrollment.sequenceId)
+    const entry = outreachStoppedEntry({
+      enrollmentId: enrollment.id,
+      sequenceName: sequence?.name ?? '',
+      reason: 'replied',
+    })
+    await fileOutreachNote(deps, {
+      orgId: context.orgId,
+      hostId: enrollment.hostId,
+      link: outreachEnrollmentLink(enrollment),
+      dedupeKey: entry.dedupeKey,
+      body: entry.body,
+      atMs: event.atMs,
+    })
+  }
   // The run's own view of the enrollment moves with it, so a second message
   // of it in this run is judged against what this one did.
   if (outcome.enrollment) Object.assign(enrollment, outcome.enrollment)

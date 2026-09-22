@@ -16,6 +16,7 @@
  */
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import { outreachStoppedEntry } from '../engine/enrollment-activity'
 import {
   applyOutreachEnrollmentEvent,
   type OutreachEnrollmentEvent,
@@ -23,8 +24,14 @@ import {
 import { OUTREACH_OPEN_ENROLLMENT_STATUSES } from '../engine/gates'
 import type { OutreachDoNotContactReason, OutreachEnrollment } from '../model/outreach.types'
 import { addOutreachDoNotContact } from '../storage/do-not-contact-store'
-import { outreachOrgCollection, readStoredOutreachEnrollment } from '../storage/outreach-records'
+import {
+  outreachEnrollmentLink,
+  outreachOrgCollection,
+  readStoredOutreachEnrollment,
+  readStoredOutreachSequence,
+} from '../storage/outreach-records'
 import type { OutreachRuntimeDeps } from './runtime-deps'
+import { fileOutreachNote } from './timeline'
 
 /**
  * WHAT THE RUNTIME DOES TO ENROLLMENTS, AND TO THE LISTS BESIDE THEM
@@ -114,18 +121,20 @@ export type OutreachOptOutSource = Extract<OutreachDoNotContactReason, 'opt_out_
  *  3. every open enrollment of the address in the organization: the one it
  *     came from with the reason given, the others as `do_not_contact`;
  *  4. the lead and the contact that carry the address (AGL-3245), so the
- *     record a person reads says what the lists hold.
+ *     record a person reads says what the lists hold;
+ *  5. the person's Activity (AGL-3274): "<sequence> stopped: they opted
+ *     out", once per enrollment, under the last email it sent.
  *
  * Each is idempotent, so a second request — the link used twice, a reply
  * read by two runs — changes nothing.
  */
 export async function recordOutreachOptOut(
-  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'optOutOfSalesTopic' | 'stampRecordEmailState'>,
+  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'optOutOfSalesTopic' | 'stampRecordEmailState' | 'timeline'>,
   input: {
     orgId: string
     email: string
     source: OutreachOptOutSource
-    enrollment: Pick<OutreachEnrollment, 'id' | 'sequenceId' | 'hostId'> | null
+    enrollment: Pick<OutreachEnrollment, 'id' | 'sequenceId' | 'hostId' | 'target' | 'contactId' | 'leadId'> | null
     hostIds: readonly string[]
     detail: string | null
     nowMs: number
@@ -171,7 +180,31 @@ export async function recordOutreachOptOut(
       event: { type: 'opt_out', atMs: input.nowMs, reason: input.source, detail: input.detail },
       nowMs: input.nowMs,
     })
-    if (own.changed) stopped += 1
+    if (own.changed) {
+      stopped += 1
+      // 5. the person's record says the sequence ended (AGL-3274), once,
+      //    after the status moved — so the link used twice files once.
+      const sequenceSnapshot = await outreachOrgCollection(firestore, input.orgId, 'sequences')
+        .doc(input.enrollment.sequenceId)
+        .get()
+      const sequence = readStoredOutreachSequence(
+        input.enrollment.sequenceId,
+        sequenceSnapshot.exists ? sequenceSnapshot.data() : undefined,
+      )
+      const entry = outreachStoppedEntry({
+        enrollmentId: input.enrollment.id,
+        sequenceName: sequence?.name ?? '',
+        reason: 'opted_out',
+      })
+      await fileOutreachNote(deps, {
+        orgId: input.orgId,
+        hostId: input.enrollment.hostId,
+        link: outreachEnrollmentLink(input.enrollment),
+        dedupeKey: entry.dedupeKey,
+        body: entry.body,
+        atMs: input.nowMs,
+      })
+    }
   }
   stopped += await optOutOtherOutreachEnrollments(firestore, {
     orgId: input.orgId,

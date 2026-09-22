@@ -96,12 +96,30 @@ function collectionRef(path: string): any {
   return {
     path,
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoId}`}`),
+    // The filing entries (AGL-3274) are added with fresh ids.
+    add: async (value: Record<string, any>) => {
+      const ref = docRef(`${path}/auto-${++autoId}`)
+      docs.set(ref.path, { ...value })
+      return ref
+    },
     count: () => countQuery(path),
     // The whole-collection read the route makes for the org's field
     // definitions (AGL-3272).
     ...query,
   }
 }
+
+/** What the route filed on the lead's timeline (AGL-3274). */
+const filed = () =>
+  [...docs.entries()]
+    .filter(([path]) => path.startsWith(`orgs/${ORG}/crmActivities/`))
+    .map(([, data]) => data)
+
+// The record's activity ceiling (AGL-3274), never reached here.
+jest.mock('@aglyn/tenant-data-admin/server/crm-records', () => ({
+  __esModule: true,
+  countCrmActivitiesForRecord: async () => 0,
+}))
 
 const fakeFirestore: any = {
   collection: (name: string) => collectionRef(name),
@@ -381,6 +399,24 @@ describe('what is written', () => {
     const out = await call({ hostId: HOST, email: 'dana@example.com', campaignIds: ['founder-icp2', 'founder-icp2'] })
     expect(out.status).toBe(200)
     expect(leadAt('dana@example.com')?.['campaignIds']).toEqual(['founder-icp1', 'founder-icp2'])
+    /*
+     * And the lead's Activity says so (AGL-3274): one "Filed under" for
+     * the campaign the lead was not already in, by the member, with the
+     * scope a record made on the site carries and the CRM's own id.
+     */
+    expect(filed()).toEqual([
+      expect.objectContaining({
+        kind: 'note',
+        body: 'Filed under Founder · ICP 2',
+        leadId: personKey('dana@example.com'),
+        hostId: HOST,
+        visibleTo: [`host:${HOST}`],
+        byUid: CALLER,
+        byName: 'ed@example.com',
+        sourcePluginId: 'crm',
+        campaignId: 'founder-icp2',
+      }),
+    ])
 
     for (const campaignIds of [['gone'], ['nope'], ['founder-icp2', 'hosts/x']]) {
       const refused = await call({ hostId: HOST, email: 'new@example.com', campaignIds })

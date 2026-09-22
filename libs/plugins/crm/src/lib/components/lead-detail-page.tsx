@@ -31,6 +31,7 @@ import {
 import { Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useState } from 'react'
+import { useCampaignFilingLog } from '../hooks/use-campaign-filing-log'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CrmDetailPageProps, crmRoutes } from '../model/crm-routes'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
@@ -76,6 +77,13 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
    * so the containers are that site's.
    */
   const campaigns = useHostCampaigns(hostId, { enabled: true })
+  // A saved filing is written on the lead's Activity too (AGL-3274), one
+  // entry per campaign added or removed, by the member who saved it.
+  const logFiling = useCampaignFilingLog({
+    orgId,
+    hostId,
+    org: org as Record<string, unknown> | undefined,
+  })
   const [converting, setConverting] = useState(false)
   const [unqualifying, setUnqualifying] = useState(false)
   // The privacy erasure (AGL-2623), offered from the lead as from the
@@ -164,6 +172,14 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
           fromCache={fromCache}
           options={campaigns.options}
           optionsReady={campaigns.ready}
+          onFiled={({ added, removed }) => {
+            const named = (ids: string[]) =>
+              ids.map((campaignId) => ({
+                id: campaignId,
+                name: campaigns.options.find((option) => option.value === campaignId)?.label ?? '',
+              }))
+            void logFiling({ leadId: id }, { filed: named(added), removed: named(removed) })
+          }}
         />
         <LeadHistoryCard hostId={hostId} leadId={id} lead={lead} />
         <RecordActivityCard hostId={hostId} org={org} leadId={id} />

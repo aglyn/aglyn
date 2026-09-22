@@ -49,11 +49,16 @@ jest.mock('firebase/firestore', () => ({
     void ops.push({ via: 'single', kind: 'update', path: ref.path, data }),
   deleteDoc: async (ref: { path: string }) =>
     void ops.push({ via: 'single', kind: 'delete', path: ref.path }),
+  // The filing entries Add to campaign writes on each lead's Activity (AGL-3274).
+  collection: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  addDoc: async (ref: { path: string }, data: unknown) =>
+    void ops.push({ via: 'single', kind: 'add', path: ref.path, data }),
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
-  useUser: () => ({ data: null }),
+  useUser: () => ({ data: { uid: 'uid-a' } }),
+  useUserName: () => 'Ada Lovelace',
   // The site's campaigns the Add to campaign picker offers (AGL-3254).
   useHostCampaigns: () => ({
     options: [
@@ -180,7 +185,9 @@ describe('the campaign', () => {
         selected={ALL.slice(0, 2)}
         onSelectedChange={jest.fn()}
         roster={roster}
+        orgId="org-1"
         hostId="site-1"
+        org={{}}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Add to campaign' }))
@@ -190,10 +197,53 @@ describe('the campaign', () => {
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
     fireEvent.click(dialog().getByRole('button', { name: 'Add' }))
     await waitFor(() => expect(notices).toEqual(['Added 2 leads to the campaign']))
-    expect(ops.map((op) => [op.via, op.path, (op.data as any).campaignIds])).toEqual([
+    const writes = ops.filter((op) => op.kind === 'update')
+    expect(writes.map((op) => [op.via, op.path, (op.data as any).campaignIds])).toEqual([
       ['batch', 'hosts/site-1/leads/l-open', { op: 'arrayUnion', values: ['founder-icp2'] }],
       ['batch', 'hosts/site-2/leads/l-working', { op: 'arrayUnion', values: ['founder-icp2'] }],
     ])
+    /*
+     * And each lead's Activity says so (AGL-3274): one "Filed under" per
+     * lead, named, by the member, into the org's activity collection with
+     * the site's scope — after the batch, never in it.
+     */
+    await waitFor(() => expect(ops.filter((op) => op.kind === 'add')).toHaveLength(2))
+    const adds = ops.filter((op) => op.kind === 'add')
+    expect(adds.map((op) => [op.path, (op.data as any).leadId, (op.data as any).body])).toEqual([
+      ['orgs/org-1/crmActivities', 'l-open', 'Filed under Founder · ICP 2'],
+      ['orgs/org-1/crmActivities', 'l-working', 'Filed under Founder · ICP 2'],
+    ])
+    expect(adds[0].data).toMatchObject({
+      kind: 'note',
+      hostId: 'site-1',
+      visibleTo: ['host:site-1'],
+      byUid: 'uid-a',
+      byName: 'Ada Lovelace',
+      sourcePluginId: 'crm',
+      campaignId: 'founder-icp2',
+    })
+  })
+
+  it('files nothing on a lead already in the campaign (AGL-3274)', async () => {
+    render(
+      <LeadsBulkBar
+        rows={[lead('site-1', 'l-in', 'in@example.com', { campaignIds: ['founder-icp2'] })]}
+        selected={['site-1/l-in']}
+        onSelectedChange={jest.fn()}
+        roster={roster}
+        orgId="org-1"
+        hostId="site-1"
+        org={{}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add to campaign' }))
+    fireEvent.mouseDown(dialog().getByRole('combobox', { name: 'Campaigns' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Founder · ICP 2' }))
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    fireEvent.click(dialog().getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(notices).toEqual(['Added 1 lead to the campaign']))
+    expect(ops.filter((op) => op.kind === 'add')).toEqual([])
   })
 
   it('is not offered at the organization level', () => {

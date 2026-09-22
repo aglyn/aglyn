@@ -22,6 +22,7 @@ import type {
   PluginRecordWrite,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { OUTREACH_PLUGIN_ID } from '../constants/bundle-common'
+import { OUTREACH_TIMELINE_BY_NAME } from '../engine/enrollment-activity'
 import type { OutreachTaskKind } from '../model/outreach.types'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 
@@ -93,6 +94,46 @@ export async function fileOutreachEmail(
     return written
   } catch (error) {
     console.error('[outreach] filing an email on the record failed', error)
+    return null
+  }
+}
+
+/**
+ * Files one of the runtime's own lines on a person's record (AGL-3274) —
+ * "Enrolled in", "stopped" — as a note by "Sequences", once per the key
+ * given; never throws. The words and the keys are `enrollment-activity.ts`'s.
+ */
+export async function fileOutreachNote(
+  deps: Pick<OutreachRuntimeDeps, 'timeline'>,
+  input: {
+    orgId: string
+    hostId: string
+    /** The record the entry lands on: `{ contactId }` or `{ leadId }`. */
+    link: PluginRecordLink
+    dedupeKey: string
+    body: string
+    atMs: number
+  },
+): Promise<PluginRecordWrite | null> {
+  const writer = deps.timeline()
+  if (!writer) return null
+  try {
+    const written = await writer.logActivity({
+      orgId: input.orgId,
+      hostId: input.hostId,
+      link: input.link,
+      sourcePluginId: OUTREACH_PLUGIN_ID,
+      kind: 'note',
+      atMs: input.atMs,
+      body: input.body,
+      byUid: '',
+      byName: OUTREACH_TIMELINE_BY_NAME,
+      dedupeKey: input.dedupeKey,
+    })
+    if (written.ok === false) console.warn(`[outreach] the record system did not file a note: ${written.error}`)
+    return written
+  } catch (error) {
+    console.error('[outreach] filing a note on the record failed', error)
     return null
   }
 }
