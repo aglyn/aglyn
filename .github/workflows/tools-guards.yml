@@ -1045,6 +1045,12 @@ jobs:
       # the tree no longer says what the script assumes.
       - run: npm run test:crm-lifecycle-backfill
 
+      # AGL-3274. The enrollment-activity backfill's decisions — the id and
+      # the words the enroll route files "Enrolled in" by, restated and held
+      # to the TypeScript that owns them, the scope a record's entry carries,
+      # and which enrollments are owed nothing.
+      - run: npm run test:enrollment-activity-backfill
+
       # AGL-3235. The one-record migration's decisions — which contact is a
       # duplicate of a lead and which a relationship, what a fold writes onto
       # the lead and never clears, what follows the person between records —

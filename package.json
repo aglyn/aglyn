@@ -141,6 +141,7 @@
     "test:crm-lifecycle-backfill": "node --test tools/scripts/lib/crm-lifecycle-backfill.test.mjs",
     "test:one-record-backfill": "node --test tools/scripts/lib/one-record-backfill.test.mjs",
     "test:email-state-backfill": "node --test tools/scripts/lib/email-state-backfill.test.mjs",
+    "test:enrollment-activity-backfill": "node --test tools/scripts/lib/enrollment-activity-backfill.test.mjs",
     "test:gated-media-backfill": "node --test tools/scripts/lib/gated-media-backfill.test.mjs",
     "test:pricing-drift": "node --test tools/scripts/lib/pricing-drift.test.mjs",
     "test:decision-log": "node --test tools/scripts/lib/decision-log.test.mjs",
