@@ -74,6 +74,11 @@ function docRef(path: string): any {
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
       docs.set(path, options?.merge ? applyWrite(docs.get(path), value) : { ...value })
     },
+    // The filing entries (AGL-3274) are created under a platform-minted id.
+    create: async (value: Record<string, any>) => {
+      if (docs.has(path)) throw Object.assign(new Error('ALREADY_EXISTS'), { code: 6 })
+      docs.set(path, { ...value })
+    },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   }
 }
@@ -96,12 +101,6 @@ function collectionRef(path: string): any {
   return {
     path,
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoId}`}`),
-    // The filing entries (AGL-3274) are added with fresh ids.
-    add: async (value: Record<string, any>) => {
-      const ref = docRef(`${path}/auto-${++autoId}`)
-      docs.set(ref.path, { ...value })
-      return ref
-    },
     count: () => countQuery(path),
     // The whole-collection read the route makes for the org's field
     // definitions (AGL-3272).

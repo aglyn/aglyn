@@ -16,6 +16,7 @@
  */
 
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import {
   CRM_COLLECTIONS,
   crmActivityLogHasRoom,
@@ -43,8 +44,9 @@ import {
  *
  * ## Once, when the caller says so
  *
- * A member's act is an act each time, and the route's entries are added
- * with fresh ids. The conversion carry runs from a seam every converting
+ * A member's act is an act each time, and the route's entries are named
+ * by `createResourceUid()`, the id every console resource carries. The
+ * conversion carry runs from a seam every converting
  * door reaches, and a door that runs twice must not file twice — so a
  * caller that hands in a `dedupeKey` gets a keyed `create()`, and the
  * second run finds its own entry and writes nothing. The key is hashed
@@ -151,7 +153,8 @@ export async function fileCampaignFilingActivities(
           if ((error as { code?: unknown })?.code !== ALREADY_EXISTS) throw error
         }
       } else {
-        await activities.add(entry)
+        // A member's act, new each time, named by the platform's own id.
+        await activities.doc(createResourceUid()).create(entry)
         written += 1
       }
     }

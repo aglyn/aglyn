@@ -31,7 +31,10 @@ import { type LeadBulkRow, LeadsBulkBar } from './leads-bulk-bar'
 
 let ops: Array<{ via: 'batch' | 'single'; kind: string; path: string; data?: any }>
 jest.mock('firebase/firestore', () => ({
-  doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+  // Rooted at the store, or at a collection reference (the filing entries).
+  doc: (base: { path?: string }, ...segments: string[]) => ({
+    path: [base?.path, ...segments].filter(Boolean).join('/'),
+  }),
   deleteField: () => ({ op: 'delete' }),
   serverTimestamp: () => ({ op: 'serverTimestamp' }),
   arrayUnion: (...values: unknown[]) => ({ op: 'arrayUnion', values }),
@@ -49,11 +52,15 @@ jest.mock('firebase/firestore', () => ({
     void ops.push({ via: 'single', kind: 'update', path: ref.path, data }),
   deleteDoc: async (ref: { path: string }) =>
     void ops.push({ via: 'single', kind: 'delete', path: ref.path }),
-  // The filing entries Add to campaign writes on each lead's Activity (AGL-3274).
+  // The filing entries Add to campaign writes on each lead's Activity
+  // (AGL-3274), each under a platform-minted id.
   collection: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
-  addDoc: async (ref: { path: string }, data: unknown) =>
-    void ops.push({ via: 'single', kind: 'add', path: ref.path, data }),
+  setDoc: async (ref: { path: string }, data: unknown) =>
+    void ops.push({ via: 'single', kind: 'set', path: ref.path, data }),
 }))
+
+/** The filing entries written, by the activity path they were named under. */
+const filings = () => ops.filter((op) => op.kind === 'set' && op.path.startsWith('orgs/org-1/crmActivities/'))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
@@ -207,11 +214,11 @@ describe('the campaign', () => {
      * lead, named, by the member, into the org's activity collection with
      * the site's scope — after the batch, never in it.
      */
-    await waitFor(() => expect(ops.filter((op) => op.kind === 'add')).toHaveLength(2))
-    const adds = ops.filter((op) => op.kind === 'add')
-    expect(adds.map((op) => [op.path, (op.data as any).leadId, (op.data as any).body])).toEqual([
-      ['orgs/org-1/crmActivities', 'l-open', 'Filed under Founder · ICP 2'],
-      ['orgs/org-1/crmActivities', 'l-working', 'Filed under Founder · ICP 2'],
+    await waitFor(() => expect(filings()).toHaveLength(2))
+    const adds = filings()
+    expect(adds.map((op) => [(op.data as any).leadId, (op.data as any).body])).toEqual([
+      ['l-open', 'Filed under Founder · ICP 2'],
+      ['l-working', 'Filed under Founder · ICP 2'],
     ])
     expect(adds[0].data).toMatchObject({
       kind: 'note',
@@ -243,7 +250,7 @@ describe('the campaign', () => {
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
     fireEvent.click(dialog().getByRole('button', { name: 'Add' }))
     await waitFor(() => expect(notices).toEqual(['Added 1 lead to the campaign']))
-    expect(ops.filter((op) => op.kind === 'add')).toEqual([])
+    expect(filings()).toEqual([])
   })
 
   it('is not offered at the organization level', () => {

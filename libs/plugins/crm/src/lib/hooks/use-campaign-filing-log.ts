@@ -19,11 +19,12 @@
 import {
   CRM_COLLECTIONS,
   consentGroupForHost,
+  createResourceUid,
   crmScopeTokens,
   type CrmActivityLink,
 } from '@aglyn/aglyn'
 import { useFirestore, useUser, useUserName } from '@aglyn/tenant-feature-instance'
-import { addDoc, collection } from 'firebase/firestore'
+import { collection, doc, setDoc } from 'firebase/firestore'
 import { useCallback } from 'react'
 import {
   buildCampaignFilingActivity,
@@ -76,7 +77,8 @@ export function useCampaignFilingLog(input: {
       const activities = collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.activities)
       for (const entry of entries) {
         try {
-          await addDoc(activities, {
+          // Named by the platform's own id, as every console resource is.
+          await setDoc(doc(activities, createResourceUid()), {
             ...buildCampaignFilingActivity({
               action: entry.action,
               campaign: entry.campaign,
