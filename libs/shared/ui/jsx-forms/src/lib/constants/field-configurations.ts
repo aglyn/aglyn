@@ -174,7 +174,17 @@ export const FIELD_MAP_TOGGLE_BUTTON: ExtendedMapperComponent = {
     ...fieldSharedOptions,
   },
 }
+/*
+ * NO `fieldSharedOptions` (AGL-3253). A sub-form is a LAYOUT, not a control:
+ * `size: 'small'` there is MUI's input density, but `size` on a Grid is its
+ * column span — and the spread lands after the component's own
+ * `size={{ xs: 12 }}`, so every sub-form rendered as `MuiGrid-grid-xs-small`,
+ * a class with no width rule at all, and took whatever width its contents
+ * happened to resolve to instead of the full row it asks for.
+ *
+ * `FIELD_MAP_FIELD_ARRAY` and `FIELD_MAP_WIZARD` are bare for the same
+ * reason; this one was not, and nothing reads a density off it.
+ */
 export const FIELD_SUB_FORM: ExtendedMapperComponent = {
-  ...fieldSharedOptions,
   component: FieldSubForm,
 }

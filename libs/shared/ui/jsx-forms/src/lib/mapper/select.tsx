@@ -246,7 +246,18 @@ function InternalSelect<T = OptionValue>({
               description
             }
             label={label}
-            margin="normal"
+            /*
+              NO `margin` (AGL-3253). The port carried `margin="normal"` from
+              the upstream mapper, and it made a select the only field type
+              that did not occupy the box a text field does: 16px of margin
+              above and 8px below, on top of whatever gap the grid was already
+              spacing rows by. Two neighbouring fields were 16px apart, a
+              select and its neighbour 24px, and on the SEO card that read as
+              the Entity heading being further from its first field than from
+              the field above it. `FormFieldGrid` wraps every field in a grid
+              item, so the container's spacing is what owns the rhythm — and
+              it owns it for text fields already.
+            */
             {...TextFieldProps}
             slotProps={{
               ...params.slotProps,

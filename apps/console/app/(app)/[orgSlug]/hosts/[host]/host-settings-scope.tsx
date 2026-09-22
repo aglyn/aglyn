@@ -644,7 +644,6 @@ const seoSchema: FormSchema = {
           'Who publishes this site — emitted as JSON-LD structured data ' +
           'so search engines show rich results.',
       }),
-      className: false,
       fields: [
         {
           component: FieldComponentType.SELECT,
@@ -772,7 +771,6 @@ const seoSchema: FormSchema = {
           component: FieldComponentType.SUB_FORM,
           name: 'seo.entity.address',
           title: 'Address',
-          className: false,
           help: docsHelp('seo', {
             anchor: '#structured-data',
             excerpt:
@@ -834,7 +832,6 @@ const seoSchema: FormSchema = {
       component: FieldComponentType.SUB_FORM,
       name: 'seo.agent',
       title: 'AI agents',
-      className: false,
       help: docsHelp('seo', {
         anchor: '#structured-data',
         excerpt:
