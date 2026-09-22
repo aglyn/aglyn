@@ -19,6 +19,7 @@ import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
 import { outreachOrgSubject } from '../mailboxes/register-mailbox-routes'
+import { createOutreachDoNotContactDomainsRoute } from './do-not-contact-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
@@ -87,4 +88,9 @@ export function registerOutreachRoutes(
     orgSubject,
   )
   registerPluginApiRoute(OUTREACH_API_ROUTES.preview, { web: createOutreachPreviewRoute(deps) }, orgSubject)
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.doNotContactDomains,
+    { web: createOutreachDoNotContactDomainsRoute(deps) },
+    orgSubject,
+  )
 }

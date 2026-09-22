@@ -56,7 +56,10 @@ import {
 } from '@aglyn/tenant-data-admin/server/email-suppression'
 import type { OutreachGateLookups } from '../engine/gates'
 import type { OutreachEnrollmentStatus } from '../model/outreach.types'
-import { lookupOutreachDoNotContact } from '../storage/do-not-contact-store'
+import {
+  lookupOutreachDoNotContact,
+  lookupOutreachDoNotContactDomains,
+} from '../storage/do-not-contact-store'
 import { outreachOrgCollection } from '../storage/outreach-records'
 
 /**
@@ -141,7 +144,7 @@ export async function readOutreachGateLookups(
   const enrollments = outreachOrgCollection(firestore, orgId, 'enrollments')
   const activities = firestore.collection('orgs').doc(orgId).collection(CRM_COLLECTIONS.activities)
 
-  const [platform, site, sales, doNotContact, roster, perPerson] = await Promise.all([
+  const [platform, site, sales, doNotContact, doNotContactDomain, roster, perPerson] = await Promise.all([
     keyedLookup(
       firestore,
       people,
@@ -168,6 +171,13 @@ export async function readOutreachGateLookups(
       'sales topic',
     ),
     lookupOutreachDoNotContact(
+      firestore,
+      orgId,
+      people.map((person) => person.email),
+    ),
+    // The domain half of the same list (AGL-3244), one `getAll` over the
+    // distinct domains the people are at.
+    lookupOutreachDoNotContactDomains(
       firestore,
       orgId,
       people.map((person) => person.email),
@@ -225,6 +235,7 @@ export async function readOutreachGateLookups(
       hostSuppressed: site.get(person.personId) ?? null,
       salesTopicState: sales.get(person.personId) ?? null,
       doNotContact: doNotContact.get(person.email) ?? null,
+      doNotContactDomain: doNotContactDomain.get(person.email) ?? null,
       workspaceMembers: roster,
       openEnrollments: own?.open ?? null,
       hasInboundEmail: own?.inbound ?? null,

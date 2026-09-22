@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { LEAD_FILTER_LABELS, LEAD_FILTERS, leadMatchesFilter } from './lead-filters'
+import {
+  LEAD_FILTER_LABELS,
+  LEAD_FILTERS,
+  leadMatchesFilter,
+  leadMatchesSearch,
+} from './lead-filters'
 
 /**
  * The Leads section's `Show` control (AGL-2608), and the one property that
@@ -54,5 +59,41 @@ describe('leadMatchesFilter', () => {
     for (const filter of LEAD_FILTERS) {
       expect(LEAD_FILTER_LABELS[filter]).toBeTruthy()
     }
+  })
+})
+
+/**
+ * The Leads section's search box (AGL-3246): the fields it reads, and that
+ * every word must land somewhere.
+ */
+describe('leadMatchesSearch', () => {
+  const morgan = {
+    name: 'Morgan Lamphere',
+    email: 'morgan@lamphere.coffee',
+    company: 'Lamphere Coffee',
+    jobTitle: 'Head Roaster',
+    tags: ['sal-15', 'trade-show'],
+  }
+
+  it('reads name, email, company, title and tags, whatever the case', () => {
+    expect(leadMatchesSearch(morgan, 'LAMPHERE')).toBe(true)
+    expect(leadMatchesSearch(morgan, '@lamphere.coffee')).toBe(true)
+    expect(leadMatchesSearch(morgan, 'coffee')).toBe(true)
+    expect(leadMatchesSearch(morgan, 'roaster')).toBe(true)
+    expect(leadMatchesSearch(morgan, 'SAL-15')).toBe(true)
+    expect(leadMatchesSearch(morgan, 'smith')).toBe(false)
+  })
+
+  it('needs every word, in any field', () => {
+    expect(leadMatchesSearch(morgan, 'morgan lamphere')).toBe(true)
+    expect(leadMatchesSearch(morgan, 'lamphere sal-15')).toBe(true)
+    expect(leadMatchesSearch(morgan, 'morgan smith')).toBe(false)
+  })
+
+  it('matches everything on a blank term and nothing on a bare lead', () => {
+    expect(leadMatchesSearch(morgan, '')).toBe(true)
+    expect(leadMatchesSearch(morgan, '   ')).toBe(true)
+    expect(leadMatchesSearch({}, '')).toBe(true)
+    expect(leadMatchesSearch({ name: null, tags: 'sal-15' }, 'sal')).toBe(false)
   })
 })

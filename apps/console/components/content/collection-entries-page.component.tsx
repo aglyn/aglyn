@@ -55,8 +55,10 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControlLabel,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
@@ -723,6 +725,46 @@ export function CollectionEntriesPage() {
           { variant: 'success', persist: false },
         )
       },
+    [firestore, hostId, enqueueSnackbar],
+  )
+
+  /**
+   * "List the collection, not its entries" (AGL-3247).
+   *
+   * A plain client write for the same reason `handleSchemaTypeChange` above
+   * is one: it changes one field on the collection and moves no billable
+   * count.
+   *
+   * `deleteField()` on the way OFF rather than `false`, matching the
+   * site-level switch in `search-indexing-card.component.tsx`: "absent means
+   * index" is the invariant `areCollectionEntriesIndexable` reads, and a
+   * lingering `false` would make the document assert something it does not
+   * need to.
+   */
+  const handleExcludeEntriesChange = useCallback(
+    (collectionId: string) => async (excluded: boolean) => {
+      if (!collectionId) return
+      try {
+        await updateDoc(
+          doc(firestore, 'hosts', hostId, 'collections', collectionId),
+          {
+            excludeEntriesFromSearch: excluded || deleteField(),
+            updatedAt: Timestamp.now(),
+          },
+        )
+      } catch (error: any) {
+        return void enqueueSnackbar(
+          error?.message ?? 'Could not change how entries are listed',
+          { variant: 'error' },
+        )
+      }
+      enqueueSnackbar(
+        excluded
+          ? 'Entries hidden from search — the collection is still listed'
+          : 'Entries offered to search engines again',
+        { variant: excluded ? 'warning' : 'success', persist: false },
+      )
+    },
     [firestore, hostId, enqueueSnackbar],
   )
 
@@ -1835,6 +1877,57 @@ export function CollectionEntriesPage() {
                                     </MenuItem>
                                   ))}
                                 </TextField>
+                                {/*
+                                  "List the collection, not its entries"
+                                  (AGL-3247).
+
+                                  Beside `Publishes as` because it is the same
+                                  class of decision — how this collection is
+                                  described to search engines — and because it
+                                  is the collection that answers it, not each
+                                  entry.
+
+                                  The helper text names the TRADE-OFF rather
+                                  than the setting. This switch is blunt on
+                                  purpose: it withholds every entry, including
+                                  ones worth indexing, and an author who finds
+                                  that out from a sitemap diff weeks later has
+                                  been failed by this sentence.
+                                */}
+                                <FormControlLabel
+                                  control={
+                                    <Switch
+                                      color="warning"
+                                      checked={Boolean(
+                                        selected?.excludeEntriesFromSearch,
+                                      )}
+                                      onChange={(event) =>
+                                        void handleExcludeEntriesChange(
+                                          selected?.$id ?? '',
+                                        )(event.target.checked)
+                                      }
+                                    />
+                                  }
+                                  label={
+                                    <Stack spacing={0}>
+                                      <span>
+                                        {'Keep entries out of search'}
+                                      </span>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                      >
+                                        {`/${selected?.slug ?? '…'} and its ` +
+                                          'categories stay in the sitemap; ' +
+                                          'every entry under it is withheld ' +
+                                          'and asks not to be indexed. For a ' +
+                                          'changelog or a release feed, where ' +
+                                          'the list is the page worth finding.'}
+                                      </Typography>
+                                    </Stack>
+                                  }
+                                  sx={{ alignItems: 'flex-start', mr: 0 }}
+                                />
                               </Stack>
                               {/*
                                 AGL-1324 gave the collection shell a delete;

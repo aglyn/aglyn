@@ -103,7 +103,7 @@ below that.
 | --- | --- |
 | **Active** | The mailbox can send. |
 | **Paused** | Somebody paused it, or it paused itself — see below. Nothing sends from it until it is resumed. |
-| **Reconnect required** | Google stopped accepting the connection — the password changed, access was removed from the Google account, or an administrator revoked it. Nothing sends until you connect the mailbox again. |
+| **Reconnect required** | Google stopped accepting the connection — the password changed, access was removed from the Google account, or an administrator revoked it. Nothing sends until you connect the mailbox again. The member who connected it, and the organization's owners and admins, are emailed the moment this happens, with a link to this page. |
 | **Disconnected** | The mailbox was disconnected. Nothing sends from it until it is connected again. |
 
 **Health** shows the last seven days: messages sent, bounces and replies. A
@@ -115,12 +115,17 @@ Bounces are the first sign that a list has bad addresses in it, and mailbox
 providers judge a sender by them. So a mailbox pauses itself when:
 
 - **two** of its emails hard-bounce in one of its days;
-- more than **3%** of its last **50** emails hard-bounced; or
+- more than **3%** of its last **50** emails hard-bounced, once at least
+  **25** of them are in that window — under that, one bounce would be the
+  whole rate, and a single blocked address is not a list problem; or
 - a reply called one of its emails spam. That pause is meant to last a week,
   and the card says when the week is out.
 
 The card says why, with the date, and a line is written to your
-organization's activity. Re-check the addresses in the mailbox's sequences,
+organization's activity. The member who connected the mailbox, and the
+organization's owners and admins, are emailed the moment it pauses: the
+reason in the mailbox's own words, how many enrollments are waiting on it,
+and a link to this page. Re-check the addresses in the mailbox's sequences,
 then select **Resume**. Only bounces that arrive after you resume are judged
 again.
 
@@ -189,6 +194,28 @@ to someone who never contacted you does not have. So a **cold** email — to
 someone who never filled in a form, signed up, ordered or booked with you, or
 wrote to you — never goes outside the United States, whatever this list says.
 Add another country only for people who came to you first.
+
+### Do not contact domains {#do-not-contact-domains}
+
+The domains no sequence emails anyone at, whoever enrolls them. Your
+organization's do-not-contact list holds addresses — a person who replied
+"no", used the unsubscribe link, or was marked do-not-contact on an
+enrollment — and, beside them, whole domains:
+
+- **Add one yourself** — a company that asked not to hear from you, or one
+  whose mail gateway you know blocks you. Type the domain (`example.com`; an
+  address at it works too) and select **Add domain**.
+- **Added for you** — when an email hard-bounces because the recipient's mail
+  gateway refused it (Barracuda, Proofpoint, Mimecast and the like say so in
+  the bounce), rather than because the address is unknown, the domain is
+  added here with the bounce's reason. That kind of bounce is the whole
+  company's verdict on the sender, and the next person there would bounce
+  the same way and count against the mailbox's bounce rule.
+
+Every address at a listed domain is refused in **Check people** and again
+before each send, with the domain named. Take a domain off with its
+**Remove** button; both changes are written to your organization's activity.
+Domains of public mailbox providers are never added automatically.
 
 ## Sequences {#sequences}
 
@@ -283,8 +310,8 @@ Before anything is enrolled, each person is marked:
   cold email never goes to; an address outside the allowed countries, or in no
   known country; on the platform's or your site's suppression list after a
   bounce, a complaint or an unsubscribe; opted out of sales email from the
-  site; on
-  your organization's do-not-contact list; a member of your workspace; a
+  site; on your organization's do-not-contact list, or at a
+  [domain on it](#do-not-contact-domains); a member of your workspace; a
   customer, unless the sequence includes customers; already in a sequence; or
   a lead that converted, is already a contact, or was closed as unqualified.
 
@@ -359,7 +386,7 @@ Each connected mailbox is read every 15 minutes for what came back:
 | **The person replies** | Stops the sequence (**Replied**), files the reply on the contact's timeline, and gives the rep the task **Reply from** *their name*. |
 | **An out-of-office reply** | Keeps the sequence going, and moves the next step to at least five business days after the reply. |
 | **They ask not to be emailed** — a reply such as "no" or "unsubscribe", the unsubscribe link, or a message to the unsubscribe address | Stops the sequence (**Opted out**), puts the address on your do-not-contact list, unsubscribes it from the site's **Sales outreach** email, and stops it in every other sequence. |
-| **The email hard-bounces** | Stops the sequence (**Bounced**) and puts the address on your do-not-contact list and on the platform's suppression list. |
+| **The email hard-bounces** | Stops the sequence (**Bounced**) and puts the address on your do-not-contact list and on the platform's suppression list. When the bounce says the recipient's mail gateway refused it rather than that the address is unknown, the whole [domain](#do-not-contact-domains) goes on the list too, and the enrollment says so. |
 | **A check refuses them before the next email** — a customer now, a member of your workspace, on a suppression list | Stops the sequence, saying which check. |
 | **The mailbox is disconnected or removed, or the member who connected it leaves the organization** | Stops the sequences that send from it. |
 | **The next email needs something the contact doesn't have** — a first name for `{{contact.firstName}}` | Pauses the enrollment, naming what is missing. Fill it in and select **Resume**. |

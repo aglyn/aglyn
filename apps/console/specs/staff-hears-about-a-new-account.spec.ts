@@ -127,6 +127,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
   }),
   isLockdownActive: (state: unknown) => state != null,
   toEpochMs: () => undefined,
+  // The real shape, not a flat `false`: the canary exclusion below is only
+  // exercised if this can actually say yes (AGL-3248).
+  isSignupCanaryEmail: (email: string) =>
+    typeof email === 'string' &&
+    (email.toLowerCase().split('@')[0].split('+')[1] ?? '').startsWith(
+      'signup-canary',
+    ),
 }))
 
 import { POST } from '../app/api/auth/session/route'
@@ -173,6 +180,29 @@ describe('a new account is announced to staff (AGL-3225)', () => {
     mockSeedUserProfile.mockResolvedValue({ created: false, fields: ['photoUrl'] })
     await post()
     await settle()
+    expect(mockNotifyStaff).not.toHaveBeenCalled()
+  })
+
+  it('says nothing about the canary walking its own signup (AGL-3248)', async () => {
+    /*
+     * The hourly walk signs up for real through this path and then deletes
+     * the account, so an announcement here is a person who no longer exists
+     * behind a link to an admin page that 404s.
+     *
+     * `created` is deliberately true: the walk genuinely is a first sighting,
+     * which is why nothing in AGL-3225's own restraint catches it.
+     */
+    mockSeedUserProfile.mockResolvedValue({ created: true, fields: [] })
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'uid-canary',
+      email: 'ops+signup-canary-m2rso9ab12@example.com',
+      email_verified: true,
+    })
+    const response = await post()
+    await settle()
+    // Minted, and silently: the walk has to take the same path a stranger
+    // takes or it proves nothing about signup.
+    expect(response.status).toBe(200)
     expect(mockNotifyStaff).not.toHaveBeenCalled()
   })
 

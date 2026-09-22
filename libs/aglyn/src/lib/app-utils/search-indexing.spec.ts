@@ -18,6 +18,7 @@
 import { HostScreenVisibility } from '../foundation/definitions/platform.types'
 import {
   AI_AGENT_USER_AGENTS,
+  areCollectionEntriesIndexable,
   buildRobotsTxt,
   isPageIndexable,
   statusPageScreenIds,
@@ -131,6 +132,62 @@ describe('search-indexing policy (AGL-1263)', () => {
       expect(isPageIndexable({ host: { seo: {} }, screen: publicScreen })).toBe(
         true,
       )
+    })
+  })
+
+  describe('areCollectionEntriesIndexable (AGL-3247)', () => {
+    it('indexes a collection that has never heard of the switch', () => {
+      // The default every collection was created with. A schema slip must
+      // never read as "de-index this customer's blog".
+      expect(areCollectionEntriesIndexable(undefined)).toBe(true)
+      expect(areCollectionEntriesIndexable(null)).toBe(true)
+      expect(areCollectionEntriesIndexable({})).toBe(true)
+    })
+
+    it('withholds entries only for an explicit true', () => {
+      expect(
+        areCollectionEntriesIndexable({ excludeEntriesFromSearch: true }),
+      ).toBe(false)
+      expect(
+        areCollectionEntriesIndexable({ excludeEntriesFromSearch: false }),
+      ).toBe(true)
+      expect(
+        areCollectionEntriesIndexable({ excludeEntriesFromSearch: null }),
+      ).toBe(true)
+    })
+
+    it('does not treat a truthy non-boolean as on', () => {
+      // Same guard the site-level switch carries: a stored `"true"` from an
+      // import or a form is not the boolean this field means.
+      expect(
+        areCollectionEntriesIndexable({
+          excludeEntriesFromSearch: 'true',
+        } as never),
+      ).toBe(true)
+      expect(
+        areCollectionEntriesIndexable({ excludeEntriesFromSearch: 1 } as never),
+      ).toBe(true)
+    })
+
+    it('turns back ON when the switch is cleared', () => {
+      // The console writes `deleteField()` rather than `false` on the way off,
+      // so "cleared" is an ABSENT key — the shape the first case covers, and
+      // the direction that makes this control reversible at all.
+      expect(
+        areCollectionEntriesIndexable({ excludeEntriesFromSearch: true }),
+      ).toBe(false)
+      expect(areCollectionEntriesIndexable({})).toBe(true)
+    })
+
+    it('is independent of the site-level switch', () => {
+      // Two different subjects. The sitemap answers the site switch once for
+      // the whole file and the render surface answers it for the listing too,
+      // so this predicate must not quietly fold it in — a collection that
+      // never set the field stays indexable here even on a discouraged site.
+      expect(isSearchDiscouraged({ seo: { discourageSearchEngines: true } })).toBe(
+        true,
+      )
+      expect(areCollectionEntriesIndexable({})).toBe(true)
     })
   })
 

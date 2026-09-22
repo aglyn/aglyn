@@ -73,7 +73,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 
 jest.mock('@aglyn/aglyn/server', () => ({
   __esModule: true,
-  isSignupCanaryOrgSlug: () => false,
+  // The real shape, not a flat `false`: the canary exclusion below is only
+  // exercised if this can actually say yes (AGL-3248).
+  isSignupCanaryOrgSlug: (slug: string) =>
+    typeof slug === 'string' && slug.startsWith('signup-canary-'),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     body: await request.json().catch(() => ({})),
@@ -145,6 +148,24 @@ describe('a new workspace is announced to staff (AGL-3225)', () => {
     mockCreateOrganization.mockRejectedValue(new Error('slug clash'))
     const response = await post()
     expect(response.status).toBe(500)
+    expect(mockNotifyStaff).not.toHaveBeenCalled()
+  })
+
+  it('says nothing about the canary walking its own signup (AGL-3248)', async () => {
+    const response = await POST(
+      new Request('https://app.aglyn.com/api/orgs/create', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer tok',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ name: 'Signup canary m2rso9ab12' }),
+      }),
+    )
+    // Created, and silently: the walk must still exercise the real route end
+    // to end — suppressing the ANNOUNCEMENT is the whole change, and a canary
+    // that took a different path through creation would prove nothing.
+    expect(response.status).toBe(200)
     expect(mockNotifyStaff).not.toHaveBeenCalled()
   })
 

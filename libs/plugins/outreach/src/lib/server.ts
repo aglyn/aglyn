@@ -149,11 +149,19 @@ export {
 } from './storage/compliance-settings-store'
 export {
   addOutreachDoNotContact,
+  addOutreachDoNotContactDomain,
   getOutreachDoNotContactEntry,
   isOutreachDoNotContact,
+  listOutreachDoNotContactDomains,
   lookupOutreachDoNotContact,
+  lookupOutreachDoNotContactDomains,
   outreachDoNotContactCollection,
+  outreachDoNotContactDomainCollection,
+  readOutreachDoNotContactDomainEntry,
   readOutreachDoNotContactEntry,
+  removeOutreachDoNotContactDomain,
+  type AddOutreachDoNotContactDomainInput,
+  type AddOutreachDoNotContactDomainResult,
   type AddOutreachDoNotContactInput,
   type AddOutreachDoNotContactResult,
 } from './storage/do-not-contact-store'

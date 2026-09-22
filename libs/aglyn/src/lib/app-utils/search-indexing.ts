@@ -32,7 +32,7 @@ import { SITEMAP_INDEX_PATH } from './sitemap'
  * submission, and submitting a page you have marked noindex is the shape that
  * gets a site flagged for conflicting directives.
  *
- * There are two controls and they compose:
+ * There are three controls and they compose:
  *
  * - **Site-level** `host.seo.discourageSearchEngines` — the staged-launch
  *   switch. Everything about the site goes dark to crawlers at once.
@@ -41,6 +41,11 @@ import { SITEMAP_INDEX_PATH } from './sitemap'
  *   `UNLISTED` is literally `PUBLIC | (1 << 2)`: "public, plus the not-listed
  *   bit". A second per-screen field would be a field that can disagree with
  *   this one, and every render surface would then need a rule for which wins.
+ * - **Per-collection** `collection.excludeEntriesFromSearch` (AGL-3247) — a
+ *   content collection keeps its listing and its category listings indexable
+ *   and withholds its ENTRIES. That is a different axis from the two above,
+ *   not a third copy of either: the subject is the collection, and what it
+ *   answers for is every URL underneath it.
  */
 
 /** The host fields this module reads; keeps callers free of the full doc. */
@@ -58,6 +63,16 @@ export interface SearchIndexingHost {
 /** The screen fields this module reads. */
 export interface SearchIndexingScreen {
   visibility?: HostScreenVisibility | null
+}
+
+/** The content-collection fields this module reads. */
+export interface SearchIndexingCollection {
+  /**
+   * "List the collection, not its entries" (AGL-3247). PERSISTED NAME — flat
+   * on the collection document, where `schemaType` and `categories` already
+   * live, rather than under a `seo` map the collection has never carried.
+   */
+  excludeEntriesFromSearch?: boolean | null
 }
 
 /**
@@ -91,13 +106,39 @@ export function isScreenIndexable(
   return visibility === HostScreenVisibility.PUBLIC
 }
 
-/** Both controls together — what a render surface actually wants to know. */
+/**
+ * The site and screen controls together — what a SCREEN render wants to know.
+ *
+ * Collection entries do not come through here; their URL belongs to the
+ * collection rather than to a screen, so they ask
+ * {@link areCollectionEntriesIndexable} alongside {@link isSearchDiscouraged}.
+ */
 export function isPageIndexable(options: {
   host?: SearchIndexingHost | null
   screen?: SearchIndexingScreen | null
 }): boolean {
   if (isSearchDiscouraged(options.host)) return false
   return isScreenIndexable(options.screen)
+}
+
+/**
+ * Whether a content collection's ENTRIES may be indexed, ignoring the
+ * site-level switch (AGL-3247).
+ *
+ * Absent means "index them" — the default every collection was created with,
+ * and the only safe default, exactly as for {@link isSearchDiscouraged}: a
+ * schema slip must never be readable as "de-index this customer's blog".
+ *
+ * This says nothing about the LISTING at `/{collection}` or the category
+ * listings under it. Those stay indexable on purpose — they are the pages
+ * that make the withheld entries reachable at all, and a collection whose
+ * whole point is that it is too numerous to index is still a collection a
+ * reader should be able to find.
+ */
+export function areCollectionEntriesIndexable(
+  collection: SearchIndexingCollection | null | undefined,
+): boolean {
+  return collection?.excludeEntriesFromSearch !== true
 }
 
 /**

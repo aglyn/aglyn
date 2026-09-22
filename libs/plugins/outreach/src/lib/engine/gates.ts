@@ -119,6 +119,11 @@ export interface OutreachGateLookups {
   /** The address is on the organization's Outreach do-not-contact list. */
   doNotContact: boolean | null
   /**
+   * The address's DOMAIN is on that list (AGL-3244): a member put it there,
+   * or the domain's mail gateway blocked the sender outright.
+   */
+  doNotContactDomain: boolean | null
+  /**
    * The organization's roster: each member's sign-in address and confirmed
    * aliases, as `crmInboundRoster` builds it.
    */
@@ -171,6 +176,7 @@ export type OutreachGateCode =
   | 'host_suppressed'
   | 'sales_opted_out'
   | 'do_not_contact'
+  | 'do_not_contact_domain'
   | 'workspace_member'
   | 'customer'
   | 'already_enrolled'
@@ -382,6 +388,18 @@ export function evaluateOutreachGates(input: OutreachGateInput): OutreachGateRes
     block(
       'do_not_contact',
       `We couldn't check your do-not-contact list for ${email}. ${COULD_NOT_CHECK}`,
+    )
+  }
+  const domain = email.slice(email.lastIndexOf('@') + 1)
+  if (lookups?.doNotContactDomain === true) {
+    block(
+      'do_not_contact_domain',
+      `${email} is at ${domain}, which is on your organization's do-not-contact list: no address there is emailed.`,
+    )
+  } else if (lookups?.doNotContactDomain !== false) {
+    block(
+      'do_not_contact_domain',
+      `We couldn't check your do-not-contact list for ${domain}. ${COULD_NOT_CHECK}`,
     )
   }
 

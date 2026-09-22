@@ -28,6 +28,7 @@ import type {
   OutreachMailboxDailyHealth,
   OutreachRecentSend,
 } from '../model/outreach.types'
+import { notifyOutreachMailboxOwner } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 
 /**
@@ -52,8 +53,10 @@ import type { OutreachRuntimeDeps } from './runtime-deps'
  * it lands in.
  *
  * A pause is the mailbox's own: status `paused` with `autoPause` beside it,
- * which the Mailboxes card shows as the reason, and a line on the
- * organization's activity feed under `outreach:mailbox`.
+ * which the Mailboxes card shows as the reason, a line on the
+ * organization's activity feed under `outreach:mailbox`, and an email to
+ * the member whose mailbox it is (AGL-3244) — sent by the write that paused
+ * it, so once per pause.
  */
 
 /** The activity target a mailbox's rows are filed under (AGL-2978). */
@@ -137,7 +140,7 @@ export const emptyOutreachHealthDelta = (): OutreachMailboxHealthDelta => ({
  * Answers the decision that paused it, or `null`.
  */
 export async function applyOutreachMailboxHealth(
-  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'now' | 'logOrgActivity'>,
+  deps: Pick<OutreachRuntimeDeps, 'firestore' | 'now' | 'logOrgActivity' | 'notifyMailboxOwner'>,
   input: { orgId: string; mailboxId: string; delta: OutreachMailboxHealthDelta },
 ): Promise<OutreachMailboxHealthDecision | null> {
   const { delta } = input
@@ -189,14 +192,23 @@ export async function applyOutreachMailboxHealth(
       }
     }
     transaction.update(ref, update)
-    return decision?.pause ? { decision, email: mailbox.email } : null
+    return decision?.pause ? { decision, mailbox } : null
   })
   if (!outcome) return null
   await deps.logOrgActivity(
     input.orgId,
     { uid: null },
     `Paused a mailbox in Sequences automatically: ${outcome.decision.message}`,
-    { type: MAILBOX_TARGET, id: input.mailboxId, name: outcome.email },
+    { type: MAILBOX_TARGET, id: input.mailboxId, name: outcome.mailbox.email },
   )
+  // The owner is told by the write that paused it (AGL-3244), and so once:
+  // a mailbox already paused is not judged again above, and so never
+  // reaches here until a member resumes it and new evidence arrives.
+  await notifyOutreachMailboxOwner(deps, {
+    orgId: input.orgId,
+    mailbox: outcome.mailbox,
+    kind: 'auto_pause',
+    message: outcome.decision.message ?? '',
+  })
   return outcome.decision
 }

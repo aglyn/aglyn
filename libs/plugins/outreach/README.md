@@ -81,6 +81,9 @@ pure functions with no I/O, exported from the package root:
 | `thread-message` | the classifier's message shape, and the adapter from a Gmail API message |
 | `delivery-status`, `opt-out-intent`, `thread-classification` | what came back: bounces, automatic replies, replies and opt-outs |
 | `mailbox-health` | when a mailbox pauses itself |
+| `mailbox-notice` | the email a mailbox's owner gets when it pauses itself or needs reconnecting |
+| `gateway-block` | whether a hard bounce is the recipient domain's gateway refusing the sender, rather than one unknown address |
+| `do-not-contact-domain` | how a domain on the do-not-contact list is spelled |
 
 `engine/do-not-contact` derives the do-not-contact document id with
 `node:crypto`, so it is not in the barrel: import
@@ -97,6 +100,7 @@ console alone — each run opens a rep's sealed grant:
 | `runtime/sync-job` | `outreach-sync`: replies, out-of-office answers, opt-outs and bounces read with `format=full` and classified by the engine; the mailbox's health evidence and its automatic pause |
 | `runtime/unsubscribe-link`, `runtime/unsubscribe-route` | the signed one-click link (`GET` and RFC 8058 `POST /api/outreach/unsubscribe`), a recipient link that outlives a paused rollout, and the `+unsubscribe` mailto |
 | `runtime/enrollment-events` | status changes as the engine's events, and an opt-out recorded on every list |
+| `runtime/mailbox-notices` | the owner told, once, when a mailbox pauses itself or needs reconnecting |
 | `runtime/timeline` | the contact's timeline, through the core's record-timeline seam |
 | `runtime/person-erasure` | the enrollments a person erasure deletes, and the do-not-contact entry it keeps |
 

@@ -66,6 +66,11 @@ export const OUTREACH_API_ROUTES = {
   enroll: 'outreach/enroll',
   /** `POST` — pause, resume, stop, or mark do-not-contact. */
   enrollmentsAction: 'outreach/enrollments/action',
+  /**
+   * `GET ?orgId` — the domains on the organization's do-not-contact list
+   * (AGL-3244); `POST` — add one, or take one off.
+   */
+  doNotContactDomains: 'outreach/do-not-contact/domains',
   /** `POST` — one email of a saved sequence, for a contact or a sample person. */
   preview: 'outreach/preview',
   // The one route a RECIPIENT reaches (AGL-2981): no session, a signed

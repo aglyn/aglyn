@@ -573,7 +573,26 @@ function buildMetadata(props: Props): Metadata {
     return {
       title: fullTitle,
       ...(description ? { description } : {}),
-      ...(searchDiscouraged || unknownCategory
+      /*
+        noindex for this branch (AGL-1263, AGL-1321, AGL-3247). Three reasons,
+        one directive:
+
+          - the site-wide switch,
+          - an address that names no content — `/{collection}/category/{slug}`
+            for a category this collection does not have,
+          - an ENTRY of a collection whose entries are withheld from search.
+
+        The third is asked of the collection, not of this page, so the LISTING
+        and its category listings stay indexable: they are what makes the
+        withheld entries reachable, and the sitemap still submits them.
+
+        `follow: true` throughout, and it matters most for the third: the
+        links out of a withheld entry are still worth crawling, and the
+        collection asked to be listed rather than hidden.
+      */
+      ...(searchDiscouraged ||
+      unknownCategory ||
+      (entry && !Aglyn.areCollectionEntriesIndexable(content.collection))
         ? { robots: { index: false, follow: true } }
         : {}),
       ...(contentCanonical || collectionFeed

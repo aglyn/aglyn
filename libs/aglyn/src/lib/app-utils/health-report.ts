@@ -2967,6 +2967,45 @@ export function isSignupCanaryOrgSlug(slug: string | null | undefined): boolean 
 }
 
 /**
+ * The plus tag every canary address carries.
+ *
+ * Identity Platform will not reuse an address, so the walk stamps a fresh one
+ * per run by appending to the LOCAL PART of `SIGNUP_CANARY_EMAIL`:
+ * `name+signup-canary@example.com` becomes
+ * `name+signup-canary-m2rso9ab12@example.com`, which still reaches the same
+ * mailbox. The tag is therefore the only part of a canary account that the
+ * console can recognize at the moment it first sees one — there is no org yet,
+ * no claim, and nothing on the token that says CI.
+ *
+ * The address is operator-supplied, so this is a convention rather than a
+ * fact, and `tools/e2e/signup-canary.mjs` is what makes it one: it refuses to
+ * start on a base address whose tag is not this. Held together by
+ * `apps/console/specs/signup-canary-marker-wiring.spec.ts`, exactly as the
+ * slug prefix above is.
+ */
+export const SIGNUP_CANARY_EMAIL_TAG = 'signup-canary'
+
+/**
+ * Is this sign-up the canary's own?
+ *
+ * The cost mirrors the slug prefix's: a stranger who signs up as
+ * `them+signup-canary@example.com` goes unannounced. That is bounded to the
+ * one address, it cannot hide anything staff need — the account still exists,
+ * still appears in the admin user list, and still bills — and it is the price
+ * of a check that needs no secret and no second code path.
+ */
+export function isSignupCanaryEmail(email: string | null | undefined): boolean {
+  if (typeof email !== 'string') return false
+  const local = email.toLowerCase().split('@')[0] ?? ''
+  const plus = local.indexOf('+')
+  if (plus < 0) return false
+  // `startsWith`, not equality: the walk's own address is the base tag plus a
+  // stamp, and the base address itself must match too — a human reading the
+  // mailbox should not find the two classified differently.
+  return local.slice(plus + 1).startsWith(SIGNUP_CANARY_EMAIL_TAG)
+}
+
+/**
  * How old the last walk may be before the check goes red.
  *
  * Six hours, far wider than the schedule that writes it, and deliberately so.

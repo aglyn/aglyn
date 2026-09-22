@@ -59,6 +59,7 @@ const cleanLookups = (overrides: Partial<OutreachGateLookups> = {}): OutreachGat
   hostSuppressed: false,
   salesTopicState: 'subscribed',
   doNotContact: false,
+  doNotContactDomain: false,
   workspaceMembers: [{ email: 'avery@example.org', verifiedAliases: ['avery@example.net'] }],
   openEnrollments: [],
   hasInboundEmail: false,
@@ -273,6 +274,7 @@ describe('gate 4: every list that says not to', () => {
           hostSuppressed: true,
           salesTopicState: 'opted-out',
           doNotContact: true,
+          doNotContactDomain: true,
         }),
       }),
     )
@@ -288,7 +290,16 @@ describe('gate 4: every list that says not to', () => {
       },
       { code: 'sales_opted_out', reason: 'casey@example.com opted out of sales outreach from this site.' },
       { code: 'do_not_contact', reason: "casey@example.com is on your organization's do-not-contact list." },
+      {
+        code: 'do_not_contact_domain',
+        reason:
+          "casey@example.com is at example.com, which is on your organization's do-not-contact list: no address there is emailed.",
+      },
     ])
+  })
+
+  it('refuses a domain on the list on its own, whatever the address list says (AGL-3244)', () => {
+    expect(codesOf({ lookups: cleanLookups({ doNotContactDomain: true }) })).toEqual(['do_not_contact_domain'])
   })
 
   it('refuses when a list could not be read, and says so rather than accusing the address', () => {
@@ -299,6 +310,7 @@ describe('gate 4: every list that says not to', () => {
           hostSuppressed: null,
           salesTopicState: null,
           doNotContact: null,
+          doNotContactDomain: null,
           workspaceMembers: null,
           openEnrollments: null,
         }),
@@ -310,6 +322,7 @@ describe('gate 4: every list that says not to', () => {
       'host_suppressed',
       'sales_opted_out',
       'do_not_contact',
+      'do_not_contact_domain',
       'workspace_member',
       'already_enrolled',
     ])

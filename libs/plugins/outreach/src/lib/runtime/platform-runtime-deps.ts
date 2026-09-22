@@ -23,9 +23,11 @@ import { suppressEmail } from '@aglyn/tenant-data-admin/server/email-suppression
 import { recordTopicOptOut } from '@aglyn/tenant-data-admin/server/email-topic-confirmation'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
+import { sendOrgMemberNotice } from '@aglyn/tenant-data-admin/server/org-member-notice'
 import { logOrgActivity } from '@aglyn/tenant-data-admin/server/organizations'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
 import { OUTREACH_PLUGIN_ID } from '../constants/bundle-common'
+import { composeOutreachMailboxNotice } from '../engine/mailbox-notice'
 import { openOutreachMailboxClient } from '../mailboxes/mailbox-transport'
 import { canonicalConsoleOrigin } from '../mailboxes/oauth-redirect'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
@@ -66,6 +68,25 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
     },
     async suppressBouncedEmail({ email, hostId }) {
       await suppressEmail({ email, reason: 'bounce', context: 'outreach', hostId, firestore: firestore() })
+    },
+    async notifyMailboxOwner(notice) {
+      // The Mailboxes page, by the organization's slug — the page Resume and
+      // Reconnect live on (AGL-3244). Without a slug or a console origin the
+      // notice still goes, and says where the page is instead.
+      const org = await firestore().collection('orgs').doc(notice.orgId).get()
+      const slug = typeof org.get('slug') === 'string' ? String(org.get('slug')) : ''
+      const origin = canonicalConsoleOrigin()
+      const mailboxesUrl = slug && origin ? `${origin}/${encodeURIComponent(slug)}/outreach/mailboxes` : null
+      const email = composeOutreachMailboxNotice(notice, { mailboxesUrl })
+      const result = await sendOrgMemberNotice({
+        orgId: notice.orgId,
+        uids: [notice.connectedByUid],
+        includeAdmins: true,
+        subject: email.subject,
+        text: email.text,
+        context: 'outreach-mailbox-notice',
+      })
+      if (!result.sent) console.warn(`[outreach] the mailbox owner was not emailed: ${result.reason}`)
     },
     unsubscribeUrl: (target) => outreachUnsubscribeUrl({ origin: canonicalConsoleOrigin(), target }),
     clickUrl: (target) => outreachClickUrl({ origin: canonicalConsoleOrigin(), target }),

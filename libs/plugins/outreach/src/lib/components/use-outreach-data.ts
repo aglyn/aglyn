@@ -33,6 +33,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   OUTREACH_COLLECTIONS,
   OUTREACH_LINK_ROLLUP_PATH,
+  type OutreachDoNotContactDomainEntry,
   type OutreachEnrollment,
   type OutreachEnrollmentStatus,
   type OutreachSequence,
@@ -177,6 +178,37 @@ export function useOutreachSequenceLinks(
       (error) => setResult(failed(null, error, 'the link report')),
     )
   }, [firestore, orgId, sequenceId])
+  return result
+}
+
+/**
+ * The domains on the organization's do-not-contact list (AGL-3244),
+ * alphabetically, live: an add or a remove through the route shows up here
+ * without a reload, and so does a domain the sending runtime files after a
+ * gateway block.
+ */
+export function useOutreachDoNotContactDomains(
+  orgId: string | null,
+): OutreachLoad<OutreachDoNotContactDomainEntry[]> {
+  const firestore = useFirestore()
+  const [result, setResult] = useState<OutreachLoad<OutreachDoNotContactDomainEntry[]>>({
+    status: 'loading',
+    data: [],
+  })
+  useEffect(() => {
+    setResult({ status: 'loading', data: [] })
+    if (!orgId) return undefined
+    return onSnapshot(
+      collection(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.doNotContactDomains),
+      (snapshot) => {
+        const domains = snapshot.docs
+          .map((entry) => ({ ...(entry.data() as OutreachDoNotContactDomainEntry), domain: entry.id }))
+          .sort((a, b) => a.domain.localeCompare(b.domain))
+        setResult({ status: 'ready', data: domains })
+      },
+      (error) => setResult(failed([], error, 'the do-not-contact domains')),
+    )
+  }, [firestore, orgId])
   return result
 }
 

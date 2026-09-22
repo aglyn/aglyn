@@ -59,3 +59,35 @@ export function leadMatchesFilter(
   if (filter === 'open') return isCrmLeadOpen(lead)
   return crmLeadStatus(lead) === filter
 }
+
+/**
+ * The fields the Leads section's search box reads (AGL-3246): who the lead
+ * is and where they work — the words a person types to find one — plus the
+ * tags, which are how an import names its batch (`sal-15`). `name` and
+ * `email` are the capture door's fields rather than the CRM's, so the row is
+ * read as a record rather than through `CrmLeadFields`.
+ */
+const LEAD_SEARCH_FIELDS = ['name', 'email', 'company', 'jobTitle'] as const
+
+/**
+ * Whether a lead answers a search term.
+ *
+ * Case-insensitive, and every whitespace-separated word of the term must
+ * appear in SOME searched field: `morgan lamphere` and `lamphere sal-15`
+ * both find Morgan Lamphere, `morgan smith` does not. A blank term matches
+ * every lead, so the box emptied is the list unfiltered.
+ */
+export function leadMatchesSearch(
+  lead: Readonly<Record<string, unknown>>,
+  term: string,
+): boolean {
+  const words = term.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (!words.length) return true
+  const values = [
+    ...LEAD_SEARCH_FIELDS.map((field) => lead[field]),
+    ...(Array.isArray(lead['tags']) ? lead['tags'] : []),
+  ]
+    .filter((value): value is string => typeof value === 'string' && value !== '')
+    .map((value) => value.toLowerCase())
+  return words.every((word) => values.some((value) => value.includes(word)))
+}

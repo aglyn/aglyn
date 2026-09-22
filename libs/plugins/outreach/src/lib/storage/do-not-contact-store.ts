@@ -17,7 +17,10 @@
 
 /**
  * The organization's Outreach do-not-contact list (AGL-2980):
- * `orgs/{orgId}/outreachDoNotContact/{key}`, one document per address.
+ * `orgs/{orgId}/outreachDoNotContact/{key}`, one document per address —
+ * and, beside it, `orgs/{orgId}/outreachDoNotContactDomains/{domain}`, one
+ * document per DOMAIN (AGL-3244), which the same callers read: an address
+ * is refused when it, or the domain it is at, is listed.
  *
  * SERVER ONLY — the key hashes with `node:crypto`. Two kinds of caller, and
  * the API is shaped for both:
@@ -48,10 +51,12 @@
  */
 
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
+import { normalizeOutreachDomain, outreachEmailDomain } from '../engine/do-not-contact-domain'
 import {
   OUTREACH_COLLECTIONS,
   OUTREACH_DO_NOT_CONTACT_REASONS,
   OUTREACH_DO_NOT_CONTACT_SOURCES,
+  type OutreachDoNotContactDomainEntry,
   type OutreachDoNotContactEntry,
   type OutreachDoNotContactReason,
   type OutreachDoNotContactSource,
@@ -195,27 +200,7 @@ export async function addOutreachDoNotContact(
 ): Promise<AddOutreachDoNotContactResult> {
   const key = outreachDoNotContactKey(input.email)
   if (!key) throw new Error('[outreach] cannot key a do-not-contact entry for that value')
-  if (!(OUTREACH_DO_NOT_CONTACT_REASONS as readonly string[]).includes(input.reason)) {
-    throw new Error(`[outreach] "${String(input.reason)}" is not a do-not-contact reason`)
-  }
-  if (!(OUTREACH_DO_NOT_CONTACT_SOURCES as readonly string[]).includes(input.source)) {
-    throw new Error(`[outreach] "${String(input.source)}" is not a do-not-contact source`)
-  }
-  const addedByUid = typeof input.addedByUid === 'string' && input.addedByUid ? input.addedByUid : null
-  if (input.source === 'member' && !addedByUid) {
-    throw new Error('[outreach] a member-added do-not-contact entry names the member')
-  }
-  const detail = String(input.detail ?? '').replace(/\s+/g, ' ').trim()
-  const entry: OutreachDoNotContactEntry = {
-    key,
-    reason: input.reason,
-    source: input.source,
-    addedByUid,
-    addedAtMs: input.nowMs,
-    enrollmentId: input.enrollmentId || null,
-    sequenceId: input.sequenceId || null,
-    detail: detail ? detail.slice(0, OUTREACH_DO_NOT_CONTACT_DETAIL_MAX) : null,
-  }
+  const entry: OutreachDoNotContactEntry = { key, ...entryFields(input) }
   const ref = outreachDoNotContactCollection(firestore, input.orgId).doc(key)
   try {
     await ref.create(entry)
@@ -229,4 +214,162 @@ export async function addOutreachDoNotContact(
       entry: readOutreachDoNotContactEntry(key, existing.data()) ?? entry,
     }
   }
+}
+
+/**
+ * The fields an address entry and a domain entry share, held to the rules
+ * the module note gives: a reason and a source the list knows, and a member
+ * behind every member-sourced add.
+ */
+function entryFields(
+  input: Omit<AddOutreachDoNotContactInput, 'orgId' | 'email'>,
+): Omit<OutreachDoNotContactEntry, 'key'> {
+  if (!(OUTREACH_DO_NOT_CONTACT_REASONS as readonly string[]).includes(input.reason)) {
+    throw new Error(`[outreach] "${String(input.reason)}" is not a do-not-contact reason`)
+  }
+  if (!(OUTREACH_DO_NOT_CONTACT_SOURCES as readonly string[]).includes(input.source)) {
+    throw new Error(`[outreach] "${String(input.source)}" is not a do-not-contact source`)
+  }
+  const addedByUid = typeof input.addedByUid === 'string' && input.addedByUid ? input.addedByUid : null
+  if (input.source === 'member' && !addedByUid) {
+    throw new Error('[outreach] a member-added do-not-contact entry names the member')
+  }
+  const detail = String(input.detail ?? '').replace(/\s+/g, ' ').trim()
+  return {
+    reason: input.reason,
+    source: input.source,
+    addedByUid,
+    addedAtMs: input.nowMs,
+    enrollmentId: input.enrollmentId || null,
+    sequenceId: input.sequenceId || null,
+    detail: detail ? detail.slice(0, OUTREACH_DO_NOT_CONTACT_DETAIL_MAX) : null,
+  }
+}
+
+/*==========================================
+ * DOMAINS (AGL-3244).
+ *
+ * `orgs/{orgId}/outreachDoNotContactDomains/{domain}`, the domain itself
+ * the id — it names a company, not a person, so it is stored in clear and
+ * the Compliance page lists it. The same three rules hold: a read that
+ * failed is `null`, an entry is written once, and every add is explained.
+ *==========================================*/
+
+/** `orgs/{orgId}/outreachDoNotContactDomains`. */
+export function outreachDoNotContactDomainCollection(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+): FirebaseFirestore.CollectionReference {
+  return firestore
+    .collection('orgs')
+    .doc(orgId)
+    .collection(OUTREACH_COLLECTIONS.doNotContactDomains)
+}
+
+/** A stored domain entry held to its shape, or `null` for a document that is not one. */
+export function readOutreachDoNotContactDomainEntry(
+  domain: string,
+  data: Record<string, unknown> | undefined,
+): OutreachDoNotContactDomainEntry | null {
+  const entry = readOutreachDoNotContactEntry(domain, data)
+  if (!entry) return null
+  const { key, ...rest } = entry
+  return { domain: normalizeOutreachDomain(data?.['domain']) ?? key, ...rest }
+}
+
+/**
+ * Whether each address's DOMAIN is on the list, in one round trip, keyed by
+ * the address exactly as given: `true` or `false` per address, `null` for
+ * an address whose domain cannot be read off it and for every address when
+ * the read failed.
+ */
+export async function lookupOutreachDoNotContactDomains(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  emails: readonly string[],
+): Promise<Map<string, boolean | null>> {
+  const answers = new Map<string, boolean | null>()
+  const domainOf = new Map<string, string>()
+  for (const email of emails) {
+    const domain = outreachEmailDomain(email)
+    if (domain) domainOf.set(email, domain)
+    else answers.set(email, null)
+  }
+  const domains = [...new Set(domainOf.values())]
+  if (!domains.length) return answers
+  const list = outreachDoNotContactDomainCollection(firestore, orgId)
+  const listed = new Map<string, boolean>()
+  try {
+    for (let start = 0; start < domains.length; start += GET_ALL_CHUNK) {
+      const chunk = domains.slice(start, start + GET_ALL_CHUNK)
+      const snapshots = await firestore.getAll(...chunk.map((domain) => list.doc(domain)))
+      chunk.forEach((domain, index) => listed.set(domain, snapshots[index]?.exists === true))
+    }
+    for (const [email, domain] of domainOf) answers.set(email, listed.get(domain) ?? null)
+  } catch (error) {
+    console.error('[outreach] do-not-contact domain lookup failed; reading as unchecked', error)
+    for (const email of domainOf.keys()) answers.set(email, null)
+  }
+  return answers
+}
+
+/** Every domain on the list, alphabetically. */
+export async function listOutreachDoNotContactDomains(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+): Promise<OutreachDoNotContactDomainEntry[]> {
+  const snapshot = await outreachDoNotContactDomainCollection(firestore, orgId).get()
+  return snapshot.docs
+    .map((doc) => readOutreachDoNotContactDomainEntry(doc.id, doc.data()))
+    .filter((entry): entry is OutreachDoNotContactDomainEntry => entry !== null)
+    .sort((a, b) => a.domain.localeCompare(b.domain))
+}
+
+export interface AddOutreachDoNotContactDomainInput extends Omit<AddOutreachDoNotContactInput, 'email'> {
+  /** The domain, or an address at it; spelled by `normalizeOutreachDomain`. */
+  domain: string
+}
+
+export interface AddOutreachDoNotContactDomainResult {
+  domain: string
+  /** False when the domain was on the list already; its entry is unchanged. */
+  created: boolean
+  entry: OutreachDoNotContactDomainEntry
+}
+
+/** Puts a domain on the list; a second add changes nothing. Throws for a value that is not a domain. */
+export async function addOutreachDoNotContactDomain(
+  firestore: FirebaseFirestore.Firestore,
+  input: AddOutreachDoNotContactDomainInput,
+): Promise<AddOutreachDoNotContactDomainResult> {
+  const domain = normalizeOutreachDomain(input.domain)
+  if (!domain) throw new Error('[outreach] cannot key a do-not-contact entry for a value that is not a domain')
+  const entry: OutreachDoNotContactDomainEntry = { domain, ...entryFields(input) }
+  const ref = outreachDoNotContactDomainCollection(firestore, input.orgId).doc(domain)
+  try {
+    await ref.create(entry)
+    return { domain, created: true, entry }
+  } catch (error) {
+    if ((error as { code?: unknown })?.code !== ALREADY_EXISTS) throw error
+    const existing = await ref.get()
+    return {
+      domain,
+      created: false,
+      entry: readOutreachDoNotContactDomainEntry(domain, existing.data()) ?? entry,
+    }
+  }
+}
+
+/** Takes a domain off the list; answers whether it was on it. */
+export async function removeOutreachDoNotContactDomain(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  value: string,
+): Promise<boolean> {
+  const domain = normalizeOutreachDomain(value)
+  if (!domain) return false
+  const ref = outreachDoNotContactDomainCollection(firestore, orgId).doc(domain)
+  if (!(await ref.get()).exists) return false
+  await ref.delete()
+  return true
 }
