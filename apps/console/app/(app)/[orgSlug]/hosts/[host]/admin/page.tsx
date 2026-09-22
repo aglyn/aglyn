@@ -41,7 +41,14 @@ import {
  * `redirect()` is a 307 — a temporary, non-cached hop. Deliberately not
  * `permanentRedirect`: which section is the default is a product decision that
  * may change, and a 308 is cached by the browser past the point where changing
- * it would help.
+ * it would help. AGL-3257 is that change, and it landed without anyone having
+ * to clear a cache, which is the reason the hop was written this way.
+ *
+ * GENERAL, because the rail lists it first (`(sections)/layout.tsx`). This
+ * pointed at Plugins, so clicking Admin opened a section nobody picked and the
+ * breadcrumb read "Admin / Plugins" over a rail whose first row was General.
+ * The rail's order is the product's answer to "where does Admin start"; a
+ * second answer here could only ever disagree with it.
  */
 export default async function HostAdminIndex({
   params,
@@ -53,7 +60,7 @@ export default async function HostAdminIndex({
   const { orgSlug, host } = await params
   redirect(
     sectionIndexTarget(
-      buildRoute(Route.HOST_ADMIN_PLUGINS, { orgSlug, host }),
+      buildRoute(Route.HOST_ADMIN_GENERAL, { orgSlug, host }),
       await searchParams,
     ),
   )
