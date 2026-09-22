@@ -113,7 +113,16 @@ describe('the email check', () => {
       'sender.name',
       'site.name',
     ])
-    expect(aiCrmEmailMergeFields('lead')).toEqual(['lead.firstName', 'lead.lastName', 'lead.name', 'sender.firstName', 'sender.name', 'site.name'])
+    expect(aiCrmEmailMergeFields('lead')).toEqual([
+      'lead.firstName',
+      'lead.lastName',
+      'lead.name',
+      'lead.company',
+      'lead.title',
+      'sender.firstName',
+      'sender.name',
+      'site.name',
+    ])
     expect(aiCrmEmailMergeFields('deal')).toContain('deal.amount')
   })
 
