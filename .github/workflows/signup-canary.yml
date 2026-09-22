@@ -123,6 +123,30 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # The reap has to reach Vercel, not just Firestore (AGL-3236). Org
+      # creation attaches `{slug}.aglyn.com` to the console project and admits
+      # its origin into the media bucket's upload CORS, and neither is
+      # reachable from a document delete. Without this secret the script
+      # skips the release honestly — which is right for a self-hoster with no
+      # Vercel, and silent accumulation here: 132 domains and 132 stale upload
+      # origins built up that way before anyone looked. So this deployment
+      # refuses to walk without it rather than leak an hour at a time.
+      - name: Refuse to walk without the credential the reap needs
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "Missing repo secret: VERCEL_TOKEN" >&2
+            echo "" >&2
+            echo "Every walk creates a real org, and org creation attaches a" >&2
+            echo "workspace subdomain plus an upload-CORS origin. Without this" >&2
+            echo "token the walk still passes and leaves both behind, once an" >&2
+            echo "hour, collected by nothing (AGL-3236)." >&2
+            echo "" >&2
+            echo "  gh secret set VERCEL_TOKEN --body '<token scoped to the aglyn team>'" >&2
+            exit 2
+          fi
+
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -157,4 +181,14 @@ jobs:
           # address that hard-bounces would cost the sending domain a bounce
           # every hour. Defaults to a plus-address on the owner's mailbox.
           SIGNUP_CANARY_EMAIL: ${{ vars.SIGNUP_CANARY_EMAIL }}
+          # What the reap hands back: the workspace subdomain on the console
+          # project, and the upload origin that rode in with it. Project and
+          # team default to the console's own constants in
+          # `tools/scripts/lib/upload-cors-drift.mjs`, so only the token is
+          # required here.
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEXT_PUBLIC_WORKSPACE_DOMAIN: ${{ vars.NEXT_PUBLIC_WORKSPACE_DOMAIN || 'aglyn.com' }}
+          # The bucket the upload-CORS release is scoped to, resolved the same
+          # way `deploy-storage-rules` and `check:upload-cors` resolve it.
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'aglyn-main.appspot.com' }}
         run: node tools/e2e/signup-canary.mjs
