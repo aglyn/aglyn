@@ -96,8 +96,19 @@ import { randomBytes } from 'node:crypto'
 const require = createRequire(import.meta.url)
 // The repo's own reader, not a second copy: it owns the variable names and
 // the newline unescaping the private key needs.
-const { readServiceAccount } =
+const { readServiceAccount, getServiceAccountToken, resolveStorageBucket } =
   await import('../scripts/lib/firebase-rules-api.mjs')
+// Same principle for the bucket's CORS document: `check:upload-cors` already
+// owns the read, the conditional write and the prune that refuses `*`.
+const {
+  CONSOLE_PROJECT,
+  TEAM_SCOPE,
+  fetchBucketCors,
+  fetchProjectDomains,
+  pruneUploadOrigins,
+  uploadOriginFor,
+  writeBucketCors,
+} = await import('../scripts/lib/upload-cors-drift.mjs')
 const { initializeApp, cert } = require('firebase-admin/app')
 const { getFirestore } = require('firebase-admin/firestore')
 const { getAuth } = require('firebase-admin/auth')
@@ -127,6 +138,21 @@ const EMAIL_BASE = process.env['SIGNUP_CANARY_EMAIL'] ?? ''
  * to it — so the sweep can never reach a customer's workspace.
  */
 const CANARY_SLUG_PREFIX = 'signup-canary-'
+
+/**
+ * Where the workspace subdomain a walk creates actually lives.
+ *
+ * Same resolution as `workspace-domains.ts` and the reconcile script, so all
+ * three name the same host for a slug. The Vercel coordinates default to the
+ * console project's own constants rather than to literals, and a self-hoster
+ * overrides them the way every other Vercel-aware script here lets them.
+ */
+const WORKSPACE_DOMAIN =
+  process.env['NEXT_PUBLIC_WORKSPACE_DOMAIN'] ?? 'aglyn.com'
+const VERCEL_TOKEN = process.env['VERCEL_TOKEN'] ?? ''
+const VERCEL_PROJECT =
+  process.env['VERCEL_CONSOLE_PROJECT_ID'] || CONSOLE_PROJECT
+const VERCEL_TEAM = process.env['VERCEL_TEAM_ID'] || TEAM_SCOPE
 
 /**
  * The shortest gap between two real walks.
@@ -180,11 +206,124 @@ function done(detail = '') {
 }
 
 /**
+ * Hand back the workspace subdomain, and the upload permission that rides
+ * with it (AGL-3236).
+ *
+ * ## The write set is bigger than Firestore, and this is the part that is not
+ *
+ * `createOrganization` awaits `attachWorkspaceDomain(slug)`, and that call
+ * reaches two systems no document delete can touch: it registers
+ * `{slug}.aglyn.com` on the console's Vercel project, and it admits
+ * `https://{slug}.aglyn.com` into the media bucket's upload CORS. A reap that
+ * cleared only documents therefore left both behind on EVERY walk — one of
+ * each per hour, collected by nothing. Measured 2026-09-21: 132 orphaned
+ * `signup-canary-*` domains on a project holding 159, and the same 132 origins
+ * on a bucket holding 154, against 14 real `orgSlugs`.
+ *
+ * The stale origin is the one that matters. It is a standing upload permission
+ * for a host nobody serves, on a bucket where the signed URL IS the
+ * authorization.
+ *
+ * ## Vercel first, bucket second
+ *
+ * `detachProjectDomain`'s order, for `detachProjectDomain`'s reason: a name
+ * that still resolves must never be the one to lose the origin its uploads
+ * need. Reversed, a failed detach leaves a live workspace that cannot upload.
+ *
+ * ## Why it takes a list
+ *
+ * Cloud Storage rate-limits bucket metadata to one update per second, so the
+ * sweep's batch is one read-modify-write for every origin rather than one
+ * each — which is also why the write is retried: a 412 or a 429 here is the
+ * expected shape under contention, not an anomaly.
+ */
+async function releaseWorkspaceDomains(slugs) {
+  // Structural, not conventional. Everything this file reaps it also created,
+  // and the prefix is the same bound the orphan sweep uses — so a future
+  // caller cannot hand this a customer's slug even by mistake.
+  const canary = [...new Set(slugs)].filter(
+    (slug) => typeof slug === 'string' && slug.startsWith(CANARY_SLUG_PREFIX),
+  )
+  if (canary.length === 0) return []
+
+  const domains = canary.map((slug) =>
+    `${slug}.${WORKSPACE_DOMAIN}`.toLowerCase(),
+  )
+  const missed = []
+
+  /*
+   * No token is a deployment that never attached the name either — the attach
+   * needs the same credential — so there is nothing here to hand back, and
+   * saying so is honest rather than a silent pass. What makes it loud for THIS
+   * deployment is the workflow, which refuses to start without the secret.
+   */
+  if (VERCEL_TOKEN) {
+    for (const domain of domains) {
+      const result = await fetch(
+        `https://api.vercel.com/v9/projects/${encodeURIComponent(VERCEL_PROJECT)}` +
+          `/domains/${encodeURIComponent(domain)}` +
+          `?teamId=${encodeURIComponent(VERCEL_TEAM)}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } },
+      ).catch((error) => ({ ok: false, status: String(error).slice(0, 60) }))
+      // Already gone is the success case: a reap that runs twice must not read
+      // as a name that would not go.
+      if (!result.ok && result.status !== 404) {
+        missed.push(`vercel/${domain}: ${result.status}`)
+      }
+    }
+  }
+
+  missed.push(...(await releaseUploadOrigins(domains)))
+  return missed
+}
+
+/**
+ * Withdraw `https://{domain}` from the media bucket's upload CORS.
+ *
+ * One conditional read-modify-write for the whole set. `pruneUploadOrigins`
+ * is the repo's own remover — it refuses `*` structurally — and
+ * `writeBucketCors` carries the `ifMetagenerationMatch` that stops this
+ * clobbering a concurrent attach.
+ */
+async function releaseUploadOrigins(domains) {
+  const origins = domains.map((domain) => uploadOriginFor(domain)).filter(Boolean)
+  const account = readServiceAccount()
+  if (origins.length === 0 || !account) return []
+  const bucket = resolveStorageBucket(account.projectId)
+
+  try {
+    const token = await getServiceAccountToken(account)
+    for (let attempt = 1; ; attempt += 1) {
+      const { rules, metageneration } = await fetchBucketCors({ token, bucket })
+      const { rules: next, removed } = pruneUploadOrigins(rules, origins)
+      // Nothing to withdraw is the success case, not a no-op to report: on a
+      // deployment with no media bucket the attach never admitted anything.
+      if (removed.length === 0) return []
+      try {
+        await writeBucketCors({ token, bucket, rules: next, metageneration })
+        return []
+      } catch (error) {
+        // Re-READ before retrying, never re-send: a 412 means the document
+        // moved, and the metageneration in hand is the stale one that caused
+        // it. Three tries covers the one-per-second limit with room over.
+        if (attempt === 3) throw error
+        await new Promise((resolve) => setTimeout(resolve, 1_200 * attempt))
+      }
+    }
+  } catch (error) {
+    return [`upload-cors/${origins.length} origin(s): ${String(error).slice(0, 80)}`]
+  }
+}
+
+/**
  * Delete everything one walk creates, and prove each piece is gone.
  *
  * The write set is `createOrganization`'s, read off the source rather than
  * guessed: `orgSlugs/{slug}`, `orgs/{orgId}` with its `members` and `billing`
- * subcollections, `users/{uid}/orgs/{orgId}`, and the account itself.
+ * subcollections, `users/{uid}/orgs/{orgId}`, the account itself — and, in
+ * {@link releaseWorkspaceDomains}, the two things that are not documents at
+ * all.
+ *
  * `recursiveDelete` is what handles the subcollections — deleting an org
  * document alone orphans them, and an orphaned subcollection is residue that
  * no listing would ever show.
@@ -214,6 +353,10 @@ async function reap(db, auth, { uid, orgId, slug }) {
     )
     if (stillThere) missed.push(`auth/${uid}`)
   }
+  // Last, and outside the try: the documents are what a retry can reconstruct
+  // from, and a domain released before them would leave a workspace that
+  // exists and cannot be reached.
+  if (slug) missed.push(...(await releaseWorkspaceDomains([slug])))
   return missed
 }
 
@@ -243,7 +386,72 @@ async function sweepOrphans(db, auth) {
     await reap(db, auth, { uid: ownerUid, orgId: doc.id, slug })
     swept.push(doc.id)
   }
+  swept.push(...(await sweepOrphanDomains(db)))
   return swept
+}
+
+/**
+ * The residue the document sweep above cannot see (AGL-3236).
+ *
+ * A domain outlives its org by design here: the reap deletes the documents
+ * first, so a run killed in the seconds between leaves a name attached to a
+ * project with nothing in Firestore left to find it by. The org sweep queries
+ * `orgs`, so for that name it has already looked in the only place it knows
+ * and found nothing — which is exactly how 132 of them accumulated behind a
+ * sweep reporting "nothing to do".
+ *
+ * So this sweeps the OTHER direction: every canary-prefixed name the project
+ * is holding whose slug no longer has an `orgSlugs` document. Bounded twice —
+ * by the prefix, which no customer slug can carry, and by a per-run cap, so
+ * one run can never turn into hundreds of writes against a bucket that takes
+ * one a second.
+ */
+const ORPHAN_DOMAIN_SWEEP_LIMIT = 25
+
+async function sweepOrphanDomains(db) {
+  if (!VERCEL_TOKEN) return []
+  let attached
+  try {
+    attached = await fetchProjectDomains({
+      token: VERCEL_TOKEN,
+      project: VERCEL_PROJECT,
+      teamId: VERCEL_TEAM,
+    })
+  } catch {
+    // A read that failed is not an empty project. Staying quiet here is the
+    // right call — the walk itself is what this run exists to measure, and a
+    // Vercel outage must not red it — but returning [] must never be read as
+    // "nothing was orphaned".
+    return []
+  }
+  const suffix = `.${WORKSPACE_DOMAIN}`.toLowerCase()
+  const candidates = attached
+    .map((entry) => String(entry?.name ?? '').toLowerCase())
+    .filter((name) => name.endsWith(suffix))
+    .map((name) => name.slice(0, -suffix.length))
+    .filter((slug) => slug.startsWith(CANARY_SLUG_PREFIX))
+    .slice(0, ORPHAN_DOMAIN_SWEEP_LIMIT)
+
+  /*
+   * A LIVE canary workspace is not residue. Two runs can overlap — the
+   * interval guard makes that rare, not impossible — and taking the domain
+   * out from under a walk in progress would fail it at a step nowhere near
+   * the cause. `orgSlugs` is the reservation the attach follows, so a slug
+   * still holding one is still somebody's.
+   */
+  const slugs = []
+  for (const slug of candidates) {
+    if ((await db.collection('orgSlugs').doc(slug).get()).exists) continue
+    slugs.push(slug)
+  }
+  if (slugs.length === 0) return []
+
+  const released = await releaseWorkspaceDomains(slugs)
+  // One line naming the count, not one per name: at the sizes this collects a
+  // backlog in, the list is the noise and the number is the signal.
+  return released.length === 0
+    ? [`${slugs.length} orphaned domain(s)`]
+    : [`${slugs.length} orphaned domain(s), ${released.length} MISSED`]
 }
 
 /**
