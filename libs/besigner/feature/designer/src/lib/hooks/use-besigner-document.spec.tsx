@@ -73,6 +73,22 @@ const mockCanvas = {
     return true
   }),
   applyNodes: jest.fn(),
+  /**
+   * The working draft's baseline (AGL-3271), modelled the way the real
+   * `isDraftedSame` computes it: the recorded tree compared against the
+   * canvas, so a case can record one and then move the canvas underneath it.
+   */
+  draftedNodes: undefined as Record<string, unknown> | undefined,
+  updateDraftedNodes: jest.fn((nodes?: Record<string, unknown>) => {
+    mockCanvas.draftedNodes = nodes ?? mockCanvas.toJSON().nodes
+  }),
+  get isDraftedSame(): boolean {
+    if (!mockCanvas.draftedNodes) return false
+    return (
+      JSON.stringify(mockCanvas.draftedNodes) ===
+      JSON.stringify(mockCanvas.toJSON().nodes)
+    )
+  },
   toJSON: jest.fn((): { nodes: Record<string, unknown> } => ({
     nodes: { root: {} },
   })),
@@ -1163,7 +1179,84 @@ describe('useBesignerDocument', () => {
         mockReadServerDraft.mockClear()
         mockReadServerDraft.mockResolvedValue(null)
         mockClearServerDraft.mockClear()
+        mockCanvas.updateDraftedNodes.mockClear()
+        mockCanvas.draftedNodes = undefined
+        mockCanvas.toJSON.mockReturnValue({ nodes: { root: {} } })
         mockCanvas.didSetInitial = true
+      })
+
+      /**
+       * The toolbar's middle state, on the one version that could never
+       * reach it (AGL-3271). Save draft writes the draft document and leaves
+       * the version alone on purpose, so the canvas stays dirty against the
+       * DOCUMENT for as long as the draft is unpublished — `saveAvailable`
+       * is the wrong question to ask about whether the work is safe.
+       */
+      it('records the tree the draft took, so the toolbar can offer Publish', async () => {
+        setCanvasDirty(true)
+        const { result, rerender } = setup({
+          draft: DRAFT,
+          firestore,
+          updatedAt: stamp(7),
+        })
+        expect(result.current.workingDraftSaved).toBe(false)
+
+        await act(async () => {
+          await result.current.saveWorkingDraft()
+        })
+
+        expect(mockCanvas.updateDraftedNodes).toHaveBeenCalledWith({ root: {} })
+        // The real baseline is a mobx observable and the editors are
+        // observers, so the toolbar repaints on its own; the stub is inert,
+        // and a render is what reads the new answer out of it.
+        rerender()
+        // Still everything to save — the version document does not have it.
+        expect(result.current.saveAvailable).toBe(true)
+        expect(result.current.workingDraftSaved).toBe(true)
+      })
+
+      it('records nothing when the draft did not take it', async () => {
+        // A refused write leaves the work in the canvas and nowhere else.
+        setCanvasDirty(true)
+        mockWriteServerDraft.mockResolvedValueOnce('failed' as never)
+        const { result } = setup({ draft: DRAFT, firestore, updatedAt: stamp(7) })
+
+        await act(async () => {
+          await result.current.saveWorkingDraft()
+        })
+
+        expect(mockCanvas.updateDraftedNodes).not.toHaveBeenCalled()
+        expect(result.current.workingDraftSaved).toBe(false)
+      })
+
+      it('holds the tree it SENT, not the one the author typed while it flew', async () => {
+        // The draft has what the write carried. Recording the canvas as it
+        // stands when the promise resolves would call the newer work stored.
+        setCanvasDirty(true)
+        let resolveWrite: (value: 'written') => void = () => undefined
+        mockWriteServerDraft.mockImplementationOnce(
+          () =>
+            new Promise<'written'>((resolve) => {
+              resolveWrite = resolve
+            }) as never,
+        )
+        const { result, rerender } = setup({
+          draft: DRAFT,
+          firestore,
+          updatedAt: stamp(7),
+        })
+
+        await act(async () => {
+          const writing = result.current.saveWorkingDraft()
+          // …and the author keeps working through the round trip.
+          mockCanvas.toJSON.mockReturnValue({ nodes: { root: {}, added: {} } })
+          resolveWrite('written')
+          await writing
+        })
+
+        expect(mockCanvas.updateDraftedNodes).toHaveBeenCalledWith({ root: {} })
+        rerender()
+        expect(result.current.workingDraftSaved).toBe(false)
       })
 
       it('stamps it against the document the restore check compares to', async () => {

@@ -353,6 +353,7 @@ function ComponentBesignerPage(props) {
     draft,
     handleSave,
     saveWorkingDraft,
+    workingDraftSaved,
     refuseOverUnopenedDraft,
     markOwnWrite,
     jsonOpen,
@@ -1047,6 +1048,12 @@ function ComponentBesignerPage(props) {
                             canPublish ? undefined : publishBlock
                           }
                           saveAvailable={saveAvailable}
+                          // Save draft writes the draft document, not
+                          // this version, so the canvas never reads
+                          // clean while a draft is waiting — this is
+                          // what still lets the button say Publish
+                          // (AGL-3271).
+                          draftSaved={workingDraftSaved}
                         />
                         <BesignerDraftAlertComponent
                           draft={draft}

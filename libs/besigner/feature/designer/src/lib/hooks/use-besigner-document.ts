@@ -226,6 +226,23 @@ export interface BesignerDraftAuthor {
 export interface UseBesignerDocumentResult {
   /** True when the canvas differs from the last agreed state. */
   saveAvailable: boolean
+  /**
+   * True when the canvas is exactly what {@link saveWorkingDraft} last
+   * stored — the work is safe, even though {@link saveAvailable} is still
+   * true because the VERSION document deliberately does not have it
+   * (AGL-3271).
+   *
+   * On the version a site is serving, Save draft writes the draft beside the
+   * version and never the version itself, so `saveAvailable` can never go
+   * false there and a toolbar reading it alone offers `Save draft` forever —
+   * over work that has already saved, with the publish it is waiting for
+   * reachable only from a menu. Read the two together: unsaved, saved but
+   * not live, live.
+   *
+   * Goes false again on the author's next edit, and on a document that has
+   * no working draft it is never true.
+   */
+  workingDraftSaved: boolean
   /** True when someone else wrote this document since we loaded it. */
   remoteChanged: boolean
   handleSave: () => Promise<void> | void
@@ -788,12 +805,27 @@ export function useBesignerDocument<TData = unknown>(
       // unconfirmed baseline always reads dirty (AGL-1262), so "clean" here
       // means the store has confirmed exactly this tree.
       if (!saveAvailable) return 'unchanged'
+      // What is SENT is what the draft will hold. An author who keeps typing
+      // through the round trip has work this write does not carry, and
+      // recording the canvas as it stands when the promise resolves would
+      // call that work stored (AGL-3271).
+      const written = canvas.toJSON().nodes as Aglyn.ProcessableNodes
       return writeServerDraft(firestore, draftIds, {
-        nodes: canvas.toJSON().nodes as Aglyn.ProcessableNodes,
+        nodes: written,
         baseStamp: versionStamp(updatedAt),
         updatedByUid: author?.uid ?? null,
         updatedByEmail: author?.email ?? null,
-      }).catch(() => 'failed' as const)
+      })
+        .then((result) => {
+          // ONLY on a write, so this moves in lockstep with the editor's own
+          // `draftPending` — the two are read together to decide the button's
+          // label, and a checkpoint recorded on a branch that leaves
+          // `draftPending` false would let a document with an unpublished
+          // draft read as "Up to date".
+          if (result === 'written') canvas.updateDraftedNodes(written as never)
+          return result
+        })
+        .catch(() => 'failed' as const)
     },
     [options.firestore, draftIds, updatedAt, saveAvailable],
   )
@@ -818,6 +850,7 @@ export function useBesignerDocument<TData = unknown>(
 
   return {
     saveAvailable,
+    workingDraftSaved: canvas.isDraftedSame,
     remoteChanged,
     handleSave,
     saveWorkingDraft,

@@ -338,6 +338,19 @@ export class CanvasManager {
    * one the client believes. See {@link updateInitialNodes}.
    */
   private _initialConfirmed = true
+  /**
+   * The tree a SECOND store — one that is not the document — is known to
+   * hold (AGL-3271). Undefined until something records one.
+   *
+   * {@link _initial} answers "is there anything to save", and on the version
+   * a site is serving that answer is permanently yes: the working draft is
+   * written beside the version and the version itself is deliberately left
+   * alone, so the canvas differs from the document for as long as the draft
+   * is unpublished. This is what lets a caller still ask the other question
+   * — "is this work stored anywhere" — without pretending the document holds
+   * it.
+   */
+  private _drafted: NodesMap | undefined = undefined
   private _history: HistoryManager<NodeId, NodeSchema<any>>
   /** The open {@link transact} burst, if any. See that method. */
   private _coalescing: { key: string; at: number } | undefined = undefined
@@ -354,17 +367,24 @@ export class CanvasManager {
   constructor(public aglyn: Aglyn) {
     makeObservable<
       CanvasManager,
-      '_initial' | '_initialConfirmed' | '_epoch'
+      '_initial' | '_initialConfirmed' | '_drafted' | '_epoch'
     >(this, {
       _initial: observable.ref,
       _initialConfirmed: observable,
+      // Observable for the same reason `_epoch` is: {@link isDraftedSame} is
+      // read while rendering the toolbar, and the label it decides has to
+      // change on the author's next keystroke rather than on the next
+      // unrelated render (AGL-3271).
+      _drafted: observable.ref,
       // Observable so {@link hasRemoteEdits} is a computed a React observer
       // re-renders on: the draft prompt has to stop offering Restore the
       // moment a peer's first change lands, not on the next unrelated
       // render (AGL-2486).
       _epoch: observable,
       nodes: computed,
+      serializedNodes: computed,
       isInitialSame: computed,
+      isDraftedSame: computed,
       didSetInitial: computed,
       hasRemoteEdits: computed,
       markRemoteNode: action,
@@ -383,6 +403,7 @@ export class CanvasManager {
       reset: action,
       updateInitialNodes: action,
       confirmInitialNodes: action,
+      updateDraftedNodes: action,
       setNode: action,
       setNodes: action,
       applyNodes: action,
@@ -416,10 +437,39 @@ export class CanvasManager {
    * the strength of a snapshot the server never acknowledged is how unsaved
    * work becomes unsavable work (AGL-1262).
    */
+  /**
+   * The node map as it would be stored, cached until a node changes.
+   *
+   * A mobx computed rather than a call per reader because there are two
+   * readers now (AGL-3271): {@link isInitialSame} and {@link isDraftedSame}
+   * both compare a baseline against this, both are read while rendering the
+   * toolbar, and serializing the whole tree twice per keystroke on a
+   * document that can reach a megabyte is a cost neither of them needs to
+   * pay. Read-only by contract — both hand it to `isEqual` and neither may
+   * mutate what comes back.
+   */
+  public get serializedNodes(): NodesMap {
+    return this.serializeNodes()
+  }
   public get isInitialSame() {
     if (!this._initial) return true
     if (!this._initialConfirmed) return false
-    return isEqual(this._initial, this.serializeNodes())
+    return isEqual(this._initial, this.serializedNodes)
+  }
+  /**
+   * True when the canvas is exactly the tree last recorded by
+   * {@link updateDraftedNodes} — i.e. this work is stored somewhere, even
+   * though {@link isInitialSame} says the DOCUMENT does not have it
+   * (AGL-3271).
+   *
+   * FALSE when nothing has been recorded, which is the opposite default to
+   * {@link isInitialSame}: no baseline there means nothing is loaded and so
+   * there is nothing to save, while no draft here means no draft — and
+   * "stored" is a claim that needs evidence, never an absence of it.
+   */
+  public get isDraftedSame() {
+    if (!this._drafted) return false
+    return isEqual(this._drafted, this.serializedNodes)
   }
   public get didSetInitial() {
     return Boolean(this._initial)
@@ -910,6 +960,7 @@ export class CanvasManager {
     this.clearHistory()
     this._initial = undefined
     this._initialConfirmed = true
+    this._drafted = undefined
     // A new document gets a new epoch line. Stale marks would otherwise
     // preserve node ids that mean something else here (AGL-1958).
     this._foreignAt.clear()
@@ -958,6 +1009,24 @@ export class CanvasManager {
     if (!isEqual(this._initial, this.serializeNodes())) return false
     this._initialConfirmed = true
     return true
+  }
+  /**
+   * Record the tree a store OTHER than the document now holds — today the
+   * shared working draft, written by Save draft on the version a site is
+   * serving (AGL-3271).
+   *
+   * Pass what was actually WRITTEN, not the canvas at the moment the write
+   * resolved: an author who kept typing through the round trip has work the
+   * draft does not hold, and recording the later canvas would call it stored.
+   * Omit the argument only when the two are known to be the same.
+   *
+   * Records nothing about the document, so {@link isInitialSame} is
+   * untouched: a drafted canvas still has everything to save, and Save stays
+   * alive (AGL-1262).
+   */
+  public updateDraftedNodes(nodes?: NodesMap) {
+    this._drafted = nodes ? (toJS(nodes) as NodesMap) : this.serializeNodes()
+    return this
   }
   /**
    * Registers a node in the map AND lists it on `parent`, in one action

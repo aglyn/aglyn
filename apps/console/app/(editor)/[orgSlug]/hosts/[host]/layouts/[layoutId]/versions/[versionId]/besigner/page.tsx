@@ -296,6 +296,7 @@ function LayoutBesignerPage(props) {
     draft,
     handleSave,
     saveWorkingDraft,
+    workingDraftSaved,
     refuseOverUnopenedDraft,
     markOwnWrite,
     jsonOpen,
@@ -849,6 +850,12 @@ function LayoutBesignerPage(props) {
                           // Live only when the parent's pointer names THIS version.
                           livePublished={livePublished}
                           saveAvailable={saveAvailable}
+                          // Save draft writes the draft document, not
+                          // this version, so the canvas never reads
+                          // clean while a draft is waiting — this is
+                          // what still lets the button say Publish
+                          // (AGL-3271).
+                          draftSaved={workingDraftSaved}
                         />
                         <BesignerDraftAlertComponent
                           draft={draft}
