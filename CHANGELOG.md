@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.161 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.160...v1.0.0-beta.161)
+
+### Added
+
+- **console:** the feed says which workspace a row is about, and Status always speaks ([AGL-3249](https://linear.app/aglyn/issue/AGL-3249), [AGL-1773](https://linear.app/aglyn/issue/AGL-1773), [AGL-3225](https://linear.app/aglyn/issue/AGL-3225))
+- **outreach:** an auto-pause tells the mailbox owner, and do-not-contact holds a domain ([AGL-3244](https://linear.app/aglyn/issue/AGL-3244))
+- **content:** a collection can list itself without submitting its entries ([AGL-3247](https://linear.app/aglyn/issue/AGL-3247), [AGL-1274](https://linear.app/aglyn/issue/AGL-1274))
+
+### Fixed
+
+- **console:** the export round-trip seeds the key AGL-3247 added ([AGL-3247](https://linear.app/aglyn/issue/AGL-3247), [AGL-3250](https://linear.app/aglyn/issue/AGL-3250), [AGL-1382](https://linear.app/aglyn/issue/AGL-1382), [AGL-1384](https://linear.app/aglyn/issue/AGL-1384))
+- **console:** the signup canary does not announce itself to staff ([AGL-3248](https://linear.app/aglyn/issue/AGL-3248), [AGL-3225](https://linear.app/aglyn/issue/AGL-3225), [AGL-2715](https://linear.app/aglyn/issue/AGL-2715))
+- **crm:** the Leads search narrows the loaded window, not the page ([AGL-3246](https://linear.app/aglyn/issue/AGL-3246))
+
+<details>
+<summary>Also in this release: 3 chore</summary>
+
+- **tools:** the canary notification sweep has converged ([AGL-3248](https://linear.app/aglyn/issue/AGL-3248))
+- **tools:** sweep the canary rows AGL-3248 stopped writing ([AGL-3248](https://linear.app/aglyn/issue/AGL-3248), [AGL-3225](https://linear.app/aglyn/issue/AGL-3225))
+- **tools:** the Linear ceiling is 3248, read from the workspace ([AGL-3247](https://linear.app/aglyn/issue/AGL-3247), [AGL-3244](https://linear.app/aglyn/issue/AGL-3244), [AGL-3248](https://linear.app/aglyn/issue/AGL-3248))
+
+</details>
+
 ## v1.0.0-beta.160 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.159...v1.0.0-beta.160)
