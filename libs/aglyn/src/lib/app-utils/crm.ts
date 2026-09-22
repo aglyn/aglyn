@@ -547,6 +547,13 @@ export interface CrmTask extends Omit<CrmScoped, 'hostId'> {
   companyId?: string
   dealId?: string
   /**
+   * `hosts/{hostId}/leads/{leadId}` — a task filed on a lead not yet
+   * converted (AGL-3233): a sequence's call step or a reply to answer. The
+   * conversion stamps the contact beside it, so the task is the contact's
+   * from then on and the lead's page still lists it.
+   */
+  leadId?: string
+  /**
    * When the assignee is reminded (AGL-2659): the due time unless a person
    * moved it, `null` for no reminder. The hourly `/api/crm/task-reminders`
    * runner reads every open task whose reminder has come due, so a task

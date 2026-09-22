@@ -463,7 +463,7 @@ const captured = await capturePluginContact({
   identity: { email: form.email, name: form.name },
   interaction: { source: 'kiosk', atMs, refId: `kioskVisits/${visitId}`, summary: 'Signed the guest book' },
   marketingConsent: form.optIn,
-  lifecycleFloor: 'lead',
+  surface: 'lead',
   profile: { phone: form.phone },
 })
 if (captured?.ok === false) log.warn(captured.reason, captured.error)
@@ -472,7 +472,7 @@ if (captured?.ok === false) log.warn(captured.reason, captured.error)
 | API | Semantics |
 | --- | --- |
 | `registerPluginContactCaptureWriter(writer, { pluginId? })` | A slot: a workspace keeps one set of people, so a second plugin's writer throws naming both and the incumbent keeps serving. |
-| `capturePluginContact(request)` | `{ ok: true, contactId, created }` — `created: false` is a returning visit — or `{ ok: false, reason, error }`, or **`null` when no plugin keeps people**. `null` and a refusal are different answers: `null` is a workspace with no record system, where nothing has gone wrong. |
+| `capturePluginContact(request)` | `{ ok: true, record: 'contact', contactId, created }` or `{ ok: true, record: 'lead', leadId, created }` — `created: false` is a returning visit — or `{ ok: false, reason, error }`, or **`null` when no plugin keeps people**. `null` and a refusal are different answers: `null` is a workspace with no record system, where nothing has gone wrong. |
 | `registerPluginContactSource({ source, label, openLabel?, recordKind? }, { pluginId? })` | One source word has one owner. `openLabel` is what a link from a timeline entry says, and a door with nothing to open declares none. `recordKind` is the kind `plugin-record-routes` addresses the silo's own document by. |
 | `pluginContactCaptureWriter()` / `listPluginContactSources()` / `pluginContactSource(source)` | The writer with its owner, every declared door, and one by its word. |
 
@@ -480,6 +480,15 @@ if (captured?.ok === false) log.warn(captured.reason, captured.error)
 accepted the submission or taken the money, so a throw would cost it the thing
 it was recording. `reason` is `invalid-email`, `band`, `erased` or `error`, and
 `error` is customer-safe.
+
+**`surface` says what kind of door this is, and the owner decides which record
+the person lands on.** `lead` is a lead surface — a form its author routes to
+leads, a booking request: the owner files a lead and no contact, unless the
+workspace already holds the address as a contact. `relationship` is an act that
+makes the person known — a member account, a purchase: the owner files a
+contact and closes an open lead onto it. `touch`, the default, lands on the
+open lead when the site holds one and on the contact otherwise. One person is
+one record; the verdict's `record` says which.
 
 **`profile` is the owner's own field names with scalar values, not a core
 type.** A person's record shape belongs to the plugin that models it. So does
@@ -673,6 +682,31 @@ without the address. A record that the person asked not to be contacted,
 keyed that way, is kept — the promise outlives the data — with anything that
 could identify the person removed from it. A dry run counts and writes
 nothing. Reports land under `plugins` on the erasure's counts and audit row.
+
+## Lead conversion — `plugin-lead-conversion` (`/server`)
+
+When a lead becomes a contact — from the console, over the REST API, or on its
+own when the person signs up or buys — the record system stamps the lead,
+moves its activities and tasks onto the contact, then tells every plugin with
+a listener, so a plugin that keeps records naming the lead can re-point them:
+
+```ts
+registerPluginLeadConversionListener(
+  async ({ orgId, hostId, leadId, contactId, email, by }) => {
+    const { followLeadToContact } = await import('./server/enrollments')
+    return followLeadToContact({ orgId, hostId, leadId, contactId })
+  },
+  { pluginId: 'acme-mail' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginLeadConversionListener(listener, { pluginId? })` | One listener per plugin; registering again replaces it in place. |
+| `runPluginLeadConversionListeners({ orgId, hostId, leadId, contactId, email, by })` | What the conversion calls after the lead carries `convertedContactId` and its own records have moved. Every listener in registration order; each plugin's report by plugin id, or `null` for one that threw — logged, and never the conversion's failure, which has already happened. |
+
+`by` names the door: `member`, `api`, `signup`, `purchase` or `backfill`.
+`leadId` is the person key the lead is filed under on `hostId`.
 
 ## Console jobs — `plugin-console-crons` (`/server`)
 

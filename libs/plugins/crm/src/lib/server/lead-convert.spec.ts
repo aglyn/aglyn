@@ -256,6 +256,15 @@ jest.mock('../../../../../tenant/runtime/src/lib/capture-host-contact', () => ({
   __esModule: true,
   captureHostContact: (...args: unknown[]) => (mockUpsertHostContact as any)(...args),
 }))
+/*
+ * What the lead hands to the contact (AGL-3233) has a spec of its own in
+ * the runtime; here it is the call the conversion makes after the stamp.
+ */
+const mockHandOff = jest.fn(async () => ({ activities: 0, tasks: 0, plugins: {} }))
+jest.mock('../../../../../tenant/runtime/src/lib/hand-off-lead', () => ({
+  __esModule: true,
+  handOffLeadRecords: (...args: unknown[]) => (mockHandOff as any)(...args),
+}))
 jest.mock('../../../../../tenant/runtime/src/lib/assign-contact-owner', () => ({
   __esModule: true,
   assignOwnerForCapture: (...args: unknown[]) => (mockAssignOwnerForCapture as any)(...args),
@@ -462,6 +471,52 @@ describe('converting a lead', () => {
     expect(lead?.companyId).toBeUndefined()
     // What the capture door wrote is still there — the stamp is an update.
     expect(lead?.sources).toEqual(['form'])
+    // …and the lead's records are handed to the contact, after the stamp.
+    expect(mockHandOff).toHaveBeenCalledTimes(1)
+    expect(mockHandOff).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostId: HOST,
+        orgId: ORG,
+        leadId: 'lead-1',
+        contactId: contact.id,
+        email: 'ann@acme.com',
+        by: 'member',
+      }),
+    )
+  })
+
+  /**
+   * The lead's own profile travels with it (AGL-3233): phone, title,
+   * address, the company as text, tags, and the marketing basis the lead
+   * recorded — handed to the capture door in the shape it stores them.
+   */
+  it('hands the lead’s profile, tags and consent to the contact', async () => {
+    const consent = jest.requireActual('../../../../../aglyn/src/lib/app-utils/marketing-consent')
+    const groups = jest.requireActual('../../../../../aglyn/src/lib/app-utils/consent-groups')
+    docs.set(leadPath('lead-1'), {
+      ...docs.get(leadPath('lead-1')),
+      phone: '+15125550107',
+      jobTitle: 'CMO',
+      address: { city: 'Austin', country: 'US' },
+      company: 'Acme Brands',
+      tags: ['icp2', 'a-list'],
+      ...consent.marketingConsentFieldsForGroup(groups.soloConsentGroup(HOST), 1_000),
+    })
+    const { status } = await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(status).toBe(200)
+    expect(mockUpsertHostContact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        marketingConsent: true,
+        tags: ['icp2', 'a-list'],
+        facet: {
+          lifecycleStage: 'sales-qualified',
+          phone: '+15125550107',
+          jobTitle: 'CMO',
+          address: { city: 'Austin', country: 'US' },
+          companyName: 'Acme Brands',
+        },
+      }),
+    )
   })
 
   /**
@@ -720,6 +775,28 @@ describe('converting a lead', () => {
     expect(body.companyId).toBe('co-1')
     expect(all(`orgs/${ORG}/companies`)).toHaveLength(2)
     expect(all(`orgs/${ORG}/contacts`)[0].companyIds).toEqual(['co-1'])
+  })
+
+  it('reuses a company the caller can see by NAME before the domain (AGL-3233)', async () => {
+    docs.set(`orgs/${ORG}/companies/co-globex`, {
+      name: 'Globex',
+      nameLower: 'globex',
+      domain: 'globex.example',
+      visibleTo: ['host:h1'],
+    })
+    docs.set(`orgs/${ORG}/companies/co-acme`, {
+      name: 'Acme',
+      nameLower: 'acme',
+      domain: 'acme.com',
+      visibleTo: ['host:h1'],
+    })
+    const { body } = await call({
+      hostId: HOST,
+      leadId: 'lead-1',
+      createCompany: { name: 'Globex', domain: 'acme.com' },
+    })
+    expect(body.companyId).toBe('co-globex')
+    expect(all(`orgs/${ORG}/companies`)).toHaveLength(2)
   })
 
   it('links an existing company by id and refuses one that does not exist', async () => {

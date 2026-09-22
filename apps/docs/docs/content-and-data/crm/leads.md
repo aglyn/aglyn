@@ -271,19 +271,25 @@ from the list in one click. The dialog asks three things:
    a second one — the address book stays one row per person — and a contact
    that already has an owner keeps them.
 2. **Company.** *No company*, *Link an existing company*, or *Create a
-   company*. The dialog proposes the company the lead's email domain implies:
-   if your workspace already has a company at that domain, it is preselected;
-   otherwise a new one is proposed, named after the domain, with the domain
-   filled in. Public mailboxes such as Gmail propose nothing.
+   company*. The dialog proposes from the lead's own **Company** text first:
+   a company your workspace already files under that name is preselected,
+   whatever its domain; otherwise one at the address's domain; otherwise a
+   new company named as the lead names it, with the domain filled in when
+   the address has one. A lead with no company text at a public mailbox
+   such as Gmail proposes nothing.
 3. **Deal.** Tick **Open a deal** to open one in your default pipeline with a
    title, an amount, a currency and a starting stage. A workspace with no
    pipeline yet gets a **Sales** pipeline with the default stages created
    along with the deal.
 
 Converting marks the lead **Qualified**, records what it became, and takes
-you to the new contact's page. Back on the lead, the card links to the
-contact, the company and the deal. A converted lead cannot be converted
-again — opening the dialog on one simply takes you to its contact.
+you to the new contact's page. What was filed on the lead follows it: the
+calls, emails, notes and tasks logged on the lead appear on the contact's
+timeline and task list too, and a [sequence](./sequences.md) the lead was
+enrolled in carries on with the contact. Back on the lead, the card links
+to the contact, the company and the deal. A converted lead cannot be
+converted again — opening the dialog on one simply takes you to its
+contact.
 
 A lead whose person has an [erasure pending](#erasing-the-person) cannot be
 converted either: **Convert** stays on the page but is disabled, with the

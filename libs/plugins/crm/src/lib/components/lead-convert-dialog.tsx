@@ -217,14 +217,15 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
     if (!open || companiesStatus !== 'success') return
     if (seededFor.current === leadId) return
     seededFor.current = leadId
-    const suggestion = suggestCompanyForLead(email, companies)
+    // The lead's own company text first (AGL-3233), then the domain.
+    const suggestion = suggestCompanyForLead(email, companies, lead.company)
     setCompanyMode(suggestion.mode)
     if (suggestion.mode === 'existing') setCompanyId(suggestion.companyId)
     if (suggestion.mode === 'new') {
       setCompanyName(suggestion.name)
       setCompanyDomain(suggestion.domain)
     }
-  }, [open, companiesStatus, companies, email, leadId])
+  }, [open, companiesStatus, companies, email, leadId, lead.company])
 
   const amountCents = dollarsToCents(dealAmount)
   const amountInvalid = amountCents === undefined

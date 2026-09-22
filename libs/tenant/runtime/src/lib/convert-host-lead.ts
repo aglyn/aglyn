@@ -90,6 +90,8 @@ import {
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
   readContactFacet,
+  readMarketingBasis,
+  soloConsentGroup,
 } from '@aglyn/aglyn/server'
 import {
   consentGroupForSite,
@@ -102,6 +104,7 @@ import {
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { assignOwnerForCapture, notifyRecordAssigned } from './assign-contact-owner'
 import { captureHostContact } from './capture-host-contact'
+import { handOffLeadRecords } from './hand-off-lead'
 
 /** Who is converting, as far as the writes need to know. */
 export interface LeadConvertActor {
@@ -295,16 +298,35 @@ export async function convertHostLead(
    * contact's timeline can be walked back to what was captured. The facet
    * carries the stage and the owner, which is what makes this a sales
    * record rather than another form capture.
+   *
+   * THE LEAD'S OWN PROFILE TRAVELS WITH IT (AGL-3233), the way Salesforce
+   * hands a lead's fields to the contact: phone, title, address, the
+   * company as text (until step 2 links a record, whose own name then
+   * replaces it), tags, and the marketing basis the lead recorded — the
+   * person ticked the box on the lead, and a conversion must not be the
+   * moment they lose it. Only what the lead holds is handed over; a value
+   * the contact already carries is the contact's, because the capture door
+   * writes a profile field only where the facet has none.
    *=========================================*/
+  const leadTags = Array.isArray(lead.tags) ? lead.tags.map(String) : []
+  const leadConsent = readMarketingBasis(lead, soloConsentGroup(hostId))
   const captured = await captureHostContact({
     hostId,
     email,
     ...(leadName ? { name: leadName } : {}),
     source: 'manual',
     interaction: { summary: 'Converted from a lead', refId: leadId },
+    ...(leadConsent.basis === 'granted' ? { marketingConsent: true } : {}),
+    ...(leadTags.length ? { tags: leadTags } : {}),
     facet: {
       lifecycleStage: 'sales-qualified',
       ...(chosenOwner ? { ownerUid: chosenOwner } : {}),
+      ...(typeof lead.phone === 'string' && lead.phone ? { phone: lead.phone } : {}),
+      ...(typeof lead.jobTitle === 'string' && lead.jobTitle ? { jobTitle: lead.jobTitle } : {}),
+      ...(lead.address && typeof lead.address === 'object' ? { address: lead.address } : {}),
+      ...(typeof lead.company === 'string' && lead.company
+        ? { companyName: lead.company }
+        : {}),
     },
   })
   /*
@@ -397,26 +419,38 @@ export async function convertHostLead(
     if (!companySnapshot.exists) return { ok: false, reason: 'unknown-company' }
     companyId = requestedCompanyId
   } else if (createCompany) {
-    if (createCompany.domain) {
-      /*
-       * FIND BEFORE CREATE. The domain is the key two contacts at one
-       * business share, and a second company document for `acme.com`
-       * would split the account the key exists to join. Only a company the
-       * caller can see counts as found — see `readableTokens`.
-       */
-      const byDomain = await orgRef
-        .collection(CRM_COLLECTIONS.companies)
-        .where('domain', '==', createCompany.domain)
-        .limit(5)
-        .get()
-      const visible = byDomain.docs.find((snapshot) => {
+    /*
+     * FIND BEFORE CREATE. The NAME first (AGL-3233): a lead names its
+     * company as text, and a company the org already files under that
+     * name is the account, whatever domain it carries. Then the domain,
+     * the key two contacts at one business share — a second company
+     * document for `acme.com` would split the account the key exists to
+     * join. Only a company the caller can see counts as found — see
+     * `readableTokens`.
+     */
+    const visibleAmong = (
+      snapshots: readonly FirebaseFirestore.QueryDocumentSnapshot[],
+    ): string | undefined =>
+      snapshots.find((snapshot) => {
         const tokens = snapshot.get('visibleTo')
         return (
           Array.isArray(tokens) &&
           tokens.some((token) => readableTokens.has(String(token)))
         )
-      })
-      if (visible) companyId = visible.id
+      })?.id
+    const byName = await orgRef
+      .collection(CRM_COLLECTIONS.companies)
+      .where('nameLower', '==', createCompany.name.toLowerCase())
+      .limit(5)
+      .get()
+    companyId = visibleAmong(byName.docs)
+    if (!companyId && createCompany.domain) {
+      const byDomain = await orgRef
+        .collection(CRM_COLLECTIONS.companies)
+        .where('domain', '==', createCompany.domain)
+        .limit(5)
+        .get()
+      companyId = visibleAmong(byDomain.docs)
     }
     if (!companyId) {
       if (await bandFull()) return { ok: false, reason: 'band-full' }
@@ -537,6 +571,23 @@ export async function convertHostLead(
     ...(dealId ? { dealId } : {}),
   }
   await leadRef.update({ ...stamp, updatedAt: FieldValue.serverTimestamp() })
+
+  /*
+   * WHAT THE LEAD HANDS OVER (AGL-3233): its activities and tasks gain the
+   * contact, and every plugin with a listener — Sequences, for an
+   * enrollment naming the lead — re-points its own records. After the
+   * stamp, so a listener reading the lead finds the conversion on it; it
+   * never throws.
+   */
+  await handOffLeadRecords({
+    firestore,
+    orgId,
+    hostId,
+    leadId,
+    contactId,
+    email,
+    by: actor.kind === 'member' ? 'member' : 'api',
+  })
 
   /*
    * The audit line, from the function that did the work (AGL-2622): the

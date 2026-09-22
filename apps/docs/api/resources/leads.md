@@ -205,17 +205,21 @@ notes and owner stay writable.
 
 This is the same conversion the console's **Convert** dialog performs, through the same
 code: the lead becomes a [contact](contacts.md) at the **Sales qualified** lifecycle
-stage — joining the existing contact if the address is already one, so the address book
-stays one row per person — then, optionally, a company is linked or created and a deal
-opened in your default pipeline; and the lead is stamped `qualified` last, once everything
-it names exists. A lead already converted answers `200` with the ids it has and creates
-nothing more, so a retry never opens a second deal.
+stage, carrying the lead's phone, job title, address, tags, notes, company name and
+marketing consent — joining the existing contact if the address is already one, so the
+address book stays one row per person — then, optionally, a company is linked or created
+and a deal opened in your default pipeline; the lead is stamped `qualified` once
+everything it names exists; and what was filed on the lead follows it: its
+[activities](activities.md) and [tasks](tasks.md) gain the contact, and a sequence
+enrollment naming the lead re-points itself to the contact. A lead already converted
+answers `200` with the ids it has and creates nothing more, so a retry never opens a
+second deal.
 
 **Body** — every key optional:
 
 | Key | Notes |
 | --- | --- |
-| `company` | `{ "link": "co_…" }` to link an existing company, `{ "create": { "name": "Acme", "domain": "acme.com" } }` to create one (a company your key can see at that domain is reused rather than duplicated), or `null` for none. |
+| `company` | `{ "link": "co_…" }` to link an existing company, `{ "create": { "name": "Acme", "domain": "acme.com" } }` to create one (a company your key can see under that name, or at that domain, is reused rather than duplicated), or `null` for none. The lead's own `company` text is the name to send. |
 | `deal` | `{ "title": "…", "amountCents": 12500, "currency": "usd", "stageId": "qualified" }` — `title` required; `amountCents` a whole number; `currency` lowercase ISO 4217, `usd` when omitted; `stageId` a stage of the default pipeline, its first open stage when omitted. `null` for none. An organization with no pipeline yet gets a **Sales** pipeline with the default stages. |
 | `ownerUid` / `ownerEmail` | Who owns the contact and the deal. Defaults to the lead's owner; failing that your organization's assignment rules and the site's default owner decide. A key cannot own a record, so a contact nobody names and no rule assigns stays unassigned — where a person converting from the console would have kept it. |
 | `siteId` | Instead of the query parameter. |

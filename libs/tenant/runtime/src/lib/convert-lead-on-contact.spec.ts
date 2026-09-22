@@ -12,6 +12,7 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  getOrgForHost: async (hostId: string) => (hostId === 'site-1' ? { orgId: 'org-1', org: {} } : null),
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
@@ -38,6 +39,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
 }))
 
+const handOffs: Array<Record<string, unknown>> = []
+jest.mock('./hand-off-lead', () => ({
+  __esModule: true,
+  handOffLeadRecords: async (input: Record<string, unknown>) => {
+    handOffs.push(input)
+    return { activities: 0, tasks: 0, plugins: {} }
+  },
+}))
+
 import { personKey } from '@aglyn/aglyn/server'
 import { convertOpenLeadOntoContact } from './convert-lead-on-contact'
 
@@ -45,7 +55,10 @@ const HOST = 'site-1'
 const EMAIL = 'dana@example.com'
 const path = `hosts/${HOST}/leads/${personKey(EMAIL)}`
 
-beforeEach(() => docs.clear())
+beforeEach(() => {
+  docs.clear()
+  handOffs.length = 0
+})
 
 describe('convertOpenLeadOntoContact', () => {
   it('stamps an open lead converted onto the contact, naming the door', async () => {
@@ -60,6 +73,17 @@ describe('convertOpenLeadOntoContact', () => {
       ownerUid: 'rep',
     })
     expect(typeof docs.get(path)?.convertedAtMs).toBe('number')
+    // …and hands what was filed on the lead to the contact (AGL-3233).
+    expect(handOffs).toEqual([
+      expect.objectContaining({
+        orgId: 'org-1',
+        hostId: HOST,
+        leadId: personKey(EMAIL),
+        contactId: 'c-1',
+        email: EMAIL,
+        by: 'signup',
+      }),
+    ])
   })
 
   it('reads a lead with no status as open, the way the list does', async () => {
@@ -82,6 +106,7 @@ describe('convertOpenLeadOntoContact', () => {
       convertOpenLeadOntoContact({ hostId: HOST, email: EMAIL, contactId: 'c-1', by: 'signup' }),
     ).resolves.toBe(false)
     expect(docs.get(path)?.status).toBe('unqualified')
+    expect(handOffs).toEqual([])
   })
 
   it('answers false for no lead, an unreadable address or no contact, and never throws', async () => {

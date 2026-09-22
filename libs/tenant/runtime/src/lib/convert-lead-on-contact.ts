@@ -32,6 +32,11 @@
  * team judged not real who then buys something is a fact for the contact's
  * timeline, not a reason to rewrite the team's verdict.
  *
+ * Once stamped, the lead hands what was filed on it to the contact — its
+ * activities, its tasks, and every plugin's records about it — exactly as
+ * the convert dialog's conversion does (AGL-3233), so a lead closed by a
+ * purchase leaves the same timeline behind as one a rep converted.
+ *
  * Never throws: the capture that made the contact has already happened,
  * and a lead that could not be stamped is one somebody converts by hand.
  */
@@ -42,8 +47,9 @@ import {
   normalizeContactEmail,
   personKey,
 } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
+import { handOffLeadRecords } from './hand-off-lead'
 
 /** Which door closed the lead, recorded on it beside the conversion stamp. */
 export type LeadAutoConvertedBy = 'signup' | 'purchase' | 'backfill'
@@ -68,9 +74,8 @@ export async function convertOpenLeadOntoContact(
   const key = email ? personKey(email) : null
   if (!key || !input.contactId) return false
   try {
-    const leadRef = firebaseAdmin
-      .app()
-      .firestore()
+    const firestore = firebaseAdmin.app().firestore()
+    const leadRef = firestore
       .collection('hosts')
       .doc(input.hostId)
       .collection('leads')
@@ -89,6 +94,18 @@ export async function convertOpenLeadOntoContact(
       },
       { merge: true },
     )
+    const resolved = await getOrgForHost(input.hostId)
+    if (resolved) {
+      await handOffLeadRecords({
+        firestore,
+        orgId: resolved.orgId,
+        hostId: input.hostId,
+        leadId: key,
+        contactId: input.contactId,
+        email,
+        by: input.by,
+      })
+    }
     return true
   } catch (error) {
     console.error('convertOpenLeadOntoContact failed', input.hostId, error)

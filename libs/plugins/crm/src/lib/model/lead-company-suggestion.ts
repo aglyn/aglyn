@@ -27,8 +27,15 @@ export type CompanySuggestion =
   | { mode: 'new'; name: string; domain: string }
 
 /**
- * The company a lead's address implies, matched against the companies the
- * caller can already see (AGL-2608).
+ * The company a lead names, or its address implies, matched against the
+ * companies the caller can already see (AGL-2608, AGL-3233).
+ *
+ * The lead's own `company` text comes first: it is the account the lead
+ * carries, the way a Salesforce lead does, and a company already filed
+ * under that name — whatever its domain — is the one to link. Failing a
+ * name match, the domain. Failing both, a new company: named as the lead
+ * names it, with the domain beside it when the address has one, or named
+ * after the domain when the lead names nothing.
  *
  * The email domain is the one fact about a company a capture carries, and
  * `companyDomainForEmail` already refuses the public mailboxes, so a lead at
@@ -46,14 +53,33 @@ export type CompanySuggestion =
  */
 export function suggestCompanyForLead(
   email: unknown,
-  companies: ReadonlyArray<{ $id: string; domain?: unknown }>,
+  companies: ReadonlyArray<{ $id: string; domain?: unknown; name?: unknown }>,
+  /**
+   * The company the lead names as text (AGL-3233) — what a Salesforce lead
+   * carries and what the convert step turns into the account. It outranks
+   * the domain: a name the converter typed or imported is a fact about the
+   * business, a domain is a guess from the address.
+   */
+  companyText?: unknown,
 ): CompanySuggestion {
+  const name = String(companyText ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
   const domain = companyDomainForEmail(email)
+  if (name) {
+    const byName = companies.find(
+      (company) => String(company.name ?? '').trim().toLowerCase() === name.toLowerCase(),
+    )
+    if (byName) return { mode: 'existing', companyId: byName.$id }
+  }
+  if (domain) {
+    const byDomain = companies.find(
+      (company) => String(company.domain ?? '').toLowerCase() === domain,
+    )
+    if (byDomain) return { mode: 'existing', companyId: byDomain.$id }
+  }
+  if (name) return { mode: 'new', name, domain: domain ?? '' }
   if (!domain) return { mode: 'none' }
-  const existing = companies.find(
-    (company) => String(company.domain ?? '').toLowerCase() === domain,
-  )
-  if (existing) return { mode: 'existing', companyId: existing.$id }
   return { mode: 'new', name: companyNameForDomain(domain), domain }
 }
 

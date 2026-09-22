@@ -51,6 +51,46 @@ describe('suggestCompanyForLead', () => {
   })
 })
 
+/**
+ * The lead's own company text (AGL-3233) outranks the domain: a company
+ * already filed under that name is linked whatever its domain, and a
+ * name nobody has filed becomes the new company's name — even at a
+ * public mailbox, where the address alone would propose nothing.
+ */
+describe('suggestCompanyForLead with the lead’s company text', () => {
+  const companies = [
+    { $id: 'co-acme', name: 'Acme Brands', domain: 'acme.com' },
+    { $id: 'co-globex', name: 'Globex', domain: 'globex.example' },
+  ]
+
+  it('links the company already filed under that name, whatever its domain', () => {
+    expect(suggestCompanyForLead('ann@acme.com', companies, ' globex ')).toEqual({
+      mode: 'existing',
+      companyId: 'co-globex',
+    })
+  })
+
+  it('falls back to the domain when the name matches nobody', () => {
+    expect(suggestCompanyForLead('ann@acme.com', companies, 'Acme Corporation')).toEqual({
+      mode: 'existing',
+      companyId: 'co-acme',
+    })
+  })
+
+  it('proposes a new company by the lead’s name, with the domain when the address has one', () => {
+    expect(suggestCompanyForLead('ann@initech.example', companies, 'Initech  Inc')).toEqual({
+      mode: 'new',
+      name: 'Initech Inc',
+      domain: 'initech.example',
+    })
+    expect(suggestCompanyForLead('ann@gmail.com', companies, 'Initech')).toEqual({
+      mode: 'new',
+      name: 'Initech',
+      domain: '',
+    })
+  })
+})
+
 describe('dollarsToCents', () => {
   it('tells an empty field from an amount from a mistake', () => {
     expect(dollarsToCents('')).toBeNull()
