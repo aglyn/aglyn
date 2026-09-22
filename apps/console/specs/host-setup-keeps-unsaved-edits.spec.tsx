@@ -92,6 +92,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // Firestore directly. An inert handle is enough: these specs are about the
   // theme-save guard, and the card's own reads resolve to nothing.
   useFirestore: () => ({}),
+  // The entity logo is a card on the SEO section now rather than a control
+  // inside the form's own template (AGL-3258), so it mounts here and asks
+  // which org's media library to offer.
+  useHostOrgId: () => 'org1',
   // The REAL guard (AGL-1358). A stub would let all three writes through
   // whatever the page passed it, which is what these specs disprove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -145,6 +149,15 @@ jest.mock('@aglyn/aglyn', () => ({
   */
   resolveSiteTimeZone: jest.requireActual('@aglyn/aglyn').resolveSiteTimeZone,
   supportedTimeZones: jest.requireActual('@aglyn/aglyn').supportedTimeZones,
+  /*
+    The REAL media resolver (AGL-3258). The SEO section's favicon, app icon,
+    social image and entity logo are CARDS on the page now rather than
+    controls drawn inside the form's own template, so they mount whether or
+    not a form does — and each asks this what to preview. It resolves a
+    `media:` reference against a host and returns a string; nothing this spec
+    stubs is reachable from it.
+  */
+  resolveMediaSrc: jest.requireActual('@aglyn/aglyn').resolveMediaSrc,
 }))
 jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
   resolveSiteTheme: (host: { theme?: unknown }) => host?.theme ?? {},

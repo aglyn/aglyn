@@ -129,6 +129,15 @@ jest.mock('@aglyn/aglyn', () => ({
   */
   resolveSiteTimeZone: jest.requireActual('@aglyn/aglyn').resolveSiteTimeZone,
   supportedTimeZones: jest.requireActual('@aglyn/aglyn').supportedTimeZones,
+  /*
+    The REAL media resolver (AGL-3258). The SEO section's favicon, app icon,
+    social image and entity logo are CARDS on the page now rather than
+    controls drawn inside the form's own template, so they mount whether or
+    not a form does — and each asks this what to preview. It resolves a
+    `media:` reference against a host and returns a string; nothing this spec
+    stubs is reachable from it.
+  */
+  resolveMediaSrc: jest.requireActual('@aglyn/aglyn').resolveMediaSrc,
 }))
 jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
   resolveSiteTheme: (host: { theme?: unknown }) => host?.theme ?? {},

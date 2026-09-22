@@ -21,7 +21,7 @@
  */
 
 import { HelpTip, type HelpTipContent } from '@aglyn/shared-ui-jsx'
-import { createContext, useContext, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 
 import {
   Grid,
@@ -29,19 +29,22 @@ import {
   Typography,
   type TypographyProps,
 } from '@mui/material'
+import { styled } from '@mui/material/styles'
 
 import { type FieldSchema, useFormApi } from '../vendor/data-driven-forms'
 
-/**
- * How deeply nested this sub-form is (AGL-3253).
- *
- * A section cannot be told apart from a SUBsection by anything in its own
- * schema — both are a `SUB_FORM` with a `title`, and the SEO card's Address
- * sits inside its Entity for a reason nobody wants to restate as a prop. So
- * the depth is read from the tree rather than declared, which means any
- * nesting added later inherits the same answer without being asked.
- */
-const SubFormDepth = createContext(0)
+const PREFIX = 'SubForm'
+
+const classes = {
+  grid: `${PREFIX}-grid`,
+}
+
+const StyledGrid = styled(Grid)(() => ({
+  [`&.${classes.grid}`]: {
+    paddingRight: 0,
+    paddingLeft: 0,
+  },
+}))
 
 export interface SubFormProps extends Omit<GridProps, 'component' | 'title'> {
   fields: FieldSchema[]
@@ -57,44 +60,6 @@ export interface SubFormProps extends Omit<GridProps, 'component' | 'title'> {
   ItemsGridProps?: GridProps
 }
 
-/**
- * A titled group of fields, with a rhythm of its own (AGL-3253).
- *
- * ## What was wrong with one gap for everything
- *
- * MUI v7's Grid spaces with `gap` and CSS custom properties, and custom
- * properties INHERIT. So the `spacing={2}` on a card's outer container
- * reached every container nested under it through the DOM, and this
- * component's title row, its description and its fields were one
- * undifferentiated 16px stack: a heading sat no closer to the fields it names
- * than to the field above it, and where the first field was a multiline text
- * box the heading landed flush against its floating label.
- *
- * Three numbers fix it, and they are declared here rather than inherited:
- *
- *  - **8px under a heading**, tighter than the 16px between fields, which is
- *    what makes a heading read as belonging to what follows it.
- *  - **16px between fields**, unchanged.
- *  - **16px (nested) or 32px (top level) above a section**, which is the only
- *    thing that says a new group has started.
- *
- * `columnSpacing` is declared for the same reason: a sub-form rendered under
- * a container that spaces differently would otherwise inherit that container's
- * column gap, so two `sm: 6` fields could sit flush in one card and apart in
- * the next.
- *
- * ## And the titles are sized against the card, not against each other
- *
- * `CardDisplay` renders its own title at `h6`. This component asked for `h5`,
- * which is LARGER — so a section heading outranked the card containing it,
- * and a nested section's heading was the same size again as its parent's.
- * Depth 0 is `subtitle1`, depth 1 and below is a small uppercase label: below
- * the card, above the fields, and in order among themselves.
- *
- * The heading stays a real heading ELEMENT at every depth. It is what a
- * screen reader navigates this form by, and the card's own title is a `div`,
- * so nothing here competes with it.
- */
 export const SubForm = ({
   fields,
   title,
@@ -109,36 +74,14 @@ export const SubForm = ({
   ...rest
 }: SubFormProps) => {
   const { renderForm } = useFormApi()
-  const depth = useContext(SubFormDepth)
-  const top = depth === 0
 
   return (
-    <Grid
-      size={{ xs: 12 }}
-      container
-      rowSpacing={1}
-      columnSpacing={2}
-      // On TOP of the parent's own gap, so a top-level section is separated
-      // by 32px and a nested one by 24px. Before `rest`, so a schema that
-      // needs a different separation can still say so.
-      sx={{ mt: top ? 2 : 1 }}
-      {...rest}
-    >
+    <StyledGrid size={{ xs: 12 }} container className={classes.grid} {...rest}>
       {title && (
         <Grid size={{ xs: 12 }} {...TitleGridProps}>
           <Typography
-            variant={top ? 'subtitle1' : 'overline'}
-            component={top ? 'h4' : 'h5'}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              fontWeight: 600,
-              lineHeight: 1.6,
-              ...(top
-                ? {}
-                : { color: 'text.secondary', letterSpacing: '0.06em' }),
-            }}
+            variant="h5"
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
             {...TitleProps}
           >
             {title}
@@ -148,26 +91,15 @@ export const SubForm = ({
       )}
       {description && (
         <Grid size={{ xs: 12 }} {...DescriptionGridProps}>
-          {/* No `mb` of its own: the row gap above owns the space now, and a
-              margin on top of it put a described section's fields further
-              from their heading than an undescribed one's. */}
-          <Typography variant="body2" color="text.secondary" {...DescriptionProps}>
+          <Typography sx={{ mb: 2 }} {...DescriptionProps}>
             {description}
           </Typography>
         </Grid>
       )}
-      <SubFormDepth.Provider value={depth + 1}>
-        <Grid
-          size={{ xs: 12 }}
-          container
-          rowSpacing={2}
-          columnSpacing={2}
-          {...ItemsGridProps}
-        >
-          {renderForm(fields)}
-        </Grid>
-      </SubFormDepth.Provider>
-    </Grid>
+      <Grid size={{ xs: 12 }} container rowSpacing={2} {...ItemsGridProps}>
+        {renderForm(fields)}
+      </Grid>
+    </StyledGrid>
   )
 }
 
