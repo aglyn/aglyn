@@ -22,6 +22,7 @@ import {
   type CrmAssignmentRule,
   newAssignmentRuleId,
   readCrmAssignmentRule,
+  crmMemberPickerLabel,
 } from '@aglyn/aglyn'
 import {
   Button,
@@ -246,7 +247,7 @@ export function AssignmentRuleDrawer(props: AssignmentRuleDrawerProps) {
           >
             {members.map((member) => (
               <MenuItem key={member.uid} value={member.uid}>
-                {member.label}
+                {crmMemberPickerLabel(member)}
               </MenuItem>
             ))}
           </TextField>

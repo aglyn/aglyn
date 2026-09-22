@@ -379,7 +379,7 @@ describe('setting the stage and the owner', () => {
     render(<Harness initial={['c1']} />)
     fireEvent.click(screen.getByRole('button', { name: 'Set owner' }))
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Owner' }))
-    fireEvent.click(within(screen.getByRole('listbox')).getByText('Ada Lovelace'))
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Ada Lovelace (ada@example.com)'))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     await waitFor(() => expect(notices).toContain('Owner set on 1 contact'))
     expect(updates()).toEqual([{ contactIds: ['c1'], set: { ownerUid: 'uid-a' } }])

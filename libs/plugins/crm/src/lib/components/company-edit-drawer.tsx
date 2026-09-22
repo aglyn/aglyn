@@ -24,6 +24,7 @@ import {
   CRM_RECORDS_BAND_FULL_MESSAGE,
   type CrmCompany,
   pluginDocsHelp,
+  crmMemberPickerLabel,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, HelpTip, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
@@ -434,7 +435,7 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
             ) : null}
             {members.options.map((option) => (
               <MenuItem key={option.uid} value={option.uid}>
-                {option.label}
+                {crmMemberPickerLabel(option)}
               </MenuItem>
             ))}
           </TextField>

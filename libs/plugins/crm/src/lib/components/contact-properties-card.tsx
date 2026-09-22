@@ -466,7 +466,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             ) : null}
             {members.options.map((owner) => (
               <MenuItem key={owner.uid} value={owner.uid}>
-                {owner.label}
+                {Aglyn.crmMemberPickerLabel(owner)}
               </MenuItem>
             ))}
           </TextField>

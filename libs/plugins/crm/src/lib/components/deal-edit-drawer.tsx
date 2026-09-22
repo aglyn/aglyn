@@ -22,6 +22,7 @@ import {
   dealHasLineItems,
   findOrgMember,
   nameSearchKey,
+  crmMemberPickerLabel,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_CLOSE } from '@aglyn/shared-data-enums'
 import { Container, MdiIcon, SrOnly } from '@aglyn/shared-ui-jsx'
@@ -572,7 +573,7 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
             ) : null}
             {roster.members.map((member) => (
               <MenuItem key={member.uid} value={member.uid}>
-                {member.label}
+                {crmMemberPickerLabel(member)}
               </MenuItem>
             ))}
           </TextField>

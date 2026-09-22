@@ -23,6 +23,7 @@ import {
   filterByNextActivity,
   isNoNextActivityClause,
   pluginDocsHelp,
+  crmMemberPickerLabel,
 } from '@aglyn/aglyn'
 import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -324,7 +325,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
         type: 'singleSelect',
         valueOptions: members.options.map((option) => ({
           value: option.uid,
-          label: option.label,
+          label: crmMemberPickerLabel(option),
         })),
         filterable: members.options.length > 0,
         filterOperators: getGridSingleSelectOperators().filter(

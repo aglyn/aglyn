@@ -147,7 +147,7 @@ describe('the owner', () => {
     mount(ALL.slice(0, 2))
     fireEvent.click(screen.getByRole('button', { name: 'Set owner' }))
     fireEvent.mouseDown(dialog().getByRole('combobox', { name: 'Owner' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Ada Lovelace' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Ada Lovelace (ada@example.com)' }))
     fireEvent.click(dialog().getByRole('button', { name: 'Apply' }))
     await waitFor(() => expect(notices).toEqual(['Owner set on 2 leads']))
     expect(ops.map((op) => [op.via, op.path, (op.data as any).ownerUid])).toEqual([

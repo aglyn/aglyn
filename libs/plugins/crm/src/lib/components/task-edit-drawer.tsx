@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { CRM_COLLECTIONS, findOrgMember } from '@aglyn/aglyn'
+import { CRM_COLLECTIONS, findOrgMember, crmMemberPickerLabel } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -429,7 +429,7 @@ function TaskForm(props: TaskEditDrawerProps) {
         ) : null}
         {directory.members.map((member) => (
           <MenuItem key={member.uid} value={member.uid}>
-            {member.label}
+            {crmMemberPickerLabel(member)}
             {member.uid === user?.uid ? ' (you)' : ''}
           </MenuItem>
         ))}

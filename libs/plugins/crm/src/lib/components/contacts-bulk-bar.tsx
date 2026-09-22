@@ -66,6 +66,7 @@ import {
   CONTACT_LIFECYCLE_STAGES,
   type ConsentGroup,
   type ContactLifecycleStage,
+  crmMemberPickerLabel,
 } from '@aglyn/aglyn'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { Button, MenuItem, TextField } from '@mui/material'
@@ -471,7 +472,7 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
                 <MenuItem value="">{'Nobody — clear the owner'}</MenuItem>
                 {team.options.map((member) => (
                   <MenuItem key={member.uid} value={member.uid}>
-                    {member.label}
+                    {crmMemberPickerLabel(member)}
                   </MenuItem>
                 ))}
               </TextField>
