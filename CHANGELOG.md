@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.154 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.153...v1.0.0-beta.154)
+
+### Fixed
+
+- **ai:** the repeated item a paid section writes once is the Grid item, not the instance ([AGL-3024](https://linear.app/aglyn/issue/AGL-3024), [AGL-3055](https://linear.app/aglyn/issue/AGL-3055))
+
 ## v1.0.0-beta.153 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/276c49b5d...v1.0.0-beta.153)
