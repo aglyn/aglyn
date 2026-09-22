@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.157 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/3b182d037...v1.0.0-beta.157)
+
+### Added
+
+- **outreach:** sequences count link clicks, and say plainly that opens are not measured ([AGL-3239](https://linear.app/aglyn/issue/AGL-3239))
+
+### Fixed
+
+- **tenant:** the TEMPLATE path composes with the site zone too ([AGL-3237](https://linear.app/aglyn/issue/AGL-3237))
+
 ## v1.0.0-beta.156 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/6104b07f0...v1.0.0-beta.156)
