@@ -459,6 +459,15 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
    * case and the right one to budget against — an established site draws no
    * zone and reads 60.
    *
+   * Details went 65 -> 66 with the site time zone (AGL-3252). The sixth is a
+   * SIXTH SUBSCRIPTION to `orgs/{orgId}`, not a sixth path: the settings
+   * scope asks `useCurrentOrg` what zone this site would inherit, so the
+   * control's empty option can name it rather than say "default". The
+   * document was already being read five times over by the slot's gates, so
+   * what this buys is one more listener on a document in hand — the same
+   * classification the five above got, and the companion assertion below is
+   * what proves no new PATH came with it.
+   *
    * Theme measures 10 rather than the 6 it used to, and nothing on that
    * section changed: its editor blanks while the host document has never
    * emitted (AGL-1066), so a meter whose listeners never called back was
@@ -468,7 +477,7 @@ describe('host Setup read cost, per section (AGL-2501)', () => {
    */
   it('holds each section under its document budget', () => {
     renderSetup('details')
-    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(65)
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(66)
     renderSetup('theme')
     expect(documentCeiling(mockListens)).toBeLessThanOrEqual(20)
   })
