@@ -108,8 +108,15 @@ export const CAMPAIGN_CONVERSION_KINDS = [
 /** One identify moment. Mirrors the writer's `CampaignConversionKind`. */
 export type CampaignConversionKind = (typeof CAMPAIGN_CONVERSION_KINDS)[number]
 
-/** Which channel the credited touch arrived through. */
-export type CampaignTouchChannel = 'email' | 'web'
+/**
+ * Which channel the credited touch arrived through.
+ *
+ * `sequence` (AGL-3254) is a one-to-one email a rep's sequence sent: the
+ * touch names the CAMPAIGN the sequence is in, like an email touch names
+ * the campaign whose mail was clicked, plus the sequence and the enrollment
+ * it came through, so a record can say which rep's outreach it credits.
+ */
+export type CampaignTouchChannel = 'email' | 'web' | 'sequence'
 
 /**
  * What a reader calls one kind, and what the count means.
@@ -167,8 +174,15 @@ export interface CampaignConversionRecord {
   /** The submission, lead, contact or booking this credits. */
   refId?: string
   channel?: CampaignTouchChannel
-  /** The campaign document, when the touch was a click on our own mail. */
+  /**
+   * The campaign document, when the touch was a click on our own mail — or,
+   * for a `sequence` touch, the campaign container the sequence is in.
+   */
   campaignId?: string
+  /** The sequence, when the touch was a sequence email (AGL-3254). */
+  sequenceId?: string
+  /** The enrollment the sequence email went out under (AGL-3254). */
+  enrollmentId?: string
   /** `utm_source`, when the touch was a link on the web. */
   source?: string
   /** `utm_medium`, when the touch was a link on the web. */
@@ -441,9 +455,10 @@ export function campaignConversionsCoverage(options: {
 /**
  * How a record names the thing it was credited to.
  *
- * The email channel names a campaign document, so the screen can link to it.
- * The web channel names a label the marketer typed, which is text and never a
- * link — there is nothing at the other end of it.
+ * The email channel names a campaign document, so the screen can link to it,
+ * and so does a sequence touch: the campaign the sequence is in is a
+ * container with a page. The web channel names a label the marketer typed,
+ * which is text and never a link — there is nothing at the other end of it.
  *
  * The `utm_` triple is joined in the order a marketer set it, with the parts
  * that are absent left out rather than filled with a placeholder.
@@ -454,7 +469,9 @@ export function campaignTouchLabel(
   record: CampaignConversionRecord | null | undefined,
 ): string {
   if (!record) return ''
-  if (record.channel === 'email') return String(record.campaignId ?? '')
+  if (record.channel === 'email' || record.channel === 'sequence') {
+    return String(record.campaignId ?? '')
+  }
   const parts = [record.source, record.medium, record.campaign]
     .map((part) => String(part ?? '').trim())
     .filter(Boolean)

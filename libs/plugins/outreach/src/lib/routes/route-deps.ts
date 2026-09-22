@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { OutreachRecordEmailStamp } from '../runtime/runtime-deps'
+import type { OutreachCampaignCredit, OutreachRecordEmailStamp } from '../runtime/runtime-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
 
 /**
@@ -54,4 +54,9 @@ export interface OutreachRouteDeps {
    * carry the address (AGL-3245); the runtime's twin is on its own deps.
    */
   stampRecordEmailState(stamp: OutreachRecordEmailStamp): Promise<void>
+  /**
+   * Credits an enrollment to the sequence's campaigns (AGL-3254) — the
+   * enroll route's `enrolled`; the runtime's twin credits the rest.
+   */
+  creditCampaign: OutreachCampaignCredit['credit']
 }

@@ -292,6 +292,17 @@ describe('campaignTouchLabel', () => {
     ).toBe('camp_9')
   })
 
+  it('names the campaign a sequence is in for a sequence touch (AGL-3254)', () => {
+    expect(
+      campaignTouchLabel({
+        channel: 'sequence',
+        campaignId: 'camp_founder',
+        sequenceId: 'seq_1',
+        enrollmentId: 'seq_1_lead',
+      }),
+    ).toBe('camp_founder')
+  })
+
   it('joins the utm triple a marketer set', () => {
     expect(
       campaignTouchLabel({

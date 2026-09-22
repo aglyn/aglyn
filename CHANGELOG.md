@@ -9,6 +9,36 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.163 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.162...v1.0.0-beta.163)
+
+### Added
+
+- **console:** /support asks which workspace, then goes there ([AGL-3265](https://linear.app/aglyn/issue/AGL-3265), [AGL-1158](https://linear.app/aglyn/issue/AGL-1158), [AGL-2430](https://linear.app/aglyn/issue/AGL-2430), [AGL-3017](https://linear.app/aglyn/issue/AGL-3017))
+- **campaigns:** a sequence and a lead join a campaign, and the report counts it ([AGL-3254](https://linear.app/aglyn/issue/AGL-3254))
+- **console:** a site can name its own time zone, falling back to the workspace ([AGL-3252](https://linear.app/aglyn/issue/AGL-3252), [AGL-3237](https://linear.app/aglyn/issue/AGL-3237), [AGL-1361](https://linear.app/aglyn/issue/AGL-1361), [AGL-1608](https://linear.app/aglyn/issue/AGL-1608), [AGL-3197](https://linear.app/aglyn/issue/AGL-3197))
+
+### Fixed
+
+- **crm:** the conversion listener defers its own module and the Admin SDK comes with it ([AGL-3254](https://linear.app/aglyn/issue/AGL-3254))
+- **console:** a listing URL opens the listing, not the browse tab ([AGL-3264](https://linear.app/aglyn/issue/AGL-3264))
+- **console:** a refused URL answers a page, not an empty 404 ([AGL-3261](https://linear.app/aglyn/issue/AGL-3261), [AGL-3016](https://linear.app/aglyn/issue/AGL-3016), [AGL-3090](https://linear.app/aglyn/issue/AGL-3090), [AGL-3017](https://linear.app/aglyn/issue/AGL-3017))
+- **marketplace:** the publisher logo is validated as an image, not a link ([AGL-3260](https://linear.app/aglyn/issue/AGL-3260), [AGL-1215](https://linear.app/aglyn/issue/AGL-1215), [AGL-1701](https://linear.app/aglyn/issue/AGL-1701))
+- **crm:** the admin app is imported statically and the leads surfaces satisfy the sweeps ([AGL-3254](https://linear.app/aglyn/issue/AGL-3254))
+- **tenant:** the abuse form spells authorized and organization the American way ([AGL-3259](https://linear.app/aglyn/issue/AGL-3259), [AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+- **console:** the SEO section is a stack of cards, like every other one ([AGL-3258](https://linear.app/aglyn/issue/AGL-3258), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-3253](https://linear.app/aglyn/issue/AGL-3253))
+- **console:** the Admin hub opens on General, the section its rail lists first ([AGL-3257](https://linear.app/aglyn/issue/AGL-3257))
+- **forms:** a settings section is spaced and sized as a section ([AGL-3253](https://linear.app/aglyn/issue/AGL-3253))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **console:** the host settings specs price and mock the site time zone ([AGL-3252](https://linear.app/aglyn/issue/AGL-3252))
+- **tools:** the Linear ceiling rises to AGL-3255 ([AGL-3255](https://linear.app/aglyn/issue/AGL-3255), [AGL-3252](https://linear.app/aglyn/issue/AGL-3252), [AGL-3253](https://linear.app/aglyn/issue/AGL-3253))
+
+</details>
+
 ## v1.0.0-beta.162 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.161...v1.0.0-beta.162)

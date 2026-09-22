@@ -30,6 +30,7 @@ import {
   formatCollectionEntryDate,
   isSupportedTimeZone,
   resolveSiteTimeZone,
+  supportedTimeZones,
 } from './collection-entry-date'
 
 /** v1.0.0-beta.152's real publish instant: 7:30 PM on the 21st in Chicago. */
@@ -93,6 +94,46 @@ describe('an entry is dated in the publisher’s zone (AGL-3237)', () => {
     expect(resolveSiteTimeZone({ timeZone: '  Europe/Berlin  ' })).toBe(
       'Europe/Berlin',
     )
+  })
+
+  it('lets a site override the workspace, and keeps the workspace as the floor', () => {
+    // AGL-3252. The agency case: one workspace, sites in two regions. The
+    // site's own zone wins where it names one; where it does not, nothing
+    // about the org answer changes — which is the back-compat claim for
+    // every site that existed before the field did.
+    const org = { timeZone: 'America/Chicago' }
+    expect(resolveSiteTimeZone(org, { timeZone: 'Europe/Berlin' })).toBe(
+      'Europe/Berlin',
+    )
+    expect(resolveSiteTimeZone(org, {})).toBe('America/Chicago')
+    expect(resolveSiteTimeZone(org, null)).toBe('America/Chicago')
+    expect(resolveSiteTimeZone(null, { timeZone: 'Europe/Berlin' })).toBe(
+      'Europe/Berlin',
+    )
+  })
+
+  it('falls THROUGH a site zone it cannot use, rather than down to UTC', () => {
+    // The order matters and is easy to get wrong: a site whose stored zone
+    // has gone stale through an IANA rename should read in its workspace's
+    // zone, which somebody chose, rather than in UTC, which nobody did.
+    expect(
+      resolveSiteTimeZone(
+        { timeZone: 'America/Chicago' },
+        { timeZone: 'Mars/Olympus_Mons' },
+      ),
+    ).toBe('America/Chicago')
+    expect(resolveSiteTimeZone({}, { timeZone: 'Mars/Olympus_Mons' })).toBe(
+      'UTC',
+    )
+  })
+
+  it('offers only zones it would then accept', () => {
+    // The picker and the validator ask the same authority (AGL-3252), so a
+    // reader cannot choose a name that resolves back to UTC behind them.
+    const zones = supportedTimeZones()
+    expect(zones.length).toBeGreaterThan(100)
+    expect(zones.every((zone) => isSupportedTimeZone(zone))).toBe(true)
+    expect(resolveSiteTimeZone(null, { timeZone: zones[0] })).toBe(zones[0])
   })
 
   it('is still a pure function of its inputs, which is what AGL-1926 needed', () => {

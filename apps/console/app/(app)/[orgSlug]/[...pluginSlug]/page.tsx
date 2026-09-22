@@ -226,9 +226,22 @@ const OrgPluginPage: NextPageWithLayout<Record<string, never>> = () => {
           ? (hubLandingHref(resolvedSections, searchParams) ?? basePath)
           : undefined
       : undefined
+  /*
+   * Only a BARE hub URL lands on a section — one naming neither a section nor
+   * anything beneath the surface (AGL-3264). A surface that owns its subtree
+   * resolves an entity id as `segments` with NO section, which is the same
+   * shape the bare URL has, so asking about the section alone replaced
+   * `/marketplace/{listingId}` with the browse tab before the hub could draw
+   * the listing. `legacyRedirect` above already tells the two apart by the
+   * same count.
+   */
   const sectionRedirect =
     legacyRedirect ??
-    (resolved && !resolved.section && resolvedSections?.length && orgReady
+    (resolved &&
+    !resolved.section &&
+    !resolved.segments?.length &&
+    resolvedSections?.length &&
+    orgReady
       ? hubLandingHref(resolvedSections, searchParams)
       : undefined)
   useEffect(() => {

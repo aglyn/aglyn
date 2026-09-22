@@ -19,6 +19,10 @@
 // boot needs one registry, not the whole server surface.
 import { registerPluginConsoleCron } from '@aglyn/aglyn/plugin-manager/plugin-console-crons'
 import {
+  listPluginMembershipDetachers,
+  registerPluginMembershipDetacher,
+} from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
+import {
   listPluginOrgErasers,
   registerPluginOrgEraser,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
@@ -86,15 +90,36 @@ export function registerOutreachConsoleServerDeclarations(): void {
     { pluginId: OUTREACH_PLUGIN_ID },
   )
   // A lead that converts takes its enrollments to the contact it became
-  // (AGL-3234): the same document, now naming the contact.
+  // (AGL-3234): the same document, now naming the contact — and every
+  // enrollment made on it credits `converted` to its campaigns (AGL-3254).
   if (!listPluginLeadConversionListeners().includes(OUTREACH_PLUGIN_ID)) {
     registerPluginLeadConversionListener(
       async (request) => {
-        const [{ followOutreachLeadToContact }, platform] = await Promise.all([
+        const [{ followOutreachLeadToContact }, { creditOutreachLeadConversion }, platform] = await Promise.all([
           import('./runtime/lead-records'),
+          import('./runtime/campaign-credit'),
           runtime(),
         ])
-        return followOutreachLeadToContact(platform.platformOutreachRuntimeDeps().firestore(), request)
+        const deps = platform.platformOutreachRuntimeDeps()
+        const credited = await creditOutreachLeadConversion(deps, request)
+        const followed = await followOutreachLeadToContact(deps.firestore(), request)
+        return { ...followed, campaignsCredited: credited }
+      },
+      { pluginId: OUTREACH_PLUGIN_ID },
+    )
+  }
+  // A deleted campaign comes off every sequence and enrollment naming it
+  // (AGL-3254), before the marketing plugin removes the container.
+  if (!listPluginMembershipDetachers().includes(OUTREACH_PLUGIN_ID)) {
+    registerPluginMembershipDetacher(
+      async (request) => {
+        const [{ createOutreachCampaignDetacher }, platform] = await Promise.all([
+          import('./runtime/campaign-detach'),
+          runtime(),
+        ])
+        return createOutreachCampaignDetacher({ firestore: platform.platformOutreachRuntimeDeps().firestore })(
+          request,
+        )
       },
       { pluginId: OUTREACH_PLUGIN_ID },
     )

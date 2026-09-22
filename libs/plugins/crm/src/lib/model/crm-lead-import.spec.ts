@@ -45,11 +45,26 @@ describe('the lead vocabulary', () => {
       expect(LEAD_IMPORT_FIELD_LABELS[field]).toBeTruthy()
     }
     expect(Object.keys(LEAD_IMPORT_SKIP_LABELS).sort()).toEqual([
+      'campaign-unknown',
       'duplicate',
       'invalid-email',
       'lead-ceiling',
       'write-failed',
     ])
+  })
+
+  /** The campaigns column (AGL-3254): names as typed, for the server to resolve. */
+  it('reads the campaigns a row names, as names, and leaves `campaign` to the lead source', () => {
+    const verdict = normalizeLeadImportRow({
+      email: 'dana@example.com',
+      campaigns: ' Founder · ICP 2 | Founder · ICP 2, Spring  push ',
+    })
+    expect(verdict.ok && verdict.row.campaigns).toEqual(['Founder · ICP 2', 'Spring push'])
+    expect(guessLeadImportMapping(['Email', 'Campaign', 'Campaigns'])).toEqual({
+      0: 'email',
+      1: 'leadSource',
+      2: 'campaigns',
+    })
   })
 
   /**

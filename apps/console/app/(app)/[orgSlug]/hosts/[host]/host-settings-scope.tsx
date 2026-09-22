@@ -33,7 +33,6 @@ import {
   FormRenderer,
   FormSchema,
   simpleComponentMapper,
-  useFormApi,
 } from '@aglyn/shared-ui-jsx-forms'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -42,7 +41,7 @@ import {
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import { Grid, InputAdornment } from '@mui/material'
+import { InputAdornment } from '@mui/material'
 import { deleteField } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import {
@@ -55,32 +54,40 @@ import {
   type MutableRefObject,
   type ReactNode,
 } from 'react'
-import CardDisplayFormTemplate, {
-  FormCardWrapper,
-} from '../../../../../components/card-display-form-template'
+import CardDisplayFormTemplate from '../../../../../components/card-display-form-template'
 import {
   useHostId,
   useHostSubdomain,
 } from '../../../../../components/host-id-provider'
-import AppIconCard from '../../../../../components/app-icon-card.component'
-import FaviconCard from '../../../../../components/favicon-card.component'
-import EntityLogoCard from '../../../../../components/entity-logo-card.component'
-import SocialImageCard from '../../../../../components/social-image-card.component'
 import type { ThemeEditorProposedDraft } from '../../../../../components/theme-editor/theme-editor.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
+import useCurrentOrg from '../../../../../hooks/use-current-org'
 import { useOrgSlug } from '../../../../../hooks/use-org-scope'
 import useHostActivityLogger from '../../../../../hooks/use-host-activity-logger'
 
-const basicSchema: FormSchema = {
+/**
+ * Basic details, built around the zone this site would INHERIT (AGL-3252).
+ *
+ * A function rather than a constant because of one option: the time zone
+ * field's empty choice names the workspace zone it falls back to, and a
+ * schema that could not see the org could only offer "default" — which is the
+ * word a reader has to leave the page to resolve.
+ *
+ * `inheritedTimeZone` is EMPTY while the org doc is still loading, and the
+ * copy below drops the zone rather than guessing at it. The fallback answer
+ * during that window is UTC, which is a claim about the reader's workspace
+ * that nobody has checked — the AGL-1916 rule, applied to a placeholder.
+ */
+const buildBasicSchema = (inheritedTimeZone: string): FormSchema => ({
   id: 'hostDetails',
   title: 'Basic details',
   CardDisplayProps: {
     help: docsHelp('gettingStarted', {
       anchor: '#what-a-site-contains',
       excerpt:
-        'The site name shown across the console and the subdomain it is ' +
-        'served from.',
+        'The site name shown across the console, the subdomain it is served ' +
+        'from, and the zone its published dates read in.',
     }),
   },
   fields: [
@@ -139,8 +146,43 @@ const basicSchema: FormSchema = {
         },
       ],
     },
+    {
+      /*
+        THE SITE'S ZONE (AGL-3252), overriding the workspace's.
+
+        `isSearchable` because the list is every IANA name the runtime knows —
+        four hundred or so — and a reader looking for Chicago should be able
+        to type it rather than scroll to it.
+
+        `clearable` is the way BACK to the workspace's zone, and it is the
+        mapper's corner ✕ rather than an option in the list: an option whose
+        value is `''` renders with an EMPTY label in the closed box
+        (`getOptionLabel` returns '' for it), so the control would say nothing
+        at all in exactly the state that needs explaining. The placeholder
+        carries the inherited zone instead, where it is legible whether or not
+        the list is open.
+      */
+      component: FieldComponentType.SELECT,
+      name: 'timeZone',
+      label: 'Time zone',
+      isSearchable: true,
+      clearable: true,
+      placeholder: inheritedTimeZone
+        ? `Same as the workspace — ${inheritedTimeZone}`
+        : 'Same as the workspace',
+      helperText:
+        'The day a published post is dated on this site. Leave it unset and ' +
+        (inheritedTimeZone
+          ? `the workspace decides, which today means ${inheritedTimeZone}.`
+          : 'the workspace decides.'),
+      options: Aglyn.supportedTimeZones().map((zone) => ({
+        value: zone,
+        label: zone.replace(/_/g, ' '),
+      })),
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
   ],
-}
+})
 
 /**
  * Tracking (AGL-2486) — its own tab, and not part of SEO.
@@ -199,6 +241,20 @@ const CLEARABLE_TRACKING_PATHS = [
  * their empty case never reaches a save and they stay out of this list.
  */
 const CLEARABLE_SEO_PATHS = ['seo.titlePattern'] as const
+
+/**
+ * The Basic details fields that must be able to go back to EMPTY (AGL-3252).
+ *
+ * `timeZone` is the only one, and empty is not "nothing" there — it is "same
+ * as the workspace", the state a site is in until somebody overrides it. The
+ * renderer drops a cleared field from its submitted values, so without this a
+ * site could take a zone and never give it back: the ✕ would clear the box,
+ * the save would report "Saved!", and the override would still be stored.
+ *
+ * `displayName` and `subdomain` are both REQUIRED and never reach a save
+ * empty, so they stay out of this list.
+ */
+const CLEARABLE_HOST_PATHS = ['timeZone'] as const
 
 const trackingSchema: FormSchema = {
   id: 'hostTracking',
@@ -571,292 +627,332 @@ const seoSchema: FormSchema = {
       The card carries the URL box too, so an externally hosted icon is still
       reachable.
     */
+  ],
+}
+
+/**
+ * ENTITY — the publisher, on a card of its own (AGL-3258).
+ *
+ * It was a `SUB_FORM` inside the SEO card, under an `h5` heading, and nothing
+ * else in the console groups fields that way: a settings section stacks
+ * CARDS, each with its own header, its own help tip and its own Update. This
+ * very section already did that for the indexing switch and the four media
+ * controls; the form was the odd one out.
+ *
+ * AGL-3253 tried to fix the same complaint by giving the sub-form headings a
+ * size and a rhythm of their own, which made the card look LESS like the rest
+ * of the product rather than more. The heading was never the problem — the
+ * container was.
+ *
+ * The sub-form's `help` becomes the card's, so the same words are a tip in
+ * the same place, and the save is `handleBasicSave` like every other card
+ * here: what a form submits is what gets merged, so a card that carries only
+ * the entity fields writes only them.
+ */
+const seoEntitySchema: FormSchema = {
+  id: 'hostSeoEntity',
+  title: 'Entity',
+  CardDisplayProps: {
+    help: docsHelp('seo', {
+      anchor: '#structured-data',
+      excerpt:
+        'Who publishes this site — emitted as JSON-LD structured data ' +
+        'so search engines show rich results.',
+    }),
+  },
+  fields: [
     {
-      component: FieldComponentType.SUB_FORM,
-      name: 'seo.entity',
-      title: 'Entity',
+      component: FieldComponentType.SELECT,
+      name: 'seo.entity.type',
+      label: 'Type',
       help: docsHelp('seo', {
         anchor: '#structured-data',
         excerpt:
-          'Who publishes this site — emitted as JSON-LD structured data ' +
-          'so search engines show rich results.',
+          'Whether this site is published by a company or by a person. ' +
+          'The two carry different structured-data fields, so the ' +
+          'choice changes what is emitted, not just the label.',
       }),
-      className: false,
-      fields: [
+      options: [
         {
-          component: FieldComponentType.SELECT,
-          name: 'seo.entity.type',
-          label: 'Type',
-          help: docsHelp('seo', {
-            anchor: '#structured-data',
-            excerpt:
-              'Whether this site is published by a company or by a person. ' +
-              'The two carry different structured-data fields, so the ' +
-              'choice changes what is emitted, not just the label.',
-          }),
-          options: [
-            {
-              value: `${Aglyn.HostEntityType.ORGANIZATION}`,
-              label: 'Organization',
-            },
-            { value: `${Aglyn.HostEntityType.PERSON}`, label: 'Person' },
-          ],
+          value: `${Aglyn.HostEntityType.ORGANIZATION}`,
+          label: 'Organization',
         },
+        { value: `${Aglyn.HostEntityType.PERSON}`, label: 'Person' },
+      ],
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.name',
+      label: 'Name',
+      help: docsHelp('seo', {
+        anchor: '#structured-data',
+        excerpt:
+          'The publisher’s legal or trading name, as it should appear ' +
+          'in search results. Not the site title — that is the SEO ' +
+          'field above.',
+      }),
+    },
+    /*
+      Same as the favicon above (AGL-2486). This was a URL box whose own
+      helper text told the reader to go and use a different card — two
+      controls for `seo.entity.logo`, and the one in front of them had no
+      picker. The Entity logo card is the editor, and it takes a URL too,
+      so nothing an author could do here is gone.
+    */
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.description',
+      label: 'Description',
+      multiline: true,
+      rows: 2,
+      helperText:
+        'What the publisher IS, in a sentence — not what this page is ' +
+        'about. Falls back to the site description above',
+      help: docsHelp('seo', {
+        anchor: '#structured-data',
+        excerpt:
+          'One sentence describing the organization or person behind ' +
+          'the site — published as the entity’s `description` so AI ' +
+          'assistants can say who you are.',
+      }),
+      validate: [
         {
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.entity.name',
-          label: 'Name',
-          help: docsHelp('seo', {
-            anchor: '#structured-data',
-            excerpt:
-              'The publisher’s legal or trading name, as it should appear ' +
-              'in search results. Not the site title — that is the SEO ' +
-              'field above.',
-          }),
-        },
-        /*
-          Same as the favicon above (AGL-2486). This was a URL box whose own
-          helper text told the reader to go and use a different card — two
-          controls for `seo.entity.logo`, and the one in front of them had no
-          picker. The Entity logo card is the editor, and it takes a URL too,
-          so nothing an author could do here is gone.
-        */
-        {
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.entity.description',
-          label: 'Description',
-          multiline: true,
-          rows: 2,
-          helperText:
-            'What the publisher IS, in a sentence — not what this page is ' +
-            'about. Falls back to the site description above',
-          help: docsHelp('seo', {
-            anchor: '#structured-data',
-            excerpt:
-              'One sentence describing the organization or person behind ' +
-              'the site — published as the entity’s `description` so AI ' +
-              'assistants can say who you are.',
-          }),
-          validate: [
-            {
-              type: FieldValidatorType.MAX_LENGTH,
-              threshold: 300,
-              message: 'Please enter a shorter description',
-            },
-          ],
-        },
-        {
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.entity.url',
-          label: 'Website',
-          type: 'url',
-          helperText:
-            'Only when the publisher’s main address is somewhere else — ' +
-            'leave blank and this site’s own address is used',
-          help: docsHelp('seo', {
-            anchor: '#structured-data',
-            excerpt:
-              'The publisher’s canonical address, for a brand site whose ' +
-              'company lives at a different domain.',
-          }),
-        },
-        {
-          /*
-            CONTACT AND ADDRESS (AGL-2716). These are what turn "a name" into
-            "a business a reader can verify" — an assistant asked how to reach
-            you answers from `contactPoint`, and `address` is what a local
-            search result is built from. Both were unauthorable until now, so
-            every site published an Organization with neither.
-
-            Flat fields rather than one nested `contactPoint` object, matching
-            how the document stores them: a nested object in a settings
-            document is a shape a partial write can blank, and the serializer
-            assembles the object anyway.
-          */
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.entity.email',
-          label: 'Contact email',
-          type: 'email',
-          helperText:
-            'Published in your structured data and in /llms.txt, so an AI ' +
-            'assistant can tell someone how to reach you',
-          help: docsHelp('seo', {
-            anchor: '#structured-data',
-            excerpt:
-              'A published contact address for the organization. Appears in ' +
-              'the site’s `contactPoint` structured data.',
-          }),
-          FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-        },
-        {
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.entity.telephone',
-          label: 'Contact phone',
-          type: 'tel',
-          helperText: 'In international form, e.g. +1-512-555-0100',
-          FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-        },
-        {
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.entity.contactType',
-          label: 'Contact is for',
-          helperText:
-            'What that contact answers — e.g. customer support, sales, ' +
-            'press. Defaults to customer support',
-          FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-        },
-        {
-          component: FieldComponentType.SUB_FORM,
-          name: 'seo.entity.address',
-          title: 'Address',
-          className: false,
-          help: docsHelp('seo', {
-            anchor: '#structured-data',
-            excerpt:
-              'Your postal address, published as `PostalAddress` structured ' +
-              'data. Partial is fine — every field is optional.',
-          }),
-          fields: [
-            {
-              component: FieldComponentType.TEXT_FIELD,
-              name: 'seo.entity.address.streetAddress',
-              label: 'Street',
-              FormFieldGridProps: { size: { xs: 12 } },
-            },
-            {
-              component: FieldComponentType.TEXT_FIELD,
-              name: 'seo.entity.address.addressLocality',
-              label: 'City',
-              FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-            },
-            {
-              component: FieldComponentType.TEXT_FIELD,
-              name: 'seo.entity.address.addressRegion',
-              label: 'State or region',
-              FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-            },
-            {
-              component: FieldComponentType.TEXT_FIELD,
-              name: 'seo.entity.address.postalCode',
-              label: 'Postal code',
-              FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-            },
-            {
-              component: FieldComponentType.TEXT_FIELD,
-              name: 'seo.entity.address.addressCountry',
-              label: 'Country',
-              helperText: 'A country name, or its two-letter code',
-              FormFieldGridProps: { size: { xs: 12, sm: 6 } },
-            },
-          ],
+          type: FieldValidatorType.MAX_LENGTH,
+          threshold: 300,
+          message: 'Please enter a shorter description',
         },
       ],
     },
     {
-      /*
-        AGENT GUIDANCE (AGL-2716) — what `/llms.txt` publishes above its
-        derived link lists.
-
-        Its own sub-form rather than a field on Entity, because it is about the
-        SITE's usefulness rather than about who publishes it, and because the
-        two are written by different people at different times.
-
-        Both fields are OPTIONAL and the file is useful without them:
-        `buildLlmsTxt` derives a when-to-use section from what the site
-        demonstrably publishes — its collections, their entry counts, its
-        search and its OpenAPI document — so a site whose author writes nothing
-        here still ships checkable guidance. These are for the things that
-        cannot be derived.
-      */
-      component: FieldComponentType.SUB_FORM,
-      name: 'seo.agent',
-      title: 'AI agents',
-      className: false,
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.url',
+      label: 'Website',
+      type: 'url',
+      helperText:
+        'Only when the publisher’s main address is somewhere else — ' +
+        'leave blank and this site’s own address is used',
       help: docsHelp('seo', {
         anchor: '#structured-data',
         excerpt:
-          'What AI agents are told about your site in /llms.txt — when to ' +
-          'reach for you, and how to call you.',
+          'The publisher’s canonical address, for a brand site whose ' +
+          'company lives at a different domain.',
       }),
-      fields: [
+    },
+    {
+      /*
+        CONTACT AND ADDRESS (AGL-2716). These are what turn "a name" into
+        "a business a reader can verify" — an assistant asked how to reach
+        you answers from `contactPoint`, and `address` is what a local
+        search result is built from. Both were unauthorable until now, so
+        every site published an Organization with neither.
+
+        Flat fields rather than one nested `contactPoint` object, matching
+        how the document stores them: a nested object in a settings
+        document is a shape a partial write can blank, and the serializer
+        assembles the object anyway.
+      */
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.email',
+      label: 'Contact email',
+      type: 'email',
+      helperText:
+        'Published in your structured data and in /llms.txt, so an AI ' +
+        'assistant can tell someone how to reach you',
+      help: docsHelp('seo', {
+        anchor: '#structured-data',
+        excerpt:
+          'A published contact address for the organization. Appears in ' +
+          'the site’s `contactPoint` structured data.',
+      }),
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.telephone',
+      label: 'Contact phone',
+      type: 'tel',
+      helperText: 'In international form, e.g. +1-512-555-0100',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.contactType',
+      label: 'Contact is for',
+      helperText:
+        'What that contact answers — e.g. customer support, sales, ' +
+        'press. Defaults to customer support',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+  ],
+}
+
+/**
+ * ADDRESS — the publisher's postal address (AGL-3258).
+ *
+ * A card rather than a sub-form nested two deep inside Entity, where its
+ * heading rendered at the same size as its parent's and read as a peer of it
+ * anyway. Every field is optional and a partial address is legitimate, so
+ * this card can sit empty without the one above it being wrong.
+ *
+ * ⚠️ Still `seo.entity.address.*`. The card is a place to edit the fields,
+ * not a new shape for them — the structured data this feeds is one
+ * `PostalAddress` under the entity either way, and Firestore deep-merges a
+ * map, so saving this card writes the address without touching the rest of
+ * the entity.
+ */
+const seoAddressSchema: FormSchema = {
+  id: 'hostSeoAddress',
+  title: 'Address',
+  CardDisplayProps: {
+    help: docsHelp('seo', {
+      anchor: '#structured-data',
+      excerpt:
+        'Your postal address, published as `PostalAddress` structured ' +
+        'data. Partial is fine — every field is optional.',
+    }),
+  },
+  fields: [
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.streetAddress',
+      label: 'Street',
+      FormFieldGridProps: { size: { xs: 12 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.addressLocality',
+      label: 'City',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.addressRegion',
+      label: 'State or region',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.postalCode',
+      label: 'Postal code',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.entity.address.addressCountry',
+      label: 'Country',
+      helperText: 'A country name, or its two-letter code',
+      FormFieldGridProps: { size: { xs: 12, sm: 6 } },
+    },
+  ],
+}
+
+/**
+ * AI AGENTS (AGL-2716) — what `/llms.txt` publishes above its derived link
+ * lists, on its own card (AGL-3258).
+ *
+ * Separate from Entity because it is about the SITE's usefulness rather than
+ * about who publishes it, and because the two are written by different people
+ * at different times — the argument that made it its own sub-form, which a
+ * card states more plainly than a heading did.
+ *
+ * Both fields are OPTIONAL and the file is useful without them: `buildLlmsTxt`
+ * derives a when-to-use section from what the site demonstrably publishes —
+ * its collections, their entry counts, its search and its OpenAPI document —
+ * so a site whose author writes nothing here still ships checkable guidance.
+ * These are for the things that cannot be derived.
+ */
+const seoAgentSchema: FormSchema = {
+  id: 'hostSeoAgent',
+  title: 'AI agents',
+  CardDisplayProps: {
+    help: docsHelp('seo', {
+      anchor: '#structured-data',
+      excerpt:
+        'What AI agents are told about your site in /llms.txt — when to ' +
+        'reach for you, and how to call you.',
+    }),
+  },
+  fields: [
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.agent.whenToUse',
+      label: 'When to use this site',
+      multiline: true,
+      rows: 3,
+      helperText:
+        'The questions this site is the best source for. Be specific — ' +
+        'marketing copy does not read as guidance, and an agent ' +
+        'discounts a claim it cannot check',
+      validate: [
         {
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.agent.whenToUse',
-          label: 'When to use this site',
-          multiline: true,
-          rows: 3,
-          helperText:
-            'The questions this site is the best source for. Be specific — ' +
-            'marketing copy does not read as guidance, and an agent ' +
-            'discounts a claim it cannot check',
-          validate: [
-            {
-              type: FieldValidatorType.MAX_LENGTH,
-              threshold: 1000,
-              message: 'Please write something shorter',
-            },
-          ],
+          type: FieldValidatorType.MAX_LENGTH,
+          threshold: 1000,
+          message: 'Please write something shorter',
         },
+      ],
+    },
+    {
+      component: FieldComponentType.TEXT_FIELD,
+      name: 'seo.agent.howToUse',
+      label: 'How an agent should call you',
+      multiline: true,
+      rows: 3,
+      helperText:
+        'Anything an agent should know before it fetches — which pages ' +
+        'answer what, how often you update, what not to rely on',
+      validate: [
         {
-          component: FieldComponentType.TEXT_FIELD,
-          name: 'seo.agent.howToUse',
-          label: 'How an agent should call you',
-          multiline: true,
-          rows: 3,
-          helperText:
-            'Anything an agent should know before it fetches — which pages ' +
-            'answer what, how often you update, what not to rely on',
-          validate: [
-            {
-              type: FieldValidatorType.MAX_LENGTH,
-              threshold: 1000,
-              message: 'Please write something shorter',
-            },
-          ],
+          type: FieldValidatorType.MAX_LENGTH,
+          threshold: 1000,
+          message: 'Please write something shorter',
         },
       ],
     },
   ],
 }
 
+
 /**
- * The SEO card's contents: the form's fields, then the media controls it owns.
+ * Which form owns each field name (AGL-3258).
  *
- * A separate component because it needs `useFormApi` — the `<form>` element's
- * submit handler comes from the form context, and a template that rendered the
- * fields without it would have a card whose Update button did nothing.
+ * A plugin zone proposes values by FIELD NAME — `seo.entity.name`,
+ * `seo.agent.whenToUse` — and those fields used to live in one form, so a
+ * proposal could name its target form and be right by construction. They are
+ * four cards now, and the SEO zone's own proposal spans three of them.
+ *
+ * Derived from the schemas rather than written down, so a field moved between
+ * cards routes itself and a field added to one is proposable the day it
+ * exists. Built ONCE at module scope: the field names are the same whatever
+ * the org's zone is, so `buildBasicSchema` is walked with an empty one — it
+ * decides copy, never names.
+ *
+ * Recursive, because `SUB_FORM` groups carry their own `fields`. None is left
+ * on these schemas today; the walk costs nothing and means the map does not
+ * quietly go blind the next time somebody nests one.
  */
-function SeoFormBody(props: {
-  hostId: string
-  formFields: ReactNode
-  formProps: Record<string, unknown>
-}) {
-  const { hostId, formFields, formProps } = props
-  const { handleSubmit } = useFormApi()
-  return (
-    <>
-      <form onSubmit={handleSubmit} noValidate {...formProps}>
-        <Grid spacing={2} container>
-          {formFields}
-        </Grid>
-      </form>
-      {/*
-        Entity logo FIRST: the form ends with the Entity's Type and Name, and
-        the logo belongs with them. The favicon sitting between them is what
-        made the entity read as separated (AGL-2486).
-      */}
-      <EntityLogoCard hostId={hostId} embedded />
-      <FaviconCard hostId={hostId} embedded />
-      {/* Beside the favicon, which is the icon it is most often confused
-          with: both are the site's mark drawn small by somebody else's
-          chrome, and seeing the two together is what makes the difference in
-          size and shape legible. */}
-      <AppIconCard hostId={hostId} embedded />
-      <SocialImageCard hostId={hostId} embedded />
-    </>
-  )
-}
-SeoFormBody.displayName = 'SeoFormBody'
+const fieldOwner = (() => {
+  const owner = new Map<string, string>()
+  const walk = (schemaId: string, fields: readonly unknown[]) => {
+    for (const field of fields) {
+      const entry = field as { name?: string; fields?: readonly unknown[] }
+      // A sub-form has a `name` of its own and holds no value; its CHILDREN
+      // are the proposable fields, so it must not claim its own name.
+      if (entry?.fields) walk(schemaId, entry.fields)
+      else if (entry?.name) owner.set(entry.name, schemaId)
+    }
+  }
+  for (const schema of [
+    buildBasicSchema(''),
+    seoSchema,
+    seoEntitySchema,
+    seoAddressSchema,
+    seoAgentSchema,
+    trackingSchema,
+  ]) {
+    walk(schema.id as string, schema.fields as readonly unknown[])
+  }
+  return owner
+})()
 
 /**
  * Everything a settings section needs but must not own (AGL-2501).
@@ -909,8 +1005,6 @@ export interface HostSettingsScope {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onSubmit: (fields: any) => void
   }>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  SeoFormTemplate: any
   draftsRef: MutableRefObject<Record<string, Record<string, unknown>>>
   /**
    * Puts `values` in a form as unsaved edits (AGL-2910), keyed by the form's
@@ -918,7 +1012,7 @@ export interface HostSettingsScope {
    * draft, the same place typing lands, and the form re-applies its draft
    * as edits: the card reads as changed and its Update is the write.
    */
-  proposeFormDraft: (schemaId: string, values: Record<string, string>) => void
+  proposeFormDraft: (values: Record<string, string>) => void
   /** Moves each time a proposal lands, so the form picks its draft up again. */
   formDraftRevision: number
 }
@@ -944,8 +1038,7 @@ export function useHostSettingsScope(): HostSettingsScope {
  * places for the draft recording to be forgotten on the next one added.
  */
 export function HostSettingsForm({ schemaId }: { schemaId: string }) {
-  const { forms, SeoFormTemplate, draftsRef, formDraftRevision } =
-    useHostSettingsScope()
+  const { forms, draftsRef, formDraftRevision } = useHostSettingsScope()
   const form = forms.find((entry) => entry.schema.id === schemaId)
 
   /**
@@ -985,20 +1078,15 @@ export function HostSettingsForm({ schemaId }: { schemaId: string }) {
     <FormRenderer
       key={`${schemaId}:${formDraftRevision}`}
       /*
-        The SEO section renders its media controls INSIDE its own card
-        (AGL-2486), which is why it gets `SeoFormTemplate` instead of the
-        shared `CardDisplayFormTemplate`.
-
-        The favicon and social image are `seo.*` fields like the rest of the
-        section. They are separate components only because a media pick needs a
-        picker dialog and because a CLEARED value has to reach Firestore as `''`
-        rather than being dropped by the form stack (AGL-1191). Rendered by the
-        default template those implementation details surface as free-floating
-        cards sitting between the fields they belong to.
+        ONE template for every form here (AGL-3258). The SEO section used to
+        get a bespoke one that drew the four media controls inside its card,
+        because the sections they belong beside were sub-forms in that same
+        card and a media control rendered anywhere else read as free-floating.
+        Those sections are cards now, so each media control is a card too and
+        sits next to the card it is about — which is what the rest of the
+        console does with them.
       */
-      FormTemplate={
-        schema.id === 'hostSeo' ? SeoFormTemplate : CardDisplayFormTemplate
-      }
+      FormTemplate={CardDisplayFormTemplate}
       componentMapper={simpleComponentMapper}
       onSubmit={onSubmit}
       schema={schema}
@@ -1429,28 +1517,48 @@ export function HostSettingsScopeProvider({
    *
    * A REF rather than state, and that is load-bearing twice over. It is
    * written on every keystroke, so state would re-render the whole page each
-   * time; and a re-render that changed `SeoFormTemplate`'s identity would
-   * remount the form and blow away the very input being typed into — the trap
-   * its own `useMemo` was added for.
+   * time; and a re-render that changed a FormTemplate's identity would
+   * remount the form and blow away the very input being typed into.
    */
   const draftsRef = useRef<Record<string, Record<string, unknown>>>({})
 
   /**
-   * A proposal from a plugin zone (AGL-2910), put in the form's DRAFT beside
-   * whatever was typed, by field name — `seo.agent.whenToUse` — rather than
-   * written anywhere. The revision is what makes the mounted form apply it:
-   * `HostSettingsForm` keys its renderer on it and re-applies the draft as
-   * edits, so the card reads as changed and Update is the write. Field names
-   * go after the typed values, so a proposed field wins over a stale draft of
-   * the same field.
+   * A proposal from a plugin zone (AGL-2910), put in the owning form's DRAFT
+   * beside whatever was typed, by field name — `seo.agent.whenToUse` — rather
+   * than written anywhere. The revision is what makes the mounted form apply
+   * it: `HostSettingsForm` keys its renderer on it and re-applies the draft
+   * as edits, so the card reads as changed and Update is the write. Field
+   * names go after the typed values, so a proposed field wins over a stale
+   * draft of the same field.
+   *
+   * ROUTED BY FIELD NAME, not by a schema id the caller passes (AGL-3258).
+   * The SEO zone's own proposal spans `seo.title`, `seo.entity.*` and
+   * `seo.agent.*`, and those are three cards now — a caller naming one schema
+   * would have to know which, and would silently drop whatever it guessed
+   * wrong about. `fieldOwner` is built from the schemas themselves, so a
+   * field added to a card is routable the moment it exists.
+   *
+   * A proposed name no form declares is IGNORED rather than parked in some
+   * default form's draft, where it would mark that card dirty over a value
+   * nothing renders and no save could write.
    */
   const [formDraftRevision, setFormDraftRevision] = useState(0)
   const proposeFormDraft = useCallback(
-    (schemaId: string, values: Record<string, string>) => {
-      if (!Object.keys(values).length) return
-      draftsRef.current[schemaId] = {
-        ...(draftsRef.current[schemaId] ?? {}),
-        ...values,
+    (values: Record<string, string>) => {
+      const routed = new Map<string, Record<string, string>>()
+      for (const [name, value] of Object.entries(values)) {
+        const schemaId = fieldOwner.get(name)
+        if (!schemaId) continue
+        const bucket = routed.get(schemaId) ?? {}
+        bucket[name] = value
+        routed.set(schemaId, bucket)
+      }
+      if (!routed.size) return
+      for (const [schemaId, bucket] of routed) {
+        draftsRef.current[schemaId] = {
+          ...(draftsRef.current[schemaId] ?? {}),
+          ...bucket,
+        }
       }
       setFormDraftRevision((revision) => revision + 1)
     },
@@ -1485,6 +1593,30 @@ export function HostSettingsScopeProvider({
     if (saved) delete draftsRef.current[schemaId]
   }
 
+  /**
+   * The zone this site READS as, before it names one of its own (AGL-3252).
+   *
+   * The workspace's, or UTC where the workspace has not said either — which
+   * is the same question `resolveSiteTimeZone` answers for the published
+   * site, asked here with the host deliberately left out, so the answer is
+   * what this site would fall back TO rather than what it currently does.
+   *
+   * GATED ON `ready`, and this is a claim rather than an action: the org doc
+   * is undefined during the loading window, `resolveSiteTimeZone` answers UTC
+   * for an absent one, and a placeholder reading "Same as the workspace —
+   * UTC" would tell a Chicago workspace something false about itself for as
+   * long as the read takes. Empty until the answer is trustworthy; the schema
+   * drops the zone from its copy rather than guessing (AGL-1916, AGL-1380).
+   */
+  const { org, ready: orgReady } = useCurrentOrg()
+  const inheritedTimeZone = orgReady
+    ? Aglyn.resolveSiteTimeZone(org as never)
+    : ''
+  const basicSchema = useMemo(
+    () => buildBasicSchema(inheritedTimeZone),
+    [inheritedTimeZone],
+  )
+
   const forms = [
     {
       schema: basicSchema,
@@ -1492,13 +1624,46 @@ export function HostSettingsScopeProvider({
       // Wrapped, never passed by reference: the renderer calls
       // `onSubmit(values, formApi, callback)`, and a bare handler would take
       // the form API as its `clearable` argument.
-      onSubmit: (fields: any) => saveAndClearDraft(basicSchema.id, fields),
+      onSubmit: (fields: any) =>
+        saveAndClearDraft(basicSchema.id, fields, CLEARABLE_HOST_PATHS),
     },
     {
       schema: seoSchema,
       initialValues: seedFor(seoSchema.id),
+      // The only form carrying `seo.titlePattern`, so the only one entitled
+      // to read its absence as "cleared" (AGL-3197). Handing the list to the
+      // Entity or Address card would wipe the pattern every time somebody
+      // saved an address.
       onSubmit: (fields: any) =>
         saveAndClearDraft(seoSchema.id, fields, CLEARABLE_SEO_PATHS),
+    },
+    /*
+      The three cards the SEO section's sub-forms became (AGL-3258). Each
+      submits only its own fields and the write is `merge: true`, and
+      Firestore deep-merges a map — so saving Address writes
+      `seo.entity.address` without touching the rest of `seo.entity`, and the
+      base card above writes the titles without touching either.
+
+      None of them takes a clearable list: every field on all three is
+      optional and already stores `''` when emptied, and a path handed to a
+      form that does not submit it reads as cleared on every save.
+    */
+    {
+      schema: seoEntitySchema,
+      initialValues: seedFor(seoEntitySchema.id),
+      onSubmit: (fields: any) =>
+        saveAndClearDraft(seoEntitySchema.id, fields),
+    },
+    {
+      schema: seoAddressSchema,
+      initialValues: seedFor(seoAddressSchema.id),
+      onSubmit: (fields: any) =>
+        saveAndClearDraft(seoAddressSchema.id, fields),
+    },
+    {
+      schema: seoAgentSchema,
+      initialValues: seedFor(seoAgentSchema.id),
+      onSubmit: (fields: any) => saveAndClearDraft(seoAgentSchema.id, fields),
     },
     {
       schema: trackingSchema,
@@ -1510,41 +1675,6 @@ export function HostSettingsScopeProvider({
     },
   ]
 
-  /**
-   * The SEO card's own form template (AGL-2486).
-   *
-   * Same card the shared template draws — `FormCardWrapper` is what carries
-   * the Update button and the pristine/invalid states — with the three media
-   * controls rendered inside it, after the fields.
-   *
-   * ORDER IS THE POINT. Entity logo comes FIRST of the three, because the
-   * form's last fields are the Entity's Type and Name and the logo belongs
-   * with them; putting the favicon between them is what made the entity
-   * "look separated" in the first place.
-   *
-   * Memoised on `hostId`: a FormTemplate identity that changes every render
-   * remounts the whole form, which would blow away half-typed input on every
-   * keystroke.
-   */
-  const SeoFormTemplate = useMemo(
-    () =>
-      function SeoFormTemplateRender(templateProps: any) {
-        // `schema` is dropped rather than forwarded: `FormCardWrapper` reads
-        // it off the form context itself, and passing it as a prop would
-        // spread an unknown attribute onto the Card.
-        const { formFields, schema: _schema, ...rest } = templateProps
-        return (
-          <FormCardWrapper>
-            <SeoFormBody
-              hostId={hostId}
-              formFields={formFields}
-              formProps={rest}
-            />
-          </FormCardWrapper>
-        )
-      },
-    [hostId],
-  )
 
   const scope = useMemo<HostSettingsScope>(
     () => ({
@@ -1559,7 +1689,6 @@ export function HostSettingsScopeProvider({
       proposeThemeDraft,
       settleThemeDraft,
       forms,
-      SeoFormTemplate,
       draftsRef,
       proposeFormDraft,
       formDraftRevision,
@@ -1576,7 +1705,6 @@ export function HostSettingsScopeProvider({
       proposeThemeDraft,
       settleThemeDraft,
       forms,
-      SeoFormTemplate,
       proposeFormDraft,
       formDraftRevision,
     ],

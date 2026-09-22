@@ -83,6 +83,8 @@ const CARD_EXCEPTIONS: Record<string, string> = {
     'The workspace picker itself — one card per workspace the reader belongs to, headed by its name. It claims nothing that could need explaining, and the twin below (the billing entry point) was already exempt for exactly this reason. The page carried a whole-file exemption until AGL-2486 gave it `help` on its DashboardLayout, which is where "what is a workspace" belongs.',
   'apps/console/app/(app)/billing/page.tsx#{org.orgName ?? org.slug ?? org.$id}':
     'The workspace picker on the org-agnostic billing entry point (AGL-2430) — the same navigational card the org jump page renders, and exempt for the same reason: it names one of the reader\'s own workspaces and claims nothing about billing. The surface itself carries help="billing" on its DashboardLayout, which is where the explanation belongs.',
+  'apps/console/app/(app)/support/page.tsx#{org.orgName ?? org.slug ?? org.$id}':
+    'The workspace picker on the org-agnostic support entry point (AGL-3265) — the third rendering of the same navigational card, exempt for the reason the other two are: it names one of the reader\'s own workspaces and claims nothing about support. The surface carries the support docs topic as `help` on its DashboardLayout, which is where the explanation belongs.',
 }
 
 function walk(dir: string, out: string[] = []): string[] {

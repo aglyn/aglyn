@@ -51,6 +51,7 @@ import {
   type OutreachSequence,
   type OutreachStopReason,
 } from '../model/outreach.types'
+import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
 import { normalizeOutreachPersonalLine } from './gates'
 import { effectiveOutreachWindow, type OutreachRandom, scheduleOutreachDue } from './schedule'
 import { isInThreadEmailStep } from './sequence-validation'
@@ -241,7 +242,7 @@ export function outreachAttestationsFrom(
 
 export interface OutreachEnrollmentDraft {
   id: string
-  sequence: Pick<OutreachSequence, 'id' | 'hostId' | 'mailboxId' | 'steps' | 'settings'>
+  sequence: Pick<OutreachSequence, 'id' | 'hostId' | 'mailboxId' | 'steps' | 'settings' | 'campaignIds'>
   mailbox: ScheduleMailbox
   /** The record the person is (AGL-3234); a contact when absent. */
   target?: OutreachEnrollmentTarget
@@ -299,6 +300,9 @@ export function buildOutreachEnrollment(draft: OutreachEnrollmentDraft): Outreac
     threadSubject: null,
     messageIds: [],
     lastSentAtMs: null,
+    // The sequence's campaigns as they stand now (AGL-3254): what this
+    // enrollment's outcomes are credited to, whatever the sequence joins later.
+    campaignIds: normalizeCampaignIds(draft.sequence.campaignIds),
     createdAtMs: draft.nowMs,
     updatedAtMs: draft.nowMs,
   }

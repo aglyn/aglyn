@@ -426,12 +426,15 @@ describe('validateListingContent (AGL-430)', () => {
 })
 
 describe('validatePublisherProfileContent (AGL-1009)', () => {
-  const { validatePublisherProfileContent, safePublisherHref } =
-    require('./marketplace') as typeof import('./marketplace')
+  const {
+    validatePublisherProfileContent,
+    safePublisherHref,
+    safePublisherImageSrc,
+  } = require('./marketplace') as typeof import('./marketplace')
 
   it('accepts a full, valid payload', () => {
     const verdict = validatePublisherProfileContent({
-      avatarUrl: 'https://cdn.example.com/logo.png',
+      avatarUrl: '/api/media/cdn/org:acme/med123',
       website: 'https://example.com',
       supportEmail: 'help@example.com',
       supportUrl: 'https://example.com/support',
@@ -499,6 +502,71 @@ describe('validatePublisherProfileContent (AGL-1009)', () => {
     expect(verdict.ok).toBe(true)
     expect(verdict.content).toEqual({ website: '' })
     expect(validatePublisherProfileContent({}).content).toEqual({})
+  })
+
+  /**
+   * THE LOGO TAKES WHAT THE PICKER RETURNS (AGL-3260).
+   *
+   * The panel's only way to set one is the media library, which hands back a
+   * root-relative CDN path — so the link rule made the single producible
+   * value the single refused one, reported to the publisher as their logo
+   * not being an https URL. The image rule (AGL-1701) accepts it, and
+   * refuses the third-party host the link rule waved through.
+   */
+  describe('the logo is an image field, not a link field', () => {
+    it('accepts the media library CDN path the picker returns', () => {
+      const verdict = validatePublisherProfileContent({
+        avatarUrl: '/api/media/cdn/org:acme/med123',
+      })
+      expect(verdict.ok).toBe(true)
+      expect(verdict.content?.avatarUrl).toBe('/api/media/cdn/org:acme/med123')
+    })
+
+    it('accepts a first-party https URL — the free tier has no CDN path', () => {
+      expect(
+        validatePublisherProfileContent({
+          avatarUrl:
+            'https://firebasestorage.googleapis.com/v0/b/x/o/logo.png?alt=media',
+        }).ok,
+      ).toBe(true)
+    })
+
+    it('refuses a third-party image host, which the link rule allowed', () => {
+      const verdict = validatePublisherProfileContent({
+        avatarUrl: 'https://cdn.publisher.example/logo.png',
+      })
+      expect(verdict.ok).toBe(false)
+      // The remedy, not the shape: "must be an https URL" was true of what
+      // they typed and told them nothing (AGL-1701).
+      expect(verdict.error).toContain('media library')
+    })
+
+    it('refuses a private media reference nothing can render', () => {
+      // First-party, and still wrong here: no publisher-avatar render site
+      // signs a link, so storing one saves a logo that is never shown.
+      expect(
+        validatePublisherProfileContent({ avatarUrl: 'media:org:acme/med123' })
+          .ok,
+      ).toBe(false)
+    })
+
+    it('still clears on an explicit empty string', () => {
+      expect(
+        validatePublisherProfileContent({ avatarUrl: '' }).content,
+      ).toEqual({ avatarUrl: '' })
+    })
+  })
+
+  it('safePublisherImageSrc emits the CDN path the href guard dropped', () => {
+    // The render half of the same bug: every stored logo failed the href
+    // guard and fell back to the publisher's initial.
+    expect(safePublisherImageSrc('/api/media/cdn/org:acme/med123')).toBe(
+      '/api/media/cdn/org:acme/med123',
+    )
+    expect(safePublisherImageSrc('https://cdn.publisher.example/l.png')).toBeUndefined()
+    expect(safePublisherImageSrc('media:org:acme/med123')).toBeUndefined()
+    expect(safePublisherImageSrc('javascript:alert(1)')).toBeUndefined()
+    expect(safePublisherImageSrc(undefined)).toBeUndefined()
   })
 
   it('safePublisherHref only ever emits https hrefs', () => {

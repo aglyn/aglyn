@@ -1525,6 +1525,11 @@ describe('hosts', () => {
       // that could delete one would remove the record an erasure is meant to
       // be the only remover of. Named here for the `registers` reason above.
       'campaignAttributions',
+      // One document per campaign CONTAINER, counting what the sequences in
+      // it produced (AGL-3254). Written only by the Outreach runtime on the
+      // Admin SDK; a client that could write one would author the numbers a
+      // campaign is judged by. Named here for the `registers` reason above.
+      'campaignSequenceReports',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -9647,6 +9652,22 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
     await mustAllow(
       'the owner still setting the status beside a stamped email state',
       updateDoc(lead(OWNER, 'lead-held'), { status: 'working' }),
+    )
+  })
+
+  it("lets a member who writes host content file a lead under a campaign (AGL-3254), like its other profile fields", async () => {
+    await setOrg({ plan: 'starter' })
+    await mustAllow(
+      'an editor filing a lead under a campaign',
+      updateDoc(lead(EDITOR, 'lead-held'), { campaignIds: ['founder-icp2'] }),
+    )
+    await mustAllow(
+      'an editor adding a lead with its campaigns',
+      setDoc(lead(EDITOR, 'lead-filed'), { email: 'filed@example.test', campaignIds: ['founder-icp2'] }),
+    )
+    await mustDeny(
+      'a viewer filing a lead under a campaign',
+      updateDoc(lead(VIEWER, 'lead-held'), { campaignIds: ['founder-icp2'] }),
     )
   })
 

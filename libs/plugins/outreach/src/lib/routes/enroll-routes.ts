@@ -15,6 +15,11 @@
  * limitations under the License.
  */
 
+import {
+  CAMPAIGN_MEMBERSHIP_FIELD,
+  contactCampaignFieldPath,
+  normalizeCampaignIds,
+} from '@aglyn/aglyn/app-utils/campaign-membership'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
   CRM_COLLECTIONS,
@@ -26,6 +31,7 @@ import {
 import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import { FieldValue } from 'firebase-admin/firestore'
 import { buildOutreachEnrollment, planOutreachFirstDue } from '../engine/enrollment-state'
 import type { OutreachGateLookups } from '../engine/gates'
 import {
@@ -278,6 +284,48 @@ async function leadsViewPeople(
 
 export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): OutreachEnrollRoutes {
   /**
+   * The person joins the sequence's campaigns (AGL-3254), the moment they
+   * are enrolled: `arrayUnion` on the lead's own `campaignIds`, or on the
+   * contact's facet for the sequence's site — the same field, the same
+   * shape, every other campaign member carries — and `enrolled` credited
+   * to each campaign. After the enrollment is created and never before:
+   * a person the create refused joins nothing. Neither write may fail the
+   * enrollment, which already exists; a membership that could not be
+   * stamped is one the list's bulk bar can add by hand.
+   */
+  async function joinSequenceCampaigns(
+    firestore: Firestore,
+    orgId: string,
+    sequence: OutreachSequence,
+    contactGroupId: string,
+    candidate: OutreachEnrollCandidate,
+    nowMs: number,
+  ): Promise<void> {
+    const campaignIds = normalizeCampaignIds(sequence.campaignIds)
+    if (!campaignIds.length) return
+    try {
+      const ref =
+        candidate.target === 'lead' && candidate.leadId
+          ? firestore.collection('hosts').doc(sequence.hostId).collection('leads').doc(candidate.leadId)
+          : candidate.contactId
+            ? firestore.collection('orgs').doc(orgId).collection('contacts').doc(candidate.contactId)
+            : null
+      if (ref) {
+        const field =
+          candidate.target === 'lead' ? CAMPAIGN_MEMBERSHIP_FIELD : contactCampaignFieldPath(contactGroupId)
+        await ref.update({ [field]: FieldValue.arrayUnion(...campaignIds), updatedAt: FieldValue.serverTimestamp() })
+      }
+    } catch (error) {
+      console.error('[outreach] the enrolled person could not join the sequence’s campaigns', error)
+    }
+    try {
+      await deps.creditCampaign({ hostId: sequence.hostId, campaignIds, outcome: 'enrolled', atMs: nowMs })
+    } catch (error) {
+      console.error('[outreach] the enrollment could not be credited to the sequence’s campaigns', error)
+    }
+  }
+
+  /**
    * The people a source names, the batch limit applied: every contact a
    * search picked, every lead picked from the sequence's site, or the
    * people a saved Contacts or Leads view selects there — contacts found by
@@ -514,6 +562,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
             ],
           }
         }
+        await joinSequenceCampaigns(firestore, caller.orgId, sequence, context.contactGroupId, candidate, nowMs)
         return { ...named, email: decision.email, outcome: 'enrolled', enrollmentId: id }
       }),
     )

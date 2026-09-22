@@ -119,6 +119,25 @@ jest.mock('@aglyn/aglyn', () => ({
     jest.requireActual('@aglyn/aglyn').LINKEDIN_PARTNER_ID_PATTERN,
   GTM_CONTAINER_ID_PATTERN:
     jest.requireActual('@aglyn/aglyn').GTM_CONTAINER_ID_PATTERN,
+  /*
+    The REAL zone resolver and zone list (AGL-3252), for the reason the
+    patterns above are real: the General schema is built from
+    `resolveSiteTimeZone(org)` and its options from `supportedTimeZones()` at
+    render, so a mock missing either throws before a case runs. Neither reads
+    anything this spec stubs — one is a pure function of its argument and the
+    other asks `Intl`.
+  */
+  resolveSiteTimeZone: jest.requireActual('@aglyn/aglyn').resolveSiteTimeZone,
+  supportedTimeZones: jest.requireActual('@aglyn/aglyn').supportedTimeZones,
+  /*
+    The REAL media resolver (AGL-3258). The SEO section's favicon, app icon,
+    social image and entity logo are CARDS on the page now rather than
+    controls drawn inside the form's own template, so they mount whether or
+    not a form does — and each asks this what to preview. It resolves a
+    `media:` reference against a host and returns a string; nothing this spec
+    stubs is reachable from it.
+  */
+  resolveMediaSrc: jest.requireActual('@aglyn/aglyn').resolveMediaSrc,
 }))
 jest.mock('@aglyn/aglyn/app-utils/marketplace-theme', () => ({
   resolveSiteTheme: (host: { theme?: unknown }) => host?.theme ?? {},

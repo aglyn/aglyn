@@ -101,6 +101,50 @@ describe('a hub index redirects on the server (AGL-2501)', () => {
   })
 })
 
+/**
+ * A hub index lands on the section its rail lists FIRST (AGL-3257).
+ *
+ * The site Admin hub redirected to Plugins while its rail opened with
+ * General, so clicking **Admin** landed on a section nobody picked and the
+ * breadcrumb read "Admin / Plugins" above a rail whose first row said
+ * something else. Two answers to "where does this hub start" can only
+ * disagree; the rail's is the one the reader sees.
+ *
+ * Read as source rather than rendered: the rail is a client component behind
+ * an org scope, a host provider and a permission hook, and what is being
+ * asserted is which constant each file names.
+ */
+describe('a hub index lands where its rail starts (AGL-3257)', () => {
+  const railSections = (layout: string): string[] => {
+    const source = readFileSync(join(APP, layout), 'utf8')
+    const at = source.indexOf('const sections = [')
+    expect({ layout, found: at > -1 }).toEqual({ layout, found: true })
+    const block = source.slice(at, source.indexOf(']', at))
+    return [...block.matchAll(/section\(Route\.([A-Z_]+)/g)].map((m) => m[1])
+  }
+
+  it('the site Admin hub opens on General, the rail’s first row', () => {
+    const rail = railSections(
+      '(app)/[orgSlug]/hosts/[host]/admin/(sections)/layout.tsx',
+    )
+    // THE CONTROL: the parse still sees a rail at all, so the comparison
+    // below cannot pass over an empty list.
+    expect(rail.length).toBeGreaterThanOrEqual(5)
+    expect(rail[0]).toBe('HOST_ADMIN_GENERAL')
+
+    const index = readFileSync(
+      join(APP, '(app)/[orgSlug]/hosts/[host]/admin/page.tsx'),
+      'utf8',
+    )
+    expect(index).toContain(`Route.${rail[0]}`)
+    // And names no OTHER section, which is how a second answer gets in.
+    const named = [...index.matchAll(/Route\.(HOST_ADMIN_[A-Z_]+)/g)].map(
+      (m) => m[1],
+    )
+    expect([...new Set(named)]).toEqual([rail[0]])
+  })
+})
+
 /** The balanced `(...)` beginning at `from`, as source. */
 function balancedCall(code: string, from: number): string {
   const open = code.indexOf('(', from)

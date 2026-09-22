@@ -45,6 +45,7 @@
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
@@ -83,7 +84,13 @@ const deps = (): OutreachEnrollRouteDeps => ({
   logOrgActivity: async () => undefined,
   crmViewEmails: async () => ({ emails: [], complete: true }),
   stampRecordEmailState: async () => undefined,
+  creditCampaign: async (input) => {
+    credits.push(input)
+  },
 })
+
+/** What the enroll route credited to a campaign (AGL-3254). */
+const credits: Array<{ hostId: string; campaignIds: readonly string[]; outcome: string; atMs: number }> = []
 
 async function post(handler: ReturnType<typeof createOutreachEnrollmentActionRoute>, body: Record<string, unknown>) {
   const response = await handler(
@@ -130,7 +137,7 @@ afterAll(async () => {
   if (!EMULATED) return
   // Only what this spec wrote: the emulator may be shared with a dev server.
   await firestore.recursiveDelete(orgRef())
-  await firestore.collection('hosts').doc(HOST).delete()
+  await firestore.recursiveDelete(firestore.collection('hosts').doc(HOST))
 })
 
 describeEmulated('Outreach routes on Firestore (AGL-2980)', () => {
@@ -172,6 +179,63 @@ describeEmulated('Outreach routes on Firestore (AGL-2980)', () => {
     const stored = await orgRef().collection('outreachEnrollments').doc(`${sequenceId}_c-warm`).get()
     expect(stored.get('status')).toBe('active')
     expect(typeof stored.get('nextDueAtMs')).toBe('number')
+  })
+
+  /*
+   * The enroll stamp (AGL-3254), against the database's own `arrayUnion`:
+   * the enrollment stores the sequence's campaigns, the lead gains them
+   * beside the one it already carried, and `enrolled` is credited once.
+   */
+  it('stamps the sequence’s campaigns on the enrollment and the lead, and credits the enroll', async () => {
+    const hostRef = firestore.collection('hosts').doc(HOST)
+    await hostRef.collection('emailCampaigns').doc('founder-icp2').set({ name: 'Founder · ICP 2' })
+    await hostRef.collection('emailCampaigns').doc('founder-icp1').set({ name: 'Founder · ICP 1' })
+    const leadId = personKey('sam@initech.example') as string
+    await hostRef.collection('leads').doc(leadId).set({
+      email: 'sam@initech.example',
+      name: 'Sam Rivera',
+      sources: ['form:form-1'],
+      address: { country: 'US' },
+      campaignIds: ['founder-icp1'],
+      lastSeenAtMs: AT,
+    })
+    const sequences = createOutreachSequenceRoutes(deps())
+    const saved = await post(sequences.save, {
+      sequence: {
+        name: 'Founder outbound',
+        hostId: HOST,
+        mailboxId: MAILBOX,
+        campaignIds: ['founder-icp2', 'founder-icp1'],
+        steps: [
+          {
+            id: 'step-a',
+            kind: 'email',
+            delayBusinessDays: 0,
+            subject: 'Hello',
+            replyInThread: false,
+            body: 'Hi {{contact.firstName}}. {{enrollment.personalLine}}',
+            templateId: null,
+          },
+        ],
+        settings: { window: null, allowedCountries: ['US'], allowCustomers: false },
+      },
+    })
+    expect(saved.status).toBe(200)
+    const inCampaign = saved.body.sequence.id as string
+    expect(saved.body.sequence.campaignIds).toEqual(['founder-icp2', 'founder-icp1'])
+    await post(sequences.status, { sequenceId: inCampaign, action: 'activate' })
+
+    credits.length = 0
+    const enroll = createOutreachEnrollRoutes(deps())
+    const { body } = await post(enroll.confirm, { sequenceId: inCampaign, people: [{ leadId }] })
+    expect(body.enrolled).toBe(1)
+    const enrollment = await orgRef().collection('outreachEnrollments').doc(`${inCampaign}_${leadId}`).get()
+    expect(enrollment.get('campaignIds')).toEqual(['founder-icp2', 'founder-icp1'])
+    const lead = await hostRef.collection('leads').doc(leadId).get()
+    expect(lead.get('campaignIds')).toEqual(['founder-icp1', 'founder-icp2'])
+    expect(credits).toEqual([
+      { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
+    ])
   })
 
   it('marks do-not-contact, and opts out the address in another sequence', async () => {

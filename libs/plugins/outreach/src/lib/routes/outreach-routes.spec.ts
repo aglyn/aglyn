@@ -59,6 +59,24 @@ function clone<T>(value: T): T {
 const fieldOf = (data: Data | undefined, field: string) =>
   field.split('.').reduce<unknown>((node, part) => (isObject(node) ? node[part] : undefined), data)
 
+/** Writes `value` at a dotted path, making the maps along it. */
+function setField(data: Data, field: string, value: unknown): void {
+  const parts = field.split('.')
+  let node: Data = data
+  for (const part of parts.slice(0, -1)) {
+    const held = node[part]
+    node[part] = isObject(held) ? { ...held } : {}
+    node = node[part] as Data
+  }
+  node[parts[parts.length - 1]] = value
+}
+
+/** The ids a real `FieldValue.arrayUnion` carries, or `null` for any other value. */
+const arrayUnionElements = (value: unknown): string[] | null =>
+  value && typeof value === 'object' && value.constructor?.name === 'ArrayUnionTransform'
+    ? ((value as { elements: unknown[] }).elements ?? []).map(String)
+    : null
+
 function fakeFirestore(docs: Docs) {
   let autoId = 0
   const snapshot = (path: string) => {
@@ -77,7 +95,18 @@ function fakeFirestore(docs: Docs) {
     update: (path: string, data: Data) => {
       const current = docs.get(path)
       if (!current) throw Object.assign(new Error(`NOT_FOUND ${path}`), { code: 5 })
-      docs.set(path, { ...current, ...clone(data) })
+      const next = { ...current }
+      for (const [field, value] of Object.entries(data)) {
+        // A real `FieldValue.arrayUnion` (the enroll stamp, AGL-3254) is
+        // applied as the database would; a dotted path lands at depth.
+        const union = arrayUnionElements(value)
+        const held = fieldOf(next, field)
+        const stored = union
+          ? [...(Array.isArray(held) ? held : []), ...union.filter((id) => !(Array.isArray(held) && held.includes(id)))]
+          : clone(value)
+        setField(next, field, stored)
+      }
+      docs.set(path, next)
     },
     create: (path: string, data: Data) => {
       if (docs.has(path)) throw Object.assign(new Error(`ALREADY_EXISTS ${path}`), { code: 6 })
@@ -185,6 +214,8 @@ let docs: Docs
 let members: Record<string, Member>
 let activity: Array<{ action: string; target: unknown }>
 let viewEmails: string[]
+/** What the enroll route credited to a campaign (AGL-3254). */
+let credits: Array<{ hostId: string; campaignIds: readonly string[]; outcome: string; atMs: number }>
 /** What the routes stamped on the person's record (AGL-3245). */
 let stamped: OutreachRecordEmailStamp[]
 
@@ -210,6 +241,9 @@ const deps = (): OutreachEnrollRouteDeps => ({
     activity.push({ action, target })
   },
   crmViewEmails: async () => ({ emails: viewEmails, complete: true }),
+  creditCampaign: async (input) => {
+    credits.push(input)
+  },
   stampRecordEmailState: async (stamp) => {
     stamped.push(stamp)
   },
@@ -280,6 +314,7 @@ const lead = (email: string, fields: Data) => {
 beforeEach(() => {
   docs = new Map()
   activity = []
+  credits = []
   viewEmails = []
   stamped = []
   members = {
@@ -374,6 +409,31 @@ describe('outreach/sequences/save (AGL-2980)', () => {
         target: { type: 'outreach:sequence', id: body.sequence.id, name: 'Second locations' },
       },
     ])
+  })
+
+  /*
+   * A sequence joins the site's campaigns (AGL-3254): the ids are stored
+   * as picked, `[]` for none, and only the site's live containers pass.
+   */
+  it('stores the campaigns picked, and refuses one that is not the site’s live container', async () => {
+    docs.set(`hosts/${HOST}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
+    docs.set(`hosts/${HOST}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
+    docs.set(`hosts/${OTHER_HOST}/emailCampaigns/theirs`, { name: 'Theirs' })
+
+    const saved = await post(sequences().save, REP, {
+      sequence: draft({ campaignIds: ['founder-icp2', 'founder-icp2'] }),
+    })
+    expect(saved.status).toBe(200)
+    expect(docs.get(org(`outreachSequences/${saved.body.sequence.id}`))?.['campaignIds']).toEqual(['founder-icp2'])
+    expect(docs.get(org(`outreachSequences/${(await post(sequences().save, REP, { sequence: draft() })).body.sequence.id}`))?.['campaignIds']).toEqual([])
+
+    for (const campaignId of ['gone', 'theirs', 'nope']) {
+      const refused = await post(sequences().save, REP, { sequence: draft({ campaignIds: [campaignId] }) })
+      expect(refused.status).toBe(400)
+      expect(refused.body.issues.map((issue: { path: string; code: string }) => [issue.path, issue.code])).toEqual([
+        ['campaignIds', 'campaign_unknown'],
+      ])
+    }
   })
 
   it('files its rows under Outreach’s own namespaced target, which the org feed reads as a Sequence', () => {
@@ -853,6 +913,60 @@ describe('outreach/enroll (AGL-2980)', () => {
     const { body } = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-warm' }] })
     expect(body.results[0]).toMatchObject({ outcome: 'blocked', blocks: [{ code: 'host_suppressed' }] })
     expect(docs.has(org(`outreachEnrollments/${sequenceId}_c-warm`))).toBe(false)
+  })
+
+  /*
+   * Enrolling joins the sequence's campaigns (AGL-3254): the enrollment
+   * stores them as they stood, the lead gains them at the top of its
+   * document, the contact inside the site's facet, and `enrolled` is
+   * credited once per person to each campaign. A sequence in no campaign
+   * stamps and credits nothing.
+   */
+  it('stamps the sequence’s campaigns on the enrollment, the lead and the contact, and credits the enroll', async () => {
+    docs.set(`hosts/${HOST}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
+    docs.set(`hosts/${HOST}/emailCampaigns/founder-icp1`, { name: 'Founder · ICP 1' })
+    const sequenceId = await activeSequence({ campaignIds: ['founder-icp2', 'founder-icp1'] })
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    docs.set(org('contacts/c-warm'), {
+      ...docs.get(org('contacts/c-warm')),
+      facets: { [HOST]: { sources: { form: true }, address: { country: 'US' }, campaignIds: ['spring'] } },
+    })
+    const leadId = lead('sam@initech.example', {
+      name: 'Sam Rivera',
+      sources: ['form:form-1'],
+      address: { country: 'US' },
+      campaignIds: ['founder-icp1'],
+    })
+
+    const { body } = await post(enroll().confirm, REP, {
+      sequenceId,
+      people: [{ contactId: 'c-warm' }, { leadId }],
+    })
+    expect(body.enrolled).toBe(2)
+    expect(docs.get(org(`outreachEnrollments/${sequenceId}_c-warm`))?.['campaignIds']).toEqual([
+      'founder-icp2',
+      'founder-icp1',
+    ])
+    expect(fieldOf(docs.get(org('contacts/c-warm')), `facets.${HOST}.campaignIds`)).toEqual([
+      'spring',
+      'founder-icp2',
+      'founder-icp1',
+    ])
+    expect(docs.get(`hosts/${HOST}/leads/${leadId}`)?.['campaignIds']).toEqual(['founder-icp1', 'founder-icp2'])
+    expect(credits).toEqual([
+      { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
+      { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
+    ])
+  })
+
+  it('stamps and credits nothing for a sequence in no campaign', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { body } = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-warm' }] })
+    expect(body.enrolled).toBe(1)
+    expect(docs.get(org(`outreachEnrollments/${sequenceId}_c-warm`))?.['campaignIds']).toEqual([])
+    expect(fieldOf(docs.get(org('contacts/c-warm')), `facets.${HOST}.campaignIds`)).toBeUndefined()
+    expect(credits).toEqual([])
   })
 
   it('enrolls a person in a sequence once, ever', async () => {

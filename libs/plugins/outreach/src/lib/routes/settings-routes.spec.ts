@@ -113,6 +113,7 @@ const deps = (): OutreachRouteDeps => ({
     activity.push({ orgId, actor, action, target })
   },
   stampRecordEmailState: async () => undefined,
+  creditCampaign: async () => undefined,
 })
 
 const SETTINGS_PATH = `orgs/${ORG}/outreachSettings/compliance`

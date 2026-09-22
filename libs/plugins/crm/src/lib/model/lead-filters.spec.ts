@@ -20,10 +20,25 @@ import {
   LEAD_EMAIL_FILTERS,
   LEAD_FILTER_LABELS,
   LEAD_FILTERS,
+  leadMatchesCampaignFilter,
   leadMatchesEmailFilter,
   leadMatchesFilter,
   leadMatchesSearch,
 } from './lead-filters'
+
+/** The `Campaign` control (AGL-3254): one campaign's leads, or every lead. */
+describe('leadMatchesCampaignFilter', () => {
+  it('keeps everyone on no campaign, and only the filed under one', () => {
+    const filed = { campaignIds: ['founder-icp2', 'founder-icp1'] }
+    expect(leadMatchesCampaignFilter(filed, '')).toBe(true)
+    expect(leadMatchesCampaignFilter({}, '')).toBe(true)
+    expect(leadMatchesCampaignFilter(filed, 'founder-icp1')).toBe(true)
+    expect(leadMatchesCampaignFilter(filed, 'spring')).toBe(false)
+    expect(leadMatchesCampaignFilter({}, 'spring')).toBe(false)
+    // A stored value that is not a clean list is read as no campaign.
+    expect(leadMatchesCampaignFilter({ campaignIds: 'spring' }, 'spring')).toBe(false)
+  })
+})
 
 /**
  * The Leads section's `Show` control (AGL-2608), and the one property that

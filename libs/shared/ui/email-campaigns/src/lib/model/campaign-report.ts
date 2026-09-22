@@ -208,6 +208,9 @@ export interface CampaignCaveat {
     | 'conversions-web-not-rolled-up'
     | 'conversions-unattributed-is-a-ceiling'
     | 'conversions-total-crosses-hosts'
+    /* Raised by the Sequences block below (AGL-3254): the five figures are
+     * a funnel read across, never a sum. */
+    | 'sequences-funnel-not-summed'
   message: string
 }
 
@@ -601,4 +604,128 @@ export function campaignLinkReport(
     unattributedClicks: Number(rollup?.unattributedClicks ?? 0),
     truncated: entries.length >= CAMPAIGN_LINK_ROLLUP_MAX || overflowClicks > 0,
   }
+}
+
+/*==========================================
+ * WHAT THE CAMPAIGN'S SEQUENCES PRODUCED (AGL-3254).
+ *
+ * A sequence joins a campaign the way a form does — `campaignIds` on its own
+ * document — and its outcomes are then the campaign's to report: every
+ * person enrolled, the first email each one was sent, the replies, the
+ * meetings booked from a sequence link, and the enrolled leads that
+ * converted. The Outreach runtime credits each outcome once per enrollment
+ * to every campaign the sequence was in when the person was enrolled, into
+ * `hosts/{hostId}/campaignSequenceReports/{campaignId}` — one document per
+ * campaign, beside the conversions rollup and never inside the campaign
+ * document, which the history list and the glance widget read.
+ *
+ * ## The five figures are a funnel, not a sum
+ *
+ * Each figure counts ENROLLMENTS at a stage: 40 enrolled, 38 sent, 6
+ * replied, 2 meetings, 1 converted. They are read across, never added — a
+ * person is in every stage they reached — and the model keeps them as an
+ * ordered list rather than a total for the reason the conversion kinds are
+ * kept apart.
+ *
+ * ## Absent is not zero
+ *
+ * A campaign no sequence was ever in has no document, and a stage nobody
+ * reached has no field. Both are `null` here, so the screen can say
+ * "nothing recorded" for the first and draw a dash for the second, rather
+ * than printing a measured 0 replies for a campaign whose sequence went
+ * out yesterday.
+ *=========================================*/
+
+/**
+ * The outcomes the runtime credits, in funnel order. An array first, because
+ * the ORDER is the reading order and a second list is a second chance to
+ * leave one out; the union is derived from it.
+ */
+export const CAMPAIGN_SEQUENCE_OUTCOMES = [
+  'enrolled',
+  'sent',
+  'replied',
+  'meetings',
+  'converted',
+] as const
+
+export type CampaignSequenceOutcome = (typeof CAMPAIGN_SEQUENCE_OUTCOMES)[number]
+
+/** The per-host collection holding one document per campaign. */
+export const CAMPAIGN_SEQUENCE_REPORTS_COLLECTION = 'campaignSequenceReports'
+
+/** What a reader calls each outcome, and what the count means. */
+export const CAMPAIGN_SEQUENCE_OUTCOME_COPY: Readonly<
+  Record<CampaignSequenceOutcome, { label: string; note: string }>
+> = {
+  enrolled: { label: 'Enrolled', note: 'people enrolled in a sequence in this campaign' },
+  sent: { label: 'Sent', note: 'of them, sent their first sequence email' },
+  replied: { label: 'Replied', note: 'of them, who wrote back' },
+  meetings: { label: 'Meetings', note: 'bookings made from a sequence link' },
+  converted: { label: 'Converted', note: 'enrolled leads that became contacts' },
+}
+
+/**
+ * The stored shape of `campaignSequenceReports/{campaignId}`.
+ *
+ * Read-side only, every field optional: another plugin's runtime wrote it,
+ * and a reader that assumed a field was present would throw on the first
+ * document written before the field existed.
+ */
+export interface CampaignSequencesRollup {
+  byOutcome?: Partial<Record<CampaignSequenceOutcome, number>>
+  /** When the runtime last credited anything, epoch ms. */
+  updatedAtMs?: number
+}
+
+/** One outcome's figure on screen. */
+export interface CampaignSequenceFigure {
+  outcome: CampaignSequenceOutcome
+  label: string
+  /** The count, or `null` when the rollup holds no entry for the outcome. */
+  value: number | null
+  note: string
+}
+
+/** Everything the Sequences section renders. */
+export interface CampaignSequencesReport {
+  /** Always all five, always in {@link CAMPAIGN_SEQUENCE_OUTCOMES} order. */
+  figures: CampaignSequenceFigure[]
+  /** Whether the rollup document exists at all — see the block header. */
+  recorded: boolean
+  /** At least one outcome holds a figure. */
+  any: boolean
+  caveats: CampaignCaveat[]
+}
+
+/** Turns the stored rollup into the Sequences section. */
+export function campaignSequencesReport(
+  rollup: CampaignSequencesRollup | undefined,
+): CampaignSequencesReport {
+  const stored = rollup?.byOutcome ?? {}
+  const figures: CampaignSequenceFigure[] = CAMPAIGN_SEQUENCE_OUTCOMES.map((outcome) => {
+    const raw = stored[outcome]
+    const value = Math.floor(Number(raw ?? 0))
+    return {
+      outcome,
+      label: CAMPAIGN_SEQUENCE_OUTCOME_COPY[outcome].label,
+      // Unrecorded, negative and non-numeric all read as "no figure": the
+      // runtime only ever increments, so a stored 0 is not a count either.
+      value: raw === undefined || !Number.isFinite(value) || value <= 0 ? null : value,
+      note: CAMPAIGN_SEQUENCE_OUTCOME_COPY[outcome].note,
+    }
+  })
+  const any = figures.some((figure) => figure.value !== null)
+  const caveats: CampaignCaveat[] = any
+    ? [
+        {
+          id: 'sequences-funnel-not-summed',
+          message:
+            'Each figure counts the people who reached that stage, so a person ' +
+            'who replied is counted under Enrolled and Sent as well. Read them ' +
+            'across; they are deliberately not added together.',
+        },
+      ]
+    : []
+  return { figures, recorded: rollup !== undefined, any, caveats }
 }

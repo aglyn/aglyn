@@ -6,6 +6,7 @@
   "apps/console/components/staff-email-message-dialog.component.tsx": 1,
   "apps/console/components/user-menu.component.tsx": 1,
   "apps/console/constants/sanctions-geo.ts": 2,
+  "apps/console/constants/not-found-refusal.ts": 2,
   "apps/tenant/app/[host]/[scheme]/[[...slug]]/catch-all-client.tsx": 5,
   "apps/tenant/app/[host]/[scheme]/[[...slug]]/collection-fallback.tsx": 5,
   "apps/tenant/app/[host]/[scheme]/aglyn-preview/preview-banner.tsx": 4,

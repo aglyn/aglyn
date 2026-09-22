@@ -58,12 +58,14 @@ import {
  * opposite facts, and a component that reached for a default would print the
  * second when it means the first.
  *
- * ## The two channels do not render the same, because they are not the same
+ * ## The channels do not render the same, because they are not the same
  *
  * An EMAIL touch names a campaign document, so the label is a link to it. A
  * WEB touch names `utm_` text a marketer typed into a URL — there is no
  * document at the other end and no page to open — so it is rendered as text.
- * A link that resolves nowhere is worse than no link.
+ * A link that resolves nowhere is worse than no link. A SEQUENCE touch
+ * (AGL-3254) names the campaign a rep's sequence is in, a container with a
+ * page, so it links like an email touch and says which door it came through.
  */
 export interface ConversionAttributionProps {
   hostId: string
@@ -159,8 +161,9 @@ export function ConversionAttribution(props: ConversionAttributionProps) {
   const converted = Number(record.convertedAtMs ?? 0)
   const touched = Number(record.touchedAtMs ?? 0)
   const isEmail = record.channel === 'email'
+  const isSequence = record.channel === 'sequence'
   const campaignHref =
-    isEmail && marketingBasePath && record.campaignId
+    (isEmail || isSequence) && marketingBasePath && record.campaignId
       ? `${marketingBasePath}/campaigns/${record.campaignId}`
       : undefined
 
@@ -182,9 +185,9 @@ export function ConversionAttribution(props: ConversionAttributionProps) {
          */}
         <Chip
           size="small"
-          color={isEmail ? 'primary' : 'default'}
-          variant={isEmail ? 'filled' : 'outlined'}
-          label={isEmail ? 'Campaign email' : 'Web link'}
+          color={isEmail || isSequence ? 'primary' : 'default'}
+          variant={isEmail || isSequence ? 'filled' : 'outlined'}
+          label={isEmail ? 'Campaign email' : isSequence ? 'Sequence' : 'Web link'}
         />
         {campaignHref ? (
           <AppLink href={campaignHref}>{label || record.campaignId}</AppLink>
@@ -202,9 +205,13 @@ export function ConversionAttribution(props: ConversionAttributionProps) {
         older rule prints the rule it was credited under.
        */}
       <Typography variant="caption" color="text.secondary">
-        {(touched
-          ? `Followed the link on ${new Date(touched).toLocaleString()}`
-          : 'Followed a campaign link') +
+        {(isSequence
+          ? touched
+            ? `Reached by a sequence email on ${new Date(touched).toLocaleString()}`
+            : 'Reached by a sequence email'
+          : touched
+            ? `Followed the link on ${new Date(touched).toLocaleString()}`
+            : 'Followed a campaign link') +
           (converted
             ? `, converted ${new Date(converted).toLocaleString()}`
             : '') +

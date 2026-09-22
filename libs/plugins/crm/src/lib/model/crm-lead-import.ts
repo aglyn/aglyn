@@ -67,6 +67,7 @@
  * nowhere rather than discovering it weeks later.
  */
 
+import { CAMPAIGN_MEMBERSHIP_CAP } from '@aglyn/aglyn/app-utils/campaign-membership'
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
 import {
   CRM_LEAD_STATUS_LABELS,
@@ -148,6 +149,7 @@ export const LEAD_IMPORT_FIELDS = [
   'addressPostalCode',
   'addressCountry',
   'tags',
+  'campaigns',
   'unqualifiedReason',
   'notes',
 ] as const
@@ -172,6 +174,7 @@ export const LEAD_IMPORT_FIELD_LABELS: Record<LeadImportField, string> = {
   addressPostalCode: 'Postal code',
   addressCountry: 'Country (two-letter code)',
   tags: 'Tags (comma or | separated)',
+  campaigns: 'Campaigns (by name, comma or | separated)',
   unqualifiedReason: 'Unqualified reason',
   notes: 'Notes',
 }
@@ -209,6 +212,10 @@ const FIELD_ALIASES: Record<LeadImportField, readonly string[]> = {
   addressPostalCode: ['postal code', 'postcode', 'zip', 'zip code'],
   addressCountry: ['country', 'country code'],
   tags: ['tags', 'tag', 'labels', 'lists'],
+  // `campaign` alone stays the lead source's: another tool's "Campaign"
+  // column names where the person came from, not one of this site's
+  // containers (AGL-3254).
+  campaigns: ['campaigns', 'campaign names', 'in campaigns', 'email campaigns'],
   unqualifiedReason: [
     'unqualified reason',
     'reason',
@@ -249,6 +256,7 @@ export type LeadImportSkipReason =
   | 'invalid-email'
   | 'duplicate'
   | 'lead-ceiling'
+  | 'campaign-unknown'
   | 'write-failed'
 
 /** How a skip reason reads on screen and in the downloaded file. */
@@ -256,8 +264,12 @@ export const LEAD_IMPORT_SKIP_LABELS: Record<LeadImportSkipReason, string> = {
   'invalid-email': 'No usable email address',
   duplicate: 'The same address appears earlier in this file',
   'lead-ceiling': 'This site is at the platform lead limit',
+  'campaign-unknown': 'Names a campaign this site does not have',
   'write-failed': 'Could not be saved',
 }
+
+/** The most campaigns one row may name — the membership field's own cap. */
+export const LEAD_IMPORT_CAMPAIGNS_MAX = CAMPAIGN_MEMBERSHIP_CAP
 
 /** One row, ready for the server to resolve and write. */
 export interface LeadImportRow {
@@ -271,6 +283,13 @@ export interface LeadImportRow {
    * is a cell nobody filled, not a decision to erase what the site knows.
    */
   profile: CrmLeadProfile
+  /**
+   * The campaigns the row files the lead under (AGL-3254), by NAME as the
+   * file wrote them: the server resolves each against the site's own
+   * containers and refuses the row whole when one is not there, because a
+   * row filed under half its campaigns is a row nobody asked for.
+   */
+  campaigns?: string[]
   /** Absent leaves an existing lead's status alone and a new one reading as `new`. */
   status?: CrmLeadStatus
   /** Normalized, for the server to resolve against the org's members. */
@@ -372,6 +391,18 @@ export function normalizeLeadImportRow(raw: LeadImportRawRow): LeadImportRowVerd
       .map((tag) => tag.trim()),
   )
   if (tags.length) row.profile.tags = tags
+
+  // Names, trimmed and deduplicated as typed; the server matches them to
+  // the site's campaigns without regard to case.
+  const campaigns = [
+    ...new Set(
+      String(raw.campaigns ?? '')
+        .split(/[,|]/)
+        .map((name) => name.trim().replace(/\s+/g, ' '))
+        .filter(Boolean),
+    ),
+  ].slice(0, LEAD_IMPORT_CAMPAIGNS_MAX)
+  if (campaigns.length) row.campaigns = campaigns
 
   const statusText = importTextValue(raw.status, 32)
   if (statusText) {

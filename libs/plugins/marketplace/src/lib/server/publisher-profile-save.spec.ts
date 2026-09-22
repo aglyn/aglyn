@@ -110,9 +110,13 @@ describe('publisherProfileSaveHandler contact/link fields (AGL-1009)', () => {
     writes().length = 0
   })
 
-  it('refuses a javascript: avatar and an http website before any write', async () => {
+  it('refuses a hostile avatar and an http website before any write', async () => {
     for (const body of [
       { avatarUrl: 'javascript:alert(1)' },
+      // A third-party image HOST too (AGL-3260): the logo is an `<img src>`
+      // other orgs' users load, so it takes the library rule the listing's
+      // artwork already takes, not the any-https rule beside it.
+      { avatarUrl: 'https://cdn.publisher.example/logo.png' },
       { website: 'http://example.com' },
       { githubUrl: 'https://evil.example.com/' },
     ]) {
@@ -127,7 +131,7 @@ describe('publisherProfileSaveHandler contact/link fields (AGL-1009)', () => {
     const res = makeRes()
     await publisherProfileSaveHandler(
       makeReq({
-        avatarUrl: 'https://cdn.example.com/logo.png',
+        avatarUrl: '/api/media/cdn/org:acme/med123',
         website: 'https://example.com',
         supportEmail: 'help@example.com',
         supportUrl: 'https://example.com/support',
@@ -142,7 +146,7 @@ describe('publisherProfileSaveHandler contact/link fields (AGL-1009)', () => {
     expect(writes()[0]).toMatchObject({
       handle: 'acme',
       displayName: 'Acme',
-      avatarUrl: 'https://cdn.example.com/logo.png',
+      avatarUrl: '/api/media/cdn/org:acme/med123',
       website: 'https://example.com',
       supportEmail: 'help@example.com',
       supportUrl: 'https://example.com/support',

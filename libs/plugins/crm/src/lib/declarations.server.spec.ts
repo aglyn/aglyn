@@ -32,10 +32,17 @@ import {
   pluginContactCaptureWriter,
   registerPluginContactCaptureWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import {
+  listPluginLeadConversionListeners,
+  resetPluginLeadConversionListenersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { crmContactCaptureWriter, registerCrmServerDeclarations } from './declarations.server'
+import {
+  crmContactCaptureWriter,
+  registerCrmServerDeclarations,
+} from './declarations.server'
 
 const SOURCE = readFileSync(join(__dirname, 'declarations.server.ts'), 'utf8')
 
@@ -49,11 +56,30 @@ const SOURCE = readFileSync(join(__dirname, 'declarations.server.ts'), 'utf8')
  * this spec did.
  */
 const staticImports = [...SOURCE.matchAll(/\bfrom '([^']+)'/g)].map((m) => m[1])
-const deferredImports = [...SOURCE.matchAll(/\bimport\('([^']+)'\)/g)].map((m) => m[1])
+const deferredImports = [...SOURCE.matchAll(/\bimport\('([^']+)'\)/g)].map(
+  (m) => m[1],
+)
 
 describe('what the CRM declares at boot', () => {
   beforeEach(() => {
     resetPluginServicesForTests()
+    resetPluginLeadConversionListenersForTests()
+  })
+
+  it('registers its share of a lead conversion — the campaigns the lead carries — under this plugin (AGL-3254)', () => {
+    registerCrmServerDeclarations()
+    expect(listPluginLeadConversionListeners()).toEqual(['crm'])
+    // Deferred like the capture: the writer loads with the first conversion,
+    // never at boot, and the Admin SDK comes with IT — this file defers the
+    // plugin's own module only. A library the plugin imports statically in
+    // thirty files cannot also be lazy-loaded in one; the boundaries rule
+    // refuses every static import of a library the project lazy-loads
+    // anywhere, which is what made Main Gate red on the first cut.
+    expect(deferredImports).toContain('./server/lead-campaign-carry')
+    expect(
+      deferredImports.some((name) => name.startsWith('@aglyn/tenant-')),
+    ).toBe(false)
+    expect(staticImports).not.toContain('./server/lead-campaign-carry')
   })
 
   it('registers the workspace’s contact-capture writer, under this plugin', () => {
@@ -100,12 +126,16 @@ describe('what it costs the processes that will never use it', () => {
      */
     expect(deferredImports).toContain('./server/capture-contact')
     expect(staticImports).not.toContain('./server/capture-contact')
-    expect(staticImports.some((name) => name.startsWith('@aglyn/tenant-'))).toBe(false)
+    expect(
+      staticImports.some((name) => name.startsWith('@aglyn/tenant-')),
+    ).toBe(false)
   })
 
   it('imports the contract by its own module, not the plugin-manager barrel', () => {
     // The barrel reaches the client contexts; boot needs the registry alone.
-    expect(staticImports).toContain('@aglyn/aglyn/plugin-manager/plugin-contact-capture')
+    expect(staticImports).toContain(
+      '@aglyn/aglyn/plugin-manager/plugin-contact-capture',
+    )
     expect(staticImports).not.toContain('@aglyn/aglyn')
   })
 })

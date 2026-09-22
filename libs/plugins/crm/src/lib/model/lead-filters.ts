@@ -25,6 +25,7 @@ import {
   emailStateForbidsEmail,
   crmLeadStatus,
   isCrmLeadOpen,
+  readCampaignIds,
   readEmailState,
 } from '@aglyn/aglyn'
 
@@ -98,6 +99,21 @@ export function leadMatchesEmailFilter(
   if (filter === 'none') return state === null
   if (filter === 'problem') return emailStateForbidsEmail(state)
   return state?.status === filter
+}
+
+/**
+ * The Leads section's `Campaign` control (AGL-3254): every lead, or the
+ * ones filed under one campaign — read off the lead's own `campaignIds`,
+ * the field every campaign member carries. `''` is every lead, which is
+ * what the control opens on; the ids are the site's containers', and the
+ * section resolves their names for the menu.
+ */
+export function leadMatchesCampaignFilter(
+  lead: Readonly<Record<string, unknown>>,
+  campaignId: string,
+): boolean {
+  if (!campaignId) return true
+  return readCampaignIds(lead).includes(campaignId)
 }
 
 /**

@@ -356,6 +356,29 @@ export enum Route {
   MANAGE_SUPPORT = '/[orgSlug]/support',
   MANAGE_SUPPORT_TICKETS = '/[orgSlug]/support/tickets',
   MANAGE_SUPPORT_FORUM = '/[orgSlug]/support/forum',
+  /*
+   * The ONE support URL that carries no org (AGL-3265), and the second member
+   * of the apex category `BILLING_ENTRY` opened.
+   *
+   * Everything a person is handed when they need help — a receipt, a system
+   * email footer, a Stripe customer portal, a self-host runbook — stores ONE
+   * link for every customer, with no workspace to interpolate. `/[orgSlug]`
+   * cannot be templated into any of them, so the only support address those
+   * surfaces could carry was one outside the console entirely.
+   *
+   * This resolves the workspace from the SESSION instead: one workspace goes
+   * straight through, several offer a choice, none says so. It forwards to
+   * `MANAGE_SUPPORT`, which is itself an umbrella — so the tier decision about
+   * tickets versus the forum stays in the one place that already makes it.
+   *
+   * `support` is a reserved subdomain (`RESERVED_SUBDOMAINS` in
+   * `host-naming.ts`), so no org can hold this slug and the literal segment
+   * can never shadow a real `/[orgSlug]`. That is the same guarantee
+   * `BILLING_ENTRY` rests on, and it is a precondition rather than a
+   * coincidence: an apex route whose segment an org could claim would take a
+   * workspace's own address away from it.
+   */
+  SUPPORT_ENTRY = '/support',
   HOST_DASHBOARD = '/[orgSlug]/hosts/[host]',
   // The catch-all console page a plugin's own nav items resolve against
   // (`app/(app)/[orgSlug]/hosts/[host]/[pluginSlug]/page.tsx`). Plugin slugs
@@ -632,6 +655,7 @@ export interface RoutePayload {
   [Route.MANAGE_BILLING_INVOICES]: { orgSlug: string }
   [Route.MANAGE_BILLING_SETTINGS]: { orgSlug: string }
   [Route.BILLING_ENTRY]: undefined
+  [Route.SUPPORT_ENTRY]: undefined
   [Route.HOST_INBOX]: { orgSlug: string; host: string }
   [Route.HOST_CONTACTS]: { orgSlug: string; host: string }
   [Route.HOST_SETUP]: { orgSlug: string; host: string }

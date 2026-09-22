@@ -69,8 +69,9 @@ and the unsubscribe links in mail already delivered are untouched.
 ### What belongs to a campaign {#what-belongs-to-a-campaign}
 
 A push is rarely only its mail. A campaign can also hold the **landing pages**, the
-**forms** those pages place, and the **contacts** you have filed under it — so the
-campaign's page shows the whole coordinated push rather than a folder of emails.
+**forms** those pages place, the **contacts** and **leads** you have filed under it, and
+the **sequences** a rep sends as part of it — so the campaign's page shows the whole
+coordinated push rather than a folder of emails.
 
 You set it from the record itself, never from the campaign:
 
@@ -78,24 +79,38 @@ You set it from the record itself, never from the campaign:
 - **A form** — open it from Forms and pick its campaigns under **Details**.
 - **A contact** — open the contact under **CRM → Contacts** and pick its campaigns on
   the **Relationship** card of [their page](../../content-and-data/crm/contact-record.md#the-record-page).
+- **A lead** — pick its campaigns in the **New lead** drawer, in a `Campaigns` column of
+  an [imported file](../../content-and-data/crm/leads.md#import-from-csv), or with
+  **Add to campaign** over a selection of the [Leads list](../../content-and-data/crm/leads.md#the-leads-list).
+  A lead in a campaign hands the campaign to the contact it converts into.
+- **A sequence** — pick its campaigns in the
+  [sequence's settings](../../content-and-data/crm/sequences.md#build-a-sequence).
+  Everyone enrolled from then on joins the campaign on their own record.
 
 Each of them can be in **more than one campaign**, because the same landing page and the
 same signup form are usually re-run for the next push. Clearing every campaign takes the
 record out of all of them; nothing else about it changes.
 
 The campaign's own page then lists the screens and forms assigned to it, so you can see
-the association from either end.
+the association from either end, and — under **What its sequences produced** — counts
+what the sequences in it did: people **enrolled**, the first email **sent** to each,
+**replies**, **meetings** booked from a link in a sequence email, and enrolled leads
+**converted** into contacts. Each figure counts the people who reached that stage, so
+they are read across, never added. A person's own page says which sequence's campaign
+they came from when nothing else was credited first.
 
 **This is grouping, not crediting.** Filing a page under a campaign does not decide who
 that campaign mails, and it does not credit a visit, a signup or a sale to it. Those
 figures come from the links a campaign's emails actually carried — see
 [Revenue from a campaign](#revenue-from-a-campaign) — and they read the same whatever is
-assigned here. A contact's campaigns are likewise a label on your CRM record: they never
-add anybody to a send.
+assigned here. A contact's or a lead's campaigns are likewise a label on your CRM record:
+they never add anybody to a send. A sequence's are the exception in one direction only:
+what the sequence produces is counted on the campaign, because the sequence's emails
+are the campaign's outreach.
 
-**Deleting a campaign** clears it off everything assigned to it. The screens, forms and
-contacts stay exactly where they are, minus that one campaign; nothing is deleted with
-the campaign except the campaign.
+**Deleting a campaign** clears it off everything assigned to it. The screens, forms,
+contacts, leads, sequences and their enrollments stay exactly where they are, minus that
+one campaign; nothing is deleted with the campaign except the campaign.
 
 ### Who the email comes from {#who-the-email-comes-from}
 

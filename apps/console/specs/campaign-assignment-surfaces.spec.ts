@@ -61,8 +61,12 @@ const ASSIGNMENT_SURFACES: Record<string, string> = {
   forms: 'libs/plugins/forms/src/lib/components/form-detail-card.tsx',
   // The record page's Relationship card (AGL-2596); the list's drawer that
   // held the picker before is gone.
-  contacts:
-    'libs/plugins/crm/src/lib/components/contact-associations-card.tsx',
+  contacts: 'libs/plugins/crm/src/lib/components/contact-associations-card.tsx',
+  // A lead is filed under its campaigns as it is created (AGL-3254). The
+  // record page has no picker: the bulk bar ADDS to a selection with an
+  // arrayUnion, which is not a membership value, and a lead's campaigns
+  // otherwise change only when it converts and they carry to the contact.
+  leads: 'libs/plugins/crm/src/lib/components/new-lead-drawer.tsx',
 }
 
 /** The one place a campaign's removal walks its members. */

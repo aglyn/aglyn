@@ -114,6 +114,7 @@ import {
   type PluginDraftWrite,
   type PluginResourceDraftWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
+import { runPluginMembershipDetachers } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
 
 /**
  * Sends detached in one write.
@@ -234,7 +235,8 @@ async function detachMembership(
 }
 
 /**
- * Clears the campaign off every form, screen and contact holding it.
+ * Clears the campaign off every form, screen, lead and contact holding it,
+ * and then off every record a plugin keeps about it (AGL-3254).
  *
  * ## Why the campaign is not simply deleted over the top of them
  *
@@ -259,6 +261,18 @@ async function detachMembership(
  * A group that cannot be resolved answers as the site alone, which is
  * {@link consentGroupForSite}'s documented failure direction and the safe one
  * here too: the pass then clears the site's own facet and no other.
+ *
+ * ## A plugin's members are the plugin's to clear
+ *
+ * A sequence and its enrollments name the campaign from documents under the
+ * org, in collections this plugin does not know (AGL-3254). Every plugin
+ * with a membership detacher registered on the core's seam is asked, with
+ * the campaign's id and the field it is held in, after the site's own
+ * records, and a detacher that reports records
+ * remaining — or threw, which is reported as `null` — holds the container
+ * exactly as this pass's own `remaining` does. A plugin that failed is a
+ * plugin whose records may still name the campaign, and the deletion has
+ * no way to tell that apart from one that has more than a request clears.
  */
 async function detachMembers(
   hostId: string,
@@ -290,6 +304,16 @@ async function detachMembers(
    * survives, which is the direction a failure here has to fall.
    */
   const orgId = await resolveOrgIdForHost(hostId)
+  const plugins = await runPluginMembershipDetachers({
+    hostId,
+    orgId: orgId ?? '',
+    field: CAMPAIGN_MEMBERSHIP_FIELD,
+    id: campaignId,
+  })
+  for (const report of Object.values(plugins)) {
+    detached += report?.detached ?? 0
+    remaining = remaining || report === null || report.remaining
+  }
   if (!orgId) return { detached, remaining }
   const group = await consentGroupForSite(hostId)
   const contacts = await orgDataCollectionForHost(hostId, 'contacts')

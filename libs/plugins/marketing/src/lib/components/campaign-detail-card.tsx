@@ -91,6 +91,7 @@ import {
   CampaignConversionsSection,
   CampaignDestinationsSection,
   CampaignRevenueSection,
+  CampaignSequencesSection,
 } from './campaign-reach-sections'
 import CampaignMembersSection from './campaign-members-section'
 import CampaignReportCard from './campaign-report-card'
@@ -747,6 +748,16 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           truncated={sendsTruncated}
           basePath={basePath}
         />
+
+        <Divider />
+        {/*
+          WHAT ITS SEQUENCES PRODUCED (AGL-3254), beside what its mail caused:
+          a sequence in this campaign is a rep's one-to-one outreach, and its
+          enrollments, sends, replies, meetings and conversions are the
+          campaign's numbers too. Joined on the container's own id, since a
+          sequence's emails are not the campaign's sends.
+         */}
+        <CampaignSequencesSection hostId={hostId} campaignId={campaignId} />
 
         <Divider />
         {/*

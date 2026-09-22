@@ -21,6 +21,7 @@ import {
   registerPluginContactCaptureWriter,
   type PluginContactCaptureWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
+import { registerPluginLeadConversionListener } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -66,4 +67,20 @@ export function registerCrmServerDeclarations(): void {
   registerPluginContactCaptureWriter(crmContactCaptureWriter, {
     pluginId: BUNDLE_ID,
   })
+  // The CRM's own share of a lead conversion (AGL-3254): the lead's
+  // campaigns go onto the contact's facet. Through the seam every door
+  // that converts a lead reaches, and deferred like the capture: the
+  // module that writes is loaded when the first conversion arrives, and
+  // it brings the Admin SDK with it — this file defers the plugin's OWN
+  // module only. A library imported statically across the plugin cannot
+  // also be lazy-loaded here: `enforce-module-boundaries` refuses every
+  // static import of a library the project lazy-loads anywhere.
+  registerPluginLeadConversionListener(
+    async (request) => {
+      const { carryLeadCampaignsOnConversion } =
+        await import('./server/lead-campaign-carry')
+      return carryLeadCampaignsOnConversion(request)
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }

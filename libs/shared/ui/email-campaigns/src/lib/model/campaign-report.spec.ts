@@ -33,10 +33,12 @@
 
 import {
   CAMPAIGN_LINK_ROLLUP_MAX,
+  CAMPAIGN_SEQUENCE_OUTCOMES,
   campaignLinkKey,
   campaignLinkReport,
   campaignRate,
   campaignReport,
+  campaignSequencesReport,
   type CampaignStats,
 } from './campaign-report'
 
@@ -499,5 +501,45 @@ describe('campaignLinkReport', () => {
     expect(report.rows).toEqual([])
     expect(report.attributedClicks).toBe(0)
     expect(report.truncated).toBe(false)
+  })
+})
+
+/*
+ * The Sequences block (AGL-3254): five figures in funnel order, absent
+ * distinguished from zero, and no total anywhere.
+ */
+describe('campaignSequencesReport', () => {
+  it('reports every outcome in funnel order and never a total', () => {
+    const report = campaignSequencesReport({
+      byOutcome: { enrolled: 40, sent: 38, replied: 6, meetings: 2, converted: 1 },
+    })
+    expect(report.figures.map((figure) => figure.outcome)).toEqual([...CAMPAIGN_SEQUENCE_OUTCOMES])
+    expect(report.figures.map((figure) => figure.value)).toEqual([40, 38, 6, 2, 1])
+    expect(report.recorded).toBe(true)
+    expect(report.any).toBe(true)
+    expect(Object.keys(report)).not.toContain('total')
+    expect(report.caveats.map((caveat) => caveat.id)).toEqual(['sequences-funnel-not-summed'])
+  })
+
+  it('reads a stage nobody reached as unrecorded, not as zero', () => {
+    const report = campaignSequencesReport({ byOutcome: { enrolled: 3, sent: 3 } })
+    const replied = report.figures.find((figure) => figure.outcome === 'replied')
+    expect(replied?.value).toBeNull()
+  })
+
+  it('distinguishes an absent rollup from one that recorded nothing yet', () => {
+    expect(campaignSequencesReport(undefined).recorded).toBe(false)
+    const empty = campaignSequencesReport({})
+    expect(empty.recorded).toBe(true)
+    expect(empty.any).toBe(false)
+    expect(empty.caveats).toEqual([])
+  })
+
+  it('reads a negative or non-numeric stored count as unrecorded', () => {
+    const report = campaignSequencesReport({
+      byOutcome: { enrolled: -2, sent: Number.NaN as never, replied: 'six' as never },
+    })
+    expect(report.figures.map((figure) => figure.value)).toEqual([null, null, null, null, null])
+    expect(report.any).toBe(false)
   })
 })

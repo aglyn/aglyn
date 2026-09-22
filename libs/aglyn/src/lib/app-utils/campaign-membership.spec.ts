@@ -67,7 +67,7 @@ describe('the field a resource carries', () => {
   it('names the collections a campaign deletion has to walk', () => {
     // The picker and the detach read the same list, so a collection that
     // grows one grows the other.
-    expect([...CAMPAIGN_MEMBER_HOST_COLLECTIONS]).toEqual(['forms', 'screens'])
+    expect([...CAMPAIGN_MEMBER_HOST_COLLECTIONS]).toEqual(['forms', 'screens', 'leads'])
   })
 })
 

@@ -64,6 +64,7 @@ import {
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
 import { FieldValue } from 'firebase-admin/firestore'
 import { holdsDataManage } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
@@ -92,6 +93,33 @@ export interface LeadCreateRequest {
   status?: CrmLeadStatus
   ownerUid?: string
   notes?: string
+  /** The site's campaigns to file the lead under (AGL-3254), by container id. */
+  campaignIds?: string[]
+}
+
+/** The sentence a campaign that is not the site's is refused with, under the field. */
+export const LEAD_CAMPAIGN_REFUSAL =
+  "One of the campaigns picked isn't a campaign of this site any more. Pick it again."
+
+/**
+ * The campaign ids a request may file a lead under: the site's own live
+ * containers, and nothing else. A request can claim any id, and a lead
+ * filed under another site's campaign — or one the console soft-deleted —
+ * would sit on a page nobody at this site can open.
+ *
+ * @returns the clean ids, or `null` when one of them is not the site's.
+ */
+export async function siteCampaignIds(
+  hostRef: FirebaseFirestore.DocumentReference,
+  raw: unknown,
+): Promise<string[] | null> {
+  const ids = normalizeCampaignIds(raw)
+  if (!ids.length) return []
+  if (ids.some((id) => id.includes('/'))) return null
+  const containers = hostRef.collection('emailCampaigns')
+  const found = await hostRef.firestore.getAll(...ids.map((id) => containers.doc(id)))
+  const live = found.every((snapshot) => snapshot.exists && !snapshot.get('deletedAt'))
+  return live ? ids : null
 }
 
 /** What the route answers on success. */
@@ -193,6 +221,13 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const leadsRef = hostRef.collection('leads')
+    // The campaigns, judged before any write, so a refused pick leaves
+    // nothing to retry against (AGL-3254).
+    const campaignIds = await siteCampaignIds(hostRef, body.campaignIds)
+    if (campaignIds === null) {
+      res.status(400).json({ error: LEAD_CAMPAIGN_REFUSAL, field: 'campaignIds' })
+      return
+    }
     // Non-null by construction: the normalizer refused every address this
     // derivation could not key.
     const leadId = personKey(email) as string
@@ -234,6 +269,10 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
       ...(rawStatus ? { status: rawStatus } : {}),
       ...(ownerUid ? { ownerUid } : {}),
       ...(notes ? { notes } : {}),
+      // Added to what a lead the site already held carries, never in place
+      // of it: a second "new lead" for an address files it under one more
+      // campaign, as the bulk bar would.
+      ...(campaignIds.length ? { campaignIds: FieldValue.arrayUnion(...campaignIds) } : {}),
     }
     if (Object.keys(working).length) {
       await leadsRef

@@ -25,7 +25,10 @@
 // and API routes, and `@aglyn/aglyn` carries `createContext` (illegal in a
 // Server Component) while `@aglyn/aglyn/server` carries `node:fs` (illegal in
 // the browser). Neither is safe from here; the deep path has no dependencies.
-import { isFirstPartyMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
+import {
+  isFirstPartyMediaSrc,
+  MEDIA_REF_PREFIX,
+} from '@aglyn/aglyn/app-utils/media-ref'
 import { marketplaceMinPriceUsd } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { MarketplaceArtifactType } from '@aglyn/aglyn/app-utils/marketplace-provenance'
 import type { ListingVerificationRequest } from './listing-verification'
@@ -784,6 +787,23 @@ function isListingImageValue(value: unknown): value is string {
 }
 
 /**
+ * Whether a value may be a publisher's LOGO (AGL-3260).
+ *
+ * The listing-image rule, minus the private `media:` reference. A listing's
+ * logo may be one because a caller that signs its own links can resolve it;
+ * nothing that renders a publisher avatar signs anything, so a reference
+ * there would store a value every render site must turn back into the
+ * fallback initial — a logo that looks saved and is never seen.
+ *
+ * `startsWith` rather than `isMediaRef`, for the reason that predicate's own
+ * neighbour gives: negating a `value is string` guard on a value already
+ * known to be a string leaves the else branch `never`.
+ */
+function isPublisherAvatarValue(value: unknown): value is string {
+  return isListingImageValue(value) && !value.startsWith(MEDIA_REF_PREFIX)
+}
+
+/**
  * Validates publisher-editable listing content (AGL-430). Returns the
  * normalized subset to persist, or an error. Shared by publish and the
  * update-listing action so both paths accept exactly the same shapes.
@@ -897,8 +917,9 @@ const SUPPORT_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**
  * Validates the publisher-profile extras (AGL-1009), sharing
- * `validateListingContent`'s URL discipline: https only, length capped,
- * validated on the save route (server-owned like the handle — no client
+ * `validateListingContent`'s discipline on both of its halves: the LINKS are
+ * https only and length capped, the LOGO is first-party media (AGL-3260).
+ * Validated on the save route (server-owned like the handle — no client
  * write path carries these). An explicit empty string comes back as `''` so
  * the save route can distinguish "clear this field" from "left untouched".
  */
@@ -906,8 +927,33 @@ export function validatePublisherProfileContent(
   input: Record<string, unknown>,
 ): { ok: boolean; error?: string; content?: PublisherProfileContent } {
   const content: PublisherProfileContent = {}
+  /**
+   * THE LOGO IS AN IMAGE FIELD, NOT A LINK FIELD (AGL-3260).
+   *
+   * It was validated as a link — any https URL — and the panel that edits it
+   * only ever offers the media library, which since AGL-1215 hands back the
+   * media-id-keyed CDN path (`/api/media/cdn/…`) rather than a storage URL.
+   * A root-relative path is not an https URL, so the one value the form could
+   * produce was the one value the route refused, and the publisher was told
+   * their logo was malformed.
+   *
+   * Held to the same first-party rule as `logoUrl` and `screenshots` for the
+   * reason given there (AGL-1701): this is an `<img src>` that other orgs'
+   * users load on every listing's Publisher card, so it fetches with no
+   * reader choice. That makes the fix a TIGHTENING as well — a third-party
+   * `https://cdn.publisher.example/logo.png` no longer passes.
+   */
+  const avatarUrl = input['avatarUrl']
+  if (avatarUrl !== undefined) {
+    if (avatarUrl === '') {
+      content.avatarUrl = ''
+    } else if (!isPublisherAvatarValue(avatarUrl)) {
+      return { ok: false, error: `avatarUrl ${LISTING_IMAGE_ERROR}` }
+    } else {
+      content.avatarUrl = avatarUrl
+    }
+  }
   const urlKeys = [
-    'avatarUrl',
     'website',
     'supportUrl',
     'githubUrl',
@@ -967,6 +1013,17 @@ export function safePublisherHref(url: unknown): string | undefined {
   return typeof url === 'string' && /^https:\/\//i.test(url) && url.length <= 500
     ? url
     : undefined
+}
+
+/**
+ * The same guard for the publisher's LOGO (AGL-3260), which is an `<img src>`
+ * rather than an href and so has a different safe set: the media library's
+ * root-relative CDN path is the value the picker produces and must render,
+ * and a third-party https URL — fine as a link the reader chooses to follow —
+ * is exactly what must not be fetched on their behalf.
+ */
+export function safePublisherImageSrc(src: unknown): string | undefined {
+  return isPublisherAvatarValue(src) ? src : undefined
 }
 
 /**

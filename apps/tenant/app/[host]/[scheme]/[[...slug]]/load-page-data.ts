@@ -336,8 +336,14 @@ const loadPageDataCached = cache(
      * org and the host — and because every render of this page, server and
      * client, has to format an instant into the same string. A composed date
      * that two sides disagree about is the React #418 crash AGL-1926 fixed.
+     *
+     * The HOST is passed second and wins (AGL-3252): a site may name its own
+     * zone, and falls back to its workspace's when it does not.
      */
-    const siteTimeZone = Aglyn.resolveSiteTimeZone(orgRes.org as never)
+    const siteTimeZone = Aglyn.resolveSiteTimeZone(
+      orgRes.org as never,
+      hostRes.host as never,
+    )
 
     // BOTH SCOPE READS AT ONCE. They were sequential `await`s inside the
     // object literal, so a cold 15s window paid two Firestore round trips
@@ -1651,8 +1657,14 @@ export async function loadNotFoundScreen(
      * org and the host — and because every render of this page, server and
      * client, has to format an instant into the same string. A composed date
      * that two sides disagree about is the React #418 crash AGL-1926 fixed.
+     *
+     * The HOST is passed second and wins (AGL-3252): a site may name its own
+     * zone, and falls back to its workspace's when it does not.
      */
-    const siteTimeZone = Aglyn.resolveSiteTimeZone(orgRes.org as never)
+    const siteTimeZone = Aglyn.resolveSiteTimeZone(
+      orgRes.org as never,
+      hostRes.host as never,
+    )
     const lockdownState = Aglyn.resolveLockdown(
       {
         platform: await getPlatformLockdown(),

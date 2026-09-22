@@ -47,6 +47,7 @@ import {
 } from '../storage/outreach-records'
 import type { GmailClient } from '../transport/gmail-client'
 import { GmailTransportError, isReconnectRequired } from '../transport/gmail-errors'
+import { creditOutreachReply } from './campaign-credit'
 import { applyOutreachEvent, recordOutreachOptOut } from './enrollment-events'
 import {
   applyOutreachMailboxHealth,
@@ -483,6 +484,9 @@ async function applyMessages(
       context.delta.replies += 1
       event = { type: 'reply', atMs: decidedBy?.atMs || nowMs, detail: decidedBy?.evidence ?? null }
       report.replies += 1
+      // Once per enrollment (AGL-3254): a reply moves the status to
+      // `replied`, and nothing is synced for it again.
+      await creditOutreachReply(deps, { enrollment, atMs: event.atMs })
       break
     }
     case 'bounced': {

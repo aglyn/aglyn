@@ -228,13 +228,13 @@ service.</div>
     </div>
     <label class="choice">
       <input type="checkbox" name="dmcaGoodFaith" value="on">
-      <span>I have a good faith belief that the use described is not authorised
+      <span>I have a good faith belief that the use described is not authorized
       by the copyright owner, its agent, or the law.</span>
     </label>
     <label class="choice">
       <input type="checkbox" name="dmcaUnderPenalty" value="on">
       <span>Under penalty of perjury, the information in this notice is
-      accurate and I am authorised to act for the owner of the exclusive right
+      accurate and I am authorized to act for the owner of the exclusive right
       allegedly infringed.</span>
     </label>
     <div class="field">
@@ -252,7 +252,7 @@ service.</div>
            maxlength="${Aglyn.ABUSE_REPORT_MAX_CONTACT}">
   </div>
   <div class="field">
-    <label for="reporterName">Your name or organisation (optional)</label>
+    <label for="reporterName">Your name or organization (optional)</label>
     <input id="reporterName" name="reporterName" type="text"
            maxlength="${Aglyn.ABUSE_REPORT_MAX_CONTACT}">
   </div>

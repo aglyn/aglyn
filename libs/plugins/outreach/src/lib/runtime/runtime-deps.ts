@@ -65,6 +65,61 @@ export interface OutreachRecordEmailStamp {
   state: EmailState
 }
 
+/**
+ * What a sequence produced, credited to the campaigns it is in (AGL-3254).
+ *
+ * Three doors into the platform's campaign attribution, all on the
+ * platform's own join and none on the marketing plugin, which Outreach may
+ * not import. Each is called once per enrollment per outcome, from the
+ * state change that happens once; none throws, because the send, the reply
+ * and the click have already happened and a lost credit understates a
+ * campaign while a thrown one loses a step.
+ */
+export interface OutreachCampaignCredit {
+  /**
+   * Adds one to an outcome under every campaign named, in the campaign's
+   * sequences report. `enrolled`, `sent`, `replied` and `converted` are the
+   * runtime's to credit; `meetings` is credited by the booking door from
+   * the touch {@link OutreachCampaignCredit.recordTouch} stamps.
+   */
+  credit(input: {
+    hostId: string
+    campaignIds: readonly string[]
+    outcome: 'enrolled' | 'sent' | 'replied' | 'converted'
+    atMs: number
+  }): Promise<void>
+  /**
+   * Writes the conversion record the person's own page reads as "where
+   * this came from": the sequence's campaign as the touch, on the lead or
+   * the contact the enrollment names. Once per record, and never over a
+   * record that already carries a web or email touch — the join's own
+   * `create()` decides that.
+   */
+  attributeRecord(input: {
+    hostId: string
+    kind: 'lead' | 'contact'
+    /** The lead's person key, or the contact's id. */
+    refId: string
+    campaignId: string
+    sequenceId: string
+    enrollmentId: string
+    atMs: number
+  }): Promise<void>
+  /**
+   * Stamps a click on a sequence email as the person's last campaign touch
+   * on the site, so a booking or a form they go on to submit is credited to
+   * the sequence's campaign by the door that credits every other one.
+   */
+  recordTouch(input: {
+    hostId: string
+    email: string
+    campaignId: string
+    sequenceId: string
+    enrollmentId: string
+    atMs: number
+  }): Promise<void>
+}
+
 export interface OutreachRuntimeDeps {
   firestore(): FirebaseFirestore.Firestore
   now(): number
@@ -85,6 +140,8 @@ export interface OutreachRuntimeDeps {
   sendRefusal(input: { orgId: string; org: Record<string, unknown>; uid: string }): Promise<string | null>
   /** The workspace's record system on the timeline seam, when a plugin keeps one. */
   timeline(): PluginRecordTimelineWriter | null
+  /** The platform's campaign attribution, for what a sequence produced (AGL-3254). */
+  campaignCredit: OutreachCampaignCredit
   logOrgActivity(
     orgId: string,
     actor: { uid: string | null; email?: string | null },

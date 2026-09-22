@@ -24,6 +24,7 @@
  * what decides whether it is sent at all.
  */
 
+import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
 import { readOutreachSequenceDraft } from './sequence-draft'
 import {
   OUTREACH_ENROLLMENT_STATUSES,
@@ -156,6 +157,10 @@ export function readStoredOutreachEnrollment(
       typeof data['threadSubject'] === 'string' ? data['threadSubject'] : null,
     messageIds: texts(data['messageIds']),
     lastSentAtMs: ms(data['lastSentAtMs']),
+    // Absent on an enrollment made before a sequence could join a campaign
+    // (AGL-3254), and read as none: nothing is credited to a campaign the
+    // enrollment does not name.
+    campaignIds: normalizeCampaignIds(data['campaignIds']),
     createdAtMs: ms(data['createdAtMs']) ?? 0,
     updatedAtMs: ms(data['updatedAtMs']) ?? 0,
   }

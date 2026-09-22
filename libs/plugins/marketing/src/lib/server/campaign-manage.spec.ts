@@ -289,6 +289,10 @@ import {
   buildUnsubscribeUrl,
   unsubscribeSignatureMatches,
 } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
+import {
+  registerPluginMembershipDetacher,
+  resetPluginMembershipDetachersForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
 import { campaignManageHandler } from './campaign-manage'
 
 const mockLogResourceDuplicated = jest.fn(async (..._args: unknown[]) => undefined)
@@ -359,6 +363,7 @@ const stored = (path: string) => store.get(`hosts/${HOST}/${path}`)
 beforeEach(() => {
   store.clear()
   commits.length = 0
+  resetPluginMembershipDetachersForTests()
   mockUid = 'uid-1'
   process.env['EMAIL_UNSUBSCRIBE_SECRET'] = SECRET
   store.set(`hosts/${HOST}`, {
@@ -907,6 +912,62 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     })
 
     expect(result.body.detachedMembers).toBe(4)
+  })
+
+  /*
+   * A lead joins a campaign at the top of its document like a form does
+   * (AGL-3254), and comes off it the same way.
+   */
+  it('clears the campaign off its leads, and leaves the lead standing', async () => {
+    seedHostMember('leads', 'lead-key', [CAMPAIGN, OTHER])
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(result.status).toBe(200)
+    expect(hostMember('leads', 'lead-key')?.['campaignIds']).toEqual([OTHER])
+    expect(hostMember('leads', 'lead-key')?.['displayName']).toBe('leads lead-key')
+  })
+
+  /*
+   * A plugin's own members (AGL-3254) — a sequence, its enrollments — are
+   * reached through the core's seam, before the container goes, and a
+   * plugin that has more to clear, or that failed, holds the deletion.
+   */
+  it('asks every plugin to clear its own records, before the container goes', async () => {
+    const asked: Array<{ hostId: string; orgId: string; field: string; id: string }> = []
+    registerPluginMembershipDetacher(
+      async (request) => {
+        asked.push(request)
+        expect(store.has(`hosts/${HOST}/emailCampaigns/${CAMPAIGN}`)).toBe(true)
+        return { detached: 3, remaining: false }
+      },
+      { pluginId: 'outreach' },
+    )
+    seedHostMember('forms', 'signup', [CAMPAIGN])
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(result.status).toBe(200)
+    expect(result.body.detachedMembers).toBe(4)
+    expect(asked).toEqual([{ hostId: HOST, orgId: ORG, field: 'campaignIds', id: CAMPAIGN }])
+    expect(store.has(`hosts/${HOST}/emailCampaigns/${CAMPAIGN}`)).toBe(false)
+  })
+
+  it('keeps the container while a plugin has records left, or failed to clear them', async () => {
+    registerPluginMembershipDetacher(async () => ({ detached: 400, remaining: true }), {
+      pluginId: 'outreach',
+    })
+    const more = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(more.status).toBe(409)
+    expect(more.body.detachedMembers).toBe(400)
+    expect(store.has(`hosts/${HOST}/emailCampaigns/${CAMPAIGN}`)).toBe(true)
+
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    registerPluginMembershipDetacher(
+      async () => {
+        throw new Error('boom')
+      },
+      { pluginId: 'outreach' },
+    )
+    const failed = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(failed.status).toBe(409)
+    expect(store.has(`hosts/${HOST}/emailCampaigns/${CAMPAIGN}`)).toBe(true)
   })
 })
 
