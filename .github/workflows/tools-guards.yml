@@ -1045,6 +1045,13 @@ jobs:
       # the tree no longer says what the script assumes.
       - run: npm run test:crm-lifecycle-backfill
 
+      # AGL-3235. The one-record migration's decisions — which contact is a
+      # duplicate of a lead and which a relationship, what a fold writes onto
+      # the lead and never clears, what follows the person between records —
+      # and the tree guard that refuses `--apply` on a checkout that does not
+      # yet run the one-record model.
+      - run: npm run test:crm-salesforce-backfill
+
       # AGL-2814. The members-video backfill's decisions: which files become
       # private, which download tokens are rotated, which stored links are
       # rewritten, and the public file used elsewhere that is listed and left

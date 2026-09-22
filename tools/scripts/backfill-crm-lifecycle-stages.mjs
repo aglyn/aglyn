@@ -70,12 +70,11 @@
 // it bumps no `updatedAt`, so a list ordered by edits does not reshuffle to
 // put every historical row on top.
 
-import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applicationDefault, cert, initializeApp } from 'firebase-admin/app'
-import { FieldPath, FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { FieldValue } from 'firebase-admin/firestore'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
+import { collect, commitAll, connectFirestore } from './lib/firestore-backfill.mjs'
 import {
   FIELDS,
   hostLeadContext,
@@ -123,96 +122,17 @@ if (anyForm && !withLeads) {
   process.exit(2)
 }
 
-const PAGE_SIZE = 400
-const BATCH_OPERATIONS = 400
-
-/*==========================================
- * CREDENTIALS
- *=========================================*/
-
-/**
- * The root `.env`, read from the checkout this file lives in and from the
- * working directory, whichever holds one. Already-set variables win, so a
- * value on the command line is never overridden by the file.
- */
-function loadRootEnv() {
-  const candidates = [join(REPO_ROOT, '.env'), join(process.cwd(), '.env')]
-  for (const file of new Set(candidates)) {
-    if (!existsSync(file)) continue
-    for (const line of readFileSync(file, 'utf8').split('\n')) {
-      const match = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)$/)
-      if (!match) continue
-      const [, key] = match
-      if (process.env[key] !== undefined) continue
-      let value = match[2].trim()
-      if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-      ) {
-        value = value.slice(1, -1)
-      }
-      process.env[key] = value
+// The credentials, the collection walk and the batched commit are the
+// shared backfill plumbing in `lib/firestore-backfill.mjs` (AGL-3235).
+const everyDocument = async function* (collectionRef) {
+  for (const row of await collect(collectionRef)) {
+    yield {
+      id: row.id,
+      data: () => row.data,
+      get: (field) => row.data?.[field],
+      ref: collectionRef.doc(row.id),
     }
   }
-}
-
-function connect() {
-  loadRootEnv()
-  const projectId = process.env.GOOGLE_CLOUD_PROJECT || process.env.FIREBASE_PROJECT_ID
-  if (!projectId) {
-    console.error(
-      'Name the project: GOOGLE_CLOUD_PROJECT=aglyn-main (or FIREBASE_PROJECT_ID in the root .env). NOTHING WAS WRITTEN.',
-    )
-    process.exit(2)
-  }
-  const emulator = process.env.FIRESTORE_EMULATOR_HOST
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-  let via
-  if (emulator) {
-    initializeApp({ projectId })
-    via = `emulator at ${emulator}`
-  } else if (clientEmail && privateKey) {
-    initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) })
-    via = `service account ${clientEmail}`
-  } else {
-    initializeApp({ credential: applicationDefault(), projectId })
-    via = 'application-default credentials'
-  }
-  console.log(`project ${projectId} via ${via} — ${apply ? 'APPLY' : 'DRY RUN'}`)
-  return getFirestore(process.env.FIRESTORE_DATABASE_ID)
-}
-
-/*==========================================
- * READS
- *=========================================*/
-
-/**
- * Every document of a collection, paged on the document id.
- *
- * `orderBy` on a data field drops every document missing it, and the rows
- * this script exists for are the OLDEST — the ones an older writer never
- * stamped. The document id is the one path every document has.
- */
-async function* everyDocument(collectionRef) {
-  let cursor = null
-  for (;;) {
-    let query = collectionRef.orderBy(FieldPath.documentId()).limit(PAGE_SIZE)
-    if (cursor) query = query.startAfter(cursor)
-    const page = await query.get()
-    if (page.empty) return
-    for (const snapshot of page.docs) yield snapshot
-    cursor = page.docs[page.docs.length - 1]
-    if (page.size < PAGE_SIZE) return
-  }
-}
-
-async function collect(collectionRef) {
-  const rows = []
-  for await (const snapshot of everyDocument(collectionRef)) {
-    rows.push({ id: snapshot.id, data: snapshot.data() ?? {} })
-  }
-  return rows
 }
 
 /**
@@ -254,26 +174,6 @@ async function readHostForLeads(db, hostId, nowMs) {
     nowMs,
     anyForm,
   })
-}
-
-/*==========================================
- * WRITES
- *=========================================*/
-
-/**
- * Commit a list of `{ kind, ref, value }` writes in batches under the
- * operation ceiling, in order. `create` refuses an existing document, which
- * is the one write here that must never win a race with a live door.
- */
-async function commitAll(db, writes) {
-  for (let start = 0; start < writes.length; start += BATCH_OPERATIONS) {
-    const batch = db.batch()
-    for (const write of writes.slice(start, start + BATCH_OPERATIONS)) {
-      if (write.kind === 'create') batch.create(write.ref, write.value)
-      else batch.update(write.ref, write.value)
-    }
-    await batch.commit()
-  }
 }
 
 /*==========================================
@@ -459,7 +359,7 @@ async function run() {
     console.error('\nREFUSING --apply until the preconditions above hold. NOTHING WAS WRITTEN.')
     process.exit(2)
   }
-  const db = connect()
+  const db = connectFirestore({ repoRoot: REPO_ROOT, apply })
   const nowMs = Date.now()
   const byOrg = await hostsByOrg(db)
   const orgIds = onlyOrg

@@ -1,5 +1,14 @@
 # CRM lifecycle backfill (AGL-2631)
 
+> ⚠️ **Superseded for stages and leads by the one-record backfill (AGL-3235,
+> [`CRM_SALESFORCE_BACKFILL.md`](CRM_SALESFORCE_BACKFILL.md)).** Since
+> AGL-3232 a form or a booking files a lead and no contact, so the stage
+> pass here — which stamps `lead` onto a contact a form captured — and the
+> `--leads` pass — which files a lead beside such a contact — describe the
+> model the CRM left. Do not run either against a workspace the one-record
+> backfill has moved. The `--companies` pass and the tree guards stand; the
+> guard now holds the two lead surfaces to setting no stage at all.
+
 Three gaps the CRM v2 arc left in the data that was already there, closed by
 one script: `tools/scripts/backfill-crm-lifecycle-stages.mjs`. Its decisions
 live in `tools/scripts/lib/crm-lifecycle-backfill.mjs` and are pinned by

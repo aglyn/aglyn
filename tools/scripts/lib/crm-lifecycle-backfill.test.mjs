@@ -30,6 +30,7 @@ import {
   advanceNeverDowngrades,
   advanceStage,
   declaresLiteral,
+  doorIsLeadSurface,
   doorSetsFloor,
   facetStageAfterBackfill,
   grantedConsentEntry,
@@ -1021,6 +1022,11 @@ describe('the guards', () => {
     // And a door that names the floor under neither name is still a door
     // this backfill may not be run against.
     assert.equal(doorSetsFloor("recordCapturedContact({ interaction: { source: 'form' } })", 'lead'), false)
+    // A lead surface (AGL-3232) declares itself and stamps no floor.
+    assert.equal(doorIsLeadSurface("recordCapturedContact({ surface: 'lead' })"), true)
+    assert.equal(doorIsLeadSurface("recordCapturedContact({ surface: routed ? 'lead' : 'touch' })"), true)
+    assert.equal(doorIsLeadSurface("recordCapturedContact({ surface: 'lead', lifecycleFloor: 'lead' })"), false)
+    assert.equal(doorIsLeadSurface("recordCapturedContact({ lifecycleFloor: 'lead' })"), false)
   })
 
   it('reads a field literal off its declaration', () => {
