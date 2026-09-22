@@ -38,12 +38,20 @@ const SAMPLE_CONSOLE_ORIGIN: string =
  * Mirrors `PLATFORM_SUPPORT_URL`'s precedence, including the step that makes
  * the operator identity sufficient on its own: a configured support URL, else
  * the operator's support mailbox as a `mailto:`, else ours.
+ *
+ * The last step is built from `SAMPLE_CONSOLE_ORIGIN` rather than written out
+ * (AGL-3262). The support entry point is a CONSOLE route — `/support`
+ * resolves the workspace from the session (AGL-3265) — so the origin it hangs
+ * off is the one directly above, and an operator who set
+ * `NEXT_PUBLIC_CONSOLE_URL` gets their own console in the sample instead of
+ * ours. The literal it replaces was `aglyn.com/support`, which answers 404 and
+ * never existed.
  */
 const SAMPLE_SUPPORT_URL: string =
   (process.env.NEXT_PUBLIC_PLATFORM_SUPPORT_URL || '').trim() ||
   ((process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL || '').trim()
     ? `mailto:${(process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL || '').trim()}`
-    : 'https://aglyn.com/support')
+    : `${SAMPLE_CONSOLE_ORIGIN}/support`)
 
 // Deep import, NOT the barrel (AGL-1151): `@aglyn/shared-data-enums` re-exports
 // `firebase-auth`, whose `AuthErrorCodes` is a VALUE import of `firebase/auth`.

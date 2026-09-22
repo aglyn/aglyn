@@ -27,6 +27,7 @@ import {
   notificationMuted,
   notificationOverriddenScopes,
   notificationScopePref,
+  notificationScopeTypePref,
   notificationTypesInCategory,
   type AglynNotificationType,
   type NotificationSettings,
@@ -413,5 +414,150 @@ describe('a type can answer for itself', () => {
       ['billing', 'team', 'content', 'marketplace', 'support', 'system', 'staff'] as const
     ).flatMap((category) => notificationTypesInCategory(category))
     expect(grouped.sort()).toEqual(everyType.sort())
+  })
+})
+
+/**
+ * A staff notification is platform-wide (AGL-3267).
+ *
+ * The workspace a staff row MENTIONS is its subject, not its audience — the
+ * person reading "Acme Co subscribed" is almost never a member of Acme Co.
+ */
+describe('the staff category cannot be scoped', () => {
+  const settings = {
+    account: { staff: { console: true } },
+    orgs: { 'org-a': { staff: { console: false } } },
+    hosts: { 'host-1': { staff: { console: false } } },
+    orgTypes: { 'org-a': { 'staff.orgCreated': { console: false } } },
+    hostTypes: { 'host-1': { 'staff.orgCreated': { console: false } } },
+  } as const
+
+  it('ignores a workspace or site answer, however it was written', () => {
+    for (const scope of [{ orgId: 'org-a' }, { hostId: 'host-1' }]) {
+      expect(
+        notificationChannelEnabled(settings, 'console', 'staff.orgCreated', scope),
+      ).toBe(true)
+    }
+  })
+
+  it('still takes the account answer, which is the one that means something', () => {
+    const off = { account: { staff: { console: false } } }
+    expect(
+      notificationChannelEnabled(off, 'console', 'staff.orgCreated', {
+        orgId: 'org-a',
+      }),
+    ).toBe(false)
+    // And per-type at the account scope keeps working for staff rows.
+    const oneOff = {
+      account: { staff: { console: true } },
+      accountTypes: { 'staff.userSignedUp': { console: false } },
+    }
+    expect(
+      notificationChannelEnabled(oneOff, 'console', 'staff.userSignedUp'),
+    ).toBe(false)
+    expect(
+      notificationChannelEnabled(oneOff, 'console', 'staff.orgCreated'),
+    ).toBe(true)
+  })
+
+  /**
+   * The positive control. The same settings shape on a NON-staff type must be
+   * honored at both scopes, or this test would pass against a resolver that
+   * had simply stopped reading the scope layers for everybody.
+   */
+  it('THE CONTROL: a non-staff type is still scoped', () => {
+    const scoped = {
+      account: { billing: { console: true } },
+      orgs: { 'org-a': { billing: { console: false } } },
+    }
+    expect(
+      notificationChannelEnabled(scoped, 'console', 'billing.invoice', {
+        orgId: 'org-a',
+      }),
+    ).toBe(false)
+  })
+})
+
+/**
+ * Per-type answers at the workspace and site scopes (AGL-3267) — the fine
+ * grain moved to where the noise actually is.
+ */
+describe('a type can answer for itself at any scope', () => {
+  const settings = {
+    account: { content: { console: true } },
+    orgTypes: { 'org-a': { 'content.formSubmission': { console: false } } },
+    hostTypes: { 'host-1': { 'content.formSubmission': { console: false } } },
+  } as const
+
+  it('takes the site answer over the workspace and the account', () => {
+    expect(
+      notificationChannelEnabled(settings, 'console', 'content.formSubmission', {
+        orgId: 'org-a',
+        hostId: 'host-1',
+      }),
+    ).toBe(false)
+    // A different type from the same category is untouched at that site.
+    expect(
+      notificationChannelEnabled(settings, 'console', 'content.booking', {
+        orgId: 'org-a',
+        hostId: 'host-1',
+      }),
+    ).toBe(true)
+  })
+
+  it('beats its own category at the SAME scope, and loses to a narrower one', () => {
+    const mixed = {
+      account: { content: { console: true } },
+      orgTypes: { 'org-a': { 'content.booking': { console: false } } },
+      hosts: { 'host-1': { content: { console: true } } },
+    }
+    // Workspace type answer beats the account category.
+    expect(
+      notificationChannelEnabled(mixed, 'console', 'content.booking', {
+        orgId: 'org-a',
+      }),
+    ).toBe(false)
+    // …and the SITE's category answer, being narrower, beats that type answer.
+    expect(
+      notificationChannelEnabled(mixed, 'console', 'content.booking', {
+        orgId: 'org-a',
+        hostId: 'host-1',
+      }),
+    ).toBe(true)
+  })
+
+  it('reads back unresolved, per scope', () => {
+    expect(
+      notificationScopeTypePref(
+        settings,
+        { kind: 'org', id: 'org-a' },
+        'content.formSubmission',
+        'console',
+      ),
+    ).toBe(false)
+    expect(
+      notificationScopeTypePref(
+        settings,
+        { kind: 'org', id: 'org-b' },
+        'content.formSubmission',
+        'console',
+      ),
+    ).toBeUndefined()
+  })
+
+  /**
+   * A scope whose ONLY answer is a per-type one must still be listed, or the
+   * person who set it has no way to find it again — which is the whole job of
+   * `notificationOverriddenScopes`.
+   */
+  it('a type-only override still makes its scope findable', () => {
+    const found = notificationOverriddenScopes(settings)
+    expect(found.orgIds).toContain('org-a')
+    expect(found.hostIds).toContain('host-1')
+  })
+
+  it('an emptied scope is not listed', () => {
+    const empty = { orgTypes: { 'org-a': { 'content.booking': {} } }, orgs: {} }
+    expect(notificationOverriddenScopes(empty).orgIds).toEqual([])
   })
 })

@@ -922,17 +922,15 @@ function tablesWithoutFooters(): string[] {
  */
 const NOT_A_LIST: Array<[string, string]> = [
   [
-    'apps/console/app/(app)/manage/notifications/(sections)/settings/page.tsx',
-    'The per-WORKSPACE and per-SITE overrides (AGL-3226) — one row per ' +
-      '`NotificationCategory` for the scope on screen, with a channel per ' +
-      'column. The rows are a closed union in the type system rather than a ' +
-      'collection anybody adds to: another row can only arrive by somebody ' +
-      'writing another category, which is a compile error in three places ' +
-      'until they decide what it does. Paging a person’s own settings would ' +
-      'hide half of them behind a click. The account-scope table that used ' +
-      'to sit above this one moved into ' +
-      '`notification-category-table.component.tsx` when it grew its type ' +
-      'rows (AGL-3251); this file keeps the scope table only.',
+    'apps/console/components/notification-scope-table.component.tsx',
+    'The per-WORKSPACE and per-SITE notification settings (AGL-3267) — a row ' +
+      'per `NotificationCategory` for the scope on screen, each opening onto ' +
+      'a row per type inside it, tri-state because a scope INHERITS. Both ' +
+      'are closed unions, neither is a window over anything that grows, and ' +
+      'a footer would hide half of a person’s own answers from the other ' +
+      'half. It left ' +
+      '`manage/notifications/(sections)/settings/page.tsx`, whose row this ' +
+      'replaces: that page now draws no table of its own.',
   ],
   [
     'apps/console/components/notification-category-table.component.tsx',
@@ -1817,6 +1815,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // files really do need classifying — but it is not the thing the ratchet
     // was built to catch, and an increment for this reason should say so
     // rather than borrowing the language of a new exemption.
+    //
+    // Still 64 after AGL-3267, and the two files are now BOTH components:
+    // the scope half left the settings page as well, so that page's row was
+    // dropped and `notification-scope-table.component.tsx` took its place.
+    // One entry out, one in — the same two tables this console has always
+    // drawn here.
     expect(NOT_A_LIST).toHaveLength(64)
   })
 })

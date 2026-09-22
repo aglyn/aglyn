@@ -509,6 +509,7 @@ function BesignerPage(props) {
     draft,
     handleSave,
     saveWorkingDraft,
+    workingDraftSaved,
     refuseOverUnopenedDraft,
     jsonOpen,
     openJsonEditor,
@@ -2083,6 +2084,12 @@ function BesignerPage(props) {
                           liveUnavailableReason={liveUnavailableReason}
                           onPropertiesEdit={() => setScreenDialog(true)}
                           saveAvailable={saveAvailable}
+                          // Save draft writes the draft document, not
+                          // this version, so the canvas never reads
+                          // clean while a draft is waiting — this is
+                          // what still lets the button say Publish
+                          // (AGL-3271).
+                          draftSaved={workingDraftSaved}
                         />
                         {/* Surfaced as soon as their save lands, not on Save — finding
                 out after twenty more minutes of editing is the bad

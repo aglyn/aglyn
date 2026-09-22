@@ -210,9 +210,19 @@ metadata key, not a second endpoint.
 None of these live in code, none are created by `setup-stripe.mjs`, and every
 one of them is something the **first paying customer sees**.
 
+⚑ **The support URL here is deliberately NOT `PLATFORM_SUPPORT_URL`** (AGL-3262).
+That constant is `https://app.aglyn.com/support`, the console entry point that
+resolves the workspace from the session — correct for a system email footer,
+whose reader is signed in or can be. A receipt is read by the CARDHOLDER, who
+may have no console account and is at that moment deciding whether they
+recognize a charge. Putting a sign-in wall in front of that reader is close to
+the blank support details this row exists to prevent, so Stripe points at the
+public contact page instead. The live setting already carries
+`https://aglyn.com/contact`; this row records it rather than changing it.
+
 | # | Where | Set it to | Why it matters |
 | -- | -- | -- | -- |
-| 1 | Settings → Business → **Public details** | Public business name `Aglyn`, support email, support URL `https://aglyn.com/support`, support phone | These render on the Checkout page, the receipt and the customer portal. Blank support details on a receipt is the single most common trigger for "I don't recognise this charge" → a chargeback. |
+| 1 | Settings → Business → **Public details** | Public business name `Aglyn`, support email, support URL `https://aglyn.com/contact` — **not** `PLATFORM_SUPPORT_URL`, see below — support phone | These render on the Checkout page, the receipt and the customer portal. Blank support details on a receipt is the single most common trigger for "I don't recognise this charge" → a chargeback. |
 | 2 | Settings → **Branding** | Icon + logo (`apps/console/public`), brand colour, accent colour | Checkout and the portal are the only pages in the purchase flow we do not render. Default-styled, they read as a third party. |
 | 3 | Settings → Payments → **Statement descriptor** | `AGLYN` (and a shortened descriptor if prompted) | This is the string on the cardholder's statement. An unrecognised descriptor is a chargeback, and a chargeback on a subscription invoice is the reversal AGL-2120 now handles — better not to cause it. |
 | 4 | Settings → **Emails** | ✅ "Successful payments", ✅ "Refunds" | **Off by default for card payments.** With it off, a customer who pays gets no receipt from Stripe at all. |

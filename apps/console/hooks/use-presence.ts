@@ -33,7 +33,7 @@ import {
   authEmulatorUrl,
   databaseEmulatorHost,
 } from '@aglyn/tenant-feature-instance'
-import { useUser } from '@aglyn/tenant-feature-instance'
+import { useUser, useUserPhoto } from '@aglyn/tenant-feature-instance'
 import {
   describeCallFailure,
   resolveIdToken,
@@ -1206,8 +1206,38 @@ export function usePresence(options: {
     )
       .slice(0, 80)
       .trim() || 'Someone'
-  const photoURL =
-    (user as { photoURL?: string } | undefined)?.photoURL || idp.photoURL
+  /**
+   * THE AVATAR IS NOT ON THE AUTH RECORD FOR A TENANTED ACCOUNT (AGL-3270).
+   *
+   * This used to read `user.photoURL || idp.photoURL` — the Firebase Auth
+   * record, then the ID token's mapped claim — and for an SSO account BOTH are
+   * empty. `sso-avatar-is-the-users-to-set.spec.ts` already records why: a
+   * Google Workspace SAML app maps no picture attribute, so the assertion
+   * carries none and `resolveIdpPhotoUrl` correctly returns `''`; the auth
+   * record has nothing either. The avatar such a person has is the one they
+   * SET, and it lives on `users/{uid}.photoUrl`.
+   *
+   * So presence announced no photo at all, and every reader — the room's
+   * avatar stack, the summary endpoint, the list-row chips — had nothing to
+   * hand `MemberAvatar` and drew initials. Measured on production: the roster
+   * row and the profile document both held a photo for the uid, and the live
+   * RTDB row carried `colour`, `displayName`, `lastSeenAt` and no `photoURL`
+   * key at all.
+   *
+   * `useUserPhoto` is the join the app bar already uses — profile document
+   * first, auth record as the fallback, blank-not-null (AGL-1961) — so this is
+   * that same fix arriving at the third surface rather than a second opinion
+   * about where a photo lives. One user, one answer, header and room.
+   *
+   * The IdP claim stays LAST rather than being dropped: it is still the only
+   * source for an IdP that does map a picture, on a first sign-in before
+   * `seedUserProfile`'s write has arrived at this tab.
+   *
+   * It is the SELF-announcement, so no other member's document is read: this
+   * tab writes its own row and everyone else's photo arrives on theirs.
+   */
+  const consolePhotoURL = useUserPhoto()
+  const photoURL = consolePhotoURL || idp.photoURL
   // The account is read inside an effect that must NOT depend on the user
   // object; a ref keeps the latest without re-triggering.
   const userRef = useRef<MaybeTokenSource>(undefined)

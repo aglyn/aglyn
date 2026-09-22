@@ -219,6 +219,18 @@ export type AglynNotificationType =
   // notifications they could never receive.
   | 'staff.userSignedUp'
   | 'staff.orgCreated'
+  // And when money moves (AGL-3267). The category was two signup types, so
+  // the one thing a platform feed exists to report — revenue starting,
+  // changing and stopping — was the one thing it did not.
+  //
+  // `staff.paymentFailed` is deliberately NOT the customer's
+  // `billing.paymentFailed`: different audience, different action. The
+  // customer is told to fix their card; staff are told a paying workspace is
+  // about to stop paying.
+  | 'staff.subscriptionStarted'
+  | 'staff.subscriptionCanceled'
+  | 'staff.planChanged'
+  | 'staff.paymentFailed'
 
 export interface AglynNotification {
   $id?: string
@@ -271,6 +283,10 @@ export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {
   'system.disputeUnattributed': 'Card dispute with no owner',
   'staff.userSignedUp': 'New account',
   'staff.orgCreated': 'New workspace',
+  'staff.subscriptionStarted': 'New subscription',
+  'staff.subscriptionCanceled': 'Subscription canceled',
+  'staff.planChanged': 'Plan changed',
+  'staff.paymentFailed': 'Payment failed (workspace)',
 }
 
 /** Preference buckets (AGL-267): the prefix before the dot. */
@@ -337,7 +353,7 @@ export const NOTIFICATION_CATEGORY_DESCRIPTIONS: Record<
   system:
     'Announcements, and the faults the platform finds in your account: sign-in methods removed, traffic limits reached, billing or sharing left in a broken state.',
   staff:
-    'New accounts and new workspaces across the whole platform. Only staff receive these.',
+    'New accounts, new workspaces, and money moving — subscriptions starting, changing, failing and ending — across the whole platform. Only staff receive these.',
 }
 
 export function notificationCategory(
@@ -497,6 +513,24 @@ export interface NotificationSettings {
   orgs?: Record<string, NotificationCategoryPrefs>
   /** Keyed by host id — a site's own answer, narrower than its workspace's. */
   hosts?: Record<string, NotificationCategoryPrefs>
+  /**
+   * Per-TYPE answers at the workspace and site scopes (AGL-3267), beside the
+   * category maps above rather than nested inside them.
+   *
+   * Parallel maps because the category maps are already stored under `orgs`
+   * and `hosts` on live user documents: folding both into one
+   * `{ categories, types }` object per scope would be a migration of every
+   * preference anybody has set, to express something two more keys express
+   * without touching a byte of what exists.
+   *
+   * This supersedes the account-only limit AGL-3251 shipped under. That was
+   * the right call for a card nobody had used yet and the wrong one once it
+   * existed: "quiet this one type down on this one busy site" is the question
+   * the scope card is FOR, and answering it only for whole categories made
+   * the fine grain stop exactly where the noise is worst.
+   */
+  orgTypes?: Record<string, NotificationTypePrefs>
+  hostTypes?: Record<string, NotificationTypePrefs>
 }
 
 export const NOTIFICATION_SETTINGS_FIELD = 'notificationSettings'
@@ -575,22 +609,52 @@ export function notificationChannelEnabled(
 ): boolean {
   const category = notificationCategory(type)
   /*
-   * The account layer answers TWICE, type before category (AGL-3251).
+   * ⛔ A STAFF NOTIFICATION HAS NO SCOPE TO BE NARROWED BY (AGL-3267).
    *
-   * The minimal extension of the rule above rather than a new one: the layers
-   * keep their order, narrowest scope first, and only what "the account says"
-   * gets finer. A person who switched `Payment failed` off has said something
-   * about that type specifically, so it must beat their own `Billing` answer
-   * — and it must NOT beat a narrower scope, because "quiet down this one
-   * noisy site" is the question the scope layers exist to answer and a
-   * type-level opinion about the kind of thing does not overrule it.
+   * It is about the platform, and the workspace one MENTIONS is its subject,
+   * not its audience: the staff member reading "Acme Co subscribed" is
+   * almost never a member of Acme Co, and if they happen to be, their
+   * preferences for their own membership have nothing to do with it.
+   *
+   * This was already true by accident — no staff emitter passes `orgId` or
+   * `hostId`, so the scope layers never matched — which made every
+   * "Platform growth" row in the per-workspace card a control that could be
+   * set and could never do anything. Stating it here rather than only hiding
+   * those rows is the difference between the model being right and the UI
+   * covering for a model that is wrong: a `staff.*` type that ever does
+   * start carrying an `orgId`, for its link or its subject line, must not
+   * silently become mutable per workspace.
    */
-  const layers: Array<NotificationChannelPrefs | undefined> = [
-    scope?.hostId ? settings?.hosts?.[scope.hostId]?.[category] : undefined,
-    scope?.orgId ? settings?.orgs?.[scope.orgId]?.[category] : undefined,
-    settings?.accountTypes?.[type as AglynNotificationType],
-    settings?.account?.[category],
-  ]
+  const staffWide = STAFF_NOTIFICATION_CATEGORIES.has(category)
+  /*
+   * Narrowest scope first, and within each scope the TYPE before its
+   * CATEGORY (AGL-3251, widened to every scope by AGL-3267).
+   *
+   * Both halves matter and they answer different questions. Scope order is
+   * "where is this from" — a site's answer beats its workspace's, which beats
+   * the account's, because quietening one busy site is the thing the scope
+   * card exists for. Type-before-category is "what kind of thing is this" —
+   * somebody who switched `Payment failed` off said something about that
+   * type, and it must beat their own broader `Billing` answer at the SAME
+   * scope without leaking upward past a narrower one.
+   */
+  const layers: Array<NotificationChannelPrefs | undefined> = staffWide
+    ? [
+        settings?.accountTypes?.[type as AglynNotificationType],
+        settings?.account?.[category],
+      ]
+    : [
+        scope?.hostId
+          ? settings?.hostTypes?.[scope.hostId]?.[type as AglynNotificationType]
+          : undefined,
+        scope?.hostId ? settings?.hosts?.[scope.hostId]?.[category] : undefined,
+        scope?.orgId
+          ? settings?.orgTypes?.[scope.orgId]?.[type as AglynNotificationType]
+          : undefined,
+        scope?.orgId ? settings?.orgs?.[scope.orgId]?.[category] : undefined,
+        settings?.accountTypes?.[type as AglynNotificationType],
+        settings?.account?.[category],
+      ]
   for (const layer of layers) {
     const answer = layer?.[channel]
     if (typeof answer === 'boolean') return answer
@@ -641,6 +705,28 @@ export function notificationTypesInCategory(
   ).filter((type) => notificationCategory(type) === category)
 }
 
+/**
+ * What ONE scope says about ONE type, with no inheritance applied
+ * (AGL-3267) — `undefined` means the row follows its category at that scope.
+ *
+ * The scope-aware sibling of {@link notificationAccountTypePref}, which stays
+ * as the account-only shorthand its callers already use.
+ */
+export function notificationScopeTypePref(
+  settings: NotificationSettings | null | undefined,
+  scope: { kind: 'account' } | { kind: 'org' | 'host'; id: string },
+  type: AglynNotificationType | string,
+  channel: NotificationChannel,
+): boolean | undefined {
+  const layer =
+    scope.kind === 'account'
+      ? settings?.accountTypes
+      : scope.kind === 'org'
+        ? settings?.orgTypes?.[scope.id]
+        : settings?.hostTypes?.[scope.id]
+  return layer?.[type as AglynNotificationType]?.[channel]
+}
+
 export function notificationScopePref(
   settings: NotificationSettings | null | undefined,
   scope: { kind: 'account' } | { kind: 'org' | 'host'; id: string },
@@ -669,18 +755,37 @@ export function notificationScopePref(
 export function notificationOverriddenScopes(
   settings: NotificationSettings | null | undefined,
 ): { orgIds: string[]; hostIds: string[] } {
+  /*
+   * BOTH maps for a scope, categories and types (AGL-3267).
+   *
+   * Reading only the category map would make a scope whose ONLY answer is a
+   * per-type one invisible here — and this list is the single place a person
+   * can find an override they set months ago. Silencing one type on one busy
+   * site and then being unable to find where you did it is precisely the
+   * failure this function exists to prevent.
+   */
+  const answered = (prefs: Record<string, NotificationChannelPrefs> | undefined) =>
+    Object.values(prefs ?? {}).some((channels) =>
+      Object.values(channels ?? {}).some((value) => typeof value === 'boolean'),
+    )
   const named = (
-    layers: Record<string, NotificationCategoryPrefs> | undefined,
+    categories: Record<string, NotificationCategoryPrefs> | undefined,
+    types: Record<string, NotificationTypePrefs> | undefined,
   ) =>
-    Object.entries(layers ?? {})
-      .filter(([, prefs]) =>
-        Object.values(prefs ?? {}).some((channels) =>
-          Object.values(channels ?? {}).some(
-            (value) => typeof value === 'boolean',
-          ),
-        ),
+    [
+      ...new Set([
+        ...Object.keys(categories ?? {}),
+        ...Object.keys(types ?? {}),
+      ]),
+    ]
+      .filter(
+        (id) =>
+          answered(categories?.[id] as Record<string, NotificationChannelPrefs>) ||
+          answered(types?.[id] as Record<string, NotificationChannelPrefs>),
       )
-      .map(([id]) => id)
       .sort()
-  return { orgIds: named(settings?.orgs), hostIds: named(settings?.hosts) }
+  return {
+    orgIds: named(settings?.orgs, settings?.orgTypes),
+    hostIds: named(settings?.hosts, settings?.hostTypes),
+  }
 }

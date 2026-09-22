@@ -45,6 +45,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import FormFieldGrid, { buildFieldClear } from '../mapper/form-field-grid'
@@ -56,6 +57,18 @@ import {
 } from '../vendor/data-driven-forms'
 
 const iconUnset = { ...DEFAULT_ICON, id: null, name: '(none)' }
+/**
+ * What the element carries when the catalog has no icon under that id — a
+ * different thing from carrying nothing, and it has to READ differently
+ * (AGL-3266). The bundled set is one MDI release, so an id minted against a
+ * newer one (`creation-outline`, on aglyn.com's Aglyn AI card) resolves to
+ * nothing here. Naming it `(none)` hid that the element had an icon at all,
+ * and every pick then replaced a working icon the author could not see.
+ */
+const iconUnknown = (id: string) => ({ ...DEFAULT_ICON, id, name: id })
+
+/** The handle {@link GridList} forwards, narrowed to what is used here. */
+type ScrollableGrid = { scrollToIndex?: (opts: { index: number }) => void }
 const classKeys = generateComponentClassKeys('AglynIconSelect', [
   'root',
   'button',
@@ -165,12 +178,38 @@ export const IconSelectControl = forwardRef<any, IconSelectControlProps>(
       [icons],
     )
 
+    /**
+     * A new result set starts at its own top (AGL-3266).
+     *
+     * The grid is virtualized and keeps its scroll offset when `items`
+     * changes, so once the author had scrolled, every later search painted
+     * the MIDDLE of the new results. Searching `bullhorn` while scrolled
+     * showed Cellphone Play, Cellphone Settings… and the four Bullhorn
+     * icons — ranked first, correctly — sat off-screen above. It reads
+     * exactly like a search that ignores the query, which is how it was
+     * reported.
+     */
+    const gridRef = useRef<ScrollableGrid>(null)
+    useEffect(() => {
+      gridRef.current?.scrollToIndex?.({ index: 0 })
+    }, [visibleIcons])
+
     const [currentIcon, selectedIcon] = useMemo(() => {
-      const findIcon = (id: string) => allIcons.find((icon) => icon.id === id)
-      const currentIcon = (currentValue && findIcon(currentValue)) || iconUnset
-      const selectedIcon = (selected && findIcon(selected)) || iconUnset
-      return [currentIcon, selectedIcon]
+      const resolve = (id: string) => {
+        if (!id) return iconUnset
+        // The catalog arrives async, so "not found yet" is not "not in the
+        // set" — keep saying `(none)` until it has loaded, or the opener
+        // flashes the raw id on every mount.
+        if (allIcons.length === 0) return iconUnset
+        return allIcons.find((icon) => icon.id === id) ?? iconUnknown(id)
+      }
+      return [resolve(currentValue), resolve(selected)]
     }, [currentValue, selected, allIcons])
+    /** True once the catalog is in and still has nothing under that id. */
+    const currentIsUnknown =
+      Boolean(currentValue) &&
+      currentIcon.id === currentValue &&
+      !allIcons.some((icon) => icon.id === currentValue)
 
     const handleButtonClick = useCallback(() => {
       setOpen((prev) => !prev)
@@ -334,6 +373,16 @@ export const IconSelectControl = forwardRef<any, IconSelectControlProps>(
                     ? `Not applied yet — press Choose to replace ${currentIcon.name}.`
                     : 'Pick an icon, then press Choose to apply it.'}
                 </Typography>
+                {currentIsUnknown ? (
+                  <Typography
+                    data-aglyn-icon-unknown=""
+                    component="div"
+                    variant="caption"
+                    color="text.secondary"
+                  >
+                    {`This element carries ${currentValue}, which is not in the icon library — it renders on the site but has no preview here. Choosing another icon replaces it.`}
+                  </Typography>
+                ) : null}
               </Grid>
               <Grid>
                 <Button color="inherit" onClick={handleCancelButtonClick}>
@@ -354,6 +403,7 @@ export const IconSelectControl = forwardRef<any, IconSelectControlProps>(
 
             <GridListWrapper>
               <GridList
+                ref={gridRef as any}
                 GridContainerProps={{ spacing: 1 }}
                 GridItemProps={{ size: { xs: 2 } }}
                 ListWrapperProps={{ className: classKeys.gridList }}

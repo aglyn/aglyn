@@ -65,6 +65,7 @@ function SaveControl(props: {
   onSaveAndPublish?: () => void
   publishBlockedReason?: string
   saveAvailable?: boolean
+  draftSaved?: boolean
   livePublished?: boolean
 }) {
   const {
@@ -72,6 +73,7 @@ function SaveControl(props: {
     onSaveAndPublish,
     publishBlockedReason,
     saveAvailable,
+    draftSaved,
     livePublished,
   } = props
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
@@ -96,22 +98,37 @@ function SaveControl(props: {
    *
    * `livePublished` undefined means the editor has no publish concept at all,
    * and the control collapses to its original two states.
+   *
+   * SAVED IS NOT ONLY THE DOCUMENT (AGL-3271). On the version a site is
+   * serving, Save draft writes the working draft and leaves the version
+   * alone on purpose, so `saveAvailable` stays true for as long as the draft
+   * is unpublished — and a middle state that can never be reached is one an
+   * author never leaves. `draftSaved` is the other way in: the canvas is in
+   * the draft, the live site is still behind, and publishing is exactly what
+   * is left to do.
    */
   const publishPending =
-    !saveAvailable && livePublished === false && Boolean(onSaveAndPublish)
+    (!saveAvailable || Boolean(draftSaved)) &&
+    livePublished === false &&
+    Boolean(onSaveAndPublish)
   /*
    * "Save draft" ONLY where a draft is a real state. Templates have no
    * versions at all — the document IS the template — so calling their save a
    * draft would invent a distinction the editor does not have, and imply a
    * publish step that does not exist. Those editors keep the plain "Save" they
    * always had.
+   *
+   * `publishPending` is read FIRST now that it can be true over a dirty
+   * canvas: a drafted document has both something to save and something to
+   * publish, and publishing does both — `handleSaveAndPublish` saves before
+   * it promotes.
    */
-  const label = saveAvailable
-    ? onSaveAndPublish
-      ? 'Save draft'
-      : 'Save'
-    : publishPending
-      ? 'Publish'
+  const label = publishPending
+    ? 'Publish'
+    : saveAvailable
+      ? onSaveAndPublish
+        ? 'Save draft'
+        : 'Save'
       : 'Up to date'
   const icon = (
     <MdiIcon
@@ -242,6 +259,17 @@ export interface BesignerAppBarProps extends SecondaryAppBarProps {
   onPropertiesEdit?: ButtonProps['onClick']
   saveAvailable?: boolean
   /**
+   * Is the canvas already in the working draft? (AGL-3271)
+   *
+   * The second way into `Publish`, and the only one the live version has:
+   * its Save draft writes the draft document rather than the version, so
+   * `saveAvailable` never goes false there and the button used to offer
+   * `Save draft` over work that had already saved. Passed by the editors
+   * that have a working draft; `undefined` everywhere else leaves the
+   * control exactly as it was.
+   */
+  draftSaved?: boolean
+  /**
    * Who else is in this document (AGL-675). Rendered inside the toolbar
    * rather than beside it: the screen editor passed `<PresenceAvatars />` as
    * a SIBLING of this app bar, so on the first day presence ever produced an
@@ -262,6 +290,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
       onSave,
       onSaveAndPublish,
       publishBlockedReason,
+      draftSaved,
       saveAvailable,
       livePublished,
     } = props
@@ -367,6 +396,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             onSave={onSave}
             onSaveAndPublish={onSaveAndPublish}
             publishBlockedReason={publishBlockedReason}
+            draftSaved={draftSaved}
             saveAvailable={saveAvailable}
             livePublished={livePublished}
           />

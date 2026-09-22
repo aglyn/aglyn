@@ -130,7 +130,30 @@ describe('PLATFORM_SUPPORT_URL falls through the operator before us', () => {
   })
 
   it('AGLYN-OPERATED shape: wholly unconfigured is our support page', () => {
-    expect(loadWith({}).PLATFORM_SUPPORT_URL).toBe('https://aglyn.com/support')
+    // The CONSOLE's support entry, not the marketing site's: `/support` there
+    // has never existed and answers 404 (AGL-3262), and this value is printed
+    // on a receipt beside a charge the reader is already unsure about. The
+    // console page resolves the workspace from the session (AGL-3265), which
+    // is what lets one static URL be right for every customer.
+    expect(loadWith({}).PLATFORM_SUPPORT_URL).toBe(
+      'https://app.aglyn.com/support',
+    )
+  })
+
+  it('points at a path the console actually routes, not a plausible one', () => {
+    // How the old value rotted: nothing here knew whether `/support` existed,
+    // so a URL that had never resolved sat in system email footers and on
+    // Stripe receipts until somebody opened it. Tying the literal to the route
+    // table does not prove the page is deployed, but it does mean a route that
+    // MOVES fails here instead of going quiet.
+    const { Route } = require('./console-routes') as typeof import('./console-routes')
+    const url = new URL(loadWith({}).PLATFORM_SUPPORT_URL)
+    expect(url.pathname).toBe(Route.SUPPORT_ENTRY)
+    // Anti-vacuity, both halves: a route table that lost the entry would leave
+    // `pathname` comparing against `undefined`, and the origin is the other
+    // half of the claim.
+    expect(Route.SUPPORT_ENTRY).toBe('/support')
+    expect(url.origin).toBe('https://app.aglyn.com')
   })
 })
 

@@ -398,9 +398,9 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'libs/shared/util/email/src/lib/system-email-catalog.ts',
-    count: 2,
+    count: 1,
     reason:
-      'The SAMPLE_CONSOLE_ORIGIN / SAMPLE_SUPPORT_URL defaults for the staff email-designer preview. The ten literal samples now build on them (AGL-2202).',
+      'SAMPLE_CONSOLE_ORIGIN, the default for the staff email-designer preview. The ten literal samples build on it (AGL-2202), and SAMPLE_SUPPORT_URL stopped being a literal of its own when the support entry point became a console route (AGL-3262) — it is now that origin plus `/support`, so an operator who sets NEXT_PUBLIC_CONSOLE_URL gets their own console in the sample.',
   },
   {
     file: 'libs/shared/util/next/src/lib/use-continue-url.ts',

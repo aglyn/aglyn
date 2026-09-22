@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { forwardRef, useImperativeHandle, useState } from 'react'
 
 // A stand-in catalog: the real one loads ~6,600 icons asynchronously and
 // none of this is about the catalog. Everything else — CardListItem, the
@@ -26,6 +27,12 @@ const CATALOG = [
   { id: 'mdiTablet', name: 'Tablet', path: 'M3 3h1z', tags: [] },
 ]
 
+/**
+ * Lets a test narrow the result set the way a search does, without going
+ * through the 300ms debounce in front of the real filter.
+ */
+let mockNarrowResults: (icons: typeof CATALOG) => void = () => undefined
+
 // Mocked at the SUBPATH, not the barrel (AGL-2486). The hook left
 // `@aglyn/shared-ui-jsx`'s barrel because reaching it from there dragged
 // `fuse.js` into the eager graph of every published customer page; this
@@ -33,16 +40,33 @@ const CATALOG = [
 // override would silently stop intercepting and hand the component the real
 // hook — which is exactly how this spec failed when the import moved.
 jest.mock('@aglyn/shared-ui-jsx/hooks/mdi-icon/use-mdi-icons-fuzzy', () => ({
-  useMdiIconsFuzzy: () => [CATALOG, CATALOG, jest.fn(), jest.fn()],
+  useMdiIconsFuzzy: () => {
+    const [icons, setIcons] = useState(CATALOG)
+    mockNarrowResults = setIcons
+    return [icons, CATALOG, jest.fn(), jest.fn()]
+  },
 }))
+
+/** Stands in for the virtualized grid's imperative handle. */
+const mockScrollToIndex = jest.fn()
 
 // The grid is virtualized (react-virtuoso), which renders nothing in a
 // zero-height jsdom container. Only the windowing is replaced; the cards it
 // is handed are the real `CardListItem`.
 jest.mock('@aglyn/shared-ui-jsx/components/grid-list', () => ({
-  GridList: ({ items, renderItemContent }: any) => (
-    <div>{items.map((item: any, i: number) => renderItemContent(item, i))}</div>
-  ),
+  GridList: forwardRef(function GridList(
+    { items, renderItemContent }: any,
+    ref,
+  ) {
+    // The real grid hands back a Virtuoso handle; the scroll-to-top fix
+    // (AGL-3266) calls through it, so the stand-in has to offer one too.
+    useImperativeHandle(ref, () => ({ scrollToIndex: mockScrollToIndex }), [])
+    return (
+      <div>
+        {items.map((item: any, i: number) => renderItemContent(item, i))}
+      </div>
+    )
+  }),
 }))
 
 import { IconSelectControl } from './icon-select.component'
@@ -120,5 +144,69 @@ describe('IconSelectControl two-step pick (AGL-2486)', () => {
       (screen.getByRole('button', { name: 'Choose' }) as HTMLButtonElement)
         .disabled,
     ).toBe(false)
+  })
+})
+
+describe('IconSelectControl results grid (AGL-3266)', () => {
+  beforeEach(() => {
+    mockScrollToIndex.mockClear()
+  })
+
+  it('sends a new result set back to its own top', () => {
+    render(<IconSelectControl value="" onChange={jest.fn()} />)
+    openPicker()
+    mockScrollToIndex.mockClear()
+
+    // What a search does. The grid keeps its scroll offset across an items
+    // change, so without this the author reads the MIDDLE of the new
+    // results and the best matches sit off-screen above.
+    act(() => mockNarrowResults([CATALOG[2]]))
+
+    expect(mockScrollToIndex).toHaveBeenCalledWith({ index: 0 })
+  })
+
+  it('leaves the grid alone when the results have not changed', () => {
+    render(<IconSelectControl value="mdiTablet" onChange={jest.fn()} />)
+    openPicker()
+    mockScrollToIndex.mockClear()
+
+    fireEvent.click(cardFor('Laptop'))
+
+    expect(mockScrollToIndex).not.toHaveBeenCalled()
+  })
+})
+
+describe('IconSelectControl with an icon the catalog does not have (AGL-3266)', () => {
+  /** aglyn.com's Aglyn AI card: minted against a newer MDI release. */
+  const UNKNOWN = 'creation-outline'
+
+  it('names the id it is carrying rather than reading as empty', () => {
+    render(<IconSelectControl value={UNKNOWN} onChange={jest.fn()} />)
+
+    // Both the opener and the "Selected icon:" line name it.
+    expect(screen.getAllByText(UNKNOWN).length).toBeGreaterThan(0)
+    expect(screen.queryByText('(none)')).toBeNull()
+  })
+
+  it('says the icon is real but unpreviewable, so a pick is a replacement', () => {
+    render(<IconSelectControl value={UNKNOWN} onChange={jest.fn()} />)
+    openPicker()
+
+    const note = document.querySelector('[data-aglyn-icon-unknown]')
+    expect(note).not.toBeNull()
+    expect(note?.textContent).toContain(UNKNOWN)
+  })
+
+  it('says nothing of the sort for an icon the catalog does have', () => {
+    render(<IconSelectControl value="mdiTablet" onChange={jest.fn()} />)
+    openPicker()
+
+    expect(document.querySelector('[data-aglyn-icon-unknown]')).toBeNull()
+  })
+
+  it('reads as empty when there is genuinely no icon', () => {
+    render(<IconSelectControl value="" onChange={jest.fn()} />)
+
+    expect(screen.getAllByText('(none)').length).toBeGreaterThan(0)
   })
 })

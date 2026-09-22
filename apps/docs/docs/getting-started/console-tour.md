@@ -236,7 +236,8 @@ contents of.
   this page.
 
 Rows marked **Staff only** are Aglyn's own — they are shown to staff and reach
-nobody else.
+nobody else. They are about the platform rather than any one workspace, which
+is why they appear here and not under **One workspace or one site**.
 
 #### One kind at a time
 
@@ -253,9 +254,9 @@ alone.
 A digest's **Email** switch is grayed out here, because a digest composes and
 sends its own mail under its own switch in **Digests** below.
 
-These are answers for your whole account. **One workspace or one site** stays
-at the category level, and a narrower scope still wins: a workspace or site
-answer overrides what you said about the kind of notification here.
+These are answers for your whole account. A narrower scope still wins: a
+workspace or site answer overrides what you said about the kind of
+notification here.
 
 ### Workspace and site overrides
 
@@ -265,6 +266,14 @@ single site, rather than for your whole account. Each cell starts at
 workspace, a workspace follows your account. Set one to **On** or **Off** and
 only that scope changes. This is how you take form submissions by email from
 one busy site without taking them from the other five.
+
+Categories open here too, so a scope can answer for a single notification
+rather than a whole category — the finest grain, in the place the noise
+usually is. A type set to **Inherit** follows its own category at that scope;
+a category set to **Inherit** follows the scope above it.
+
+Staff rows do not appear here. They are about the platform, not about any one
+workspace, so there is nothing for a workspace answer to change.
 
 ### Daily digests
 
