@@ -77,6 +77,9 @@ import PluginWidgetSlot, {
 } from '../../../../../components/plugin-widget-slot.component'
 import { legalAcceptanceDocumentHref } from '../../../../../utils/legal-document-link'
 import { formatStaffTimestamp } from '../../../../../utils/staff-timestamps'
+import StaffUserProductEmail, {
+  type StaffUserMarketing,
+} from '../../../../../components/staff-user-product-email.component'
 
 interface UserDetail {
   user: {
@@ -221,6 +224,12 @@ interface UserDetail {
   }>
   /** A source was unreadable, so `addresses` may be short. */
   addressesIncomplete?: boolean
+  /**
+   * Product email from the operator (AGL-3292): the person's own answer, and
+   * what a campaign from the marketing site would decide. Optional so a
+   * response from a deployment that predates it renders nothing.
+   */
+  marketing?: StaffUserMarketing
 }
 
 /**
@@ -731,6 +740,10 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                                   }
                                 </Typography>
                               ) : null}
+                              {/* Product email (AGL-3292): the person's answer and what
+                                  the operator's marketing sends would do — beside the
+                                  phone line because both answer "may we contact them?". */}
+                              <StaffUserProductEmail marketing={detail.marketing} />
                               {!detail.user.staff ? (
                                 <Button
                                   size="small"

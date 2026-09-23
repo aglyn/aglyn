@@ -53,3 +53,13 @@ export const CONSOLE_TOP_LEVEL_SEGMENTS = new Set([
 export function isConsoleRouteSegment(first: string): boolean {
   return first === '' || first.startsWith('_') || CONSOLE_TOP_LEVEL_SEGMENTS.has(first)
 }
+
+/**
+ * The console's not-found page at an address of its own (AGL-3290), which the
+ * middleware's refusal of an address that names no workspace forwards to.
+ * `app/%5Fmissing/page.tsx` says why it cannot be the typed address itself.
+ */
+export const NOT_FOUND_ROUTE = '/_missing'
+
+/** The query parameter on {@link NOT_FOUND_ROUTE} naming the address that was not found. */
+export const NOT_FOUND_FROM_PARAM = 'from'

@@ -22,16 +22,26 @@ import {
   useFormApi,
 } from '@aglyn/shared-ui-jsx-forms'
 import { Box, Button, FormControl, Grid } from '@mui/material'
-import { forwardRef } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import { useSigninCheck } from '@aglyn/tenant-feature-instance'
 import AuthErrorAlertComponent from './auth-error-alert.component'
 
 export interface AuthFormTemplateComponentProps
-  extends FormTemplateRenderProps {}
+  extends FormTemplateRenderProps {
+  /**
+   * What the page puts between its fields and the submit button, handed down
+   * through `FormRenderer`'s `FormTemplateProps` (AGL-3291).
+   *
+   * Anything a page renders beside the form lands after the button, and the
+   * sign-up page's terms box is what the button checks — so the person met
+   * it only after pressing Next and being refused. It belongs above.
+   */
+  beforeSubmit?: ReactNode
+}
 
-const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
+const AuthFormTemplateComponent = forwardRef<any, AuthFormTemplateComponentProps>(
   (props, ref) => {
-    const { formFields, schema, ...rest } = props
+    const { formFields, schema, beforeSubmit, ...rest } = props
     const { handleSubmit } = useFormApi()
     const { status, error } = useSigninCheck()
     const isLoading = status === 'loading'
@@ -42,10 +52,13 @@ const AuthFormTemplateComponent = forwardRef<any, FormTemplateRenderProps>(
           {formFields}
         </Grid>
         <AuthErrorAlertComponent error={error as AuthResultError} sx={{ mt: 2, mb: 1 }} />
+        {beforeSubmit ? <Box sx={{ mt: 2 }}>{beforeSubmit}</Box> : null}
         <FormSpy>
           {({ submitting, pristine, valid }) => (
+            // Tighter under a before-submit block, which brings its own
+            // top margin: the block and the button read as one group.
             <Box sx={{
-              mt: 2
+              mt: beforeSubmit ? 1 : 2
             }}>
               <FormControl margin="normal" fullWidth>
                 <Button

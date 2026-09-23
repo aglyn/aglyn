@@ -17,15 +17,10 @@
 
 'use client'
 
-import {
-  Checkbox,
-  FormControlLabel,
-  FormHelperText,
-  Link,
-  Typography,
-} from '@mui/material'
+import { Link, Typography } from '@mui/material'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { LEGAL_URLS } from '../constants/shared'
+import AuthCheckboxRow from './auth-checkbox-row.component'
 
 /**
  * The Terms/Privacy links. These are canonical documents on the marketing
@@ -94,38 +89,20 @@ export function AuthConsentCheckbox({
   error,
 }: AuthConsentCheckboxProps) {
   return (
-    <>
-      <FormControlLabel
-        sx={{ alignItems: 'flex-start', mt: 1, mr: 0 }}
-        control={
-          <Checkbox
-            checked={checked}
-            onChange={(event) => onChange(event.target.checked)}
-            size="small"
-            color={error ? 'error' : 'primary'}
-            sx={{ pt: 0 }}
-            slotProps={{
-              input: {
-                'aria-label':
-                  'Agree to the Terms of Service and Privacy Policy',
-              },
-            }}
-          />
-        }
-        label={
-          <Typography variant="body2" sx={{ mt: 0.25 }}>
-            {`I agree to ${PLATFORM_BRAND_NAME}’s `}
-            <LegalLinks />
-            {'.'}
-          </Typography>
-        }
-      />
-      {error ? (
-        <FormHelperText error sx={{ mx: 0 }}>
-          {'Please accept the Terms of Service and Privacy Policy to continue.'}
-        </FormHelperText>
-      ) : null}
-    </>
+    <AuthCheckboxRow
+      checked={checked}
+      onChange={onChange}
+      inputLabel="Agree to the Terms of Service and Privacy Policy"
+      error={
+        error
+          ? 'Please accept the Terms of Service and Privacy Policy to continue.'
+          : null
+      }
+    >
+      {`I agree to ${PLATFORM_BRAND_NAME}’s `}
+      <LegalLinks />
+      {'.'}
+    </AuthCheckboxRow>
   )
 }
 

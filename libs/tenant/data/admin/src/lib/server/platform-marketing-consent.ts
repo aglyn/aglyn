@@ -61,7 +61,27 @@ import {
   readPlatformMarketingConsent,
   USER_MARKETING_PROMPT_DISMISSED_AT_FIELD,
 } from '@aglyn/aglyn/app-utils/platform-marketing-consent'
+import {
+  marketingConsentDecision,
+  type MarketingBasis,
+  type MarketingConsentAssertedBy,
+  type MarketingConsentReason,
+  type MarketingConsentVerdict,
+  readMarketingBasis,
+  resolveMarketingConsentPolicy,
+} from '@aglyn/aglyn/app-utils/marketing-consent'
+import { findContactByEmail } from './contact-email-index'
+import {
+  EMAIL_SUPPRESSIONS_COLLECTION,
+  emailSuppressionKey,
+  HOST_SUPPRESSIONS_SUBCOLLECTION,
+} from './email-suppression'
 import firebaseAdmin from './firebase-admin'
+import {
+  consentGroupForSite,
+  getOrgForHost,
+  orgDataCollectionForHost,
+} from './organizations'
 import { upsertHostContact } from './upsert-contact'
 
 const firestore = () => firebaseAdmin.app().firestore()
@@ -248,4 +268,146 @@ export async function readPlatformMarketingConsentForUser(
   return readPlatformMarketingConsent(
     (snapshot?.data?.() as Record<string, unknown> | undefined) ?? null,
   )
+}
+
+/** An entry on one of the two lists every campaign send passes. */
+export interface PlatformMarketingSuppression {
+  /** `site`: the marketing site's own list. `platform`: every sender's. */
+  list: 'site' | 'platform'
+  /** `unsubscribe` on the site list; `bounce`, `complaint` or `staff` platform-wide. */
+  reason: string
+}
+
+/**
+ * What the operator's own product email would decide about one address
+ * (AGL-3292), read the way a campaign from the marketing site reads it.
+ *
+ * The decision the person made lives on `users/{uid}`, and nothing a send
+ * does looks there. A campaign from the configured marketing site reads the
+ * CONTACT `recordPlatformMarketingConsent` wrote into that site's
+ * organization — its basis for the site, under the organization's policy —
+ * and then drops anybody on either suppression list. Nothing syncs the two
+ * afterwards: an unsubscribe link writes a suppression and leaves both
+ * consent records as they were. So a staff reader asking "may we email
+ * them?" needs this half, and needs it from the sender's own readers — the
+ * same basis read, consent group, policy and lists — or it answers a
+ * question no send asks.
+ */
+export type PlatformMarketingReach =
+  /** No marketing site is configured — a self-hosted install. */
+  | { status: 'unconfigured' }
+  /** The account carries no address a contact could be keyed on. */
+  | { status: 'no-email' }
+  /** A read failed. Nothing about the person follows from it. */
+  | { status: 'unreadable'; hostId: string }
+  | {
+      status: 'read'
+      hostId: string
+      orgId: string
+      orgSlug: string | null
+      /** `null` when the operator's CRM holds no contact for the address. */
+      contactId: string | null
+      basis: MarketingBasis
+      basisAtMs: number | null
+      /** Whose act the basis is — a person's own, or an operator's assertion. */
+      assertedBy: MarketingConsentAssertedBy | null
+      /** Which door recorded the basis (`console-signup`, a form, a backfill). */
+      basisKind: string | null
+      /** The consent rule's answer alone, before either list is consulted. */
+      verdict: MarketingConsentVerdict
+      reason: MarketingConsentReason
+      /** The list that stops every send to the address, when one does. */
+      suppression: PlatformMarketingSuppression | null
+    }
+
+/**
+ * The entry that suppresses `email` for sends from `hostId`, if any.
+ *
+ * The site's own list first, because it is the one a person puts themselves
+ * on from this sender's footer; the platform list second. The same two reads
+ * `filterSendableForHost` makes: a site entry suppresses by existing, and a
+ * platform entry until it is released.
+ */
+async function readPlatformMarketingSuppression(
+  db: any,
+  hostId: string,
+  email: string,
+): Promise<PlatformMarketingSuppression | null> {
+  const key = emailSuppressionKey(email)
+  if (!key) return null
+  const [site, platform] = await Promise.all([
+    db
+      .collection('hosts')
+      .doc(hostId)
+      .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
+      .doc(key)
+      .get(),
+    db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key).get(),
+  ])
+  if (site?.exists) {
+    return { list: 'site', reason: String(site.get('reason') ?? 'unsubscribe') }
+  }
+  if (platform?.exists && !platform.get('releasedAt')) {
+    return { list: 'platform', reason: String(platform.get('reason') ?? 'staff') }
+  }
+  return null
+}
+
+/**
+ * Reads {@link PlatformMarketingReach} for an address.
+ *
+ * Never throws: a failed read is `unreadable`, which the staff page shows as
+ * unknown — never as "no consent", which would be a claim about the person.
+ */
+export async function readPlatformMarketingReach(input: {
+  email: string | null | undefined
+  /** Injectable for tests; defaults to {@link platformMarketingHostId}. */
+  hostId?: string | null
+  /** Injectable for tests; defaults to the admin app's Firestore. */
+  firestore?: any
+}): Promise<PlatformMarketingReach> {
+  const hostId =
+    input.hostId === undefined ? platformMarketingHostId() : input.hostId
+  if (!hostId) return { status: 'unconfigured' }
+  const email = String(input.email ?? '').trim().toLowerCase()
+  if (!email) return { status: 'no-email' }
+  const db = input.firestore ?? firestore()
+  try {
+    const owner = await getOrgForHost(hostId)
+    if (!owner) return { status: 'unreadable', hostId }
+    const org = owner.org as Record<string, unknown>
+    const [contact, group, suppression] = await Promise.all([
+      // Through the org-data seam, as the capture door finds the same row.
+      orgDataCollectionForHost(hostId, 'contacts').then((contacts) =>
+        findContactByEmail(contacts, email),
+      ),
+      consentGroupForSite(hostId, org),
+      readPlatformMarketingSuppression(db, hostId, email),
+    ])
+    const record = readMarketingBasis(
+      (contact?.data?.() as Record<string, unknown> | undefined) ?? null,
+      group,
+    )
+    const decision = marketingConsentDecision(
+      record,
+      resolveMarketingConsentPolicy(org['marketingConsentPolicy']),
+    )
+    return {
+      status: 'read',
+      hostId,
+      orgId: owner.orgId,
+      orgSlug: typeof org['slug'] === 'string' ? org['slug'] : null,
+      contactId: contact?.id ?? null,
+      basis: record.basis,
+      basisAtMs: record.basisAtMs,
+      assertedBy: record.assertedBy,
+      basisKind: record.source?.kind ?? null,
+      verdict: decision.verdict,
+      reason: decision.reason,
+      suppression,
+    }
+  } catch (error) {
+    console.error('[platform-marketing-consent] reach read failed', error)
+    return { status: 'unreadable', hostId }
+  }
 }

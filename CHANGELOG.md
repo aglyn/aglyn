@@ -9,6 +9,26 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.175 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/6e19462d8...v1.0.0-beta.175)
+
+### Added
+
+- **console:** the staff user page shows product-email consent, both halves ([AGL-3292](https://linear.app/aglyn/issue/AGL-3292), [AGL-3185](https://linear.app/aglyn/issue/AGL-3185))
+
+### Fixed
+
+- **console:** sign-up's two checkboxes sit above Next, on the fields' edge ([AGL-3291](https://linear.app/aglyn/issue/AGL-3291))
+- **console:** an unknown address sends a person to sign in, then to the console's 404 ([AGL-3290](https://linear.app/aglyn/issue/AGL-3290), [AGL-3261](https://linear.app/aglyn/issue/AGL-3261), [AGL-3017](https://linear.app/aglyn/issue/AGL-3017))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3292 ([AGL-3292](https://linear.app/aglyn/issue/AGL-3292), [AGL-3290](https://linear.app/aglyn/issue/AGL-3290), [AGL-3289](https://linear.app/aglyn/issue/AGL-3289))
+
+</details>
+
 ## v1.0.0-beta.174 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/8a32136d1...v1.0.0-beta.174)
