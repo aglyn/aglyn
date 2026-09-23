@@ -164,6 +164,10 @@ export async function POST(request: Request): Promise<Response> {
     // content-kind filter as the loader (AGL-1845).
     let collectionName: string | undefined
     let collectionEntry = false
+    // The entry an entry page renders, so the bar can open the entry editor
+    // beside the template's besigner — "Edit this page" edits the DESIGN every
+    // entry shares, which is not where a post's own words and byline live.
+    let entryRef: { collectionKey: string; entryId: string } | undefined
     if (!screenId && normalized !== SCREEN_ROOT_PATH) {
       const collectionRoute = parseCollectionRoute(normalized.split('/'))
       if (collectionRoute) {
@@ -198,6 +202,22 @@ export async function POST(request: Request): Promise<Response> {
                 (collectionDoc.get('displayName') as string | undefined) ||
                 collectionRoute.collectionSlug
               collectionEntry = Boolean(collectionRoute.entrySlug)
+            }
+            if (collectionRoute.entrySlug) {
+              const entryQuery = await collectionDoc.ref
+                .collection('entries')
+                .where('slug', '==', collectionRoute.entrySlug)
+                .limit(1)
+                .get()
+              const entryId = entryQuery.docs[0]?.id
+              if (entryId) {
+                entryRef = {
+                  collectionKey:
+                    (collectionDoc.get('slug') as string | undefined) ||
+                    collectionDoc.id,
+                  entryId,
+                }
+              }
             }
           }
         } catch {
@@ -300,6 +320,16 @@ export async function POST(request: Request): Promise<Response> {
             host: hostDoc.subdomain as string,
             screenId,
             versionId,
+          })}`
+        : null
+
+    const entryEditUrl =
+      canLink && entryRef
+        ? `${CONSOLE_ORIGIN}${buildRoute(Route.CONTENT_ENTRY_DETAILS, {
+            orgSlug: orgSlug as string,
+            host: hostDoc.subdomain as string,
+            collectionSlug: entryRef.collectionKey,
+            entryId: entryRef.entryId,
           })}`
         : null
 
@@ -418,6 +448,7 @@ export async function POST(request: Request): Promise<Response> {
         // the answer isn't known (no screen, or the read failed).
         draftChanges,
         editUrl,
+        entryEditUrl,
         consoleUrl,
         screensUrl,
         // One entry per plugin the site runs, in the order the bar draws

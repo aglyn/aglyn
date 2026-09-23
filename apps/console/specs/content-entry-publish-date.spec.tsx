@@ -64,6 +64,7 @@ const mockEntries = {
       title: 'Hello world',
       slug: 'hello-world',
       status: 'published',
+      authorName: 'Pen Name',
       // A real `Timestamp` shape: the row formatter and the dialog seed both
       // go through `toDate()`, which is the only reader that tells an absent
       // date apart from a zero one.
@@ -78,6 +79,7 @@ const mockEntries = {
       title: 'Never published',
       slug: 'never-published',
       status: 'draft',
+      authorName: 'Pen Name',
     },
   ] as Array<Record<string, unknown>>,
   status: 'success' as 'success' | 'error',
@@ -610,5 +612,44 @@ describe('future scheduling is UNCHANGED (AGL-123 regression control)', () => {
     expect(mockEnqueueSnackbar.mock.calls[0][0]).toEqual(
       expect.stringMatching(/future/i),
     )
+  })
+})
+
+/**
+ * A byline is required to go live. Unpublishing is never gated, so the
+ * refusal is tested only on the two doors that put an entry on the site.
+ */
+describe('publishing requires an author', () => {
+  it('refuses to publish an entry with no byline', async () => {
+    delete mockEntries.data[1].authorName
+    try {
+      renderList()
+      openRowAction('Never published', 'Publish')
+
+      await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+      expect(mockUpdateDoc).not.toHaveBeenCalled()
+      expect(mockEnqueueSnackbar.mock.calls[0][0]).toMatch(/author/i)
+    } finally {
+      mockEntries.data[1].authorName = 'Pen Name'
+    }
+  })
+
+  it('refuses to schedule an entry with no byline', async () => {
+    delete mockEntries.data[1].authorName
+    try {
+      renderList()
+      openRowAction('Never published', /^Schedule/)
+      const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      fireEvent.change(screen.getByLabelText('Publish at'), {
+        target: { value: localValue(future) },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Schedule' }))
+
+      await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+      expect(mockUpdateDoc).not.toHaveBeenCalled()
+      expect(mockEnqueueSnackbar.mock.calls[0][0]).toMatch(/author/i)
+    } finally {
+      mockEntries.data[1].authorName = 'Pen Name'
+    }
   })
 })

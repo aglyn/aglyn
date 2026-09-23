@@ -60,6 +60,7 @@ const mockEntries = {
       title: 'Hello world',
       slug: 'hello-world',
       status: 'published',
+      authorName: 'Pen Name',
       // A real `Timestamp` shape: the row formatter and the dialog seed both
       // go through `toDate()`, which is the only reader that tells an absent
       // date apart from a zero one.
@@ -74,6 +75,7 @@ const mockEntries = {
       title: 'Never published',
       slug: 'never-published',
       status: 'draft',
+      authorName: 'Pen Name',
     },
   ] as Array<Record<string, unknown>>,
   status: 'success' as 'success' | 'error',

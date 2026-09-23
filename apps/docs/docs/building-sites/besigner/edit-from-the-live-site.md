@@ -76,7 +76,9 @@ From left to right:
   no screen serves shows *Unrouted page*.
 - **Draft changes**, when the screen has a version newer than the one that's live.
 - **Edit this page**, which opens the besigner on that screen, at the version the page is
-  serving.
+  serving. On a blog post or another collection entry it reads **Edit template**, because
+  that screen is the design every entry shares, and **Edit this entry** beside it opens
+  the entry itself — its text, cover and author — in the console's content editor.
 - today's page views across the site, and on **Pro+** how many of them were of this page,
   as in *120 views today · 18 on this page*. Days are counted in UTC. It opens the site's
   analytics.
@@ -91,7 +93,7 @@ browse, the bar follows: go to another page and it names that page's screen.
 
 The bar sits above the page rather than over it. The page moves down by the bar's height,
 and so does a site header pinned to the top of the window. On a phone, the bar keeps the
-site name, **Edit this page** and **×**, and a **⋯** menu holds the links, your email and
+site name, the edit links and **×**, and a **⋯** menu holds the links, your email and
 **Disconnect**.
 
 ## Hide it

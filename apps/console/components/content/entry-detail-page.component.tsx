@@ -552,6 +552,18 @@ export function EntryDetailPage() {
         { variant: 'warning', persist: false },
       )
     }
+    // A live or scheduled entry keeps its byline: publishing requires one, so
+    // a save that cleared it would publish an unattributed post by the back
+    // door. Drafts may still be saved without one.
+    if (
+      stored?.status &&
+      stored.status !== 'draft' &&
+      !Aglyn.entryHasByline(editor)
+    ) {
+      return void enqueueSnackbar(Aglyn.ENTRY_BYLINE_REQUIRED_MESSAGE, {
+        variant: 'warning',
+      })
+    }
     const id = editor.id ?? Aglyn.createResourceUid()
     const timestamp = Timestamp.now()
     /**
@@ -1087,7 +1099,7 @@ export function EntryDetailPage() {
         secondary:
           authors.find((author) => author.$id === editor?.authorId)?.name ||
           editor?.authorName ||
-          'The site (publisher entity)',
+          'None — required to publish',
         icon: mdiAccountOutline.path,
       },
       {
@@ -1514,6 +1526,12 @@ export function EntryDetailPage() {
                           re-attribute it. */}
                       <TextField
                         select
+                        required
+                        error={
+                          Boolean(stored?.status) &&
+                          stored.status !== 'draft' &&
+                          !Aglyn.entryHasByline(editor)
+                        }
                         label="Author"
                         value={
                           editor.authorId
@@ -1546,11 +1564,9 @@ export function EntryDetailPage() {
                           })
                         }}
                         size="small"
-                        helperText="Byline for this entry — falls back to the site entity"
+                        helperText="Byline for this entry — required to publish"
                       >
-                        <MenuItem value="">
-                          {'The site (publisher entity)'}
-                        </MenuItem>
+                        <MenuItem value="">{'None — pick an author'}</MenuItem>
                         {authors.map((author) => (
                           <MenuItem key={author.$id} value={author.$id}>
                             {`${author.name} · ${Aglyn.contentAuthorSchemaType(author.type)}`}
@@ -1587,8 +1603,7 @@ export function EntryDetailPage() {
                           size="small"
                           helperText={
                             'A one-off name for this entry — published as a ' +
-                            'Person. Leave blank to attribute the piece to the ' +
-                            'site.'
+                            'Person.'
                           }
                         />
                       ) : null}

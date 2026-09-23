@@ -314,6 +314,19 @@ describe('AdminBar top chrome (AGL-1829)', () => {
     expect(screen.queryByText('Unrouted page')).toBeNull()
   })
 
+  it('links both the entry and its template on an entry page', async () => {
+    await renderReadyBar({
+      collectionName: 'Blog',
+      collectionEntry: true,
+      entryEditUrl: 'https://app.aglyn.com/acme/hosts/www/content/blog/entries/e1',
+    })
+    expect(linkByText('Edit this entry').href).toBe(
+      'https://app.aglyn.com/acme/hosts/www/content/blog/entries/e1',
+    )
+    expect(linkByText('Edit template').href).toBe(CONTEXT_RESPONSE.editUrl)
+    expect(screen.queryByText('Edit this page')).toBeNull()
+  })
+
   it('hides the draft flag when the server says false', async () => {
     await renderReadyBar({ draftChanges: false })
     expect(screen.queryByText('Draft changes')).toBeNull()

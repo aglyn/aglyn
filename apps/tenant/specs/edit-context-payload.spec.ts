@@ -59,6 +59,9 @@ let mockCollectionData: FakeDocData | null
 let mockCollectionShadowData: FakeDocData | null
 let mockCollectionQueries: number
 let mockCollectionSlugQueried: string | undefined
+// The entry an entry route renders, looked up by slug inside the collection.
+let mockEntryId: string | null
+let mockEntrySlugQueried: string | undefined
 
 function docSnapshot(data: FakeDocData | null) {
   return {
@@ -139,7 +142,37 @@ function hostSubcollection(sub: string) {
                     ? [docSnapshot(mockCollectionShadowData)]
                     : []),
                   ...(mockCollectionData
-                    ? [docSnapshot(mockCollectionData)]
+                    ? [
+                        {
+                          ...docSnapshot(mockCollectionData),
+                          id: 'col-blog',
+                          ref: {
+                            collection: (inner: string) => {
+                              expect(inner).toBe('entries')
+                              return {
+                                where: (
+                                  entryField: string,
+                                  entryOp: string,
+                                  entrySlug: string,
+                                ) => {
+                                  expect(entryField).toBe('slug')
+                                  expect(entryOp).toBe('==')
+                                  mockEntrySlugQueried = entrySlug
+                                  return {
+                                    limit: () => ({
+                                      get: async () => ({
+                                        docs: mockEntryId
+                                          ? [{ id: mockEntryId }]
+                                          : [],
+                                      }),
+                                    }),
+                                  }
+                                },
+                              }
+                            },
+                          },
+                        },
+                      ]
                     : []),
                 ],
               }
@@ -236,6 +269,8 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     mockCollectionData = null
     mockCollectionShadowData = null
     mockCollectionQueries = 0
+    mockEntryId = null
+    mockEntrySlugQueried = undefined
     mockCollectionSlugQueried = undefined
   })
 
@@ -389,6 +424,33 @@ describe('/api/edit-context extended payload (AGL-1829)', () => {
     expect(payload.editUrl).toBe(
       'https://app.aglyn.com/acme/hosts/www/screens/screen-1/versions/v-live/besigner',
     )
+  })
+
+  it('links the ENTRY editor beside the template on an entry route', async () => {
+    mockCollectionData = {
+      slug: 'blog',
+      displayName: 'Blog',
+      entryScreenId: 'screen-1',
+    }
+    mockEntryId = 'entry-42'
+    const payload = await (
+      await POST(contextRequest('good-token', '/blog/aglyn-is-in-early-access'))
+    ).json()
+    expect(mockEntrySlugQueried).toBe('aglyn-is-in-early-access')
+    expect(payload.entryEditUrl).toBe(
+      'https://app.aglyn.com/acme/hosts/www/content/blog/entries/entry-42',
+    )
+    // The template link is still there — both, not one or the other.
+    expect(payload.editUrl).toContain('/screens/screen-1/')
+  })
+
+  it('offers no entry link on a list route or an unknown entry', async () => {
+    mockCollectionData = { displayName: 'Blog', entryScreenId: 'screen-1' }
+    const missing = await (
+      await POST(contextRequest('good-token', '/blog/no-such-post'))
+    ).json()
+    expect(missing.entryEditUrl).toBeNull()
+    expect(missing.editUrl).toContain('/screens/screen-1/')
   })
 
   it('skips a catalog collection that shadows the blog slug (AGL-954)', async () => {

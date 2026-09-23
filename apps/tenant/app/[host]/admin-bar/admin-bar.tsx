@@ -104,6 +104,8 @@ interface EditContext {
   /** True when a version newer than the live pointer exists; null unknown. */
   draftChanges?: boolean | null
   editUrl: string | null
+  /** The entry editor for the entry this page renders; null elsewhere. */
+  entryEditUrl?: string | null
   consoleUrl: string
   screensUrl?: string | null
   /**
@@ -853,7 +855,17 @@ export default function AdminBar({
           target="_blank"
           rel="noreferrer"
         >
-          Edit this page
+          {context.entryEditUrl ? 'Edit template' : 'Edit this page'}
+        </a>
+      ) : null}
+      {context?.entryEditUrl ? (
+        <a
+          style={linkStyle}
+          href={context.entryEditUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Edit this entry
         </a>
       ) : null}
       <span style={{ flex: 1, minWidth: 12 }} />
