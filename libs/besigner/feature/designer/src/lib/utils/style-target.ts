@@ -80,6 +80,12 @@ export interface NodeStyleTarget {
   readonly isComposed: boolean
   /** Replaces the target sx wholesale (MobX action inside). */
   setSx(next: Record<string, any> | undefined): void
+  /**
+   * Removes every style change a placement carries, on every part — the
+   * "Reset all" of AGL-3288. Does nothing on a plain node, whose sx is its
+   * own and has nothing to reset to (MobX action inside).
+   */
+  clearAll(): void
 }
 
 const isPlainRecord = (value: unknown): value is Record<string, any> =>
@@ -285,6 +291,7 @@ export function getNodeStyleTarget(
         if (!node) return
         writeComposedNodeSx(node, next)
       }),
+      clearAll: () => undefined,
     }
   }
   // An instance's target is deliberately NOT composed with anything
@@ -320,7 +327,26 @@ export function getNodeStyleTarget(
       node.styleOverrides =
         Object.keys(overrides).length > 0 ? overrides : undefined
     }),
+    clearAll: action(() => {
+      if (node.styleOverrides !== undefined) node.styleOverrides = undefined
+    }),
   }
+}
+
+/**
+ * How many style settings a placement changes across all of its parts — the
+ * count the "N changes on this page" line reads (AGL-3288).
+ */
+export function countStyleChanges(
+  node: { styleOverrides?: unknown } | null | undefined,
+): number {
+  const overrides = node?.styleOverrides
+  if (!isPlainRecord(overrides)) return 0
+  let count = 0
+  for (const slice of Object.values(overrides)) {
+    if (isPlainRecord(slice)) count += Object.keys(slice).length
+  }
+  return count
 }
 
 export default getNodeStyleTarget

@@ -99,6 +99,11 @@ export interface NodeAttrTarget {
   setAttrs(next: Record<string, any> | undefined): void
   /** Removes ONE overridden prop, leaving this instance's others (MobX action inside). */
   clearAttr(prop: string): void
+  /**
+   * Removes every attribute change this placement carries, on every part —
+   * the "Reset all" of AGL-3288 (MobX action inside).
+   */
+  clearAll(): void
 }
 
 const isPlainRecord = (value: unknown): value is Record<string, any> =>
@@ -184,6 +189,7 @@ function plainNodeTarget(): NodeAttrTarget {
     },
     setAttrs: () => undefined,
     clearAttr: () => undefined,
+    clearAll: () => undefined,
   }
 }
 
@@ -246,7 +252,26 @@ export function getNodeAttrTarget(
       node.attrOverrides =
         Object.keys(overrides).length > 0 ? overrides : undefined
     }),
+    clearAll: action(() => {
+      if (node.attrOverrides !== undefined) node.attrOverrides = undefined
+    }),
   }
+}
+
+/**
+ * How many attribute changes a placement carries across all of its parts —
+ * the count the "N changes on this page" line reads (AGL-3288).
+ */
+export function countAttrChanges(
+  node: { attrOverrides?: unknown } | null | undefined,
+): number {
+  const overrides = node?.attrOverrides
+  if (!isPlainRecord(overrides)) return 0
+  let count = 0
+  for (const slice of Object.values(overrides)) {
+    if (isPlainRecord(slice)) count += Object.keys(slice).length
+  }
+  return count
 }
 
 /**

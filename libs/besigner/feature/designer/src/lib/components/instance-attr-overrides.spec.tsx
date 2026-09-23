@@ -21,6 +21,10 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import { elementPropsComponentMapper } from './element-props-form.component'
 import { InstanceAttrOverrides } from './instance-attr-overrides.component'
+import {
+  pickPlacementPart,
+  resetPlacementPartPick,
+} from '../utils/placement-part-pick'
 
 /**
  * The Attributes panel's per-instance override section (AGL-1899).
@@ -96,7 +100,7 @@ describe('the instance attribute-override section (AGL-1899)', () => {
    */
   const pickTarget = async (key: string) => {
     act(() => {
-      fireEvent.mouseDown(screen.getByLabelText('Override target'))
+      fireEvent.mouseDown(screen.getByLabelText('Which part?'))
     })
     await act(async () => undefined)
     const option = within(screen.getByRole('listbox')).getByRole('option', {
@@ -150,6 +154,7 @@ describe('the instance attribute-override section (AGL-1899)', () => {
     jest.runOnlyPendingTimers()
     jest.useRealTimers()
     Aglyn.canvas.reset()
+    resetPlacementPartPick()
   })
 
   it('renders nothing at all for a node that is not an instance', async () => {
@@ -158,15 +163,15 @@ describe('the instance attribute-override section (AGL-1899)', () => {
       plain: { $id: 'plain', componentId: STACK, props: { spacing: 1 } },
     } as any)
     await renderSection(Aglyn.canvas.getNode('plain') as Aglyn.NodeSchema)
-    expect(screen.queryByText('Attribute overrides')).toBeNull()
+    expect(screen.queryByText('Change it on this page only')).toBeNull()
   })
 
   it('offers the component tree as targets and starts on the root', async () => {
     await renderSection(seedInstance())
-    expect(screen.getByText('Attribute overrides')).toBeTruthy()
+    expect(screen.getByText('Change it on this page only')).toBeTruthy()
     // The root's own attributes, because the root is where it starts.
     expect(screen.getByLabelText('Spacing')).toBeTruthy()
-    expect(screen.getByText("Using the component's attributes")).toBeTruthy()
+    expect(screen.getByText('No changes on this page yet')).toBeTruthy()
   })
 
   it('shows only the overridable attributes of the picked element', async () => {
@@ -197,9 +202,14 @@ describe('the instance attribute-override section (AGL-1899)', () => {
     await pickTarget('cta')
     await typeInto('Variant', 'outlined')
     expect(live().attrOverrides).toEqual({ cta: { variant: 'outlined' } })
-    // The chip counts it, and names it.
-    expect(screen.getByText('Overridden here: 1')).toBeTruthy()
-    expect(screen.getByText('variant')).toBeTruthy()
+    // The summary counts it, and the field itself says it changed.
+    expect(screen.getByText('1 change on this page')).toBeTruthy()
+    expect(screen.getByText('Changed here')).toBeTruthy()
+    expect(
+      screen.getByRole('button', {
+        name: "Reset Variant to the component's value",
+      }),
+    ).toBeTruthy()
   })
 
   it('opening the panel commits nothing', async () => {
@@ -221,18 +231,77 @@ describe('the instance attribute-override section (AGL-1899)', () => {
     transact.mockRestore()
   })
 
-  it("a chip's ✕ clears that override and leaves the instance clean", async () => {
+  it("a field's reset clears that change and leaves the instance clean", async () => {
     await renderSection(seedInstance({ cta: { variant: 'outlined' } }))
     await pickTarget('cta')
-    expect(screen.getByText('Overridden here: 1')).toBeTruthy()
+    expect(screen.getByText('1 change on this page')).toBeTruthy()
     act(() => {
-      fireEvent.click(screen.getByTestId('CancelIcon'))
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: "Reset Variant to the component's value",
+        }),
+      )
     })
     await act(async () => undefined)
     // Cleared means the field is GONE, not stored empty: the panel and the
     // graft must both read this instance as clean.
     expect(live().attrOverrides).toBeUndefined()
-    expect(screen.getByText("Using the component's attributes")).toBeTruthy()
+    expect(screen.getByText('No changes on this page yet')).toBeTruthy()
+    // The form re-seeds, so the reset value cannot be written back.
+    expect((screen.getByLabelText('Variant') as HTMLInputElement).value).toBe(
+      '',
+    )
+  })
+
+  it('reset all clears every part in one undoable step', async () => {
+    await renderSection(
+      seedInstance({ cta: { variant: 'outlined' }, root: { spacing: 4 } }),
+    )
+    expect(screen.getByText('2 changes on this page')).toBeTruthy()
+    const transact = jest.spyOn(Aglyn.canvas, 'transact')
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /^Reset every/ }))
+    })
+    await act(async () => undefined)
+    expect(transact).toHaveBeenCalledTimes(1)
+    expect(live().attrOverrides).toBeUndefined()
+    expect(screen.getByText('No changes on this page yet')).toBeTruthy()
+    transact.mockRestore()
+  })
+
+  it('names parts plainly, and marks the changed ones', async () => {
+    await renderSection(seedInstance({ cta: { variant: 'outlined' } }))
+    act(() => {
+      fireEvent.mouseDown(screen.getByLabelText('Which part?'))
+    })
+    await act(async () => undefined)
+    const listbox = screen.getByRole('listbox')
+    expect(within(listbox).getByText('Whole component')).toBeTruthy()
+    expect(within(listbox).getByText('Call to action')).toBeTruthy()
+    expect(within(listbox).getByText('(changed)')).toBeTruthy()
+  })
+
+  it('never shows the storage vocabulary', async () => {
+    await renderSection(seedInstance({ cta: { variant: 'outlined' } }))
+    await pickTarget('cta')
+    const text = document.body.textContent ?? ''
+    expect(text).not.toMatch(
+      /\b(attributes?|overrides?|overridden|instances?|targets?|root)\b/i,
+    )
+  })
+
+  it('a click on a part on the canvas moves the picker there', async () => {
+    const node = seedInstance()
+    await renderSection(node)
+    expect(screen.getByLabelText('Spacing')).toBeTruthy()
+    act(() => {
+      pickPlacementPart('inst', 'cta')
+    })
+    await act(async () => undefined)
+    expect(screen.getByLabelText('Variant')).toBeTruthy()
+    // A later choice in the menu is not snapped back by that click.
+    await pickTarget('root')
+    expect(screen.getByLabelText('Spacing')).toBeTruthy()
   })
 
   it('an edit on one target leaves another target’s override alone', async () => {

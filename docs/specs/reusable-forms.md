@@ -386,12 +386,12 @@ two per-placement layers a component instance does, stored on the placed node
 and applied by the one graft (`composeReusableComponentNodes`) that the canvas,
 Preview and the published page all run:
 
-- **Styles** (`styleOverrides`). The Styles tab's *Style target* picker lists
+- **Styles** (`styleOverrides`). The Styles tab's *Which part?* picker lists
   *Whole form* and every part of the form's design; picking a field restyles
   that field's copy on this page only. Keys are the design's own node ids (or
   `root`), exactly as for an instance.
-- **Attributes** (`attrOverrides`). The Attributes tab's *Override target*
-  picker offers the same parts. A page may change a field's label or
+- **Attributes** (`attrOverrides`). The Attributes tab's *Which part?* picker
+  offers the same parts (both under *Change it on this page only*, AGL-3288). A page may change a field's label or
   placeholder, the submit button's text and the success message.
 
 What a page may **not** change is anything that alters what the form submits.

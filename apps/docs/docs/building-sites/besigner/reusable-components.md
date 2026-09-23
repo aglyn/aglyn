@@ -242,22 +242,28 @@ A conditional property's field appears only while its condition holds for this i
 Shared layouts take properties the same way, and each screen sets them in Screen
 Properties — see [Layout properties](../screens-and-layouts/layouts.md#layout-properties).
 
-### Restyle one instance
+### Restyle it on one page only {#restyle-one-instance}
 
-Select an instance, open the **Styles** tab, and everything you change applies to
-**that placement only** — layered over the component's own styles. Other pages keep the
-component look, and component updates still flow through. A chip at the top of the panel
-names the mode, and each overridden property lists beside it with an ✕ that returns it to
-the component's value.
+Select a placed component, open the **Styles** tab, and the panel opens with
+**Change it on this page only**: everything you change applies to **that spot only**.
+The component itself, and every other page using it, stay the same — and later changes
+to the component still flow through. A line under the heading counts what this page
+changes (*"3 changes on this page · Reset all"*), and each changed setting is listed by
+its name — *Corner Radius*, *Top margin* — with an ✕ that puts it back to the
+component's value. **Reset all** puts back every one of them in one step, and one undo
+brings them all back.
 
-Styles are per **element inside** the component, not just its outer box. The panel's
-**Style target** picker lists the component's own tree — the outer element first, then
-each element inside it, indented — and a `•` marks the ones this instance has already
-overridden. Pick one and the whole panel styles that element, on this instance.
+Styles are per **part** of the component, not just its outer box. **Which part?** lists
+the component's own pieces by what they show — *Whole component* first, then
+*Card: Besigner*, *Text: "Design on a live canvas…"*, *Link: Read the docs →*,
+*Icon (in Besigner card)* — indented the way they nest, and **(changed)** marks the ones
+this page already changes. Pick one and the whole panel styles that part, on this page.
+You can also click the part itself on the canvas: with the component selected, a click on
+its headline or button sets **Which part?** to it.
 
 That picker is what a variant needs. A component's headline usually sets **its own**
 color, so a background change on the outer element never reaches it: switching one CTA
-to a white band without also targeting the headline gives you white text on white. Set
+to a white band without also picking the headline gives you white text on white. Set
 the background on the outer element, then pick the headline and the sub-copy and set
 their colors too.
 
@@ -265,18 +271,18 @@ their colors too.
 *Background Color* on the instance is not enough — `background-image` paints over
 `background-color`, so the gradient still wins. Set **Background Fill** to *Solid color*
 as well: that records "paint no image" for this placement and your color shows. The
-field's first choice, *Inherited*, is the way back — it drops the override and the
-component's gradient returns. Overriding to a *different* gradient works the same way.
+field's first choice, *Inherited*, is the way back — it drops this page's change and
+the component's gradient returns. Changing it to a *different* gradient works the same way.
 
-Styling is all an override does. The **content** of an element inside a component stays
+Styling is all this does. The **content** of an element inside a component stays
 the component's — text and images come from the component or from its
 [properties](#properties). If one page needs different words, add a property for the
 difference; if it needs a different structure, edit the component (every page follows)
 or [detach](#detach) that instance.
 
-Overrides are stored against the component element they target, so an element deleted
-from the component later simply drops its override — that instance falls back to the
-component's own styling rather than breaking.
+A change is stored against the part it was made on, so a part deleted from the component
+later simply drops it — that page falls back to the component's own styling rather than
+breaking.
 
 :::warning
 Instance values are stored **against the property name**, so renaming a property orphans
@@ -284,39 +290,43 @@ every value already set against the old one and those pages fall back to the def
 Rename in place rather than deleting and re-adding.
 :::
 
-### Override an attribute on one instance
+### Change it on this page only {#override-an-attribute-on-one-instance}
 
-Styles are not the only thing one placement can differ in. Select an instance, open the
-**Attributes** tab, and scroll to **Attribute overrides**: an **Override target** picker
-listing the same tree the Style target picker does, and under it the attributes of the
-element you pick — its variant, size, link, and so on.
+Styles are not the only thing one placement can differ in. Select a placed component and
+open the **Attributes** tab. Right after the component's own fields (its Headline, Lede and
+so on) comes **Change it on this page only**: the same **Which part?** picker the Styles tab
+has, and under it the settings of the part you pick — its variant, size, link, and so on.
 
-Set one and it applies to **that placement only**, layered over the component's own value.
-Leave a field empty and the component's value is what renders; the placeholder shows you
-what that is. A chip counts what this instance overrides, and each override lists beside it
-with an ✕ that hands the attribute back to the component.
+Changes here affect **this spot only**. The component itself, and every other page using
+it, stay the same. Leave a box empty and the component's value is what shows; the gray hint
+in the box tells you what that is. A field you change says **Changed here**, with a ↺ button
+beside it that puts it back to the component's value, and the line above the fields counts
+them — *"2 changes on this page · Reset all"*.
 
 This is for the differences that are not worth a property. A property is the right answer
 when the difference is *content*, or when the same difference recurs across pages — it is
-named, documented and filled in on every instance. An override is for the one-off: this
-page's CTA is outlined, everywhere else it stays solid.
+named, documented and filled in on every page. A change here is for the one-off: this
+page's button is outlined, everywhere else it stays solid.
 
-**No** and `0` are real overrides and survive; an empty field is not an override at all.
+**No** and `0` are real changes and are kept; an empty box is no change at all.
 
-Component updates still flow through an override. An override replaces only the attributes
-it names, so an attribute the component **adds** later reaches every instance with the
-component's new value, overridden ones included.
+Component updates still flow through. A change here replaces only the settings it names,
+so a setting the component **adds** later reaches every page with the component's new
+value, including pages that changed something else.
 
-Two things are deliberately not overridable here:
+Two things deliberately can't be changed here:
 
 - **Content.** `Text` and rich text stay the component's, and come from the component or
-  from its [properties](#properties) — the same rule the style overrides follow.
-- **Styles**, which have their own layer on the [Styles](#restyle-one-instance) tab. One
-  place per kind of change, so the two can never disagree about what an instance looks
-  like.
+  from its [properties](#properties) — the same rule styles follow.
+- **Styles**, which have their own place on the [Styles](#restyle-one-instance) tab. One
+  place per kind of change, so the two can never disagree about what a page shows.
 
-A handful of attributes are not offered per instance either — icon pickers, screen links,
+A handful of settings are not offered per page either — icon pickers, screen links,
 gradients and plugin settings. Change those in the component, or [detach](#detach).
+
+A form placed from the Forms page works the same way: **Which part?** starts at
+*Whole form* and lists each field by its label (*Field: Work email*). A page may change a
+label, a placeholder or the button's words, never what the form collects.
 
 ## Retrofit duplicated sections
 
@@ -344,8 +354,8 @@ ids — the confirmation reads *"Detached — this copy no longer follows the co
 Use it when one page needs a variation the shared source shouldn't carry.
 
 What you get is what the page was showing. The property values set on that instance — and
-every [per-instance style](#restyle-one-instance) and
-[attribute override](#override-an-attribute-on-one-instance) applied to it, on its outer
+every [style](#restyle-one-instance) and
+[setting](#override-an-attribute-on-one-instance) changed on that page only, on its outer
 element and on each element inside it — are baked into the copy as ordinary text, images,
 styles and attributes,
 so the section looks identical before and after; it is simply editable now. Nothing in the

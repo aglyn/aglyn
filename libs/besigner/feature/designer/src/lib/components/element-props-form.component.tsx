@@ -250,13 +250,23 @@ export function withoutFormatting(
   return next
 }
 
+/**
+ * Something drawn BETWEEN the Attributes form's fields (AGL-3288): after the
+ * first `afterFieldCount` fields, as a full-width row of the same grid.
+ */
+export interface ElementPropsFormInsert {
+  afterFieldCount: number
+  content: JSX.Node
+}
+
 export const ElementPropsFormTemplate = forwardRef<
   any,
-  FormTemplateRenderProps
+  FormTemplateRenderProps & { insert?: ElementPropsFormInsert | null }
 >((props, ref) => {
-  const { formFields, schema, ...rest } = props
+  const { formFields, schema, insert, ...rest } = props
   const { handleSubmit } = useFormApi()
   const { schedule, flush } = useDebouncedCommit(handleSubmit)
+  const fields = formFields as unknown as JSX.Node[]
   return (
     <form
       ref={ref}
@@ -271,7 +281,15 @@ export const ElementPropsFormTemplate = forwardRef<
     >
       {schema.title}
       <Grid spacing={2} container>
-        {formFields as unknown as JSX.Node}
+        {insert && Array.isArray(fields) ? (
+          <>
+            {fields.slice(0, insert.afterFieldCount)}
+            <Grid size={12}>{insert.content}</Grid>
+            {fields.slice(insert.afterFieldCount)}
+          </>
+        ) : (
+          (formFields as unknown as JSX.Node)
+        )}
       </Grid>
       <FormSpy subscription={{ values: true, pristine: true, valid: true }}>
         {({ values, pristine, valid }) => (
@@ -2628,6 +2646,50 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
       [formFieldSchema],
     )
 
+    /**
+     * "Change it on this page only" (AGL-1899, AGL-3288), drawn directly
+     * after the element's own fields and the placement's declared
+     * properties — Headline, Lede and the rest — and BEFORE visibility,
+     * animation and repeat, which belong to the element on every page. An
+     * author changing one page's copy of a component reads those two groups
+     * together; with the whole Attributes form between them, the per-page
+     * section read as something unrelated at the bottom of the panel.
+     *
+     * It runs a form of its own and shares no value plumbing with the one it
+     * sits in: it writes `node.attrOverrides` and reads the component
+     * DEFINITION's values, so it cannot become a second writer on anything
+     * the form around it owns. Its template renders no `<form>` element, so
+     * the markup stays valid, and it stops Return from submitting the outer
+     * form.
+     */
+    const placementFieldCount = useMemo(() => {
+      const trailing = new Set(
+        [...visibilityFields, ...animationFields, ...repeatFields].map(
+          (field: any) => field?.name as string,
+        ),
+      )
+      const index = fieldsWithAssetFacts.findIndex((field: any) =>
+        trailing.has(field?.name),
+      )
+      return index === -1 ? fieldsWithAssetFacts.length : index
+    }, [fieldsWithAssetFacts, visibilityFields, animationFields, repeatFields])
+    const isPlacement = isInstance || isPlacedFormNode(node)
+    const placementInsert = useMemo<ElementPropsFormInsert | null>(
+      () =>
+        isPlacement && node
+          ? {
+              afterFieldCount: placementFieldCount,
+              content: (
+                <InstanceAttrOverrides
+                  node={node}
+                  componentMapper={elementPropsComponentMapper}
+                />
+              ),
+            }
+          : null,
+      [isPlacement, node, placementFieldCount],
+    )
+
     const handleFormCancel = useCallback((e: SyntheticEvent, reason?: string) => {}, [])
     const handleElementSave = useCallback(
       (values: Record<string, unknown>) => {
@@ -2774,27 +2836,9 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                 <ElementPropsFormTemplate
                   formFields={formFields}
                   schema={schema}
+                  insert={placementInsert}
                   {...rest}
                 />
-
-                {/* Per-instance ATTRIBUTE overrides (AGL-1899), the
-                    attribute-side twin of the Styles panel's override
-                    section. Rendered OUTSIDE `ElementPropsFormTemplate` —
-                    which is the `<form>` — because it runs a form of its own:
-                    nesting them would produce invalid markup and a submit
-                    from the inner one would be the outer one's submit.
-
-                    It writes `node.attrOverrides`, a first-class node field,
-                    and reads its values from the component DEFINITION rather
-                    than from this node's props, so it shares no value plumbing
-                    with the form above and cannot become a second writer on
-                    anything the form above owns. */}
-                {isInstance || isPlacedFormNode(node) ? (
-                  <InstanceAttrOverrides
-                    node={node}
-                    componentMapper={elementPropsComponentMapper}
-                  />
-                ) : null}
 
                 {boundPropSummaries.length ? (
                   <Box sx={{ mt: 2 }}>
