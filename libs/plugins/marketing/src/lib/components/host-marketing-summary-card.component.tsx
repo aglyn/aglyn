@@ -26,6 +26,8 @@ import {
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import { campaignSendsQuery } from './campaign-queries'
+import { useMarketingOrgId } from './marketing-org-mount'
 
 export interface HostMarketingSummaryCardProps {
   hostId: string
@@ -41,15 +43,19 @@ export interface HostMarketingSummaryCardProps {
 export function HostMarketingSummaryCard(props: HostMarketingSummaryCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
+  const { orgId } = useMarketingOrgId(hostId)
   const { data: overlayDocs } = useFirestoreCollection<any>(
     () => query(collection(firestore, 'hosts', hostId, 'overlays'), limit(50)),
     [firestore, hostId],
     { idField: '$id' },
   )
+  // The org's sends, narrowed to the ones this site sent.
   const { data: campaignDocs } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'campaigns'), limit(50)),
-    [firestore, hostId],
+    () => {
+      const sends = campaignSendsQuery(firestore, orgId, hostId)
+      return sends ? query(sends, limit(50)) : null
+    },
+    [firestore, orgId, hostId],
     { idField: '$id' },
   )
   const { data: experimentDocs } = useFirestoreCollection<any>(

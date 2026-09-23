@@ -34,6 +34,7 @@ import type { PluginRevocation } from '@aglyn/aglyn/server'
 import { renderRecipientEmail } from '@aglyn/aglyn/app-utils/recipient-email-render'
 import type { EmailRenderProduct } from '@aglyn/shared-util-email'
 import { assignExperimentVariant, type HostExperiment } from '../model'
+import { campaignPlacedOnHost } from '@aglyn/shared-ui-email-campaigns/model'
 import { readPluginRecordCard } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'
@@ -101,6 +102,12 @@ import {
   recordCampaignReach,
   recordCampaignSkipped,
 } from './email-campaign-reach'
+import {
+  campaignSendSiteStamp,
+  orgCampaignSends,
+  orgEmailCampaigns,
+  sendIsOnHost,
+} from './campaign-org-refs'
 /*
  * The LEAF module for the reputation controls too, and for the same reason
  * as the three above it: every spec that reaches this file mocks the
@@ -149,6 +156,9 @@ import {
  */
 const MAX_RECIPIENTS_PER_SEND = EMAIL_MAX_RECIPIENTS_PER_SEND
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** What Resend accepts as a tag value; anything else fails the message. */
+const RESEND_TAG_VALUE = /^[A-Za-z0-9_-]{1,256}$/
 
 /** How many audience documents one Firestore round trip fetches. */
 const AUDIENCE_PAGE_SIZE = 500
@@ -781,8 +791,10 @@ export async function performCampaignSend(
   // `hostId` is deliberately NOT guarded here, and that is measured rather
   // than overlooked: both callers prove it first — the handler resolves the
   // host document and checks the caller's role on it before calling in, and
-  // the scheduled processor passes `hostRef.id` off a document it just read. A
-  // guard here could not fail today. A third caller would need to earn that.
+  // the scheduled processor passes the site a send records only after
+  // `scheduledSendSite` has refused an empty or path-shaped one. The host
+  // read below then refuses a site that does not exist. A guard here could
+  // not fail today. A third caller would need to earn that.
   for (const [name, value] of [
     ['campaignId', options.campaignId],
     ['experimentId', options.experimentId],
@@ -827,6 +839,28 @@ export async function performCampaignSend(
   if (!hostSnapshot.exists) {
     throw new CampaignSendError('Unknown site', 404)
   }
+  /*
+   * THE ORGANIZATION, resolved before anything else is read.
+   *
+   * Every send is recorded under it (`orgs/{orgId}/campaigns`), so no branch
+   * below — the follow-up's checks, the batch's, the final write — can
+   * address the send without it. The consent policy, the plan cap, the
+   * reputation ramp and the branding further down read the same document,
+   * so this is the one read of it.
+   *
+   * A site with no organization cannot send: there is nowhere to record the
+   * send and no plan to charge it to. `getOrgForHost` failing is treated the
+   * same way — refused, with nothing written.
+   */
+  const orgForHost = await getOrgForHost(hostId).catch(() => null)
+  const orgId = String(orgForHost?.orgId ?? '')
+  if (!orgId) {
+    throw new CampaignSendError(
+      'This site is not part of an organization, so it cannot send campaigns.',
+      409,
+    )
+  }
+  const sends = orgCampaignSends(firestore, orgId)
 
   /*==========================================
    * THE FOLLOW-UP'S ADMISSION CHECKS.
@@ -859,11 +893,8 @@ export async function performCampaignSend(
         400,
       )
     }
-    const sendSnapshot = await hostRef
-      .collection('campaigns')
-      .doc(options.campaignId)
-      .get()
-    if (!sendSnapshot.exists) {
+    const sendSnapshot = await sends.doc(options.campaignId).get()
+    if (!sendSnapshot.exists || !sendIsOnHost(sendSnapshot, hostId)) {
       throw new CampaignSendError('Unknown email', 404)
     }
     /*
@@ -885,11 +916,7 @@ export async function performCampaignSend(
      * send and a second copy in somebody's inbox, and a batch that cannot
      * read it must not run.
      */
-    const settled = await readCampaignSettled(
-      hostId,
-      options.campaignId,
-      firestore,
-    )
+    const settled = await readCampaignSettled(sends.doc(options.campaignId))
     const sentSoFar = Number(sendSnapshot.get('stats')?.sent ?? 0)
     if (!campaignReachCovers(settled.reached, sentSoFar)) {
       throw new CampaignSendError(
@@ -928,17 +955,15 @@ export async function performCampaignSend(
    */
   const finishContinuation = async (): Promise<CampaignSendResult> => {
     const sendId = String(options.campaignId ?? '')
-    await hostRef
-      .collection('campaigns')
-      .doc(sendId)
-      .set(
-        {
-          status: 'sent',
-          resume: { remaining: 0, batch: batchesSoFar + 1, nextAtMs: 0 },
-          lastSentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      )
+    await sends.doc(sendId).set(
+      {
+        ...campaignSendSiteStamp(hostId),
+        status: 'sent',
+        resume: { remaining: 0, batch: batchesSoFar + 1, nextAtMs: 0 },
+        lastSentAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
     return {
       campaignId: sendId,
       recipients: 0,
@@ -957,11 +982,8 @@ export async function performCampaignSend(
         400,
       )
     }
-    const sendSnapshot = await hostRef
-      .collection('campaigns')
-      .doc(options.campaignId)
-      .get()
-    if (!sendSnapshot.exists) {
+    const sendSnapshot = await sends.doc(options.campaignId).get()
+    if (!sendSnapshot.exists || !sendIsOnHost(sendSnapshot, hostId)) {
       throw new CampaignSendError('Unknown email', 404)
     }
     /*
@@ -981,7 +1003,7 @@ export async function performCampaignSend(
      * rests on being able to name who already has this email, and a send that
      * cannot is a send that must not happen.
      */
-    const keys = await readCampaignReach(hostId, options.campaignId, firestore)
+    const keys = await readCampaignReach(sends.doc(options.campaignId))
     const sentSoFar = Number(sendSnapshot.get('stats')?.sent ?? 0)
     if (!campaignReachCovers(keys, sentSoFar)) {
       throw new CampaignSendError(
@@ -1297,12 +1319,9 @@ export async function performCampaignSend(
    * decision informed — it rides the same readout as `audienceSize`, so a
    * merchant sees which population is which before sending.
    *
-   * The org is resolved here rather than at the quota block below because the
-   * policy lives on it and this is the first thing that needs it; the quota
-   * lines further down reuse the same read rather than taking a second one.
+   * The policy lives on the org document resolved at the top of this
+   * function; the quota lines further down reuse the same read.
    */
-  const orgForHost = await getOrgForHost(hostId).catch(() => null)
-  const orgId = String(orgForHost?.orgId ?? '')
 
   /*
    * THE SENDING IDENTITY, and the refusal when it is not usable.
@@ -2288,6 +2307,16 @@ export async function performCampaignSend(
         tags: [
           { name: 'hostId', value: hostId },
           { name: 'campaignId', value: campaignId },
+          /*
+           * The org the send is recorded under, so the webhook finds it
+           * without a site lookup. Only a value Resend accepts is tagged —
+           * ASCII letters, digits, `_` and `-`, which every generated org id
+           * is — because a rejected tag fails the whole message; the webhook
+           * resolves the org from the site when the tag is missing.
+           */
+          ...(RESEND_TAG_VALUE.test(orgId)
+            ? [{ name: 'orgId', value: orgId }]
+            : []),
           ...(experiment
             ? [{ name: 'experimentId', value: experiment.$id }]
             : []),
@@ -2405,7 +2434,7 @@ export async function performCampaignSend(
    * follow-up, which is also safe but loses the feature over a transient.
    */
   if (options.recordCampaign !== false) {
-    await recordCampaignReach(hostId, campaignId, reached, firestore)
+    await recordCampaignReach(sends.doc(campaignId), reached)
     /*
      * And who it decided NOT to mail, under a field of its own.
      *
@@ -2415,7 +2444,7 @@ export async function performCampaignSend(
      * this function, which will have no way to know that these five hundred
      * addresses were already considered.
      */
-    await recordCampaignSkipped(hostId, campaignId, settledOut, firestore)
+    await recordCampaignSkipped(sends.doc(campaignId), settledOut)
   }
 
   // Sends are the email variant's exposures (AGL-255).
@@ -2526,8 +2555,14 @@ export async function performCampaignSend(
    * below are stored under: they are true of the send that happened.
    */
   const measuresTheAudience = !options.continuation
-  await hostRef.collection('campaigns').doc(campaignId).set(
+  await sends.doc(campaignId).set(
     {
+      /*
+       * The site this send is sent AS, on every write rather than only the
+       * one that mints the record: a batch or a follow-up merging onto a
+       * send that predates the field completes it.
+       */
+      ...campaignSendSiteStamp(hostId),
       subject,
       body,
       audience,
@@ -3479,6 +3514,61 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
     if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not a site admin or editor' })
     }
+    /*==========================================
+     * THE ORGANIZATION'S SENDS, AND WHICH OF THEM THIS SITE MAY TOUCH.
+     *
+     * Sends and campaigns are recorded under the org, so every branch below
+     * that reads or writes one goes through `orgSends`. It is null for a site
+     * with no organization, and each such branch refuses rather than
+     * guessing where to write.
+     *
+     * The role above is a role on THIS site, while the collection holds every
+     * site's mail. So a send addressed by id is acted on only when it is sent
+     * as this site (`sendIsOnHost`); a sibling site's send answers exactly as
+     * a send that does not exist, which is what it is from here.
+     *=========================================*/
+    const orgForSite = await getOrgForHost(hostId).catch(() => null)
+    const siteOrgId = String(orgForSite?.orgId ?? '')
+    const orgSends = siteOrgId ? orgCampaignSends(firestore, siteOrgId) : null
+    const needsOrg =
+      action !== 'proofOptions' &&
+      action !== 'test' &&
+      action !== 'renderPreview' &&
+      action !== 'preview'
+    if (needsOrg && !orgSends) {
+      return res.status(409).json({
+        error:
+          'This site is not part of an organization, so it cannot hold ' +
+          'campaign emails.',
+      })
+    }
+    /*
+     * THE CAMPAIGN A SEND JOINS has to be one this site can see.
+     *
+     * The id is a pointer the console chose from a picker, but the request
+     * could carry any container in the org — including one placed only on a
+     * sibling site, which this site's editors cannot read — or one that has
+     * been deleted. Filing a send under either would put it where its own
+     * editors cannot find it. Checked only for the actions that store it.
+     */
+    if (
+      emailCampaignId &&
+      (action === 'draft' || action === 'schedule' || action === 'send')
+    ) {
+      const container = await orgEmailCampaigns(firestore, siteOrgId)
+        .doc(emailCampaignId)
+        .get()
+      if (
+        !container.exists ||
+        container.get('deletedAt') != null ||
+        !campaignPlacedOnHost(
+          { visibleTo: container.get('visibleTo') as string[] | undefined },
+          hostId,
+        )
+      ) {
+        return res.status(400).json({ error: 'Unknown campaign' })
+      }
+    }
 
     if (action === 'proofOptions') {
       /*
@@ -3623,8 +3713,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           cname: hostSnapshot.get('cname'),
           subdomain: hostSnapshot.get('subdomain'),
         }) ?? ''
-      const orgForHost = await getOrgForHost(hostId)
-      const branding = resolveBrandingProfile(orgForHost?.org as never)
+      const branding = resolveBrandingProfile(orgForSite?.org as never)
       /*
        * Personalized for the REQUESTER, because a preview showing raw
        * `{{firstName|there}}` tells a merchant nothing about what a recipient
@@ -3711,11 +3800,8 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       if (!isDocumentId(followUpId)) {
         return res.status(400).json({ error: 'Invalid campaignId' })
       }
-      const sendSnapshot = await hostRef
-        .collection('campaigns')
-        .doc(followUpId)
-        .get()
-      if (!sendSnapshot.exists) {
+      const sendSnapshot = await orgSends.doc(followUpId).get()
+      if (!sendSnapshot.exists || !sendIsOnHost(sendSnapshot, hostId)) {
         return res.status(404).json({ error: 'Unknown email' })
       }
       const result = await performCampaignSend({
@@ -3768,8 +3854,16 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       if (!isDocumentId(campaignId)) {
         return res.status(400).json({ error: 'Invalid campaignId' })
       }
-      const targetRef = hostRef.collection('campaigns').doc(campaignId)
+      const targetRef = orgSends.doc(campaignId)
       const targetSnapshot = await targetRef.get()
+      /*
+       * An id that names a sibling site's send is refused, not adopted: the
+       * merge below would otherwise rewrite that site's email under this
+       * site's name.
+       */
+      if (targetSnapshot.exists && !sendIsOnHost(targetSnapshot, hostId)) {
+        return res.status(404).json({ error: 'Unknown email' })
+      }
       const targetState = targetSnapshot.exists
         ? String(targetSnapshot.get('status') ?? '')
         : ''
@@ -3814,11 +3908,15 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         if (!targetSnapshot.exists) {
           return res.status(404).json({ error: 'Unknown email' })
         }
-        await targetRef.set({ displayName }, { merge: true })
+        await targetRef.set(
+          { ...campaignSendSiteStamp(hostId), displayName },
+          { merge: true },
+        )
         return res.status(200).json({ campaignId, displayName })
       }
       await targetRef.set(
         {
+          ...campaignSendSiteStamp(hostId),
           subject,
           body,
           audience,
@@ -3916,16 +4014,18 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       if (!isDocumentId(campaignId)) {
         return res.status(400).json({ error: 'Not a scheduled campaign' })
       }
-      const campaignRef = hostRef.collection('campaigns').doc(campaignId)
+      const campaignRef = orgSends.doc(campaignId)
       const campaignSnapshot = await campaignRef.get()
       if (
         !campaignSnapshot?.exists ||
+        !sendIsOnHost(campaignSnapshot, hostId) ||
         campaignSnapshot.get('status') !== 'scheduled'
       ) {
         return res.status(400).json({ error: 'Not a scheduled campaign' })
       }
       await campaignRef.set(
         {
+          ...campaignSendSiteStamp(hostId),
           status: 'canceled',
           canceledAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           canceledBy: decoded.uid,
@@ -3956,9 +4056,9 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       if (!isDocumentId(sendNowId)) {
         return res.status(400).json({ error: 'Invalid campaignId' })
       }
-      const sendNowRef = hostRef.collection('campaigns').doc(sendNowId)
+      const sendNowRef = orgSends.doc(sendNowId)
       const sendNowSnapshot = await sendNowRef.get()
-      if (!sendNowSnapshot.exists) {
+      if (!sendNowSnapshot.exists || !sendIsOnHost(sendNowSnapshot, hostId)) {
         return res.status(404).json({ error: 'Unknown email' })
       }
       const sendNowState = String(sendNowSnapshot.get('status') ?? '')
@@ -4072,7 +4172,10 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       if (!isDocumentId(sendId)) {
         return res.status(400).json({ error: 'Invalid campaignId' })
       }
-      const existing = await hostRef.collection('campaigns').doc(sendId).get()
+      const existing = await orgSends.doc(sendId).get()
+      if (existing.exists && !sendIsOnHost(existing, hostId)) {
+        return res.status(404).json({ error: 'Unknown email' })
+      }
       const existingState = existing.exists
         ? String(existing.get('status') ?? '')
         : ''

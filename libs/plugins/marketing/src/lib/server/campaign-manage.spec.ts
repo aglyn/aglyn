@@ -293,7 +293,7 @@ import {
   registerPluginMembershipDetacher,
   resetPluginMembershipDetachersForTests,
 } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
-import { campaignManageHandler } from './campaign-manage'
+import { campaignManageHandler, campaignManageSubject } from './campaign-manage'
 
 const mockLogResourceDuplicated = jest.fn(async (..._args: unknown[]) => undefined)
 jest.mock('@aglyn/tenant-data-admin/server/duplicate-activity', () => ({
@@ -302,6 +302,9 @@ jest.mock('@aglyn/tenant-data-admin/server/duplicate-activity', () => ({
 }))
 
 const HOST = 'host-1'
+/** A second site of the same organization. */
+const SIBLING = 'host-2'
+const ORG_ID = 'org-1'
 const CAMPAIGN = 'spring-2026'
 const SECRET = 'test-secret'
 
@@ -345,7 +348,9 @@ async function post(
 
 /** One send inside the campaign, as the send path writes one. */
 function seedSend(id: string, over: Record<string, any> = {}) {
-  store.set(`hosts/${HOST}/campaigns/${id}`, {
+  store.set(`orgs/${ORG_ID}/campaigns/${id}`, {
+    hostId: HOST,
+    visibleTo: [`host:${HOST}`],
     subject: `Subject ${id}`,
     status: 'sent',
     audience: 'leads',
@@ -358,7 +363,8 @@ function seedSend(id: string, over: Record<string, any> = {}) {
   })
 }
 
-const stored = (path: string) => store.get(`hosts/${HOST}/${path}`)
+/** A document under the organization — where campaigns and sends live. */
+const stored = (path: string) => store.get(`orgs/${ORG_ID}/${path}`)
 
 beforeEach(() => {
   store.clear()
@@ -370,10 +376,16 @@ beforeEach(() => {
     subdomain: 'acme',
     memberRoles: { 'uid-1': 'admin', 'uid-viewer': 'viewer' },
   })
-  store.set(`hosts/${HOST}/emailCampaigns/${CAMPAIGN}`, {
+  // The site→org link every site request resolves through.
+  store.set(`hostIndex/${HOST}`, { orgId: ORG_ID })
+  store.set(`orgs/${ORG_ID}`, { name: 'Acme' })
+  store.set(`orgs/${ORG_ID}/members/uid-1`, { role: 'admin' })
+  // The campaign, created from this site's hub: placed on this site alone.
+  store.set(`orgs/${ORG_ID}/emailCampaigns/${CAMPAIGN}`, {
     name: 'Spring sale',
     startAtMs: Date.UTC(2026, 2, 1),
     listIds: ['list-1'],
+    visibleTo: [`host:${HOST}`],
   })
 })
 
@@ -516,7 +528,7 @@ describe('deleting a campaign', () => {
      * a missing document precisely so an opt-out never creates a phantom
      * campaign. So this write succeeding is the proof the id still resolves.
      */
-    await docRef(`hosts/${HOST}/campaigns/send-1`).update({
+    await docRef(`orgs/${ORG_ID}/campaigns/send-1`).update({
       'stats.unsubscribes': 1,
     })
     // A dotted key in an `update()` is a field PATH, so the count lands
@@ -670,7 +682,9 @@ describe('deleting a campaign', () => {
 
 describe('discarding a draft', () => {
   const seedDraft = (id: string, over: Record<string, any> = {}) =>
-    store.set(`hosts/${HOST}/campaigns/${id}`, {
+    store.set(`orgs/${ORG_ID}/campaigns/${id}`, {
+      hostId: HOST,
+      visibleTo: [`host:${HOST}`],
       status: 'draft',
       displayName: 'Half-written',
       createdAtMs: Date.UTC(2026, 7, 20),
@@ -879,11 +893,10 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     expect(contactRow('ada')?.['facets']?.[HOST]?.['campaignIds']).toEqual([])
   })
 
-  it('still deletes a campaign on a site with no org behind it', async () => {
+  it('refuses a site with no org behind it, which can hold no campaign', async () => {
     /*
-     * Contacts live on the ORG, so a site whose `hostIndex` entry names none
-     * holds none of them — a skip rather than a failure. A pass that treated
-     * the two the same would make every campaign on such a site undeletable.
+     * Campaigns live on the ORG, so a site whose `hostIndex` entry names none
+     * has nowhere a campaign could be — and nothing here may guess one.
      */
     store.delete(`hostIndex/${HOST}`)
     seedHostMember('forms', 'signup', [CAMPAIGN])
@@ -894,9 +907,9 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
       campaignId: CAMPAIGN,
     })
 
-    expect(result.status).toBe(200)
-    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeUndefined()
-    expect(hostMember('forms', 'signup')?.['campaignIds']).toEqual([])
+    expect(result.status).toBe(409)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeTruthy()
+    expect(hostMember('forms', 'signup')?.['campaignIds']).toEqual([CAMPAIGN])
   })
 
   it('reports how many records it cleared', async () => {
@@ -919,11 +932,61 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
    * (AGL-3254), and comes off it the same way.
    */
   it('clears the campaign off its leads, and leaves the lead standing', async () => {
+    // A lead is the org's row; one captured before leads moved there is still
+    // at the site, and both come off.
+    store.set(`orgs/${ORG}/leads/org-lead`, { name: 'Org lead', campaignIds: [CAMPAIGN, OTHER] })
     seedHostMember('leads', 'lead-key', [CAMPAIGN, OTHER])
     const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
     expect(result.status).toBe(200)
+    expect(store.get(`orgs/${ORG}/leads/org-lead`)).toEqual({ name: 'Org lead', campaignIds: [OTHER] })
     expect(hostMember('leads', 'lead-key')?.['campaignIds']).toEqual([OTHER])
     expect(hostMember('leads', 'lead-key')?.['displayName']).toBe('leads lead-key')
+  })
+
+  /*
+   * THE CAMPAIGN IS THE ORGANIZATION'S, so its members may be on any of its
+   * sites — including one it has since been taken off. The walk covers every
+   * site in the org, and each distinct consent group's facet once.
+   */
+  it('clears it off every site of the organization, whichever site asked', async () => {
+    store.set(`hostIndex/${SIBLING}`, { orgId: ORG })
+    store.set(`hostIndex/elsewhere`, { orgId: 'org-2' })
+    store.set(`hosts/${SIBLING}/forms/their-form`, { campaignIds: [CAMPAIGN] })
+    store.set(`hosts/elsewhere/forms/not-ours`, { campaignIds: [CAMPAIGN] })
+    store.set(`orgs/${ORG}/contacts/both`, {
+      email: 'both@example.com',
+      facets: {
+        [HOST]: { campaignIds: [CAMPAIGN] },
+        [SIBLING]: { campaignIds: [CAMPAIGN, OTHER] },
+      },
+    })
+
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(result.status).toBe(200)
+    expect(store.get(`hosts/${SIBLING}/forms/their-form`)?.['campaignIds']).toEqual([])
+    expect(contactRow('both')?.['facets']?.[HOST]?.['campaignIds']).toEqual([])
+    expect(contactRow('both')?.['facets']?.[SIBLING]?.['campaignIds']).toEqual([OTHER])
+    // Another organization's records are never reached.
+    expect(store.get(`hosts/elsewhere/forms/not-ours`)?.['campaignIds']).toEqual([CAMPAIGN])
+  })
+
+  it('walks a facet two sites share as one sender once', async () => {
+    store.set(`hostIndex/${SIBLING}`, { orgId: ORG })
+    store.set(`orgs/${ORG}`, {
+      name: 'Acme',
+      consentGroups: { brand: { name: 'Acme brands', hostIds: [HOST, SIBLING] } },
+    })
+    store.set(`orgs/${ORG}/contacts/grouped`, {
+      email: 'grouped@example.com',
+      facets: { brand: { campaignIds: [CAMPAIGN] } },
+    })
+
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(result.status).toBe(200)
+    expect(contactRow('grouped')?.['facets']?.['brand']?.['campaignIds']).toEqual([])
+    expect(result.body.detachedMembers).toBe(1)
   })
 
   /*
@@ -936,7 +999,7 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     registerPluginMembershipDetacher(
       async (request) => {
         asked.push(request)
-        expect(store.has(`hosts/${HOST}/emailCampaigns/${CAMPAIGN}`)).toBe(true)
+        expect(store.has(`orgs/${ORG}/emailCampaigns/${CAMPAIGN}`)).toBe(true)
         return { detached: 3, remaining: false }
       },
       { pluginId: 'outreach' },
@@ -946,7 +1009,7 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     expect(result.status).toBe(200)
     expect(result.body.detachedMembers).toBe(4)
     expect(asked).toEqual([{ hostId: HOST, orgId: ORG, field: 'campaignIds', id: CAMPAIGN }])
-    expect(store.has(`hosts/${HOST}/emailCampaigns/${CAMPAIGN}`)).toBe(false)
+    expect(store.has(`orgs/${ORG}/emailCampaigns/${CAMPAIGN}`)).toBe(false)
   })
 
   it('keeps the container while a plugin has records left, or failed to clear them', async () => {
@@ -956,7 +1019,7 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     const more = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
     expect(more.status).toBe(409)
     expect(more.body.detachedMembers).toBe(400)
-    expect(store.has(`hosts/${HOST}/emailCampaigns/${CAMPAIGN}`)).toBe(true)
+    expect(store.has(`orgs/${ORG}/emailCampaigns/${CAMPAIGN}`)).toBe(true)
 
     jest.spyOn(console, 'error').mockImplementation(() => undefined)
     registerPluginMembershipDetacher(
@@ -967,7 +1030,7 @@ describe('deleting a campaign takes it off everything assigned to it', () => {
     )
     const failed = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
     expect(failed.status).toBe(409)
-    expect(store.has(`hosts/${HOST}/emailCampaigns/${CAMPAIGN}`)).toBe(true)
+    expect(store.has(`orgs/${ORG}/emailCampaigns/${CAMPAIGN}`)).toBe(true)
   })
 })
 
@@ -977,7 +1040,9 @@ describe('action: duplicate (AGL-2936)', () => {
 
   beforeEach(() => {
     mockLogResourceDuplicated.mockClear()
-    store.set(`hosts/${HOST}/campaigns/sent-1`, {
+    store.set(`orgs/${ORG_ID}/campaigns/sent-1`, {
+      hostId: HOST,
+      visibleTo: [`host:${HOST}`],
       subject: 'Spring sale',
       body: 'Hello {{contact.firstName}}',
       fromName: 'Acme',
@@ -1003,8 +1068,11 @@ describe('action: duplicate (AGL-2936)', () => {
     const { status, body } = await duplicate({ name: 'Summer blast' })
     expect(status).toBe(200)
     expect(body).toEqual({ emailId: expect.any(String), name: 'Summer blast' })
-    const copy = store.get(`hosts/${HOST}/campaigns/${body.emailId}`) as Record<string, any>
+    const copy = store.get(`orgs/${ORG_ID}/campaigns/${body.emailId}`) as Record<string, any>
     expect(copy).toMatchObject({
+      // Sent as the same site as its source.
+      hostId: HOST,
+      visibleTo: [`host:${HOST}`],
       subject: 'Spring sale',
       body: 'Hello {{contact.firstName}}',
       fromName: 'Acme',
@@ -1032,7 +1100,11 @@ describe('action: duplicate (AGL-2936)', () => {
   })
 
   it('defaults the name and numbers a taken one', async () => {
-    store.set(`hosts/${HOST}/campaigns/other`, { displayName: 'Copy of Spring blast', status: 'draft' })
+    store.set(`orgs/${ORG_ID}/campaigns/other`, {
+      hostId: HOST,
+      displayName: 'Copy of Spring blast',
+      status: 'draft',
+    })
     const { body } = await duplicate()
     expect(body.name).toBe('Copy of Spring blast 2')
   })
@@ -1041,5 +1113,181 @@ describe('action: duplicate (AGL-2936)', () => {
     expect((await duplicate({ campaignId: 'missing' })).status).toBe(404)
     store.set(`hosts/${HOST}`, { memberRoles: { 'uid-1': 'viewer' } })
     expect((await duplicate()).status).toBe(403)
+  })
+})
+
+/*==========================================
+ * TWO DOORS: A SITE, AND THE ORGANIZATION.
+ *
+ * A site hub acts on what that site holds, by the caller's role on the site.
+ * The organization hub names its org and no site, and acts for an org-wide
+ * member — on an email, in the name of the site the email is sent as.
+ *=========================================*/
+describe('what a site hub may reach', () => {
+  it('answers a sibling site’s email as unknown, for a discard and a copy alike', async () => {
+    store.set(`orgs/${ORG_ID}/campaigns/theirs`, {
+      hostId: SIBLING,
+      visibleTo: [`host:${SIBLING}`],
+      status: 'draft',
+      subject: 'Theirs',
+    })
+
+    const discard = await post({ hostId: HOST, action: 'discardEmail', campaignId: 'theirs' })
+    const copy = await post({ hostId: HOST, action: 'duplicate', campaignId: 'theirs' })
+
+    expect(discard.status).toBe(404)
+    expect(copy.status).toBe(404)
+    expect(stored('campaigns/theirs')).toMatchObject({ status: 'draft', hostId: SIBLING })
+    expect(
+      [...store.keys()].filter((key) => key.startsWith(`orgs/${ORG_ID}/campaigns/`)),
+    ).toEqual([`orgs/${ORG_ID}/campaigns/theirs`])
+  })
+
+  it('answers a campaign placed only on a sibling site as unknown', async () => {
+    store.set(`orgs/${ORG_ID}/emailCampaigns/theirs`, {
+      name: 'Theirs',
+      visibleTo: [`host:${SIBLING}`],
+    })
+    const result = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: 'theirs' })
+    expect(result.status).toBe(404)
+    expect(stored('emailCampaigns/theirs')).toBeTruthy()
+  })
+
+  it('deletes a campaign on other sites too only for an org-wide member', async () => {
+    store.set(`orgs/${ORG_ID}/emailCampaigns/${CAMPAIGN}`, {
+      name: 'Spring sale',
+      visibleTo: ['org'],
+    })
+    // A collaborator invited to this site alone: an editor here, and no more.
+    store.set(`orgs/${ORG_ID}/members/uid-1`, {
+      role: 'editor',
+      allHosts: false,
+      hostAccess: { [HOST]: 'editor' },
+    })
+
+    const refused = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(refused.status).toBe(403)
+    expect(String(refused.body.error)).toMatch(/other sites/)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeTruthy()
+
+    store.set(`orgs/${ORG_ID}/members/uid-1`, { role: 'admin' })
+    const allowed = await post({ hostId: HOST, action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(allowed.status).toBe(200)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeUndefined()
+  })
+
+  it('refuses a site that is not in the organization the request names', async () => {
+    const result = await post({
+      hostId: HOST,
+      orgId: 'org-2',
+      action: 'deleteCampaign',
+      campaignId: CAMPAIGN,
+    })
+    expect(result.status).toBe(400)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeTruthy()
+  })
+})
+
+describe('the organization hub', () => {
+  const orgPost = (body: Record<string, unknown>) => post({ orgId: ORG_ID, ...body })
+
+  it('deletes a campaign for an org-wide editor, with no site named', async () => {
+    store.set(`orgs/${ORG_ID}/members/uid-1`, { role: 'editor' })
+    seedSend('send-1')
+
+    const result = await orgPost({ action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(result.status).toBe(200)
+    expect(result.body.detached).toBe(1)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeUndefined()
+    expect(stored('campaigns/send-1')).toBeTruthy()
+  })
+
+  it.each([
+    ['a viewer', { role: 'viewer' }],
+    ['a collaborator scoped to one site', { role: 'editor', allHosts: false, hostAccess: { [HOST]: 'editor' } }],
+    ['somebody who is not a member', null],
+  ])('refuses %s', async (_label, member) => {
+    if (member) store.set(`orgs/${ORG_ID}/members/uid-1`, member)
+    else store.delete(`orgs/${ORG_ID}/members/uid-1`)
+
+    const result = await orgPost({ action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(result.status).toBe(403)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeTruthy()
+  })
+
+  it('refuses when the organization has switched Marketing off', async () => {
+    store.set(`orgs/${ORG_ID}/members/uid-1`, { role: 'owner' })
+    store.set(`orgs/${ORG_ID}`, {
+      ...(store.get(`orgs/${ORG_ID}`) ?? {}),
+      enabledPlugins: ['crm'],
+    })
+
+    const result = await orgPost({ action: 'deleteCampaign', campaignId: CAMPAIGN })
+
+    expect(result.status).toBe(404)
+    expect(stored(`emailCampaigns/${CAMPAIGN}`)).toBeTruthy()
+  })
+
+  it('refuses an org id that is a path', async () => {
+    const result = await post({ orgId: 'org-1/campaigns/x', action: 'deleteCampaign', campaignId: CAMPAIGN })
+    expect(result.status).toBe(400)
+  })
+
+  it('discards any site’s draft', async () => {
+    store.set(`orgs/${ORG_ID}/campaigns/theirs`, {
+      hostId: SIBLING,
+      visibleTo: [`host:${SIBLING}`],
+      status: 'draft',
+    })
+    const result = await orgPost({ action: 'discardEmail', campaignId: 'theirs' })
+    expect(result.status).toBe(200)
+    expect(stored('campaigns/theirs')).toBeUndefined()
+  })
+
+  it('copies an email as the site it is sent as, named among that site’s emails', async () => {
+    store.set(`orgs/${ORG_ID}/campaigns/theirs`, {
+      hostId: SIBLING,
+      visibleTo: [`host:${SIBLING}`],
+      status: 'sent',
+      subject: 'Their sale',
+      displayName: 'Their sale',
+    })
+    // A same-named email on ANOTHER site does not take the name.
+    store.set(`orgs/${ORG_ID}/campaigns/mine`, {
+      hostId: HOST,
+      displayName: 'Copy of Their sale',
+      status: 'draft',
+    })
+
+    const result = await orgPost({ action: 'duplicate', campaignId: 'theirs' })
+
+    expect(result.status).toBe(200)
+    expect(result.body.name).toBe('Copy of Their sale')
+    expect(stored(`campaigns/${result.body.emailId}`)).toMatchObject({
+      hostId: SIBLING,
+      visibleTo: [`host:${SIBLING}`],
+      status: 'draft',
+      subject: 'Their sale',
+    })
+  })
+
+  it('refuses to copy an email that records no site, since the copy could never be sent', async () => {
+    store.set(`orgs/${ORG_ID}/campaigns/unsited`, { status: 'sent', subject: 'Old' })
+    const result = await orgPost({ action: 'duplicate', campaignId: 'unsited' })
+    expect(result.status).toBe(409)
+  })
+
+  it('names its org to the dispatcher’s release gate', async () => {
+    // The two members of a `Request` the resolver reads; this suite runs
+    // under jsdom, which has no fetch `Request`.
+    const request = (body: unknown) =>
+      ({ method: 'POST', json: async () => body }) as unknown as Request
+    await expect(campaignManageSubject(request({ orgId: ORG_ID }))).resolves.toEqual({
+      orgId: ORG_ID,
+    })
+    await expect(campaignManageSubject(request({ orgId: 'a/b' }))).resolves.toBeNull()
+    await expect(campaignManageSubject(request({}))).resolves.toBeNull()
   })
 })

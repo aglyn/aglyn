@@ -93,6 +93,7 @@ import {
   normalizeLeadImportRow,
 } from '../model/crm-lead-import'
 import { addHostLead, firebaseAdmin, orgLeadsForHost } from '@aglyn/tenant-data-admin'
+import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   ownerDirectory,
@@ -113,25 +114,39 @@ import {
 const LEAD_IMPORT_SOURCE: ContactSource = 'import'
 
 /**
- * How many of the site's campaigns one chunk reads to resolve the names a
- * file carries (AGL-3254). Well past what a site keeps — the picker offers
+ * How many of the org's campaigns one chunk reads to resolve the names a
+ * file carries (AGL-3254). Well past what an org keeps — the picker offers
  * fifty — and read once per chunk rather than once per row.
  */
 const CAMPAIGN_DIRECTORY_CEILING = 200
 
 /**
- * The site's live campaigns by NAME, lower-cased, for the `campaigns`
- * column. A name the site does not have is not guessed at: the row is
- * refused whole and named, because a lead filed under half its campaigns
- * is a lead nobody asked for. Read only when some row names one.
+ * The org's live campaigns by NAME, lower-cased, for the `campaigns`
+ * column. A lead is an org record, so every live container of the org
+ * (`orgs/{orgId}/emailCampaigns`) may be named, whichever sites it is
+ * placed on; where two share a name, the one placed on the importing site
+ * wins, because that is the one its picker shows. A name the org does not
+ * have is not guessed at: the row is refused whole and named, because a
+ * lead filed under half its campaigns is a lead nobody asked for. Read
+ * only when some row names one.
  */
 async function campaignDirectory(
-  hostRef: FirebaseFirestore.DocumentReference,
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+  hostId: string,
 ): Promise<Map<string, string>> {
   const directory = new Map<string, string>()
-  const containers = await hostRef.collection('emailCampaigns').limit(CAMPAIGN_DIRECTORY_CEILING).get()
-  for (const container of containers.docs) {
-    if (container.get('deletedAt')) continue
+  if (!orgId) return directory
+  const containers = await firestore
+    .collection('orgs')
+    .doc(orgId)
+    .collection('emailCampaigns')
+    .limit(CAMPAIGN_DIRECTORY_CEILING)
+    .get()
+  const live = containers.docs.filter((container) => !container.get('deletedAt'))
+  const placed = (container: FirebaseFirestore.QueryDocumentSnapshot) =>
+    visibleToHost(container.get('visibleTo') as string[] | undefined, hostId)
+  for (const container of [...live.filter(placed), ...live.filter((entry) => !placed(entry))]) {
     const name = String(container.get('name') ?? '').trim().toLowerCase()
     if (name && !directory.has(name)) directory.set(name, container.id)
   }
@@ -225,7 +240,9 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
         normalized.map((entry) => entry.row),
       ),
       refs.length ? firestore.getAll(...refs) : Promise.resolve([]),
-      namesCampaigns ? campaignDirectory(hostRef) : Promise.resolve(new Map<string, string>()),
+      namesCampaigns
+        ? campaignDirectory(firestore, context.orgId, context.hostId)
+        : Promise.resolve(new Map<string, string>()),
     ])
     const held = new Set(
       before.filter((snapshot) => snapshot.exists).map((snapshot) => snapshot.id),
@@ -237,7 +254,7 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
     let merged = 0
 
     for (const { index, row, key } of normalized) {
-      // The campaigns the row names, every one of them the site's, or the
+      // The campaigns the row names, every one of them the org's, or the
       // row is refused whole and named (AGL-3254).
       const campaignIds = (row.campaigns ?? []).map((name) => campaigns.get(name.toLowerCase()) ?? '')
       if (campaignIds.some((id) => !id)) {

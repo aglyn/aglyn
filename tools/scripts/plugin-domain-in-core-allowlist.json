@@ -1632,7 +1632,6 @@
       "path": "libs/tenant/data/admin/src/lib/server/campaign-conversion-attribution.ts",
       "rules": [
         "domain-name",
-        "plugin-collection:marketing",
         "domain-exports:marketing",
         "domain-declares:marketing"
       ],
@@ -1787,7 +1786,6 @@
     {
       "path": "libs/tenant/data/admin/src/lib/server/email-revenue-attribution.ts",
       "rules": [
-        "plugin-collection:marketing",
         "domain-declares:marketing"
       ],
       "lane": "marketing"

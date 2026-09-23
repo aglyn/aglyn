@@ -510,7 +510,7 @@ describe('an email goes out as the sender it names', () => {
       fromName: 'Jamie Lee',
     })
 
-    const record = store.get(`hosts/${HOST}/campaigns/${result.body.campaignId}`)
+    const record = store.get(`orgs/org-1/campaigns/${result.body.campaignId}`)
     const reported = emailSentAs(record)
 
     expect(reported.recorded).toBe(true)
@@ -685,7 +685,7 @@ describe('a stored email', () => {
       senderId: 'sender-jamie',
     })
     expect(saved.status).toBe(200)
-    expect(store.get(`hosts/${HOST}/campaigns/email-1`)?.['senderId']).toBe(
+    expect(store.get(`orgs/org-1/campaigns/email-1`)?.['senderId']).toBe(
       'sender-jamie',
     )
 

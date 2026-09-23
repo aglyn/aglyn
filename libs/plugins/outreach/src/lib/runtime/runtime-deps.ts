@@ -84,6 +84,12 @@ export interface OutreachCampaignCredit {
    */
   credit(input: {
     hostId: string
+    /**
+     * The org whose campaigns these are, when the caller holds it — an
+     * enrollment is an org record, so its routes do. The platform resolves
+     * it from the site otherwise.
+     */
+    orgId?: string | null
     campaignIds: readonly string[]
     outcome: 'enrolled' | 'sent' | 'replied' | 'converted'
     atMs: number

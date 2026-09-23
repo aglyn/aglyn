@@ -51,19 +51,27 @@
  * the stored status alone would let somebody rewrite the copy of a message
  * that is already reaching inboxes; `campaignSendDisplay` is what tells the
  * two apart.
+ *
+ * ## The site it is written as
+ *
+ * The record is the org's; the composer is a site's — its senders, its
+ * designs, its experiments. Under a site that is the site. On the org hub it
+ * is the send's own `hostId`, and a send that names none is not opened for
+ * writing there.
  */
 
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Typography } from '@mui/material'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
-import { doc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import {
   campaignSendDisplay,
   CAMPAIGN_SEND_CONTAINER_FIELD,
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import CampaignComposer from './campaign-composer'
+import { campaignSendDoc } from './campaign-queries'
+import { useMarketingOrgId, useMarketingOrgMount } from './marketing-org-mount'
 
 const composeDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#send-a-campaign',
@@ -73,24 +81,32 @@ const composeDocsHelp = pluginDocsHelp('emailCampaigns', {
 })
 
 export interface EmailComposeCardProps {
-  hostId: string
-  /** The message document under `hosts/{hostId}/campaigns`. */
+  /** The site, or `null` on the org Marketing hub. */
+  hostId: string | null
+  /** The message document under `orgs/{orgId}/campaigns`. */
   emailId: string
   /** The emails hub URL, for the way back to the message's own page. */
   basePath: string
 }
 
 export function EmailComposeCard(props: EmailComposeCardProps) {
-  const { hostId, emailId, basePath } = props
+  const { emailId, basePath } = props
   const firestore = useFirestore()
   const router = useRouter()
+  const orgMount = useMarketingOrgMount()
+  const { orgId } = useMarketingOrgId(props.hostId)
 
   const { data: email, status } = useFirestoreDoc<Record<string, any>>(
-    () => doc(firestore, 'hosts', hostId, 'campaigns', emailId),
-    [firestore, hostId, emailId],
+    () => (orgId ? campaignSendDoc(firestore, orgId, emailId) : null),
+    [firestore, orgId, emailId],
   )
+  /** The site this email is written as; see the file header. */
+  const hostId: string | null =
+    props.hostId ?? (email?.hostId ? String(email.hostId) : null)
 
-  const detailHref = `${basePath}/messages/${emailId}`
+  const detailHref = orgMount
+    ? `${orgMount.basePath}/emails/${emailId}`
+    : `${basePath}/messages/${emailId}`
   const headerActions = (
     <Button
       component={AppLink as any}
@@ -121,7 +137,10 @@ export function EmailComposeCard(props: EmailComposeCardProps) {
     ? status === 'loading'
       ? 'Loading this email…'
       : 'This email could not be loaded. It may have been deleted.'
-    : editable
+    : !hostId
+      ? 'This email does not record which site it is sent as, so it can ' +
+        'only be written from that site’s own Emails page.'
+      : editable
       ? ''
       : display?.state === 'sending'
         ? 'This email is being sent right now, so its message can no longer ' +

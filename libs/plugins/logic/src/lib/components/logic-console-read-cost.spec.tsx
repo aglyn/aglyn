@@ -195,7 +195,6 @@ describe('a bounded audit says it is bounded (AGL-2501)', () => {
   const AUDITED = [
     'hosts/h1/actions',
     'hosts/h1/collections',
-    'hosts/h1/emailCampaigns',
     'hosts/h1/functions',
     'hosts/h1/overlays',
     'hosts/h1/productCategories',
@@ -205,6 +204,7 @@ describe('a bounded audit says it is bounded (AGL-2501)', () => {
     'hosts/h1/webhooks',
     'hosts/h1/workflows',
     'orgs/org-1/datasets',
+    'orgs/org-1/emailCampaigns',
     'orgs/org-1/lists',
   ]
 

@@ -48,6 +48,11 @@ export interface CampaignFilingChange {
  * on this site carries (`crmScopeTokens`), the signed-in member as author,
  * and the CRM's own id as the filing plugin.
  *
+ * The site an entry carries is the hook's, or — for a surface that files
+ * leads from several sites at once, the organization-level bulk bar — the
+ * one a call names for its record. With neither there is no scope to stamp,
+ * and nothing is written.
+ *
  * Bookkeeping beside the act: the membership has landed by the time this
  * runs, so a write that fails is logged and the filing stands — the card
  * shows the campaigns from the document, not from the timeline.
@@ -65,14 +70,19 @@ export function useCampaignFilingLog(input: {
   const uid = user?.uid
 
   return useCallback(
-    async (link: CrmActivityLink, change: CampaignFilingChange): Promise<void> => {
-      if (!orgId || !hostId || !uid) return
+    async (
+      link: CrmActivityLink,
+      change: CampaignFilingChange,
+      recordHostId?: string | null,
+    ): Promise<void> => {
+      const siteHostId = hostId || recordHostId || null
+      if (!orgId || !siteHostId || !uid) return
       const entries = [
         ...(change.filed ?? []).map((campaign) => ({ action: 'filed' as const, campaign })),
         ...(change.removed ?? []).map((campaign) => ({ action: 'removed' as const, campaign })),
       ]
       if (!entries.length) return
-      const visibleTo = crmScopeTokens(org, consentGroupForHost(org, hostId))
+      const visibleTo = crmScopeTokens(org, consentGroupForHost(org, siteHostId))
       const atMs = Date.now()
       const activities = collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.activities)
       for (const entry of entries) {
@@ -83,7 +93,7 @@ export function useCampaignFilingLog(input: {
               action: entry.action,
               campaign: entry.campaign,
               link,
-              hostId,
+              hostId: siteHostId,
               visibleTo,
               atMs,
               byUid: uid,

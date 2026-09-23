@@ -18,31 +18,45 @@
 /**
  * A CAMPAIGN IS A CONTAINER; A SEND IS ONE MESSAGE INSIDE IT.
  *
- * ## The two collections, and why there are two
+ * ## Both belong to the ORGANIZATION (AGL-3273)
  *
- * `hosts/{hostId}/campaigns/{sendId}` holds a SEND: one subject, one body,
- * one audience, one set of counters. That is what the collection has always
- * held, and it is why the container could not simply be that document grown
- * new fields.
+ * `orgs/{orgId}/emailCampaigns/{campaignId}` holds a CONTAINER: a name, a
+ * window, the lists it aims at. `orgs/{orgId}/campaigns/{sendId}` holds a
+ * SEND: one subject, one body, one audience, one set of counters.
  *
- * **Its ids are load-bearing outside this repo.** Every unsubscribe link that
- * has ever gone out carries `cid={sendId}`, those emails sit in inboxes
- * forever, and the `cid` is inside the link's HMAC — so a send id that stops
- * resolving is an opt-out that stops working, which is a compliance failure
- * rather than a broken page. `/marketing/campaigns/{sendId}` is likewise
- * linkable by design: a merchant pastes it into a message about last week's
- * send.
+ * They lived under one site (`hosts/{hostId}/…`) until the audience side —
+ * contacts, lists, topics, sending domains — had long since become the
+ * org's. An organization's outbound sequences then had to be filed under a
+ * campaign that belonged to its marketing site, and the org-level Leads page
+ * could not name a campaign at all. Moving both up is what lets one campaign
+ * coordinate a push across every site, a sequence and the leads it produced.
  *
- * So the send collection is left exactly where it is, under exactly its
- * existing ids, and the container is a new collection above it:
- * `hosts/{hostId}/emailCampaigns/{campaignId}`. A send joins one by carrying
- * {@link CAMPAIGN_SEND_CONTAINER_FIELD}; a send written before containers
- * existed carries nothing, and {@link campaignListRows} presents it as a
- * container of one rather than hiding it.
+ * ## What stays a SITE fact, and where it is recorded
  *
- * That last property is what makes this migration-free. There is no backfill
- * to run, no window in which a merchant's history is missing, and no id
- * rewritten anywhere.
+ * A campaign's reach is {@link EmailCampaign.visibleTo}, the same scope
+ * tokens every org-owned resource carries: `['org']` is every site, and
+ * `['host:{id}', …]` is the sites it is placed on. It decides which sites'
+ * pickers offer the campaign and which scoped collaborators can read it —
+ * nothing else, because membership stays a field on the member.
+ *
+ * A send, by contrast, is always sent AS one site: that site's sender, the
+ * consent the person gave that site, the site's unsubscribe signature and
+ * its designs. {@link CAMPAIGN_SEND_HOST_FIELD} records which, and the
+ * send's `visibleTo` is that one site's token.
+ *
+ * ## Ids did not change, and that is load-bearing
+ *
+ * Every unsubscribe link that has ever gone out carries `hostId` and
+ * `cid={sendId}`, both inside the link's HMAC, and those emails sit in
+ * inboxes forever. So the move copied every document under its existing id,
+ * and every reader that starts from a link resolves the send through the
+ * site's org (`resolveCampaignSendRef` in `@aglyn/tenant-data-admin`), with the
+ * old site path as the fallback for a document the migration has not reached.
+ * A member's `campaignIds` names container ids, which likewise never moved.
+ *
+ * A send written before containers existed carries no
+ * {@link CAMPAIGN_SEND_CONTAINER_FIELD}, and {@link campaignListRows}
+ * presents it as a container of one rather than hiding it.
  *
  * ## Why the arithmetic is here
  *
@@ -55,10 +69,106 @@
  */
 
 import {
+  CAMPAIGN_SEQUENCE_REPORTS_COLLECTION,
   campaignRate,
   type CampaignRate,
   type CampaignStats,
 } from './campaign-report'
+
+/** The org collection holding campaign CONTAINERS. */
+export const EMAIL_CAMPAIGNS_COLLECTION = 'emailCampaigns'
+
+/** The org collection holding SENDS — one document per email. */
+export const CAMPAIGN_SENDS_COLLECTION = 'campaigns'
+
+/** `orgs/{orgId}/emailCampaigns`, as path segments. */
+export function orgEmailCampaignsPath(orgId: string): [string, string, string] {
+  return ['orgs', orgId, EMAIL_CAMPAIGNS_COLLECTION]
+}
+
+/** `orgs/{orgId}/campaigns`, as path segments. */
+export function orgCampaignSendsPath(orgId: string): [string, string, string] {
+  return ['orgs', orgId, CAMPAIGN_SENDS_COLLECTION]
+}
+
+/** `orgs/{orgId}/campaignSequenceReports`, as path segments. */
+export function orgCampaignSequenceReportsPath(
+  orgId: string,
+): [string, string, string] {
+  return ['orgs', orgId, CAMPAIGN_SEQUENCE_REPORTS_COLLECTION]
+}
+
+/**
+ * The field on a SEND naming the site it is sent AS.
+ *
+ * Required on every send written since AGL-3273. The sender, the consent
+ * group, the unsubscribe signature, the designs and the experiments all
+ * belong to that site, so a send with no site cannot be delivered.
+ */
+export const CAMPAIGN_SEND_HOST_FIELD = 'hostId'
+
+/** The scope token naming every site in the org, as `scope-tokens.ts` spells it. */
+export const CAMPAIGN_ORG_SCOPE = 'org'
+
+/** `host:{hostId}`, the scope token naming one site. */
+export function campaignHostScope(hostId: string): string {
+  return `host:${hostId}`
+}
+
+/**
+ * The `visibleTo` a send is stamped with: the one site it sends as.
+ *
+ * Not `['org']`. An org-wide member reads every send regardless, and a
+ * collaborator invited to a sibling site has no business reading who this
+ * site mailed.
+ */
+export function campaignSendVisibleTo(hostId: string): string[] {
+  return [campaignHostScope(hostId)]
+}
+
+/**
+ * The sites a container is placed on, or `null` when it is on every site.
+ *
+ * An absent or empty `visibleTo` reads as NO sites, for the reason
+ * `visibleToHost` in `scope-tokens.ts` gives: a document nobody scoped is
+ * not the same fact as one scoped to everyone, and hiding is the
+ * recoverable direction.
+ */
+export function campaignSiteIds(
+  campaign: Pick<EmailCampaign, 'visibleTo'> | null | undefined,
+): string[] | null {
+  const tokens = campaign?.visibleTo ?? []
+  if (tokens.includes(CAMPAIGN_ORG_SCOPE)) return null
+  const ids: string[] = []
+  for (const token of tokens) {
+    if (typeof token === 'string' && token.startsWith('host:') && token.length > 5) {
+      ids.push(token.slice(5))
+    }
+  }
+  return ids
+}
+
+/** Whether a container is offered on this site. */
+export function campaignPlacedOnHost(
+  campaign: Pick<EmailCampaign, 'visibleTo'> | null | undefined,
+  hostId: string,
+): boolean {
+  const ids = campaignSiteIds(campaign)
+  return ids === null || ids.includes(hostId)
+}
+
+/**
+ * The `visibleTo` a container is stamped with, from a site selection.
+ *
+ * `null` (or an empty selection) is every site. A selection is deduped and
+ * capped at thirty, the ceiling `array-contains-any` and the rules' `hasAny`
+ * both impose.
+ */
+export function campaignVisibleTo(siteIds: readonly string[] | null): string[] {
+  if (!siteIds || siteIds.length === 0) return [CAMPAIGN_ORG_SCOPE]
+  const unique = [...new Set(siteIds.filter((id) => typeof id === 'string' && id))]
+  return unique.slice(0, 30).map(campaignHostScope)
+}
 
 /**
  * The field on a SEND naming the campaign it belongs to.
@@ -72,7 +182,7 @@ export const CAMPAIGN_SEND_CONTAINER_FIELD = 'emailCampaignId'
 /**
  * A campaign: the container, not a message.
  *
- * Stored at `hosts/{hostId}/emailCampaigns/{campaignId}`.
+ * Stored at `orgs/{orgId}/emailCampaigns/{campaignId}`.
  */
 export interface EmailCampaign {
   $id: string
@@ -96,6 +206,11 @@ export interface EmailCampaign {
    * `marketing`.
    */
   topicId?: string
+  /**
+   * The sites the campaign is placed on, as scope tokens: `['org']` for
+   * every site, `['host:{id}', …]` for a set. See {@link campaignSiteIds}.
+   */
+  visibleTo?: string[]
   createdAtMs?: number
   createdBy?: string
   deletedAt?: unknown
@@ -113,6 +228,8 @@ export interface CampaignSend {
   segmentId?: string
   /** Which container it belongs to, absent on a send written before them. */
   emailCampaignId?: string
+  /** The site it is sent as. See {@link CAMPAIGN_SEND_HOST_FIELD}. */
+  hostId?: string
   status?: string
   sentAt?: { seconds?: number } | null
   sendAtMs?: number

@@ -170,7 +170,9 @@ describe('carryLeadCampaignsToContact', () => {
   })
 
   it('files "Filed under" on the contact per campaign carried, by the conversion, once across runs (AGL-3274)', async () => {
-    docs.set('hosts/site-1/emailCampaigns/founder-icp2', { name: 'Founder · ICP 2' })
+    // Named from the org's container; the site path is not read.
+    docs.set('orgs/org-1/emailCampaigns/founder-icp2', { name: 'Founder · ICP 2' })
+    docs.set('hosts/site-1/emailCampaigns/gone', { name: 'Stale site copy' })
     docs.set('orgs/org-1/leads/lead-key', { campaignIds: ['founder-icp2', 'gone'] })
     docs.set('orgs/org-1/contacts/c-1', { facets: {} })
     await carryLeadCampaignsToContact(firestore, request)

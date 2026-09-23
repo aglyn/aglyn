@@ -397,8 +397,8 @@ function campaignPaths(): string[] {
 
 /** The paths one ordinary send leaves behind, in `campaignPaths()` order. */
 const sendPaths = (campaignId: string) => [
-  `hosts/${HOST}/campaigns/${campaignId}`,
-  `hosts/${HOST}/campaigns/${campaignId}/reports/reached`,
+  `orgs/org-1/campaigns/${campaignId}`,
+  `orgs/org-1/campaigns/${campaignId}/reports/reached`,
 ]
 
 function makeResponse() {
@@ -587,7 +587,7 @@ describe('the ordinary campaign still sends', () => {
 
     expect(result.sent).toBe(1)
     expect(campaignPaths()).toEqual(sendPaths('spring-2026'))
-    expect(store.get(`hosts/${HOST}/campaigns/spring-2026`)).toMatchObject({
+    expect(store.get(`orgs/org-1/campaigns/spring-2026`)).toMatchObject({
       subject: 'Spring sale',
       status: 'sent',
     })
@@ -619,7 +619,7 @@ describe('the ordinary campaign still sends', () => {
     })
 
     expect(result.status).toBe(200)
-    expect(store.get(`hosts/${HOST}/campaigns/spring-2026`)).toMatchObject({
+    expect(store.get(`orgs/org-1/campaigns/spring-2026`)).toMatchObject({
       status: 'scheduled',
     })
   })
@@ -669,7 +669,7 @@ describe('creating a draft', () => {
     // asked for, taken at create time.
     expect(sent).toHaveLength(0)
     const stored = store.get(
-      `hosts/${HOST}/campaigns/${result.body.campaignId}`,
+      `orgs/org-1/campaigns/${result.body.campaignId}`,
     )
     expect(stored?.['status']).toBe('draft')
     expect(stored?.['displayName']).toBe('The discount one')
@@ -688,19 +688,19 @@ describe('creating a draft', () => {
     const result = await post({ hostId: HOST, action: 'draft' })
 
     expect(campaignPaths()).toEqual([
-      `hosts/${HOST}/campaigns/${result.body.campaignId}`,
+      `orgs/org-1/campaigns/${result.body.campaignId}`,
     ])
     // Specifically not `reports/reached`, which an ordinary send leaves and
     // which is what a follow-up subtracts from.
     expect(store.has(
-      `hosts/${HOST}/campaigns/${result.body.campaignId}/reports/reached`,
+      `orgs/org-1/campaigns/${result.body.campaignId}/reports/reached`,
     )).toBe(false)
   })
 
   it('records no stats, so no surface can read it as a send that reached nobody', async () => {
     const result = await post({ hostId: HOST, action: 'draft' })
     const stored = store.get(
-      `hosts/${HOST}/campaigns/${result.body.campaignId}`,
+      `orgs/org-1/campaigns/${result.body.campaignId}`,
     )
     // An absent `stats` is what lets the report surfaces withhold the figures
     // instead of dividing into zero and publishing a 0% delivery rate.
@@ -779,7 +779,7 @@ describe('sending a draft turns THAT document into the sent email', () => {
 
     expect(result.status).toBe(200)
     expect(result.body.campaignId).toBe('draft-1')
-    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['status']).toBe(
+    expect(store.get(`orgs/org-1/campaigns/draft-1`)?.['status']).toBe(
       'sent',
     )
     // No second document anywhere under campaigns.
@@ -828,7 +828,7 @@ describe('sending a draft turns THAT document into the sent email', () => {
     await post({ hostId: HOST, action: 'sendNow', campaignId: 'draft-1' })
 
     expect(
-      store.has(`hosts/${HOST}/campaigns/draft-1/reports/reached`),
+      store.has(`orgs/org-1/campaigns/draft-1/reports/reached`),
     ).toBe(true)
   })
 })
@@ -896,8 +896,8 @@ describe('send-now is refused on everything that has gone out', () => {
       audience: 'leads',
     })
     // What a batch writes back when it leaves people unaddressed.
-    store.set(`hosts/${HOST}/campaigns/msg-1`, {
-      ...(store.get(`hosts/${HOST}/campaigns/msg-1`) ?? {}),
+    store.set(`orgs/org-1/campaigns/msg-1`, {
+      ...(store.get(`orgs/org-1/campaigns/msg-1`) ?? {}),
       stats: { sent: 500, audienceSize: 3000 },
       resume: { remaining: 2500, batch: 1, nextAtMs: Date.now() + 60_000 },
     })
@@ -913,7 +913,7 @@ describe('send-now is refused on everything that has gone out', () => {
     expect(sent).toHaveLength(0)
     // And it is left claimable by the processor rather than parked in the
     // `sending` state this branch takes before it mails.
-    expect(store.get(`hosts/${HOST}/campaigns/msg-1`)?.['status']).toBe(
+    expect(store.get(`orgs/org-1/campaigns/msg-1`)?.['status']).toBe(
       'scheduled',
     )
   })
@@ -939,7 +939,7 @@ describe('send-now is refused on everything that has gone out', () => {
 
     expect(result.status).toBe(200)
     expect(sent).toHaveLength(1)
-    expect(store.get(`hosts/${HOST}/campaigns/msg-1`)?.['status']).toBe('sent')
+    expect(store.get(`orgs/org-1/campaigns/msg-1`)?.['status']).toBe('sent')
   })
 })
 
@@ -959,7 +959,7 @@ describe('send-now is refused on everything that has gone out', () => {
  *=========================================*/
 describe('when an email says it was created', () => {
   const created = (id: string) =>
-    store.get(`hosts/${HOST}/campaigns/${id}`)?.['createdAtMs']
+    store.get(`orgs/org-1/campaigns/${id}`)?.['createdAtMs']
 
   /*
    * THE CLOCK MOVES BETWEEN CALLS, and it has to be made to.
@@ -1086,7 +1086,7 @@ describe('what a sent email says was delivered cannot be rewritten', () => {
     })
 
     expect(result.status).toBe(409)
-    const stored = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    const stored = store.get(`orgs/org-1/campaigns/msg-1`)
     expect(stored?.['status']).toBe('sent')
     expect(stored?.['subject']).toBe('Spring sale')
   })
@@ -1104,7 +1104,7 @@ describe('what a sent email says was delivered cannot be rewritten', () => {
     })
 
     expect(result.status).toBe(409)
-    const stored = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    const stored = store.get(`orgs/org-1/campaigns/msg-1`)
     expect(stored?.['status']).toBe('sent')
     expect(stored?.['subject']).toBe('Spring sale')
   })
@@ -1131,7 +1131,7 @@ describe('what a sent email says was delivered cannot be rewritten', () => {
     })
 
     expect(result.status).toBe(200)
-    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['subject']).toBe(
+    expect(store.get(`orgs/org-1/campaigns/draft-1`)?.['subject']).toBe(
       'Second attempt',
     )
   })
@@ -1157,7 +1157,7 @@ describe('what a sent email says was delivered cannot be rewritten', () => {
     })
 
     expect(result.status).toBe(200)
-    const stored = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    const stored = store.get(`orgs/org-1/campaigns/msg-1`)
     expect(stored?.['displayName']).toBe('The discount one')
     // Every field that describes the mail is untouched.
     expect(stored?.['subject']).toBe('Spring sale')
@@ -1203,7 +1203,7 @@ describe('rescheduling and unscheduling', () => {
     })
 
     expect(result.status).toBe(200)
-    expect(store.get(`hosts/${HOST}/campaigns/msg-1`)?.['sendAtMs']).toBe(
+    expect(store.get(`orgs/org-1/campaigns/msg-1`)?.['sendAtMs']).toBe(
       second,
     )
   })
@@ -1233,7 +1233,7 @@ describe('rescheduling and unscheduling', () => {
       audience: 'leads',
     })
 
-    const stored = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    const stored = store.get(`orgs/org-1/campaigns/msg-1`)
     expect(stored?.['status']).toBe('draft')
     expect(stored?.['sendAtMs']).toBeUndefined()
   })
@@ -1270,19 +1270,19 @@ describe('an immediate send may name an email, but only an unsent one', () => {
 
     expect(result.status).toBe(200)
     expect(result.body.campaignId).toBe('draft-1')
-    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['status']).toBe(
+    expect(store.get(`orgs/org-1/campaigns/draft-1`)?.['status']).toBe(
       'sent',
     )
     // The composer's copy is what went out — this branch is the one that
     // legitimately takes it from the request.
-    expect(store.get(`hosts/${HOST}/campaigns/draft-1`)?.['subject']).toBe(
+    expect(store.get(`orgs/org-1/campaigns/draft-1`)?.['subject']).toBe(
       'Spring sale',
     )
   })
 
   it('refuses to send over an email that has already gone out', async () => {
     await send({ campaignId: 'msg-1' })
-    const before = store.get(`hosts/${HOST}/campaigns/msg-1`)?.['stats']
+    const before = store.get(`orgs/org-1/campaigns/msg-1`)?.['stats']
 
     const result = await post({
       hostId: HOST,
@@ -1295,7 +1295,7 @@ describe('an immediate send may name an email, but only an unsent one', () => {
     expect(result.status).toBe(409)
     // The record still says what it said, and nothing was mailed a second
     // time.
-    const after = store.get(`hosts/${HOST}/campaigns/msg-1`)
+    const after = store.get(`orgs/org-1/campaigns/msg-1`)
     expect(after?.['subject']).toBe('Spring sale')
     expect(after?.['stats']).toEqual(before)
     expect(sent).toHaveLength(1)
@@ -1338,5 +1338,121 @@ describe('an immediate send may name an email, but only an unsent one', () => {
     expect(result.status).toBe(200)
     expect(String(result.body.campaignId)).toBeTruthy()
     expect(sent).toHaveLength(1)
+  })
+})
+
+/*==========================================
+ * A SEND IS ACTED ON ONLY BY THE SITE IT IS SENT AS.
+ *
+ * Every site's sends are one org collection, and a send id is not a secret —
+ * it is in every unsubscribe link and every report URL. The role this route
+ * checks is a role on the site the REQUEST names, so an id naming a sibling
+ * site's send has to answer as a send that does not exist; otherwise an
+ * editor of one site could cancel, mail or rewrite another site's email.
+ *=========================================*/
+describe('a sibling site’s email', () => {
+  const SIBLING_SEND = 'sibling-1'
+  const siblingSend = (status: string) => {
+    store.set(`orgs/org-1/campaigns/${SIBLING_SEND}`, {
+      hostId: 'host-2',
+      visibleTo: ['host:host-2'],
+      status,
+      subject: 'Their sale',
+      body: 'Theirs',
+      audience: 'leads',
+      sendAtMs: Date.now() + 60_000,
+      stats: status === 'sent' ? { sent: 0 } : undefined,
+    })
+  }
+
+  it.each([
+    ['sendNow', 'scheduled', {}],
+    ['cancel', 'scheduled', {}],
+    ['followUp', 'sent', {}],
+    ['update', 'draft', { displayName: 'Mine now' }],
+    ['draft', 'draft', { subject: 'Mine', body: 'Mine', audience: 'leads' }],
+    [
+      'schedule',
+      'draft',
+      {
+        subject: 'Mine',
+        body: 'Mine',
+        audience: 'leads',
+        sendAtMs: Date.now() + 3_600_000,
+      },
+    ],
+    ['send', 'draft', { subject: 'Mine', body: 'Mine', audience: 'leads' }],
+  ])('refuses %s on it as an unknown email', async (action, status, extra) => {
+    siblingSend(status)
+    const before = JSON.stringify(store.get(`orgs/org-1/campaigns/${SIBLING_SEND}`))
+
+    const result = await post({
+      hostId: HOST,
+      action,
+      campaignId: SIBLING_SEND,
+      ...extra,
+    })
+
+    expect([action, result.status]).toEqual([action, action === 'cancel' ? 400 : 404])
+    expect(sent).toHaveLength(0)
+    // Untouched: no claim, no merge, no site stamp moved.
+    expect(JSON.stringify(store.get(`orgs/org-1/campaigns/${SIBLING_SEND}`))).toBe(before)
+  })
+
+  it('acts on a send that records no site, which only a record from before sites were recorded can be', async () => {
+    store.set(`orgs/org-1/campaigns/legacy-1`, {
+      status: 'scheduled',
+      subject: 'Old',
+      body: 'Old',
+      audience: 'leads',
+      sendAtMs: Date.now() + 60_000,
+    })
+
+    const result = await post({ hostId: HOST, action: 'cancel', campaignId: 'legacy-1' })
+
+    expect(result.status).toBe(200)
+    // And the write that touched it completed it with this site.
+    expect(store.get(`orgs/org-1/campaigns/legacy-1`)).toMatchObject({
+      status: 'canceled',
+      hostId: HOST,
+      visibleTo: [`host:${HOST}`],
+    })
+  })
+
+  it('stamps the site on every send it creates, at the org path and nowhere else', async () => {
+    const drafted = await post({
+      hostId: HOST,
+      action: 'draft',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    const mailed = await send({})
+
+    for (const id of [drafted.body.campaignId, mailed.campaignId]) {
+      expect(store.get(`orgs/org-1/campaigns/${id}`)).toMatchObject({
+        hostId: HOST,
+        visibleTo: [`host:${HOST}`],
+      })
+      expect(store.has(`hosts/${HOST}/campaigns/${id}`)).toBe(false)
+    }
+  })
+})
+
+/*
+ * THE ORG RIDES THE MESSAGE, so the delivery webhook finds the send without a
+ * site lookup — beside the site and the send id it has always carried, which
+ * are what a message sent before the org tag still has to be resolved by.
+ */
+describe('the tags a campaign message carries', () => {
+  it('names the org, the site and the send', async () => {
+    const result = await send({})
+    expect(sent[0]?.['tags']).toEqual(
+      expect.arrayContaining([
+        { name: 'hostId', value: HOST },
+        { name: 'campaignId', value: result.campaignId },
+        { name: 'orgId', value: 'org-1' },
+      ]),
+    )
   })
 })

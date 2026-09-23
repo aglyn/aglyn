@@ -655,6 +655,60 @@ function hostCollectionRows() {
 }
 
 /**
+ * The ORG collections each plugin owns, for the media-usage scan (AGL-3273).
+ *
+ * The same checks as the host rows, minus the ones that only mean something
+ * for a host: one owner per name, a reason to skip, a route the owner serves,
+ * and — the one field the host rows do not have — `siteField`, the document
+ * field naming the site a row belongs to, which has to be a plain field name.
+ * `own` is refused: no dedicated pass reads an org collection.
+ */
+function orgCollectionRows() {
+  const rows = []
+  const owners = new Map()
+  for (const plugin of config.plugins) {
+    const declared = plugin.orgCollections
+    if (!declared) continue
+    const where = `plugins.config.json: "${plugin.id}" orgCollections`
+    if (!Array.isArray(declared) || !declared.length) {
+      throw new Error(`${where} is present and declares nothing — drop it, or name what the plugin owns`)
+    }
+    const routes = (plugin.contributes?.console?.routes ?? []).map((route) => route.replace(/^\//, ''))
+    for (const declaration of declared) {
+      const { name, label, mediaScan, mediaScanReason, routeSlug, siteField } = declaration
+      const what = `${where} "${name ?? ''}"`
+      if (typeof name !== 'string' || !name.trim()) throw new Error(`${where}: a collection needs a "name"`)
+      const held = owners.get(name)
+      if (held) throw new Error(`${what} is already declared by "${held}" — one collection has one owner`)
+      owners.set(name, plugin.id)
+      if (mediaScan !== undefined && !['generic', 'none'].includes(mediaScan)) {
+        throw new Error(`${what}: "mediaScan" is generic or none — no dedicated pass reads an org collection`)
+      }
+      if (mediaScan === 'none' && !String(mediaScanReason ?? '').trim()) {
+        throw new Error(`${what}: "mediaScan": "none" needs a "mediaScanReason" naming what scanning would cost, or what it would get wrong`)
+      }
+      if (mediaScan !== 'none' && mediaScanReason) {
+        throw new Error(`${what}: "mediaScanReason" reads as a reason NOT to scan, and this collection is scanned`)
+      }
+      if (routeSlug !== undefined && !routes.includes(routeSlug)) {
+        throw new Error(
+          `${what}: "routeSlug": "${routeSlug}" is not one of "${plugin.id}"'s own console routes ` +
+            `(${routes.length ? routes.join(', ') : 'it declares none'}) — a reference row would deep-link where the document is not`,
+        )
+      }
+      if (siteField !== undefined && (typeof siteField !== 'string' || !/^[A-Za-z][A-Za-z0-9]*$/.test(siteField))) {
+        throw new Error(`${what}: "siteField" is the plain name of the field naming a document's site`)
+      }
+      if (label !== undefined && (typeof label !== 'string' || !label.trim())) {
+        throw new Error(`${what}: "label" is what ONE of its documents is called, or is left out`)
+      }
+      rows.push({ pluginId: plugin.id, ...declaration })
+    }
+  }
+  return rows
+}
+
+/**
  * The org capacities each plugin backs (AGL-3080).
  *
  * Compiled for the reason the whole file is, and here the reason is money: the
@@ -751,7 +805,7 @@ function catalogContent() {
  * the types and the resolvers in \`enabled-plugins.ts\`; it holds no row.
  */
 
-import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
+import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'\nimport type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'\nimport type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
 ${rows.map((row) => `  ${indent(JSON.stringify(row.plugin, null, 2))},`).join('\n')}
@@ -775,6 +829,14 @@ ${editBarRows.map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\
  */
 export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollection[] = [
 ${hostCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
+]
+
+/**
+ * Every org collection a first-party plugin owns whose documents the media
+ * scan reads, declared by that plugin (AGL-3273).
+ */
+export const PLUGIN_ORG_COLLECTIONS_DECLARED: readonly ResolvedPluginOrgCollection[] = [
+${orgCollectionRows().map((row) => `  ${indent(JSON.stringify(row, null, 2))},`).join('\n')}
 ]
 
 /**

@@ -51,10 +51,10 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { collection } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
 import {
+  campaignPlacedOnHost,
   campaignSendDisplay,
   CAMPAIGN_SEND_CONTAINER_FIELD,
   type CampaignSendDisplayState,
@@ -68,6 +68,14 @@ import {
   useCampaignSendApi,
 } from './use-campaign-send-api'
 import { useMarketingHubPath } from './use-marketing-hub-path'
+import { campaignContainersQuery, campaignSendsQuery } from './campaign-queries'
+import {
+  orgSiteHubPath,
+  orgSiteName,
+  orgSiteOptions,
+  useMarketingOrgId,
+  useMarketingOrgMount,
+} from './marketing-org-mount'
 
 /** How many messages one read of this list covers. */
 const EMAIL_CEILING = 30
@@ -118,7 +126,8 @@ const emailsDocsHelp = pluginDocsHelp('emailCampaigns', {
 })
 
 export interface EmailsListCardProps {
-  hostId: string
+  /** The site, or `null` on the org Marketing hub. */
+  hostId: string | null
   /** The emails hub URL, so a row can link to the message's own page. */
   basePath: string
 }
@@ -148,21 +157,32 @@ export interface EmailsListCardProps {
  * The page is therefore a SLICE of a window this card already holds, not a
  * query: paging an id-ordered walk and re-sorting each page by date would run
  * in one order within a page and another across them.
+ *
+ * ## Under a site, and over the organization
+ *
+ * Sends are the org's. Under a site this lists the ones sent as that site;
+ * on the org hub it lists every site's, with a Site column, and every action
+ * on a row names the site that row is sent as — the only site that can
+ * duplicate it, discard it or open its template. Creating one there first
+ * asks which site it is sent as.
  */
 export function EmailsListCard(props: EmailsListCardProps) {
   const { hostId, basePath } = props
   const firestore = useFirestore()
-  // The sibling hub: a campaign's page belongs to the Marketing console.
-  const marketingHub = useMarketingHubPath()
+  const orgMount = useMarketingOrgMount()
+  const { orgId } = useMarketingOrgId(hostId)
+  // The sibling hub: a campaign's page belongs to the Marketing console —
+  // which, on the org hub, is the page this list is already on.
+  const siteMarketingHub = useMarketingHubPath()
+  const marketingHub = orgMount ? orgMount.basePath : siteMarketingHub
   const router = useRouter()
 
   const { data: emailDocs } = useFirestoreCollection<any>(
-    () =>
-      collectionCeiling(
-        collection(firestore, 'hosts', hostId, 'campaigns'),
-        EMAIL_CEILING,
-      ),
-    [firestore, hostId],
+    () => {
+      const sends = campaignSendsQuery(firestore, orgId, hostId)
+      return sends ? collectionCeiling(sends, EMAIL_CEILING) : null
+    },
+    [firestore, orgId, hostId],
     { idField: '$id' },
   )
   const { rows: readEmails, truncated } = ceilingedWindow<any>(
@@ -188,7 +208,33 @@ export function EmailsListCard(props: EmailsListCardProps) {
     [readEmails],
   )
 
-  const emailHref = (email: any) => `${basePath}/messages/${email.$id}`
+  /*
+   * A message's own pages: the Emails console's under a site, the org hub's
+   * Emails section over the org. A template is a site's design, so on the
+   * org hub it opens on the site the row is sent as.
+   */
+  const messagesPath = orgMount
+    ? `${orgMount.basePath}/emails`
+    : `${basePath}/messages`
+  const emailHref = (email: any) => `${messagesPath}/${email.$id}`
+  const templatesHub = (email: any): string | null =>
+    orgMount ? orgSiteHubPath(orgMount, email?.hostId, 'emails') : basePath
+  /** The site a row is sent as, which every action on it must name. */
+  const rowHostId = useCallback(
+    (email: any): string | null =>
+      hostId ?? (email?.hostId ? String(email.hostId) : null),
+    [hostId],
+  )
+  const hostOfEmail = useMemo(
+    () =>
+      new Map<string, string | null>(
+        readEmails.map((email: any) => [
+          String(email.$id),
+          email?.hostId ? String(email.hostId) : null,
+        ]),
+      ),
+    [readEmails],
+  )
 
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
@@ -197,13 +243,15 @@ export function EmailsListCard(props: EmailsListCardProps) {
   // which is the plugin's own.
   const manageForCopy = useCampaignManageApi(hostId)
   const duplicate = useDuplicateResource({
-    hostId,
+    hostId: hostId ?? '',
     perform: async ({ sourceId, name, attemptKey }) => {
       const { response, payload } = await manageForCopy({
         action: 'duplicate',
         campaignId: sourceId,
         name,
         attemptKey,
+        // The copy is made as the site the source is sent as.
+        ...(hostId ? {} : { hostId: hostOfEmail.get(sourceId) ?? undefined }),
       })
       if (!response.ok) throw new Error(payload?.error ?? 'Duplicate failed')
       return {
@@ -259,6 +307,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
         const { response, payload } = await manageApi({
           action: 'discardEmail',
           campaignId: id,
+          ...(hostId ? {} : { hostId: rowHostId(email) ?? undefined }),
         })
         if (!response.ok) {
           return void enqueueSnackbar(
@@ -280,7 +329,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
         setDiscardingId('')
       }
     },
-    [confirm, discardingId, enqueueSnackbar, manageApi],
+    [confirm, discardingId, enqueueSnackbar, hostId, manageApi, rowHostId],
   )
 
   /**
@@ -305,6 +354,12 @@ export function EmailsListCard(props: EmailsListCardProps) {
     const containerId = String(email?.[CAMPAIGN_SEND_CONTAINER_FIELD] ?? '')
     const templateScreenId = String(email?.templateScreenId ?? '')
     const state = String(email?.status ?? '')
+    const templates = templatesHub(email)
+    /** On the org hub, a send that names no site has nothing to act as. */
+    const siteless = !rowHostId(email)
+    const sitelessReason =
+      'This email does not record which site it was sent as. Manage it from ' +
+      'that site’s own Emails page.'
     return [
       {
         key: 'details',
@@ -331,16 +386,21 @@ export function EmailsListCard(props: EmailsListCardProps) {
         key: 'template',
         label: 'Open its template',
         icon: <MdiIcon path={mdiPaletteOutline.path} size={0.8} />,
-        href: templateScreenId
-          ? `${basePath}/templates/${templateScreenId}`
-          : undefined,
-        disabled: !templateScreenId,
-        disabledReason: 'This message was not built from a template',
+        href:
+          templateScreenId && templates
+            ? `${templates}/templates/${templateScreenId}`
+            : undefined,
+        disabled: !templateScreenId || !templates,
+        disabledReason: templateScreenId
+          ? 'This site’s console URL has not resolved yet'
+          : 'This message was not built from a template',
       },
       {
         key: 'duplicate',
         label: DUPLICATE_MENU_LABEL,
         icon: <MdiIcon path={mdiContentCopy.path} size={0.8} />,
+        disabled: siteless,
+        disabledReason: sitelessReason,
         onClick: () =>
           duplicate.request('campaign', {
             id: String(email.$id),
@@ -352,8 +412,10 @@ export function EmailsListCard(props: EmailsListCardProps) {
         label: 'Discard draft',
         icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
         destructive: true,
-        disabled: state !== 'draft' || Boolean(discardingId),
-        disabledReason: DISCARD_REFUSAL[state] ?? 'Only a draft can be discarded',
+        disabled: siteless || state !== 'draft' || Boolean(discardingId),
+        disabledReason: siteless
+          ? sitelessReason
+          : (DISCARD_REFUSAL[state] ?? 'Only a draft can be discarded'),
         onClick: () => void handleDiscard(email),
       },
     ]
@@ -362,6 +424,15 @@ export function EmailsListCard(props: EmailsListCardProps) {
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const campaignSendApi = useCampaignSendApi(hostId)
+  /*
+   * The sites a new email can be sent as, on the org hub. One site answers
+   * the question itself, so the field is asked only when there is a choice.
+   */
+  const orgSites = useMemo(
+    () => (orgMount ? orgSiteOptions(orgMount) : []),
+    [orgMount],
+  )
+  const askSite = !hostId && orgSites.length > 1
 
   /*
    * The campaigns a new email may be filed under, read only while the drawer
@@ -373,14 +444,13 @@ export function EmailsListCard(props: EmailsListCardProps) {
    * which is the cost the whole surface is routed to avoid.
    */
   const { data: campaignDocs } = useFirestoreCollection<any>(
-    () =>
-      createOpen
-        ? collectionCeiling(
-            collection(firestore, 'hosts', hostId, 'emailCampaigns'),
-            CONTAINER_CEILING,
-          )
-        : null,
-    [firestore, hostId, createOpen],
+    () => {
+      const containers = createOpen
+        ? campaignContainersQuery(firestore, orgId, hostId)
+        : null
+      return containers ? collectionCeiling(containers, CONTAINER_CEILING) : null
+    },
+    [firestore, orgId, hostId, createOpen],
     { idField: '$id' },
   )
   const campaignOptions = useMemo(
@@ -411,10 +481,41 @@ export function EmailsListCard(props: EmailsListCardProps) {
   const handleCreate = useCallback(
     async (values: Record<string, any>) => {
       if (creating) return
+      const sendAs =
+        hostId ?? (askSite ? String(values.hostId ?? '') : orgSites[0]?.value)
+      if (!sendAs) {
+        return void enqueueSnackbar('Choose the site this email is sent as', {
+          variant: 'warning',
+          allowDuplicate: true,
+        })
+      }
+      /*
+       * The organization hub offers every campaign, because the site is
+       * chosen in the same form. An email can only join a campaign placed on
+       * the site it is sent as — the send route refuses anything else — so
+       * the mismatch is named here, where it can be fixed, rather than
+       * arriving as the route's bare refusal. A site hub lists only the
+       * campaigns placed on it, so there is nothing to check there.
+       */
+      const chosenCampaign =
+        !hostId && values.emailCampaignId
+          ? (campaignDocs ?? []).find(
+              (campaign: any) =>
+                String(campaign.$id) === String(values.emailCampaignId),
+            )
+          : null
+      if (chosenCampaign && !campaignPlacedOnHost(chosenCampaign, sendAs)) {
+        return void enqueueSnackbar(
+          'That campaign is not offered on the site this email is sent as. ' +
+            'Choose another, or add the site to the campaign first.',
+          { variant: 'warning', allowDuplicate: true },
+        )
+      }
       setCreating(true)
       try {
         const { response, payload } = await campaignSendApi({
           action: 'draft',
+          ...(hostId ? {} : { hostId: sendAs }),
           displayName: String(values.displayName ?? '').trim(),
           ...(values.emailCampaignId
             ? { emailCampaignId: String(values.emailCampaignId) }
@@ -433,7 +534,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
          * next thing to do with it is compose it — and its own page is a
          * report of a send that has not happened.
          */
-        router.push(`${basePath}/messages/${payload.campaignId}/edit`)
+        router.push(`${messagesPath}/${payload.campaignId}/edit`)
       } catch (error) {
         console.error(error)
         enqueueSnackbar('This email could not be created', {
@@ -444,7 +545,17 @@ export function EmailsListCard(props: EmailsListCardProps) {
         setCreating(false)
       }
     },
-    [basePath, campaignSendApi, creating, enqueueSnackbar, router],
+    [
+      askSite,
+      campaignDocs,
+      campaignSendApi,
+      creating,
+      enqueueSnackbar,
+      hostId,
+      messagesPath,
+      orgSites,
+      router,
+    ],
   )
 
   /*
@@ -472,6 +583,18 @@ export function EmailsListCard(props: EmailsListCardProps) {
         </AppLink>
       ),
     },
+    // Which site each row is sent as, on the org hub only.
+    ...(orgMount
+      ? [
+          {
+            field: 'site',
+            headerName: 'Site',
+            width: 150,
+            valueGetter: (_value: unknown, row: any) =>
+              row?.hostId ? orgSiteName(orgMount, row.hostId) : '—',
+          } satisfies GridColDef,
+        ]
+      : []),
     {
       /*
        * WHAT THIS EMAIL IS DOING, not what field it stores.
@@ -580,7 +703,9 @@ export function EmailsListCard(props: EmailsListCardProps) {
         )}
         {truncated ? (
           <Alert severity="info">
-            {`Showing ${EMAIL_CEILING} messages. This site has sent or ` +
+            {`Showing ${EMAIL_CEILING} messages. ${
+              hostId ? 'This site' : 'This organization'
+            } has sent or ` +
               'scheduled more than that, and the rest are not in this list.'}
           </Alert>
         ) : null}
@@ -609,6 +734,22 @@ export function EmailsListCard(props: EmailsListCardProps) {
         includeDescription={false}
         onSubmit={handleCreate}
         extraFields={[
+          ...(askSite
+            ? [
+                {
+                  component: 'select',
+                  name: 'hostId',
+                  label: 'Send as',
+                  isRequired: true,
+                  initialValue: '',
+                  helperText:
+                    'The site this email is sent from — its sender, designs ' +
+                    'and unsubscribe page',
+                  disableDefaultOption: true,
+                  options: orgSites,
+                },
+              ]
+            : []),
           {
             component: 'select',
             name: 'emailCampaignId',

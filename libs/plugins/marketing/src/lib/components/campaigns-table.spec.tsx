@@ -43,6 +43,8 @@ const FIRESTORE = {}
 
 /** Every `limit` the card asked each collection for. */
 let capsAsked: Record<string, number[]> = {}
+/** Every query the card built, by collection name: its path and filters. */
+let queried: Record<string, { path: string; constraints: any[] }> = {}
 /** Documents the doubles serve, by collection name. */
 let served: Record<string, any[]> = {}
 /** Every client write the card made: [path, value]. */
@@ -69,6 +71,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestoreCollection: (build: () => any) => {
     const built = build()
     const name = String(built?.path ?? '').split('/').pop() ?? ''
+    if (built) queried[name] = built
     const cap = (built?.constraints ?? []).find(
       (item: any) => 'limit' in item,
     )?.limit
@@ -94,6 +97,9 @@ jest.mock('firebase/firestore', () => ({
     constraints: [...(base?.constraints ?? []), ...constraints],
   }),
   limit: (value: number) => ({ limit: value }),
+  where: (field: string, op: string, value: unknown) => ({
+    where: [field, op, value],
+  }),
   orderBy: (field: unknown) => ({ orderBy: field }),
   documentId: () => '__name__',
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
@@ -195,6 +201,7 @@ let posted: Array<[string, Record<string, any>]> = []
 let postAnswer = { ok: true, body: {} as Record<string, unknown> }
 
 import HostCampaignsCard from './campaigns-card'
+import { MarketingOrgMountProvider } from './marketing-org-mount'
 
 const CONTAINER_CEILING = 50
 const SEND_CEILING = 30
@@ -210,6 +217,7 @@ const sentSend = (id: string, over: Record<string, any> = {}) => ({
 
 beforeEach(() => {
   capsAsked = {}
+  queried = {}
   writes = []
   pushed = []
   drawerFields = []
@@ -537,7 +545,7 @@ describe('deleting a campaign', () => {
   })
 
   it('does NOT delete the container through a client write', async () => {
-    // `hosts/{id}/campaigns` is server-only in the rules — the container can
+    // `orgs/{id}/campaigns` is server-only in the rules — the container can
     // only go once its sends are detached, and no client may detach them.
     await mount()
     await waitFor(() => expect(cells()).toContain('Spring sale'))
@@ -708,7 +716,9 @@ describe('creating a campaign', () => {
     const [path, value] = writes[0]
     // The CONTAINER collection. The send collection is untouched, which is
     // what leaves every delivered `cid` resolving.
-    expect(path.startsWith('hosts/host-1/emailCampaigns/')).toBe(true)
+    expect(path.startsWith('orgs/org-1/emailCampaigns/')).toBe(true)
+    // Created from a site's hub, it is placed on that site and no other.
+    expect(value.visibleTo).toEqual(['host:host-1'])
     expect(value.name).toBe('Summer sale')
     expect(value.startAtMs).toBe(Date.parse('2026-06-01'))
     expect(value.endAtMs).toBe(Date.parse('2026-06-30'))
@@ -745,5 +755,151 @@ describe('creating a campaign', () => {
       ).toBeTruthy(),
     )
     expect(writes).toEqual([])
+  })
+})
+
+/*==========================================
+ * WHERE THE TABLE READS, under a site and over the organization.
+ *
+ * Both collections are the org's. A site hub's reads must be ones the rules
+ * can prove for a site collaborator — containers placed on every site or on
+ * this one, sends sent as this site — and the org hub, admitted only to
+ * org-wide members, reads them whole.
+ *=========================================*/
+describe('the org collections the table reads', () => {
+  it('under a site, reads the org collections filtered to that site', async () => {
+    await mount()
+
+    expect(queried['emailCampaigns'].path).toBe('orgs/org-1/emailCampaigns')
+    expect(queried['emailCampaigns'].constraints).toContainEqual({
+      where: ['visibleTo', 'array-contains-any', ['org', 'host:host-1']],
+    })
+    expect(queried['campaigns'].path).toBe('orgs/org-1/campaigns')
+    expect(queried['campaigns'].constraints).toContainEqual({
+      where: ['visibleTo', 'array-contains-any', ['host:host-1']],
+    })
+  })
+})
+
+const ORG_MOUNT = {
+  orgId: 'org-1',
+  orgSlug: 'acme',
+  hosts: [
+    { id: 'host-1', name: 'Store', subdomain: 'store' },
+    { id: 'host-2', name: 'Blog', subdomain: 'blog' },
+  ],
+  hostsReady: true,
+  hostsPath: '/acme/hosts',
+  basePath: '/acme/marketing',
+}
+
+const mountAtOrg = async () => {
+  render(
+    <MarketingOrgMountProvider value={ORG_MOUNT}>
+      <HostCampaignsCard hostId={null} basePath="/acme/marketing" />
+    </MarketingOrgMountProvider>,
+  )
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
+describe('the campaigns table on the org hub', () => {
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  const deleteItem = () =>
+    screen
+      .getAllByRole('menuitem')
+      .find((item) => item.textContent === 'Delete campaign') as HTMLElement
+
+  beforeEach(() => {
+    served.emailCampaigns = [
+      { $id: 'camp-1', name: 'Spring sale', visibleTo: ['org'], listIds: [] },
+      {
+        $id: 'camp-2',
+        name: 'Blog launch',
+        visibleTo: ['host:host-2'],
+        listIds: [],
+      },
+      { $id: 'camp-3', name: 'Unplaced', listIds: [] },
+    ]
+    served.campaigns = [
+      sentSend('legacy-send', { subject: 'Old news', hostId: 'host-1' }),
+    ]
+  })
+
+  it('reads every campaign and every send, unfiltered', async () => {
+    await mountAtOrg()
+
+    expect(queried['emailCampaigns'].path).toBe('orgs/org-1/emailCampaigns')
+    expect(
+      queried['emailCampaigns'].constraints.some((item) => 'where' in item),
+    ).toBe(false)
+    expect(queried['campaigns'].path).toBe('orgs/org-1/campaigns')
+    expect(
+      queried['campaigns'].constraints.some((item) => 'where' in item),
+    ).toBe(false)
+  })
+
+  it('names the sites each campaign is placed on', async () => {
+    await mountAtOrg()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    expect(rowFor('Spring sale').textContent).toContain('Every site')
+    expect(rowFor('Blog launch').textContent).toContain('Blog')
+    // An absent placement is NO site, and says so rather than going blank.
+    expect(rowFor('Unplaced').textContent).toContain('No site')
+    // A single send is on the one site it was sent as.
+    expect(rowFor('Old news').textContent).toContain('Store')
+  })
+
+  it('offers a Sites picker, and places a campaign on every site by default', async () => {
+    formValues = { displayName: 'Everywhere' }
+    await mountAtOrg()
+    fireEvent.click(screen.getAllByText('Create campaign')[0])
+    await settle()
+
+    const sites = drawerFields.find((field: any) => field.name === 'siteIds')
+    expect(sites.options).toEqual([
+      { value: 'host-1', label: 'Store' },
+      { value: 'host-2', label: 'Blog' },
+    ])
+
+    fireEvent.click(screen.getByText('Submit campaign'))
+    await waitFor(() => expect(writes).toHaveLength(1))
+    expect(writes[0][0].startsWith('orgs/org-1/emailCampaigns/')).toBe(true)
+    expect(writes[0][1].visibleTo).toEqual(['org'])
+    expect(pushed[0]).toMatch(/^\/acme\/marketing\/campaigns\//)
+  })
+
+  it('places a campaign on the sites the creator picks', async () => {
+    formValues = { displayName: 'Blog only', siteIds: ['host-2'] }
+    await mountAtOrg()
+    fireEvent.click(screen.getAllByText('Create campaign')[0])
+    await settle()
+    fireEvent.click(screen.getByText('Submit campaign'))
+    await waitFor(() => expect(writes).toHaveLength(1))
+
+    expect(writes[0][1].visibleTo).toEqual(['host:host-2'])
+  })
+
+  it('deletes a campaign by naming the org, not a site', async () => {
+    await mountAtOrg()
+    await waitFor(() => expect(cells()).toContain('Spring sale'))
+
+    openMenuFor('Spring sale')
+    fireEvent.click(deleteItem())
+    await waitFor(() => expect(posted).toHaveLength(1))
+
+    expect(posted[0][0]).toBe('/api/campaigns/manage')
+    expect(posted[0][1]).toEqual({
+      action: 'deleteCampaign',
+      campaignId: 'camp-1',
+      orgId: 'org-1',
+    })
   })
 })

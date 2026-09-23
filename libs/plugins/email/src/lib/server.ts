@@ -38,6 +38,7 @@ import {
   confirmTopicSubscription,
   EMAIL_FREQUENCY_SUBCOLLECTION,
   firebaseAdmin,
+  resolveCampaignSendRef,
   resolveOrgIdForHost,
   setMarketingCadence,
   UNSUBSCRIBE_SUPPRESSION_REASON,
@@ -303,24 +304,10 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
      * the delivery webhook orders its writes the same way: the suppression is
      * the write that must happen, and a statistic must never be able to cost
      * one. A lost increment understates an unsubscribe rate; a lost
-     * suppression mails somebody who asked us not to.
-     *
-     * A merge-set would CREATE the campaign — a document holding one `stats`
-     * map and nothing else — for an unsubscribe arriving after the merchant
-     * deleted it, which is the fault the delivery webhook records against
-     * this exact shape. `update()` refuses a missing document, which is the
-     * behavior wanted: the count for a campaign nobody can open has no
-     * reader.
+     * suppression mails somebody who asked us not to. Where the send is, and
+     * why the write never creates it, is {@link countSendUnsubscribe}'s.
      */
-    if (created && isCampaignPathId(campaignId)) {
-      await firestore
-        .collection('hosts')
-        .doc(hostId)
-        .collection('campaigns')
-        .doc(campaignId)
-        .update({ 'stats.unsubscribes': FieldValue.increment(1) })
-        .catch(() => undefined)
-    }
+    if (created) await countSendUnsubscribe(firestore, hostId, campaignId)
     return void sendPage(
       res,
       page(
@@ -345,6 +332,42 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
   } catch (error) {
     console.error(error)
     return void res.status(500).send('Unsubscribe failed — please try again')
+  }
+}
+
+/**
+ * One more unsubscribe on the send a link named (`cid`), never throwing.
+ *
+ * The link carries the site and the send id it was signed over, and nothing
+ * else; the send itself is the organization's
+ * (`orgs/{orgId}/campaigns/{sendId}`), or still the site's when the
+ * migration has not reached it, and `resolveCampaignSendRef` finds whichever
+ * holds it. A send in neither place was discarded, and there is nothing to
+ * count against.
+ *
+ * `update()`, never a merge-set: a merge-set would re-create a send deleted
+ * between the resolve and the write as a husk holding one `stats` map, and
+ * `update()` refuses a missing document — the count for a send nobody can
+ * open has no reader. Every failure is swallowed, because the suppression
+ * has already been written and a statistic must never be able to cost one.
+ */
+async function countSendUnsubscribe(
+  firestore: FirebaseFirestore.Firestore,
+  hostId: string,
+  campaignId: string,
+): Promise<void> {
+  if (!isCampaignPathId(campaignId)) return
+  try {
+    const orgId = await resolveOrgIdForHost(hostId)
+    const sendRef = await resolveCampaignSendRef({
+      hostId,
+      sendId: campaignId,
+      orgId,
+      firestore,
+    })
+    await sendRef?.update({ 'stats.unsubscribes': FieldValue.increment(1) })
+  } catch {
+    // The suppression is the write that mattered, and it has landed.
   }
 }
 
@@ -649,15 +672,7 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
         campaignId,
         topicId,
       })
-      if (created && isCampaignPathId(campaignId)) {
-        await firestore
-          .collection('hosts')
-          .doc(hostId)
-          .collection('campaigns')
-          .doc(campaignId)
-          .update({ 'stats.unsubscribes': FieldValue.increment(1) })
-          .catch(() => undefined)
-      }
+      if (created) await countSendUnsubscribe(firestore, hostId, campaignId)
       return void sendPage(
         res,
         page(

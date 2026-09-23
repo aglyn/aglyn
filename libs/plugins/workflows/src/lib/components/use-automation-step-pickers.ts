@@ -163,7 +163,7 @@ export function useAutomationStepPickers(
   )
   const { rows: overlayDocs, truncated: overlaysTruncated } =
     ceilingedWindow<any>(overlayRead, EDITOR_OPTION_CEILING)
-  // Lists live on the org (AGL-254); campaigns on the host.
+  // Lists live on the org (AGL-254), and so do campaigns.
   const { data: listRead } = useFirestoreCollection<any>(
     () =>
       editorOpened && dataScope
@@ -185,16 +185,24 @@ export function useAutomationStepPickers(
    * runs (AGL-3052). `campaigns` beside it holds the individual email sends,
    * and a send's id names no container, so a step pointed at one fails every
    * run with "unknown campaign".
+   *
+   * The org's, narrowed to the ones placed on THIS site by the same host
+   * tokens the datasets use — an automation runs on this site, so it may
+   * only file under a campaign the site offers, and the clause is what
+   * makes the list provable for a collaborator scoped to the site.
    */
   const { data: campaignRead } = useFirestoreCollection<any>(
     () =>
-      editorOpened
+      editorOpened && dataScope
         ? collectionCeiling(
-            collection(firestore, 'hosts', hostId, 'emailCampaigns'),
+            query(
+              collection(firestore, dataScope[0], dataScope[1], 'emailCampaigns'),
+              where('visibleTo', 'array-contains-any', scopeTokens),
+            ),
             EDITOR_OPTION_CEILING,
           )
         : null,
-    [firestore, hostId, editorOpened],
+    [firestore, dataScope, scopeTokens, editorOpened],
     { idField: '$id' },
   )
   const { rows: campaignDocs, truncated: campaignsTruncated } =

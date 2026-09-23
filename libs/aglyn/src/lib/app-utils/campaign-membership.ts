@@ -21,7 +21,7 @@
  *
  * ## The edge is a field on the RESOURCE, not a list on the campaign
  *
- * A campaign container lives at `hosts/{hostId}/emailCampaigns/{campaignId}`
+ * A campaign container lives at `orgs/{orgId}/emailCampaigns/{campaignId}`
  * and names nothing outside itself. A send joins one by carrying
  * `emailCampaignId`; every other member joins the same way, through
  * {@link CAMPAIGN_MEMBERSHIP_FIELD} on its own document.
@@ -109,8 +109,9 @@ export function normalizeCampaignIds(raw: unknown): string[] {
  * The campaigns a HOST resource — a form, a screen — belongs to.
  *
  * Host resources carry the field at the top of the document: they belong to
- * one site, which is the same site the campaign belongs to, so there is no
- * second holder to keep the edge away from.
+ * one site, and whoever may read the resource may read which of the org's
+ * campaigns it is filed under, so there is no second holder to keep the edge
+ * away from.
  */
 export function readCampaignIds(
   resource: Record<string, unknown> | null | undefined,
@@ -189,12 +190,13 @@ export function campaignMembershipUnchanged(
  * detach fails the build rather than shipping a campaign whose removal leaves
  * that collection pointing at nothing.
  *
- * A lead (`hosts/{hostId}/leads/{personKey}`, AGL-3254) carries the field at
- * the top of its document like a form does: a lead is one site's own record,
- * captured there and worked there, so there is no second holder to keep the
- * edge away from. It joins a campaign by hand — the New lead drawer, the CSV
- * import, the list's bulk bar — or by being enrolled in a sequence that is
- * in one, and it hands the membership to the contact it converts into.
+ * `leads` is here for the site rows the lead migration (AGL-3276) has not
+ * reached. A live lead is an org row (`orgs/{orgId}/leads/{personKey}`) that
+ * carries the field at the top of its document like a form does, and the
+ * deletion walks that collection by name beside this list. A lead joins a
+ * campaign by hand — the New lead drawer, the CSV import, the list's bulk
+ * bar — or by being enrolled in a sequence that is in one, and it hands the
+ * membership to the contact it converts into.
  *
  * Contacts are deliberately NOT here. They live on the org
  * (`orgs/{orgId}/contacts`), not the host, and carry the field inside a

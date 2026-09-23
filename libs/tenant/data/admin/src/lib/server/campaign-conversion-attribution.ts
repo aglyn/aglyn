@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, type DocumentReference, type Firestore } from 'firebase-admin/firestore'
 import {
   parseCampaignTouch,
   type CampaignTouch,
@@ -42,6 +42,7 @@ import {
 import { readEmailCampaignTouch } from './email-delivery-log'
 import { isDocumentId } from './document-id'
 import firebaseAdmin from './firebase-admin'
+import { resolveOrgIdForHost } from './organizations'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 
@@ -391,7 +392,18 @@ export async function attributeCampaignConversion(
       return null
     }
 
-    if (touch.channel === 'email' && touch.campaignId) {
+    /*
+     * The send the touch names (`touch.campaignId` is a SEND id on the email
+     * channel), wherever it is: the org's `campaigns` collection, or the
+     * site's for a send the migration has not reached. A send in neither
+     * place was discarded, and its rollup is skipped — the record above
+     * already says what was credited.
+     */
+    const sendRef =
+      touch.channel === 'email' && touch.campaignId && isDocumentId(touch.campaignId)
+        ? await resolveCampaignSendRef({ hostId, sendId: touch.campaignId, firestore: db })
+        : null
+    if (sendRef) {
       /*
        * A merge-set that CREATES, for the reason `reports/revenue` gives: this
        * writes a document UNDER a campaign, so a campaign that no longer
@@ -402,9 +414,7 @@ export async function attributeCampaignConversion(
        * Every figure is an increment, so two conversions settling at once
        * both land.
        */
-      await hostRef
-        .collection('campaigns')
-        .doc(touch.campaignId)
+      await sendRef
         .collection('reports')
         .doc(CAMPAIGN_CONVERSIONS_REPORT_DOC)
         .set(
@@ -447,9 +457,10 @@ export async function attributeCampaignConversion(
  * credits what each enrollment produced — enrolled, first email sent, a
  * reply, a meeting booked from a sequence link, an enrolled lead converted
  * — to every campaign the sequence was in when the person was enrolled. The
- * counts live in `hosts/{hostId}/campaignSequenceReports/{campaignId}`:
- * one document per campaign, server-only like every other report here, and
- * never inside the campaign container, which the history list reads.
+ * counts live in `orgs/{orgId}/campaignSequenceReports/{campaignId}`, beside
+ * the org's containers: one document per campaign, server-only like every
+ * other report here, and never inside the campaign container, which the
+ * history list reads.
  *
  * Idempotency is the CALLER's: a plugin credits an outcome once per
  * enrollment from a state change that happens once — the enrollment is
@@ -459,7 +470,7 @@ export async function attributeCampaignConversion(
  *=========================================*/
 
 /**
- * The per-host collection of sequence rollups. Restated from the reader
+ * The per-org collection of sequence rollups. Restated from the reader
  * (`campaign-report.ts` in the campaigns UI library, which this package may
  * not import) and asserted equal by the reader's spec.
  */
@@ -488,7 +499,14 @@ export type CampaignSequenceOutcome = (typeof CAMPAIGN_SEQUENCE_OUTCOMES)[number
  */
 export async function creditCampaignSequenceOutcome(
   options: {
+    /** The site the enrollment emails for; resolves the org when none is given. */
     hostId: string
+    /**
+     * The org whose containers the campaigns are, when the caller holds it —
+     * an enrollment is an org document, so its routes do. Saves the
+     * `hostIndex` read.
+     */
+    orgId?: string | null
     /** The campaigns the enrollment carries; unusable ids are skipped. */
     campaignIds: readonly string[]
     outcome: CampaignSequenceOutcome
@@ -498,19 +516,24 @@ export async function creditCampaignSequenceOutcome(
   firestore?: any,
 ): Promise<number> {
   try {
-    const hostId = String(options.hostId ?? '')
-    if (!isDocumentId(hostId)) return 0
     if (!(CAMPAIGN_SEQUENCE_OUTCOMES as readonly string[]).includes(options.outcome)) return 0
     const atMs = Number(options.atMs ?? Date.now())
     const ids = [...new Set(options.campaignIds.map((id) => String(id ?? '').trim()))].filter(
       (id) => isDocumentId(id),
     )
     if (!ids.length) return 0
+    const hostId = String(options.hostId ?? '')
+    const given = String(options.orgId ?? '')
+    const orgId = isDocumentId(given)
+      ? given
+      : isDocumentId(hostId)
+        ? await resolveOrgIdForHost(hostId)
+        : null
+    if (!orgId || !isDocumentId(orgId)) return 0
     const db = firestore ?? defaultFirestore()
-    const reports = db.collection('hosts').doc(hostId).collection(CAMPAIGN_SEQUENCE_REPORTS_COLLECTION)
     await Promise.all(
       ids.map((campaignId) =>
-        reports.doc(campaignId).set(
+        orgCampaignSequenceReportRef(orgId, campaignId, db).set(
           {
             byOutcome: { [options.outcome]: FieldValue.increment(1) },
             ...(Number.isFinite(atMs) && atMs > 0 ? { updatedAtMs: atMs } : {}),
@@ -525,4 +548,115 @@ export async function creditCampaignSequenceOutcome(
     console.error('creditCampaignSequenceOutcome failed', error)
     return 0
   }
+}
+
+/*==========================================
+ * WHERE A SEND IS (AGL-3273)
+ *=========================================*/
+
+/**
+ * WHERE A SEND IS, given only what a link or a delivery event carries.
+ *
+ * Campaign containers and sends belong to the organization
+ * (`orgs/{orgId}/emailCampaigns`, `orgs/{orgId}/campaigns`, AGL-3273). Every
+ * reader that starts from inside the product already holds the org id and
+ * addresses those collections directly. This module is for the readers that
+ * start OUTSIDE it — the unsubscribe link, the provider's delivery webhook,
+ * the conversion join — which hold a site id and a send id and nothing else,
+ * because that is what was signed into the link or tagged on the message
+ * when it went out, possibly years ago.
+ *
+ * ## The fallback, and why it stays
+ *
+ * The site path (`hosts/{hostId}/campaigns/{sendId}`) is where every send
+ * lived before the move, and the migration copies each one up under its
+ * existing id. Between a deployment of this code and the migration reaching
+ * an org, the send is still only at the site; and an interrupted migration
+ * leaves some sends behind. A reader that looked only at the org would, in
+ * that window, drop an unsubscribe's count or a bounce — and a bounce that
+ * is dropped is an address that gets mailed again. So the org is asked
+ * first and the site second. After the migration the second read never
+ * happens, because the first one answers.
+ *
+ * The collection names are spelled here rather than imported from the
+ * campaign model (`@aglyn/shared-ui-email-campaigns`), which this package
+ * does not depend on. They are the same strings; `campaign-container.ts`
+ * documents them. The join above is this lookup's first reader, and the two
+ * move together when the campaign code leaves this package.
+ */
+
+const sendRefFirestore = (): Firestore => firebaseAdmin.app().firestore()
+
+/** `orgs/{orgId}/campaigns` — one document per email send. */
+const ORG_SENDS = 'campaigns'
+
+/** `orgs/{orgId}/campaignSequenceReports` — keyed by the container id. */
+const ORG_SEQUENCE_REPORTS = 'campaignSequenceReports'
+
+/** `orgs/{orgId}/campaigns/{sendId}`. */
+export function orgCampaignSendRef(
+  orgId: string,
+  sendId: string,
+  firestore: Firestore = sendRefFirestore(),
+): DocumentReference {
+  return firestore.collection('orgs').doc(orgId).collection(ORG_SENDS).doc(sendId)
+}
+
+/** `orgs/{orgId}/campaignSequenceReports/{campaignId}`. */
+export function orgCampaignSequenceReportRef(
+  orgId: string,
+  campaignId: string,
+  firestore: Firestore = sendRefFirestore(),
+): DocumentReference {
+  return firestore
+    .collection('orgs')
+    .doc(orgId)
+    .collection(ORG_SEQUENCE_REPORTS)
+    .doc(campaignId)
+}
+
+/** The pre-AGL-3273 location, read only as the fallback described above. */
+function legacySiteSendRef(
+  hostId: string,
+  sendId: string,
+  firestore: Firestore,
+): DocumentReference {
+  return firestore.collection('hosts').doc(hostId).collection(ORG_SENDS).doc(sendId)
+}
+
+export interface ResolveCampaignSendRefInput {
+  /** The site the link or the message tag names. */
+  hostId: string
+  /** The send id (`cid` on a link, `campaignId` on a message tag). */
+  sendId: string
+  /**
+   * The org, when the caller already has it — a message tag minted since
+   * AGL-3273 carries it. Saves the `hostIndex` read.
+   */
+  orgId?: string | null
+  firestore?: Firestore
+}
+
+/**
+ * The send's document, wherever it currently is. Null when neither location
+ * holds it — a send id from a link whose send was discarded, or a forged one.
+ *
+ * Costs one read after the migration (the org document), plus the
+ * `hostIndex` lookup when the caller has no org id; that lookup is
+ * request-cached.
+ */
+export async function resolveCampaignSendRef(
+  input: ResolveCampaignSendRefInput,
+): Promise<DocumentReference | null> {
+  const { hostId, sendId } = input
+  if (!hostId || !sendId || sendId.includes('/') || hostId.includes('/')) return null
+  const firestore = input.firestore ?? sendRefFirestore()
+  const orgId = input.orgId || (await resolveOrgIdForHost(hostId))
+  if (orgId) {
+    const orgRef = orgCampaignSendRef(orgId, sendId, firestore)
+    if ((await orgRef.get()).exists) return orgRef
+  }
+  const siteRef = legacySiteSendRef(hostId, sendId, firestore)
+  if ((await siteRef.get()).exists) return siteRef
+  return null
 }

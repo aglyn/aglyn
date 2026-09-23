@@ -20,6 +20,7 @@ import { actionRunResult } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { datasetDisplayName } from '@aglyn/aglyn/app-utils/datasets'
 import { isFormArchived } from '@aglyn/aglyn/app-utils/forms'
 import type { HostWorkflow } from '@aglyn/aglyn/app-utils/workflows'
+import { campaignPlacedOnHost } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import { scopedToHost } from '@aglyn/tenant-data-admin/server/organizations'
 import type {
   AiAutomationForm,
@@ -116,9 +117,18 @@ export async function readAiAutomationRecords(
           (data, id) => datasetDisplayName(data) || id,
         ),
     !wanted('lists') ? none : named(org.collection('lists'), ['name', 'deletedAt'], live, (data) => text(data['name'])),
+    // The org's campaigns placed on this site: the set the automation's
+    // `assignCampaign` step accepts when it runs here.
     !wanted('campaigns')
       ? none
-      : named(host.collection('emailCampaigns'), ['name', 'deletedAt'], live, (data) => text(data['name'])),
+      : named(
+          org.collection('emailCampaigns'),
+          ['name', 'deletedAt', 'visibleTo'],
+          (data) =>
+            live(data) &&
+            campaignPlacedOnHost({ visibleTo: data['visibleTo'] as string[] | undefined }, input.hostId),
+          (data) => text(data['name']),
+        ),
     !wanted('workflows')
       ? none
       : named(host.collection('workflows'), ['name', 'deletedAt'], live, (data) => text(data['name'])),

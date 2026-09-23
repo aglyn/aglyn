@@ -369,7 +369,7 @@ const send = () =>
 /** The `sent` a campaign report will divide every rate by. */
 function recordedSent(campaignId: string): number {
   return Number(
-    mockState.store[`hosts/${HOST}/campaigns/${campaignId}`]?.stats?.sent,
+    mockState.store[`orgs/org-1/campaigns/${campaignId}`]?.stats?.sent,
   )
 }
 

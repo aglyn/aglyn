@@ -70,6 +70,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
+  useOrgCampaigns: () => ({ options: [], truncated: false, ready: true }),
   useFirestoreCollection: (build: () => unknown) => ({
     data: build() === 'contacts' ? mockContacts : [],
     status: 'success',

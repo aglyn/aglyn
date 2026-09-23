@@ -145,7 +145,13 @@ export async function creditOutreachLeadConversion(
     if (!enrollment || enrollment.hostId !== input.hostId) continue
     const campaignIds = outreachEnrollmentCampaignIds(enrollment)
     if (!campaignIds.length) continue
-    await deps.campaignCredit.credit({ hostId: input.hostId, campaignIds, outcome: 'converted', atMs })
+    await deps.campaignCredit.credit({
+      hostId: input.hostId,
+      orgId: input.orgId,
+      campaignIds,
+      outcome: 'converted',
+      atMs,
+    })
     credited += 1
   }
   return credited

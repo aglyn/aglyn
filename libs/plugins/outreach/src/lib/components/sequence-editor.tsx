@@ -21,7 +21,7 @@ import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useHostCampaigns, useUser } from '@aglyn/tenant-feature-instance'
+import { useOrgCampaigns, useUser } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
   Autocomplete,
@@ -170,12 +170,12 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
     null
   const archived = sequence?.status === 'archived'
   /*
-   * The site's campaigns, for the picker (AGL-3254): read while the editor
-   * is open, the way the form's page reads them, and re-read when the
-   * sequence moves to another site — a campaign belongs to one site, so a
-   * draft moved elsewhere has to pick again from that site's.
+   * The org's campaigns, for the picker (AGL-3254): read while the editor
+   * is open. A sequence is the organization's record and so is a campaign,
+   * so the choice is every campaign in the org, whichever site the
+   * sequence sends as.
    */
-  const campaigns = useHostCampaigns(draft.hostId || undefined, { enabled: Boolean(draft.hostId) })
+  const campaigns = useOrgCampaigns(orgId, { enabled: true })
 
   const issues = useMemo(() => {
     const judged = [
@@ -339,21 +339,19 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
                 and what the sequence produces is reported under them; it
                 does not change who is enrolled or what is sent.
                */}
-              {draft.hostId ? (
-                <CampaignPicker
-                  options={campaigns.options}
-                  value={draft.campaignIds}
-                  onChange={(campaignIds) => update({ campaignIds })}
-                  label="Campaigns"
-                  helperText={
-                    issueAt('campaignIds') ??
-                    'The campaigns this sequence is part of. Everyone enrolled joins them, and its sends, replies, meetings and conversions count on their pages.'
-                  }
-                  disabled={archived}
-                  empty={campaigns.ready && !campaigns.options.length}
-                  emptyText="This site has no campaigns yet. Create one from Marketing to file this sequence under it."
-                />
-              ) : null}
+              <CampaignPicker
+                options={campaigns.options}
+                value={draft.campaignIds}
+                onChange={(campaignIds) => update({ campaignIds })}
+                label="Campaigns"
+                helperText={
+                  issueAt('campaignIds') ??
+                  'The campaigns this sequence is part of. Everyone enrolled joins them, and its sends, replies, meetings and conversions count on their pages.'
+                }
+                disabled={archived}
+                empty={campaigns.ready && !campaigns.options.length}
+                emptyText="There are no campaigns yet. Create one from Marketing to file this sequence under it."
+              />
             </Stack>
           </CardDisplay>
 

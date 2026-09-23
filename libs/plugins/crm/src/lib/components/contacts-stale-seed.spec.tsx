@@ -97,6 +97,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The site's campaigns, which fill the filing picker on the card beside
   // the one under test.
   useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
+  useOrgCampaigns: () => ({ options: [], truncated: false, ready: true }),
   // The ONE document the page reads, carrying the listener's verdict.
   useFirestoreDoc: () => ({
     data: contactDoc,

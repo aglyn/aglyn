@@ -39,6 +39,7 @@ import {
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { customFieldColumns } from './contact-custom-columns'
@@ -53,7 +54,6 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
-  useHostCampaigns,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -295,10 +295,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   )
   /*
    * The `Campaign` filter (AGL-3254) is the view's too, as a `campaignIds`
-   * clause: the id of one of the site's campaign containers, resolved to
-   * its name from the containers themselves — ids only in storage, so a
-   * renamed campaign keeps its leads. Under a site alone: a campaign
-   * belongs to one site, and the organization-level list spans them all.
+   * clause: the id of one of the org's campaign containers, resolved to its
+   * name from the containers themselves — ids only in storage, so a renamed
+   * campaign keeps its leads. Under a site the choice is the campaigns
+   * placed on it; at the organization level, every campaign in the org.
    */
   const campaignFilter = useMemo(
     () =>
@@ -318,7 +318,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       ]),
     [views.setFilters, views.state.filters],
   )
-  const campaigns = useHostCampaigns(hostId, { enabled: Boolean(hostId) })
+  const campaigns = useCrmCampaigns({ hostId, orgId }, { enabled: true })
   const campaignName = useCallback(
     (id: string) =>
       campaigns.options.find((option) => option.value === id)?.label ?? id,
@@ -628,19 +628,15 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         valueGetter: (_value, row: LeadRow) => (row.tags ?? []).join(', '),
       },
       // The campaigns the lead is filed under (AGL-3254), by name — the
-      // ids are the storage. Under a site only, like the filter.
-      ...(hostId
-        ? [
-            {
-              field: 'campaignIds',
-              headerName: 'Campaign',
-              flex: 1,
-              minWidth: 150,
-              valueGetter: (_value: unknown, row: LeadRow) =>
-                Aglyn.readCampaignIds(row).map(campaignName).join(', '),
-            } satisfies GridColDef,
-          ]
-        : []),
+      // ids are the storage.
+      {
+        field: 'campaignIds',
+        headerName: 'Campaign',
+        flex: 1,
+        minWidth: 150,
+        valueGetter: (_value: unknown, row: LeadRow) =>
+          Aglyn.readCampaignIds(row).map(campaignName).join(', '),
+      } satisfies GridColDef,
       {
         field: 'lastSeenAtMs',
         headerName: 'Last seen',
@@ -786,38 +782,36 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 ))}
               </Select>
             </FormControl>
-            {/* The campaign the lead is filed under (AGL-3254): the site's containers, by name. */}
-            {hostId ? (
-              <FormControl size="small" sx={{ minWidth: 180 }}>
-                <InputLabel id={campaignFilterLabelId} shrink>
-                  {'Campaign'}
-                </InputLabel>
-                <Select
-                  labelId={campaignFilterLabelId}
-                  label="Campaign"
-                  notched
-                  value={campaignFilter}
-                  onChange={(event) =>
-                    setCampaignFilter(String(event.target.value))
-                  }
-                  displayEmpty
-                >
-                  <MenuItem value="">{'Any campaign'}</MenuItem>
-                  {campaigns.options.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                  {/* A stored filter naming a campaign the site no longer lists stays selectable, by id, so it can be cleared. */}
-                  {campaignFilter &&
-                  !campaigns.options.some(
-                    (option) => option.value === campaignFilter,
-                  ) ? (
-                    <MenuItem value={campaignFilter}>{campaignFilter}</MenuItem>
-                  ) : null}
-                </Select>
-              </FormControl>
-            ) : null}
+            {/* The campaign the lead is filed under (AGL-3254), by name. */}
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <InputLabel id={campaignFilterLabelId} shrink>
+                {'Campaign'}
+              </InputLabel>
+              <Select
+                labelId={campaignFilterLabelId}
+                label="Campaign"
+                notched
+                value={campaignFilter}
+                onChange={(event) =>
+                  setCampaignFilter(String(event.target.value))
+                }
+                displayEmpty
+              >
+                <MenuItem value="">{'Any campaign'}</MenuItem>
+                {campaigns.options.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+                {/* A stored filter naming a campaign no longer listed stays selectable, by id, so it can be cleared. */}
+                {campaignFilter &&
+                !campaigns.options.some(
+                  (option) => option.value === campaignFilter,
+                ) ? (
+                  <MenuItem value={campaignFilter}>{campaignFilter}</MenuItem>
+                ) : null}
+              </Select>
+            </FormControl>
             <TextField
               size="small"
               value={search}

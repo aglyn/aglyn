@@ -37,7 +37,6 @@ import {
 } from '@mui/material'
 import {
   collection,
-  doc,
   getCountFromServer,
   getDoc,
   query,
@@ -50,7 +49,6 @@ import {
   campaignSequencesReport,
   CAMPAIGN_CONVERSION_KINDS,
   CAMPAIGN_CONVERSION_KIND_COPY,
-  CAMPAIGN_SEQUENCE_REPORTS_COLLECTION,
   EMAIL_ATTRIBUTION_WINDOW_DAYS,
   type CampaignConversionKind,
   type CampaignLinkRollup,
@@ -58,6 +56,10 @@ import {
   type CampaignRevenueRollup,
   type CampaignSequencesRollup,
 } from '@aglyn/shared-ui-email-campaigns/model'
+import {
+  campaignSendReportDoc,
+  campaignSequenceReportDoc,
+} from './campaign-queries'
 
 /**
  * A CAMPAIGN BEYOND ITS MAIL — what it caused, what it earned, and where it
@@ -112,7 +114,11 @@ import {
 const ID_CHUNK = 30
 
 export interface CampaignReachProps {
-  hostId: string
+  /**
+   * The org whose sends the rollups sit under, `orgs/{orgId}/campaigns/{id}/
+   * reports/*`; nothing is read until it is known.
+   */
+  orgId: string | null
   /**
    * The campaign's emails, by send id — the handle both collections join on.
    *
@@ -160,9 +166,18 @@ function chunked(ids: readonly string[]): string[][] {
  * total here and the note under the figures says why.
  */
 export function CampaignConversionsSection(
-  props: CampaignReachProps & {
-    /** The marketing hub URL, for the site-wide conversions list. */
-    basePath: string
+  props: Omit<CampaignReachProps, 'orgId'> & {
+    /**
+     * The site whose conversions are counted. Conversions are a site's
+     * visitors and are recorded under it, so on the org hub the caller picks
+     * one.
+     */
+    hostId: string
+    /**
+     * That site's marketing hub URL, for its conversions list; `null` hides
+     * the link rather than pointing it nowhere.
+     */
+    basePath: string | null
   },
 ) {
   const { hostId, sendIds, truncated, basePath } = props
@@ -267,17 +282,19 @@ export function CampaignConversionsSection(
           ) : null}
         </Stack>
       )}
-      <Stack direction="row">
-        <Button
-          component={AppLink as any}
-          {...({ componentVariant: 'naked', nativeButton: false } as any)}
-          href={`${basePath}/conversions`}
-          size="small"
-          color="primary"
-        >
-          {'All conversions'}
-        </Button>
-      </Stack>
+      {basePath ? (
+        <Stack direction="row">
+          <Button
+            component={AppLink as any}
+            {...({ componentVariant: 'naked', nativeButton: false } as any)}
+            href={`${basePath}/conversions`}
+            size="small"
+            color="primary"
+          >
+            {'All conversions'}
+          </Button>
+        </Stack>
+      ) : null}
     </Section>
   )
 }
@@ -369,7 +386,7 @@ function creditedUnder(report: CampaignRevenueAcrossSends): string {
  * arrangement that looks authoritative and is not.
  */
 export function CampaignRevenueSection(props: CampaignReachProps) {
-  const { hostId, sendIds, truncated } = props
+  const { orgId, sendIds, truncated } = props
   const firestore = useFirestore()
   const key = idsKey(sendIds)
   const [busy, setBusy] = useState(false)
@@ -386,23 +403,13 @@ export function CampaignRevenueSection(props: CampaignReachProps) {
   const load = useCallback(async () => {
     if (busy) return
     const ids = key ? key.split(',') : []
-    if (!ids.length) return
+    if (!ids.length || !orgId) return
     setBusy(true)
     setError(null)
     try {
       const snapshots = await Promise.all(
         ids.map((id) =>
-          getDoc(
-            doc(
-              firestore,
-              'hosts',
-              hostId,
-              'campaigns',
-              id,
-              'reports',
-              'revenue',
-            ),
-          ),
+          getDoc(campaignSendReportDoc(firestore, orgId, id, 'revenue')),
         ),
       )
       /*
@@ -430,7 +437,7 @@ export function CampaignRevenueSection(props: CampaignReachProps) {
     } finally {
       setBusy(false)
     }
-  }, [busy, firestore, hostId, key])
+  }, [busy, firestore, orgId, key])
 
   const count = key ? key.split(',').length : 0
 
@@ -632,7 +639,7 @@ interface DestinationsResult {
  * total is not a count of people.
  */
 export function CampaignDestinationsSection(props: CampaignReachProps) {
-  const { hostId, sendIds, truncated } = props
+  const { orgId, sendIds, truncated } = props
   const firestore = useFirestore()
   const key = idsKey(sendIds)
   const [busy, setBusy] = useState(false)
@@ -662,23 +669,13 @@ export function CampaignDestinationsSection(props: CampaignReachProps) {
   const load = useCallback(async () => {
     if (busy) return
     const ids = key ? key.split(',') : []
-    if (!ids.length) return
+    if (!ids.length || !orgId) return
     setBusy(true)
     setError(null)
     try {
       const snapshots = await Promise.all(
         ids.map((id) =>
-          getDoc(
-            doc(
-              firestore,
-              'hosts',
-              hostId,
-              'campaigns',
-              id,
-              'reports',
-              'links',
-            ),
-          ),
+          getDoc(campaignSendReportDoc(firestore, orgId, id, 'links')),
         ),
       )
       const byUrl = new Map<string, DestinationRow>()
@@ -715,7 +712,7 @@ export function CampaignDestinationsSection(props: CampaignReachProps) {
     } finally {
       setBusy(false)
     }
-  }, [busy, firestore, hostId, key])
+  }, [busy, firestore, orgId, key])
 
   const count = key ? key.split(',').length : 0
 
@@ -823,8 +820,9 @@ CampaignDestinationsSection.displayName = 'CampaignDestinationsSection'
  *
  * A sequence joins a campaign from its own document, and the Outreach
  * runtime credits what each enrollment produced to the campaign's one
- * sequences report — `campaignSequenceReports/{campaignId}` on the host,
- * server-only like the conversions rollup. One keyed read, joined on the
+ * sequences report — `campaignSequenceReports/{campaignId}` on the org,
+ * server-only like the conversions rollup, and readable by org-wide members
+ * alone: a site collaborator is told it could not be read. One keyed read, joined on the
  * CONTAINER's id rather than on send ids: a sequence's emails are not the
  * campaign's sends, so the join the three sections above make does not
  * exist for it, and the report is written under the campaign directly.
@@ -832,8 +830,11 @@ CampaignDestinationsSection.displayName = 'CampaignDestinationsSection'
  * Absent is not zero: a campaign no sequence was ever in has no document,
  * and says so in words rather than as five dashes.
  */
-export function CampaignSequencesSection(props: { hostId: string; campaignId: string }) {
-  const { hostId, campaignId } = props
+export function CampaignSequencesSection(props: {
+  orgId: string | null
+  campaignId: string
+}) {
+  const { orgId, campaignId } = props
   const firestore = useFirestore()
   const [rollup, setRollup] = useState<CampaignSequencesRollup | undefined | null>(null)
   const [failed, setFailed] = useState(false)
@@ -842,7 +843,8 @@ export function CampaignSequencesSection(props: { hostId: string; campaignId: st
     let active = true
     setRollup(null)
     setFailed(false)
-    getDoc(doc(firestore, 'hosts', hostId, CAMPAIGN_SEQUENCE_REPORTS_COLLECTION, campaignId))
+    if (!orgId) return undefined
+    getDoc(campaignSequenceReportDoc(firestore, orgId, campaignId))
       .then((snapshot) => {
         if (active) setRollup((snapshot.data() as CampaignSequencesRollup | undefined) ?? undefined)
       })
@@ -853,7 +855,7 @@ export function CampaignSequencesSection(props: { hostId: string; campaignId: st
     return () => {
       active = false
     }
-  }, [firestore, hostId, campaignId])
+  }, [firestore, orgId, campaignId])
 
   const report = rollup === null ? null : campaignSequencesReport(rollup)
 

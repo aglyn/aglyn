@@ -51,6 +51,12 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({ __firestore: true }),
+  // The site's org: a send and its rollups are the org's documents.
+  useOrgDataScope: () => ({
+    scope: ['orgs', 'org-1'],
+    orgId: 'org-1',
+    ready: true,
+  }),
   useFirestoreDoc: (build: () => { __path?: string } | null) => ({
     data: mockDocs.get(build()?.__path ?? ''),
   }),
@@ -73,8 +79,8 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
-const CAMPAIGN_PATH = 'hosts/site1/campaigns/camp_1'
-const REVENUE_PATH = 'hosts/site1/campaigns/camp_1/reports/revenue'
+const CAMPAIGN_PATH = 'orgs/org-1/campaigns/camp_1'
+const REVENUE_PATH = 'orgs/org-1/campaigns/camp_1/reports/revenue'
 
 /**
  * Every candidate denominator a different number.

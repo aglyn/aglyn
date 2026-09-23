@@ -25,9 +25,10 @@ import { join } from 'node:path'
  * resource-drafts seam, against a double that honors transactions. Every
  * assertion is about what a drafted campaign holds and what it cannot do:
  *
- *  - it is the container the create drawer writes and ONE email inside it,
- *    `draft`, naming its design, with no audience, list, segment, addresses,
- *    topic, sender, send time or experiment;
+ *  - it is the container a site hub's create drawer writes — the org's,
+ *    placed on the site it was drafted for — and ONE email inside it,
+ *    `draft`, sent as that site, naming its design, with no audience, list,
+ *    segment, addresses, topic, sender, send time or experiment;
  *  - no send path is reachable from the writer: the module imports none, and
  *    the scheduled processor's query cannot match a draft.
  */
@@ -114,7 +115,10 @@ const CONTENT = {
   preheaderVariants: ['Saturday and Sunday mornings, while they last.', 'Warm from 7 am.', 'Come early.'],
 }
 
-const writer = createCampaignDraftWriter({ firestore: mockFirestore })
+const writer = createCampaignDraftWriter({
+  firestore: mockFirestore,
+  resolveOrgId: async (hostId) => (hostId === 'host-1' || hostId === 'host-2' ? 'org-1' : null),
+})
 
 const request = (patch: Record<string, unknown> = {}) => ({
   orgId: 'org-1',
@@ -147,14 +151,15 @@ describe('the campaign draft writer', () => {
       versionId: null,
       facts: { emailId: 'job-1-email' },
     })
-    expect(commits).toEqual(['hosts/host-1/emailCampaigns/job-1', 'hosts/host-1/campaigns/job-1-email'])
-    expect(store.get('hosts/host-1/emailCampaigns/job-1')).toEqual({
+    expect(commits).toEqual(['orgs/org-1/emailCampaigns/job-1', 'orgs/org-1/campaigns/job-1-email'])
+    expect(store.get('orgs/org-1/emailCampaigns/job-1')).toEqual({
       name: 'Weekend buns',
       listIds: [],
+      visibleTo: ['host:host-1'],
       createdAtMs: NOW.getTime(),
       createdBy: 'uid-1',
     })
-    const email = store.get(`hosts/host-1/campaigns/${campaignDraftEmailId('job-1')}`) as Record<string, unknown>
+    const email = store.get(`orgs/org-1/campaigns/${campaignDraftEmailId('job-1')}`) as Record<string, unknown>
     expect(email).toEqual({
       subject: CONTENT.subject,
       preheader: CONTENT.preheader,
@@ -162,6 +167,8 @@ describe('the campaign draft writer', () => {
       subjectVariants: CONTENT.subjectVariants,
       preheaderVariants: CONTENT.preheaderVariants,
       [CAMPAIGN_SEND_CONTAINER_FIELD]: 'job-1',
+      hostId: 'host-1',
+      visibleTo: ['host:host-1'],
       status: 'draft',
       createdAtMs: NOW.getTime(),
       draftedAt: NOW,
@@ -191,6 +198,29 @@ describe('the campaign draft writer', () => {
     expect(await writer.read({ hostId: 'host-1', id: 'job-9' })).toBeNull()
   })
 
+  it('neither reports nor writes over a campaign placed only on a sibling site', async () => {
+    store.set('orgs/org-1/emailCampaigns/job-3', { name: 'Theirs', visibleTo: ['host:host-2'] })
+    expect(await writer.read({ hostId: 'host-1', id: 'job-3' })).toBeNull()
+    expect(await writer.read({ hostId: 'host-2', id: 'job-3' })).toMatchObject({ name: 'Theirs' })
+    expect(await writer.write(request({ id: 'job-3' }))).toEqual({
+      ok: false,
+      status: 409,
+      error: 'That campaign already exists',
+    })
+    expect(commits).toEqual([])
+  })
+
+  it('refuses a site that belongs to no organization', async () => {
+    store.set('hosts/host-9', { memberRoles: { 'uid-1': 'editor' } })
+    expect(await writer.write(request({ hostId: 'host-9' }))).toEqual({
+      ok: false,
+      status: 409,
+      error: 'This site is not part of an organization',
+    })
+    expect(await writer.read({ hostId: 'host-9', id: 'job-1' })).toBeNull()
+    expect(commits).toEqual([])
+  })
+
   it('refuses where the send route refuses, and a design that is not an email design', async () => {
     expect(await writer.refusal({ orgId: 'org-1', hostId: 'host-9', uid: 'uid-1', org: null, now: NOW })).toEqual({
       status: 404,
@@ -210,7 +240,7 @@ describe('the campaign draft writer', () => {
       status: 400,
       error: 'Unknown email design',
     })
-    store.set('hosts/host-1/campaigns/job-2-email', { status: 'sent' })
+    store.set('orgs/org-1/campaigns/job-2-email', { status: 'sent' })
     expect(await writer.write(request({ id: 'job-2' }))).toEqual({ ok: false, status: 409, error: 'That email already exists' })
     expect(commits).toEqual([])
   })
@@ -242,8 +272,8 @@ describe('no send path is reachable from a drafted campaign', () => {
     const processor = readFileSync(join(__dirname, 'campaign-process-scheduled.ts'), 'utf8')
     expect(processor).toContain(".where('status', '==', 'scheduled')")
     await writer.write(request())
-    expect(store.get('hosts/host-1/campaigns/job-1-email')).toMatchObject({ status: 'draft' })
-    expect(store.get('hosts/host-1/campaigns/job-1-email')).not.toHaveProperty('sendAtMs')
+    expect(store.get('orgs/org-1/campaigns/job-1-email')).toMatchObject({ status: 'draft' })
+    expect(store.get('orgs/org-1/campaigns/job-1-email')).not.toHaveProperty('sendAtMs')
   })
 })
 

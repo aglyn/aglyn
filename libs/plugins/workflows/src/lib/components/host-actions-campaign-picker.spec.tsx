@@ -19,11 +19,10 @@
  * The "Assign to a campaign" picker offers the campaigns the step runs
  * against (AGL-3052).
  *
- * The executor resolves an assign step's `campaignId` in
- * `hosts/{hostId}/emailCampaigns`, the campaign containers.
- * `hosts/{hostId}/campaigns` beside them holds the individual email sends, and
- * a send's id names no container, so a step saved with one fails every run
- * with "unknown campaign". Both collections are seeded here with different
+ * The executor resolves an assign step's `campaignId` in the org's
+ * `emailCampaigns`, the campaign containers. `campaigns` beside them holds
+ * the individual email sends, and a send's id names no container, so a step
+ * saved with one fails every run with "unknown campaign". Both collections are seeded here with different
  * rows, so a picker reading the wrong one offers the wrong names and saves the
  * wrong id.
  */

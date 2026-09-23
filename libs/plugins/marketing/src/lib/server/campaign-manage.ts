@@ -24,16 +24,28 @@
  * ## Why these two are not client writes
  *
  * The console creates and edits a campaign CONTAINER with the client SDK —
- * `hosts/{hostId}/emailCampaigns` is deliberately outside the rules'
- * server-only exclusion list, because a container holds no counter, no
- * consent record and no entitlement input.
+ * `orgs/{orgId}/emailCampaigns` is client-writable, because a container holds
+ * no counter, no consent record and no entitlement input. It is not
+ * client-DELETABLE: removing one has to detach everything that names it
+ * first, across every site in the organization, which no rule can express.
  *
- * The SEND collection is the opposite: `hosts/{hostId}/campaigns` is excluded
+ * The SEND collection is the opposite: `orgs/{orgId}/campaigns` is excluded
  * from client create, update AND delete, because each document is the record
  * of what a merchant mailed and to whom they were allowed to mail it. Both
  * operations here have to touch it — one to detach sends from the container
  * being removed, the other to remove a draft outright — so both run on the
- * Admin SDK behind the same site-role check the send route uses.
+ * Admin SDK behind a role check.
+ *
+ * ## Two doors: a site, and the organization
+ *
+ * A campaign belongs to the organization and may be placed on several of its
+ * sites. A request from a SITE hub names the site (`hostId`) and is
+ * authorized by the caller's role there, as the send route is — and it acts
+ * only on what that site holds: a send sent as another site, or a campaign
+ * not placed on this one, answers as if it did not exist. A request from the
+ * ORGANIZATION hub names the org (`orgId`) and no site, and is authorized by
+ * the caller's org-wide membership; for an email it acts in the name of the
+ * site the email is sent as.
  *
  * ## What deleting a campaign MEANS
  *
@@ -87,25 +99,40 @@ import {
 } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import { claimAttempt, createResourceUid } from '@aglyn/aglyn/server'
 /*
- * The MODULES again, for the same reason: `consentGroupForSite` and
- * `orgDataCollectionForHost` are what the contact pass needs, and taking them
+ * The MODULES again, for the same reason: the org and membership reads here
+ * are what the contact pass and the organization door need, and taking them
  * from `@aglyn/tenant-data-admin`'s index would pull the whole Next server
  * pipeline back into this file's graph.
  */
 import {
   consentGroupForSite,
-  orgDataCollectionForHost,
+  getOrgDoc,
   resolveOrgIdForHost,
+  resolveOrgMembership,
 } from '@aglyn/tenant-data-admin/server/organizations'
 import {
   CAMPAIGN_MEMBER_HOST_COLLECTIONS,
   CAMPAIGN_MEMBERSHIP_FIELD,
   contactCampaignFieldPath,
+  isOrgWideMember,
+  type AglynOrgMember,
   type PluginApiHandler,
+  type PluginApiRequestSubject,
 } from '@aglyn/aglyn/server'
 import {
   CAMPAIGN_SEND_CONTAINER_FIELD,
+  CAMPAIGN_SEND_HOST_FIELD,
+  campaignPlacedOnHost,
+  campaignSiteIds,
+  campaignVisibleTo,
 } from '@aglyn/shared-ui-email-campaigns/model'
+import {
+  campaignSendSiteStamp,
+  orgCampaignSends,
+  orgEmailCampaigns,
+  sendHostId,
+  sendIsOnHost,
+} from './campaign-org-refs'
 import { SCREEN_KIND_EMAIL } from '@aglyn/aglyn/app-utils/screen-route'
 import {
   registerPluginResourceDraftWriter,
@@ -115,6 +142,7 @@ import {
   type PluginResourceDraftWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { runPluginMembershipDetachers } from '@aglyn/aglyn/plugin-manager/plugin-membership-detach'
+import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 
 /**
  * Sends detached in one write.
@@ -140,6 +168,16 @@ const DETACH_BATCH = 400
  */
 const DETACH_PASSES = 25
 
+/**
+ * The most sites one deletion walks for members.
+ *
+ * A campaign is the organization's, so its forms, screens and consent-group
+ * facets may be on any of its sites. An organization past this has more
+ * sites than one request should sweep, and the deletion refuses rather than
+ * removing a container some sites' records would still name.
+ */
+const ORG_SITES_MAX = 200
+
 /** What one `campaigns/manage` call answered with. */
 interface ManageResult {
   status: number
@@ -157,14 +195,13 @@ interface ManageResult {
  * @returns how many were detached, and whether any were left.
  */
 async function detachSends(
-  hostRef: FirebaseFirestore.DocumentReference,
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
   campaignId: string,
 ): Promise<{ detached: number; remaining: boolean }> {
-  const firestore = hostRef.firestore
   let detached = 0
   for (let pass = 0; pass < DETACH_PASSES; pass += 1) {
-    const page = await hostRef
-      .collection('campaigns')
+    const page = await orgCampaignSends(firestore, orgId)
       .where(CAMPAIGN_SEND_CONTAINER_FIELD, '==', campaignId)
       .limit(DETACH_BATCH)
       .get()
@@ -235,8 +272,32 @@ async function detachMembership(
 }
 
 /**
+ * Every site of the organization, by id — the sites a campaign's members may
+ * be on. One equality on the `hostIndex` mirror, the same document
+ * `resolveOrgIdForHost` reads to put a site in an org.
+ *
+ * @returns the ids, and whether the org has more than {@link ORG_SITES_MAX}.
+ */
+async function orgSiteIds(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
+): Promise<{ hostIds: string[]; truncated: boolean }> {
+  const page = await firestore
+    .collection('hostIndex')
+    .where('orgId', '==', orgId)
+    .limit(ORG_SITES_MAX + 1)
+    .get()
+  const hostIds = page.docs.map((doc) => String(doc.id))
+  return {
+    hostIds: hostIds.slice(0, ORG_SITES_MAX),
+    truncated: hostIds.length > ORG_SITES_MAX,
+  }
+}
+
+/**
  * Clears the campaign off every form, screen, lead and contact holding it,
- * and then off every record a plugin keeps about it (AGL-3254).
+ * on every site of the organization, and then off every record a plugin
+ * keeps about it (AGL-3254).
  *
  * ## Why the campaign is not simply deleted over the top of them
  *
@@ -247,86 +308,124 @@ async function detachMembership(
  * any campaign the console can draw, and not free of one either. Its own page
  * would render the dead id as a chip with no name.
  *
- * ## The contacts are reached by a different path, on purpose
+ * ## Every site, not the one that asked
  *
- * A contact lives on the ORG (`orgs/{orgId}/contacts`) and is shared by every
- * site in it, so the membership sits inside this site's consent-group facet
- * rather than at the top of the document. The field PATH is therefore the
- * scope: only rows this group filed under the campaign match it, and no other
- * holder's filing is touched. The unscoped collection ref is what the walk
- * runs on precisely because the path already carries the boundary — the
- * `visibleTo` filter `orgDataQueryForHost` adds would spend the query's one
- * array-contains slot and leave none for the membership.
+ * The campaign is the organization's, and a site it has since been taken off
+ * may still hold forms and screens filed under it. So the walk covers every
+ * site in the org regardless of which door the deletion came through.
  *
- * A group that cannot be resolved answers as the site alone, which is
- * {@link consentGroupForSite}'s documented failure direction and the safe one
- * here too: the pass then clears the site's own facet and no other.
+ * ## Leads and contacts are reached on the organization
+ *
+ * A lead lives at `orgs/{orgId}/leads` and carries the field at the top of
+ * its document, like a form. The site `leads` collection is walked as well,
+ * as part of each site's own collections: records captured before leads
+ * moved to the org are still read there.
+ *
+ * A contact lives at `orgs/{orgId}/contacts` and is shared by every site, so
+ * the membership sits inside a consent group's facet rather than at the top
+ * of the document. The field PATH is therefore the scope, and the walk runs
+ * once per distinct group of the org's sites — two sites declared as one
+ * sender share a facet, and clearing it twice would find nothing the second
+ * time. The unscoped collection ref is what the walk runs on precisely
+ * because the path already carries the boundary — a `visibleTo` filter would
+ * spend the query's one array-contains slot and leave none for the
+ * membership.
  *
  * ## A plugin's members are the plugin's to clear
  *
  * A sequence and its enrollments name the campaign from documents under the
  * org, in collections this plugin does not know (AGL-3254). Every plugin
- * with a membership detacher registered on the core's seam is asked, with
- * the campaign's id and the field it is held in, after the site's own
- * records, and a detacher that reports records
- * remaining — or threw, which is reported as `null` — holds the container
- * exactly as this pass's own `remaining` does. A plugin that failed is a
- * plugin whose records may still name the campaign, and the deletion has
- * no way to tell that apart from one that has more than a request clears.
+ * with a membership detacher registered on the core's seam is asked, once
+ * per site, with the campaign's id and the field it is held in, and a
+ * detacher that reports records remaining — or threw, which is reported as
+ * `null` — holds the container exactly as this pass's own `remaining` does.
+ * A plugin that failed is a plugin whose records may still name the
+ * campaign, and the deletion has no way to tell that apart from one that has
+ * more than a request clears.
  */
 async function detachMembers(
-  hostId: string,
-  hostRef: FirebaseFirestore.DocumentReference,
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
   campaignId: string,
 ): Promise<{ detached: number; remaining: boolean }> {
-  const firestore = hostRef.firestore
   let detached = 0
   let remaining = false
-  for (const collectionName of CAMPAIGN_MEMBER_HOST_COLLECTIONS) {
-    const pass = await detachMembership(
-      firestore,
-      hostRef.collection(collectionName),
-      CAMPAIGN_MEMBERSHIP_FIELD,
-      campaignId,
-    )
+  const take = (pass: { detached: number; remaining: boolean }) => {
     detached += pass.detached
     remaining = remaining || pass.remaining
   }
-  /*
-   * NO ORG, NO ORG CONTACTS — and that is a skip rather than a failure.
-   *
-   * Contacts live at `orgs/{orgId}/contacts`, so a site whose `hostIndex`
-   * entry names no org holds none of them and there is nothing here to
-   * detach. Resolving it first is what separates that from a read that FAILED:
-   * `orgDataCollectionForHost` throws for both, and swallowing both would let
-   * a transient Firestore error delete the campaign with contacts still
-   * naming it. A thrown read reaches the handler's 500 and the container
-   * survives, which is the direction a failure here has to fall.
-   */
-  const orgId = await resolveOrgIdForHost(hostId)
-  const plugins = await runPluginMembershipDetachers({
-    hostId,
-    orgId: orgId ?? '',
-    field: CAMPAIGN_MEMBERSHIP_FIELD,
-    id: campaignId,
-  })
-  for (const report of Object.values(plugins)) {
-    detached += report?.detached ?? 0
-    remaining = remaining || report === null || report.remaining
+  const { hostIds, truncated } = await orgSiteIds(firestore, orgId)
+  if (truncated) remaining = true
+  for (const hostId of hostIds) {
+    const hostRef = firestore.collection('hosts').doc(hostId)
+    for (const collectionName of CAMPAIGN_MEMBER_HOST_COLLECTIONS) {
+      take(
+        await detachMembership(
+          firestore,
+          hostRef.collection(collectionName),
+          CAMPAIGN_MEMBERSHIP_FIELD,
+          campaignId,
+        ),
+      )
+    }
   }
-  if (!orgId) return { detached, remaining }
-  const group = await consentGroupForSite(hostId)
-  const contacts = await orgDataCollectionForHost(hostId, 'contacts')
-  const contactPass = await detachMembership(
-    firestore,
-    contacts,
-    contactCampaignFieldPath(group.groupId),
-    campaignId,
+  const orgRef = firestore.collection('orgs').doc(orgId)
+  take(
+    await detachMembership(
+      firestore,
+      orgRef.collection('leads'),
+      CAMPAIGN_MEMBERSHIP_FIELD,
+      campaignId,
+    ),
   )
-  return {
-    detached: detached + contactPass.detached,
-    remaining: remaining || contactPass.remaining,
+  /*
+   * An org with no sites still has plugins that may hold the campaign, so
+   * the seam is asked once with no site rather than not at all.
+   */
+  for (const hostId of hostIds.length ? hostIds : ['']) {
+    const plugins = await runPluginMembershipDetachers({
+      hostId,
+      orgId,
+      field: CAMPAIGN_MEMBERSHIP_FIELD,
+      id: campaignId,
+    })
+    for (const report of Object.values(plugins)) {
+      detached += report?.detached ?? 0
+      remaining = remaining || report === null || report.remaining
+    }
   }
+  /*
+   * One read of the org document serves every site's group: with it in
+   * hand, `consentGroupForSite` resolves from the declaration without a
+   * lookup per site. A missing document answers every site as a group of
+   * one, which is `consentGroupForSite`'s documented failure direction and
+   * the safe one here — each site's own facet is cleared, and no other.
+   */
+  const org = ((await getOrgDoc(orgId)) ?? {}) as Record<string, unknown>
+  const groupIds = new Set<string>()
+  for (const hostId of hostIds) {
+    groupIds.add((await consentGroupForSite(hostId, org)).groupId)
+  }
+  const contacts = orgRef.collection('contacts')
+  for (const groupId of groupIds) {
+    take(
+      await detachMembership(
+        firestore,
+        contacts,
+        contactCampaignFieldPath(groupId),
+        campaignId,
+      ),
+    )
+  }
+  return { detached, remaining }
+}
+
+/** Who is deleting, and through which door. */
+interface DeleteAccess {
+  /** The site hub the request came from, or `''` from the organization hub. */
+  hostId: string
+  /** The caller, for the site door's reach check. */
+  uid: string
 }
 
 /**
@@ -337,13 +436,23 @@ async function detachMembers(
  * list draws correctly and a second run finishes. Deleting first would leave
  * sends naming a container nobody can read, which is the state that loses
  * them from the table.
+ *
+ * ## What a site hub may delete
+ *
+ * A campaign placed on this site and on no other — the one a site hub
+ * creates. A campaign that is not placed here is not this site's to see, so
+ * it answers 404 as a missing one would. A campaign also placed on other
+ * sites is refused unless the caller is an org-wide member: deleting it
+ * takes it off those sites too, which is the same reach change the rules
+ * reserve for org-wide members when a campaign is edited.
  */
 async function deleteCampaign(
-  hostId: string,
-  hostRef: FirebaseFirestore.DocumentReference,
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
   campaignId: string,
+  access: DeleteAccess,
 ): Promise<ManageResult> {
-  const ref = hostRef.collection('emailCampaigns').doc(campaignId)
+  const ref = orgEmailCampaigns(firestore, orgId).doc(campaignId)
   const snapshot = await ref.get()
   /*
    * A 404 rather than a silent success. The id in a campaign URL may name a
@@ -352,10 +461,36 @@ async function deleteCampaign(
    * very often "this is a send", and answering it as a completed deletion
    * would tell the console it had removed something it never touched.
    */
-  if (!snapshot.exists) {
+  const placement = {
+    visibleTo: snapshot.exists
+      ? (snapshot.get('visibleTo') as string[] | undefined)
+      : undefined,
+  }
+  if (
+    !snapshot.exists ||
+    (access.hostId && !campaignPlacedOnHost(placement, access.hostId))
+  ) {
     return { status: 404, body: { error: 'Unknown campaign' } }
   }
-  const { detached, remaining } = await detachSends(hostRef, campaignId)
+  if (access.hostId) {
+    const sites = campaignSiteIds(placement)
+    const onlyHere = sites !== null && sites.every((id) => id === access.hostId)
+    if (!onlyHere) {
+      const membership = await resolveOrgMembership(access.uid, orgId)
+      if (!isOrgWideMember(membership?.member)) {
+        return {
+          status: 403,
+          body: {
+            error:
+              'This campaign is on other sites too, so deleting it would take ' +
+              'it off them as well. An organization admin can delete it from ' +
+              'the organization’s campaigns.',
+          },
+        }
+      }
+    }
+  }
+  const { detached, remaining } = await detachSends(firestore, orgId, campaignId)
   if (remaining) {
     return {
       status: 409,
@@ -379,7 +514,7 @@ async function deleteCampaign(
    * it about a campaign of two emails and four thousand contacts would go
    * looking for emails that are not the problem.
    */
-  const members = await detachMembers(hostId, hostRef, campaignId)
+  const members = await detachMembers(firestore, orgId, campaignId)
   if (members.remaining) {
     return {
       status: 409,
@@ -419,13 +554,18 @@ async function deleteCampaign(
  * Only `draft`. A scheduled email is withdrawn with `cancel`, which leaves
  * the record and its report standing; a sent one has reached people, and
  * nothing on this surface may remove the evidence of that.
+ *
+ * `hostId` is the site hub the request came from, and a draft sent as a
+ * different site is refused as unknown; from the organization hub it is
+ * `''` and any site's draft may be discarded.
  */
 async function discardDraft(
-  hostRef: FirebaseFirestore.DocumentReference,
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
   emailId: string,
+  hostId: string,
 ): Promise<ManageResult> {
-  const ref = hostRef.collection('campaigns').doc(emailId)
-  const firestore = hostRef.firestore
+  const ref = orgCampaignSends(firestore, orgId).doc(emailId)
   const refusal = (state: string): string => {
     if (state === 'sent') {
       return 'This email has already been sent, so it cannot be discarded. ' +
@@ -443,7 +583,7 @@ async function discardDraft(
   const outcome = await firestore.runTransaction(
     async (transaction): Promise<ManageResult> => {
       const fresh = await transaction.get(ref)
-      if (!fresh.exists) {
+      if (!fresh.exists || (hostId && !sendIsOnHost(fresh, hostId))) {
         return { status: 404, body: { error: 'Unknown email' } }
       }
       const state = String(fresh.get('status') ?? '')
@@ -463,20 +603,6 @@ async function discardDraft(
   return outcome
 }
 
-/**
- * Campaign management API: removing a campaign, and discarding a draft.
- *
- * Separate from `campaigns/send` because nothing here sends, reserves
- * allowance or moves a meter, and because both operations are about a record
- * ceasing to exist — which is the one class of change that has to be read
- * against what a merchant has already mailed. Same authorization as the send
- * route: a site admin or editor, proven by a Firebase ID token.
- *
- * Editing a campaign is deliberately NOT here. The container is client-
- * writable by the same roles, its create already runs on the client SDK, and
- * a second door to the same document would be a second place for the two to
- * disagree about what a campaign may hold.
- */
 /**
  * The fields a copy of a message carries (AGL-2936): what was written and
  * how it is sent — never who it goes to or when. The audience, list,
@@ -500,23 +626,54 @@ const DUPLICATED_MESSAGE_FIELDS = [
 /**
  * Copies a message as a new draft (AGL-2936). Any status can be copied —
  * a sent email is the usual source — and the copy is always `draft`, with
- * the name the person gave it made unique among the site's messages.
+ * the name the person gave it made unique among its site's messages.
+ *
+ * The copy is sent as the same site as its source: the sender, the design
+ * and the consent it would mail under are all that site's. From a site hub
+ * that is the requesting site, and a source sent as another site is refused
+ * as unknown; from the organization hub (`hostId` `''`) it is whichever site
+ * the source records, and a source that records none cannot be copied,
+ * because the copy would be an email that can never be sent.
  */
 async function duplicateMessage(
+  firestore: FirebaseFirestore.Firestore,
+  orgId: string,
   hostId: string,
-  hostRef: FirebaseFirestore.DocumentReference,
   emailId: string,
   requestedName: string,
-  actor: { uid: string; email: string | null; orgId: string },
+  actor: { uid: string; email: string | null },
 ): Promise<ManageResult> {
-  const messages = hostRef.collection('campaigns')
-  const firestore = hostRef.firestore
+  const messages = orgCampaignSends(firestore, orgId)
   const id = createResourceUid()
+  /*
+   * The source is read once outside the transaction to learn its site, which
+   * decides which siblings the name must be unique among; the transaction
+   * reads it again, so a source changed in between is copied as it stands.
+   */
+  const peek = await messages.doc(emailId).get()
+  if (!peek.exists || (hostId && !sendIsOnHost(peek, hostId))) {
+    return { status: 404, body: { error: 'Unknown email' } }
+  }
+  const siteId = hostId || sendHostId(peek)
+  if (!siteId) {
+    return {
+      status: 409,
+      body: {
+        error:
+          'This email does not record which site it is sent from, so it ' +
+          'cannot be copied from here. Open it from its site instead.',
+      },
+    }
+  }
   const outcome = await firestore.runTransaction(
     async (transaction): Promise<ManageResult & { name?: string; sourceName?: string }> => {
       const [source, siblings] = await Promise.all([
         transaction.get(messages.doc(emailId)),
-        transaction.get(messages.select('displayName', 'subject')),
+        transaction.get(
+          messages
+            .select('displayName', 'subject')
+            .where(CAMPAIGN_SEND_HOST_FIELD, '==', siteId),
+        ),
       ])
       if (!source.exists) {
         return { status: 404, body: { error: 'Unknown email' } }
@@ -534,6 +691,7 @@ async function duplicateMessage(
       const nowMs = Date.now()
       transaction.create(messages.doc(id), {
         ...copy,
+        ...campaignSendSiteStamp(siteId),
         displayName: name,
         status: 'draft',
         createdAtMs: nowMs,
@@ -548,8 +706,8 @@ async function duplicateMessage(
       'campaign',
       { uid: actor.uid, email: actor.email },
       {
-        orgId: actor.orgId,
-        hostId,
+        orgId,
+        hostId: siteId,
         source: { id: emailId, name: outcome.sourceName ?? '' },
         target: { id, name: outcome.name ?? '' },
       },
@@ -566,11 +724,12 @@ async function duplicateMessage(
  * generator working from a brief, an importer bringing campaigns over from
  * another tool — asks for it by name, and gets exactly two documents:
  *
- *  - the CONTAINER at `emailCampaigns/{id}`, written as the campaigns list's
- *    create drawer writes one, aimed at no list;
- *  - ONE EMAIL inside it at `campaigns/{id}-email`, `status: 'draft'`, naming
- *    the email design it sends and holding its subject, preheader and the
- *    alternatives to them.
+ *  - the CONTAINER at `orgs/{orgId}/emailCampaigns/{id}`, written as a site
+ *    hub's create drawer writes one: aimed at no list, placed on the site
+ *    the draft was asked for;
+ *  - ONE EMAIL inside it at `orgs/{orgId}/campaigns/{id}-email`,
+ *    `status: 'draft'`, sent as that site, naming the email design it sends
+ *    and holding its subject, preheader and the alternatives to them.
  *
  * ## What a drafted email never holds
  *
@@ -626,6 +785,8 @@ export const CAMPAIGN_DRAFT_EMAIL_FIELDS = [
   'subjectVariants',
   'preheaderVariants',
   CAMPAIGN_SEND_CONTAINER_FIELD,
+  CAMPAIGN_SEND_HOST_FIELD,
+  'visibleTo',
   'status',
   'createdAtMs',
   'draftedAt',
@@ -708,6 +869,8 @@ function campaignDraftRecord(campaign: FirebaseFirestore.DocumentSnapshot): Plug
 export interface CampaignDraftWriterDeps {
   /** The Admin SDK handle; specs hand in a double. */
   firestore?: () => FirebaseFirestore.Firestore
+  /** The site's organization, or null; specs hand in a double. */
+  resolveOrgId?: (hostId: string) => Promise<string | null>
 }
 
 export function createCampaignDraftWriter(
@@ -716,6 +879,12 @@ export function createCampaignDraftWriter(
   const firestore =
     deps.firestore ??
     (() => firebaseAdmin.app().firestore() as unknown as FirebaseFirestore.Firestore)
+  /*
+   * The org is resolved from the SITE rather than taken from the request's
+   * context: the site is what the role check reads, so the campaign lands in
+   * the organization that site belongs to and no other.
+   */
+  const resolveOrgId = deps.resolveOrgId ?? resolveOrgIdForHost
   return {
     refusal: async ({ hostId, uid }) => {
       const host = await firestore().collection('hosts').doc(hostId).get()
@@ -732,13 +901,16 @@ export function createCampaignDraftWriter(
 
     read: async ({ hostId, id }) => {
       if (!isDocumentId(id)) return null
-      const campaign = await firestore()
-        .collection('hosts')
-        .doc(hostId)
-        .collection('emailCampaigns')
-        .doc(id)
-        .get()
-      return campaign.exists ? campaignDraftRecord(campaign) : null
+      const orgId = await resolveOrgId(hostId)
+      if (!orgId) return null
+      const campaign = await orgEmailCampaigns(firestore(), orgId).doc(id).get()
+      return campaign.exists &&
+        campaignPlacedOnHost(
+          { visibleTo: campaign.get('visibleTo') as string[] | undefined },
+          hostId,
+        )
+        ? campaignDraftRecord(campaign)
+        : null
     },
 
     write: async (request): Promise<PluginDraftWrite> => {
@@ -746,10 +918,14 @@ export function createCampaignDraftWriter(
       if (read.ok === false) return { ok: false, status: 400, error: read.problems[0] }
       if (!isDocumentId(request.id)) return { ok: false, status: 400, error: 'Invalid campaignId' }
       const db = firestore()
+      const orgId = await resolveOrgId(request.hostId)
+      if (!orgId) {
+        return { ok: false, status: 409, error: 'This site is not part of an organization' }
+      }
       const hostRef = db.collection('hosts').doc(request.hostId)
-      const campaignRef = hostRef.collection('emailCampaigns').doc(request.id)
+      const campaignRef = orgEmailCampaigns(db, orgId).doc(request.id)
       const emailId = campaignDraftEmailId(request.id)
-      const emailRef = hostRef.collection('campaigns').doc(emailId)
+      const emailRef = orgCampaignSends(db, orgId).doc(emailId)
       const designRef = hostRef.collection('screens').doc(read.value.templateScreenId)
       return db.runTransaction(async (transaction): Promise<PluginDraftWrite> => {
         const [host, campaign, email, design] = await Promise.all([
@@ -760,6 +936,19 @@ export function createCampaignDraftWriter(
         ])
         if (!host.exists) return { ok: false, status: 404, error: 'Unknown site' }
         if (campaign.exists) {
+          /*
+           * A replay answers only for a campaign this site can see: the id
+           * space is the organization's, and one placed on a sibling site is
+           * not this request's to report or to write over.
+           */
+          if (
+            !campaignPlacedOnHost(
+              { visibleTo: campaign.get('visibleTo') as string[] | undefined },
+              request.hostId,
+            )
+          ) {
+            return { ok: false, status: 409, error: 'That campaign already exists' }
+          }
           return { ok: true, replayed: true, ...campaignDraftRecord(campaign) }
         }
         const refusal = campaignDraftRoleRefusal(host, request.uid)
@@ -774,10 +963,12 @@ export function createCampaignDraftWriter(
         if (email.exists) return { ok: false, status: 409, error: 'That email already exists' }
         const name = draftHeaderLine(request.name) || CAMPAIGN_DRAFT_DEFAULT_NAME
         const nowMs = request.now.getTime()
-        // The create drawer's own document: a name, no dates, no lists.
+        // A site hub's create drawer's own document: a name, no dates, no
+        // lists, placed on the site it was drafted for.
         transaction.create(campaignRef, {
           name,
           listIds: [],
+          visibleTo: campaignVisibleTo([request.hostId]),
           createdAtMs: nowMs,
           createdBy: request.uid,
         })
@@ -789,6 +980,7 @@ export function createCampaignDraftWriter(
           ...(value.subjectVariants.length ? { subjectVariants: value.subjectVariants } : {}),
           ...(value.preheaderVariants.length ? { preheaderVariants: value.preheaderVariants } : {}),
           [CAMPAIGN_SEND_CONTAINER_FIELD]: request.id,
+          ...campaignSendSiteStamp(request.hostId),
           status: 'draft',
           createdAtMs: nowMs,
           draftedAt: request.now,
@@ -819,14 +1011,61 @@ export function registerCampaignDraftWriter(): void {
   })
 }
 
+/** The org roles that may manage campaigns from the organization hub. */
+const ORG_MANAGE_ROLES = ['owner', 'admin', 'editor'] as const
+
+/**
+ * The organization a `campaigns/manage` request from the organization hub is
+ * for, read off its JSON body, so the dispatcher's release gate asks about the
+ * right organization. Only consulted for a request that names no site.
+ * Unverified, exactly as a `hostId` is: the handler refuses anyone who is not
+ * an org-wide member of it.
+ */
+export async function campaignManageSubject(
+  request: Request,
+): Promise<PluginApiRequestSubject | null> {
+  if (request.method !== 'POST') return null
+  const body = (await request.json().catch(() => null)) as { orgId?: unknown } | null
+  const orgId = typeof body?.orgId === 'string' ? body.orgId : ''
+  return isDocumentId(orgId) ? { orgId } : null
+}
+
+/**
+ * Campaign management API: removing a campaign, discarding a draft, and
+ * copying an email.
+ *
+ * Separate from `campaigns/send` because nothing here sends, reserves
+ * allowance or moves a meter, and because the removals are about a record
+ * ceasing to exist — which is the one class of change that has to be read
+ * against what a merchant has already mailed.
+ *
+ * Reached through two doors — see the header. A site request carries
+ * `hostId` and is authorized by the caller's admin or editor role on that
+ * site; an organization request carries `orgId` and no `hostId`, and is
+ * authorized by an org-wide membership as owner, admin or editor.
+ *
+ * Editing a campaign is deliberately NOT here. The container is client-
+ * writable, its create already runs on the client SDK, and a second door to
+ * the same document would be a second place for the two to disagree about
+ * what a campaign may hold.
+ */
 export const campaignManageHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
   const hostId = String(req.body?.hostId ?? '')
+  const requestedOrgId = String(req.body?.orgId ?? '')
   const action = String(req.body?.action ?? '')
   const targetId = String(req.body?.campaignId ?? '')
-  if (!hostId) return res.status(400).json({ error: 'Missing hostId' })
+  if (!hostId && !requestedOrgId) {
+    return res.status(400).json({ error: 'Missing hostId' })
+  }
+  if (hostId && !isDocumentId(hostId)) {
+    return res.status(400).json({ error: 'Invalid hostId' })
+  }
+  if (requestedOrgId && !isDocumentId(requestedOrgId)) {
+    return res.status(400).json({ error: 'Invalid orgId' })
+  }
   if (!isDocumentId(targetId)) {
     return res.status(400).json({ error: 'Invalid campaignId' })
   }
@@ -847,25 +1086,62 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
   try {
     const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     const firestore = firebaseAdmin.app().firestore()
-    const hostRef = firestore.collection('hosts').doc(hostId)
-    const hostSnapshot = await hostRef.get()
-    if (!hostSnapshot.exists) {
-      return res.status(404).json({ error: 'Unknown site' })
-    }
-    const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
-    if (memberRole !== 'admin' && memberRole !== 'editor') {
-      return res.status(403).json({ error: 'Not a site admin or editor' })
+    let orgId: string
+    if (hostId) {
+      const hostRef = firestore.collection('hosts').doc(hostId)
+      const hostSnapshot = await hostRef.get()
+      if (!hostSnapshot.exists) {
+        return res.status(404).json({ error: 'Unknown site' })
+      }
+      const memberRole = (hostSnapshot.get('memberRoles') ?? {})[decoded.uid]
+      if (memberRole !== 'admin' && memberRole !== 'editor') {
+        return res.status(403).json({ error: 'Not a site admin or editor' })
+      }
+      orgId = (await resolveOrgIdForHost(hostId)) ?? ''
+      if (!orgId) {
+        return res.status(409).json({
+          error: 'This site is not part of an organization, so it holds no campaigns.',
+        })
+      }
+      /*
+       * A request naming both is answered for the site, and only when the
+       * two agree: an org id the site does not belong to is a confused
+       * caller, and acting on the site's own org instead would be a guess.
+       */
+      if (requestedOrgId && requestedOrgId !== orgId) {
+        return res.status(400).json({ error: 'That site is not in this organization' })
+      }
+    } else {
+      const membership = await resolveOrgMembership(decoded.uid, requestedOrgId)
+      const member = membership?.member as Partial<AglynOrgMember> | undefined
+      if (
+        !member ||
+        !isOrgWideMember(member) ||
+        !(ORG_MANAGE_ROLES as readonly string[]).includes(String(member.role ?? ''))
+      ) {
+        return res
+          .status(403)
+          .json({ error: 'Not an organization owner, admin or editor' })
+      }
+      /*
+       * The site door is refused by the dispatcher when Marketing is off for
+       * the site; a request naming no site reaches here past only the release
+       * gate, so the organization's own switch is asked here.
+       */
+      if (!isPluginEnabled(await getOrgDoc(requestedOrgId), MARKETING_PLUGIN_ID)) {
+        return res.status(404).json({ error: 'Not found' })
+      }
+      orgId = requestedOrgId
     }
 
     if (action === 'duplicate') {
       // One attempt key, one copy (AGL-2936): a double click on Duplicate
       // replays the first answer rather than drafting the message twice.
       const attemptKey = String(req.body?.attemptKey ?? '').trim().slice(0, 200)
-      const orgId = (await resolveOrgIdForHost(hostId)) ?? ''
       const claimed = attemptKey
         ? await claimAttempt(firestore as never, {
             kind: 'duplicate-campaign',
-            scopeId: `${hostId}:${targetId}`,
+            scopeId: `${hostId || `org:${orgId}`}:${targetId}`,
             orgId,
             key: attemptKey,
             busyMessage: DUPLICATE_BUSY_MESSAGE,
@@ -876,11 +1152,12 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
       }
       const claim = claimed && 'claim' in claimed ? claimed.claim : null
       const copied = await duplicateMessage(
+        firestore,
+        orgId,
         hostId,
-        hostRef,
         targetId,
         String(req.body?.name ?? ''),
-        { uid: decoded.uid, email: decoded.email ?? null, orgId },
+        { uid: decoded.uid, email: decoded.email ?? null },
       )
       if (copied.status === 200) await claim?.record(copied.status, copied.body)
       else await claim?.release()
@@ -888,8 +1165,11 @@ export const campaignManageHandler: PluginApiHandler = async (req, res) => {
     }
     const result =
       action === 'deleteCampaign'
-        ? await deleteCampaign(hostId, hostRef, targetId)
-        : await discardDraft(hostRef, targetId)
+        ? await deleteCampaign(firestore, orgId, targetId, {
+            hostId,
+            uid: decoded.uid,
+          })
+        : await discardDraft(firestore, orgId, targetId, hostId)
     return res.status(result.status).json(result.body)
   } catch (error) {
     console.error(error)

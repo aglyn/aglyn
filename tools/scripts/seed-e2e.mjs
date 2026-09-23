@@ -1156,7 +1156,10 @@ await put(hostRef.collection('overlays').doc('seed-bar'), {
   stats: { impressions: 120, clicks: 14, dismissals: 9 },
   createdAt: now,
 })
-await put(hostRef.collection('campaigns').doc('seed-campaign'), {
+// Email sends belong to the org (AGL-3273) and name the site they send as.
+await put(orgRef.collection('campaigns').doc('seed-campaign'), {
+  hostId,
+  visibleTo: [`host:${hostId}`],
   subject: 'Welcome to the bakery',
   body: 'Hi {{firstName|there}} — thanks for signing up!',
   audience: 'leads',
@@ -1166,7 +1169,9 @@ await put(hostRef.collection('campaigns').doc('seed-campaign'), {
   stats: { recipients: 2, sent: 2, opens: 1, clicks: 1 },
 })
 // Scheduled send (AGL-272): renders the Scheduled chip + Cancel action.
-await put(hostRef.collection('campaigns').doc('seed-campaign-scheduled'), {
+await put(orgRef.collection('campaigns').doc('seed-campaign-scheduled'), {
+  hostId,
+  visibleTo: [`host:${hostId}`],
   subject: 'Holiday preorder window',
   body: 'Hi {{firstName|there}} — preorders open next week!',
   audience: 'leads',

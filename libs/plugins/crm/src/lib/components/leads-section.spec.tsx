@@ -147,16 +147,41 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     factory()
     return { data: siteRows, status: 'success', fromCache: false }
   },
-  // The site's campaigns, for the Campaign filter and column (AGL-3254).
-  useHostCampaigns: () => ({
-    options: [
-      { value: 'founder-icp1', label: 'Founder · ICP 1' },
-      { value: 'founder-icp2', label: 'Founder · ICP 2' },
-    ],
-    truncated: false,
-    ready: true,
-  }),
+  // The campaigns placed on the site, for the Campaign filter and column
+  // (AGL-3254) — and which site, and whether they were asked for at all.
+  useHostCampaigns: (hostId: string | undefined, options?: { enabled?: boolean }) => {
+    if (options?.enabled) mockCampaignReads.push(`site:${hostId}`)
+    return {
+      options: [
+        { value: 'founder-icp1', label: 'Founder · ICP 1' },
+        { value: 'founder-icp2', label: 'Founder · ICP 2' },
+      ],
+      truncated: false,
+      ready: true,
+    }
+  },
+  // Every campaign in the org, at the organization level: one more than any
+  // one site carries, so an assertion can tell which list it was handed.
+  useOrgCampaigns: (orgId: string | null | undefined, options?: { enabled?: boolean }) => {
+    if (options?.enabled) mockCampaignReads.push(`org:${orgId}`)
+    return {
+      options: [
+        { value: 'founder-icp1', label: 'Founder · ICP 1', siteIds: ['site-2'] },
+        { value: 'founder-icp2', label: 'Founder · ICP 2', siteIds: ['site-3'] },
+        { value: 'org-launch', label: 'Org launch', siteIds: null },
+      ],
+      truncated: false,
+      ready: true,
+    }
+  },
 }))
+/** Which campaign list each render enabled: `site:{hostId}` or `org:{orgId}`. */
+const mockCampaignReads: string[] = []
+/** The columns the grid was last handed, so a column's value can be read. */
+let mockColumns: Array<{
+  field: string
+  valueGetter?: (value: unknown, row: unknown) => unknown
+}> = []
 /** Every collection path and scope clause the section asked Firestore for. */
 const mockPaths: string[] = []
 const mockScopes: unknown[][] = []
@@ -215,6 +240,7 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
     rows: Array<{ $id: string; email: string }>
     columns: Array<{ field: string; renderCell?: (params: { row: unknown }) => ReactNode }>
   }) => {
+    mockColumns = columns as typeof mockColumns
     const actions = columns.find((column) => column.field === 'actions')
     return (
       <ul>
@@ -269,6 +295,8 @@ beforeEach(() => {
   orgRows = []
   mount = null
   opened.length = 0
+  mockCampaignReads.length = 0
+  mockColumns = []
   mockFilters = [{ field: 'status', op: 'equals', value: 'all' }]
 })
 
@@ -497,5 +525,76 @@ describe('the collection the section reads', () => {
     expect(mockPaths).toContain('orgs/org-1/leads')
     expect(mockPaths.some((path) => path.startsWith('hosts/'))).toBe(false)
     expect(mockScopes).toContainEqual(['org', 'host:site-1'])
+  })
+})
+
+/**
+ * CAMPAIGNS AT THE ORGANIZATION LEVEL.
+ *
+ * A lead is an org row and a campaign is an org container, so the org's
+ * Leads page names and filters by campaign exactly as a site's does — from
+ * every campaign in the org rather than the ones one site carries.
+ */
+describe('the Campaign column and filter at the organization level', () => {
+  const orgMount = () => ({
+    orgId: 'org-1',
+    hosts: [
+      { id: 'site-2', name: 'Second' },
+      { id: 'site-3', name: 'Third' },
+    ],
+    hostsReady: true,
+    orgSlug: 'acme',
+    hostsPath: '/acme/hosts',
+    createHostId: 'site-2',
+    setCreateHostId: jest.fn(),
+    siteName: (id: string) => id,
+    siteSubdomain: () => null,
+    siteHubHref: () => null,
+  })
+  const renderOrg = () =>
+    render(
+      <CrmLeadsSection hostId={null} entitled org={ORG} basePath="/acme/crm" releaseFlag={{} as any} />,
+    )
+
+  it("reads the org's campaigns, not a site's", () => {
+    mount = orgMount()
+    orgRows = [{ ...lead('l-a', 'a@example.com'), leadId: 'l-a' }]
+    renderOrg()
+    expect(mockCampaignReads).toContain('org:org-1')
+    expect(mockCampaignReads.some((read) => read.startsWith('site:'))).toBe(false)
+  })
+
+  it('names the campaigns each lead is filed under, whichever site placed them', () => {
+    mount = orgMount()
+    const filed = {
+      ...lead('l-a', 'a@example.com', { campaignIds: ['founder-icp1', 'org-launch'] }),
+      leadId: 'l-a',
+    }
+    orgRows = [filed]
+    renderOrg()
+    const column = mockColumns.find((entry) => entry.field === 'campaignIds')
+    expect(column).toBeTruthy()
+    expect(column?.valueGetter?.(undefined, filed)).toBe('Founder · ICP 1, Org launch')
+  })
+
+  it('filters by any campaign in the org', async () => {
+    mount = orgMount()
+    orgRows = [
+      { ...lead('l-a', 'a@example.com', { campaignIds: ['org-launch'] }), leadId: 'l-a' },
+      { ...lead('l-b', 'b@example.com'), leadId: 'l-b' },
+    ]
+    const { rerender } = renderOrg()
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Campaign' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'Org launch' }))
+    expect(mockFilters).toEqual([
+      { field: 'status', op: 'equals', value: 'all' },
+      { field: 'campaignIds', op: 'contains', value: 'org-launch' },
+    ])
+    rerender(
+      <CrmLeadsSection hostId={null} entitled org={ORG} basePath="/acme/crm" releaseFlag={{} as any} />,
+    )
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'a@example.com',
+    ])
   })
 })

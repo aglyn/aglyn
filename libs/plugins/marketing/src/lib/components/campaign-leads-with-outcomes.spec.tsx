@@ -261,7 +261,7 @@ const oneEmail: Shape = {
   proof: /This campaign is one email/i,
   sendIds: ['send-1'],
   mount: async (stats = STATS) => {
-    listened.set(`hosts/${HOST}/campaigns/send-1`, {
+    listened.set(`orgs/org-1/campaigns/send-1`, {
       subject: 'Spring sale',
       status: 'sent',
       stats,
@@ -278,7 +278,7 @@ const severalEmails: Shape = {
   proof: /Emails \(2\)/,
   sendIds: ['send-1', 'send-2'],
   mount: async (stats = STATS) => {
-    listened.set(`hosts/${HOST}/emailCampaigns/camp-1`, {
+    listened.set(`orgs/org-1/emailCampaigns/camp-1`, {
       name: 'Spring sale',
       startAtMs: Date.UTC(2026, 2, 1),
       endAtMs: Date.UTC(2026, 2, 31),

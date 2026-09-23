@@ -126,7 +126,7 @@ describe('LeadCampaignsCard', () => {
         optionsReady
       />,
     )
-    expect(screen.getByText(/This site has no campaigns yet/)).toBeTruthy()
+    expect(screen.getByText(/no campaigns to file this lead under yet/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Save filing' })).toBeNull()
   })
 })

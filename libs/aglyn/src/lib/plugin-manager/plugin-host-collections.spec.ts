@@ -25,6 +25,9 @@ import {
   pluginHostCollectionsExcludedFromMediaScan,
   pluginHostCollectionsScannedGenerically,
   pluginIdForHostCollection,
+  listPluginOrgCollections,
+  pluginOrgCollection,
+  pluginOrgCollectionsScannedGenerically,
   registerPluginHostCollections,
 } from './plugin-host-collections'
 import {
@@ -191,11 +194,29 @@ describe('plugin host collections', () => {
     // every plugin-owned document would report as holding no assets.
     expect(pluginIdForHostCollection('products')).toBe('commerce')
     expect(pluginHostCollectionsScannedGenerically()).toEqual(
-      expect.arrayContaining(['products', 'campaigns', 'services']),
+      expect.arrayContaining(['products', 'experiments', 'services']),
     )
     expect(
       pluginHostCollectionsExcludedFromMediaScan().map((one) => one.name),
     ).toEqual(expect.arrayContaining(['orders', 'leads']))
+  })
+
+  it('answers org collections from the compiled declarations too (AGL-3273)', () => {
+    // Email sends are the org's, so the scan finds them through the org
+    // declarations — compiled for the same reason the host rows are.
+    expect(pluginOrgCollection('campaigns')).toMatchObject({
+      pluginId: 'marketing',
+      siteField: 'hostId',
+    })
+    expect(pluginOrgCollectionsScannedGenerically().map((one) => one.name)).toContain('campaigns')
+    // A container carries no copy; it is declared and deliberately unread.
+    expect(pluginOrgCollectionsScannedGenerically().map((one) => one.name)).not.toContain(
+      'emailCampaigns',
+    )
+    expect(listPluginOrgCollections().map((one) => one.name)).toContain('emailCampaigns')
+    // A reference row the org pass found links and reads like a host one.
+    expect(pluginHostCollectionRouteSlug('campaigns')).toBe('marketing')
+    expect(pluginHostCollectionLabel('campaigns')).toBeTruthy()
   })
 
   it('refuses a registration for a collection a plugin already declared', () => {

@@ -81,9 +81,11 @@ import { join, resolve } from 'path'
 
 import {
   listPluginHostCollections,
+  listPluginOrgCollections,
   pluginHostCollectionLabel,
   pluginHostCollectionsExcludedFromMediaScan,
   pluginHostCollectionsScannedGenerically,
+  pluginOrgCollectionsScannedGenerically,
 } from '../../plugin-manager/plugin-host-collections'
 import {
   CORE_CONTENT_COLLECTIONS,
@@ -208,8 +210,21 @@ describe('the media usage corpus is derived from the repo (AGL-1867)', () => {
     // to say which failure it is.
     expect(listPluginHostCollections().length).toBeGreaterThanOrEqual(40)
     expect(listPluginHostCollections().map((one) => one.name)).toEqual(
-      expect.arrayContaining(['products', 'campaigns', 'services', 'orders']),
+      expect.arrayContaining(['products', 'experiments', 'services', 'orders']),
     )
+  })
+
+  it('reads the org collections the plugins declare, beside the host ones', () => {
+    // Email sends are the organization's (AGL-3273), so they left the host
+    // sweep above — and a send is the copy that went out, which the scan
+    // reads. The org declarations are what keep it read; an empty list here
+    // would mean an image used only in an email reports as used nowhere.
+    expect(
+      pluginOrgCollectionsScannedGenerically().map((one) => [one.name, one.siteField]),
+    ).toEqual(expect.arrayContaining([['campaigns', 'hostId']]))
+    // No name is both: a collection lives in one place.
+    const hostNames = new Set(listPluginHostCollections().map((one) => one.name))
+    expect(listPluginOrgCollections().filter((one) => hostNames.has(one.name))).toEqual([])
   })
 
   it('scans every host subcollection that is not core or excluded', () => {

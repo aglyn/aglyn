@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.174 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/8a32136d1...v1.0.0-beta.174)
+
+### Added
+
+- **marketing:** campaigns and their emails belong to the organization ([AGL-3273](https://linear.app/aglyn/issue/AGL-3273))
+
 ## v1.0.0-beta.173 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.172...v1.0.0-beta.173)

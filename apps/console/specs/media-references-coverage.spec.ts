@@ -151,6 +151,11 @@ function docRef(collectionPath: string, id: string): any {
   return {
     id,
     path: `${collectionPath}/${id}`,
+    // A real DocumentReference carries its Firestore; the scan reaches the
+    // org's collections through a host's.
+    get firestore() {
+      return mockFirestore
+    },
     get: async () => {
       reads += 1
       return snapshotOf(
@@ -367,6 +372,8 @@ beforeEach(() => {
     ['retired-product-png', 'retired-widget.png'],
     ['order-snapshot-png', 'sold-widget.png'],
     ['film-mp4', 'harbor.mp4'],
+    ['send-png', 'spring-sale-banner.png'],
+    ['container-png', 'campaign-container.png'],
   ] as const) {
     seed(`orgs/${ORG_ID}/media`, id, {
       fileName,
@@ -376,6 +383,22 @@ beforeEach(() => {
       visibleTo: ['org'],
     })
   }
+
+  // ── The org's email sends (AGL-3273) ──────────────────────────────────
+  // A send is the organization's and names the site it was sent as. Its
+  // copy is what went out, so an image in it is in use. A campaign
+  // CONTAINER is declared and deliberately unread: it carries no copy.
+  seed(`orgs/${ORG_ID}/campaigns`, 'send-spring', {
+    displayName: 'Spring sale',
+    hostId: HOST_ID,
+    visibleTo: [`host:${HOST_ID}`],
+    body: `Our biggest sale ${refTo('send-png')}`,
+  })
+  seed(`orgs/${ORG_ID}/emailCampaigns`, 'campaign-spring', {
+    name: 'Spring',
+    visibleTo: ['org'],
+    note: refTo('container-png'),
+  })
 
   // ── Screens ────────────────────────────────────────────────────────────
   // The positive control: a live version, in the COMPRESSED form.
@@ -854,6 +877,38 @@ describe('media usage scan — plugin-owned documents', () => {
     const result = await scan('hero-png')
     expect(kindsFor(result)).toEqual(['screen:screen-home'])
     expect(result.complete).toBe(false)
+  })
+})
+
+/**
+ * The org's own plugin collections (AGL-3273). Email sends moved from each
+ * site to the organization, which took them out of the per-site loop; the
+ * owning plugin declares them as an org collection so the scan still reads
+ * the copy that went out.
+ */
+describe('media usage scan — org-owned plugin documents', () => {
+  it('finds an asset used only in an email send, and names the site it was sent as', async () => {
+    const result = await scan('send-png')
+    expect(kindsFor(result)).toEqual(['plugin:send-spring'])
+    expect(result.references[0]).toMatchObject({
+      kind: 'plugin',
+      collectionId: 'campaigns',
+      name: 'Spring sale',
+      hostId: HOST_ID,
+      field: 'body',
+    })
+    expect(result.coverage).toBe('full')
+  })
+
+  it('does not read a campaign container, which is declared unread', async () => {
+    expect(kindsFor(await scan('container-png'))).toEqual([])
+  })
+
+  it('a failed read of the sends downgrades coverage, never the result', async () => {
+    failingCollections.add(`orgs/${ORG_ID}/campaigns`)
+    const result = await scan('send-png')
+    expect(result.references).toEqual([])
+    expect(result.coverage).toBe('partial')
   })
 })
 

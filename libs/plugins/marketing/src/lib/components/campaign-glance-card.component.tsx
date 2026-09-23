@@ -19,10 +19,12 @@
 import { buildRoute, pluginDocsHelp, Route } from '@aglyn/aglyn'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Button, Stack, Typography } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
+import { limit, query } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useMemo } from 'react'
 import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { campaignSendsQuery } from './campaign-queries'
+import { useMarketingOrgId } from './marketing-org-mount'
 
 /**
  * How many campaigns the card reads to find the last SENT one.
@@ -49,13 +51,14 @@ export function CampaignGlanceCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
   const { orgSlug, host } = useParams<{ orgSlug: string; host: string }>()
+  const { orgId } = useMarketingOrgId(hostId)
+  // The org's sends, narrowed to the ones this site sent.
   const { data: campaignDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'campaigns'),
-        limit(SEARCH_CEILING),
-      ),
-    [firestore, hostId],
+    () => {
+      const sends = campaignSendsQuery(firestore, orgId, hostId)
+      return sends ? query(sends, limit(SEARCH_CEILING)) : null
+    },
+    [firestore, orgId, hostId],
     { idField: '$id' },
   )
   const lastSent = useMemo(

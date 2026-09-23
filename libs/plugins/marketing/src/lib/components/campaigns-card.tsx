@@ -40,24 +40,38 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
-import { collection, doc, limit, query, setDoc } from 'firebase/firestore'
+import { collection, limit, query, setDoc } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   useConsoleHostRoute,
   useFirestore,
   useFirestoreCollection,
-  useOrgDataScope,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
   campaignListRows,
+  campaignSiteIds,
+  campaignVisibleTo,
   type CampaignAggregate,
   type CampaignListRow,
   type CampaignSend,
   type EmailCampaign,
 } from '@aglyn/shared-ui-email-campaigns/model'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
+import {
+  campaignContainerDoc,
+  campaignContainersQuery,
+  campaignSendsQuery,
+} from './campaign-queries'
+import {
+  orgSiteName,
+  orgSiteOptions,
+  topicCatalogHostId,
+  useMarketingOrgId,
+  useMarketingOrgMount,
+  type MarketingOrgMount,
+} from './marketing-org-mount'
 import { useCampaignManageApi } from './use-campaign-send-api'
 import { useCampaignTopicOptions } from './use-campaign-topic-options'
 
@@ -101,9 +115,18 @@ const WINDOW_LABEL: Record<CampaignListRow['windowState'], string> = {
  * existed; those carry no container id, and `campaignListRows` presents each
  * as a campaign of one rather than dropping it. Nothing is rewritten, so no
  * unsubscribe link and no pasted report URL stops resolving.
+ *
+ * ## At two levels
+ *
+ * Both collections are the organization's. Under a site the card lists the
+ * campaigns PLACED on that site and the sends sent AS it (see
+ * `campaign-queries.ts` for why those filters are what make the read legal);
+ * on the org hub, with `hostId` null, it lists every campaign with the sites
+ * each one is placed on, and a new campaign is placed where its creator says.
  */
 export function HostCampaignsCard(props: {
-  hostId: string
+  /** The site, or `null` on the org Marketing hub. */
+  hostId: string | null
   /**
    * The marketing hub URL, when the caller already has it.
    *
@@ -130,8 +153,10 @@ export function HostCampaignsCard(props: {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const manageApi = useCampaignManageApi(hostId)
-  const { scope: dataScope } = useOrgDataScope({ hostId })
+  const orgMount = useMarketingOrgMount()
+  const { orgId } = useMarketingOrgId(hostId)
+  // A container is the org's, so deleting one from the org hub names the org.
+  const manageApi = useCampaignManageApi(hostId, orgId)
 
   /*
    * ORDERED AND CEILINGED, and not orderable on any DATE.
@@ -149,12 +174,11 @@ export function HostCampaignsCard(props: {
    * past the ceiling so the reader is told the history is longer.
    */
   const { data: sendDocs } = useFirestoreCollection<any>(
-    () =>
-      collectionCeiling(
-        collection(firestore, 'hosts', hostId, 'campaigns'),
-        CAMPAIGN_CEILING,
-      ),
-    [firestore, hostId],
+    () => {
+      const sends = campaignSendsQuery(firestore, orgId, hostId)
+      return sends ? collectionCeiling(sends, CAMPAIGN_CEILING) : null
+    },
+    [firestore, orgId, hostId],
     { idField: '$id' },
   )
   const { rows: readSends, truncated: sendsTruncated } = ceilingedWindow<any>(
@@ -163,12 +187,11 @@ export function HostCampaignsCard(props: {
   )
 
   const { data: campaignDocs } = useFirestoreCollection<any>(
-    () =>
-      collectionCeiling(
-        collection(firestore, 'hosts', hostId, 'emailCampaigns'),
-        CONTAINER_CEILING,
-      ),
-    [firestore, hostId],
+    () => {
+      const containers = campaignContainersQuery(firestore, orgId, hostId)
+      return containers ? collectionCeiling(containers, CONTAINER_CEILING) : null
+    },
+    [firestore, orgId, hostId],
     { idField: '$id' },
   )
   const { rows: readCampaigns, truncated: campaignsTruncated } =
@@ -178,13 +201,10 @@ export function HostCampaignsCard(props: {
   // showing ids.
   const { data: listDocs } = useFirestoreCollection<any>(
     () =>
-      dataScope
-        ? query(
-            collection(firestore, dataScope[0], dataScope[1], 'lists'),
-            limit(50),
-          )
+      orgId
+        ? query(collection(firestore, 'orgs', orgId, 'lists'), limit(50))
         : null,
-    [firestore, dataScope],
+    [firestore, orgId],
     { idField: '$id' },
   )
   const [createOpen, setCreateOpen] = useState(false)
@@ -198,9 +218,10 @@ export function HostCampaignsCard(props: {
    * members. It is the largest read on this section at 200 documents, and it
    * is the only one nothing on screen needs.
    */
-  const { topics, source: topicSource } = useCampaignTopicOptions(hostId, {
-    enabled: createOpen,
-  })
+  const { topics, source: topicSource } = useCampaignTopicOptions(
+    topicCatalogHostId(hostId, orgMount),
+    { enabled: createOpen },
+  )
   const topicOptions = useMemo(
     () =>
       topics.map((topic) => ({
@@ -231,12 +252,19 @@ export function HostCampaignsCard(props: {
     const campaigns = (readCampaigns as EmailCampaign[]).filter(
       (campaign: any) => !campaign.deletedAt,
     )
+    const byId = new Map(campaigns.map((campaign) => [campaign.$id, campaign]))
     return campaignListRows(
       campaigns,
       readSends as CampaignSend[],
       Date.now(),
-    ).map((row) => ({ ...row, $id: row.id }))
-  }, [readCampaigns, readSends])
+    ).map((row) => ({
+      ...row,
+      $id: row.id,
+      sitesLabel: orgMount
+        ? campaignSitesLabel(orgMount, row, byId.get(row.id))
+        : '',
+    }))
+  }, [readCampaigns, readSends, orgMount])
 
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -269,11 +297,18 @@ export function HostCampaignsCard(props: {
       if (startAtMs !== null && endAtMs !== null && endAtMs < startAtMs) {
         return setCreateError('The end date is before the start date')
       }
+      /*
+       * Held until the org is known. A container has one home, and a write
+       * that raced the site's org lookup would have nowhere to go.
+       */
+      if (!orgId) {
+        return setCreateError('This workspace is still loading — try again')
+      }
       setCreating(true)
       setCreateError(null)
       const id = createResourceUid()
       try {
-        await setDoc(doc(firestore, 'hosts', hostId, 'emailCampaigns', id), {
+        await setDoc(campaignContainerDoc(firestore, orgId, id), {
           name,
           ...(Number.isFinite(startAtMs) && startAtMs !== null
             ? { startAtMs }
@@ -283,6 +318,19 @@ export function HostCampaignsCard(props: {
             ? values.listIds.map(String)
             : [],
           ...(values.topicId ? { topicId: String(values.topicId) } : {}),
+          /*
+           * Where it is placed. From a site's hub, that site — the creator is
+           * standing on it, and a campaign that appeared on every sibling
+           * site would be a decision nobody made. From the org hub, the sites
+           * picked, and every site when none are.
+           */
+          visibleTo: campaignVisibleTo(
+            hostId
+              ? [hostId]
+              : Array.isArray(values.siteIds)
+                ? values.siteIds.map(String)
+                : null,
+          ),
           createdAtMs: Date.now(),
           createdBy: String((user as any)?.uid ?? ''),
         })
@@ -299,7 +347,7 @@ export function HostCampaignsCard(props: {
         setCreating(false)
       }
     },
-    [creating, firestore, hostId, user, enqueueSnackbar, openCampaign],
+    [creating, firestore, hostId, orgId, user, enqueueSnackbar, openCampaign],
   )
 
   const campaignHref = useCallback(
@@ -448,6 +496,26 @@ export function HostCampaignsCard(props: {
           </Stack>
         ),
       },
+      /*
+        WHERE IT IS PLACED, on the org hub only. Under a site every row is on
+        that site by construction, so the column would say one thing thirty
+        times.
+       */
+      ...(orgMount
+        ? [
+            {
+              field: 'sitesLabel',
+              headerName: 'Sites',
+              width: 170,
+              sortable: false,
+              renderCell: ({ row }: any) => (
+                <Typography variant="body2" noWrap>
+                  {row.sitesLabel}
+                </Typography>
+              ),
+            },
+          ]
+        : []),
       {
         field: 'windowState',
         headerName: 'Window',
@@ -627,7 +695,7 @@ export function HostCampaignsCard(props: {
         { width: 72 },
       ),
     ],
-    [listNames, campaignHref, deletingId, handleDelete],
+    [listNames, campaignHref, deletingId, handleDelete, orgMount],
   )
 
   return (
@@ -687,7 +755,9 @@ export function HostCampaignsCard(props: {
         {sendsTruncated || campaignsTruncated ? (
           <Alert severity="info">
             {`Showing the most recent ${CONTAINER_CEILING} campaigns and ` +
-              `${CAMPAIGN_CEILING} sends. This site has more — the ones ` +
+              `${CAMPAIGN_CEILING} sends. ${
+                hostId ? 'This site' : 'This organization'
+              } has more — the ones ` +
               'listed are not necessarily the most recent, because a send ' +
               'carries no date field that every writer stamps.'}
           </Alert>
@@ -709,7 +779,11 @@ export function HostCampaignsCard(props: {
         submitLabel="Create campaign"
         includeDescription={false}
         onSubmit={handleCreate}
-        extraFields={campaignFields(listOptions, topicOptions)}
+        extraFields={campaignFields(
+          listOptions,
+          topicOptions,
+          orgMount ? orgSiteOptions(orgMount) : null,
+        )}
         errorSlot={
           createError ? (
             <Alert severity="error" sx={{ mt: 2, mb: 1 }}>
@@ -732,8 +806,25 @@ export function HostCampaignsCard(props: {
 function campaignFields(
   lists: Array<{ value: string; label: string }>,
   topics: Array<{ value: string; label: string }>,
+  /** The org's sites, on the org hub only — a site hub places on itself. */
+  sites: Array<{ value: string; label: string }> | null,
 ): any[] {
   return [
+    ...(sites
+      ? [
+          {
+            component: 'select',
+            name: 'siteIds',
+            label: 'Sites',
+            multiple: true,
+            initialValue: [],
+            helperText:
+              'The sites this campaign is offered on. Leave empty for every site.',
+            disableDefaultOption: true,
+            options: sites,
+          },
+        ]
+      : []),
     {
       component: 'text-field',
       name: 'startAt',
@@ -770,6 +861,25 @@ function campaignFields(
       options: topics,
     },
   ]
+}
+
+/**
+ * The Sites cell: where a campaign is offered.
+ *
+ * A container reads its `visibleTo`; a single send, which has no container,
+ * is on the one site it was sent as. An empty placement is said rather than
+ * left blank, because a blank cell reads as "every site" and it means none.
+ */
+function campaignSitesLabel(
+  mount: MarketingOrgMount,
+  row: CampaignListRow,
+  container: EmailCampaign | undefined,
+): string {
+  if (row.legacy) return orgSiteName(mount, row.sends[0]?.hostId) || '—'
+  const ids = campaignSiteIds(container)
+  if (ids === null) return 'Every site'
+  if (!ids.length) return 'No site'
+  return ids.map((id) => orgSiteName(mount, id)).join(', ')
 }
 
 HostCampaignsCard.displayName = 'HostCampaignsCard'

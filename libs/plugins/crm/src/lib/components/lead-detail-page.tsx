@@ -23,15 +23,12 @@ import {
   normalizeContactEmail,
   readErasureRequestedAtMs,
 } from '@aglyn/aglyn'
-import {
-  useFirestore,
-  useFirestoreDoc,
-  useHostCampaigns,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import { doc } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import { useCampaignFilingLog } from '../hooks/use-campaign-filing-log'
+import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { CrmCreateSiteDefault } from '../hooks/use-crm-org-mount'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
@@ -65,8 +62,7 @@ type LeadDocument = Record<string, unknown> & CrmLeadFields
  * an absent host settles at `orgId: null`, and a null org builds no
  * reference, opens no listener and leaves the page loading forever.
  *
- * Several surfaces still need ONE site: the campaigns to offer, the feed
- * an activity is filed in, the booking door, the consent basis, the
+ * Several surfaces still need ONE site: the feed an activity is filed in, the booking door, the consent basis, the
  * conversion. Under a site that is the mounted one. At the organization
  * level it is the lead's own first capturing site — `leadPrimaryGroup` —
  * the same answer `contactPrimaryGroup` gives the contact page, and the
@@ -111,12 +107,13 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
   const siteHostId = hostId ?? (leadGroup.hostId || null)
   const roster = useOrgMemberOptions(orgId)
   /*
-   * The site's campaigns, read once for the page (AGL-3274): the header
-   * names the ones the lead is filed under and the Campaigns card offers
-   * them. One listener, not one per surface — the containers are the
-   * capturing site's.
+   * The campaigns, read once for the page (AGL-3274): the header names the
+   * ones the lead is filed under and the Campaigns card offers them. One
+   * listener, not one per surface. Under a site, the campaigns placed on
+   * it; at the organization level the lead is the org's record and so is
+   * every campaign it may be filed under.
    */
-  const campaigns = useHostCampaigns(siteHostId ?? undefined, { enabled: true })
+  const campaigns = useCrmCampaigns({ hostId, orgId }, { enabled: true })
   // A saved filing is written on the lead's Activity too (AGL-3274), one
   // entry per campaign added or removed, by the member who saved it.
   const logFiling = useCampaignFilingLog({

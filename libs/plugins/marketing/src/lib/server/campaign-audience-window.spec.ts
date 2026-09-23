@@ -426,7 +426,7 @@ describe('an audience larger than one send may carry', () => {
     const result = await send()
 
     expect(
-      (mockState.store[`hosts/${HOST}/campaigns/${result.campaignId}`] as any)
+      (mockState.store[`orgs/org-1/campaigns/${result.campaignId}`] as any)
         .stats,
     ).toMatchObject({ audienceSize: 600, recipients: 500, sent: 500 })
   })

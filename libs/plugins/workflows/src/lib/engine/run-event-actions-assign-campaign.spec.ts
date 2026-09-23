@@ -48,7 +48,8 @@ const GROUP_ID = 'group-1'
 
 /** Actions returned by the trigger query. */
 let mockActions: { id: string; data: Record<string, any> }[] = []
-/** `hosts/{id}/emailCampaigns` — the containers this site holds. */
+/** `orgs/o1/emailCampaigns` — the containers the site's org holds. */
+const CAMPAIGNS_PATH = 'orgs/o1/emailCampaigns'
 let mockCampaigns: Record<string, Record<string, any>> = {}
 /** Every `update()` the run made on the contact, in order. */
 let contactUpdates: Record<string, any>[] = []
@@ -108,7 +109,7 @@ const collectionHandle = (path: string): any => {
           empty: mockActions.length === 0,
         }
       }
-      if (path.endsWith('emailCampaigns')) {
+      if (path === CAMPAIGNS_PATH) {
         const docs = Object.entries(mockCampaigns)
           .filter(([, data]) => matcher(data))
           .map(([id, data]) => docSnapshot(id, data))
@@ -140,7 +141,7 @@ const collectionHandle = (path: string): any => {
     doc: (id: string) => ({
       id,
       get: async () =>
-        path.endsWith('emailCampaigns') && mockCampaigns[id]
+        path === CAMPAIGNS_PATH && mockCampaigns[id]
           ? docSnapshot(id, mockCampaigns[id] as Record<string, any>)
           : path.endsWith('contacts') && contactExists && id === 'contact-1'
             ? { ...docSnapshot(id, mockContactData), ref: contactRef }
@@ -235,7 +236,7 @@ beforeEach(() => {
   // the site may see, and a row with no `visibleTo` is visible to nobody.
   mockContactData = { email: 'ada@example.com', visibleTo: ['org'] }
   mockEmailIndex = {}
-  mockCampaigns = { 'spring-2026': { name: 'Spring sale' } }
+  mockCampaigns = { 'spring-2026': { name: 'Spring sale', visibleTo: ['org'] } }
 })
 
 describe('assigning a contact to a campaign', () => {
@@ -356,5 +357,84 @@ describe('what it refuses rather than storing', () => {
     expect(contactUpdates).toHaveLength(0)
     expect(mockActivity[0].result).toBe('failed')
     expect(mockActivity[0].action).toContain('no contact for')
+  })
+})
+
+describe('the organization’s campaigns, as this site sees them', () => {
+  /*
+   * The containers are the org's (`orgs/{orgId}/emailCampaigns`) and the run
+   * is one site's, so the step honors what the site's picker offers: live
+   * campaigns placed on this site. The double answers campaigns ONLY at the
+   * org path, so every passing case above is also a proof of where the read
+   * went.
+   */
+  it('files them under a campaign placed on this site alone', async () => {
+    mockCampaigns = { 'site-push': { name: 'Site push', visibleTo: [`host:${HOST_ID}`] } }
+    mockActions = [assigning({ campaignId: 'site-push' })]
+
+    await run()
+
+    expect(contactUpdates[0][`facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`]).toEqual({
+      __arrayUnion: ['site-push'],
+    })
+  })
+
+  it('refuses a campaign placed only on a sibling site', async () => {
+    mockCampaigns = { 'sibling-push': { name: 'Sibling push', visibleTo: ['host:site-2'] } }
+    mockActions = [assigning({ campaignId: 'sibling-push' })]
+
+    await run()
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('not placed on this site')
+  })
+
+  it('refuses a campaign nobody placed anywhere', async () => {
+    // An absent `visibleTo` is no site at all — hiding is the recoverable
+    // direction.
+    mockCampaigns = { unplaced: { name: 'Unplaced' } }
+    mockActions = [assigning({ campaignId: 'unplaced' })]
+
+    await run()
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(mockActivity[0].result).toBe('failed')
+  })
+
+  it('refuses a campaign the console deleted', async () => {
+    mockCampaigns = { gone: { name: 'Gone', visibleTo: ['org'], deletedAt: 1 } }
+    mockActions = [assigning({ campaignId: 'gone' })]
+
+    await run()
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(mockActivity[0].result).toBe('failed')
+    expect(mockActivity[0].action).toContain('was deleted')
+  })
+
+  it('skips a deleted or sibling campaign sharing the name, and files the live one', async () => {
+    mockCampaigns = {
+      'old-spring': { name: 'Spring sale', visibleTo: ['org'], deletedAt: 1 },
+      'sibling-spring': { name: 'Spring sale', visibleTo: ['host:site-2'] },
+      'spring-2026': { name: 'Spring sale', visibleTo: ['org'] },
+    }
+    mockActions = [assigning({ campaignName: 'Spring sale' })]
+
+    await run()
+
+    expect(contactUpdates[0][`facets.${GROUP_ID}.${CAMPAIGN_MEMBERSHIP_FIELD}`]).toEqual({
+      __arrayUnion: ['spring-2026'],
+    })
+  })
+
+  it('reports a name whose only match is deleted as unknown', async () => {
+    mockCampaigns = { 'old-spring': { name: 'Spring sale', visibleTo: ['org'], deletedAt: 1 } }
+    mockActions = [assigning({ campaignName: 'Spring sale' })]
+
+    await run()
+
+    expect(contactUpdates).toHaveLength(0)
+    expect(mockActivity[0].action).toContain('unknown campaign "Spring sale"')
   })
 })

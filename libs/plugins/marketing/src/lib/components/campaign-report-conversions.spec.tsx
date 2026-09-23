@@ -43,6 +43,12 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({ __firestore: true }),
+  // The site's org: a send and its rollups are the org's documents.
+  useOrgDataScope: () => ({
+    scope: ['orgs', 'org-1'],
+    orgId: 'org-1',
+    ready: true,
+  }),
   useFirestoreDoc: (build: () => { __path?: string } | null) => ({
     data: mockDocs.get(build()?.__path ?? ''),
   }),
@@ -60,8 +66,8 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
-const CAMPAIGN_PATH = 'hosts/site1/campaigns/camp_1'
-const CONVERSIONS_PATH = 'hosts/site1/campaigns/camp_1/reports/conversions'
+const CAMPAIGN_PATH = 'orgs/org-1/campaigns/camp_1'
+const CONVERSIONS_PATH = 'orgs/org-1/campaigns/camp_1/reports/conversions'
 
 async function renderReport(
   conversions?: CampaignConversionsRollup,
@@ -205,5 +211,53 @@ describe('the conversions section never totals the kinds', () => {
     await renderReport(ROLLUP)
     expect(screen.getByText(/credited to no campaign at all/i)).toBeTruthy()
     expect(screen.getByText('See these conversions')).toBeTruthy()
+  })
+})
+
+/*==========================================
+ * ON THE ORG HUB, THE CONVERSIONS LIST IS THE SENDING SITE'S.
+ *
+ * The send and its rollup are the org's, but the records behind the figures
+ * are one site's visitors and are listed on that site. With no site in the
+ * URL, the link goes to the site the send was sent as.
+ *=========================================*/
+describe('a single send’s report on the org hub', () => {
+  it('links its conversions to the site it was sent as', async () => {
+    mockDocs.clear()
+    mockDocs.set(CAMPAIGN_PATH, {
+      subject: 'Spring sale',
+      hostId: 'site1',
+      stats: { recipients: 1000, sent: 1000, delivered: 900, clickTracked: true },
+    })
+    mockDocs.set(CONVERSIONS_PATH, ROLLUP)
+    const { CampaignReportCard } = await import('./campaign-report-card')
+    const { MarketingOrgMountProvider } = await import('./marketing-org-mount')
+    render(
+      (
+        <MarketingOrgMountProvider
+          value={{
+            orgId: 'org-1',
+            orgSlug: 'acme',
+            hosts: [{ id: 'site1', name: 'Site', subdomain: 'site' }],
+            hostsReady: true,
+            hostsPath: '/acme/hosts',
+            basePath: '/acme/marketing',
+          }}
+        >
+          <CampaignReportCard
+            hostId={null}
+            campaignId="camp_1"
+            basePath="/acme/marketing"
+          />
+        </MarketingOrgMountProvider>
+      ) as ReactNode as never,
+    )
+
+    expect(
+      screen.getByText('See these conversions').closest('a')?.getAttribute('href'),
+    ).toBe('/acme/hosts/site/marketing/conversions/camp_1')
+    expect(
+      screen.getByText('Spring sale', { selector: 'a' }).getAttribute('href'),
+    ).toBe('/acme/marketing/emails/camp_1')
   })
 })

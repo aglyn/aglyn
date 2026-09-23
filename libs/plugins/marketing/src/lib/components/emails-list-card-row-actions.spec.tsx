@@ -57,6 +57,7 @@ import {
 } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { EmailsListCard } from './emails-list-card'
+import { MarketingOrgMountProvider } from './marketing-org-mount'
 
 const BASE_PATH = '/acme/hosts/site/emails'
 /** The sibling hub a campaign's page lives on. */
@@ -91,6 +92,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // `useCampaignSendApi` and `useCampaignManageApi`, which authorize from one
   // and issue nothing without it.
   useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'token' } }),
+  useOrgDataScope: () => ({
+    scope: ['orgs', 'org-1'],
+    orgId: 'org-1',
+    ready: true,
+  }),
   useFirestoreCollection: () => ({
     data: emailDocs,
     status: 'success',
@@ -531,5 +537,118 @@ describe('the figures line up', () => {
     // above is about alignment and not about every cell in the table.
     expect(header('subject').className).not.toMatch(/alignRight/)
     expect(cell('subject').className).not.toMatch(/textRight/)
+  })
+})
+
+/*==========================================
+ * ON THE ORG HUB, EVERY ACTION NAMES THE ROW'S OWN SITE.
+ *
+ * The org hub lists every site's messages. A message is sent AS one site, and
+ * only that site can duplicate it, discard it or open its template — so each
+ * row's actions carry that row's `hostId`, and a send that records no site
+ * has nothing to act as and says so.
+ *=========================================*/
+describe('the message rows on the org hub', () => {
+  const ORG_BASE = '/acme/marketing'
+
+  const mountAtOrg = async () => {
+    mockPush.mockClear()
+    render(
+      <MarketingOrgMountProvider
+        value={{
+          orgId: 'org-1',
+          orgSlug: 'acme',
+          hosts: [
+            { id: 'host-1', name: 'Store', subdomain: 'store' },
+            { id: 'host-2', name: 'Blog', subdomain: 'blog' },
+          ],
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+          basePath: ORG_BASE,
+        }}
+      >
+        <EmailsListCard hostId={null} basePath={ORG_BASE} />
+      </MarketingOrgMountProvider>,
+    )
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  beforeEach(() => {
+    emailDocs = [
+      {
+        $id: 'msg-draft',
+        subject: 'Half-written',
+        status: 'draft',
+        hostId: 'host-2',
+        createdAtMs: Date.UTC(2026, 7, 25),
+      },
+      {
+        $id: 'msg-modern',
+        subject: 'Spring sale',
+        status: 'sent',
+        hostId: 'host-1',
+        sentAt: { seconds: 1_770_000_000 },
+        emailCampaignId: 'camp-1',
+        templateScreenId: 'screen-9',
+      },
+      {
+        $id: 'msg-siteless',
+        subject: 'Nobody’s draft',
+        status: 'draft',
+        createdAtMs: Date.UTC(2026, 7, 20),
+      },
+    ]
+  })
+
+  it('names the site each message is sent as', async () => {
+    await mountAtOrg()
+    expect(rowFor('Spring sale').textContent).toContain('Store')
+    expect(rowFor('Half-written').textContent).toContain('Blog')
+  })
+
+  it('opens a message on the org hub, its campaign there, its template on its site', async () => {
+    await mountAtOrg()
+    openMenuFor('Spring sale')
+    const hrefs = screen
+      .getAllByRole('menuitem')
+      .slice(0, 3)
+      .map((item) => item.getAttribute('href'))
+    expect(hrefs).toEqual([
+      `${ORG_BASE}/emails/msg-modern`,
+      `${ORG_BASE}/campaigns/camp-1`,
+      '/acme/hosts/store/emails/templates/screen-9',
+    ])
+  })
+
+  it('discards a draft AS the site it belongs to', async () => {
+    await mountAtOrg()
+    openMenuFor('Half-written')
+    fireEvent.click(
+      screen
+        .getAllByRole('menuitem')
+        .find((item) => item.textContent === 'Discard draft') as HTMLElement,
+    )
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(posted).toHaveLength(1)
+    expect(posted[0][1]).toEqual({
+      action: 'discardEmail',
+      campaignId: 'msg-draft',
+      hostId: 'host-2',
+    })
+  })
+
+  it('refuses every action on a send that names no site', async () => {
+    await mountAtOrg()
+    openMenuFor('Nobody’s draft')
+    const items = screen.getAllByRole('menuitem')
+    const byLabel = (label: string) =>
+      items.find((item) => item.textContent === label) as HTMLElement
+    expect(byLabel('Duplicate…').getAttribute('aria-disabled')).toBe('true')
+    expect(byLabel('Discard draft').getAttribute('aria-disabled')).toBe('true')
   })
 })

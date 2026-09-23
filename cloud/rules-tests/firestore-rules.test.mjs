@@ -1530,6 +1530,11 @@ describe('hosts', () => {
       // Admin SDK; a client that could write one would author the numbers a
       // campaign is judged by. Named here for the `registers` reason above.
       'campaignSequenceReports',
+      // The campaign CONTAINER's old site location. Containers belong to the
+      // org (`orgs/{orgId}/emailCampaigns`, AGL-3273) and nothing writes the
+      // site copy; a stale tab that could still create one would mint a
+      // campaign no console lists. Named here for the `registers` reason above.
+      'emailCampaigns',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -2081,40 +2086,6 @@ describe('hosts', () => {
   })
 
   /**
-   * The control that proves the right collection was closed.
-   *
-   * `emailCampaigns` is the campaign CONTAINER — a name, a date window and
-   * the lists it is aimed at — and the campaigns card's create drawer writes
-   * one with a plain client `setDoc`. It is a different collection from
-   * `campaigns` despite the name, holds no counter and no entitlement input,
-   * and must stay editor-writable or campaign creation stops for every
-   * customer. Denying `campaigns` while leaving this open is the entire
-   * distinction the change rests on, so it is asserted rather than assumed.
-   */
-  it('an editor can still create a campaign container', async () => {
-    await mustAllow(
-      'creating a campaign container from the create drawer',
-      setDoc(
-        doc(authed(EDITOR), 'hosts', HOST, 'emailCampaigns', 'container-1'),
-        { name: 'Spring launch', listIds: ['list-1'] },
-      ),
-    )
-    await mustAllow(
-      'renaming a campaign container',
-      updateDoc(
-        doc(authed(EDITOR), 'hosts', HOST, 'emailCampaigns', 'container-1'),
-        { name: 'Spring launch, renamed' },
-      ),
-    )
-    await mustAllow(
-      'deleting a campaign container',
-      deleteDoc(
-        doc(authed(EDITOR), 'hosts', HOST, 'emailCampaigns', 'container-1'),
-      ),
-    )
-  })
-
-  /**
    * The negative control for the fix itself (AGL-2038), and the reason the
    * rules were NOT flipped to deny-by-default.
    *
@@ -2139,7 +2110,7 @@ describe('hosts', () => {
     // stamping `deletedAt`). The three legs are asserted separately in
     // `an editor cannot create an action client-direct (AGL-2266)`.
     const AUTHORING = [
-      'overlays', 'experiments', 'emailCampaigns', 'emailTemplates',
+      'overlays', 'experiments', 'emailTemplates',
       'coupons', 'discounts', 'reviews', 'siteMembers',
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
       'settings', 'media', 'mediaFolders',
@@ -2153,14 +2124,10 @@ describe('hosts', () => {
       // is the assertion that would catch the next attempt.
       'suppressions',
     ]
-    // `emailCampaigns` stands here and `campaigns` does not, and the pair is
-    // the whole point: `emailCampaigns` is the campaign CONTAINER the
-    // campaigns card's create drawer writes client-side, while `campaigns` is
-    // one document per SEND, carrying the delivery counters and the send-time
-    // consent record, and is denied outright. Swapping the two names breaks
-    // campaign creation for every customer while reopening the counters —
-    // which is why the denial is asserted separately, by write, in
-    // `an editor cannot forge a campaign's delivery record`.
+    // `emailCampaigns` LEFT this list in AGL-3273: the campaign container
+    // belongs to the org now, and its site location is denied outright with
+    // the send collection beside it. Both org collections are asserted in
+    // `campaigns and their sends belong to the org (AGL-3273)`.
     //
     // `memberPosts` LEFT this list in AGL-2372: create and update are now
     // denied outright and delete is decided by a dedicated block, so it fails
@@ -4244,6 +4211,198 @@ describe('site collaborators are scoped out of the org (AGL-1026)', () => {
     await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG)))
     await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'datasets', 'ds1')))
     await assertSucceeds(getDoc(doc(authed(EDITOR), 'orgs', ORG, 'media', 'm1')))
+  })
+})
+
+/**
+ * Campaign containers, their sends and their sequence rollups belong to the
+ * org (AGL-3273). A container's `visibleTo` is the set of sites it is placed
+ * on, so it answers to the scoped predicates a dataset does; a send is
+ * stamped with the one site it is sent as, and is server-written only.
+ */
+describe('campaigns and their sends belong to the org (AGL-3273)', () => {
+  const OTHER_HOST = 'host-other'
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-org'), {
+        name: 'Every site', visibleTo: ['org'],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-mine'), {
+        name: 'Site A only', visibleTo: [`host:${HOST}`],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-theirs'), {
+        name: 'Other site', visibleTo: [`host:${OTHER_HOST}`],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'campaigns', 's-mine'), {
+        subject: 'Hello', hostId: HOST, visibleTo: [`host:${HOST}`],
+        stats: { sent: 3 },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'campaigns', 's-theirs'), {
+        subject: 'Sibling', hostId: OTHER_HOST, visibleTo: [`host:${OTHER_HOST}`],
+        stats: { sent: 9 },
+      })
+      await setDoc(
+        doc(db, 'orgs', ORG, 'campaigns', 's-mine', 'reports', 'links'),
+        { links: {} },
+      )
+      await setDoc(
+        doc(db, 'orgs', ORG, 'campaigns', 's-theirs', 'reports', 'links'),
+        { links: {} },
+      )
+      await setDoc(doc(db, 'orgs', ORG, 'campaignSequenceReports', 'c-org'), {
+        byOutcome: { enrolled: 2 },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'campaignSequenceReports', 'c-theirs'), {
+        byOutcome: { enrolled: 5 },
+      })
+    })
+  })
+
+  it('a site collaborator reads every-site and own-site campaigns, not a sibling site\'s', async () => {
+    const db = authed(EDITOR)
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-org')))
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-mine')))
+    await mustDeny(
+      'a collaborator reading a sibling site\'s campaign',
+      getDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-theirs')),
+    )
+    // The site hub's own query: filtered to the tokens the site reads.
+    await mustAllow(
+      'the site hub listing its campaigns',
+      getDocs(
+        query(
+          collection(db, 'orgs', ORG, 'emailCampaigns'),
+          where('visibleTo', 'array-contains-any', ['org', `host:${HOST}`]),
+        ),
+      ),
+    )
+    await mustDeny(
+      'a collaborator listing every campaign unfiltered',
+      getDocs(collection(db, 'orgs', ORG, 'emailCampaigns')),
+    )
+  })
+
+  it('an org-wide member lists every campaign and every send', async () => {
+    const db = authed(OWNER)
+    await mustAllow(
+      'the org hub listing campaigns',
+      getDocs(collection(db, 'orgs', ORG, 'emailCampaigns')),
+    )
+    await mustAllow(
+      'the org hub listing sends',
+      getDocs(collection(db, 'orgs', ORG, 'campaigns')),
+    )
+    await assertSucceeds(
+      getDoc(doc(db, 'orgs', ORG, 'campaignSequenceReports', 'c-org')),
+    )
+  })
+
+  it('a collaborator creates a campaign on their own site, and cannot widen or delete one', async () => {
+    const db = authed(EDITOR)
+    await mustAllow(
+      'creating a campaign placed on the collaborator\'s site',
+      setDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-new'), {
+        name: 'Spring launch', visibleTo: [`host:${HOST}`], listIds: [],
+      }),
+    )
+    await mustAllow(
+      'renaming it',
+      updateDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-new'), {
+        name: 'Spring launch, renamed',
+      }),
+    )
+    await mustDeny(
+      'seeding a campaign into a sibling site',
+      setDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-forged'), {
+        name: 'Forged', visibleTo: [`host:${OTHER_HOST}`],
+      }),
+    )
+    await mustDeny(
+      'widening a site campaign to every site',
+      updateDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-mine'), {
+        visibleTo: ['org'],
+      }),
+    )
+    await mustDeny(
+      'deleting a campaign client-direct',
+      deleteDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-mine')),
+    )
+  })
+
+  it('an org-wide member re-scopes a campaign', async () => {
+    await mustAllow(
+      'placing a campaign on every site',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG, 'emailCampaigns', 'c-mine'), {
+        visibleTo: ['org'],
+      }),
+    )
+  })
+
+  it('a send is read through the site it is sent as, and written by no client', async () => {
+    const db = authed(EDITOR)
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'campaigns', 's-mine')))
+    await assertSucceeds(
+      getDoc(doc(db, 'orgs', ORG, 'campaigns', 's-mine', 'reports', 'links')),
+    )
+    await mustDeny(
+      'a collaborator reading a sibling site\'s send',
+      getDoc(doc(db, 'orgs', ORG, 'campaigns', 's-theirs')),
+    )
+    await mustDeny(
+      'a collaborator reading a sibling site\'s send report',
+      getDoc(doc(db, 'orgs', ORG, 'campaigns', 's-theirs', 'reports', 'links')),
+    )
+    await mustAllow(
+      'the site hub listing its sends',
+      getDocs(
+        query(
+          collection(db, 'orgs', ORG, 'campaigns'),
+          where('visibleTo', 'array-contains-any', [`host:${HOST}`]),
+        ),
+      ),
+    )
+    for (const uid of [EDITOR, OWNER]) {
+      await mustDeny(
+        `forging a send's counters as ${uid}`,
+        updateDoc(doc(authed(uid), 'orgs', ORG, 'campaigns', 's-mine'), {
+          'stats.sent': 0,
+        }),
+      )
+      await mustDeny(
+        `creating a send as ${uid}`,
+        setDoc(doc(authed(uid), 'orgs', ORG, 'campaigns', 's-forged'), {
+          hostId: HOST, visibleTo: [`host:${HOST}`],
+        }),
+      )
+      await mustDeny(
+        `writing a sequence rollup as ${uid}`,
+        setDoc(doc(authed(uid), 'orgs', ORG, 'campaignSequenceReports', 'c-org'), {
+          byOutcome: { enrolled: 99 },
+        }),
+      )
+    }
+    // The rollup is read through its campaign's scope: counts on the page
+    // of a campaign the collaborator may open, and nothing of a sibling's.
+    await assertSucceeds(
+      getDoc(doc(db, 'orgs', ORG, 'campaignSequenceReports', 'c-org')),
+    )
+    await mustDeny(
+      'a site collaborator reading a sibling site campaign\'s sequence rollup',
+      getDoc(doc(db, 'orgs', ORG, 'campaignSequenceReports', 'c-theirs')),
+    )
+  })
+
+  it('an outsider reads nothing', async () => {
+    const db = authed(OUTSIDER)
+    await mustDeny(
+      'an outsider reading an every-site campaign',
+      getDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-org')),
+    )
+    await mustDeny(
+      'an outsider reading a send',
+      getDoc(doc(db, 'orgs', ORG, 'campaigns', 's-mine')),
+    )
   })
 })
 

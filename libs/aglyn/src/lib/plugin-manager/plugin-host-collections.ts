@@ -17,7 +17,10 @@
 
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import { hostContentCollectionLabel } from '../foundation/definitions/host-content-collections'
-import { PLUGIN_HOST_COLLECTIONS_DECLARED } from './first-party-plugins.generated'
+import {
+  PLUGIN_HOST_COLLECTIONS_DECLARED,
+  PLUGIN_ORG_COLLECTIONS_DECLARED,
+} from './first-party-plugins.generated'
 import {
   definePluginServiceContract,
   registerPluginService,
@@ -204,12 +207,13 @@ export function pluginIdForHostCollection(name: string): string | undefined {
 
 /**
  * The console hub slug a reference row for this collection links to, or
- * `undefined` when the owner routes none.
+ * `undefined` when the owner routes none. A row found by the org pass names an
+ * org collection, so an org declaration answers when no host one does.
  */
 export function pluginHostCollectionRouteSlug(
   name: string,
 ): string | undefined {
-  return pluginHostCollection(name)?.routeSlug
+  return pluginHostCollection(name)?.routeSlug ?? pluginOrgCollection(name)?.routeSlug
 }
 
 /**
@@ -255,6 +259,74 @@ export function pluginHostArtifactCollections(): string[] {
  * disagrees with a test.
  */
 export function pluginHostCollectionLabel(name: string): string {
-  const declared = pluginHostCollection(name)?.label?.trim()
+  const declared = (
+    pluginHostCollection(name)?.label ?? pluginOrgCollection(name)?.label
+  )?.trim()
   return declared || hostContentCollectionLabel(name)
+}
+
+/**
+ * The ORG collections a plugin owns, for the media-usage scan (AGL-3273).
+ *
+ * Everything above is about `hosts/{hostId}/…`, and the scan's completeness
+ * guard sweeps the source for exactly that shape. Some plugin storage lives on
+ * the organization instead — Marketing's email sends are
+ * `orgs/{orgId}/campaigns`, each naming the site it was sent as — and a
+ * collection the scan does not know about is read as holding nothing, which
+ * is the answer "Find where this is used" must never give by omission.
+ *
+ * So a plugin declares those too, in the `orgCollections` block of
+ * `plugins.config.json`, compiled like the host rows. The same inverted
+ * default holds — scanned unless the declaration says why not — and
+ * `siteField` names the field that says which site a document belongs to, so
+ * a reference row can name that site and link into its hub.
+ *
+ * Compiled only. There is no runtime door: nothing outside the first-party
+ * config writes org storage the scan must read, and a door nobody uses is a
+ * registry the scan's request would have to be trusted to have filled.
+ */
+export interface PluginOrgCollectionDeclaration {
+  /** The subcollection under `orgs/{orgId}`, spelled as Firestore holds it. */
+  name: string
+  /** What one of its documents is called in a reference row. */
+  label?: string
+  /** Default `generic`. An org collection has no dedicated pass to be `own`. */
+  mediaScan?: Exclude<PluginHostCollectionMediaScan, 'own'>
+  /** Why the scan does not read it. Required with `mediaScan: 'none'`. */
+  mediaScanReason?: string
+  /** The `[pluginSlug]` of the site hub a reference row links to. */
+  routeSlug?: string
+  /**
+   * The field on each document naming the site it BELONGS to. Two readers
+   * act on it: a reference row names that site and links into its hub, and
+   * deleting the site deletes the documents that name it (`eraseHost`). A
+   * collection whose documents are placed on sites rather than owned by one
+   * declares none.
+   */
+  siteField?: string
+}
+
+/** An org declaration with the plugin that made it. */
+export type ResolvedPluginOrgCollection = PluginOrgCollectionDeclaration & {
+  pluginId: string
+}
+
+/** Every declared org collection, with its owner. */
+export function listPluginOrgCollections(): ResolvedPluginOrgCollection[] {
+  return PLUGIN_ORG_COLLECTIONS_DECLARED.map((row) => ({ ...row }))
+}
+
+/** One declared org collection by name, with its owner, or `null`. */
+export function pluginOrgCollection(
+  name: string,
+): ResolvedPluginOrgCollection | null {
+  const key = name.trim()
+  return listPluginOrgCollections().find((one) => one.name === key) ?? null
+}
+
+/** The declared org collections the media scan reads generically. */
+export function pluginOrgCollectionsScannedGenerically(): ResolvedPluginOrgCollection[] {
+  return listPluginOrgCollections().filter(
+    (one) => (one.mediaScan ?? 'generic') === 'generic',
+  )
 }

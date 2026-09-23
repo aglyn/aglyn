@@ -8,7 +8,7 @@
  */
 
 import type { FirstPartyPlugin, PluginEditBarLink, PublishedSiteImpact } from './enabled-plugins'
-import type { ResolvedPluginHostCollection } from './plugin-host-collections'
+import type { ResolvedPluginHostCollection, ResolvedPluginOrgCollection } from './plugin-host-collections'
 import type { ResolvedPluginOrgCapacity } from './plugin-org-capacity'
 
 export const FIRST_PARTY_PLUGINS: readonly FirstPartyPlugin[] = [
@@ -365,11 +365,6 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
   },
   {
     "pluginId": "marketing",
-    "name": "campaigns",
-    "routeSlug": "marketing"
-  },
-  {
-    "pluginId": "marketing",
     "name": "experiments",
     "routeSlug": "marketing"
   },
@@ -377,12 +372,6 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "pluginId": "marketing",
     "name": "overlays",
     "routeSlug": "marketing"
-  },
-  {
-    "pluginId": "marketing",
-    "name": "emailCampaigns",
-    "mediaScan": "none",
-    "mediaScanReason": "The campaign CONTAINER — a name, a date window, the list ids it is aimed at and a topic. Distinct from `campaigns`, which holds the sends and IS scanned because a send carries the copy that went out. A container carries no copy and no asset reference: the design a send renders is a screen, and the screen is where the picker writes."
   },
   {
     "pluginId": "marketing",
@@ -409,6 +398,25 @@ export const PLUGIN_HOST_COLLECTIONS_DECLARED: readonly ResolvedPluginHostCollec
     "pluginId": "workflows",
     "name": "actions",
     "routeSlug": "automation"
+  },
+]
+
+/**
+ * Every org collection a first-party plugin owns whose documents the media
+ * scan reads, declared by that plugin (AGL-3273).
+ */
+export const PLUGIN_ORG_COLLECTIONS_DECLARED: readonly ResolvedPluginOrgCollection[] = [
+  {
+    "pluginId": "marketing",
+    "name": "campaigns",
+    "routeSlug": "marketing",
+    "siteField": "hostId"
+  },
+  {
+    "pluginId": "marketing",
+    "name": "emailCampaigns",
+    "mediaScan": "none",
+    "mediaScanReason": "The campaign CONTAINER — a name, a date window, the list ids it is aimed at, a topic and the sites it runs on. Distinct from `campaigns`, which holds the sends and IS scanned because a send carries the copy that went out. A container carries no copy and no asset reference: the design a send renders is a screen, and the screen is where the picker writes."
   },
 ]
 

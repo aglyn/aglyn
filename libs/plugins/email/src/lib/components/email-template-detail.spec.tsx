@@ -47,6 +47,9 @@ const mockDocs = new Map<string, unknown>()
 /** What each `useFirestoreCollection` call answers, keyed by path. */
 const mockCollections = new Map<string, unknown[]>()
 
+/** Every `where` a query was built with, as its arguments. */
+const mockWheres: unknown[][] = []
+
 /** Every write the rename made, so a patch is a claim this file checks. */
 const mockUpdateDoc = jest.fn().mockResolvedValue(undefined)
 
@@ -60,7 +63,10 @@ jest.mock('firebase/firestore', () => ({
     __path: segments.join('/'),
   }),
   query: (ref: { __path: string }) => ref,
-  where: () => ({}),
+  where: (...args: unknown[]) => {
+    mockWheres.push(args)
+    return {}
+  },
   orderBy: () => ({}),
   limit: () => ({}),
   documentId: () => ({}),
@@ -70,6 +76,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({ __firestore: true }),
   useConsoleHostRoute: () => ({ orgSlug: 'acme', subdomain: 'site' }),
+  useOrgDataScope: () => ({ orgId: 'org1', scope: ['orgs', 'org1'], ready: true }),
   // Nobody signed in, so the recipients card never issues its request. This
   // file is about the page above it.
   useUser: () => ({ data: null }),
@@ -100,7 +107,8 @@ jest.mock('next/navigation', () => ({
 
 const SCREEN_PATH = 'hosts/site1/screens/scr_1'
 const VERSION_PATH = 'hosts/site1/screens/scr_1/versions/ver_1'
-const CAMPAIGNS_PATH = 'hosts/site1/campaigns'
+/** The org's sends — each one sent as a single site. */
+const CAMPAIGNS_PATH = 'orgs/org1/campaigns'
 
 /**
  * A besigner node map, rooted at `_@_` — the id the besigner really writes.
@@ -153,6 +161,7 @@ async function renderDetail(options?: {
 }): Promise<void> {
   mockDocs.clear()
   mockCollections.clear()
+  mockWheres.length = 0
   mockDocs.set(SCREEN_PATH, {
     $id: 'scr_1',
     displayName: 'Spring promo',
@@ -218,6 +227,21 @@ beforeAll(() => {
     },
     { pluginId: 'campaign-owner-stand-in' },
   )
+})
+
+describe('the sends it reports on', () => {
+  it("reads the org's sends of this design that were sent as this site", async () => {
+    await renderDetail()
+    // The site clause is what keeps a sibling site's sends out and makes the
+    // list provable for a collaborator scoped to this site.
+    expect(mockWheres).toEqual(
+      expect.arrayContaining([
+        ['visibleTo', 'array-contains-any', ['host:site1']],
+        ['templateScreenId', '==', 'scr_1'],
+      ]),
+    )
+    expect(messagesTable().textContent).toContain('Spring sale')
+  })
 })
 
 describe('the template preview cannot reach the console it is drawn in', () => {

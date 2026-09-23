@@ -59,11 +59,15 @@ jest.mock('./use-outreach-mailbox-api', () => ({
 jest.mock('./use-outreach-crm', () => ({
   useOutreachEmailTemplates: () => ({ status: 'ready', data: mockTemplates }),
 }))
-/** The site's campaigns the picker offers (AGL-3254). */
+/** The org's campaigns the picker offers (AGL-3254), and whose they were. */
 let mockCampaigns: Array<{ value: string; label: string }>
+const mockCampaignReads: Array<{ orgId: unknown; enabled: unknown }> = []
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-rep' } }),
-  useHostCampaigns: () => ({ options: mockCampaigns, truncated: false, ready: true }),
+  useOrgCampaigns: (orgId: unknown, options?: { enabled?: boolean }) => {
+    mockCampaignReads.push({ orgId, enabled: options?.enabled })
+    return { options: mockCampaigns, truncated: false, ready: true }
+  },
 }))
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
@@ -184,6 +188,7 @@ const preview = () => screen.getByLabelText('Email preview')
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockCampaignReads.length = 0
   mockCampaigns = [
     { value: 'founder-icp1', label: 'Founder · ICP 1' },
     { value: 'founder-icp2', label: 'Founder · ICP 2' },
@@ -322,7 +327,9 @@ describe('the sequence editor: a new sequence (AGL-2980)', () => {
     fireEvent.change(within(step).getByLabelText('Body'), {
       target: { value: 'Hi {{enrollment.personalLine}}' },
     })
-    // The site's campaigns, picked the way a form's page picks them (AGL-3254).
+    // The ORG's campaigns — a sequence is an org record, and so is a
+    // campaign — picked the way a form's page picks them (AGL-3254).
+    expect(mockCampaignReads.at(-1)).toEqual({ orgId: 'org-1', enabled: true })
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Campaigns' }))
     fireEvent.click(screen.getByRole('option', { name: 'Founder · ICP 2' }))
     // A multiple select stays open after a pick; Escape closes it so the

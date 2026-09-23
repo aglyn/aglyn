@@ -36,31 +36,53 @@ import { useParams } from 'next/navigation'
  * open of a campaign, to render a link.
  *
  * `null` before the params resolve, so callers render plain text rather than
- * a link to nowhere.
+ * a link to nowhere — and on the org Marketing hub, where there is no site
+ * and so no Emails console; a card there builds its message links from the
+ * org mount instead.
  */
 export function useEmailsHubPath(): string | null {
   return useConsoleHubPath('emails')
 }
 
 /**
- * The MARKETING console's URL under the site being read.
+ * The MARKETING console's URL: under the site being read, or the
+ * organization's own Marketing hub on a page that names no site.
  *
  * Named for the same reason the Emails one is, from the opposite direction: a
  * converted record — a form submission in the Inbox, a contact in Contacts —
  * links to the campaign it came from, and those surfaces are handed their own
  * hub's `basePath`, not this one's.
+ *
+ * Unlike the Emails hub it has an answer with no site in the URL. Campaigns
+ * belong to the organization, so the org-level CRM and the org Marketing hub
+ * itself link a campaign to `/[orgSlug]/marketing/campaigns/{id}`.
  */
 export function useMarketingHubPath(): string | null {
-  return useConsoleHubPath('marketing')
+  const params = useParams<{ orgSlug: string; host: string }>()
+  const orgSlug = params?.orgSlug
+  if (!orgSlug) return null
+  return params?.host
+    ? buildRoute(Route.HOST_PLUGIN, {
+        orgSlug,
+        host: params.host,
+        pluginSlug: MARKETING_SLUG,
+      })
+    : buildRoute(Route.ORG_PLUGIN, { orgSlug, pluginSlug: MARKETING_SLUG })
 }
 
+/** The Marketing hub's URL slug, under a site and under the org alike. */
+const MARKETING_SLUG = 'marketing'
+
 /**
- * Any sibling hub's URL, by plugin slug.
+ * Any sibling hub's URL under the site being read, by plugin slug.
  *
  * One implementation, because "read the org slug and the subdomain off the
  * route rather than resolving the host document" is the property that keeps
  * these links free, and a second copy of it is where somebody pays for the
  * two `getDoc`s instead.
+ *
+ * `null` on a page that names no site: a site's hub is the only thing this
+ * builds.
  */
 export function useConsoleHubPath(pluginSlug: string): string | null {
   const params = useParams<{ orgSlug: string; host: string }>()

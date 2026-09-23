@@ -206,13 +206,15 @@ async function draftPlacementIssues(
     )
   }
   /*
-   * The campaigns must be the SITE's live containers (AGL-3254): a request
-   * can claim any id, and a sequence filed under another site's campaign,
-   * or under one the console soft-deleted, would credit its outcomes to a
-   * page nobody at this site can open.
+   * The campaigns must be the ORGANIZATION's live containers
+   * (`orgs/{orgId}/emailCampaigns`, AGL-3254): a request can claim any id,
+   * and a sequence filed under another org's campaign, or under one the
+   * console soft-deleted, would credit its outcomes to a page nobody here
+   * can open. A sequence is an org record, so any live campaign of the org
+   * qualifies, whichever sites it is placed on.
    */
-  if (campaignIds.length && draft.hostId && readOutreachDocumentId(draft.hostId)) {
-    const containers = firestore.collection('hosts').doc(draft.hostId).collection('emailCampaigns')
+  if (campaignIds.length) {
+    const containers = firestore.collection('orgs').doc(caller.orgId).collection('emailCampaigns')
     const found = await firestore.getAll(
       ...campaignIds.map((campaignId) => containers.doc(readOutreachDocumentId(campaignId) ?? '-')),
     )
@@ -226,8 +228,8 @@ async function draftPlacementIssues(
           'campaignIds',
           'campaign_unknown',
           unknown.length === 1
-            ? "One of the campaigns picked isn't a campaign of this sequence's site any more. Pick it again."
-            : "Some of the campaigns picked aren't campaigns of this sequence's site any more. Pick them again.",
+            ? "One of the campaigns picked isn't one of this organization's campaigns any more. Pick it again."
+            : "Some of the campaigns picked aren't this organization's campaigns any more. Pick them again.",
         ),
       )
     }

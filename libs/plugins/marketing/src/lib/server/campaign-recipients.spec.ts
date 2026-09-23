@@ -29,12 +29,18 @@ const mockState: {
   verifyThrows: boolean
   messages: Array<{ id: string; data: Record<string, unknown> }>
   engagementCalls: Array<Record<string, unknown>>
+  /** The site's organization; null for a site with none. */
+  orgId: string | null
+  /** Every message collection a read addressed, and the filters it applied. */
+  reads: Array<{ path: string; where: Array<[string, string, unknown]> }>
 } = {
   role: 'editor',
   hostExists: true,
   verifyThrows: false,
   messages: [],
   engagementCalls: [],
+  orgId: 'org_1',
+  reads: [],
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -52,6 +58,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     declared: false,
   }),
   __esModule: true,
+  resolveOrgIdForHost: async () => mockState.orgId,
   firebaseAdmin: {
     app: () => ({
       auth: () => ({
@@ -61,8 +68,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         },
       }),
       firestore: () => ({
-        collection: () => ({
-          doc: () => hostRef(),
+        collection: (name: string) => ({
+          doc: (id: string) =>
+            name === 'hosts' ? hostRef() : parentRef(`${name}/${id}`),
         }),
       }),
     }),
@@ -117,33 +125,54 @@ jest.mock('firebase-admin/firestore', () => ({
   FieldPath: { documentId: () => '__name__' },
 }))
 
-/** The site document plus the campaigns collection hanging off it. */
+/** The site document. */
 function hostRef() {
-  const query = {
-    where: () => query,
-    orderBy: () => query,
-    limit: () => query,
-    get: async () => ({
-      docs: mockState.messages.map(messageSnapshot),
-    }),
-  }
   return {
     get: async () => ({
       exists: mockState.hostExists,
       get: (field: string) =>
         field === 'memberRoles' ? { user_1: mockState.role } : undefined,
     }),
-    collection: () => ({
-      ...query,
-      doc: (id: string) => ({
-        get: async () => {
-          const found = mockState.messages.find((one) => one.id === id)
-          return found
-            ? messageSnapshot(found)
-            : { exists: false, id, get: () => undefined }
+  }
+}
+
+/**
+ * The organization's message collection, which answers every equality the
+ * read applies — so a read that forgot to narrow to its site would be handed
+ * the sibling's messages here as it would be by Firestore.
+ */
+function parentRef(path: string) {
+  return {
+    collection: (name: string) => {
+      const read = { path: `${path}/${name}`, where: [] as Array<[string, string, unknown]> }
+      mockState.reads.push(read)
+      const query: any = {
+        where: (field: string, op: string, value: unknown) => {
+          read.where.push([field, op, value])
+          return query
         },
-      }),
-    }),
+        orderBy: () => query,
+        limit: () => query,
+        get: async () => ({
+          docs: mockState.messages
+            .filter((message) =>
+              read.where.every(([field, , value]) => message.data[field] === value),
+            )
+            .map(messageSnapshot),
+        }),
+      }
+      return {
+        ...query,
+        doc: (id: string) => ({
+          get: async () => {
+            const found = mockState.messages.find((one) => one.id === id)
+            return found
+              ? messageSnapshot(found)
+              : { exists: false, id, get: () => undefined }
+          },
+        }),
+      }
+    },
   }
 }
 
@@ -190,10 +219,28 @@ beforeEach(() => {
   mockState.hostExists = true
   mockState.verifyThrows = false
   mockState.messages = [
-    { id: 'msg_1', data: { subject: 'Spring sale', sentAt: { toMillis: () => 2 } } },
-    { id: 'msg_2', data: { subject: 'Older', sentAt: { toMillis: () => 1 } } },
+    {
+      id: 'msg_1',
+      data: {
+        hostId: 'site1',
+        templateScreenId: 'scr_1',
+        subject: 'Spring sale',
+        sentAt: { toMillis: () => 2 },
+      },
+    },
+    {
+      id: 'msg_2',
+      data: {
+        hostId: 'site1',
+        templateScreenId: 'scr_1',
+        subject: 'Older',
+        sentAt: { toMillis: () => 1 },
+      },
+    },
   ]
   mockState.engagementCalls = []
+  mockState.orgId = 'org_1'
+  mockState.reads = []
 })
 
 describe('who may read recipient addresses', () => {
@@ -283,8 +330,14 @@ describe('what a caller may ask for', () => {
 
   it('sorts a scheduled message beside a sent one', async () => {
     mockState.messages = [
-      { id: 'sent', data: { sentAt: { toMillis: () => 10 } } },
-      { id: 'scheduled', data: { sendAtMs: 20 } },
+      {
+        id: 'sent',
+        data: { hostId: 'site1', templateScreenId: 'scr_1', sentAt: { toMillis: () => 10 } },
+      },
+      {
+        id: 'scheduled',
+        data: { hostId: 'site1', templateScreenId: 'scr_1', sendAtMs: 20 },
+      },
     ]
     await call({ hostId: 'site1', screenId: 'scr_1' })
     // A message with no `sentAt` would otherwise sort last forever, which is
@@ -300,6 +353,39 @@ describe('what a caller may ask for', () => {
     expect(mockState.engagementCalls[0]['filter']).toBe('all')
     await call({ hostId: 'site1', screenId: 'scr_1', filter: 'clicked' })
     expect(mockState.engagementCalls[1]['filter']).toBe('clicked')
+  })
+})
+
+/*
+ * THE MESSAGES ARE THE ORGANIZATION'S, one collection for every site, so a
+ * read narrows to the site the caller holds a role on — or it would hand one
+ * site's editors the addresses another site mailed.
+ */
+describe('whose messages are read', () => {
+  it('reads the organization’s messages, narrowed to this site and this design', async () => {
+    mockState.messages.push({
+      id: 'theirs',
+      data: { hostId: 'site2', templateScreenId: 'scr_1', sentAt: { toMillis: () => 3 } },
+    })
+    await call({ hostId: 'site1', screenId: 'scr_1' })
+    expect(mockState.reads.map((read) => read.path)).toEqual(['orgs/org_1/campaigns'])
+    expect(mockState.reads[0].where).toEqual([
+      ['hostId', '==', 'site1'],
+      ['templateScreenId', '==', 'scr_1'],
+    ])
+    expect(mockState.engagementCalls[0]['campaignIds']).toEqual(['msg_1', 'msg_2'])
+  })
+
+  it('answers a sibling site’s message as one that does not exist', async () => {
+    mockState.messages.push({ id: 'theirs', data: { hostId: 'site2', subject: 'Theirs' } })
+    expect((await call({ hostId: 'site1', emailId: 'theirs' })).status).toBe(404)
+    expect(mockState.engagementCalls).toHaveLength(0)
+  })
+
+  it('answers 404 for a site with no organization, which has no messages', async () => {
+    mockState.orgId = null
+    expect((await call({ hostId: 'site1', emailId: 'msg_1' })).status).toBe(404)
+    expect(mockState.engagementCalls).toHaveLength(0)
   })
 })
 

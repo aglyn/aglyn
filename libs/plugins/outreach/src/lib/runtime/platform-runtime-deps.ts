@@ -55,8 +55,8 @@ export function platformOutreachCampaignCredit(
   firestore: () => FirebaseFirestore.Firestore,
 ): OutreachCampaignCredit {
   return {
-    async credit({ hostId, campaignIds, outcome, atMs }) {
-      await creditCampaignSequenceOutcome({ hostId, campaignIds, outcome, atMs }, firestore())
+    async credit({ hostId, orgId, campaignIds, outcome, atMs }) {
+      await creditCampaignSequenceOutcome({ hostId, orgId, campaignIds, outcome, atMs }, firestore())
     },
     async attributeRecord({ hostId, kind, refId, campaignId, sequenceId, enrollmentId, atMs }) {
       await attributeCampaignConversion(

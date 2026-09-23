@@ -210,7 +210,9 @@ jest.mock('./campaign-report-card', () => ({
 jest.mock('./campaign-composer', () => ({
   __esModule: true,
   default: (props: any) => (
-    <div>{`composer for ${props.emailCampaignId}`}</div>
+    <div data-testid="composer" data-host={props.hostId}>
+      {`composer for ${props.emailCampaignId}`}
+    </div>
   ),
 }))
 /*
@@ -223,7 +225,9 @@ jest.mock('./campaign-composer', () => ({
 jest.mock('./campaign-reach-sections', () => ({
   __esModule: true,
   CampaignConversionsSection: (props: any) => (
-    <div>{`caused by ${props.sendIds.join('|')}`}</div>
+    <div data-testid="conversions" data-host={props.hostId}>
+      {`caused by ${props.sendIds.join('|')}`}
+    </div>
   ),
   CampaignDestinationsSection: (props: any) => (
     <div>{`destinations of ${props.sendIds.join('|')}`}</div>
@@ -237,6 +241,7 @@ jest.mock('./campaign-reach-sections', () => ({
 }))
 
 import CampaignDetailCard from './campaign-detail-card'
+import { MarketingOrgMountProvider } from './marketing-org-mount'
 
 beforeEach(() => {
   containers = {
@@ -352,6 +357,13 @@ describe('an id that names a campaign', () => {
       where: 'emailCampaignId',
       op: '==',
       value: 'camp-1',
+    })
+    // Under a site, only the sends sent AS that site: the filter the rules
+    // can prove for a site collaborator.
+    expect(filters).toContainEqual({
+      where: 'visibleTo',
+      op: 'array-contains-any',
+      value: ['host:host-1'],
     })
     expect(screen.getByText('First mailing')).toBeTruthy()
     expect(screen.getByText('Second mailing')).toBeTruthy()
@@ -693,8 +705,10 @@ describe('editing a campaign', () => {
     const [path, value] = writes[0]
     // The CONTAINER collection. The send collection is untouched, which is
     // what leaves every delivered `cid` resolving.
-    expect(path).toBe('hosts/host-1/emailCampaigns/camp-1')
+    expect(path).toBe('orgs/org-1/emailCampaigns/camp-1')
     expect(value.name).toBe('Spring clearance')
+    // A site hub never moves a campaign between sites.
+    expect(value).not.toHaveProperty('visibleTo')
   })
 
   it('writes a cleared date as null, which is the absence the model spells', async () => {
@@ -911,5 +925,140 @@ describe('the state of each email in the campaign', () => {
       (row) => String(row.querySelector('a')?.textContent ?? ''),
     )
     expect(subjects).toEqual(['Half-written', 'Went out'])
+  })
+})
+
+/*==========================================
+ * THE SAME PAGE ON THE ORG HUB.
+ *
+ * The container and its sends are the org's, so the page renders with no
+ * site. What changes is every SITE fact: the emails are every site's, the
+ * conversions are one chosen site's, the forms and screens are gathered from
+ * each site the campaign is placed on, and an email is written AS a site the
+ * campaign is placed on — asked, unless there is only one.
+ *=========================================*/
+describe('a campaign on the org hub', () => {
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  const ORG_MOUNT = {
+    orgId: 'org-1',
+    orgSlug: 'acme',
+    hosts: [
+      { id: 'host-1', name: 'Store', subdomain: 'store' },
+      { id: 'host-2', name: 'Blog', subdomain: 'blog' },
+    ],
+    hostsReady: true,
+    hostsPath: '/acme/hosts',
+    basePath: '/acme/marketing',
+  }
+
+  const mountAtOrg = async () => {
+    render(
+      <ChromeHarness>
+        <MarketingOrgMountProvider value={ORG_MOUNT}>
+          <CampaignDetailCard
+            hostId={null}
+            campaignId="camp-1"
+            basePath="/acme/marketing"
+          />
+        </MarketingOrgMountProvider>
+      </ChromeHarness>,
+    )
+    await settle()
+  }
+
+  beforeEach(() => {
+    containers['camp-1'].visibleTo = ['org']
+    sends = sends.map((send, index) => ({
+      ...send,
+      hostId: index ? 'host-2' : 'host-1',
+    }))
+  })
+
+  it('lists every site’s emails, unfiltered, and opens them on the org hub', async () => {
+    await mountAtOrg()
+
+    expect(filters.some((item) => item.where === 'visibleTo')).toBe(false)
+    expect(
+      screen.getByText('Second mailing').closest('a')?.getAttribute('href'),
+    ).toBe('/acme/marketing/emails/send-2')
+    expect(screen.getByText('Offered on every site')).toBeTruthy()
+  })
+
+  it('reads conversions for one site at a time, the first placed site first', async () => {
+    await mountAtOrg()
+
+    expect(screen.getByTestId('conversions').getAttribute('data-host')).toBe(
+      'host-1',
+    )
+    expect(screen.getByLabelText('Conversions on')).toBeTruthy()
+  })
+
+  it('gathers the forms and screens from each site it is placed on', async () => {
+    await mountAtOrg()
+
+    expect(screen.getByText('Assigned to this campaign on Store')).toBeTruthy()
+    expect(screen.getByText('Assigned to this campaign on Blog')).toBeTruthy()
+  })
+
+  it('asks which site an email is sent as before the composer opens', async () => {
+    await mountAtOrg()
+    fireEvent.click(screen.getByRole('button', { name: 'Write an email' }))
+    await settle()
+
+    expect(screen.getByLabelText('Send as')).toBeTruthy()
+    expect(screen.queryByTestId('composer')).toBeNull()
+  })
+
+  it('does not ask when the campaign is placed on one site', async () => {
+    containers['camp-1'].visibleTo = ['host:host-2']
+    await mountAtOrg()
+    fireEvent.click(screen.getByRole('button', { name: 'Write an email' }))
+    await settle()
+
+    expect(screen.queryByLabelText('Send as')).toBeNull()
+    expect(screen.getByTestId('composer').getAttribute('data-host')).toBe(
+      'host-2',
+    )
+    expect(screen.getByText('Offered on Blog')).toBeTruthy()
+  })
+
+  it('offers the placement in the edit drawer, and leaves it alone when untouched', async () => {
+    await mountAtOrg()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit campaign' }))
+    await settle()
+
+    expect(screen.getByLabelText('Sites')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save campaign' }))
+    await settle()
+
+    expect(writes[0][0]).toBe('orgs/org-1/emailCampaigns/camp-1')
+    expect(writes[0][1]).not.toHaveProperty('visibleTo')
+  })
+
+  it('deletes by naming the org, and returns to the org hub’s list', async () => {
+    await mountAtOrg()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete campaign' }))
+    await settle()
+    await waitFor(() => expect(posted).toHaveLength(1))
+
+    expect(posted[0][1]).toEqual({
+      action: 'deleteCampaign',
+      campaignId: 'camp-1',
+      orgId: 'org-1',
+    })
+    await waitFor(() =>
+      expect(pushed).toContain('/acme/marketing/campaigns'),
+    )
   })
 })

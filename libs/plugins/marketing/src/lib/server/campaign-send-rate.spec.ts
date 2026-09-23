@@ -525,7 +525,8 @@ describe('the scheduled processor', () => {
 
   it('puts a DEFERRED campaign back to scheduled, not failed', async () => {
     seedHost(['a@example.com', 'b@example.com'])
-    mockState.store[`hosts/${HOST}/campaigns/camp-1`] = {
+    mockState.store[`orgs/org-1/campaigns/camp-1`] = {
+      hostId: HOST,
       status: 'scheduled',
       sendAtMs: 1,
       subject: 'Sale',
@@ -542,7 +543,7 @@ describe('the scheduled processor', () => {
     )
 
     expect(captured.status).toBe(200)
-    const row = mockState.store[`hosts/${HOST}/campaigns/camp-1`]
+    const row = mockState.store[`orgs/org-1/campaigns/camp-1`]
     // THE ASSERTION. `failed` here is a lost campaign a merchant has to find
     // in the History list and re-create.
     expect(row.status).toBe('scheduled')
@@ -553,7 +554,8 @@ describe('the scheduled processor', () => {
 
   it('still FAILS a campaign that is genuinely broken', async () => {
     seedHost([])
-    mockState.store[`hosts/${HOST}/campaigns/camp-2`] = {
+    mockState.store[`orgs/org-1/campaigns/camp-2`] = {
+      hostId: HOST,
       status: 'scheduled',
       sendAtMs: 1,
       subject: 'Sale',
@@ -569,10 +571,70 @@ describe('the scheduled processor', () => {
     )
 
     expect(captured.status).toBe(200)
-    const row = mockState.store[`hosts/${HOST}/campaigns/camp-2`]
+    const row = mockState.store[`orgs/org-1/campaigns/camp-2`]
     // An empty audience is not a ramp — retrying it forever would be the
     // regression in the other direction.
     expect(row.status).toBe('failed')
+  })
+
+  /*
+   * THE SITE A SEND IS SENT AS comes off the document, and only an org send
+   * has one to give. A send still at the site path waits for the migration
+   * untouched — delivering it would record the result under the org and
+   * leave the copy behind — and an org send naming no site cannot be sent at
+   * all.
+   */
+  it('sends an org send as the site it records, and leaves a site-path send for the migration', async () => {
+    seedHost(['a@example.com'])
+    mockState.store[`hosts/${HOST}/campaigns/legacy-1`] = {
+      status: 'scheduled',
+      sendAtMs: 1,
+      subject: 'Old',
+      body: 'text',
+      audience: 'leads',
+      scheduledBy: 'uid-1',
+    }
+    mockState.store[`orgs/org-1/campaigns/unsited-1`] = {
+      status: 'scheduled',
+      sendAtMs: 1,
+      subject: 'Nobody',
+      body: 'text',
+      audience: 'leads',
+      scheduledBy: 'uid-1',
+    }
+    mockState.store[`orgs/org-1/campaigns/camp-3`] = {
+      hostId: HOST,
+      status: 'scheduled',
+      sendAtMs: 1,
+      subject: 'Sale',
+      body: 'text',
+      audience: 'leads',
+      scheduledBy: 'uid-1',
+    }
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const warnings = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    const { response, captured } = res()
+    await campaignProcessScheduledHandler(
+      { method: 'POST', headers: { 'x-cron-secret': 'cron-secret' } } as any,
+      response,
+    )
+    errors.mockRestore()
+    warnings.mockRestore()
+
+    expect(captured.status).toBe(200)
+    expect(captured.body).toMatchObject({
+      processed: 1,
+      awaitingMigration: 1,
+      unsited: 1,
+    })
+    expect(mockState.store[`orgs/org-1/campaigns/camp-3`].status).toBe('sent')
+    expect(mockState.store[`orgs/org-1/campaigns/camp-3`].hostId).toBe(HOST)
+    // Neither was claimed: both are exactly as they were written.
+    expect(mockState.store[`hosts/${HOST}/campaigns/legacy-1`].status).toBe('scheduled')
+    expect(mockState.store[`orgs/org-1/campaigns/unsited-1`].status).toBe('scheduled')
+    // Nothing was written for the site-path send under the org.
+    expect(mockState.store[`orgs/org-1/campaigns/legacy-1`]).toBeUndefined()
   })
 })
 

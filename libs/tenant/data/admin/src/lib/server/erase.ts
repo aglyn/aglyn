@@ -42,6 +42,7 @@ import {
   type PluginOrgErasureReport,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
+import { listPluginOrgCollections } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { readOrgBilling } from './org-billing'
 import {
   disposeHostSendingDomain,
@@ -151,6 +152,52 @@ async function eraseHostSupplierDeliveries(hostId: string): Promise<number> {
     console.error(`eraseHost: supplier outbox cleanup failed for ${hostId}`, error)
     return 0
   }
+}
+
+/**
+ * Destroy the org documents that belong to the site (AGL-3273).
+ *
+ * Some plugin storage is the organization's and names the site each document
+ * belongs to — Marketing's email sends, `orgs/{orgId}/campaigns`, each naming
+ * the site it was sent as. The `recursiveDelete(hosts/{hostId})` below does
+ * not reach them, and they are still the site's: a send's sender, unsubscribe
+ * page and the consent it relied on were that site's, and a send addressed to
+ * a hand-typed list carries those addresses.
+ *
+ * Which collections, and which field names the site, is each plugin's own
+ * declaration (`orgCollections` in `plugins.config.json`, read through
+ * `listPluginOrgCollections`): a declaration with a `siteField` is a
+ * collection whose documents belong to one site. One without — a campaign
+ * container, placed on sites rather than owned by one — is left alone. Each
+ * document goes with its subcollections, which is why this is a recursive
+ * delete per document.
+ *
+ * Best-effort, like every other trailing cleanup in `eraseHost`, and per
+ * collection, so one failed query leaves the others' cleanup standing.
+ */
+async function eraseHostOwnedOrgDocuments(orgId: string, hostId: string): Promise<number> {
+  if (!orgId || !hostId) return 0
+  const firestore = firebaseAdmin.app().firestore()
+  let erased = 0
+  for (const declared of listPluginOrgCollections()) {
+    if (!declared.siteField) continue
+    try {
+      const rows = await firestore
+        .collection('orgs')
+        .doc(orgId)
+        .collection(declared.name)
+        .where(declared.siteField, '==', hostId)
+        .get()
+      for (const doc of rows.docs) await firestore.recursiveDelete(doc.ref)
+      erased += rows.size
+    } catch (error) {
+      console.error(
+        `eraseHost: ${declared.name} cleanup failed for ${hostId}`,
+        error,
+      )
+    }
+  }
+  return erased
 }
 
 /**
@@ -264,6 +311,7 @@ export async function eraseHost(
     // Drop every member's reverse-index row for this host (AGL-844); the
     // members still exist here (recursiveDelete of the org, if any, is later).
     await deleteHostProjectionForAllMembers(orgId, hostId).catch(() => undefined)
+    await eraseHostOwnedOrgDocuments(orgId, hostId)
   }
 
   // The host document tree (screens/layouts/versions/counters/products/…).

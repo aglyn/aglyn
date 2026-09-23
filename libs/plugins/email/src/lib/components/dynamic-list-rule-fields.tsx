@@ -721,11 +721,12 @@ export interface DynamicListRuleFieldsProps {
   /** `['orgs', orgId]` — the resolved org scope the caller already holds. */
   scope: readonly [string, string]
   /**
-   * The site whose campaigns the campaign picker offers.
+   * The site the campaign picker speaks for: it offers the org's campaigns
+   * placed on this site.
    *
    * A list is org-owned and its rule is materialized against ONE site's silos,
-   * which is the same site whose campaigns a form or a screen can be filed
-   * under. Offering the org's every campaign would offer ids the sweep can
+   * which is the same site whose picker a form or a screen is filed from.
+   * Offering campaigns the site does not carry would offer ids the sweep can
    * never match, because the membership it reads was written by that site.
    */
   hostId: string
@@ -749,7 +750,7 @@ export function DynamicListRuleFields(props: DynamicListRuleFieldsProps) {
   const viewDocs = useOrgCrmViews(scope)
   const listDocs = useOrgLists(scope)
   /*
-   * The site's campaigns, read because this form is on screen.
+   * The campaigns placed on the site, read because this form is on screen.
    *
    * `enabled` is off by default on the hook for the surfaces that render a
    * picker beside fields a reader came for; here the picker IS one of the

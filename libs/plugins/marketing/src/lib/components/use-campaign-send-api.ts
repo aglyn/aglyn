@@ -48,7 +48,7 @@ export interface CampaignSendApiResult {
  * at call time either way, so the ref costs nothing and the callback depends
  * on the one thing that really identifies the request.
  */
-export function useCampaignSendApi(hostId: string) {
+export function useCampaignSendApi(hostId: string | null) {
   return useCampaignApi(hostId, '/api/campaigns/send')
 }
 
@@ -61,13 +61,25 @@ export function useCampaignSendApi(hostId: string) {
  * — a draft's state and a container's emails are read there — so this is the
  * same one-POST caller pointed at a different path.
  */
-export function useCampaignManageApi(hostId: string) {
-  return useCampaignApi(hostId, '/api/campaigns/manage')
+export function useCampaignManageApi(
+  hostId: string | null,
+  orgId?: string | null,
+) {
+  return useCampaignApi(hostId, '/api/campaigns/manage', orgId)
 }
 
 /**
  * The POST both callers above make: the site id, the caller's ID token, and
  * whatever the action carries.
+ *
+ * ## Which subject the body names
+ *
+ * Under a site, the site: the route resolves its org from it. On the org hub
+ * there is no site, so a request about a CONTAINER names the org instead —
+ * and a request about a SEND names the site that send is sent as, passed in
+ * the payload. A payload `hostId` therefore wins over the hook's own subject,
+ * and the org id is left off such a body, because a request that names both
+ * would leave the route to decide which one it is about.
  *
  * The user is read through a ref for the reason given above, and the path is
  * a plain argument so the two hooks are one implementation. A hook taking the
@@ -85,12 +97,24 @@ export function useCampaignManageApi(hostId: string) {
  * unauthenticated and turn "you are signed out" into a refusal from the
  * route. Callers are expected to let the error reach the person.
  */
-function useCampaignApi(hostId: string, path: string) {
+function useCampaignApi(
+  hostId: string | null,
+  path: string,
+  orgId?: string | null,
+) {
   const { data: user } = useUser()
   const userRef = useRef(user)
   userRef.current = user
   return useCallback(
     async (payload: Record<string, unknown>): Promise<CampaignSendApiResult> => {
+      // Who the request is about: the payload's site, else the hook's own.
+      const subject = payload.hostId
+        ? { hostId: payload.hostId }
+        : hostId
+          ? { hostId }
+          : orgId
+            ? { orgId }
+            : {}
       const idToken = await resolveIdToken(
         userRef.current as TokenSource | null | undefined,
       )
@@ -100,11 +124,11 @@ function useCampaignApi(hostId: string, path: string) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({ hostId, ...payload }),
+        body: JSON.stringify({ ...payload, ...subject }),
       })
       const json = await response.json().catch(() => ({}))
       return { response, payload: json as Record<string, any> }
     },
-    [hostId, path],
+    [hostId, orgId, path],
   )
 }

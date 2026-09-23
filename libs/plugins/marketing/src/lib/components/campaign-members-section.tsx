@@ -66,6 +66,12 @@ const MEMBER_CEILING = 25
 
 export interface CampaignMembersSectionProps {
   hostId: string
+  /**
+   * The site's name, when the section is one of several — the org hub draws
+   * one per site the campaign is placed on, and each heading says whose
+   * forms and screens it lists.
+   */
+  siteName?: string
   campaignId: string
   /** The campaign's first day, when it has one. */
   startAtMs?: number | null
@@ -178,7 +184,7 @@ interface MemberRow {
  * would cost a scan of the collection the customer is billed on.
  */
 export function CampaignMembersSection(props: CampaignMembersSectionProps) {
-  const { hostId, campaignId, startAtMs, endAtMs } = props
+  const { hostId, siteName, campaignId, startAtMs, endAtMs } = props
   const firestore = useFirestore()
   const { orgSlug, subdomain: host } = useConsoleHostRoute(hostId)
 
@@ -285,7 +291,13 @@ export function CampaignMembersSection(props: CampaignMembersSectionProps) {
     orgSlug && host ? buildRoute(Route.HOST_CONTACTS, { orgSlug, host }) : null
 
   return (
-    <Section title="Assigned to this campaign">
+    <Section
+      title={
+        siteName
+          ? `Assigned to this campaign on ${siteName}`
+          : 'Assigned to this campaign'
+      }
+    >
       <Stack spacing={2}>
         <Typography variant="body2" color="text.secondary">
           {'The pages and forms somebody put in this campaign. Assignment is ' +

@@ -16,7 +16,7 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, resolveOrgIdForHost } from '@aglyn/tenant-data-admin'
 // Leaf imports, for the reason `email-events.ts` records: a spec that mocks
 // the `@aglyn/tenant-data-admin` barrel would otherwise replace the real
 // delivery-log reader with whatever the factory listed, and this handler's
@@ -28,6 +28,8 @@ import {
 } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { FieldPath } from 'firebase-admin/firestore'
+import { CAMPAIGN_SEND_HOST_FIELD } from '@aglyn/shared-ui-email-campaigns/model'
+import { orgCampaignSends, sendIsOnHost } from './campaign-org-refs'
 
 /**
  * When a message went out, or is due to.
@@ -134,6 +136,16 @@ export const campaignRecipientsHandler: PluginApiHandler = async (req, res) => {
     if (memberRole !== 'admin' && memberRole !== 'editor') {
       return res.status(403).json({ error: 'Not a site admin or editor' })
     }
+    /*
+     * The messages are the organization's, one collection for every site, so
+     * each read below is narrowed to the ones sent as THIS site — by equality
+     * on the template query, and by the stored site on a single message.
+     */
+    const orgId = await resolveOrgIdForHost(hostId)
+    if (!orgId) {
+      return res.status(404).json({ error: emailId ? 'Unknown email' : 'Unknown design' })
+    }
+    const sends = orgCampaignSends(firestore, orgId)
 
     /*
      * The messages this read covers.
@@ -149,7 +161,8 @@ export const campaignRecipientsHandler: PluginApiHandler = async (req, res) => {
      * `sendAtMs`; `orderBy` DROPS every document missing the ordered field,
      * so ordering on either would silently hide half the template's messages.
      * The document id is the one ordering every message satisfies, it needs
-     * no composite index beside the equality filter, and the messages are
+     * no composite index beside the two equality filters — Firestore merges
+     * their single-field indexes in document-id order — and the messages are
      * then sorted by send time here — over a window already read, so the
      * "most recent" the caller is told about really is the most recent.
      *
@@ -159,12 +172,12 @@ export const campaignRecipientsHandler: PluginApiHandler = async (req, res) => {
      */
     const ceiling = EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS + 1
     const messageDocs = emailId
-      ? [await hostRef.collection('campaigns').doc(emailId).get()].filter(
-          (snapshot: any) => snapshot.exists,
+      ? [await sends.doc(emailId).get()].filter(
+          (snapshot: any) => snapshot.exists && sendIsOnHost(snapshot, hostId),
         )
       : (
-          await hostRef
-            .collection('campaigns')
+          await sends
+            .where(CAMPAIGN_SEND_HOST_FIELD, '==', hostId)
             .where('templateScreenId', '==', screenId)
             .orderBy(FieldPath.documentId())
             .limit(ceiling)
