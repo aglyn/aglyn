@@ -26,6 +26,7 @@
  * why, and never open the dialog.
  */
 
+import { soloConsentGroup } from '@aglyn/aglyn'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps, ReactNode } from 'react'
 import { LeadPropertiesCard } from './lead-properties-card'
@@ -105,6 +106,7 @@ function renderCard(props: Partial<ComponentProps<typeof LeadPropertiesCard>> = 
   render(
     <LeadPropertiesCard
       hostId="host-1"
+      consentGroup={soloConsentGroup('host-1')}
       orgId="org-1"
       leadId="lead-1"
       lead={lead}

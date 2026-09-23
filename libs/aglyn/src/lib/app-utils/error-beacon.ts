@@ -181,6 +181,58 @@ export function isHydrationMismatch(message: string): boolean {
   return HYDRATION_MINIFIED.test(message) || HYDRATION_TEXT.test(message)
 }
 
+/**
+ * WHAT A REJECTED PROMISE ACTUALLY CARRIED (AGL-3279).
+ *
+ * `unhandledrejection` hands over whatever was passed to `reject`, and only
+ * an `Error` brings a message and a stack. A rejection with anything else —
+ * an API's `{ code, message }` object, a `DOMException` from an aborted
+ * fetch, a bare string, a `Response` — used to be reported as the literal
+ * words "Unhandled promise rejection" with no stack and no other field,
+ * which names the handler rather than the failure. One such report arrived
+ * on 2026-09-21 from the Besigner editor and there is nothing in it to act
+ * on: no message, no stack, no code, nothing but the page.
+ *
+ * So the value is DESCRIBED rather than defaulted. In order of how much a
+ * reader can do with it: the error's own message; a string as itself; a
+ * `name`/`code`/`message` shape assembled from whatever of those it has —
+ * the shape every Firebase, DOM and fetch rejection takes; the value's own
+ * `toString` when it says more than `[object Object]`; and last its own
+ * keys, which at least name what kind of thing rejected.
+ *
+ * Nothing here may throw: a getter on the reason can, `toString` can, and
+ * a describer that throws inside the rejection handler loses the report it
+ * was called to improve.
+ */
+export function describeRejectionReason(reason: unknown): string {
+  try {
+    if (reason instanceof Error && reason.message) return reason.message
+    if (typeof reason === 'string') return reason
+    if (reason === null || reason === undefined) {
+      return `Unhandled promise rejection (${String(reason)})`
+    }
+    if (typeof reason !== 'object') {
+      return `Unhandled promise rejection (${typeof reason}: ${String(reason)})`
+    }
+    const shape = reason as Record<string, unknown>
+    const named = [
+      shape['name'] ?? shape['code'] ?? '',
+      shape['message'] ?? shape['statusText'] ?? '',
+    ]
+      .map((part) => String(part ?? '').trim())
+      .filter(Boolean)
+    if (named.length) return named.join(': ')
+    const printed = String(reason)
+    if (printed && printed !== '[object Object]') return printed
+    const keys = Object.keys(shape).slice(0, 12).join(', ')
+    return keys
+      ? `Unhandled promise rejection (object with ${keys})`
+      : 'Unhandled promise rejection (empty object)'
+  } catch {
+    return 'Unhandled promise rejection (undescribable)'
+  }
+}
+
 let installed = false
 
 /**
@@ -328,10 +380,7 @@ export function installErrorBeacon(options?: ErrorBeaconOptions): void {
   window.addEventListener('unhandledrejection', (event) => {
     try {
       const reason = event.reason as Error | undefined
-      const message = clamp(
-        reason?.message ?? (typeof event.reason === 'string' ? event.reason : 'Unhandled promise rejection'),
-        MAX_MESSAGE,
-      )
+      const message = clamp(describeRejectionReason(event.reason), MAX_MESSAGE)
       if (!message) return
       enqueue({
         kind: 'unhandledrejection',

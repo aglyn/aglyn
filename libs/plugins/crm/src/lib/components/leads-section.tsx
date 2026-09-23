@@ -960,7 +960,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       <LeadUnqualifyDialog
         open={Boolean(unqualifying)}
         onClose={() => setUnqualifying(null)}
-        hostId={hostId ?? ''}
+        hostId={hostId ?? null}
         leadId={unqualifying?.leadId ?? ''}
         leadLabel={String(
           unqualifying?.['name'] || unqualifying?.['email'] || '',
@@ -976,9 +976,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         onClose={() => setConverting(null)}
         hostId={
           hostId ??
-          (Array.isArray(converting?.['capturedByHostIds'])
-            ? String((converting['capturedByHostIds'] as string[])[0] ?? '')
-            : '')
+          (Aglyn.leadPrimaryGroup(converting, org as Record<string, unknown>).hostId || null)
         }
         orgId={orgId}
         org={org as Record<string, unknown> | undefined}

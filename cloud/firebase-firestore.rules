@@ -301,12 +301,6 @@ service cloud.firestore {
           ? org.get('subscription', {}).get('status', '')
           : '');
     }
-    /** `orgCarriesCrmSuite`, for the org that owns a site. */
-    function hostOrgCarriesCrmSuite(hostId) {
-      return orgCarriesCrmSuite(
-        get(/databases/$(database)/documents/hosts/$(hostId)).data.get('orgId', null));
-    }
-
     /**
      * Whether an org carries OUTREACH (AGL-2974): the rules' restatement of
      * `checkEntitlement(org, 'outreach')`.
