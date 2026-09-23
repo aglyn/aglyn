@@ -22,8 +22,17 @@ import {
   isWorkspaceDomainHost,
   WORKSPACE_DOMAIN,
 } from './constants/workspace-domain'
-import { isConsoleRouteSegment } from './constants/console-routes'
-import { notFoundRefusal } from './constants/not-found-refusal'
+import {
+  isConsoleRouteSegment,
+  NOT_FOUND_FROM_PARAM,
+  NOT_FOUND_ROUTE,
+} from './constants/console-routes'
+import {
+  notFoundRefusal,
+  unknownAddressRefusal,
+} from './constants/not-found-refusal'
+import { readCookie } from './app/api/auth/read-cookie'
+import { parseSignedOut } from './app/api/auth/session/session-tombstone'
 import { enforceSanctionsGeo } from './constants/sanctions-geo'
 // One source of truth for the frame-ancestors allowlist, shared with
 // `with-aglyn.nextjs.config.js` so the two cannot drift (AGL-523).
@@ -146,9 +155,11 @@ const EDIT_ACCESS_PATH = '/edit-access'
 /**
  * A 404 with a page in it (AGL-3261).
  *
- * All three gates below refuse before Next.js routing, so `app/not-found.tsx`
- * is unreachable from here and the refusal has to carry its own body — see
- * `constants/not-found-refusal.ts` for why it is HTML rather than a rewrite.
+ * The `.well-known` and auth-origin gates below refuse before Next.js routing,
+ * so `app/not-found.tsx` is unreachable from them and the refusal has to carry
+ * its own body — see `constants/not-found-refusal.ts`. The workspace gate
+ * refuses through `refuseUnknownAddress` instead, whose body sends a person on
+ * (AGL-3290).
  *
  * Re-wrapped as a `NextResponse` for the same reason the geo refusal above is:
  * the module stays framework-free, and returning its bare `Response` would
@@ -157,6 +168,47 @@ const EDIT_ACCESS_PATH = '/edit-access'
  */
 function refuseNotFound(): NextResponse {
   const refusal = notFoundRefusal()
+  return new NextResponse(refusal.body, refusal)
+}
+
+/**
+ * Does the request carry a console session worth trying (AGL-3290)?
+ *
+ * Presence only — nothing is verified, because nothing is granted on it. It
+ * picks which of two doors an unknown address forwards through, and both
+ * converge: a signed-in browser sent through `/signin` is passed straight on
+ * by it, and a signed-out one sent straight to `/_missing` is sent to sign in
+ * by the console. A sign-out tombstone reads as no session, which is what it
+ * records.
+ */
+function hasSessionCookie(request: NextRequest): boolean {
+  // `__session` is minted by `app/api/auth/session/route.ts`.
+  const value = readCookie(request, '__session')
+  return Boolean(value) && parseSignedOut(value) === null
+}
+
+/**
+ * The refusal for an address that names no workspace (AGL-3290): a 404 whose
+ * body sends the browser on to the console's own not-found page — through
+ * sign-in first when the request carried no session.
+ *
+ * The typed address goes along as `from` so the page can show it, with the
+ * router's `_rsc` key taken off: a client navigation that lands here falls
+ * back to a full load, and the key means nothing to the page that follows.
+ */
+function refuseUnknownAddress(request: NextRequest): NextResponse {
+  const typed = request.nextUrl.clone()
+  typed.searchParams.delete('_rsc')
+  const missing = `${NOT_FOUND_ROUTE}?${new URLSearchParams({
+    [NOT_FOUND_FROM_PARAM]: `${typed.pathname}${typed.search}`,
+  })}`
+  const signedIn = hasSessionCookie(request)
+  const refusal = unknownAddressRefusal({
+    forwardTo: signedIn
+      ? missing
+      : `/signin?continue=${encodeURIComponent(missing)}`,
+    signedIn,
+  })
   return new NextResponse(refusal.body, refusal)
 }
 
@@ -602,12 +654,17 @@ export async function middleware(request: NextRequest) {
       malformed payload or a `degraded` answer all return `known: true`, so a
       Firestore blip serves the console rather than 404ing it. A moved slug is
       passed through untouched for the app to redirect, exactly as before.
+
+      The refusal is for a PERSON (AGL-3290). This is where a typo or an old
+      bookmark lands, so its body forwards rather than just saying no — see
+      `refuseUnknownAddress` below. The status is untouched: still a 404,
+      still settled here, still no render.
     */
     const first = firstSegment(request)
     if (!isConsoleRouteSegment(first)) {
       const verdict = await resolveOrgSlug(first, new URL(request.url).origin)
       if (!verdict.known && !verdict.movedTo) {
-        return refuseNotFound()
+        return refuseUnknownAddress(request)
       }
     }
     return pass()

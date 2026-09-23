@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { NextRequest } from 'next/server'
 import { middleware } from './middleware'
 
@@ -1112,11 +1113,16 @@ describe('a refused path is a page, not a dead socket (AGL-3261)', () => {
     await expect(response.text()).resolves.toContain('Page not found')
   })
 
-  it('names no company — a white-label console reaches these gates', async () => {
+  it.each([
+    ['the well-known namespace', 'console.acme-agency.com', '/.well-known/security.txt'],
+    ['a stray path on the auth origin', 'auth.aglyn.com', '/oauth/authorize'],
+  ])('names no company on %s — a white-label console reaches it', async (_case, host, path) => {
     // The 451 beside this one interpolates the operator, and had to be taught
     // not to print `Aglyn` at a self-hosted install's visitor (AGL-2016). This
-    // body sidesteps that trap by naming nobody at all.
-    const refused = await middleware(request('app.aglyn.com', '/nobodys-workspace'))
+    // body sidesteps that trap by naming nobody at all. The workspace gate is
+    // the exception, and says why in the AGL-3290 block below.
+    const refused = await middleware(request(host, path))
+    expect(refused.status).toBe(404)
     await expect(refused.text()).resolves.not.toMatch(/Aglyn/i)
   })
 
@@ -1126,6 +1132,100 @@ describe('a refused path is a page, not a dead socket (AGL-3261)', () => {
     // refusal would outlive the verdict it came from by a wide margin.
     const refused = await middleware(request('app.aglyn.com', '/nobodys-workspace'))
     expect(refused.headers.get('cache-control')).toContain('no-store')
+  })
+})
+
+describe('an unknown address sends a person on, and still answers 404 (AGL-3290)', () => {
+  /*
+   * `app.aglyn.com/sign` answered a bare "Page not found": nothing sent a
+   * signed-out visitor to sign in, and a signed-in one never saw the console's
+   * own not-found page. The body now forwards — to sign in with a `continue`,
+   * or straight to `/_missing` — while the status stays a 404 settled here.
+   */
+  const withCookie = (path: string, cookie: string) =>
+    new NextRequest(`https://app.aglyn.com${path}`, {
+      headers: { host: 'app.aglyn.com', cookie },
+    })
+
+  /** Where the page sends the browser: the meta refresh AND the fallback link. */
+  async function forwardsTo(response: Response): Promise<string> {
+    const html = await response.text()
+    const refresh = /<meta http-equiv="refresh" content="0;url=([^"]+)">/.exec(html)?.[1]
+    const link = /<a href="([^"]+)">/.exec(html)?.[1]
+    expect(refresh).toBeDefined()
+    // One destination, stated twice — a browser that ignores the refresh
+    // must not be sent somewhere else by the link.
+    expect(link).toBe(refresh)
+    return (refresh ?? '').replace(/&amp;/g, '&')
+  }
+
+  it('is still a 404 answered here, with no render behind it', async () => {
+    const response = await middleware(request('app.aglyn.com', '/sign'))
+    expect(response.status).toBe(404)
+    // A rewrite would hand the address to a render; the refusal must not.
+    expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+    expect(response.headers.get('cache-control')).toContain('no-store')
+    expect(response.headers.get('x-robots-tag')).toBe('noindex')
+  })
+
+  it('sends a visitor with no session to sign in, continuing to the not-found page', async () => {
+    const target = await forwardsTo(
+      await middleware(request('app.aglyn.com', '/sign')),
+    )
+    const url = new URL(target, 'https://app.aglyn.com')
+    expect(url.pathname).toBe('/signin')
+    // The continue is `/_missing`, never the typed address: that address is
+    // refused on every request, so continuing to it would bounce between
+    // this page and the sign-in page forever.
+    expect(url.searchParams.get('continue')).toBe('/_missing?from=%2Fsign')
+  })
+
+  it('sends a visitor holding a session straight to the not-found page', async () => {
+    const target = await forwardsTo(
+      await middleware(withCookie('/sign', '__session=header.payload.signature')),
+    )
+    expect(target).toBe('/_missing?from=%2Fsign')
+  })
+
+  it('reads a sign-out tombstone as no session', async () => {
+    const target = await forwardsTo(
+      await middleware(withCookie('/sign', '__session=signed-out:1758650000000')),
+    )
+    expect(new URL(target, 'https://app.aglyn.com').pathname).toBe('/signin')
+  })
+
+  it('carries the query the visitor typed, without the router’s `_rsc` key', async () => {
+    const target = await forwardsTo(
+      await middleware(
+        withCookie('/nope/deeper?tab=a&_rsc=1x2y', '__session=header.payload.signature'),
+      ),
+    )
+    const from = new URL(target, 'https://app.aglyn.com').searchParams.get('from')
+    expect(from).toBe('/nope/deeper?tab=a')
+  })
+
+  it('only ever forwards onto its own origin', async () => {
+    // `from` is escaped into a query value, so a path shaped like a
+    // protocol-relative URL cannot become the destination.
+    for (const cookie of ['', '__session=header.payload.signature']) {
+      const target = await forwardsTo(
+        await middleware(withCookie('//evil.example/x', cookie)),
+      )
+      expect(new URL(target, 'https://app.aglyn.com').origin).toBe(
+        'https://app.aglyn.com',
+      )
+    }
+  })
+
+  it('names the deployment’s own brand, which is safe only because of where it is served', async () => {
+    // Unlike the two gates above, this one is reached only on the operator’s
+    // apex console: a custom console domain is routed into its org first, and
+    // a workspace subdomain names its org in the host.
+    const html = await (await middleware(request('app.aglyn.com', '/sign'))).text()
+    expect(html).toContain(`<title>Page not found · ${PLATFORM_BRAND_NAME}</title>`)
+    expect(
+      (await middleware(request('console.acme-agency.com', '/sign'))).status,
+    ).toBe(200)
   })
 })
 

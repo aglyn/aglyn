@@ -17,7 +17,12 @@
 
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { CONSOLE_TOP_LEVEL_SEGMENTS } from '../constants/console-routes'
+import { ORG_SLUG_PATTERN } from '@aglyn/aglyn/app-utils/organizations'
+import {
+  CONSOLE_TOP_LEVEL_SEGMENTS,
+  isConsoleRouteSegment,
+  NOT_FOUND_ROUTE,
+} from '../constants/console-routes'
 
 /**
  * The middleware answers 404 for a first path segment this set does not name
@@ -46,7 +51,11 @@ function topLevelRouteSegments(dir: string): Set<string> {
       }
       if (!entry.isDirectory()) continue
       // A group contributes nothing; anything below it is still top level.
-      const next = segment ?? (isRouteGroup(entry.name) ? null : entry.name)
+      // Folder names are URL-decoded the way the router reads them:
+      // `%5Fmissing` serves `/_missing` (AGL-3290).
+      const next =
+        segment ??
+        (isRouteGroup(entry.name) ? null : decodeURIComponent(entry.name))
       walk(join(current, entry.name), next)
     }
   }
@@ -76,6 +85,14 @@ describe('the console top-level route set (AGL-3017)', () => {
   it('names nothing the app does not serve, so the set cannot rot', () => {
     const stale = [...CONSOLE_TOP_LEVEL_SEGMENTS].filter((s) => !actual.has(s)).sort()
     expect(stale).toEqual([])
+  })
+
+  it('serves the not-found page at an address no workspace can take (AGL-3290)', () => {
+    // The unknown-address refusal forwards here, so the middleware must admit
+    // it without asking for a verdict, and no workspace slug may shadow it.
+    expect(actual).toContain(NOT_FOUND_ROUTE.slice(1))
+    expect(isConsoleRouteSegment(NOT_FOUND_ROUTE.slice(1))).toBe(true)
+    expect(ORG_SLUG_PATTERN.test(NOT_FOUND_ROUTE.slice(1))).toBe(false)
   })
 
   it('carries the two credential flows the first draft of this list omitted', () => {
