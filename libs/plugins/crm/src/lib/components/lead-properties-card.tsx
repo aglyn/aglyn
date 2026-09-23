@@ -19,6 +19,7 @@
 import * as Aglyn from '@aglyn/aglyn'
 import type {
   AglynOrgBilling,
+  ConsentGroup,
   CrmLeadFields,
   CrmLeadProfilePatch,
   CrmLeadStatus,
@@ -127,7 +128,21 @@ function Fact(props: { label: string; children: React.ReactNode }) {
 }
 
 export interface LeadPropertiesCardProps {
-  hostId: string
+  /**
+   * The site this lead is acted on as — the mounted one, or at the
+   * organization level the lead's own first capturing site (AGL-3278).
+   * `null` for a lead no site has captured: the booking door, the call and
+   * the email close, because each of them is one site's to offer.
+   */
+  hostId: string | null
+  /**
+   * The group the consent basis is read against (AGL-3278): the site's own
+   * declared group, resolved by the page. Not `soloConsentGroup(hostId)`,
+   * which is what this card used to spell and which cannot see a refusal
+   * recorded against a sibling brand — three sites presenting as one sender
+   * are one sender to the person unsubscribing from them.
+   */
+  consentGroup: ConsentGroup
   /**
    * The org the site belongs to, as the page already resolved it — the
    * custom lead fields are ORG-wide (AGL-3272), and a second lookup here
@@ -189,6 +204,7 @@ export interface LeadPropertiesCardProps {
 export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const {
     hostId,
+    consentGroup,
     orgId,
     leadId,
     lead,
@@ -373,7 +389,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
     setCustom({})
   }
 
-  const consent = Aglyn.readMarketingBasis(lead, Aglyn.soloConsentGroup(hostId))
+  const consent = Aglyn.readMarketingBasis(lead, consentGroup)
   const consentLine =
     consent.basis === 'granted'
       ? `Opted in to marketing${

@@ -59,6 +59,45 @@ export const NO_HOLDER_GROUP: ConsentGroup = Object.freeze({
 }) as ConsentGroup
 
 /**
+ * The sites that captured this person, in CAPTURE order — the order
+ * `arrayUnion` left, so the first entry is the site that met them first.
+ *
+ * `contactCaptureHostIds` sorts the same array for RENDERING, where a
+ * stable order matters more than a first. Both readers below want the
+ * first, so neither may use the sorted one.
+ */
+function captureOrder(
+  record: Record<string, unknown> | null | undefined,
+): string[] {
+  const raw = (record ?? {})[CAPTURED_BY_HOST_FIELD]
+  if (!Array.isArray(raw)) return []
+  return raw.map((id) => String(id ?? '').trim()).filter(Boolean)
+}
+
+/**
+ * The group a LEAD is read and acted on through (AGL-3278).
+ *
+ * The same question {@link contactPrimaryGroup} answers, with a shorter
+ * answer: a lead is one flat document — no facets, one profile, one
+ * status — so there is nothing to choose between and the holder is simply
+ * the site that captured the person first. What it is FOR is the same: at
+ * the organization level the record page has no viewing site, and it needs
+ * one to read the consent basis against, to file an activity under, to
+ * offer a booking on and to convert as.
+ *
+ * A lead no site has captured — a row imported before attribution — reads
+ * through {@link NO_HOLDER_GROUP}, whose empty `hostId` is how a surface
+ * asks "is there a site here at all" without testing for an empty string.
+ */
+export function leadPrimaryGroup(
+  lead: Record<string, unknown> | null | undefined,
+  org: Record<string, unknown> | null | undefined,
+): ConsentGroup {
+  const captured = captureOrder(lead)
+  return captured.length ? consentGroupForHost(org, captured[0]) : NO_HOLDER_GROUP
+}
+
+/**
  * The group a CROSS-HOLDER reader flattens one contact through (AGL-2630).
  *
  * Under a site there is one answer for every row — the site's own group,
@@ -89,10 +128,7 @@ export function contactPrimaryGroup(
     facets && typeof facets === 'object' && !Array.isArray(facets)
       ? Object.keys(facets as Record<string, unknown>)
       : []
-  const raw = record[CAPTURED_BY_HOST_FIELD]
-  const captured = Array.isArray(raw)
-    ? raw.map((id) => String(id ?? '').trim()).filter(Boolean)
-    : []
+  const captured = captureOrder(record)
   for (const hostId of captured) {
     const group = consentGroupForHost(org, hostId)
     if (facetKeys.includes(group.groupId)) return group

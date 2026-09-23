@@ -61,7 +61,13 @@ export function leadCampaignNames(
 }
 
 export interface LeadCampaignsCardProps {
-  hostId: string
+  /**
+   * The lead's own site, or `null` at the organization level for a lead no
+   * site captured (AGL-3278). Read for the org root alone — the containers
+   * themselves are handed down as `options` — so the card serves both
+   * levels; the org-level mount answers the same org without a site.
+   */
+  hostId: string | null
   leadId: string
   lead: Record<string, unknown>
   leadStatus: FirestoreDocStatus

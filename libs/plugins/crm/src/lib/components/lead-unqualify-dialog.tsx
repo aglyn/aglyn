@@ -39,7 +39,12 @@ const REASON_MAX = UNQUALIFY_REASON_MAX
 export interface LeadUnqualifyDialogProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /**
+   * The lead's own site, or `null` at the organization level (AGL-3278).
+   * The write is an org-scoped one-field update; the site is read for the
+   * org root, which the mount answers without one.
+   */
+  hostId: string | null
   leadId: string
   /** How the lead reads in the title — its name, else its address. */
   leadLabel: string

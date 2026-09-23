@@ -78,7 +78,14 @@ type CompanyMode = 'none' | 'existing' | 'new'
 export interface LeadConvertDialogProps {
   open: boolean
   onClose: () => void
-  hostId: string
+  /**
+   * The site the conversion is FILED AS (AGL-3278): the mounted one, or
+   * the lead's own first capturing site at the organization level. A
+   * conversion has to name one — the contact it makes is captured by a
+   * site, and its consent is that site's group's — so with none the
+   * dialog refuses rather than posting an empty host.
+   */
+  hostId: string | null
   orgId: string | null
   org: Record<string, unknown> | null | undefined
   leadId: string
@@ -231,6 +238,9 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
   const amountInvalid = amountCents === undefined
   const submittable =
     !busy &&
+    // A conversion names the site it is filed as; there is none for a lead
+    // no site captured (AGL-3278).
+    Boolean(hostId) &&
     (companyMode !== 'new' || companyName.trim().length > 0) &&
     (companyMode !== 'existing' || Boolean(companyId)) &&
     (!dealOn || (dealTitle.trim().length > 0 && !amountInvalid))
@@ -240,7 +250,7 @@ export function LeadConvertDialog(props: LeadConvertDialogProps) {
     setBusy(true)
     setError(null)
     const body: LeadConvertRequest = {
-      hostId,
+      hostId: hostId ?? '',
       leadId,
       ...(ownerUid ? { ownerUid } : {}),
       ...(companyMode === 'existing' ? { companyId } : {}),

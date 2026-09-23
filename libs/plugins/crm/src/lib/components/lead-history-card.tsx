@@ -27,6 +27,7 @@ import {
 } from './crm-attribution-zone'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Chip, Stack, Typography } from '@mui/material'
+import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 
 /**
  * The surfaces `addHostLead` names — `signup`, `booking`, `form:{formId}`,
@@ -80,7 +81,14 @@ function Fact(props: { label: string; children: React.ReactNode }) {
 }
 
 export interface LeadHistoryCardProps {
-  hostId: string
+  /**
+   * The lead's own site, or `null` at the organization level for a lead no
+   * site captured (AGL-3278). Named on "Captured on" when the document
+   * carries no capture list of its own, and the one site the attribution
+   * zone is asked about — with none the zone is not drawn, as on the
+   * contact's Associations card.
+   */
+  hostId: string | null
   leadId: string
   lead: Record<string, unknown>
 }
@@ -99,6 +107,10 @@ export function LeadHistoryCard(props: LeadHistoryCardProps) {
   // The caption introduces what another plugin draws; with none loaded it
   // would introduce nothing.
   const hasAttribution = useHasCrmRecordAttribution()
+  // Sites read by NAME at the organization level, as they do in the Leads
+  // list's "Known by" column; under a site there is no mount and an id is
+  // all there is to print.
+  const mount = useCrmOrgMount()
   const sources = leadSources(lead)
   const capturedBy = lead[CAPTURED_BY_HOST_FIELD]
   const count = Number(lead['submissionCount'] ?? 0) || (sources.length ? 1 : 0)
@@ -120,8 +132,10 @@ export function LeadHistoryCard(props: LeadHistoryCardProps) {
           <Fact label="Captures">{count ? String(count) : '—'}</Fact>
           <Fact label="Captured on">
             {Array.isArray(capturedBy) && capturedBy.length
-              ? capturedBy.map(String).join(', ')
-              : hostId}
+              ? capturedBy
+                  .map((id) => mount?.siteName(String(id)) ?? String(id))
+                  .join(', ')
+              : (hostId ?? '—')}
           </Fact>
         </Stack>
         <Fact label="Sources">
@@ -135,7 +149,7 @@ export function LeadHistoryCard(props: LeadHistoryCardProps) {
             '—'
           )}
         </Fact>
-        {hasAttribution ? (
+        {hasAttribution && hostId ? (
           <Stack spacing={1}>
             <Typography variant="caption" color="text.secondary">
               {'Where this lead came from'}
