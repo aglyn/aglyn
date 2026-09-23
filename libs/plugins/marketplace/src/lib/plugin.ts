@@ -100,6 +100,12 @@ export function registerMarketplaceConsole(): void {
         href: '/marketplace',
         navTabId: 'nav-tab-org-marketplace',
         icon: { path: mdiStorefrontOutline.path },
+        /*
+         * Last of the plugin tabs, so it sits directly before the shell's
+         * Plugins tab (AGL-3294): shopping for plugins beside managing the
+         * ones the workspace runs, the pair AGL-1011 split into two tabs.
+         */
+        tabOrder: 100,
         ownsSubtree: true,
         Component: MarketplaceHub,
         header: {

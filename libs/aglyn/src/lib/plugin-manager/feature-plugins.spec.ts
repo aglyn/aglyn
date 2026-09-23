@@ -843,6 +843,41 @@ describe('organization-level surfaces (AGL-2974)', () => {
     ).toEqual(['/outreach'])
   })
 
+  it('orders each strip by tabOrder, a tie in registration order (AGL-3294)', () => {
+    // Registered in this order; only the first moves.
+    registerConsoleExtension({
+      pluginId: 'marketplace',
+      displayName: 'Marketplace',
+      orgNavItems: [
+        { label: 'Marketplace', href: '/marketplace', tabOrder: 100, Component: Outreach },
+      ],
+    })
+    registerOrgSurface()
+    registerConsoleExtension({
+      pluginId: 'marketing',
+      displayName: 'Marketing',
+      orgNavItems: [{ label: 'Marketing', href: '/marketing', Component: Outreach }],
+    })
+    expect(listConsoleOrgNavItems().map((entry) => entry.navItem.href)).toEqual([
+      '/outreach',
+      '/marketing',
+      '/marketplace',
+    ])
+
+    // The site strip reads the same field, and a negative order leads.
+    registerConsoleExtension({
+      pluginId: 'events-calendar',
+      displayName: 'Events',
+      navItems: [{ label: 'Events', href: '/events', Component: Events }],
+    })
+    registerConsoleExtension({
+      pluginId: 'bookings',
+      displayName: 'Bookings',
+      navItems: [{ label: 'Bookings', href: '/bookings', tabOrder: -1, Component: Events }],
+    })
+    expect(listConsoleNavItems().map((item) => item.href)).toEqual(['/bookings', '/events'])
+  })
+
   it('scopes both the list and the resolver to the enabled plugins', () => {
     registerOrgSurface()
     expect(listConsoleOrgNavItems(['crm'])).toEqual([])

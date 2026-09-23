@@ -23,8 +23,9 @@ import { buildRoute, Route } from './route-links'
  *
  * `pluginTabs` are the organization-level surfaces extensions declare in
  * `orgNavItems` (AGL-2974), already narrowed to the ones this reader may
- * open by `orgPluginNavTabItems`. They sit after the CRM, the org's other
- * plugin-served surface, and before the administration tabs.
+ * open by `orgPluginNavTabItems` and ordered by each item's `tabOrder`.
+ * They sit after the CRM, the org's other plugin-served surface, and before
+ * the administration tabs — Marketplace last among them, beside Plugins.
  */
 export function orgNavTabItems(
   orgSlug: string,

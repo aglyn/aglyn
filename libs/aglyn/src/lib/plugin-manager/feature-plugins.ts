@@ -567,6 +567,19 @@ export interface ConsoleNavItem {
    */
   legacyHrefs?: readonly string[]
   /**
+   * Where this item's tab sits among the plugin tabs of its strip
+   * (AGL-3294): lower first, absent is 0, and a tie keeps registration
+   * order.
+   *
+   * Registration order is otherwise the order, and it is not a tab's to
+   * choose: it follows the plugin registry, which also orders the staff
+   * strip, the providers and every widget zone the plugin fills — so moving
+   * one tab by moving its plugin would move everything else it registers.
+   * This moves the tab and nothing else. The shell's own tabs are not in the
+   * comparison; the plugin tabs sit as one block between them.
+   */
+  tabOrder?: number
+  /**
    * Dashboard header for the plugin page (title + icon), and the docs topic
    * its help `?` explains.
    *
@@ -1603,13 +1616,30 @@ export interface ConsoleNavEntry extends ConsoleNavItem {
 export function listConsoleNavItems(
   enabledPluginIds?: readonly PluginId[],
 ): ConsoleNavEntry[] {
-  return listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
-    (extension.navItems ?? []).map((navItem) => ({
-      ...navItem,
-      pluginId: extension.pluginId,
-      featureFlag: extension.featureFlag,
-    })),
+  return inTabOrder(
+    listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
+      (extension.navItems ?? []).map((navItem) => ({
+        ...navItem,
+        pluginId: extension.pluginId,
+        featureFlag: extension.featureFlag,
+      })),
+    ),
+    (entry) => entry.tabOrder,
   )
+}
+
+/**
+ * A strip's plugin entries by {@link ConsoleNavItem.tabOrder}, lower first,
+ * a tie in the order they arrived — which is registration order.
+ */
+function inTabOrder<T>(
+  entries: readonly T[],
+  tabOrderOf: (entry: T) => number | undefined,
+): T[] {
+  return entries
+    .map((entry, index) => ({ entry, index, order: tabOrderOf(entry) ?? 0 }))
+    .sort((a, b) => a.order - b.order || a.index - b.index)
+    .map(({ entry }) => entry)
 }
 
 /** What {@link resolveConsolePluginPage} answers for a matched href. */
@@ -1725,7 +1755,8 @@ export interface ConsoleOrgNavEntry {
 
 /**
  * Every registered {@link ConsoleExtension.orgNavItems} entry, in
- * registration order, for the organization's tab strip (AGL-2974).
+ * {@link ConsoleNavItem.tabOrder} and then registration order, for the
+ * organization's tab strip (AGL-2974).
  *
  * Carries the extension whole rather than a flattened copy of two of its
  * fields: a tab for a surface the reader cannot open is hidden, and deciding
@@ -1735,8 +1766,11 @@ export interface ConsoleOrgNavEntry {
 export function listConsoleOrgNavItems(
   enabledPluginIds?: readonly PluginId[],
 ): ConsoleOrgNavEntry[] {
-  return listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
-    (extension.orgNavItems ?? []).map((navItem) => ({ extension, navItem })),
+  return inTabOrder(
+    listConsoleExtensions(enabledPluginIds).flatMap((extension) =>
+      (extension.orgNavItems ?? []).map((navItem) => ({ extension, navItem })),
+    ),
+    (entry) => entry.navItem.tabOrder,
   )
 }
 
