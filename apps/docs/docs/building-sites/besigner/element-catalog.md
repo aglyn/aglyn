@@ -118,6 +118,13 @@ unnamed; two cannot.
 
 `main` is on none of these lists; see below.
 
+### Light or dark, whatever the visitor picked
+
+**Section**, **Container**, **Stack**, **Box** and **Grid** have a **Color scheme**
+attribute — **Match the site**, **Always light** or **Always dark** — that keeps that
+part of the page in one mode, with everything inside it using your site's colors for
+that mode. See [Keep one part of the page light or dark](responsive-styling.md#pin-a-color-scheme).
+
 ### Which link groups want to be a `nav`
 
 `nav` marks a **major** block of navigation, not every group of links — the more you

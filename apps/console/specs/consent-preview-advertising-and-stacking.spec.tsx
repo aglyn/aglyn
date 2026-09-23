@@ -77,6 +77,7 @@ jest.mock('@aglyn/aglyn-node-renderer', () => {
     // against and the rule under test would never be emitted. In production
     // the site theme merges `consoleOptions` as its base, so the token is
     // present there for the same reason it is present here.
+    useAglynSiteSchemeThemes: () => undefined,
     useAglynSiteTheme: () => theme.consoleThemeLight,
     AglynNodeRenderer: () => null,
   }

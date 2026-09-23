@@ -25,6 +25,7 @@ import MuiStack, { type StackProps } from '@mui/material/Stack'
 import type { CSSProperties, ReactElement } from 'react'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { colorSchemeAttribute } from '../utils/color-scheme-attribute'
 import {
   applySemanticElement,
   semanticElementAttribute,
@@ -276,6 +277,7 @@ export const schema: Aglyn.ComponentSchema = {
     },
     // No Repeat fields: every element's Attributes panel draws the same Repeat
     // section (AGL-3111), writing the props a Stack has always stored.
+    colorSchemeAttribute(),
   ],
 }
 

@@ -561,6 +561,28 @@ and falls back to the base color. Scheme overrides compose with
 [breakpoint scoping](#style-per-breakpoint): previewing dark on the
 *MD – Laptop* artboard writes a dark override that applies from MD up.
 
+### Keep one part of the page light or dark {#pin-a-color-scheme}
+
+**Section**, **Container**, **Stack**, **Box** and **Grid** have a **Color
+scheme** attribute: **Match the site** (the default), **Always light** or
+**Always dark**. Pick one and that element — and everything inside it —
+renders in your site's colors for that mode, whichever mode the visitor
+chose. Theme color references (`background.paper`, `text.primary`,
+`divider`, …) resolve for the pinned mode, and so do the dark-only
+overrides described above, so a dark band on a light page uses exactly the
+colors your site uses in dark mode.
+
+A pinned element paints its mode's page background and text color unless
+you give it a background or text color of your own. It still goes dark on a
+site whose theme has the **Dark scheme** switched off: that switch decides
+what the visitor can choose, and "Always dark" is your choice about one part
+of the page.
+
+On a [reusable component](reusable-components.md), set it per placement
+with an [attribute override](reusable-components.md#override-an-attribute-on-one-instance)
+on **Component root** — the same component can be a light band on one page
+and a dark band on another.
+
 ## Custom classes
 
 Every element accepts **Classes** (chips input under *Classes & custom

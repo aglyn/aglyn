@@ -20,6 +20,7 @@ import { mdiSquareOutline } from '@aglyn/shared-data-mdi'
 import MuiBox from '@mui/material/Box'
 import { forwardRef, type ReactNode } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { colorSchemeAttribute } from '../utils/color-scheme-attribute'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -92,6 +93,7 @@ export const schema: Aglyn.ComponentSchema<BoxElementProps> = {
       component: Aglyn.FieldComponentType.SELECT,
       options: BOX_ELEMENTS.map((value) => ({ value, label: value })),
     },
+    colorSchemeAttribute(),
   ],
 }
 

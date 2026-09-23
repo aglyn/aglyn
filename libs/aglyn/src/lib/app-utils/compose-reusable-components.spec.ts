@@ -3532,3 +3532,66 @@ describe('a numeric attribute bound to a Number property (AGL-2880)', () => {
     expect(label['aria-hidden']).toBe(true)
   })
 })
+
+/**
+ * AGL-3284 — one placement of a component pinned to "Always dark".
+ *
+ * The color scheme is an ordinary prop on the component's root Section, so the
+ * existing root attribute override (AGL-1899) is the per-placement control:
+ * this pins that the slice reaches the rendered root's props — which is all
+ * the renderer's leaf reads — and nothing else inside the component.
+ */
+describe('instance color scheme override (AGL-3284)', () => {
+  const band = {
+    rootId: 'root',
+    nodes: {
+      root: {
+        $id: 'root',
+        componentId: 'section',
+        nodes: ['card'],
+        props: { element: 'section' },
+        sx: { bgcolor: 'background.default' },
+      },
+      card: {
+        $id: 'card',
+        componentId: 'muiBox',
+        parentId: 'root',
+        nodes: [],
+        props: {},
+        sx: {
+          bgcolor: 'background.paper',
+          '@scheme dark': { bgcolor: '#242b33' },
+        },
+      },
+    },
+  } as any
+
+  const place = (id: string, attrOverrides?: Record<string, unknown>) => ({
+    $id: id,
+    componentId: REUSABLE_INSTANCE_COMPONENT_ID,
+    props: { refId: 'band' },
+    ...(attrOverrides ? { attrOverrides } : {}),
+    nodes: [] as string[],
+  })
+
+  it('lands on the grafted root of the one placement that set it', () => {
+    const composed = composeReusableComponentNodes(
+      {
+        dark: place('dark', {
+          [STYLE_OVERRIDES_ROOT_KEY]: { colorScheme: 'dark' },
+        }),
+        plain: place('plain'),
+      } as any,
+      { band },
+    )
+    const root = composed['dark'] as any
+    expect(root.componentId).toBe('section')
+    expect(root.props.colorScheme).toBe('dark')
+    // The component's own props survive the one-level merge.
+    expect(root.props.element).toBe('section')
+    // Inner nodes are untouched: the leaf's theme swap is what reaches them.
+    expect((composed['cmp__dark__card'] as any).props.colorScheme).toBeUndefined()
+    // And the other placement follows the site.
+    expect((composed['plain'] as any).props.colorScheme).toBeUndefined()
+  })
+})
