@@ -86,6 +86,7 @@ function mockSnapshotNodes() {
 
 jest.mock('@aglyn/aglyn-node-renderer', () => ({
   __esModule: true,
+  useAglynSiteSchemeThemes: () => undefined,
   useAglynSiteTheme: () => ({}),
   AglynNodeRenderer: () => null,
 }))
@@ -94,6 +95,9 @@ jest.mock('@aglyn/shared-ui-theme', () => ({
   __esModule: true,
   ThemeProvider: ({ children }: { children: unknown }) => children,
   getGoogleFontsUrl: () => undefined,
+  SiteSchemeThemesContext: {
+    Provider: ({ children }: { children: unknown }) => children,
+  },
   useThemeModeState: () => [['light', 'light']],
 }))
 

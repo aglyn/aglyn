@@ -178,6 +178,7 @@ jest.mock('@aglyn/tenant-runtime/stamp-form-dataset-bindings', () => ({
 // ── Preview's surroundings ─────────────────────────────────────────────────
 jest.mock('@aglyn/aglyn-node-renderer', () => ({
   __esModule: true,
+  useAglynSiteSchemeThemes: () => undefined,
   useAglynSiteTheme: () => ({}),
   AglynNodeRenderer: () => null,
 }))

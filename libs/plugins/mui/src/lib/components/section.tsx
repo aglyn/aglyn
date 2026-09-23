@@ -20,6 +20,7 @@ import { mdiPageLayoutBody } from '@aglyn/shared-data-mdi'
 import Box from '@mui/material/Box'
 import { forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { colorSchemeAttribute } from '../utils/color-scheme-attribute'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -114,6 +115,7 @@ export const schema: Aglyn.ComponentSchema<SectionProps> = {
         'has several of the same element).',
       component: Aglyn.FieldComponentType.TEXT_FIELD,
     },
+    colorSchemeAttribute(),
   ],
 }
 

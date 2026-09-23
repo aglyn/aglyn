@@ -44,13 +44,22 @@ import {
   isSwitchedOffForRenderedSite,
 } from '@aglyn/aglyn/app-utils/enabled-plugins-context'
 import { NodeIdentityContext } from '@aglyn/aglyn/app-utils/node-identity'
+import {
+  NODE_COLOR_SCHEME_PROP,
+  resolveElementColorScheme,
+} from '@aglyn/aglyn/app-utils/element-color-scheme'
 import { FEATURE_FLAG } from '@aglyn/aglyn/foundation/constants/shared'
 // Deep import, NOT the barrel: `@aglyn/shared-ui-jsx`'s index re-exports the
 // Pages Router hooks (`next/router`), the inline SVG icon set and the whole
 // ~12,000-module MDI catalog, none of which a rendered node needs. This file
 // is on every published page, so the barrel's reach is that page's reach.
 import { AglynText } from '@aglyn/shared-ui-jsx/components/aglyn-text'
-import { styled, useTheme } from '@aglyn/shared-ui-theme'
+import {
+  styled,
+  ThemeProvider,
+  useSiteSchemeThemes,
+  useTheme,
+} from '@aglyn/shared-ui-theme'
 import { mergeSxProps } from '@aglyn/shared-ui-theme'
 import { observer } from 'mobx-react-lite'
 import { forwardRef, type HTMLAttributes, useContext } from 'react'
@@ -103,6 +112,9 @@ export const Leaf = observer(
       [NODE_ANIMATION_EASE_PROP]: _animationEase,
       [NODE_ANIMATION_STAGGER_PROP]: _animationStagger,
       [NODE_ANIMATION_STAGGER_STEP_PROP]: _animationStaggerStep,
+      // A pinned color scheme (AGL-3284) is a directive to the renderer, like
+      // the two groups above: consumed below, never handed to the component.
+      [NODE_COLOR_SCHEME_PROP]: _colorScheme,
       ...resolvedProps
     } = (node?.resolvedProps ?? node?.props ?? {}) as Record<string, any>
 
@@ -173,6 +185,30 @@ export const Leaf = observer(
       palette?: { mode?: string } & Record<string, unknown>
     } | null
     const activeScheme = theme?.palette?.mode === 'dark' ? 'dark' : 'light'
+    // "Always light" / "Always dark" (AGL-3284). When the pinned scheme is not
+    // the active one, the element re-renders itself under the site's theme
+    // for that scheme, so its OWN sx — not only its descendants' — resolves
+    // palette tokens and `@scheme dark` slices for the pinned scheme. The
+    // inner render then sees the pinned scheme as active and takes the plain
+    // path; the mode check below is what guarantees that, because a site with
+    // one theme for both schemes (a single `fallback`) hands back a theme
+    // whose mode never changes, and re-wrapping it would never terminate.
+    // No provider (an email render, a bare test) means nothing to force.
+    // Every hook above runs on both paths, so the early return keeps the
+    // hook order stable when an author flips the setting.
+    const pinnedScheme = resolveElementColorScheme(_colorScheme)
+    const schemeThemes = useSiteSchemeThemes()
+    const forcedTheme =
+      pinnedScheme && pinnedScheme !== activeScheme && schemeThemes
+        ? schemeThemes(pinnedScheme)
+        : undefined
+    if (forcedTheme && forcedTheme.palette?.mode === pinnedScheme) {
+      return (
+        <ThemeProvider theme={forcedTheme}>
+          <Leaf {...props} ref={ref} />
+        </ThemeProvider>
+      )
+    }
     // MUI array composition: later entries win on key conflicts, so the
     // node-level sx (Styles panel output) overrides props.sx.
     //
@@ -200,11 +236,31 @@ export const Leaf = observer(
     // and the scheme pass above is what collapses a dark-scheme slice down
     // into that same top level. Running it earlier would leave a dark
     // override's font size unpinned.
+    //
+    // A pinned element paints its scheme's page background and text color
+    // (AGL-3284), UNDER every other style so an author's own background wins.
+    // Without it an "Always dark" band with no background of its own is
+    // light text on the light page behind it, and text that sets no color
+    // inherits the page's dark body color. `color-scheme` makes the browser's
+    // own controls and scrollbars inside the band match. Only a pinned
+    // element carries this, so an unpinned one renders exactly as before —
+    // and so does a pinned one on a surface with no site themes to pin to.
     const authorSx = sanitizeAuthorSx(node?.sx)
     const composedSx = pinRampedTypographySx(
       resolvePaletteVarsSx(
         resolveSchemeSx(
-          mergeSxProps(sx as any, propsSx as any, authorSx as any),
+          pinnedScheme && schemeThemes
+            ? mergeSxProps(
+                {
+                  colorScheme: pinnedScheme,
+                  color: 'text.primary',
+                  bgcolor: 'background.default',
+                } as any,
+                sx as any,
+                propsSx as any,
+                authorSx as any,
+              )
+            : mergeSxProps(sx as any, propsSx as any, authorSx as any),
           activeScheme,
         ),
         theme?.palette,

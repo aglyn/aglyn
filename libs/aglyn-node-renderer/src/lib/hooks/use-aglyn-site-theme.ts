@@ -18,9 +18,12 @@
 import type { HostTheme, HostThemeScheme } from '@aglyn/shared-data-types'
 import {
   createResponsiveTheme,
+  createSiteSchemeThemes,
   hostThemeToThemeOptions,
   mergeThemeOptions,
+  type SiteSchemeThemes,
   siteBaseOptions,
+  type Theme,
   useHostSiteKey,
 } from '@aglyn/shared-ui-theme'
 import { useMemo } from 'react'
@@ -127,4 +130,44 @@ export function useAglynSiteTheme(options: UseAglynSiteThemeOptions = {}) {
     [container, hostTheme, scheme, host],
   )
 }
+/**
+ * The site's theme for EITHER scheme, for `SiteSchemeThemesContext`
+ * (AGL-3284) — what an "Always light" / "Always dark" element renders under on
+ * the canvas and in Preview.
+ *
+ * Built by {@link createAglynSiteTheme} from the same inputs
+ * {@link useAglynSiteTheme} takes, so a pinned band on the canvas wears
+ * exactly what the published page's `HostThemeProvider` would give it.
+ * `active` is the theme the surface is already rendering; it is answered for
+ * its own scheme rather than rebuilt, so a surface that has pinned or patched
+ * its theme (the canvas's device width) keeps that for the matching scheme.
+ * `finish` applies the same patch to the other scheme's theme; memoize it, as
+ * the getter is rebuilt when it changes.
+ */
+export function useAglynSiteSchemeThemes(
+  options: Omit<UseAglynSiteThemeOptions, 'scheme'> & {
+    active: Theme
+    finish?: (theme: Theme) => Theme
+  },
+): SiteSchemeThemes {
+  const { container, theme: hostTheme, active, finish } = options
+  const contextHost = useHostSiteKey()
+  const host = options.host ?? contextHost
+  return useMemo(
+    () =>
+      createSiteSchemeThemes((scheme) => {
+        if ((active.palette?.mode === 'dark' ? 'dark' : 'light') === scheme)
+          return active
+        const built = createAglynSiteTheme({
+          container,
+          theme: hostTheme,
+          scheme,
+          host,
+        })
+        return finish ? finish(built) : built
+      }),
+    [active, finish, container, hostTheme, host],
+  )
+}
+
 export default useAglynSiteTheme

@@ -23,6 +23,7 @@ import {
 import MuiContainer, { type ContainerProps } from '@mui/material/Container'
 import { createElement, forwardRef } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { colorSchemeAttribute } from '../utils/color-scheme-attribute'
 import {
   applySemanticElement,
   semanticElementAttribute,
@@ -119,6 +120,7 @@ export const schema: Aglyn.ComponentSchema<ContainerProps> = {
         { value: false, label: 'Fluid Responsive (no max width)' },
       ],
     },
+    colorSchemeAttribute(),
   ],
 }
 
