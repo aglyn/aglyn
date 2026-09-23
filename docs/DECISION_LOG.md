@@ -92,6 +92,42 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-23 — A tracked sequence link is a short stored id, not a signed token
+
+- **Decided by:** the account owner, 2026-09-23, in AGL-3297, after a recipient opted out of a founder sequence that read as bulk mail.
+- **Scope:** policy
+- **Evidence:** `libs/plugins/outreach/src/lib/runtime/click-link.ts` (`newOutreachLinkId`, `outreachStoredLink`, `outreachShortLinkUrl`) and `click-route.ts` (`createOutreachShortLinkRoute`); the top-level `outreachLinks` collection in `cloud/firebase-firestore.rules`, `erase.ts` and `personal-data-export.ts`; AGL-3297.
+
+**The link in the body is `app.aglyn.com/api/outreach/l/<10 characters>`.**
+The signed token it replaces put the destination in the URL so the redirect
+needed no read, and cost ~350 characters that read as marketing in a
+plain-text one-to-one email. One Firestore read per click is the cheaper cost.
+The path stays under the plugin's `/api/outreach/` prefix so the platform's
+plugin dispatcher, its release gate and the recipient-link exemption apply
+unchanged; a bare `/l/` would need a console rewrite owned by no plugin.
+
+**Old links keep working, and nothing new can redirect anywhere else.** The
+signed `click` route still verifies and follows every token already sent. The
+short route follows only a destination read from a document that the sending
+runtime alone writes, for a URL in the sequence's own step, and clients can
+neither read nor write the collection.
+
+---
+
+## 2026-09-23 — The List-Unsubscribe header is a per-sequence choice, off by default
+
+- **Decided by:** the account owner, 2026-09-23, in AGL-3296.
+- **Scope:** policy
+- **Evidence:** `OutreachSequenceSettings.listUnsubscribe`, default `false`; `outreachListUnsubscribe` in `libs/plugins/outreach/src/lib/runtime/unsubscribe-link.ts`; the Sequences doc's Unsubscribe section; AGL-3296.
+
+**A sequence is one-to-one mail, and the header makes mail clients present it
+as a mailing list.** The Gmail/Yahoo one-click rule binds senders of 5,000 a
+day. The footer — postal address and "reply no" — stays on every email, and
+an email without it never leaves; the unsubscribe route keeps answering every
+link already sent.
+
+---
+
 ## 2026-09-22 — Sequences measure clicks only: every sequence email stays plain text, and the report says opens are not measured
 
 - **Decided by:** the account owner, 2026-09-22, on being shown that a tracking pixel can only ride in an HTML part and that giving cold one-to-one email a multipart HTML body is the posture the plugin was built to avoid — "clicks only, keep every email plain text".

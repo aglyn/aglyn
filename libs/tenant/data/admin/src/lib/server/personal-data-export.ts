@@ -179,6 +179,13 @@ export const PERSONAL_DATA_SOURCES: readonly ExportSourceSpec[] = [
     note: 'EXISTENCE ONLY — which connected mailbox a credential authorizes, its provider, granted scopes and dates (AGL-2974), and since AGL-2978 the connected account’s address, its Google account id and the member who connected it: the organization’s own record of whose mailbox it holds. Every token is redacted by name and by shape (see redactSecrets) and never disclosed; the sealed refresh token and the id of the key that sealed it both carry `token` in their names. The document id is the mailbox id, not derived from any secret, so it is disclosed.',
   },
   {
+    collection: 'outreachLinks',
+    keyedBy: 'field',
+    subjects: ['org'],
+    exported: true,
+    note: 'Where each short tracking link in a sent Outreach sequence email points (AGL-3297): the enrollment, the step, the link’s index and the destination the step wrote. The organization’s own record of what it sent; the id is random and derived from no secret.',
+  },
+  {
     collection: 'ssoDomains',
     keyedBy: 'field',
     subjects: ['org'],
@@ -960,6 +967,9 @@ export async function exportOrgData(
     'orgId',
     orgId,
   )
+
+  // Where each short tracking link the org's sequences sent points (AGL-3297).
+  data['outreachLinks'] = await readByField(db, 'outreachLinks', 'orgId', orgId)
 
   data['publisherProfiles'] = await readDoc(db, 'publisherProfiles', orgId)
   data['marketplaceListings'] = await readByField(

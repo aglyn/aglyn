@@ -99,6 +99,16 @@ export function registerOutreachConsoleApi(): void {
     },
     { recipientLink: true },
   )
+  // The short tracking link every send carries since AGL-3297, for the same
+  // reasons; the signed `click` route above keeps answering older emails.
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.shortLink,
+    {
+      web: async (request, context) =>
+        (await import('./runtime/platform-runtime-deps')).platformOutreachShortLinkRoute()(request, context),
+    },
+    { recipientLink: true },
+  )
 }
 
 // The transport the sending runtime reaches a connected mailbox through

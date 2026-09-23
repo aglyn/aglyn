@@ -2180,6 +2180,18 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Outreach short tracking links (AGL-3297): what one link in a sent
+    // sequence email points at — the org, the enrollment, the step and the
+    // destination — keyed by the link's random id. Written by the sending
+    // runtime and read by the redirect route, both through the Admin SDK.
+    // Deny ALL client access: a client that could list these could read every
+    // workspace's tracked destinations, and one that could write them could
+    // point a link already in somebody's inbox anywhere. Org erasure destroys
+    // them by the `orgId` field.
+    match /outreachLinks/{linkId} {
+      allow read, write: if false;
+    }
+
     // REST API idempotency records (AGL-618): dedupe POSTs by Idempotency-Key.
     // Written and read by the Admin SDK only.
     match /apiIdempotency/{keyHash} {

@@ -38,8 +38,8 @@ import { openOutreachMailboxClient } from '../mailboxes/mailbox-transport'
 import { canonicalConsoleOrigin } from '../mailboxes/oauth-redirect'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import type { PluginPersonEraser } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
-import { outreachClickUrl } from './click-link'
-import { createOutreachClickRoute } from './click-route'
+import { outreachShortLinkUrl } from './click-link'
+import { createOutreachClickRoute, createOutreachShortLinkRoute } from './click-route'
 import { createOutreachPersonEraser } from './person-erasure'
 import type { OutreachCampaignCredit, OutreachRuntimeDeps } from './runtime-deps'
 import { outreachUnsubscribeUrl } from './unsubscribe-link'
@@ -132,7 +132,7 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
       if (!result.sent) console.warn(`[outreach] the mailbox owner was not emailed: ${result.reason}`)
     },
     unsubscribeUrl: (target) => outreachUnsubscribeUrl({ origin: canonicalConsoleOrigin(), target }),
-    clickUrl: (target) => outreachClickUrl({ origin: canonicalConsoleOrigin(), target }),
+    clickLinkUrl: (linkId) => outreachShortLinkUrl({ origin: canonicalConsoleOrigin(), linkId }),
   }
 }
 
@@ -144,6 +144,11 @@ export function platformOutreachUnsubscribeRoute(): PluginWebApiHandler {
 /** The click-tracking redirect on the platform's own reach (AGL-3239). */
 export function platformOutreachClickRoute(): PluginWebApiHandler {
   return createOutreachClickRoute(platformOutreachRuntimeDeps())
+}
+
+/** The short tracking link's redirect on the platform's own reach (AGL-3297). */
+export function platformOutreachShortLinkRoute(): PluginWebApiHandler {
+  return createOutreachShortLinkRoute(platformOutreachRuntimeDeps())
 }
 
 /** The person eraser on the platform's own Firestore. */

@@ -21,12 +21,19 @@ import type { PluginRecordActivityRequest } from '@aglyn/aglyn/plugin-manager/pl
 import { FieldValue } from 'firebase-admin/firestore'
 import { OUTREACH_CLICK_HUMAN_DELAY_MS } from '../engine/click-tracking'
 import {
+  isOutreachLinkId,
   mintOutreachClickToken,
+  newOutreachLinkId,
   OUTREACH_CLICK_PATH,
+  OUTREACH_LINK_ID_LENGTH,
+  OUTREACH_SHORT_LINK_PATH,
   outreachClickUrl,
+  outreachShortLinkUrl,
+  outreachStoredLink,
   readOutreachClickToken,
+  readOutreachStoredLink,
 } from './click-link'
-import { createOutreachClickRoute } from './click-route'
+import { createOutreachClickRoute, createOutreachShortLinkRoute } from './click-route'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 
 /**
@@ -401,5 +408,130 @@ describe('the click route', () => {
     expect(answer.headers.get('Location')).toBe(TARGET)
     expect((docs.get(SEQUENCE_PATH) as Data)['stats']).toEqual({ sent: 3, people: 3, clickTracked: true })
     expect(filed).toHaveLength(0)
+  })
+})
+
+/*==========================================
+ * THE SHORT LINK (AGL-3297).
+ *=========================================*/
+
+const LINK_ID = 'Ab3dE9xK2q'
+const LINK_PATH = `outreachLinks/${LINK_ID}`
+const STORED = {
+  orgId: ORG,
+  enrollmentId: ENROLLMENT,
+  stepIndex: 0,
+  linkIndex: 0,
+  url: TARGET,
+}
+
+const shortVisit = (id: string, overrides: { method?: string; userAgent?: string } = {}) =>
+  new Request(`${ORIGIN}${OUTREACH_SHORT_LINK_PATH}/${id}`, {
+    method: overrides.method ?? 'GET',
+    headers: { 'user-agent': overrides.userAgent ?? 'Mozilla/5.0 (Macintosh) Safari/605.1' },
+  })
+
+const callShort = (request: Request, firestore: () => FirebaseFirestore.Firestore = fakeFirestore) =>
+  createOutreachShortLinkRoute({ ...deps(), firestore })(request, {} as never)
+
+describe('the short link id and document', () => {
+  it('is ten characters of base 62, and a fresh one every time', () => {
+    const ids = new Set(Array.from({ length: 200 }, () => newOutreachLinkId()))
+    expect(ids.size).toBe(200)
+    for (const id of ids) {
+      expect(id).toHaveLength(OUTREACH_LINK_ID_LENGTH)
+      expect(isOutreachLinkId(id)).toBe(true)
+    }
+    // Rejection sampling: a byte at or past 248 is never used.
+    let calls = 0
+    const bytes = () => {
+      calls += 1
+      return calls === 1 ? new Uint8Array(20).fill(255) : new Uint8Array(20).fill(1)
+    }
+    expect(newOutreachLinkId(bytes)).toBe('BBBBBBBBBB')
+  })
+
+  it('is a short link on an https console origin, and nothing else', () => {
+    const url = outreachShortLinkUrl({ origin: `${ORIGIN}/`, linkId: LINK_ID })
+    expect(url).toBe('https://console.example.com/api/outreach/l/Ab3dE9xK2q')
+    expect(String(url).length).toBeLessThan(60)
+    expect(outreachShortLinkUrl({ origin: 'http://console.example.com', linkId: LINK_ID })).toBeNull()
+    expect(outreachShortLinkUrl({ origin: ORIGIN, linkId: '../x' })).toBeNull()
+  })
+
+  it('stores only a destination we would follow, and reads back what it stored', () => {
+    const doc = outreachStoredLink(STORED, 5)
+    expect(doc).toEqual({ v: 1, ...STORED, createdAtMs: 5 })
+    expect(readOutreachStoredLink(doc)).toEqual(STORED)
+    for (const url of ['javascript:alert(1)', 'mailto:someone@example.com', '']) {
+      expect(outreachStoredLink({ ...STORED, url }, 5)).toBeNull()
+      expect(readOutreachStoredLink({ ...doc, url })).toBeNull()
+    }
+    expect(readOutreachStoredLink({ ...doc, v: 2 })).toBeNull()
+    expect(readOutreachStoredLink(null)).toBeNull()
+  })
+})
+
+describe('the short link route', () => {
+  beforeEach(() => {
+    docs.set(LINK_PATH, { v: 1, ...STORED, createdAtMs: SENT_AT })
+  })
+
+  it('forwards to the stored destination with the signed route’s headers', async () => {
+    const answer = await callShort(shortVisit(LINK_ID))
+    expect(answer.status).toBe(302)
+    expect(answer.headers.get('Location')).toBe(TARGET)
+    expect(answer.headers.get('Cache-Control')).toContain('no-store')
+    expect(answer.headers.get('Referrer-Policy')).toBe('no-referrer')
+  })
+
+  it('counts clicks exactly as the signed link does: once per person', async () => {
+    await callShort(shortVisit(LINK_ID))
+    clock += 60_000
+    await callShort(shortVisit(LINK_ID))
+    expect((docs.get(SEQUENCE_PATH) as Data)['stats']).toMatchObject({ clicks: 2, uniqueClicks: 1 })
+    expect(filed).toHaveLength(1)
+  })
+
+  it('stamps the campaign touch for a person, and a scanner is redirected but counted apart', async () => {
+    docs.set(ENROLLMENT_PATH, { ...(docs.get(ENROLLMENT_PATH) as Data), campaignIds: ['founder-icp2'] })
+    const scanned = await callShort(shortVisit(LINK_ID, { userAgent: 'Proofpoint-Urlrewrite/2.0' }))
+    expect(scanned.headers.get('Location')).toBe(TARGET)
+    expect(touches).toEqual([])
+    await callShort(shortVisit(LINK_ID))
+    expect(touches).toHaveLength(1)
+    expect((docs.get(SEQUENCE_PATH) as Data)['stats']).toMatchObject({ uniqueClicks: 1, machineClicks: 1 })
+  })
+
+  it('follows nothing an id does not name: no open redirect', async () => {
+    for (const id of ['Zz9Zz9Zz9Z', 'short', 'Ab3dE9xK2q2', '..%2F..%2Fx']) {
+      const answer = await callShort(shortVisit(id))
+      expect(answer.status).toBe(400)
+      expect(answer.headers.get('Location')).toBeNull()
+    }
+    // A stored document that is not one we would follow is refused too.
+    docs.set(LINK_PATH, { v: 1, ...STORED, url: 'javascript:alert(1)' })
+    expect((await callShort(shortVisit(LINK_ID))).headers.get('Location')).toBeNull()
+  })
+
+  it('answers a failed read with a page, never a guess', async () => {
+    const failing = () =>
+      ({
+        collection: () => ({ doc: () => ({ get: async () => Promise.reject(new Error('unavailable')) }) }),
+      }) as unknown as FirebaseFirestore.Firestore
+    jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const answer = await callShort(shortVisit(LINK_ID), failing)
+    expect(answer.status).toBe(503)
+    expect(answer.headers.get('Location')).toBeNull()
+  })
+
+  it('answers nothing but GET and HEAD', async () => {
+    expect((await callShort(shortVisit(LINK_ID, { method: 'POST' }))).status).toBe(405)
+  })
+
+  it('keeps answering the long signed links already in inboxes', async () => {
+    const answer = await call(visit(token()))
+    expect(answer.status).toBe(302)
+    expect(answer.headers.get('Location')).toBe(TARGET)
   })
 })

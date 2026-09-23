@@ -57,6 +57,7 @@ import { GmailTransportError, isReconnectRequired } from '../transport/gmail-err
 import { Rfc5322MessageError } from '../transport/rfc5322'
 import { sendComposedOutreachEmail } from '../transport/send-message'
 import { creditOutreachFirstSend } from './campaign-credit'
+import { newOutreachLinkId, outreachStoredLink, type OutreachStoredLink } from './click-link'
 import { applyOutreachEvent } from './enrollment-events'
 import { outreachSendDigest, withRecentSend } from './mailbox-health-store'
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
@@ -744,18 +745,29 @@ async function runEmailStep(
   /*
    * Click tracking is the sequence's own setting (AGL-3239) and is read
    * here, per send, rather than once per run: a member turning it off
-   * applies to the next email, not to the next hour. A link the minter
-   * cannot sign is left exactly as the step wrote it.
+   * applies to the next email, not to the next hour. Each link becomes a
+   * short link (AGL-3297) whose document is written below, before the email
+   * leaves; a link that cannot be made is left exactly as the step wrote it.
    */
+  const shortLinks: Array<{ id: string; doc: OutreachStoredLink }> = []
   const rewriteLink = sequence.settings.trackClicks
-    ? (link: { url: string; index: number }) =>
-        deps.clickUrl({
-          orgId: run.orgId,
-          enrollmentId: enrollment.id,
-          stepIndex: enrollment.stepIndex,
-          linkIndex: link.index,
-          url: link.url,
-        })
+    ? (link: { url: string; index: number }) => {
+        const doc = outreachStoredLink(
+          {
+            orgId: run.orgId,
+            enrollmentId: enrollment.id,
+            stepIndex: enrollment.stepIndex,
+            linkIndex: link.index,
+            url: link.url,
+          },
+          nowMs,
+        )
+        const id = newOutreachLinkId()
+        const url = doc ? deps.clickLinkUrl(id) : null
+        if (!doc || !url) return null
+        shortLinks.push({ id, doc })
+        return url
+      }
     : null
   const composed = composeOutreachEmail({
     sequence,
@@ -801,6 +813,26 @@ async function runEmailStep(
       },
       'failed',
     )
+  }
+
+  /*
+   * The short links' documents, before anything is claimed or sent: a link
+   * in an email that already left must resolve on the first click. A write
+   * that fails holds the send for the next run, which mints new ones — an
+   * orphaned document is inert, an email whose links go nowhere is not.
+   */
+  if (shortLinks.length) {
+    try {
+      const batch = firestore.batch()
+      for (const link of shortLinks) {
+        batch.create(firestore.collection(OUTREACH_COLLECTIONS.links).doc(link.id), link.doc)
+      }
+      await batch.commit()
+    } catch (error) {
+      console.error('[outreach] the short links could not be stored; the send waits for the next run', error)
+      report.held += 1
+      return
+    }
   }
 
   // Claimed, then sent, then recorded.

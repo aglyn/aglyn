@@ -55,7 +55,8 @@ import type { OutreachMailboxNoticeRequest, OutreachRuntimeDeps } from './runtim
 import { runOutreachSendJob } from './send-job'
 import { runOutreachSyncJob } from './sync-job'
 import { createOutreachPersonEraser } from './person-erasure'
-import { outreachClickUrl } from './click-link'
+import { outreachShortLinkUrl } from './click-link'
+import { createOutreachShortLinkRoute } from './click-route'
 import { mintOutreachUnsubscribeToken, outreachUnsubscribeUrl } from './unsubscribe-link'
 import { createOutreachUnsubscribeRoute } from './unsubscribe-route'
 
@@ -166,8 +167,7 @@ function deps(overrides: Partial<OutreachRuntimeDeps> = {}): OutreachRuntimeDeps
     },
     unsubscribeUrl: (target) =>
       outreachUnsubscribeUrl({ origin: 'https://console.example.com', target, secret: SECRET }),
-    clickUrl: (target) =>
-      outreachClickUrl({ origin: 'https://console.example.com', target, secret: SECRET }),
+    clickLinkUrl: (linkId) => outreachShortLinkUrl({ origin: 'https://console.example.com', linkId }),
     ...overrides,
   }
 }
@@ -351,7 +351,13 @@ afterEach(async () => {
   // mailboxes and due enrollments, and a fresh fake mailbox reuses thread
   // ids, so a workspace left behind would be read by the next test's run.
   // Only what this spec wrote: the emulator may be shared with a dev server.
-  for (const id of touchedOrgs.splice(0)) await firestore.recursiveDelete(firestore.collection('orgs').doc(id))
+  for (const id of touchedOrgs.splice(0)) {
+    await firestore.recursiveDelete(firestore.collection('orgs').doc(id))
+    // The short links live at the top level, keyed by the org (AGL-3297).
+    for (const doc of (await firestore.collection('outreachLinks').where('orgId', '==', id).get()).docs) {
+      await doc.ref.delete()
+    }
+  }
   // And the lists outside the workspace a test's opt-outs and bounces land
   // on, which would refuse the same people in the next test.
   await firestore.recursiveDelete(firestore.collection('hosts').doc(HOST))
@@ -470,8 +476,20 @@ describeEmulated('the send job (AGL-2981)', () => {
     await tick()
 
     const body = gmail.sent[0].body.replace(/=\r\n/g, '')
-    expect(body).toContain('https://console.example.com/api/outreach/click?t=')
+    // A short link (AGL-3297), not the signed token.
+    const short = body.match(/https:\/\/console\.example\.com\/api\/outreach\/l\/([A-Za-z0-9]{10})\b/)
+    expect(short).not.toBeNull()
+    expect(body).not.toContain('/api/outreach/click?t=')
     expect(body).not.toContain('https://aglyn.com/pricing')
+    const stored = await firestore.collection('outreachLinks').doc(String(short?.[1])).get()
+    expect(stored.data()).toMatchObject({
+      v: 1,
+      orgId,
+      enrollmentId: one.id,
+      stepIndex: 0,
+      linkIndex: 0,
+      url: 'https://aglyn.com/pricing',
+    })
     // The organization's identification and the way out are appended after
     // the rewrite, so no tracking link can reach them.
     expect(body).toContain('This is a sales email from Example Co.')
@@ -479,6 +497,22 @@ describeEmulated('the send job (AGL-2981)', () => {
     const after = await enrollment(one.id)
     expect(after.stepRecords?.[0].links).toEqual(['https://aglyn.com/pricing'])
     expect((await sequence()).stats).toMatchObject({ sent: 1, people: 1, clickTracked: true })
+
+    // The link resolves to the destination and counts the click, once.
+    const route = createOutreachShortLinkRoute(deps())
+    const visit = () =>
+      route(
+        new Request(String(short?.[0]), {
+          headers: { 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Safari/605.1.15' },
+        }),
+        { params: {} },
+      )
+    clock += 10 * 60_000
+    const first = await visit()
+    expect(first.status).toBe(302)
+    expect(first.headers.get('Location')).toBe('https://aglyn.com/pricing')
+    await visit()
+    expect((await sequence()).stats).toMatchObject({ uniqueClicks: 1 })
   })
 
   it('sends nothing outside the sending window', async () => {

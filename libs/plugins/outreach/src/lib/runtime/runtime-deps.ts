@@ -19,7 +19,6 @@ import type { EmailState } from '@aglyn/aglyn/app-utils/email-state'
 import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import type { OutreachMailboxNotice } from '../engine/mailbox-notice'
 import type { OpenedOutreachMailbox } from '../mailboxes/mailbox-transport'
-import type { OutreachClickTarget } from './click-link'
 import type { OutreachUnsubscribeTarget } from './unsubscribe-link'
 
 /**
@@ -175,13 +174,14 @@ export interface OutreachRuntimeDeps {
   /** The signed one-click link for an enrollment, or `null` when none can be minted. */
   unsubscribeUrl(target: OutreachUnsubscribeTarget): string | null
   /**
-   * The signed tracking link for one link in one email, or `null` when none
-   * can be minted (AGL-3239) — no console origin, no signing secret, or a
-   * destination we will not sign.
+   * The short tracking link for a stored link's id (AGL-3239, AGL-3297), or
+   * `null` when none can be made — no HTTPS console origin. The sending
+   * runtime writes the `outreachLinks` document the id names before the
+   * email leaves.
    *
    * A `null` is not an error: the link goes out as the step wrote it, and
    * that click is not counted. An email whose links do not work is worse
    * than an email we cannot measure.
    */
-  clickUrl(target: OutreachClickTarget): string | null
+  clickLinkUrl(linkId: string): string | null
 }

@@ -54,32 +54,33 @@ describe('Outreach collection names (AGL-2974)', () => {
     }
   })
 
-  it('closes the credential collection to every client', () => {
-    const rules = read('cloud/firebase-firestore.rules')
-    const block = rules.match(
-      new RegExp(
-        `match /${OUTREACH_COLLECTIONS.mailboxCredentials}/\\{[^}]+\\}\\s*\\{([^}]*)\\}`,
-      ),
-    )
-    expect(block?.[1]).toMatch(/allow read, write: if false;/)
-  })
+  it.each([OUTREACH_COLLECTIONS.mailboxCredentials, OUTREACH_COLLECTIONS.links])(
+    'closes the top-level %s collection to every client',
+    (name) => {
+      const rules = read('cloud/firebase-firestore.rules')
+      const block = rules.match(
+        new RegExp(`match /${name}/\\{[^}]+\\}\\s*\\{([^}]*)\\}`),
+      )
+      expect(block?.[1]).toMatch(/allow read, write: if false;/)
+    },
+  )
 
-  it('is swept by the org erasure under the same spelling', () => {
+  it.each([
+    ['OUTREACH_MAILBOX_CREDENTIALS_COLLECTION', OUTREACH_COLLECTIONS.mailboxCredentials],
+    ['OUTREACH_LINKS_COLLECTION', OUTREACH_COLLECTIONS.links],
+  ])('is swept by the org erasure under the same spelling (%s)', (constant, name) => {
     const erase = read('libs/tenant/data/admin/src/lib/server/erase.ts')
-    expect(erase).toContain(
-      `const OUTREACH_MAILBOX_CREDENTIALS_COLLECTION = '${OUTREACH_COLLECTIONS.mailboxCredentials}'`,
-    )
-    expect(erase).toMatch(
-      /deleteDocsByOrgId\(\s*OUTREACH_MAILBOX_CREDENTIALS_COLLECTION/,
-    )
+    expect(erase).toContain(`const ${constant} = '${name}'`)
+    expect(erase).toMatch(new RegExp(`deleteDocsByOrgId\\(\\s*${constant}`))
   })
 
-  it('has a disclosure decision in the personal-data export', () => {
-    const exported = read(
-      'libs/tenant/data/admin/src/lib/server/personal-data-export.ts',
-    )
-    expect(exported).toContain(
-      `collection: '${OUTREACH_COLLECTIONS.mailboxCredentials}'`,
-    )
-  })
+  it.each([OUTREACH_COLLECTIONS.mailboxCredentials, OUTREACH_COLLECTIONS.links])(
+    'has a disclosure decision in the personal-data export (%s)',
+    (name) => {
+      const exported = read(
+        'libs/tenant/data/admin/src/lib/server/personal-data-export.ts',
+      )
+      expect(exported).toContain(`collection: '${name}'`)
+    },
+  )
 })

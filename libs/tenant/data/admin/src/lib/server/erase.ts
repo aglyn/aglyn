@@ -99,6 +99,14 @@ const SUPPLIER_DELIVERY_COLLECTION = 'supplierDeliveries'
 const OUTREACH_MAILBOX_CREDENTIALS_COLLECTION = 'outreachMailboxCredentials'
 
 /**
+ * `outreachLinks` — Outreach's short tracking links (AGL-3297), one document
+ * per link in a sent sequence email, keyed by the link's random id and
+ * carrying `orgId` as a FIELD. A literal for the reason above, held to the
+ * plugin's spelling by the same spec.
+ */
+const OUTREACH_LINKS_COLLECTION = 'outreachLinks'
+
+/**
  * Destroy the site's DEAD-LETTERED supplier deliveries (AGL-1448).
  *
  * `supplierDeliveries/{id}` is TOP-LEVEL and carries `hostId` as a field, so
@@ -1024,6 +1032,8 @@ export interface EraseOrgResult {
   plugins?: Record<string, PluginOrgErasureReport | null>
   /** Outreach mailbox grants destroyed (AGL-2974) — outside the org path. */
   outreachMailboxCredentials?: number
+  /** Outreach short tracking links destroyed (AGL-3297). */
+  outreachLinks?: number
   /** Public SSO routing docs destroyed (AGL-1448) — outside the org path. */
   ssoDomains?: number
   /** Custom console domains released (AGL-1448) — outside the org path. */
@@ -1323,6 +1333,11 @@ export async function eraseOrg(
     // closes that window as well as the permanent one.
     progress.apiKeys = await eraseOrgApiKeys(orgId, dryRun)
     progress.outreachMailboxCredentials = await eraseOrgOutreachMailboxCredentials(
+      orgId,
+      dryRun,
+    )
+    progress.outreachLinks = await deleteDocsByOrgId(
+      OUTREACH_LINKS_COLLECTION,
       orgId,
       dryRun,
     )
