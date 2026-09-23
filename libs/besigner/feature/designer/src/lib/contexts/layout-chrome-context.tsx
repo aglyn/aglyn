@@ -20,6 +20,7 @@ import type * as Aglyn from '@aglyn/aglyn'
 import {
   aglyn,
   applyLayoutProps,
+  applyLayoutStyleOverrides,
   CanvasManager,
   composeReusableComponentNodes,
   NODE_ROOT_ID,
@@ -68,10 +69,18 @@ export function useLayoutChromeCanvas(
   layoutProps?: {
     props?: Aglyn.ReusableComponentProp[] | null
     values?: Record<string, unknown> | null
+    /**
+     * This screen's restyling of the layout's elements (AGL-3286), keyed by
+     * the layout's own node ids — merged after the properties and before the
+     * graft, exactly as `composeLayoutChainWithProps` does, so the chrome
+     * shows the page's transparent nav the moment the author sets it.
+     */
+    styleOverrides?: Record<string, Record<string, unknown>> | null
   },
 ): Aglyn.CanvasManager | undefined {
   const declared = layoutProps?.props
   const values = layoutProps?.values
+  const styleOverrides = layoutProps?.styleOverrides
   return useMemo(() => {
     if (!layoutNodes) return undefined
     // Separate store instance so edits, history, and persistence stay on the
@@ -83,8 +92,11 @@ export function useLayoutChromeCanvas(
     // it, and neither side is wrong about its own half of the trip.
     const nodes = {
       ...(composeReusableComponentNodes(
-        (applyLayoutProps(layoutNodes as any, declared, values) ??
-          layoutNodes) as any,
+        (applyLayoutStyleOverrides(
+          applyLayoutProps(layoutNodes as any, declared, values) ??
+            (layoutNodes as any),
+          styleOverrides,
+        ) ?? layoutNodes) as any,
         reusableDefinitions as any,
       ) as Record<string, Aglyn.NodeSchema>),
     }
@@ -98,7 +110,7 @@ export function useLayoutChromeCanvas(
     }
     canvas.setNodes(canvas.processNodesToDenormalized(nodes))
     return canvas
-  }, [layoutNodes, reusableDefinitions, declared, values])
+  }, [layoutNodes, reusableDefinitions, declared, values, styleOverrides])
 }
 
 export default LayoutChromeContext

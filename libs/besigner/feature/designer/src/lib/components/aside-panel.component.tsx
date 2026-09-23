@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { canvas } from '@aglyn/aglyn'
+import { canvas, NODE_ROOT_ID } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
 import {
   type BesignerPanelKey,
@@ -74,6 +74,10 @@ import NodeTreeView, { type NodeTreeViewProps } from './node-tree-view'
 import SiteThemeColorTokensProvider from './site-theme-color-tokens-provider.component'
 import { usePublishActiveHostTheme } from '../utils/active-host-theme'
 import { besignerInspected } from '../contexts/inspected-selection'
+import {
+  type LayoutElementSelection,
+  layoutStyleSelection,
+} from '../contexts/layout-style-selection'
 import {
   inspectorExtrasFor,
   useBesignerInspectorExtras,
@@ -174,13 +178,76 @@ const SelectedNodeHeader = observer(
 )
 SelectedNodeHeader.displayName = 'SelectedNodeHeader'
 
+/**
+ * The panel while a shared-layout element is the target (AGL-3286): named in
+ * the header like any selection, and marked as the layout's, styles only.
+ */
+const LayoutElementHeader = ({
+  selection,
+}: {
+  selection: LayoutElementSelection
+}) => (
+  <Stack
+    direction="row"
+    spacing={1}
+    sx={{
+      alignItems: 'center',
+      px: 2,
+      py: 1,
+      borderBottom: 1,
+      borderColor: 'divider',
+    }}
+  >
+    <Typography variant="subtitle2" noWrap sx={{ flex: 1, minWidth: 0 }}>
+      {`${selection.label} · Layout`}
+    </Typography>
+    <Chip
+      size="small"
+      variant="outlined"
+      color="info"
+      label="STYLES ONLY"
+      sx={{ height: 18, '& .MuiChip-label': { px: 0.75, fontSize: 10 } }}
+    />
+  </Stack>
+)
+
+/** What the Attributes and Interactions tabs say about a layout element. */
+const LayoutElementNote = ({
+  selection,
+}: {
+  selection: LayoutElementSelection
+}) => (
+  <Stack spacing={1.5} sx={{ p: 2 }}>
+    <Typography variant="body2" color="text.secondary">
+      {`This element belongs to the shared layout${
+        selection.layoutName ? ` "${selection.layoutName}"` : ''
+      }. Its content is edited in the layout itself — use Edit layout above ` +
+        'the canvas. On this page you can change how it looks on the Styles tab.'}
+    </Typography>
+    <Button
+      size="small"
+      variant="outlined"
+      onClick={() => layoutStyleSelection.clear()}
+    >
+      {'Back to page elements'}
+    </Button>
+  </Stack>
+)
+
 function withLastSelectedNode<P>(
   WrappedComponent: JSX.ComponentType<P & { node: Besigner.LastSelectedNode }>,
+  /**
+   * What this tab shows while a layout element is the target (AGL-3286):
+   * `styles` hands the wrapped Styles form the screen root and the target;
+   * `note` says where the element's content is edited.
+   */
+  layoutMode: 'styles' | 'note' = 'note',
 ) {
   const displayName = getDisplayName(WrappedComponent)
 
   const WithLastSelectedNode = observer((props: P) => {
     const { ...rest } = props
+    const layoutTarget = layoutStyleSelection.current
     const selected = Besigner.focus.getLastSelected()
     /**
      * The LIVE node for that selection, re-resolved by id every render
@@ -208,6 +275,26 @@ function withLastSelectedNode<P>(
     const lastSelected = selected
       ? canvas.getNode(selected.$id) ?? selected
       : selected
+
+    if (layoutTarget) {
+      // The page's layout overrides are kept on the screen root, so that is
+      // the node the Styles form is handed; the target says which slice.
+      const root = canvas.getNode(NODE_ROOT_ID)
+      return (
+        <>
+          <LayoutElementHeader selection={layoutTarget} />
+          {layoutMode === 'styles' && root ? (
+            <WrappedComponent
+              node={root}
+              {...({ layoutTarget } as any)}
+              {...rest}
+            />
+          ) : (
+            <LayoutElementNote selection={layoutTarget} />
+          )}
+        </>
+      )
+    }
 
     return (
       <>
@@ -360,7 +447,7 @@ const panelTabs: Partial<Record<BesignerPanelKey, any>> = {
           label: 'Styles',
         },
         panel: {
-          Component: withLastSelectedNode(ElementStylesForm as any),
+          Component: withLastSelectedNode(ElementStylesForm as any, 'styles'),
         },
       },
       /*

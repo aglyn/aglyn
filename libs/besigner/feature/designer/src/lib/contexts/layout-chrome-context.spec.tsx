@@ -151,3 +151,25 @@ describe("useLayoutChromeCanvas — the screen's values for its layout (AGL-2893
     expect(nodes['banner']).toBeUndefined()
   })
 })
+
+describe('useLayoutChromeCanvas — a page restyles its layout (AGL-3286)', () => {
+  it('draws the chrome with the page overrides merged in, before the graft', () => {
+    const { result } = renderHook(() =>
+      useLayoutChromeCanvas(layoutNodes(), definitions(), {
+        styleOverrides: {
+          'nav-instance': { backgroundColor: 'transparent' },
+          'removed-node': { color: 'red' },
+        },
+      }),
+    )
+    const nodes = result.current?.toJSON().nodes as Record<string, any>
+    // The instance collapses onto the component root, which renders the
+    // override through the instance's root slice.
+    expect(nodes['nav-instance'].componentId).toBe('muiAppBar')
+    expect(nodes['nav-instance'].sx).toMatchObject({
+      backgroundColor: 'transparent',
+    })
+    // A stale key restyles nothing and adds nothing.
+    expect(nodes['removed-node']).toBeUndefined()
+  })
+})

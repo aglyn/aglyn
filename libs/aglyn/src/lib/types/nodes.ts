@@ -380,6 +380,18 @@ export interface NodeSchema<P = JSX.AnyProps> extends NodeI<P> {
    */
   attrOverrides?: Record<string, Record<string, unknown>>
   /**
+   * EDITOR-ONLY: a screen's per-page restyling of its layout's elements
+   * (AGL-3286), parked on the screen canvas ROOT while the besigner is open.
+   *
+   * Stored on the screen VERSION as `layoutStyleOverrides`, never in `nodes`:
+   * the editor injects it here on load and lifts it back out on save
+   * (`injectLayoutStyleOverrides` / `extractLayoutStyleOverrides`). Carried on
+   * the root so an edit is an undo step, marks the screen dirty and rides the
+   * working draft like any other change. Composition ignores it — the screen
+   * root is dropped when it is grafted into the layout's slot.
+   */
+  layoutStyleOverrides?: Record<string, Record<string, Record<string, unknown>>>
+  /**
    * Interactions this element carries — the click, hover and
    * scroll-into-view choreography authored on it in the besigner.
    *

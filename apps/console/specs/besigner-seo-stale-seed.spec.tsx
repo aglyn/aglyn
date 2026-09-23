@@ -153,6 +153,21 @@ jest.mock('@aglyn/aglyn', () => ({
   buildScreenRouteEntries: () => ({}),
   composeLayoutChainWithProps: () => ({}),
   layoutPropValuesFor: () => undefined,
+  // Real (AGL-3286): the page parks a version's layout style overrides on
+  // the canvas root and lifts them out on save — pure functions over a map.
+  ...(({
+    injectLayoutStyleOverrides,
+    extractLayoutStyleOverrides,
+    replaceUnderMerge,
+  }) => ({
+    injectLayoutStyleOverrides,
+    extractLayoutStyleOverrides,
+    replaceUnderMerge,
+  }))(
+    jest.requireActual(
+      '../../../libs/aglyn/src/lib/app-utils/layout-style-overrides',
+    ),
+  ),
   composeScreenRoutePath: () => '/careers',
   decodeStoredNodes: () => ({}),
   findScreenIdByRoutePath: () => undefined,
@@ -254,6 +269,10 @@ jest.mock('@aglyn/besigner-ui', () => ({
     status: 'success',
   }),
   useLayoutChromeCanvas: () => ({ chromeCanvas: null }),
+  // The layout-restyling entry point and its state (AGL-3286).
+  LayoutStylePickerButton: () => null,
+  layoutStyleSelection: { current: null, select: () => {}, clear: () => {} },
+  useCanvasLayoutStyleOverrides: () => undefined,
   useRenderedCanvasElements: () => ({ elements: { current: {} } }),
   withBesignerContext: (component: unknown) => component,
   nodeElementSelector: () => '',

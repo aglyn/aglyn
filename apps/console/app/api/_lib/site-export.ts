@@ -215,6 +215,9 @@ export const IMPORTABLE_FIELDS: Record<string, readonly string[]> = {
     // binding above (AGL-2893) — dropping them restores every page with its
     // layout's defaults instead of what the page set.
     'layoutPropValues',
+    // …and its restyling of those layouts' elements (AGL-3286), for the same
+    // reason: without it a restored page wears its layout's own styling.
+    'layoutStyleOverrides',
     // A layout version's declared properties (AGL-2893). The tenant reads them
     // off the published version, so without them every `{{prop.*}}` in the
     // restored layout renders raw.
