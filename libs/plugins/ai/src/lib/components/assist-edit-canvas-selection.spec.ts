@@ -401,9 +401,13 @@ describe('the block the model reads for the reported document', () => {
     // tokens are paid on an edit the author asked for and on nothing else;
     // the surface catalogs, which every pass of every generation job carries,
     // are deliberately unchanged.
+    //
+    // Up 93 and 62 characters at AGL-3284, meant: the palette lists Color
+    // scheme among the layout elements' settings, so pinning a band light or
+    // dark is an edit the assistant can make like any other setting.
     expect({ selected: measure(LINK), nothingSelected: measure(null) }).toEqual({
-      selected: { chars: 4_025, tokens: 1_006 },
-      nothingSelected: { chars: 1_688, tokens: 422 },
+      selected: { chars: 4_118, tokens: 1_030 },
+      nothingSelected: { chars: 1_750, tokens: 438 },
     })
   })
 })

@@ -16,10 +16,6 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
-import {
-  ELEMENT_COLOR_SCHEME_SITE,
-  NODE_COLOR_SCHEME_PROP,
-} from '@aglyn/aglyn/app-utils/element-color-scheme'
 
 /**
  * "Color scheme" for the layout elements (AGL-3284): Section, Container,
@@ -37,7 +33,7 @@ import {
  */
 export function colorSchemeAttribute(): Aglyn.AglynAttributeSchema {
   return {
-    name: NODE_COLOR_SCHEME_PROP,
+    name: Aglyn.NODE_COLOR_SCHEME_PROP,
     label: 'Color scheme',
     description:
       'Keep this part of the page light or dark no matter which mode the ' +
@@ -45,7 +41,7 @@ export function colorSchemeAttribute(): Aglyn.AglynAttributeSchema {
       'cards use your site’s colors for that mode.',
     component: Aglyn.FieldComponentType.SELECT,
     options: [
-      { value: ELEMENT_COLOR_SCHEME_SITE, label: 'Match the site' },
+      { value: Aglyn.ELEMENT_COLOR_SCHEME_SITE, label: 'Match the site' },
       { value: 'light', label: 'Always light' },
       { value: 'dark', label: 'Always dark' },
     ],
