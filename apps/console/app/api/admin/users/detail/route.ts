@@ -38,6 +38,10 @@ import {
   addressKeys,
   resolveAccountAddresses,
 } from '@aglyn/tenant-data-admin/server/account-addresses'
+// From the leaf for the same reason as the delivery log above: a mocked-away
+// reader would render "no consent on file", which is a claim about a person.
+import { readPlatformMarketingReach } from '@aglyn/tenant-data-admin/server/platform-marketing-consent'
+import { readPlatformMarketingConsent } from '@aglyn/aglyn/app-utils/platform-marketing-consent'
 
 /**
  * Staff user detail (AGL-244): everything the console needs to answer
@@ -306,7 +310,7 @@ async function handler(request: Request): Promise<Response> {
       firestore,
     })
 
-    const [phone, legal, devices, emails] = await Promise.all([
+    const [phone, legal, devices, emails, marketingReach] = await Promise.all([
       readPhoneDisclosure(profile),
       readLegalDisclosure(uid, firestore),
       readDeviceDisclosure(uid, firestore),
@@ -321,6 +325,9 @@ async function handler(request: Request): Promise<Response> {
         addressSet.addresses.map((entry) => entry.address),
         { firestore },
       ),
+      // What the operator's own product email would decide (AGL-3292). Never
+      // throws — a failed read comes back `unreadable`.
+      readPlatformMarketingReach({ email: record.email }),
     ])
     const memberships = await Promise.all(
       reverse.docs.map(async (entry) => {
@@ -598,6 +605,20 @@ async function handler(request: Request): Promise<Response> {
       addresses: addressSet.addresses,
       /** A source was unreadable, so the list above may be short. */
       addressesIncomplete: addressSet.incomplete,
+      /**
+       * Product email from the operator (AGL-3292), in two halves that
+       * nothing keeps in step. `answer` is what the person said, from their
+       * own document — what the console shows them. `reach` is what a
+       * campaign from the configured marketing site would decide, read from
+       * the operator's CRM contact and both suppression lists, which is what
+       * every send actually consults.
+       */
+      marketing: {
+        answer: readPlatformMarketingConsent(
+          (profile.data() as Record<string, unknown> | undefined) ?? null,
+        ),
+        reach: marketingReach,
+      },
     }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
