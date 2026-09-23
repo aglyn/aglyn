@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.167 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.166...v1.0.0-beta.167)
+
+### Fixed
+
+- **crm:** the site-level Leads list reads the org collection ([AGL-3275](https://linear.app/aglyn/issue/AGL-3275), [AGL-3276](https://linear.app/aglyn/issue/AGL-3276))
+
 ## v1.0.0-beta.166 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.165...v1.0.0-beta.166)
