@@ -455,8 +455,26 @@ export function createFirstTouchKit(): FirstTouchKit {
     return decodeFirstTouch(cookieValue(cookieHeader, COOKIE))
   }
 
+  // Never `typeof window`, or `typeof` of any host global. This kit reaches
+  // the browser as the text of a function compiled into a SERVER bundle, and a
+  // server compile may settle those checks in advance: Next's replaces
+  // `typeof window` with "undefined", after which the minifier drops every DOM
+  // path as dead code. Reading the global is something no compiler can decide:
+  // it throws where the global is missing and is an object where it is not.
   function hasDom(): boolean {
-    return typeof window !== 'undefined' && typeof document !== 'undefined'
+    try {
+      return Boolean(document && location)
+    } catch {
+      return false
+    }
+  }
+
+  function hasFetch(): boolean {
+    try {
+      return Boolean(fetch)
+    } catch {
+      return false
+    }
   }
 
   function secureSuffix(): string {
@@ -628,7 +646,7 @@ export function createFirstTouchKit(): FirstTouchKit {
   }
 
   function post(body: unknown): Promise<Record<string, unknown> | null> {
-    if (!state.handoffUrl || typeof fetch !== 'function') return Promise.resolve(null)
+    if (!state.handoffUrl || !hasFetch()) return Promise.resolve(null)
     return fetch(state.handoffUrl, {
       method: 'POST',
       body: JSON.stringify(body),
