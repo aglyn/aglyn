@@ -793,6 +793,38 @@ function SignUp() {
     >
       <FormRenderer
         FormTemplate={AuthFormTemplateComponent}
+        // Between the fields and Next (AGL-3291): the terms box is what Next
+        // checks, so it has to be met before Next is pressed. Still above
+        // "Or sign up with", so it reads as gating the Google door too.
+        FormTemplateProps={{
+          beforeSubmit: (
+            // `useFlexGap`: a margin-spaced Stack zeroes its children's
+            // margins, and the label's negative left margin is what puts
+            // each box on the fields' edge.
+            <Stack spacing={1.5} useFlexGap>
+              {searchParams?.get('consent') === 'required' ? (
+                // Bounced from /signin, where Google had just created this
+                // account without ever showing the Terms (AGL-1497). Say so,
+                // or the redirect looks like the sign-in simply failed.
+                <Alert severity="info">
+                  {'Looks like you’re new here — please accept the Terms of Service ' +
+                    'and Privacy Policy to finish setting up your account.'}
+                </Alert>
+              ) : null}
+              <AuthConsentCheckbox
+                checked={consented}
+                onChange={handleConsentChange}
+                error={consentError}
+              />
+              {/* Below the required acceptance and never part of it
+                  (AGL-3185): the terms gate the sign-up, this gates nothing. */}
+              <AuthMarketingOptIn
+                checked={marketingOptIn}
+                onChange={setMarketingOptIn}
+              />
+            </Stack>
+          ),
+        }}
         componentMapper={simpleComponentMapper}
         onSubmit={handleFormSubmit}
         schema={formSchema}
@@ -807,24 +839,7 @@ function SignUp() {
           {`New signups are temporarily paused — ${signupsPaused.message}`}
         </Alert>
       ) : null}
-      {searchParams?.get('consent') === 'required' ? (
-        // Bounced from /signin, where Google had just created this account
-        // without ever showing the Terms (AGL-1497). Say so, or the redirect
-        // looks like the sign-in simply failed.
-        <Alert severity="info" sx={{ mt: 2, mb: 1 }}>
-          {'Looks like you’re new here — please accept the Terms of Service ' +
-            'and Privacy Policy to finish setting up your account.'}
-        </Alert>
-      ) : null}
       <AuthErrorAlertComponent error={error} sx={{ mt: 2, mb: 1 }} />
-      <AuthConsentCheckbox
-        checked={consented}
-        onChange={handleConsentChange}
-        error={consentError}
-      />
-      {/* Below the required acceptance and never part of it (AGL-3185): the
-          terms gate the sign-up, this gates nothing. */}
-      <AuthMarketingOptIn checked={marketingOptIn} onChange={setMarketingOptIn} />
       <Divider flexItem variant="middle" sx={{ my: 3 }}>
         {'Or sign up with'}
       </Divider>

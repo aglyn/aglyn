@@ -18,7 +18,7 @@
 'use client'
 
 import { PLATFORM_MARKETING_CONSENT_TEXT } from '@aglyn/aglyn/app-utils/platform-marketing-consent'
-import { Checkbox, FormControlLabel, Typography } from '@mui/material'
+import AuthCheckboxRow from './auth-checkbox-row.component'
 
 export interface AuthMarketingOptInProps {
   checked: boolean
@@ -37,26 +37,13 @@ export interface AuthMarketingOptInProps {
  */
 export function AuthMarketingOptIn({ checked, onChange }: AuthMarketingOptInProps) {
   return (
-    <FormControlLabel
-      sx={{ alignItems: 'flex-start', mt: 1, mr: 0 }}
-      control={
-        <Checkbox
-          checked={checked}
-          onChange={(event) => onChange(event.target.checked)}
-          size="small"
-          color="primary"
-          sx={{ pt: 0 }}
-          slotProps={{
-            input: { 'aria-label': 'Send me product updates' },
-          }}
-        />
-      }
-      label={
-        <Typography variant="body2" sx={{ mt: 0.25 }}>
-          {PLATFORM_MARKETING_CONSENT_TEXT}
-        </Typography>
-      }
-    />
+    <AuthCheckboxRow
+      checked={checked}
+      onChange={onChange}
+      inputLabel="Send me product updates"
+    >
+      {PLATFORM_MARKETING_CONSENT_TEXT}
+    </AuthCheckboxRow>
   )
 }
 

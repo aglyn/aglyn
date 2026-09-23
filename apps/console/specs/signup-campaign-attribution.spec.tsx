@@ -135,20 +135,31 @@ jest.mock('@aglyn/shared-ui-jsx/components/loading-text.component', () => ({
 }))
 jest.mock('@aglyn/shared-ui-jsx-forms', () => ({
   simpleComponentMapper: {},
-  FormRenderer: ({ onSubmit }: { onSubmit: (values: unknown) => void }) => (
-    <button
-      onClick={() =>
-        onSubmit({
-          email: 'new@example.com',
-          password: 'sup3rsecret!',
-          firstName: 'New',
-          lastName: 'Person',
-          organizationName: 'New Co',
-        })
-      }
-    >
-      {'Submit sign up'}
-    </button>
+  FormRenderer: ({
+    onSubmit,
+    FormTemplateProps,
+  }: {
+    onSubmit: (values: unknown) => void
+    FormTemplateProps?: { beforeSubmit?: ReactNode }
+  }) => (
+    <>
+      {/* The real template draws the page's before-submit block —
+          the consent checkboxes — above its button (AGL-3291). */}
+      {FormTemplateProps?.beforeSubmit}
+      <button
+        onClick={() =>
+          onSubmit({
+            email: 'new@example.com',
+            password: 'sup3rsecret!',
+            firstName: 'New',
+            lastName: 'Person',
+            organizationName: 'New Co',
+          })
+        }
+      >
+        {'Submit sign up'}
+      </button>
+    </>
   ),
 }))
 jest.mock('../components/auth-error-alert.component', () => ({
