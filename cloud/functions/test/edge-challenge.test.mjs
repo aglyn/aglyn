@@ -79,3 +79,95 @@ test('the retry waits between five and ten seconds', () => {
   assert.ok(EDGE_CHALLENGE_RETRY_DELAY_MS >= 5_000)
   assert.ok(EDGE_CHALLENGE_RETRY_DELAY_MS <= 10_000)
 })
+
+/*
+ * The shared retry (AGL-3281). `postConsoleCron` had this inline and the
+ * plugin job beat had nothing at all, so a single challenge cost that beat
+ * the minute — thirty of them on 2026-09-19.
+ */
+
+/** A `Response`-shaped answer, enough for the challenge test. */
+const answer = (status, contentType, text) => ({
+  response: { status, headers: { get: () => contentType } },
+  text,
+})
+
+test('a clean answer is returned without a second attempt', async () => {
+  const { fetchPastEdgeChallenge } = await import('../lib/edge-challenge.js')
+  let attempts = 0
+  const result = await fetchPastEdgeChallenge(async () => {
+    attempts += 1
+    return answer(200, 'application/json', '{"ran":[]}')
+  })
+
+  assert.equal(attempts, 1)
+  assert.equal(result.response.status, 200)
+})
+
+test("the ROUTE's own refusal is never retried, whatever its status", async () => {
+  const { fetchPastEdgeChallenge } = await import('../lib/edge-challenge.js')
+  for (const status of [401, 403, 500, 501]) {
+    let attempts = 0
+    await fetchPastEdgeChallenge(async () => {
+      attempts += 1
+      return answer(status, 'application/json', ROUTE_REFUSAL)
+    })
+    // A blind repeat of a sweep that meters into Stripe is worse than a miss.
+    assert.equal(attempts, 1, `status ${status} must not be retried`)
+  }
+})
+
+test('a challenge is retried exactly once, and the second answer stands', async () => {
+  const { fetchPastEdgeChallenge } = await import('../lib/edge-challenge.js')
+  let attempts = 0
+  const retries = []
+  const result = await fetchPastEdgeChallenge(
+    async () => {
+      attempts += 1
+      return attempts === 1
+        ? answer(403, 'text/html', CHECKPOINT_PAGE)
+        : answer(200, 'application/json', '{"ran":["a"]}')
+    },
+    { delayMs: 0, onRetry: (info) => retries.push(info) },
+  )
+
+  assert.equal(attempts, 2)
+  assert.equal(result.response.status, 200)
+  assert.deepEqual(retries, [{ status: 403, retryInMs: 0 }])
+})
+
+test('a SECOND challenge is handed back as the refusal it is', async () => {
+  const { fetchPastEdgeChallenge } = await import('../lib/edge-challenge.js')
+  let attempts = 0
+  const result = await fetchPastEdgeChallenge(
+    async () => {
+      attempts += 1
+      return answer(403, 'text/html', CHECKPOINT_PAGE)
+    },
+    { delayMs: 0 },
+  )
+
+  // Two attempts and no third: a sustained challenge wants the bypass
+  // secret, not a longer loop.
+  assert.equal(attempts, 2)
+  assert.equal(result.response.status, 403)
+})
+
+test('the default delay is the published one', async () => {
+  const { fetchPastEdgeChallenge } = await import('../lib/edge-challenge.js')
+  const retries = []
+  const started = Date.now()
+  let attempts = 0
+  await fetchPastEdgeChallenge(
+    async () => {
+      attempts += 1
+      return attempts === 1
+        ? answer(429, 'text/html', CHECKPOINT_PAGE)
+        : answer(200, 'application/json', '{}')
+    },
+    { delayMs: 1, onRetry: (info) => retries.push(info) },
+  )
+
+  assert.ok(Date.now() - started < EDGE_CHALLENGE_RETRY_DELAY_MS)
+  assert.equal(retries.length, 1)
+})

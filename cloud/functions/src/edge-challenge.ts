@@ -74,3 +74,57 @@ export function isEdgeChallenge(
     .toLowerCase()
   return head.startsWith('<!') || head.startsWith('<html')
 }
+
+/** One attempt's answer, as both callers need it: the response and its text. */
+export interface EdgeAttempt {
+  response: Response
+  text: string
+}
+
+/**
+ * Run a request, and run it ONCE MORE if the edge challenged it (AGL-3281).
+ *
+ * The retry was written into `postConsoleCron` and only there. The plugin job
+ * beat — the per-minute POST that drives scheduled publishing and
+ * booking-hold expiry — was a bare `fetch` that logged `plugin job runner
+ * refused` on any non-OK status and returned, so a single challenge cost it
+ * the minute. On 2026-09-19 that was thirty minutes.
+ *
+ * Takes the attempt as a thunk rather than a URL and an init, because the two
+ * callers differ in ways this has no business knowing: one sends a cron
+ * secret and refuses redirects, the other sends a jobs secret and reads a
+ * JSON body.
+ *
+ * ⚑ STILL EXACTLY ONE RETRY. A third attempt is tempting and is not
+ * supported by what happened: the 9/19 challenge ran for fifteen hours and
+ * took the retry with it, so more attempts would have burned more of the
+ * function's budget for the same refusal. What a retry buys is the MOMENTARY
+ * verdict — the edge's opinion of this client a few seconds from now — and
+ * one is enough for that. A sustained challenge wants Vercel's Protection
+ * Bypass for Automation, which is a credential and a decision, not a loop.
+ */
+export async function fetchPastEdgeChallenge(
+  attempt: () => Promise<EdgeAttempt>,
+  options?: {
+    delayMs?: number
+    /** Told when a retry is about to happen, so each caller logs in its own voice. */
+    onRetry?: (info: { status: number; retryInMs: number }) => void
+  },
+): Promise<EdgeAttempt> {
+  const first = await attempt()
+  if (
+    !isEdgeChallenge(
+      first.response.status,
+      first.response.headers.get('content-type'),
+      first.text,
+    )
+  ) {
+    return first
+  }
+  const retryInMs = options?.delayMs ?? EDGE_CHALLENGE_RETRY_DELAY_MS
+  options?.onRetry?.({ status: first.response.status, retryInMs })
+  await new Promise((resolve) => setTimeout(resolve, retryInMs))
+  // Whatever the second answer is, it goes back unchanged — so a second
+  // challenge is reported by the caller exactly as a first one was.
+  return attempt()
+}

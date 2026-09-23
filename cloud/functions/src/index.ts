@@ -17,7 +17,7 @@ import * as logger from 'firebase-functions/logger'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 import { signupsCreationVerdict } from './signups-lock'
-import { EDGE_CHALLENGE_RETRY_DELAY_MS, isEdgeChallenge } from './edge-challenge'
+import { fetchPastEdgeChallenge } from './edge-challenge'
 
 /**
  * Shared secret for the tenant's job runner. Must match `PLUGIN_JOBS_SECRET`
@@ -91,6 +91,15 @@ const CONSOLE_URL = process.env.AGLYN_CONSOLE_URL?.trim()?.replace(/\/+$/, '')
 const PROBE_TOKEN = process.env.AGLYN_PROBE_TOKEN?.trim()
 
 /**
+ * How long one beat waits on the tenant job runner (AGL-3281).
+ *
+ * Below the function's own 120s so a hung runner is reported rather than
+ * silently eating the whole budget, and well above any honest run: the
+ * runner answers with what it RAN, and a minute's work is seconds of it.
+ */
+const JOB_RUNNER_REQUEST_TIMEOUT_MS = 90_000
+
+/**
  * The platform's job beat (AGL-1159).
  *
  * `/api/plugins/run-jobs` has existed since AGL-435 and was built for exactly
@@ -133,15 +142,45 @@ export const pluginJobsBeat = onSchedule(
       return
     }
 
-    const response = await fetch(JOB_RUNNER_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-plugin-jobs-secret': PLUGIN_JOBS_SECRET.value(),
+    /*
+     * THE SAME EDGE-CHALLENGE RETRY THE CONSOLE CRONS HAVE (AGL-3281).
+     *
+     * This was a bare `fetch` that logged `plugin job runner refused` on any
+     * non-OK status and returned, so the Vercel firewall's Security
+     * Checkpoint — a 403 carrying an HTML page, aimed at the client rather
+     * than at the request — cost this beat the whole minute. Thirty of them
+     * on 2026-09-19, which is thirty minutes with no scheduled publishing and
+     * no booking-hold expiry.
+     *
+     * The body is read once here because the challenge test needs it and a
+     * `Response` body can only be read once; the JSON parse below reads the
+     * text rather than the stream.
+     */
+    const { response, text } = await fetchPastEdgeChallenge(
+      async () => {
+        const answer = await fetch(JOB_RUNNER_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-plugin-jobs-secret': PLUGIN_JOBS_SECRET.value(),
+          },
+          // The runner decides what is due; this carries no instructions.
+          body: '{}',
+          // A beat that runs every minute must not spend two on one request.
+          // Without this a hung runner burned the function's whole 120s
+          // budget and reported nothing at all.
+          signal: AbortSignal.timeout(JOB_RUNNER_REQUEST_TIMEOUT_MS),
+        })
+        return { response: answer, text: await answer.text().catch(() => '') }
       },
-      // The runner decides what is due; this carries no instructions.
-      body: '{}',
-    })
+      {
+        onRetry: ({ status, retryInMs }) =>
+          logger.warn('plugin job runner challenged by the edge — retrying once', {
+            status,
+            retryInMs,
+          }),
+      },
+    )
 
     if (!response.ok) {
       // Logged, not thrown. Throwing would retry a beat that is about to fire
@@ -149,14 +188,18 @@ export const pluginJobsBeat = onSchedule(
       // error every minute forever.
       logger.error('plugin job runner refused', {
         status: response.status,
-        body: await response.text().catch(() => ''),
+        body: text.slice(0, 2000),
       })
       return
     }
 
-    const result = (await response.json().catch(() => null)) as {
-      ran?: unknown[]
-    } | null
+    const result = (() => {
+      try {
+        return JSON.parse(text) as { ran?: unknown[] } | null
+      } catch {
+        return null
+      }
+    })()
     // Quiet on the common case — most minutes have nothing due, and an
     // every-minute function that logs unconditionally buries everything else.
     if (result?.ran?.length) {
@@ -331,30 +374,24 @@ async function postConsoleCron(
     return { response, text }
   }
 
-  let { response, text } = await attempt()
-  // ONE retry, and only for the edge's challenge page (AGL-2642). The Vercel
-  // firewall answers an automated client it does not recognise with a
-  // Security Checkpoint page before the request reaches the console at all,
-  // and that verdict is per attempt: the same POST a few seconds later is
-  // routinely let through. A route's own refusal — 401, 501, 500 — is not
-  // retried, because repeating it repeats the refusal, and for a sweep that
-  // meters into Stripe a blind repeat is worse than a miss. The second answer,
-  // whatever it is, goes through the handling below unchanged, so a second
-  // challenge is reported as `console cron refused` exactly as a first one
-  // was before this.
-  if (
-    isEdgeChallenge(response.status, response.headers.get('content-type'), text)
-  ) {
-    logger.warn('console cron challenged by the edge — retrying once', {
-      route,
-      status: response.status,
-      retryInMs: EDGE_CHALLENGE_RETRY_DELAY_MS,
-    })
-    await new Promise((resolve) =>
-      setTimeout(resolve, EDGE_CHALLENGE_RETRY_DELAY_MS),
-    )
-    ;({ response, text } = await attempt())
-  }
+  // ONE retry, and only for the edge's challenge page (AGL-2642, shared with
+  // the plugin job beat since AGL-3281). The Vercel firewall answers an
+  // automated client it does not recognise with a Security Checkpoint page
+  // before the request reaches the console at all, and that verdict is per
+  // attempt: the same POST a few seconds later is routinely let through. A
+  // route's own refusal — 401, 501, 500 — is not retried, because repeating
+  // it repeats the refusal, and for a sweep that meters into Stripe a blind
+  // repeat is worse than a miss. The second answer, whatever it is, goes
+  // through the handling below unchanged, so a second challenge is reported
+  // as `console cron refused` exactly as a first one was before this.
+  const { response, text } = await fetchPastEdgeChallenge(attempt, {
+    onRetry: ({ status, retryInMs }) =>
+      logger.warn('console cron challenged by the edge — retrying once', {
+        route,
+        status,
+        retryInMs,
+      }),
+  })
   if (response.status >= 300 && response.status < 400) {
     logger.error('console cron redirected — AGLYN_CONSOLE_URL is not the host that serves the console', {
       route,

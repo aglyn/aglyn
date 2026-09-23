@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.171 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.170...v1.0.0-beta.171)
+
+### Fixed
+
+- **functions:** the plugin job beat survives an edge challenge too ([AGL-3281](https://linear.app/aglyn/issue/AGL-3281), [AGL-2642](https://linear.app/aglyn/issue/AGL-2642))
+- **console:** a tab desynced by a cross-pool sign-in heals itself ([AGL-3280](https://linear.app/aglyn/issue/AGL-3280), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486), [AGL-3279](https://linear.app/aglyn/issue/AGL-3279))
+
 ## v1.0.0-beta.170 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.169...v1.0.0-beta.170)
