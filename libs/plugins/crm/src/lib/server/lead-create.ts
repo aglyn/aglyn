@@ -76,6 +76,7 @@ import { normalizeCampaignIds, readCampaignIds } from '@aglyn/aglyn/app-utils/ca
 import { FieldValue } from 'firebase-admin/firestore'
 import type { CampaignFilingRef } from '../model/campaign-filing-activity'
 import { fileCampaignFilingActivities } from './campaign-filing-activity'
+import { readLeadSourcePicklist, resolveLeadSourceWrite } from './lead-source-picklist'
 import { holdsDataManage } from './org-caller'
 import { crmSuiteRefusal } from './suite-gate'
 
@@ -296,6 +297,23 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     const leadId = personKey(email) as string
     const before = await readLeadForHost(hostId, leadId)
     const created = !before
+    /*
+     * THE ORG'S LEAD SOURCES (AGL-3298), judged before any write: a value
+     * outside the list is refused under the field naming what the list
+     * allows, a lead the site already held keeps the value it has, and a
+     * new lead that named none starts from the list's default.
+     */
+    const leadSource = resolveLeadSourceWrite(
+      await readLeadSourcePicklist(firestore, resolved.orgId),
+      patch.leadSource,
+      { current: before?.get('leadSource'), created },
+    )
+    if (leadSource.ok === false) {
+      res.status(400).json({ error: leadSource.error, field: 'leadSource' })
+      return
+    }
+    if (leadSource.write === undefined) delete patch.leadSource
+    else patch.leadSource = leadSource.write
     /*
      * The platform ceiling, judged here so the drawer can say WHY rather
      * than only that the lead could not be saved; the door re-judges it

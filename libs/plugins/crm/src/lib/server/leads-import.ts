@@ -100,6 +100,7 @@ import {
   readImportRows,
   resolveImportContext,
 } from './import-context'
+import { readLeadSourcePicklist, resolveLeadSourceWrite } from './lead-source-picklist'
 
 /**
  * The surface an imported lead names, beside `signup`, `booking` and
@@ -234,7 +235,7 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
     const leadsRef = await orgLeadsForHost(context.hostId)
     const refs = normalized.map((entry) => leadsRef.doc(entry.key))
     const namesCampaigns = normalized.some((entry) => entry.row.campaigns?.length)
-    const [owners, before, campaigns] = await Promise.all([
+    const [owners, before, campaigns, leadSources] = await Promise.all([
       ownerDirectory(
         context.orgId,
         normalized.map((entry) => entry.row),
@@ -243,7 +244,11 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
       namesCampaigns
         ? campaignDirectory(firestore, context.orgId, context.hostId)
         : Promise.resolve(new Map<string, string>()),
+      // The org's lead source list (AGL-3298): one read per chunk, for the
+      // values rows name and the default a new lead starts from.
+      readLeadSourcePicklist(firestore, context.orgId),
     ])
+    const beforeById = new Map(before.map((snapshot) => [snapshot.id, snapshot]))
     const held = new Set(
       before.filter((snapshot) => snapshot.exists).map((snapshot) => snapshot.id),
     )
@@ -262,6 +267,23 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
         continue
       }
       const isNew = !held.has(key)
+      /*
+       * THE LEAD SOURCE, restricted to the org's list (AGL-3298). A value
+       * the list does not hold is refused whole and named, as a campaign
+       * the org does not have is — the drawer's notice has already listed
+       * the values the list allows — and a lead the site already held
+       * keeps the value it has. A new lead with no value starts from the
+       * list's default.
+       */
+      const leadSource = resolveLeadSourceWrite(leadSources, row.profile.leadSource, {
+        current: beforeById.get(key)?.get('leadSource'),
+        created: isNew,
+      })
+      if (leadSource.ok === false) {
+        skipped.push({ index, email: row.email, reason: 'lead-source-unknown' })
+        continue
+      }
+      if (leadSource.write) row.profile.leadSource = leadSource.write
       /*
        * The platform lead ceiling, judged the way the deals import judges
        * the records band: one count at the first create, re-judged locally

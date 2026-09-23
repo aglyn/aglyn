@@ -392,6 +392,60 @@ describe('the request shape and the gates', () => {
   })
 })
 
+/*
+ * Lead source is a restricted picklist (AGL-3298): the org's list, or the
+ * starter list for an org that never wrote one.
+ */
+describe('the lead source', () => {
+  const list = (values: { id: string; label: string; active?: boolean }[], defaultValueId: string | null = null) =>
+    docs.set(`orgs/${ORG}/crmPicklists/leadSource`, {
+      values: values.map((value) => ({ active: true, ...value })),
+      defaultValueId,
+    })
+
+  it('refuses a value outside the list under the field, naming what the list allows, before any write', async () => {
+    list([
+      { id: 'apollo', label: 'Outbound · Apollo' },
+      { id: 'web', label: 'Website form' },
+      { id: 'old', label: 'Old list', active: false },
+    ])
+    const out = await call({ hostId: HOST, email: 'a@b.com', leadSource: 'Sales Navigator' })
+    expect(out.status).toBe(400)
+    expect(out.body).toEqual({
+      error: 'Lead source must be one of: Outbound · Apollo, Website form.',
+      field: 'leadSource',
+    })
+    const inactive = await call({ hostId: HOST, email: 'a@b.com', leadSource: 'Old list' })
+    expect(inactive.status).toBe(400)
+    expect(leadPaths()).toEqual([])
+  })
+
+  it('starts a new lead that names none from the default, and never overwrites a held lead with it', async () => {
+    list(
+      [
+        { id: 'apollo', label: 'Outbound · Apollo' },
+        { id: 'web', label: 'Website form' },
+      ],
+      'web',
+    )
+    expect((await call({ hostId: HOST, email: 'new@example.com' })).status).toBe(201)
+    expect(leadAt('new@example.com')?.['leadSource']).toBe('Website form')
+    docs.set(`orgs/${ORG}/leads/${personKey('held@example.com')}`, {
+      email: 'held@example.com',
+      leadSource: 'Retired value',
+      visibleTo: [`host:${HOST}`],
+      capturedByHostIds: [HOST],
+    })
+    // A lead the site already holds keeps its value — even one the list no
+    // longer has — when a second create names it or names nothing.
+    expect(
+      (await call({ hostId: HOST, email: 'held@example.com', leadSource: 'Retired value' })).status,
+    ).toBe(200)
+    expect((await call({ hostId: HOST, email: 'held@example.com' })).status).toBe(200)
+    expect(leadAt('held@example.com')?.['leadSource']).toBe('Retired value')
+  })
+})
+
 describe('what is written', () => {
   it('files the lead through the door, keyed by address, with the profile and the working state', async () => {
     const out = await call({
@@ -402,7 +456,9 @@ describe('what is written', () => {
       jobTitle: 'CMO',
       phone: '(512) 555-0107',
       website: 'acme.com',
-      leadSource: 'Sales Navigator',
+      // One of the starter list's values, in the wrong case: stored as the
+      // list spells it (AGL-3298).
+      leadSource: 'trade  SHOW',
       address: { city: 'Austin', country: 'us' },
       tags: ['ICP2', 'a-list'],
       status: 'working',
@@ -422,7 +478,7 @@ describe('what is written', () => {
       jobTitle: 'CMO',
       phone: '+15125550107',
       website: 'https://acme.com/',
-      leadSource: 'Sales Navigator',
+      leadSource: 'Trade show',
       address: { city: 'Austin', country: 'US' },
       tags: ['icp2', 'a-list'],
       status: 'working',

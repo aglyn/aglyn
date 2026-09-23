@@ -1657,6 +1657,22 @@ service cloud.firestore {
             orgCarriesCrmSuite(orgId));
         allow delete: if isStaff() || canWriteScopedOrgData();
       }
+      // An org's value sets for its standard picklist fields (AGL-3298) —
+      // `leadSource` today: the values a lead's Lead source select offers
+      // and an import or an API write is held to. Beside the custom-field
+      // definitions and answering to exactly their predicates, because
+      // whoever may define a field may define the choices of one. The
+      // document is org-wide (`visibleTo: ['org']`); its shape is judged
+      // by `normalizeCrmPicklist` wherever it is read.
+      match /crmPicklists/{picklistId} {
+        allow read: if isStaff() || canReadScopedPeople();
+        allow create: if isStaff() ||
+          (canWriteOrgData() && canCreateScoped() && orgCarriesCrmSuite(orgId));
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+            orgCarriesCrmSuite(orgId));
+        allow delete: if isStaff() || canWriteScopedOrgData();
+      }
       /**
        * Saved views (AGL-2617): a list's filters, columns and sort under a
        * name, for one of the CRM sections. A view describes the people it

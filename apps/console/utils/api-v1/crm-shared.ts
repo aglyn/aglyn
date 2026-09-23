@@ -49,8 +49,11 @@ import {
   type CrmCollection,
   type CrmCustomValue,
   type CrmFieldObject,
+  CRM_LEAD_SOURCE_PICKLIST,
+  type CrmPicklist,
   consentGroupForHost,
   crmScopeTokens,
+  effectiveCrmLeadSourcePicklist,
   readCrmCustomInput,
 } from '@aglyn/aglyn/server'
 import {
@@ -574,6 +577,20 @@ export async function readOrgFieldDefinitions(
     .limit(CONTACT_FIELDS_MAX_PER_ORG)
     .get()
   return snapshot.docs.map((doc) => doc.data() as ContactFieldDefinition)
+}
+
+/**
+ * The org's lead source list (AGL-3298) — the values a lead's
+ * `leadSource` is restricted to on every write through the API.
+ */
+export async function readOrgLeadSourcePicklist(ctx: ApiV1Context): Promise<CrmPicklist> {
+  const snapshot = await ctx.firestore
+    .collection('orgs')
+    .doc(ctx.orgId)
+    .collection(CRM_COLLECTIONS.picklists)
+    .doc(CRM_LEAD_SOURCE_PICKLIST)
+    .get()
+  return effectiveCrmLeadSourcePicklist(snapshot.data())
 }
 
 /**

@@ -53,6 +53,12 @@ export interface ContactUpdateFields {
   /** As typed; stored as E.164, and refused when it cannot be read as a number. */
   phone?: string
   jobTitle?: string
+  /**
+   * One of the org's lead source values, by label (AGL-3298), or `''` to
+   * clear. Refused when it is not an active value and not the one the
+   * contact already holds.
+   */
+  leadSource?: string
   address?: AglynPostalAddress | null
   notes?: string
   tags?: string[]
@@ -78,6 +84,7 @@ export const CONTACT_UPDATE_FIELDS: ReadonlyArray<keyof ContactUpdateFields> = [
   'name',
   'phone',
   'jobTitle',
+  'leadSource',
   'address',
   'notes',
   'tags',

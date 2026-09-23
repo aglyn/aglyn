@@ -302,7 +302,7 @@ export async function convertHostLead(
    * record rather than another form capture.
    *
    * THE LEAD'S OWN PROFILE TRAVELS WITH IT (AGL-3233), the way Salesforce
-   * hands a lead's fields to the contact: phone, title, address, the
+   * hands a lead's fields to the contact: phone, title, lead source, address, the
    * company as text (until step 2 links a record, whose own name then
    * replaces it), tags, and the marketing basis the lead recorded — the
    * person ticked the box on the lead, and a conversion must not be the
@@ -325,6 +325,10 @@ export async function convertHostLead(
       ...(chosenOwner ? { ownerUid: chosenOwner } : {}),
       ...(typeof lead.phone === 'string' && lead.phone ? { phone: lead.phone } : {}),
       ...(typeof lead.jobTitle === 'string' && lead.jobTitle ? { jobTitle: lead.jobTitle } : {}),
+      // Salesforce's Lead Source travels to the contact (AGL-3298).
+      ...(typeof lead.leadSource === 'string' && lead.leadSource
+        ? { leadSource: lead.leadSource }
+        : {}),
       ...(lead.address && typeof lead.address === 'object' ? { address: lead.address } : {}),
       ...(typeof lead.company === 'string' && lead.company
         ? { companyName: lead.company }

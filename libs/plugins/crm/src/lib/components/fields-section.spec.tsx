@@ -31,6 +31,15 @@ import { ContactsFieldsSection } from './fields-section'
 
 const definitionsFor = jest.fn()
 
+// The org's lead source list (AGL-3298), read as the starter set.
+jest.mock('../hooks/use-lead-source-picklist', () => {
+  const { effectiveCrmLeadSourcePicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+  const picklist = effectiveCrmLeadSourcePicklist(null)
+  return {
+    useLeadSourcePicklist: () => ({ picklist, stored: false, ready: true, fromCache: false }),
+  }
+})
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   // `doc(db, ...segments)` and `doc(collectionRef, id)` both land here; the
@@ -44,6 +53,7 @@ jest.mock('firebase/firestore', () => ({
       .join('/'),
   }),
   setDoc: jest.fn(async () => undefined),
+  serverTimestamp: () => 'server-time',
   updateDoc: jest.fn(async () => undefined),
   deleteDoc: jest.fn(async () => undefined),
   writeBatch: () => ({ update: jest.fn(), commit: jest.fn(async () => undefined) }),
@@ -173,5 +183,53 @@ describe('the Fields section tabs (AGL-2661)', () => {
       const [, data] = (setDoc as jest.Mock).mock.calls[0]
       expect(data).toMatchObject({ key: 'budget', label: 'Budget', object: 'lead' })
     })
+  })
+})
+
+/*
+ * Lead source values (AGL-3298) — Salesforce's Lead Source picklist, kept
+ * on the Leads tab. The list is the org's (here the starter set, which an
+ * org reads until it writes its own), and a list-only move such as Add is
+ * one write of the whole document, stamped org-wide the first time.
+ */
+describe('the lead source values on the Leads tab (AGL-3298)', () => {
+  it('lists the values only on the Leads tab', () => {
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    expect(screen.queryByRole('table', { name: 'Lead source values' })).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+    const table = screen.getByRole('table', { name: 'Lead source values' })
+    for (const label of ['Web', 'Phone inquiry', 'Referral', 'Trade show', 'Other']) {
+      expect(table.textContent).toContain(label)
+    }
+    expect(screen.getByText(/This is the starter list/)).toBeTruthy()
+  })
+
+  it('adds a value last, writing the whole list with the org-wide stamp', async () => {
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add value' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), {
+      target: { value: 'Webinar' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(setDoc).toHaveBeenCalledTimes(1))
+    const [ref, written, options] = (setDoc as jest.Mock).mock.calls[0]
+    expect(ref.path).toBe('orgs/org-1/crmPicklists/leadSource')
+    expect(options).toEqual({ merge: true })
+    expect(written.values.at(-1)).toEqual({ id: 'webinar', label: 'Webinar', active: true })
+    expect(written.values).toHaveLength(8)
+    expect(written).toMatchObject({ hostId: 'host-1', visibleTo: ['org'], defaultValueId: null })
+  })
+
+  it('refuses a value the list already holds, in any case, and writes nothing', () => {
+    render(<ContactsFieldsSection hostId="host-1" org={{}} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Leads' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add value' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Value' }), {
+      target: { value: 'trade SHOW' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+    expect(screen.getByText('“Trade show” is already in the list.')).toBeTruthy()
+    expect(setDoc).not.toHaveBeenCalled()
   })
 })

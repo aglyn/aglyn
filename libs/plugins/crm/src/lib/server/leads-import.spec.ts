@@ -448,6 +448,11 @@ describe('what a row becomes', () => {
    * cell did not name.
    */
   it('writes the profile the file carries, and leaves what it does not', async () => {
+    // The org's own lead source list (AGL-3298), holding the file's value.
+    docs.set(`orgs/${ORG_ID}/crmPicklists/leadSource`, {
+      values: [{ id: 'sales-navigator', label: 'Sales Navigator', active: true }],
+      defaultValueId: null,
+    })
     docs.set(`orgs/${ORG_ID}/leads/${personKey('dana@example.com')}`, {
       email: 'dana@example.com',
       sources: ['signup'],
@@ -479,6 +484,48 @@ describe('what a row becomes', () => {
       address: { city: 'Austin', country: 'US' },
       tags: ['icp2', 'a-list'],
     })
+  })
+
+  /*
+   * Lead source is a restricted picklist (AGL-3298): a row naming a value
+   * the org's list does not hold as active is refused whole and named; a
+   * row merging onto a lead that already holds its value passes; a new
+   * lead with none starts from the list's default.
+   */
+  it('refuses a lead source outside the list, keeps a held one, and fills the default on a create', async () => {
+    docs.set(`orgs/${ORG_ID}/crmPicklists/leadSource`, {
+      values: [
+        { id: 'apollo', label: 'Outbound · Apollo', active: true },
+        { id: 'web', label: 'Website form', active: true },
+        { id: 'old', label: 'Old list', active: false },
+      ],
+      defaultValueId: 'web',
+    })
+    docs.set(`orgs/${ORG_ID}/leads/${personKey('held@example.com')}`, {
+      email: 'held@example.com',
+      sources: ['signup'],
+      submissionCount: 1,
+      leadSource: 'Old list',
+    })
+    const out = await importRows([
+      { email: 'dana@example.com', leadSource: 'outbound · APOLLO' },
+      { email: 'sam@example.com', leadSource: 'Sales Navigator' },
+      { email: 'june@example.com', leadSource: 'Old list' },
+      { email: 'held@example.com', leadSource: 'Old list' },
+      { email: 'theo@example.com' },
+    ])
+    expect(out.body).toMatchObject({
+      created: 2,
+      merged: 1,
+      skipped: [
+        { index: 1, email: 'sam@example.com', reason: 'lead-source-unknown' },
+        { index: 2, email: 'june@example.com', reason: 'lead-source-unknown' },
+      ],
+    })
+    expect(leadAt('dana@example.com')?.['leadSource']).toBe('Outbound · Apollo')
+    expect(leadAt('held@example.com')?.['leadSource']).toBe('Old list')
+    expect(leadAt('theo@example.com')?.['leadSource']).toBe('Website form')
+    expect(leadAt('sam@example.com')).toBeUndefined()
   })
 
   /*

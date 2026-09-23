@@ -83,11 +83,15 @@ import {
   contactFacetPath,
   contactPrimaryGroup,
   CRM_COLLECTIONS,
+  CRM_LEAD_SOURCE_PICKLIST,
   CRM_MEDIA_IDS_FIELD,
   crmReadTokens,
+  effectiveCrmLeadSourcePicklist,
   isOrgWideMember,
+  judgeCrmLeadSource,
   normalizeAddress,
   normalizeCrmMediaIds,
+  normalizeCrmPicklistLabel,
   normalizePhone,
   type PluginApiHandler,
   planContactCompanyLink,
@@ -127,6 +131,7 @@ const SUITE_ACTS: Record<keyof ContactUpdateFields, string> = {
   name: "Editing a contact's profile",
   phone: "Editing a contact's profile",
   jobTitle: "Editing a contact's profile",
+  leadSource: "Editing a contact's profile",
   address: "Editing a contact's profile",
   notes: "Editing a contact's notes",
   tags: 'Tagging a contact',
@@ -180,6 +185,9 @@ export function readContactUpdateFields(
     fields.phone = phone
   }
   if ('jobTitle' in raw) fields.jobTitle = typed(raw['jobTitle'], 120)
+  // Held to the label's shape here; judged against the org's list by the
+  // handler, which alone can read it (AGL-3298).
+  if ('leadSource' in raw) fields.leadSource = normalizeCrmPicklistLabel(raw['leadSource'])
   if ('address' in raw) {
     const address = raw['address']
     fields.address =
@@ -298,6 +306,7 @@ function contactPatch(
     update['phone'] = text(fields.phone)
   }
   if (fields.jobTitle !== undefined) update[path('jobTitle')] = text(fields.jobTitle)
+  if (fields.leadSource !== undefined) update[path('leadSource')] = text(fields.leadSource)
   if (fields.address !== undefined) {
     update[path('address')] = fields.address ?? FieldValue.delete()
   }
@@ -475,6 +484,19 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
       custom = judged.values
     }
 
+    /*
+     * THE ORG'S LEAD SOURCES (AGL-3298), read only when the body names one.
+     * Judged per contact below, because a contact keeps the value it
+     * already holds even when the list has since deactivated it.
+     */
+    const leadSources = fields.leadSource
+      ? effectiveCrmLeadSourcePicklist(
+          (
+            await orgRef.collection(CRM_COLLECTIONS.picklists).doc(CRM_LEAD_SOURCE_PICKLIST).get()
+          ).data(),
+        )
+      : null
+
     if (fields.ownerUid) {
       const owner = await resolveOrgMembership(fields.ownerUid, writer.orgId).catch(() => null)
       if (!owner?.member) {
@@ -528,7 +550,20 @@ export const crmContactUpdateHandler: PluginApiHandler = async (req, res) => {
         outcomes.set(contactId, refused(contactId, NO_HOLDER_REFUSAL))
         return
       }
-      const patch = contactPatch(data, group.groupId, fields, custom, linkedCompanyName)
+      let rowFields = fields
+      if (leadSources && fields.leadSource) {
+        const judged = judgeCrmLeadSource(
+          leadSources,
+          fields.leadSource,
+          readContactFacet(data, group.groupId).leadSource,
+        )
+        if (judged.ok === false) {
+          outcomes.set(contactId, refused(contactId, judged.error))
+          return
+        }
+        rowFields = { ...fields, leadSource: judged.value ?? '' }
+      }
+      const patch = contactPatch(data, group.groupId, rowFields, custom, linkedCompanyName)
       if ('refused' in patch) {
         outcomes.set(contactId, refused(contactId, patch.refused))
         return

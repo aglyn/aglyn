@@ -82,6 +82,7 @@ import {
 } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import ContactFieldDrawer, { type ContactFieldDraft } from './contact-field-drawer'
+import { LeadSourceValuesCard } from './lead-source-values-card'
 import { recomputeAllCrmNextActivity } from '../model/next-activity-api'
 import { crmTaskCallScope } from '../model/task-routes'
 
@@ -607,6 +608,14 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
               `counted — that would read every ${noun} in the organization ` +
               'each time this page opened.'}
           </Typography>
+        ) : null}
+        {/*
+          Lead source (AGL-3298) — a standard lead field whose CHOICES are the
+          org's, Salesforce's Lead Source picklist — kept on the Leads tab
+          beside the custom lead fields.
+        */}
+        {object === 'lead' && scope ? (
+          <LeadSourceValuesCard hostId={hostId} orgId={orgId} createHostId={createHostId} />
         ) : null}
       </Stack>
       <ContactFieldDrawer

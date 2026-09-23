@@ -122,6 +122,35 @@ The sender's **name** and **email** are recognized from the field name — see
 [who a submission is from](../forms/overview.md#who-a-submission-is-from) — and never
 need mapping.
 
+## Lead source values {#lead-source-values}
+
+**Lead source** is a standard lead field — Salesforce's Lead Source — and its choices are
+your organization's own. They are kept on the **Leads** tab, below the custom lead
+fields, under **Lead source values**. Every lead's page, the **New lead** drawer and every
+contact's page offer them as a select, and the leads list filters and sorts by them.
+
+| Action | What it does |
+| --- | --- |
+| **Add value** | Adds a value at the end of the list. A value the list already holds, in any capitalization, is refused. |
+| **Drag**, or the arrows | Reorders the list. The order is the order every select offers, and the order the leads list sorts in. |
+| **Sort A–Z** | Puts the whole list in alphabetical order. |
+| **Rename** | Renames the value, and every lead and contact holding it is updated to the new name in the same step, so a report grouped by lead source follows the rename. |
+| **Make default** | New leads start with this value — in the **New lead** drawer, over the API, and from a CSV row that names none. **Clear default** removes it. |
+| **Deactivate** | Takes the value out of every select without touching the records that hold it. They show it as *(inactive)* and keep it until someone changes it. **Activate** brings it back. |
+| **Delete…** | Removes the value for good. You pick another active value to move its leads and contacts to, or clear it from them. To keep it on those records, deactivate it instead. |
+
+An organization that has never edited the list starts from a short starter list; your
+first change makes it your own.
+
+**The list is enforced.** A lead source typed into a [CSV import](./leads.md#import-from-csv)
+or sent over [`/v1/leads`](/api/resources/leads) must be one of the active values, matched
+without regard to case and stored as the list spells it. Anything else is refused, with
+the values the list allows named in the error — the import skips that row and says so,
+and warns before the file is sent. A lead or contact that already holds a value the list
+has since deactivated keeps it on every save.
+
+When a lead converts, its lead source is handed to the contact.
+
 ## Over the API {#over-the-api}
 
 The [`/v1/contacts`](/api/resources/contacts), [`/v1/companies`](/api/resources/companies),
@@ -167,6 +196,7 @@ records those tasks name are still written, but nothing stale is cleared, since
 - [The contact record](./contact-record.md) — the fixed properties custom fields sit beside
 - [Companies](./companies.md), [deals](./deals.md) and [leads](./leads.md) — the other
   records that carry them
+- [Leads](./leads.md#what-a-lead-holds) — where the lead source values are picked
 - [Import contacts from CSV](./import.md) — every custom field is an import target
 - [Forms & lead capture](../forms/overview.md)
 - [REST API — contacts](/api/resources/contacts), [companies](/api/resources/companies),

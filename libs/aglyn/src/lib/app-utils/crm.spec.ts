@@ -107,10 +107,20 @@ import {
   CRM_MEDIA_IDS_MAX,
   normalizeCrmMediaIds,
   readDealLineItems,
+  CRM_LEAD_SOURCE_STARTER_LABELS,
+  type CrmPicklist,
+  crmLeadSourceRefusal,
+  crmPicklistDefaultLabel,
+  crmPicklistOptions,
+  crmPicklistRank,
+  crmPicklistValueId,
+  effectiveCrmLeadSourcePicklist,
+  judgeCrmLeadSource,
+  normalizeCrmPicklist,
 } from './crm'
 
 describe('CRM collections', () => {
-  it('names eight org subcollections, four of them prefixed', () => {
+  it('names nine org subcollections, five of them prefixed', () => {
     expect(Object.values(CRM_COLLECTIONS)).toEqual([
       'companies',
       'pipelines',
@@ -120,6 +130,7 @@ describe('CRM collections', () => {
       'contactFields',
       'crmViews',
       'crmEmailTemplates',
+      'crmPicklists',
     ])
   })
 })
@@ -1528,5 +1539,99 @@ describe('a record\'s attached files', () => {
     for (const value of [undefined, null, 'm1', 7, {}]) {
       expect(normalizeCrmMediaIds(value)).toEqual([])
     }
+  })
+})
+
+/**
+ * Lead source is a restricted picklist (AGL-3298): an ordered list of
+ * `{ id, label, active }` with an optional default, records storing the
+ * label, and every write judged against the ACTIVE values — except the
+ * value a record already holds, which is never refused.
+ */
+describe('the lead source picklist', () => {
+  const list = normalizeCrmPicklist({
+    values: [
+      { id: 'apollo', label: 'Outbound · Apollo', active: true },
+      { id: 'web', label: 'Website form' },
+      { id: 'old', label: 'Old list', active: false },
+      { id: 'dupe', label: 'website FORM' },
+      { label: '   ' },
+    ],
+    defaultValueId: 'web',
+  }) as CrmPicklist
+
+  it('reads a stored list tolerantly: blank and duplicate labels dropped, active unless false', () => {
+    expect(list).toEqual({
+      values: [
+        { id: 'apollo', label: 'Outbound · Apollo', active: true },
+        { id: 'web', label: 'Website form', active: true },
+        { id: 'old', label: 'Old list', active: false },
+      ],
+      defaultValueId: 'web',
+    })
+    expect(normalizeCrmPicklist(null)).toBeNull()
+    expect(normalizeCrmPicklist({ values: 'no' })).toBeNull()
+    expect(normalizeCrmPicklist({ values: [], defaultValueId: 'gone' })).toEqual({
+      values: [],
+      defaultValueId: null,
+    })
+  })
+
+  it('answers the starter list for an org that never wrote one, with stable slug ids', () => {
+    const starter = effectiveCrmLeadSourcePicklist(undefined)
+    expect(starter.values.map((value) => value.label)).toEqual([...CRM_LEAD_SOURCE_STARTER_LABELS])
+    expect(starter.values.map((value) => value.id)).toEqual([
+      'web',
+      'phone-inquiry',
+      'referral',
+      'partner',
+      'purchased-list',
+      'trade-show',
+      'other',
+    ])
+    expect(starter.defaultValueId).toBeNull()
+    expect(crmPicklistValueId('Web', ['web', 'web-2'])).toBe('web-3')
+  })
+
+  it('stores an active value as the list spells it, clears on blank, and refuses the rest naming what is allowed', () => {
+    expect(judgeCrmLeadSource(list, '  outbound ·  APOLLO ')).toEqual({
+      ok: true,
+      value: 'Outbound · Apollo',
+    })
+    expect(judgeCrmLeadSource(list, '')).toEqual({ ok: true, value: null })
+    const refusal = { ok: false, error: 'Lead source must be one of: Outbound · Apollo, Website form.' }
+    expect(judgeCrmLeadSource(list, 'Sales Navigator')).toEqual(refusal)
+    // Inactive is not offered, so it is not accepted from a new writer…
+    expect(judgeCrmLeadSource(list, 'Old list')).toEqual(refusal)
+    // …but a record that already holds it keeps it, as does one holding a
+    // value written before the list existed.
+    expect(judgeCrmLeadSource(list, 'old LIST', 'Old list')).toEqual({ ok: true, value: 'Old list' })
+    expect(judgeCrmLeadSource(list, 'Sales Navigator', 'Sales Navigator')).toEqual({
+      ok: true,
+      value: 'Sales Navigator',
+    })
+    expect(crmLeadSourceRefusal({ values: [], defaultValueId: null })).toMatch(/no active lead sources/)
+  })
+
+  it('offers the active values, then the record’s own value marked, and ranks by the list order', () => {
+    expect(crmPicklistOptions(list, 'Old list')).toEqual([
+      { label: 'Outbound · Apollo', inactive: false, unlisted: false },
+      { label: 'Website form', inactive: false, unlisted: false },
+      { label: 'Old list', inactive: true, unlisted: false },
+    ])
+    expect(crmPicklistOptions(list, 'Sales Navigator').at(-1)).toEqual({
+      label: 'Sales Navigator',
+      inactive: false,
+      unlisted: true,
+    })
+    expect(crmPicklistOptions(list, 'website form')).toHaveLength(2)
+    expect(crmPicklistRank(list, 'Website form')).toBe(1)
+    expect(crmPicklistRank(list, 'Sales Navigator')).toBeGreaterThan(crmPicklistRank(list, 'Old list'))
+    expect(crmPicklistRank(list, '')).toBeGreaterThan(crmPicklistRank(list, 'Sales Navigator'))
+  })
+
+  it('names the default only while it is active', () => {
+    expect(crmPicklistDefaultLabel(list)).toBe('Website form')
+    expect(crmPicklistDefaultLabel({ ...list, defaultValueId: 'old' })).toBeNull()
   })
 })

@@ -25,6 +25,7 @@ import {
   emailStateForbidsEmail,
   crmLeadStatus,
   isCrmLeadOpen,
+  normalizeCrmPicklistLabel,
   readCampaignIds,
   readEmailState,
 } from '@aglyn/aglyn'
@@ -146,4 +147,27 @@ export function leadMatchesSearch(
     .filter((value): value is string => typeof value === 'string' && value !== '')
     .map((value) => value.toLowerCase())
   return words.every((word) => values.some((value) => value.includes(word)))
+}
+
+/**
+ * The `Lead source` control's "no lead source" choice (AGL-3298). Held in
+ * the saved view as an `isEmpty` clause, never as this string; it is only
+ * the select's own value for the choice.
+ */
+export const LEAD_SOURCE_FILTER_NONE = '\u0000none'
+
+/**
+ * The Leads section's `Lead source` control (AGL-3298): every lead (`''`),
+ * the ones holding one value — compared the way the picklist compares
+ * labels, so a value typed in another case before the list existed is
+ * still found — or the ones holding none.
+ */
+export function leadMatchesLeadSourceFilter(
+  lead: Readonly<Record<string, unknown>>,
+  filter: string,
+): boolean {
+  if (!filter) return true
+  const held = normalizeCrmPicklistLabel(lead['leadSource']).toLowerCase()
+  if (filter === LEAD_SOURCE_FILTER_NONE) return held === ''
+  return held === normalizeCrmPicklistLabel(filter).toLowerCase()
 }

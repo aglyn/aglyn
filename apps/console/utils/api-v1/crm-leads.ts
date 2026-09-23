@@ -81,6 +81,8 @@ import {
   LEADS_MAX_PER_HOST,
   normalizeCompanyDomain,
   normalizeContactEmail,
+  crmPicklistDefaultLabel,
+  judgeCrmLeadSource,
   normalizeCrmLeadProfile,
   personKey,
   readMarketingBasis,
@@ -118,6 +120,7 @@ import {
   memberError,
   readCrmCustomBody,
   readOptionalText,
+  readOrgLeadSourcePicklist,
   refuseUnknownKeys,
   updatePayload,
 } from './crm-shared'
@@ -399,6 +402,21 @@ async function updateLead(
   } else if (unqualifiedReason) {
     errors.unqualifiedReason = 'Only an unqualified lead carries a reason'
   }
+  /*
+   * THE ORG'S LEAD SOURCES (AGL-3298): a restricted picklist. An active
+   * value is stored as the list spells it; the value the lead already
+   * holds is kept even when it has since been deactivated; anything else
+   * is a 400 naming the values the list allows.
+   */
+  if (typeof profile.leadSource === 'string') {
+    const judged = judgeCrmLeadSource(
+      await readOrgLeadSourcePicklist(ctx),
+      profile.leadSource,
+      stored.leadSource,
+    )
+    if (judged.ok === false) errors.leadSource = judged.error
+    else profile.leadSource = judged.value
+  }
   if (Object.keys(errors).length) return crmValidationFailed(ctx, 'lead', errors)
   // The org's own lead fields (AGL-3272), judged against the definitions
   // whose object is `lead` — a contact field of the same key is a
@@ -504,7 +522,30 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
     // Non-null by construction: the normalizer refused every address this
     // derivation could not key.
     const leadId = personKey(email as string) as string
-    const created = !(await leadsRef.doc(leadId).get()).exists
+    const existing = await leadsRef.doc(leadId).get()
+    const created = !existing.exists
+    /*
+     * THE ORG'S LEAD SOURCES (AGL-3298), judged once the lead's own value
+     * is known: a value outside the list is a 400 naming what it allows, a
+     * lead the site already held keeps its current value, and a new lead
+     * that named none starts from the list's default.
+     */
+    const leadSources = await readOrgLeadSourcePicklist(ctx)
+    if (typeof profile.patch.leadSource === 'string') {
+      const judged = judgeCrmLeadSource(
+        leadSources,
+        profile.patch.leadSource,
+        existing.get('leadSource'),
+      )
+      if (judged.ok === false) {
+        await claim.release()
+        return crmValidationFailed(ctx, 'lead', { leadSource: judged.error })
+      }
+      profile.patch.leadSource = judged.value
+    } else if (profile.patch.leadSource === undefined && created) {
+      const fallback = crmPicklistDefaultLabel(leadSources)
+      if (fallback) profile.patch.leadSource = fallback
+    }
     if (created) {
       // What the SITE may see (AGL-3275), matching `addHostLead`'s own count:
       // an unscoped count would charge one site for a sibling's leads.

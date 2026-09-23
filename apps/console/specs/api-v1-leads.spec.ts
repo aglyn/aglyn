@@ -684,6 +684,11 @@ describe('POST /v1/leads', () => {
    * no company, no basis.
    */
   it('creates a lead through the door, with the profile and the working state', async () => {
+    // The org's lead source list (AGL-3298), holding the value sent.
+    mockDocs.set(`${ORG}/crmPicklists/leadSource`, {
+      values: [{ id: 'sales-navigator', label: 'Sales Navigator', active: true }],
+      defaultValueId: null,
+    })
     const response = await call('POST', `leads?siteId=${HOST}`, {
       email: '  Dana@ACME.com ',
       name: 'Dana Marsh',
@@ -730,6 +735,47 @@ describe('POST /v1/leads', () => {
     expect(all(CONTACTS)).toEqual([])
     expect(all(COMPANIES)).toEqual([])
     expect(mockCapture).not.toHaveBeenCalled()
+  })
+
+  /*
+   * Lead source is a restricted picklist (AGL-3298): a value outside the
+   * org's list is a 400 naming the values it allows, before any write; an
+   * active value is stored as the list spells it; a create that names none
+   * starts from the list's default.
+   */
+  it("holds leadSource to the org's list, and starts a new lead from the default", async () => {
+    mockDocs.set(`${ORG}/crmPicklists/leadSource`, {
+      values: [
+        { id: 'apollo', label: 'Outbound · Apollo', active: true },
+        { id: 'web', label: 'Website form', active: true },
+        { id: 'old', label: 'Old list', active: false },
+      ],
+      defaultValueId: 'web',
+    })
+    const refused = await call('POST', `leads?siteId=${HOST}`, {
+      email: 'kit@acme.com',
+      leadSource: 'Old list',
+    })
+    expect(refused.status).toBe(400)
+    expect(JSON.stringify(await json(refused))).toContain(
+      'Lead source must be one of: Outbound · Apollo, Website form.',
+    )
+    expect(all(LEADS).filter((lead) => lead.email === 'kit@acme.com')).toEqual([])
+    const matched = await json(
+      await call('POST', `leads?siteId=${HOST}`, {
+        email: 'lou@acme.com',
+        leadSource: 'OUTBOUND · apollo',
+      }),
+    )
+    expect(matched.leadSource).toBe('Outbound · Apollo')
+    const defaulted = await json(
+      await call('POST', `leads?siteId=${HOST}`, { email: 'max@acme.com' }),
+    )
+    expect(defaulted.leadSource).toBe('Website form')
+    const patched = await call('PATCH', `leads/${matched.id}?siteId=${HOST}`, {
+      leadSource: 'Sales Navigator',
+    })
+    expect(patched.status).toBe(400)
   })
 
   it('updates the lead the site already holds for the address, and answers 200', async () => {

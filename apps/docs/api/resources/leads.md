@@ -56,7 +56,7 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
   "website": "https://acme.com/",
   "address": { "city": "Austin", "state": "TX", "country": "US" },
   "tags": ["icp2", "a-list"],
-  "leadSource": "Sales Navigator",
+  "leadSource": "Trade show",
   "sources": ["form:contact-us", "api"],
   "submissionCount": 2,
   "firstSeen": "2026-08-30T15:02:11.000Z",
@@ -90,7 +90,7 @@ There is no organization-wide list of leads. To read every site's leads, walk yo
 | `website` | string \| null | An http(s) URL; `acme.com` is stored as `https://acme.com/`. Writable. |
 | `address` | object \| null | `line1`, `line2`, `city`, `state`, `postalCode`, `country` (two-letter code). Writable; a blank address clears. |
 | `tags` | string[] | Lower-cased, deduplicated, at most 20. Writable — as an array, or a comma-separated string. |
-| `leadSource` | string \| null | Where the lead came from, as text — what Salesforce calls Lead Source. Writable. Distinct from `sources`, which the site records. |
+| `leadSource` | string \| null | Where the lead came from — what Salesforce calls Lead Source: one of the organization's [lead source values](/content-and-data/crm/custom-fields#lead-source-values). Writable, and restricted to the list's **active** values, matched without regard to case and stored as the list spells it; any other value is refused with `400 validation_failed`, the allowed values named under `fields.leadSource`. The value a lead already holds is kept even after it is deactivated. A create that names none starts from the list's default, when it has one. Distinct from `sources`, which the site records. |
 | `sources` | string[] | Every surface that produced a capture: `signup`, `booking`, `form:{formId}`, `import`, `manual` (the console's New lead), `api` (this resource). **Read-only.** |
 | `submissionCount` | number | How many captures this lead represents. **Read-only.** |
 | `firstSeen` / `lastSeen` | string \| null | ISO 8601 — the first and the latest capture. **Read-only.** |
@@ -160,7 +160,7 @@ curl -X POST "https://app.aglyn.com/api/v1/leads?siteId=site_a1b2c3" \
   -H "Authorization: Bearer aglyn_sk_…" \
   -H "Idempotency-Key: 7c2e…" \
   -H "Content-Type: application/json" \
-  -d '{"email":"ann@acme.com","name":"Ann Lee","company":"Acme Brands","jobTitle":"VP Marketing","leadSource":"Sales Navigator","tags":["icp2"]}'
+  -d '{"email":"ann@acme.com","name":"Ann Lee","company":"Acme Brands","jobTitle":"VP Marketing","leadSource":"Trade show","tags":["icp2"]}'
 ```
 
 Returns **`201`** with the lead. A site that **already holds a lead for the address**

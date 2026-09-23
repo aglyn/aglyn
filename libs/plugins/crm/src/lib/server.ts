@@ -84,8 +84,10 @@ import { CRM_API_ROUTES } from './constants/api-routes'
 import { registerCrmServerDeclarations } from './declarations.server'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_NEXT_ACTIVITY_ROUTE } from './model/next-activity'
+import { CRM_LEAD_SOURCE_VALUES_ROUTE } from './model/lead-source-values'
 import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmNextActivityHandler } from './server/next-activity-routes'
+import { crmLeadSourceValuesHandler } from './server/lead-source-values'
 import { registerCrmRecordEmailStateWriter } from './server/record-email-state'
 import { registerCrmRecordTimelineWriter } from './server/record-timeline'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './server/task-routes'
@@ -577,6 +579,9 @@ export function registerCrmConsoleApi(): void {
   registerPluginApiRoute(CRM_TASK_ROUTES.complete, crmTaskCompleteHandler)
   // A client-direct task write's door to `nextTaskAtMs` (AGL-2661).
   registerPluginApiRoute(CRM_NEXT_ACTIVITY_ROUTE, crmNextActivityHandler)
+  // A lead source value renamed or deleted (AGL-3298): the list and every
+  // lead and contact holding the old label, in one request.
+  registerPluginApiRoute(CRM_LEAD_SOURCE_VALUES_ROUTE, crmLeadSourceValuesHandler)
   // One chunk of a contact file (AGL-2602), judged and written through the
   // same door every capture uses.
   registerPluginApiRoute('crm/contacts-import', crmContactsImportHandler)

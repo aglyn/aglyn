@@ -497,6 +497,8 @@ describe('converting a lead', () => {
       ...docs.get(leadPath('lead-1')),
       phone: '+15125550107',
       jobTitle: 'CMO',
+      // Salesforce's Lead Source travels too (AGL-3298).
+      leadSource: 'Outbound · Apollo',
       address: { city: 'Austin', country: 'US' },
       company: 'Acme Brands',
       tags: ['icp2', 'a-list'],
@@ -512,6 +514,7 @@ describe('converting a lead', () => {
           lifecycleStage: 'sales-qualified',
           phone: '+15125550107',
           jobTitle: 'CMO',
+          leadSource: 'Outbound · Apollo',
           address: { city: 'Austin', country: 'US' },
           companyName: 'Acme Brands',
         },

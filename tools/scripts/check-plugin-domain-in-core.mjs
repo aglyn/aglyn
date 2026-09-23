@@ -134,7 +134,7 @@ export const PLUGIN_COLLECTIONS = {
   ai: ['assistExchanges', 'assistSignals', 'assistUsage'],
   bookings: ['bookings', 'services'],
   commerce: ['products', 'productCategories', 'orders', 'carts', 'checkouts', 'coupons', 'discounts', 'giftCards', 'inventoryAdjustments', 'licenseKeys', 'reservations', 'restockAlerts', 'stockHolds', 'suppliers'],
-  crm: ['contacts', 'leads', 'companies', 'pipelines', 'deals', 'crmTasks', 'crmActivities', 'contactFields', 'crmViews', 'crmEmailTemplates'],
+  crm: ['contacts', 'leads', 'companies', 'pipelines', 'deals', 'crmTasks', 'crmActivities', 'contactFields', 'crmViews', 'crmEmailTemplates', 'crmPicklists'],
   data: ['datasets'],
   email: ['emailTopics', 'listMembers'],
   forms: ['formSubmissions'],

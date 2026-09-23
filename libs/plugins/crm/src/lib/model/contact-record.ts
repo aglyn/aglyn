@@ -76,6 +76,8 @@ export interface ContactRecord {
   ordersCount: number
   phone: string
   jobTitle: string
+  /** This holder's lead source label (AGL-3298), `''` for none. */
+  leadSource: string
   companyName: string
   companyId: string
   /**
@@ -153,6 +155,7 @@ export function contactRecordFromDoc(
     ordersCount: facet.ordersCount ?? 0,
     phone: facet.phone ?? '',
     jobTitle: facet.jobTitle ?? '',
+    leadSource: facet.leadSource ?? '',
     companyName: facet.companyName ?? '',
     companyId: facet.companyId ?? '',
     companyLink: Aglyn.readContactCompanyLink(row, group.groupId),

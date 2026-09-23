@@ -32,6 +32,15 @@ import type { ComponentProps, ReactNode } from 'react'
 import { LeadPropertiesCard } from './lead-properties-card'
 
 const updateDoc = jest.fn(async (..._args: unknown[]) => undefined)
+// The org's lead source list (AGL-3298), read as the starter set.
+jest.mock('../hooks/use-lead-source-picklist', () => {
+  const { effectiveCrmLeadSourcePicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+  const picklist = effectiveCrmLeadSourcePicklist(null)
+  return {
+    useLeadSourcePicklist: () => ({ picklist, stored: false, ready: true, fromCache: false }),
+  }
+})
+
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   deleteField: () => ({ op: 'delete' }),

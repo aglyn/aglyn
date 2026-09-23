@@ -174,6 +174,13 @@ export interface CsvImportVocabulary<
   templateFileName: string
   /** The result panel's collection-specific lines, when there are any. */
   resultExtras?: (result: ImportChunkResult<S>) => ReactNode
+  /**
+   * A collection-specific warning about the mapped file, shown above the
+   * preview before anything is sent — a value the server will refuse that
+   * the operator can fix first. Given every row as `mapRow` reads it;
+   * answers nothing when the file is fine.
+   */
+  rowsNotice?: (rows: readonly R[]) => ReactNode
 }
 
 export interface CsvImportDrawerProps<
@@ -319,6 +326,14 @@ export function CsvImportDrawer<
       rows
         .slice(0, vocabulary.previewRows)
         .map((cells) => vocabulary.mapRow(cells, mapping)),
+    [rows, mapping, vocabulary],
+  )
+  // The collection's own warning over the whole mapped file, when it has one.
+  const rowsNotice = useMemo(
+    () =>
+      vocabulary.rowsNotice && rows.length
+        ? vocabulary.rowsNotice(rows.map((cells) => vocabulary.mapRow(cells, mapping)))
+        : null,
     [rows, mapping, vocabulary],
   )
   const mappedTargets = useMemo(
@@ -564,6 +579,7 @@ export function CsvImportDrawer<
               {columns.length > 0 && !requiredMapped ? (
                 <Alert severity="warning">{vocabulary.requiredWarning}</Alert>
               ) : null}
+              {columns.length > 0 && requiredMapped ? rowsNotice : null}
               {columns.length > 0 && requiredMapped ? (
                 <ImportPreviewTable
                   targets={mappedTargets}

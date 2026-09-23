@@ -496,6 +496,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
             hostId={hostId}
             org={org}
             record={record}
+            orgId={orgId}
             consentGroup={consentGroup}
             seed={{ status, fromCache }}
             members={members}

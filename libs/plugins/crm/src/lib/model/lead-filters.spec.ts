@@ -23,7 +23,9 @@ import {
   leadMatchesCampaignFilter,
   leadMatchesEmailFilter,
   leadMatchesFilter,
+  leadMatchesLeadSourceFilter,
   leadMatchesSearch,
+  LEAD_SOURCE_FILTER_NONE,
 } from './lead-filters'
 
 /** The `Campaign` control (AGL-3254): one campaign's leads, or every lead. */
@@ -144,5 +146,18 @@ describe('leadMatchesEmailFilter', () => {
     expect(LEAD_EMAIL_FILTERS[0]).toBe('any')
     expect(LEAD_EMAIL_FILTERS.at(-1)).toBe('none')
     for (const option of LEAD_EMAIL_FILTERS) expect(LEAD_EMAIL_FILTER_LABELS[option]).toBeTruthy()
+  })
+})
+
+describe('the Lead source filter (AGL-3298)', () => {
+  const lead = (leadSource?: string) => (leadSource === undefined ? {} : { leadSource })
+
+  it('keeps every lead for no filter, the ones holding a value in any case, or the ones holding none', () => {
+    expect(leadMatchesLeadSourceFilter(lead('Website form'), '')).toBe(true)
+    expect(leadMatchesLeadSourceFilter(lead('website  FORM'), 'Website form')).toBe(true)
+    expect(leadMatchesLeadSourceFilter(lead('Outbound · Apollo'), 'Website form')).toBe(false)
+    expect(leadMatchesLeadSourceFilter(lead(), LEAD_SOURCE_FILTER_NONE)).toBe(true)
+    expect(leadMatchesLeadSourceFilter(lead(''), LEAD_SOURCE_FILTER_NONE)).toBe(true)
+    expect(leadMatchesLeadSourceFilter(lead('Website form'), LEAD_SOURCE_FILTER_NONE)).toBe(false)
   })
 })

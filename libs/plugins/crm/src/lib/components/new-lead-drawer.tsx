@@ -6,6 +6,7 @@ import {
   type CrmCustomValue,
   type CrmLeadStatus,
   campaignMembershipValue,
+  crmPicklistDefaultLabel,
   normalizeCrmLeadTags,
   normalizeContactEmail,
   normalizeCrmLeadProfile,
@@ -42,6 +43,8 @@ import {
   crmCustomDraftMissingRequired,
 } from '../model/crm-custom-draft'
 import { LeadOwnerSelect } from './lead-owner-select'
+import { LeadSourceSelect } from './lead-source-select'
+import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 
 /** What the drawer hands back — already normalized where the route would. */
 export interface NewLeadValues {
@@ -127,6 +130,18 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
   const [phone, setPhone] = useState('')
   const [website, setWebsite] = useState('')
   const [leadSource, setLeadSource] = useState('')
+  /*
+   * THE ORG'S LEAD SOURCES (AGL-3298), and its default for a new record.
+   * The default is filled in once the list has answered and only until the
+   * person picks something themselves — "None" included — so a list that
+   * arrives after the drawer opened does not overwrite a choice.
+   */
+  const leadSources = useLeadSourcePicklist(orgId ?? null)
+  const [leadSourceTouched, setLeadSourceTouched] = useState(false)
+  const defaultLeadSource = crmPicklistDefaultLabel(leadSources.picklist) ?? ''
+  useEffect(() => {
+    if (open && !leadSourceTouched) setLeadSource(defaultLeadSource)
+  }, [open, leadSourceTouched, defaultLeadSource])
   const [status, setStatus] = useState<NewLeadValues['status']>('new')
   const [ownerUid, setOwnerUid] = useState('')
   const [tags, setTags] = useState('')
@@ -163,6 +178,7 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
     setPhone('')
     setWebsite('')
     setLeadSource('')
+    setLeadSourceTouched(false)
     setStatus('new')
     setOwnerUid('')
     setTags('')
@@ -316,14 +332,15 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
             helperText={websiteError || 'Like acme.com'}
             fullWidth
           />
-          <TextField
-            size="small"
-            label="Lead source"
+          <LeadSourceSelect
+            picklist={leadSources.picklist}
             value={leadSource}
-            onChange={(event) => setLeadSource(event.target.value)}
-            helperText="Where this lead came from — a list, an event, a referral"
-            slotProps={{ htmlInput: { maxLength: CRM_LEAD_TEXT_MAX } }}
-            fullWidth
+            onChange={(label) => {
+              setLeadSource(label)
+              setLeadSourceTouched(true)
+            }}
+            disabled={Boolean(busy)}
+            helperText="Where this lead came from. The choices are kept under CRM › Fields › Leads."
           />
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <TextField

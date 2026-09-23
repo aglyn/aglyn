@@ -93,6 +93,8 @@ export const CRM_COLLECTIONS = {
   contactFields: 'contactFields',
   views: 'crmViews',
   emailTemplates: 'crmEmailTemplates',
+  /** An org's value sets for its standard picklist fields (AGL-3298). */
+  picklists: 'crmPicklists',
 } as const
 
 export type CrmCollection = (typeof CRM_COLLECTIONS)[keyof typeof CRM_COLLECTIONS]
@@ -2441,11 +2443,11 @@ export interface CrmLeadFields extends CrmLeadProfile {
  *
  * `sources` is the capture door's record of which SURFACES met the person
  * — `signup`, `booking`, `form:{id}`, `import` — and no file may rewrite
- * it. `leadSource` is what Salesforce calls Lead Source: free text the
- * team or the file supplies ("Sales Navigator", "Trade show"), reported on
- * and filtered by, and never derived. Two fields because they answer two
- * questions, and a file that could write the first would be rewriting the
- * site's own history.
+ * it. `leadSource` is what Salesforce calls Lead Source: one of the org's
+ * own picklist values ("Trade show", "Referral" — see LEAD SOURCE IS A
+ * PICKLIST below), reported on and filtered by, and never derived. Two
+ * fields because they answer two questions, and a file that could write
+ * the first would be rewriting the site's own history.
  *=========================================*/
 
 /** The longest text one profile field holds — the contact's own cap. */
@@ -2466,7 +2468,10 @@ export interface CrmLeadProfile {
   address?: AglynPostalAddress | null
   /** Lower-cased, deduplicated, at most {@link CRM_LEAD_TAGS_MAX}. */
   tags?: string[]
-  /** Free text naming where the lead came from — Salesforce's Lead Source. */
+  /**
+   * Where the lead came from — Salesforce's Lead Source: the LABEL of one
+   * of the org's lead source values (see {@link CrmPicklist}).
+   */
   leadSource?: string
 }
 
@@ -2586,6 +2591,272 @@ export function normalizeCrmLeadProfile(
     patch.tags = tags.length ? tags : null
   }
   return { patch, errors }
+}
+
+/*==========================================
+ * LEAD SOURCE IS A PICKLIST (AGL-3298).
+ *
+ * Salesforce's Lead Source is a restricted picklist: an admin keeps the
+ * list of values, a rep picks one, and an import or an API write naming
+ * anything else is refused. Here the list is one org document,
+ * `orgs/{orgId}/crmPicklists/leadSource`, holding the values in order as
+ * `{ id, label, active }` and an optional default for new records.
+ *
+ * ## Records store the LABEL
+ *
+ * A lead carries `leadSource: "Trade show"`, not an id. Every reader that
+ * existed before the picklist — the CSV export, the REST resource, the
+ * record facts, a saved view's filter, a report grouped by the field —
+ * reads the text and keeps working, and a file exported from here
+ * re-imports as is. What an id would have bought is a free rename; here a
+ * rename (and a delete) REPLACES the old label on every record in the same
+ * operation, the way Salesforce's own Replace does, so a report grouped
+ * by the field follows the rename rather than splitting in two. The value's
+ * `id` is what the list itself is keyed by — the default, a reorder, the
+ * manage page's rows — and it never changes.
+ *
+ * ## Inactive, not gone
+ *
+ * A deactivated value leaves every picker but stays on the records that
+ * hold it, shown with an "(inactive)" hint, and a write that keeps a
+ * record's current value is never refused for it. A value is removed only
+ * by Delete, which names the value its records move to.
+ *
+ * ## An org that never edited the list
+ *
+ * Has no document, and reads {@link CRM_LEAD_SOURCE_STARTER_LABELS} — a
+ * small Salesforce-like set. The first edit on the manage page writes that
+ * set down as the org's own, so a new org starts with a usable list and no
+ * org-creation step has to seed it.
+ *=========================================*/
+
+/** The picklists an org keeps, by document id — one per standard field. */
+export const CRM_PICKLIST_IDS = ['leadSource'] as const
+
+export type CrmPicklistId = (typeof CRM_PICKLIST_IDS)[number]
+
+/** The lead source value set's document id. */
+export const CRM_LEAD_SOURCE_PICKLIST: CrmPicklistId = 'leadSource'
+
+/** The most values one picklist holds — a menu, not a table. */
+export const CRM_PICKLIST_VALUES_MAX = 200
+
+/** One value of a picklist. `id` never changes; `label` is what records store. */
+export interface CrmPicklistValue {
+  id: string
+  label: string
+  active: boolean
+}
+
+/** A picklist as stored and as every reader takes it. */
+export interface CrmPicklist {
+  /** In the order every picker lists them. */
+  values: CrmPicklistValue[]
+  /** The value a new record starts with, by id — `null` for none. */
+  defaultValueId: string | null
+}
+
+/**
+ * The values an org that has never edited its list reads — see the block
+ * header. Salesforce's own standard set, trimmed to what a small team
+ * recognizes.
+ */
+export const CRM_LEAD_SOURCE_STARTER_LABELS: readonly string[] = [
+  'Web',
+  'Phone inquiry',
+  'Referral',
+  'Partner',
+  'Purchased list',
+  'Trade show',
+  'Other',
+]
+
+/** A label as a picklist stores it: trimmed, single-spaced, capped. */
+export function normalizeCrmPicklistLabel(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, CRM_LEAD_TEXT_MAX)
+}
+
+/** The key two labels are compared by: case and spacing do not make a new value. */
+function picklistKey(label: string): string {
+  return normalizeCrmPicklistLabel(label).toLowerCase()
+}
+
+/**
+ * A new value's id: the label as a slug, suffixed until it is not one of
+ * `taken`. Derived rather than random so a seeded list reads the same in
+ * every org, and never reused, because a default names a value by it.
+ */
+export function crmPicklistValueId(label: string, taken: Iterable<string>): string {
+  const used = new Set(taken)
+  const base =
+    normalizeCrmPicklistLabel(label)
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'value'
+  let id = base
+  for (let n = 2; used.has(id); n += 1) id = `${base}-${n}`
+  return id
+}
+
+/** A picklist of active values from labels, in order, with no default. */
+export function crmPicklistFromLabels(labels: readonly string[]): CrmPicklist {
+  const values: CrmPicklistValue[] = []
+  const seen = new Set<string>()
+  for (const raw of labels) {
+    const label = normalizeCrmPicklistLabel(raw)
+    if (!label || seen.has(picklistKey(label))) continue
+    seen.add(picklistKey(label))
+    values.push({ id: crmPicklistValueId(label, values.map((value) => value.id)), label, active: true })
+  }
+  return { values: values.slice(0, CRM_PICKLIST_VALUES_MAX), defaultValueId: null }
+}
+
+/**
+ * A stored document as a picklist, or `null` for one that holds none.
+ *
+ * Tolerant, because the document is client-written: a value with no label
+ * is dropped, a second value with the same label (in any case) or the same
+ * id is dropped, `active` is true unless it is `false`, and a default that
+ * names no value is no default.
+ */
+export function normalizeCrmPicklist(raw: unknown): CrmPicklist | null {
+  if (!raw || typeof raw !== 'object') return null
+  const stored = raw as Record<string, unknown>
+  if (!Array.isArray(stored['values'])) return null
+  const values: CrmPicklistValue[] = []
+  const labels = new Set<string>()
+  const ids = new Set<string>()
+  for (const entry of stored['values']) {
+    if (!entry || typeof entry !== 'object') continue
+    const value = entry as Record<string, unknown>
+    const label = normalizeCrmPicklistLabel(value['label'])
+    if (!label || labels.has(picklistKey(label))) continue
+    let id = String(value['id'] ?? '').trim().slice(0, 64)
+    if (!id || id.includes('/') || ids.has(id)) id = crmPicklistValueId(label, ids)
+    labels.add(picklistKey(label))
+    ids.add(id)
+    values.push({ id, label, active: value['active'] !== false })
+    if (values.length >= CRM_PICKLIST_VALUES_MAX) break
+  }
+  const defaultId = String(stored['defaultValueId'] ?? '')
+  return {
+    values,
+    defaultValueId: ids.has(defaultId) ? defaultId : null,
+  }
+}
+
+/** The org's lead source list as every reader should take it — see the block header. */
+export function effectiveCrmLeadSourcePicklist(raw: unknown): CrmPicklist {
+  return normalizeCrmPicklist(raw) ?? crmPicklistFromLabels(CRM_LEAD_SOURCE_STARTER_LABELS)
+}
+
+/** The value a label names, in any case or spacing — `null` for none. */
+export function crmPicklistValueByLabel(
+  picklist: CrmPicklist,
+  label: unknown,
+): CrmPicklistValue | null {
+  const key = picklistKey(String(label ?? ''))
+  if (!key) return null
+  return picklist.values.find((value) => picklistKey(value.label) === key) ?? null
+}
+
+/** The values a picker offers. */
+export function crmPicklistActiveValues(picklist: CrmPicklist): CrmPicklistValue[] {
+  return picklist.values.filter((value) => value.active)
+}
+
+/** The label a new record starts with — only while the default value is active. */
+export function crmPicklistDefaultLabel(picklist: CrmPicklist): string | null {
+  const value = picklist.values.find((entry) => entry.id === picklist.defaultValueId)
+  return value?.active ? value.label : null
+}
+
+/**
+ * The sentence a lead source outside the list is refused with, naming what
+ * the list allows. A long list is cut at twenty names so the sentence stays
+ * one a person can read.
+ */
+export function crmLeadSourceRefusal(picklist: CrmPicklist): string {
+  const active = crmPicklistActiveValues(picklist).map((value) => value.label)
+  if (!active.length) {
+    return 'This organization has no active lead sources. Add one under CRM › Fields › Leads.'
+  }
+  const shown = active.slice(0, 20).join(', ')
+  const more = active.length > 20 ? `, and ${active.length - 20} more` : ''
+  return `Lead source must be one of: ${shown}${more}.`
+}
+
+/**
+ * Whether a write may store `value` as a record's lead source, and the
+ * label it stores.
+ *
+ *  - Blank or `null` clears the field — lead source is never required.
+ *  - An ACTIVE value, in any case or spacing, stores that value's label.
+ *  - The record's `current` value is kept even when it is inactive or no
+ *    longer listed: re-saving a record must never be refused for a value
+ *    somebody else deactivated.
+ *  - Anything else is refused with {@link crmLeadSourceRefusal}.
+ */
+export function judgeCrmLeadSource(
+  picklist: CrmPicklist,
+  value: unknown,
+  current?: unknown,
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  const label = normalizeCrmPicklistLabel(value)
+  if (!label) return { ok: true, value: null }
+  const held = normalizeCrmPicklistLabel(current)
+  if (held && picklistKey(held) === picklistKey(label)) return { ok: true, value: held }
+  const match = crmPicklistValueByLabel(picklist, label)
+  if (match?.active) return { ok: true, value: match.label }
+  return { ok: false, error: crmLeadSourceRefusal(picklist) }
+}
+
+/** One option of a lead source select. */
+export interface CrmPicklistOption {
+  label: string
+  /** Listed but deactivated — shown with an "(inactive)" hint. */
+  inactive: boolean
+  /** Not in the list at all — a value written before the list existed. */
+  unlisted: boolean
+}
+
+/**
+ * What a select offers for a record holding `current`: every active value
+ * in order, then the record's own value when the list would not otherwise
+ * show it, so the select keeps what the record holds until it is changed.
+ */
+export function crmPicklistOptions(
+  picklist: CrmPicklist,
+  current?: unknown,
+): CrmPicklistOption[] {
+  const options: CrmPicklistOption[] = crmPicklistActiveValues(picklist).map((value) => ({
+    label: value.label,
+    inactive: false,
+    unlisted: false,
+  }))
+  const held = normalizeCrmPicklistLabel(current)
+  if (held && !options.some((option) => picklistKey(option.label) === picklistKey(held))) {
+    const listed = crmPicklistValueByLabel(picklist, held)
+    options.push({ label: held, inactive: Boolean(listed), unlisted: !listed })
+  }
+  return options
+}
+
+/**
+ * Where a label sorts: its value's position in the list, unlisted values
+ * after every listed one, and a record with none last. The order the admin
+ * chose is the order a sort by the field reads in, as Salesforce's does.
+ */
+export function crmPicklistRank(picklist: CrmPicklist, label: unknown): number {
+  const text = normalizeCrmPicklistLabel(label)
+  if (!text) return Number.MAX_SAFE_INTEGER
+  const at = picklist.values.findIndex((value) => picklistKey(value.label) === picklistKey(text))
+  return at < 0 ? CRM_PICKLIST_VALUES_MAX : at
 }
 
 /** The name a lead is listed under: the name it carries, else its address. */

@@ -612,6 +612,37 @@ describe('the write', () => {
     expect(contactWrites.map((write) => write.path)).toEqual([`${CONTACTS}/ada`])
   })
 
+  /*
+   * A contact's lead source (AGL-3298) is judged against the org's list:
+   * an active value as the list spells it, the contact's own current value
+   * kept even once deactivated, anything else refused by name.
+   */
+  it("holds a lead source to the org's list, keeping the one a contact already holds", async () => {
+    store[`orgs/${ORG_ID}/crmPicklists/leadSource`] = {
+      values: [
+        { id: 'web', label: 'Website form', active: true },
+        { id: 'old', label: 'Old list', active: false },
+      ],
+      defaultValueId: null,
+    }
+    const set = await post(onSite({ leadSource: ' website FORM ' }))
+    expect(set.payload.results).toEqual([{ contactId: 'ada', ok: true }])
+    expect(facetOf('ada').leadSource).toBe('Website form')
+
+    const refused = await post(onSite({ leadSource: 'Old list' }))
+    expect(refused.payload.results).toEqual([
+      { contactId: 'ada', ok: false, error: 'Lead source must be one of: Website form.' },
+    ])
+    expect(facetOf('ada').leadSource).toBe('Website form')
+
+    facetOf('ada').leadSource = 'Old list'
+    const kept = await post(onSite({ leadSource: 'Old list' }))
+    expect(kept.payload.results).toEqual([{ contactId: 'ada', ok: true }])
+
+    await post(onSite({ leadSource: '' }))
+    expect(facetOf('ada')).not.toHaveProperty('leadSource')
+  })
+
   it('removes a tag only where it is carried', async () => {
     const { payload } = await post(onSite({ removeTag: 'VIP' }, ['ada', 'bea']))
     expect(payload.results).toEqual([

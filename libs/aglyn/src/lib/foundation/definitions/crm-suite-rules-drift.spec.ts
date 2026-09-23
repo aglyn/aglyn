@@ -96,6 +96,7 @@ const SUITE_COLLECTIONS: ReadonlyArray<readonly [string, string]> = [
   ['contactFields', 'fieldId'],
   ['crmViews', 'viewId'],
   ['crmEmailTemplates', 'templateId'],
+  ['crmPicklists', 'picklistId'],
 ]
 
 describe('the rules carry the CRM suite on the plans the tables do (AGL-2801)', () => {

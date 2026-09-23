@@ -48,6 +48,7 @@ import {
 import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import {
   crmCustomDraftChanges,
   type CrmCustomDraft,
@@ -68,6 +69,7 @@ import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { LeadOwnerSelect } from './lead-owner-select'
+import { LeadSourceSelect } from './lead-source-select'
 import { LeadStatusChip } from './lead-status-chip'
 
 const NOTES_MAX = Aglyn.CRM_LEAD_NOTES_MAX
@@ -280,6 +282,8 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
    * values and an integration's writes sit under.
    */
   const fields = useContactFieldDefinitions(orgId, 'lead')
+  // The org's lead source values (AGL-3298), for the select below.
+  const leadSources = useLeadSourcePicklist(orgId)
   const storedCustom = useMemo(() => lead.custom ?? {}, [lead.custom])
   const [custom, setCustom] = useState<CrmCustomDraft>({})
 
@@ -630,14 +634,13 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
             />
           </Stack>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-            <TextField
-              size="small"
-              label="Lead source"
+            {/* The org's own values (AGL-3298); the stored one stays shown when the list no longer offers it. */}
+            <LeadSourceSelect
+              picklist={leadSources.picklist}
               value={profile.leadSource}
-              onChange={(event) => editProfile('leadSource', event.target.value)}
+              stored={String(lead.leadSource ?? '')}
+              onChange={(label) => editProfile('leadSource', label)}
               disabled={converted}
-              slotProps={{ htmlInput: { maxLength: TEXT_MAX } }}
-              fullWidth
             />
             <TextField
               size="small"
