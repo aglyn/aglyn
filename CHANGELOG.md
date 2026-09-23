@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.165 — 2026-09-22
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.164...v1.0.0-beta.165)
+
+### Added
+
+- **tools:** backfill "Enrolled in" onto the record for every existing enrollment ([AGL-3274](https://linear.app/aglyn/issue/AGL-3274))
+- **crm:** enrollment, stops and filing land on the record's Activity ([AGL-3274](https://linear.app/aglyn/issue/AGL-3274), [AGL-3245](https://linear.app/aglyn/issue/AGL-3245))
+- **crm:** the lead's page shows and edits the campaigns it is filed under ([AGL-3274](https://linear.app/aglyn/issue/AGL-3274))
+- **crm:** a lead carries the org's own custom fields ([AGL-3272](https://linear.app/aglyn/issue/AGL-3272), [AGL-3231](https://linear.app/aglyn/issue/AGL-3231))
+
+### Fixed
+
+- **crm:** a filing entry is named by the platform's id, never an auto id ([AGL-3274](https://linear.app/aglyn/issue/AGL-3274))
+- **crm:** the campaigns card's reseed key is a plain comma join, not a NUL byte ([AGL-3274](https://linear.app/aglyn/issue/AGL-3274))
+
 ## v1.0.0-beta.164 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.163...v1.0.0-beta.164)
