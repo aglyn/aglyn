@@ -41,6 +41,8 @@ let queries: Array<{ collection: string; predicates: string[] }>
 let rows: Array<Record<string, unknown>>
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead silo is the org's (AGL-3275), so these cards resolve it.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   useFirestoreCollection: (factory: () => unknown) => ({
     // `null` is how a scoped card declines the catalog read entirely. Modeled

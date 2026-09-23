@@ -327,7 +327,9 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
     void Promise.all([
       read(contactId && orgId ? ['orgs', orgId, 'contacts', contactId] : null),
       read(dealId && orgId ? ['orgs', orgId, CRM_COLLECTIONS.deals, dealId] : null),
-      read(leadId && sendHostId ? ['hosts', sendHostId, 'leads', leadId] : null),
+      // One org row (AGL-3275); the site still decides WHICH lead is offered,
+      // but not where it lives.
+      read(leadId && orgId ? ['orgs', orgId, 'leads', leadId] : null),
       mountedSite || !sendHostId ? null : read(['hosts', sendHostId]),
     ])
       .then(([contact, deal, lead, host]) => {

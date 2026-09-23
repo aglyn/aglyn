@@ -33,11 +33,14 @@ import type { ReactNode } from 'react'
 /** The window the card asked for, and what Firestore answers with. */
 let submissions: Array<Record<string, unknown>>
 let askedLimit: number | undefined
+let askedLeadScope = ''
 let askedLeadStatuses: string | undefined
 let leadCounts = { all: 0, closed: 0 }
 let askedOrder: string | undefined
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead silo is the org's (AGL-3275), so these cards resolve it.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   useFirestoreCollection: (factory: () => unknown) => {
     factory()
@@ -58,7 +61,17 @@ jest.mock('firebase/firestore', () => ({
     askedOrder = `${field} ${direction}`
     return undefined
   },
+  /*
+   * Two clauses now (AGL-3275): the STATUS filter that tells the closed count
+   * from the open one, and the `visibleTo` scope every lead read carries. A
+   * double that answered both the same would score the scoped query as the
+   * closed one and report the wrong figure.
+   */
   where: (field: string, op: string, value: string[]) => {
+    if (field === 'visibleTo') {
+      askedLeadScope = `${field} ${op} ${value.join(',')}`
+      return 'scope'
+    }
     askedLeadStatuses = `${field} ${op} ${value.join(',')}`
     return 'closed'
   },
@@ -152,6 +165,7 @@ beforeEach(() => {
   askedLimit = undefined
   askedOrder = undefined
   askedLeadStatuses = undefined
+  askedLeadScope = ''
   leadCounts = { all: 0, closed: 0 }
 })
 
@@ -238,6 +252,9 @@ describe('the inbox glance card', () => {
     await renderCard()
     expect(screen.getByText(/3 open leads/)).toBeTruthy()
     expect(askedLeadStatuses).toBe('status in qualified,unqualified')
+    // The lead silo is org-wide (AGL-3275), so both counts are narrowed to
+    // this site — unscoped they would count a sibling brand's leads.
+    expect(askedLeadScope).toBe('visibleTo array-contains-any org,host:host-1')
     const link = screen.getByRole('link', { name: 'Work them in the CRM' })
     expect(link.getAttribute('href')).toBe('/acme/hosts/demo/crm/leads')
   })

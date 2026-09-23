@@ -168,6 +168,8 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     text,
   })
   const leadSearch = useOutreachLeadSearch({
+    // The lead silo is the org's (AGL-3275); the site still narrows it.
+    orgId,
     hostId: sequence.hostId,
     text: leadText,
     enabled: props.open && tab === 'leads',

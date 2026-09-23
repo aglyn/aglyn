@@ -104,6 +104,9 @@ const leadDocs = Array.from({ length: LEADS }, (_, index) => ({
       ? `member${String(index).padStart(2, '0')}@example.test`
       : `lead${String(index).padStart(2, '0')}@example.test`,
   source: 'signup',
+  // Scoped to the site (AGL-3275): the collection is org-wide, and a lead
+  // naming no scope is visible to nobody.
+  visibleTo: ['host:host-1'],
   createdAt: { seconds: (LEADS - index) * 86_400 },
 }))
 
@@ -132,11 +135,24 @@ const firestoreAnswer = (
       ? all.filter((doc) => doc[order.orderBy] !== undefined)
       : all
   ).filter((doc) =>
-    equalities.every((clause) =>
-      clause.where === '__name__'
-        ? true
-        : doc[clause.where] === clause.value,
-    ),
+    equalities.every((clause) => {
+      if (clause.where === '__name__') return true
+      /*
+       * `array-contains-any` is how a scoped read narrows the org lead
+       * collection (AGL-3275). Applied, not ignored: a double that treated
+       * it as an equality drops every row and reports the list empty, and
+       * one that skipped it would pass a query serving one agency client
+       * another client's people.
+       */
+      if (clause.op === 'array-contains-any') {
+        const held = doc[clause.where]
+        return (
+          Array.isArray(held) &&
+          (clause.value as unknown[]).some((token) => held.includes(token))
+        )
+      }
+      return doc[clause.where] === clause.value
+    }),
   )
   const sorted = [...matching].sort((a, b) => {
     const key = (doc: Record<string, any>) =>
@@ -158,6 +174,8 @@ let mockPagedQueries: Array<{ name: string; constraints: any[] }> = []
 const FIRESTORE = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead silo is the org's (AGL-3275), so these cards resolve it.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => FIRESTORE,
   useFirestoreDoc: () => ({
     data: undefined,

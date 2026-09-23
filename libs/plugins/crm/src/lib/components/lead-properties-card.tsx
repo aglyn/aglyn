@@ -207,7 +207,13 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const routes = crmRoutes(basePath)
-  const ref = doc(firestore, 'orgs', orgId, 'leads', leadId)
+  /*
+   * Built at USE, not at render (AGL-3275). A lead is an org row, so the org
+   * has to be known to address one — and `orgId` is null while the lookup
+   * settles. Composing a ref from that null throws during render, which the
+   * page shows as a 500 rather than as a card still loading.
+   */
+  const refFor = () => (orgId ? doc(firestore, 'orgs', orgId, 'leads', leadId) : null)
   const status = Aglyn.crmLeadStatus(lead)
   const converted = Boolean(lead.convertedContactId)
   const open = Aglyn.isCrmLeadOpen(lead) && !converted
@@ -273,6 +279,14 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
 
   const write = async (fields: Record<string, unknown>, done: string) => {
     try {
+      const ref = refFor()
+      if (!ref) {
+        enqueueSnackbar('Still loading this workspace — try again in a moment.', {
+          variant: 'warning',
+          persist: false,
+        })
+        return
+      }
       await updateDoc(ref, { ...fields, updatedAt: serverTimestamp() })
       enqueueSnackbar(done, { variant: 'success', persist: false })
     } catch (error) {

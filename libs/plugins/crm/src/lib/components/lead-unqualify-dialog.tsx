@@ -71,6 +71,13 @@ export function LeadUnqualifyDialog(props: LeadUnqualifyDialogProps) {
   const submit = async () => {
     const trimmed = reason.trim()
     if (!trimmed) return
+    if (!orgId) {
+      enqueueSnackbar('Still loading this workspace — try again in a moment.', {
+        variant: 'warning',
+        persist: false,
+      })
+      return
+    }
     setBusy(true)
     try {
       const fields: Required<Pick<CrmLeadFields, 'status' | 'unqualifiedReason'>> = {
