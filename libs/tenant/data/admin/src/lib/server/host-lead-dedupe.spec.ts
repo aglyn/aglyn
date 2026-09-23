@@ -155,21 +155,34 @@ const hostRef: any = {
  * The lead silo is org-scoped now (AGL-3275). `addHostLead` resolves it
  * through these two modules, so they are doubled onto the SAME store this
  * file already drives — the claims here are about dedupe and contention, not
- * about where the collection lives, which is `org-leads.spec.ts`'s.
+ * about where the collection lives, which is `host-lead-seam.spec.ts`'s.
  */
-jest.mock('./org-leads', () => ({
+/*
+ * The seam lives in the module under test (AGL-3275), so the doubles sit one
+ * layer down: the org collection it resolves, and the legacy read behind the
+ * carry, which is empty here.
+ */
+jest.mock('./firebase-admin', () => ({
   __esModule: true,
-  orgLeadsForHost: async () => leadsCollection,
-  leadForWrite: async (_hostId: string, key: string) => ({
-    ref: leadsCollection.doc(key),
-    existed: false,
-    carried: false,
-  }),
-  leadScopeForHost: async (hostId: string) => [`host:${hostId}`],
+  default: {
+    app: () => ({
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  },
 }))
 
 jest.mock('./organizations', () => ({
   __esModule: true,
+  orgDataCollectionForHost: async () => leadsCollection,
+  resolveOrgIdForHost: async () => 'org-1',
   consentGroupForSite: async (hostId: string) =>
     jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
   scopedToHost: (ref: any) => ref,

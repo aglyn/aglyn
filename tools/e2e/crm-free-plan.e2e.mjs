@@ -103,7 +103,7 @@ const seed = () => seedFreePlanWorkspace({ firestore, auth: getAuth(), password:
 await seed()
 
 const orgRef = firestore.collection('orgs').doc(FREE.orgId)
-const leadsRef = firestore.collection('hosts').doc(FREE.hostId).collection('leads')
+const leadsRef = orgRef.collection('leads')
 const sitePath = (path) => `/${FREE.orgSlug}/hosts/${FREE.hostId}${path}`
 const siteUrl = (path) => `${BASE_URL}${sitePath(path)}`
 const orgPath = (path) => `/${FREE.orgSlug}${path}`

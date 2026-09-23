@@ -113,9 +113,9 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
  * A lead is read through the seam now (AGL-3275), which prefers the org row
  * and falls back to a site row the backfill has not reached. This file's
  * subject is what a CONVERSION carries across, so the double reads the same
- * fake by the org path and leaves the fallback to `org-leads.spec.ts`.
+ * fake by the org path and leaves the fallback to `host-lead-seam.spec.ts`.
  */
-jest.mock('@aglyn/tenant-data-admin/server/org-leads', () => ({
+jest.mock('@aglyn/tenant-data-admin/server/host-visitor-records', () => ({
   __esModule: true,
   readLeadForHost: async (_hostId: string, leadId: string) => {
     const path = `orgs/org-1/leads/${leadId}`

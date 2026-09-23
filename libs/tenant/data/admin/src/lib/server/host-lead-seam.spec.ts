@@ -41,7 +41,7 @@ import {
   legacyLeadExists,
   orgLeadsForHost,
   readLeadForHost,
-} from './org-leads'
+} from './host-visitor-records'
 
 const ORG = 'org-1'
 const HOST_A = 'hostA'

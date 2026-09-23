@@ -34,7 +34,7 @@ import {
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 import { findContactByEmail } from './contact-email-index'
-import { readLeadForHost } from './org-leads'
+import { readLeadForHost } from './host-visitor-records'
 import { countCrmActivitiesForRecord } from './crm-records'
 
 /**

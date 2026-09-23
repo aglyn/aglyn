@@ -45,7 +45,7 @@ const docs = new Map<string, Record<string, unknown>>()
  * which would otherwise resolve a live org read. This file's claim is WHICH
  * record a booking files against, so the double just serves the same store.
  */
-jest.mock('./org-leads', () => ({
+jest.mock('./host-visitor-records', () => ({
   __esModule: true,
   readLeadForHost: async (_hostId: string, id: string) => {
     const row = docs.get(`orgs/org-1/leads/${id}`)

@@ -1189,8 +1189,11 @@ await put(hostRef.collection('experiments').doc('seed-experiment'), {
   autoWinner: { minExposures: 200, confidence: 0.95 },
   createdAt: now,
 })
-await put(hostRef.collection('leads').doc('seed-lead-1'), {
+// One org collection since AGL-3275; `visibleTo` names the site.
+await put(firestore.collection('orgs').doc(orgId).collection('leads').doc('seed-lead-1'), {
   email: 'wholesale@example.com',
+  // Visible to the seeded site (AGL-3275); an unscoped row is visible to nobody.
+  visibleTo: [`host:${hostId}`],
   source: 'signup',
   sources: ['signup'],
   submissionCount: 1,

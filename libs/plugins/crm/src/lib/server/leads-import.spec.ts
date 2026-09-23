@@ -234,10 +234,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
  * The lead silo is org-scoped now (AGL-3275), and the real capture door this
  * file drives reaches it through these two modules by RELATIVE path — so they
  * are doubled here as well as on the barrel above, or the door would resolve a
- * live org read. Where a lead lives is `org-leads.spec.ts`'s claim; this file
+ * live org read. Where a lead lives is `host-lead-seam.spec.ts`'s claim; this file
  * keeps its own, which is what an imported ROW becomes.
  */
-jest.mock('../../../../../tenant/data/admin/src/lib/server/org-leads', () => ({
+jest.mock('../../../../../tenant/data/admin/src/lib/server/host-visitor-records', () => ({
   __esModule: true,
   orgLeadsForHost: async () => collectionRef(`orgs/${ORG_ID}/leads`),
   readLeadForHost: async (_hostId: string, key: string) => {
@@ -502,7 +502,7 @@ describe('what a row becomes', () => {
    *
    * The separation an agency needs is the same field with a different value:
    * an undeclared group resolves to `['host:{id}']` and the sibling site is
-   * not in it. That case is `org-leads.spec.ts`'s, because it is a property
+   * not in it. That case is `host-lead-seam.spec.ts`'s, because it is a property
    * of the resolver and not of the importer.
    */
   it('files both sites\u2019 rows in one collection, each naming who may see it', async () => {

@@ -39,7 +39,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   /*
    * The seam hands back the ORG row (AGL-3275). Where a lead LIVES is
-   * `org-leads.spec.ts`'s claim; what a conversion does to it is this file's,
+   * `host-lead-seam.spec.ts`'s claim; what a conversion does to it is this file's,
    * so the double resolves the path and asserts nothing about the carry.
    */
   leadForWrite: async (_hostId: string, key: string) => {

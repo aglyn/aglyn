@@ -25,7 +25,7 @@ import type {
 } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { consentGroupForSite } from '@aglyn/tenant-data-admin/server/organizations'
-import { readLeadForHost } from '@aglyn/tenant-data-admin/server/org-leads'
+import { readLeadForHost } from '@aglyn/tenant-data-admin/server/host-visitor-records'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CAMPAIGN_FILING_CARRY_BY_NAME } from '../model/campaign-filing-activity'
 import { fileCampaignFilingActivities, siteCampaignRefs } from './campaign-filing-activity'

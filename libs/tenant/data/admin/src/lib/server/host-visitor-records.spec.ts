@@ -55,20 +55,33 @@ jest.mock('./notifications', () => ({
   },
 }))
 
-jest.mock('./org-leads', () => ({
+/*
+ * The seam lives in the module under test (AGL-3275), so the doubles go one
+ * layer down: the org collection it resolves, and the legacy read behind its
+ * carry. No legacy row exists in this file — the carry is
+ * `host-lead-seam.spec.ts`'s claim — so the host path answers empty.
+ */
+jest.mock('./firebase-admin', () => ({
   __esModule: true,
-  orgLeadsForHost: async () => mockLeads,
-  // No legacy row in this file — the carry is `org-leads.spec.ts`'s claim.
-  leadForWrite: async (_hostId: string, key: string) => ({
-    ref: mockLeads.doc(key),
-    existed: false,
-    carried: false,
-  }),
-  leadScopeForHost: async () => ['host:host-1'],
+  default: {
+    app: () => ({
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  },
 }))
 
 jest.mock('./organizations', () => ({
   __esModule: true,
+  orgDataCollectionForHost: async () => mockLeads,
+  resolveOrgIdForHost: async () => 'org-1',
   consentGroupForSite: async (hostId: string) => ({
     hostId,
     groupId: hostId,

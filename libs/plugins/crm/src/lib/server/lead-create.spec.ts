@@ -236,9 +236,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
  * The lead silo is org-scoped (AGL-3275), and the real capture door this file
  * drives reaches it by RELATIVE path — doubled here as well as on the barrel,
  * or the door would resolve a live org read. Where a lead lives is
- * `org-leads.spec.ts`'s claim; this file keeps its own.
+ * `host-lead-seam.spec.ts`'s claim; this file keeps its own.
  */
-jest.mock('../../../../../tenant/data/admin/src/lib/server/org-leads', () => ({
+jest.mock('../../../../../tenant/data/admin/src/lib/server/host-visitor-records', () => ({
   __esModule: true,
   orgLeadsForHost: async () => collectionRef(`orgs/${ORG}/leads`),
   readLeadForHost: async (_hostId: string, key: string) => {

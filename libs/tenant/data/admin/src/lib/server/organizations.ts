@@ -735,8 +735,8 @@ export type OrgDataCollection =
   // segment is (AGL-2617).
   | 'crmViews'
   // A lead, keyed by `personKey` and scoped by consent group like a contact
-  // (AGL-3275) — see `org-leads.ts` for why the host path it replaces could
-  // not serve a multi-brand org at all.
+  // (AGL-3275) — see `host-visitor-records.ts` for why the host path it
+  // replaces could not serve a multi-brand org at all.
   | 'leads'
   | 'lists'
   | 'media'

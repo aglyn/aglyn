@@ -298,11 +298,15 @@ export async function seedFreePlanWorkspace(options) {
   })
 
   // The leads, as `addHostLead` writes them: one document per person.
-  const leadsRef = hostRef.collection('leads')
+  // Org-scoped since AGL-3275.
+  const leadsRef = orgRef.collection('leads')
   const lead = ({ email, name }, { firstSeenDaysAgo, lastSeenDaysAgo, submissionCount, ...worked }) =>
     write(leadsRef.doc(leadIdFor(email)), {
       email,
       name,
+      // Visible to the site that captured them (AGL-3275): the collection is
+      // org-wide, and a lead with no scope is visible to nobody.
+      visibleTo: [`host:${F.hostId}`],
       sources: ['form'],
       submissionCount,
       firstSeenAtMs: nowMs - firstSeenDaysAgo * DAY_MS,

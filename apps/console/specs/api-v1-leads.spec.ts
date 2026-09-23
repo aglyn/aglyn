@@ -65,7 +65,7 @@ let mockAssignment: Record<string, unknown> = { outcome: 'none', reason: 'no-rul
  * drives reaches it by RELATIVE path — so these two are doubled here as well
  * as on the barrel above, or `addHostLead` resolves a live Firebase app.
  */
-jest.mock('../../../libs/tenant/data/admin/src/lib/server/org-leads', () => {
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/host-visitor-records', () => {
   const double = jest.requireActual('./api-v1-crm-double')
   const leads = () => double.mockFirestore.collection('orgs').doc('org-1').collection('leads')
   return {
