@@ -20,7 +20,7 @@ import { HelpTip } from '@aglyn/shared-ui-jsx'
 import { Box, Link, MenuItem, TextField, Typography } from '@mui/material'
 import { type ChangeEvent, useCallback, useMemo } from 'react'
 import {
-  describePart,
+  describeParts,
   type PartNode,
   type PlacementKind,
   placementCopy,
@@ -35,6 +35,11 @@ export interface PlacementPartsHeaderProps {
   definitionNodes?: Record<string, PartNode>
   /** The placement's declared-property values, for part names that show them. */
   propValues?: Record<string, unknown>
+  /**
+   * The definition's declared defaults, for a part whose words come from a
+   * property this page leaves unset (AGL-3293).
+   */
+  propDefaults?: Record<string, unknown>
   /** The picked part's key. */
   value: string
   onChange: (key: string) => void
@@ -64,6 +69,7 @@ export function PlacementPartsHeader({
   parts,
   definitionNodes,
   propValues,
+  propDefaults,
   value,
   onChange,
   changedKeys,
@@ -74,16 +80,13 @@ export function PlacementPartsHeader({
   helpHref,
 }: PlacementPartsHeaderProps) {
   const copy = placementCopy(kind)
-  const labels = useMemo(() => {
-    const byKey = new Map<string, string>()
-    for (const entry of parts) {
-      byKey.set(
-        entry.key,
-        describePart(entry, definitionNodes, { kind, propValues }),
-      )
-    }
-    return byKey
-  }, [parts, definitionNodes, kind, propValues])
+  // Named as one list, so parts that would share a name — twelve cards'
+  // arrow icons — are told apart by the card each sits in (AGL-3293).
+  const labels = useMemo(
+    () =>
+      describeParts(parts, definitionNodes, { kind, propValues, propDefaults }),
+    [parts, definitionNodes, kind, propValues, propDefaults],
+  )
 
   const handleChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value),

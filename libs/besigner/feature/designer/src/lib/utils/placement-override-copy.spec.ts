@@ -18,9 +18,11 @@
 import {
   allPlacementCopyStrings,
   describePart,
+  describeParts,
   type PartEntry,
   type PartNode,
   placementCopy,
+  propDefaultsOf,
   styleChangeLabel,
   truncatePreview,
 } from './placement-override-copy'
@@ -90,7 +92,7 @@ describe('describePart (AGL-3288)', () => {
       parentId: 'card',
       nodes: ['icon', 'title'],
     },
-    icon: { componentId: 'icon', parentId: 'iconRow', props: { icon: 'x' } },
+    icon: { componentId: 'icon', parentId: 'iconRow', props: {} },
     title: {
       componentId: 'muiTypography',
       parentId: 'iconRow',
@@ -180,6 +182,21 @@ describe('describePart (AGL-3288)', () => {
     expect(describePart(entry('bound'), nodes)).toBe('Text: "Headline"')
   })
 
+  it('reads an unset property token as the default the page shows (AGL-3293)', () => {
+    expect(
+      describePart(entry('bound'), nodes, {
+        propDefaults: { headline: 'Every product works together.' },
+      }),
+    ).toBe('Text: "Every product works together."')
+    // The page's own value still wins over the default.
+    expect(
+      describePart(entry('bound'), nodes, {
+        propValues: { headline: 'Ship faster' },
+        propDefaults: { headline: 'Every product works together.' },
+      }),
+    ).toBe('Text: "Ship faster"')
+  })
+
   it("prefers the name the definition's author gave, but not a type label", () => {
     expect(describePart(entry('named'), nodes)).toBe('Pricing strip')
     expect(describePart(entry('genericName'), nodes)).toBe('Text: "Hello"')
@@ -211,6 +228,219 @@ describe('describePart (AGL-3288)', () => {
     const cut = truncatePreview('a'.repeat(40))
     expect(cut).toHaveLength(32)
     expect(cut.endsWith('…')).toBe(true)
+  })
+})
+
+/**
+ * The marketing site's Explore the platform band, as the Developers page
+ * places it (AGL-3293): a section → container → heading group and a grid of
+ * cards, each card a Stack with its own fill, border and shadow holding a row
+ * of two icon boxes, a title link and a line of text. The picker used to name
+ * every icon and box in every card after the band's eyebrow, name the grid
+ * after its first card, and name the unset lede "Lede".
+ */
+describe('describeParts on the Explore the platform band (AGL-3293)', () => {
+  const card = (
+    id: string,
+    title: string,
+    body: string,
+    plateIcon: string,
+  ): Record<string, PartNode> => ({
+    [id]: {
+      componentId: 'muiStack',
+      parentId: 'grid',
+      nodes: [`${id}Row`, `${id}Title`, `${id}Body`],
+      sx: {
+        bgcolor: 'background.paper',
+        border: '1px solid',
+        boxShadow: 1,
+      },
+    },
+    [`${id}Row`]: {
+      componentId: 'muiStack',
+      parentId: id,
+      nodes: [`${id}Plate`, `${id}ArrowBox`],
+    },
+    [`${id}Plate`]: {
+      componentId: 'muiStack',
+      parentId: `${id}Row`,
+      nodes: [`${id}PlateIcon`],
+      sx: { bgcolor: '#F1F3F5', borderRadius: '8px' },
+    },
+    [`${id}PlateIcon`]: {
+      componentId: 'icon',
+      parentId: `${id}Plate`,
+      props: { iconId: plateIcon },
+    },
+    [`${id}ArrowBox`]: {
+      componentId: 'muiStack',
+      parentId: `${id}Row`,
+      nodes: [`${id}Arrow`],
+    },
+    [`${id}Arrow`]: {
+      componentId: 'icon',
+      parentId: `${id}ArrowBox`,
+      props: { iconId: 'arrow-top-right' },
+    },
+    [`${id}Title`]: {
+      componentId: 'muiScreenLink',
+      parentId: id,
+      props: { children: title },
+    },
+    [`${id}Body`]: {
+      componentId: 'muiTypography',
+      parentId: id,
+      props: { children: body },
+    },
+  })
+
+  const nodes: Record<string, PartNode> = {
+    band: { componentId: 'section', nodes: ['container'] },
+    container: {
+      componentId: 'muiContainer',
+      parentId: 'band',
+      nodes: ['heading', 'grid', 'docs'],
+    },
+    heading: {
+      componentId: 'muiStack',
+      parentId: 'container',
+      nodes: ['eyebrow', 'headline', 'lede'],
+    },
+    eyebrow: {
+      componentId: 'muiTypography',
+      parentId: 'heading',
+      props: { children: '{{prop.eyebrow}}' },
+    },
+    headline: {
+      componentId: 'muiTypography',
+      parentId: 'heading',
+      props: { children: '{{prop.headline}}' },
+    },
+    lede: {
+      componentId: 'muiTypography',
+      parentId: 'heading',
+      props: { children: '{{prop.lede}}' },
+    },
+    grid: {
+      componentId: 'muiStack',
+      parentId: 'container',
+      nodes: ['besigner', 'console', 'commerce'],
+    },
+    ...card('besigner', 'Besigner', 'Design on a live canvas.', 'view-grid-outline'),
+    ...card('console', 'Console', 'Every site in one place.', 'view-dashboard-outline'),
+    ...card('commerce', 'Commerce', 'Products and checkout.', 'shopping-outline'),
+    docs: {
+      componentId: 'muiScreenLink',
+      parentId: 'container',
+      props: { children: '{{prop.docsLabel}}' },
+    },
+  }
+
+  /** Every part in tree order, as `listInstanceStyleTargets` offers them. */
+  const order: string[] = []
+  const walk = (id: string) => {
+    order.push(id)
+    const children = nodes[id]?.nodes
+    if (Array.isArray(children)) for (const child of children) walk(child)
+  }
+  walk('band')
+  const entries = order.map((id) => ({
+    key: id === 'band' ? 'root' : id,
+    componentInternalId: id,
+    componentId: nodes[id]?.componentId,
+    isRoot: id === 'band',
+  }))
+
+  const definition = {
+    rootId: 'band',
+    nodes,
+    props: [
+      { name: 'eyebrow', type: 'text', defaultValue: 'ONE PLATFORM' },
+      { name: 'headline', type: 'text', defaultValue: 'Every product works.' },
+      {
+        name: 'lede',
+        type: 'richText',
+        defaultValue: 'Every product below runs on the same platform.',
+      },
+      { name: 'docsLabel', type: 'text', defaultValue: 'Read the docs →' },
+      { name: 'hideDocs', type: 'boolean' },
+    ],
+  }
+
+  const labels = describeParts(entries, nodes, {
+    propValues: {
+      eyebrow: 'THE FULL STACK, BUILT IN',
+      headline: 'Everything a modern site needs.',
+    },
+    propDefaults: propDefaultsOf(definition),
+  })
+  const label = (id: string) => labels.get(id === 'band' ? 'root' : id)
+
+  it('reads the declared defaults off the definition', () => {
+    expect(propDefaultsOf(definition)).toEqual({
+      eyebrow: 'ONE PLATFORM',
+      headline: 'Every product works.',
+      lede: 'Every product below runs on the same platform.',
+      docsLabel: 'Read the docs →',
+    })
+    expect(propDefaultsOf(undefined)).toEqual({})
+    expect(propDefaultsOf({ rootId: 'x', nodes: {} })).toEqual({})
+  })
+
+  it('names the band, its heading and its lines as the page shows them', () => {
+    expect(label('band')).toBe('Whole component')
+    expect(label('container')).toBe('Container: THE FULL STACK, BUILT IN')
+    expect(label('eyebrow')).toBe('Text: "THE FULL STACK, BUILT IN"')
+    expect(label('headline')).toBe('Text: "Everything a modern site needs."')
+    expect(label('lede')).toBe('Text: "Every product below runs on the…"')
+    expect(label('docs')).toBe('Link: Read the docs →')
+    // Stacked lines of a heading are not a collection to list.
+    expect(label('heading')).toBe('Group: THE FULL STACK, BUILT IN')
+  })
+
+  it('names the grid by its cards, never by its first card alone', () => {
+    expect(label('grid')).toBe('Group: Besigner, Console, Commerce')
+    expect(label('besigner')).toBe('Card: Besigner')
+    expect(label('grid')).not.toBe(label('besigner'))
+  })
+
+  it('places every icon and box in its own card, not in the band', () => {
+    for (const id of order) {
+      expect(label(id)).not.toContain('(in THE FULL STACK')
+    }
+    expect(label('besignerArrow')).toBe('Icon: Arrow top right (in Besigner card)')
+    expect(label('consoleArrow')).toBe('Icon: Arrow top right (in Console card)')
+    expect(label('besignerArrowBox')).toBe(
+      'Icon box: Arrow top right (in Besigner card)',
+    )
+    expect(label('besignerPlateIcon')).toBe('Icon: View grid outline')
+    expect(label('besignerPlate')).toBe('Icon box: View grid outline')
+    expect(label('besignerRow')).toBe('Icons: View grid outline, Arrow top ri…')
+  })
+
+  it('gives every part a name no other part has', () => {
+    const all = [...labels.values()]
+    expect(new Set(all).size).toBe(all.length)
+    expect(all).toHaveLength(order.length)
+  })
+
+  it('numbers twins that even their place cannot tell apart', () => {
+    const twins: Record<string, PartNode> = {
+      root: { componentId: 'muiStack', nodes: ['a', 'b'] },
+      a: { componentId: 'muiBox', parentId: 'root' },
+      b: { componentId: 'muiBox', parentId: 'root' },
+    }
+    const named = describeParts(
+      ['root', 'a', 'b'].map((id) => ({
+        key: id,
+        componentInternalId: id,
+        componentId: twins[id].componentId,
+        isRoot: id === 'root',
+      })),
+      twins,
+    )
+    expect(named.get('a')).toBe('Group #1')
+    expect(named.get('b')).toBe('Group #2')
   })
 })
 
