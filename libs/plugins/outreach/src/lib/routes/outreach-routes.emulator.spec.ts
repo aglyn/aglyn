@@ -194,12 +194,15 @@ describeEmulated('Outreach routes on Firestore (AGL-2980)', () => {
     await hostRef.collection('emailCampaigns').doc('founder-icp2').set({ name: 'Founder · ICP 2' })
     await hostRef.collection('emailCampaigns').doc('founder-icp1').set({ name: 'Founder · ICP 1' })
     const leadId = personKey('sam@initech.example') as string
-    await hostRef.collection('leads').doc(leadId).set({
+    // The lead is an org row scoped by `visibleTo` (AGL-3275); an unscoped
+    // one is visible to nobody, including to the enroll route reading it.
+    await orgRef().collection('leads').doc(leadId).set({
       email: 'sam@initech.example',
       name: 'Sam Rivera',
       sources: ['form:form-1'],
       address: { country: 'US' },
       campaignIds: ['founder-icp1'],
+      visibleTo: [`host:${HOST}`],
       lastSeenAtMs: AT,
     })
     const sequences = createOutreachSequenceRoutes(deps())
@@ -234,7 +237,7 @@ describeEmulated('Outreach routes on Firestore (AGL-2980)', () => {
     expect(body.enrolled).toBe(1)
     const enrollment = await orgRef().collection('outreachEnrollments').doc(`${inCampaign}_${leadId}`).get()
     expect(enrollment.get('campaignIds')).toEqual(['founder-icp2', 'founder-icp1'])
-    const lead = await hostRef.collection('leads').doc(leadId).get()
+    const lead = await orgRef().collection('leads').doc(leadId).get()
     expect(lead.get('campaignIds')).toEqual(['founder-icp1', 'founder-icp2'])
     expect(credits).toEqual([
       { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
