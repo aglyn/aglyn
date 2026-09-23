@@ -65,36 +65,41 @@ let mockAssignment: Record<string, unknown> = { outcome: 'none', reason: 'no-rul
  * drives reaches it by RELATIVE path — so these two are doubled here as well
  * as on the barrel above, or `addHostLead` resolves a live Firebase app.
  */
-jest.mock('../../../libs/tenant/data/admin/src/lib/server/host-visitor-records', () => {
-  const double = jest.requireActual('./api-v1-crm-double')
-  const leads = () => double.mockFirestore.collection('orgs').doc('org-1').collection('leads')
-  return {
-    __esModule: true,
-    orgLeadsForHost: async () => leads(),
-    readLeadForHost: async (_hostId: string, key: string) => {
-      const snapshot = await leads().doc(key).get()
-      return snapshot.exists ? snapshot : null
-    },
-    leadForWrite: async (_hostId: string, key: string) => ({
-      ref: leads().doc(key),
-      existed: (await leads().doc(key).get()).exists,
-      carried: false,
-    }),
-    leadScopeForHost: async (hostId: string) => ['org', `host:${hostId}`],
-  }
-})
 
 jest.mock('../../../libs/tenant/data/admin/src/lib/server/organizations', () => {
   const consentGroups = jest.requireActual(
     '../../../libs/aglyn/src/lib/app-utils/consent-groups',
   )
+  const double = jest.requireActual('./api-v1-crm-double')
   return {
     __esModule: true,
+    // What the seam inside `host-visitor-records` resolves (AGL-3275).
+    orgDataCollectionForHost: async (_hostId: string, name: string) =>
+      double.mockFirestore.collection('orgs').doc('org-1').collection(name),
+    resolveOrgIdForHost: async () => 'org-1',
     consentGroupForSite: async (hostId: string) => consentGroups.soloConsentGroup(hostId),
     scopedToHost: (ref: any, hostId: string) =>
       ref.where('visibleTo', 'array-contains-any', ['org', `host:${hostId}`]),
   }
 })
+
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () => ({
+  __esModule: true,
+  // The LEGACY host path behind the seam's carry: empty in this suite.
+  default: {
+    app: () => ({
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  },
+}))
 
 jest.mock('@aglyn/tenant-data-admin', () => {
   const apiHttp = jest.requireActual(
@@ -721,7 +726,7 @@ describe('POST /v1/leads', () => {
     // Scoped like every other org row (AGL-3275). This asserted ABSENCE while
     // the collection was the site's own and the path was the scope; a lead
     // with no `visibleTo` would now be a row visible to nobody.
-    expect(stored?.visibleTo).toEqual(['org', `host:${HOST}`])
+    expect(stored?.visibleTo).toEqual([`host:${HOST}`])
     expect(all(CONTACTS)).toEqual([])
     expect(all(COMPANIES)).toEqual([])
     expect(mockCapture).not.toHaveBeenCalled()

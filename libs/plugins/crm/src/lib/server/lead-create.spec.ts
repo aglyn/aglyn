@@ -256,8 +256,31 @@ jest.mock('../../../../../tenant/data/admin/src/lib/server/host-visitor-records'
   leadScopeForHost: async (hostId: string) => [`host:${hostId}`],
 }))
 
+jest.mock('../../../../../tenant/data/admin/src/lib/server/firebase-admin', () => ({
+  __esModule: true,
+  // The LEGACY host path behind the seam's carry (AGL-3275). Empty here: what
+  // these files drive is the capture, and the carry is `host-lead-seam`'s.
+  default: {
+    app: () => ({
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  },
+}))
+
 jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () => ({
   __esModule: true,
+  // The seam resolves the org collection through here (AGL-3275).
+  orgDataCollectionForHost: async (_hostId: string, name: string) =>
+    collectionRef(`orgs/${ORG}/${name}`),
+  resolveOrgIdForHost: async () => ORG,
   consentGroupForSite: async (hostId: string) =>
     jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
   scopedToHost: (ref: any) => ref,

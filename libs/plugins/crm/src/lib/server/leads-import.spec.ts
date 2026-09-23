@@ -258,10 +258,44 @@ jest.mock('../../../../../tenant/data/admin/src/lib/server/host-visitor-records'
   leadScopeForHost: async () => [`host:${HOST_ID}`, `host:${OTHER_HOST_ID}`],
 }))
 
+jest.mock('../../../../../tenant/data/admin/src/lib/server/firebase-admin', () => ({
+  __esModule: true,
+  // The LEGACY host path behind the seam's carry (AGL-3275). Empty here: what
+  // these files drive is the capture, and the carry is `host-lead-seam`'s.
+  default: {
+    app: () => ({
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  },
+}))
+
 jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () => ({
   __esModule: true,
-  consentGroupForSite: async (hostId: string) =>
-    jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
+  // The seam resolves the org collection through here (AGL-3275).
+  orgDataCollectionForHost: async (_hostId: string, name: string) =>
+    collectionRef(`orgs/${ORG_ID}/${name}`),
+  resolveOrgIdForHost: async () => ORG_ID,
+  /*
+   * The org below declares ONE group over both sites, so the real resolver
+   * would answer both — and `leadScopeForHost` stamps what it answers. A
+   * group-of-one double here would quietly assert a scope the product never
+   * produces for this fixture.
+   */
+  consentGroupForSite: async () => ({
+    hostId: HOST_ID,
+    groupId: 'brand',
+    name: 'Brand',
+    hostIds: [HOST_ID, OTHER_HOST_ID],
+    declared: true,
+  }),
   scopedToHost: (ref: any) => ref,
 }))
 
