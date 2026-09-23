@@ -101,11 +101,6 @@ const firestore = () => firebaseAdmin.app().firestore()
  */
 
 
-/** The legacy home, for the read half of the migration window only. */
-function hostLeads(hostId: string): FirebaseFirestore.CollectionReference {
-  return firestore().collection('hosts').doc(hostId).collection('leads')
-}
-
 /**
  * The org collection a lead is written to. Always the org — see the
  * read-only note above.
@@ -183,69 +178,29 @@ export async function readLeadForHost(
   key: string,
 ): Promise<FirebaseFirestore.DocumentSnapshot | null> {
   const orgRow = await (await orgLeadsForHost(hostId)).doc(key).get()
-  if (orgRow.exists) return orgRow
-  const hostRow = await hostLeads(hostId).doc(key).get()
-  return hostRow.exists ? hostRow : null
+  return orgRow.exists ? orgRow : null
 }
 
 /**
- * The ref a write should target, with any host-path predecessor already
- * carried onto it.
+ * The ref a write should target.
  *
- * A lead that has not been backfilled yet is copied to the org on the next
- * write that touches it, under the capturing site's scope, and the host row
- * is left where it is for AGL-3276 to archive. Two things follow: a write
- * never has to decide which of two rows it is amending, and no later read
- * can be answered by a host row that a write has since moved past.
- *
- * `carried` says whether this call did that copy, so a caller can log it and
- * the backfill's count can be reconciled against it.
+ * This carried a not-yet-backfilled host row onto the org first, and reported
+ * whether it had (`carried`). AGL-3276 emptied the host path and AGL-3277
+ * removed it, so there is nothing left to carry: the org row is the only row.
+ * `carried` stays on the shape, always `false`, because several callers
+ * destructure it and a lie is cheaper to read than a signature change that
+ * says nothing.
  */
 export async function leadForWrite(
   hostId: string,
   key: string,
-  org?: Record<string, unknown> | null,
 ): Promise<{
   ref: FirebaseFirestore.DocumentReference
   existed: boolean
   carried: boolean
 }> {
   const ref = (await orgLeadsForHost(hostId)).doc(key)
-  if ((await ref.get()).exists) return { ref, existed: true, carried: false }
-
-  const legacy = await hostLeads(hostId).doc(key).get()
-  if (!legacy.exists) return { ref, existed: false, carried: false }
-
-  // The legacy row carries no `visibleTo` — it was scoped by its parent — so
-  // the capturing site's group supplies one. `set` rather than `create`: a
-  // peer carrying the same row in the same second must not fail the write
-  // that provoked it, and both writes carry identical field values.
-  await ref.set(
-    {
-      ...(legacy.data() ?? {}),
-      visibleTo: await leadScopeForHost(hostId, org),
-      migratedFromHostId: hostId,
-    },
-    { merge: true },
-  )
-  return { ref, existed: true, carried: true }
-}
-
-/**
- * Whether a host-path lead survives for this address — AGL-3276 reconciling
- * itself, and AGL-3277's deletion check. Not a read path for product code,
- * which wants {@link readLeadForHost}.
- */
-export async function legacyLeadExists(
-  hostId: string,
-  key: string,
-): Promise<boolean> {
-  return (await hostLeads(hostId).doc(key).get()).exists
-}
-
-/** Every org id this process has resolved a lead for — the backfill's entry point. */
-export async function orgIdForLeadHost(hostId: string): Promise<string | null> {
-  return resolveOrgIdForHost(hostId)
+  return { ref, existed: (await ref.get()).exists, carried: false }
 }
 
 

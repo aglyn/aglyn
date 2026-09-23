@@ -204,20 +204,28 @@ describe('every client-written suite collection asks the plan (AGL-2801)', () =>
     expect(allowStatement(segments, 'delete')).not.toContain('orgCarriesCrmSuite')
   })
 
-  it("asks for a lead's create and update under its site, and the catch-all cannot re-grant them", () => {
-    const hosts = rawBlockBody(RULES, 'match /hosts/<hostId> {')
-    const leads = rawBlockBody(hosts, 'match /leads/<leadId> {')
-    // Create and update are separate statements: each carries its own
-    // `emailState` clause (a create may not set it, an update may not touch
-    // it — AGL-3245), so the plan check is asserted on each rather than on a
-    // shared `create, update` verb list.
-    expect(allowStatement(leads, 'create')).toContain('hostOrgCarriesCrmSuite(hostId)')
-    expect(allowStatement(leads, 'update')).toContain('hostOrgCarriesCrmSuite(hostId)')
-    // Sibling matches are OR'd: without the exclusions the block narrows nothing.
+  it("asks on a lead's update, and refuses a client create, as a contact does (AGL-3277)", () => {
+    /*
+     * A LEAD IS AN ORG COLLECTION NOW.
+     *
+     * This read `hosts/{hostId}/leads` and asserted `hostOrgCarriesCrmSuite`
+     * and the host catch-all's exclusions. AGL-3275 moved the collection and
+     * AGL-3277 deleted the host block, so the host catch-all has nothing to
+     * exclude and the plan is asked the org's way.
+     */
+    const leads = rawBlockBody(orgs, 'match /leads/<leadId> {')
+    expect(allowStatement(leads, 'update')).toContain('orgCarriesCrmSuite(orgId)')
+    // Created by the server, as a contact is: every door that files a lead is
+    // an Admin-SDK path that judges the band and dedupes on the address.
+    expect(allowStatement(leads, 'create')).toBe('allow create: if isStaff()')
+    // Reading and removing stay open on every plan, as they do for a contact.
+    expect(allowStatement(leads, 'read')).not.toContain('orgCarriesCrmSuite')
+    expect(allowStatement(leads, 'delete')).not.toContain('orgCarriesCrmSuite')
+    // `emailState` stays closed to clients (AGL-3245).
+    expect(allowStatement(leads, 'update')).toContain('emailState')
+    // The host catch-all no longer names leads at all.
     const catchAll = parseHostSubcollectionRules(SOURCE)
-    expect(catchAll.excluded.create).toContain('leads')
-    expect(catchAll.excluded.update).toContain('leads')
-    // Reading and removing a lead stay with the catch-all, on every plan.
-    expect(catchAll.excluded.delete).not.toContain('leads')
+    expect(catchAll.excluded.create).not.toContain('leads')
+    expect(catchAll.excluded.update).not.toContain('leads')
   })
 })

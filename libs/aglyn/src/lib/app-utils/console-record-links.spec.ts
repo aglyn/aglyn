@@ -20,7 +20,6 @@ import {
   crmContactByEmailHref,
   crmHubHref,
   crmOrgHubHref,
-  crmOrgLeadHref,
   crmOrgRecordHref,
   crmOrgSectionHref,
   crmRecordHref,
@@ -66,20 +65,15 @@ describe('the same hub with no site under it (AGL-2662)', () => {
   })
 
   /**
-   * A LEAD IS NO LONGER THE EXCEPTION (AGL-3275).
+   * A LEAD IS NO LONGER THE EXCEPTION (AGL-3275/3277).
    *
    * Its id is a person key, and while a lead lived under its site two sites
    * held two documents carrying that one id — so an org-level address had to
-   * name the site to say which was meant. One org collection makes the key
-   * unambiguous, and a lead addresses like a contact or a deal.
-   *
-   * `crmOrgLeadHref` survives as a shim that IGNORES the site it is handed,
-   * so callers holding a `hostId` need not prove they no longer need one. It
-   * goes with the host path in AGL-3277.
+   * name the site to say which. One org collection makes the key unambiguous,
+   * and `crmOrgLeadHref` went with the host path it existed for.
    */
-  it('addresses a lead by its id alone, ignoring any site it is handed', () => {
+  it('addresses a lead the same way, by id alone', () => {
     expect(crmOrgRecordHref('acme', 'lead', 'l/1')).toBe('/acme/crm/leads/l%2F1')
-    expect(crmOrgLeadHref('acme', 'host-1', 'l/1')).toBe('/acme/crm/leads/l%2F1')
   })
 })
 

@@ -81,10 +81,11 @@ function sectionBody(
        * them, so the id alone could not say which record was meant. A lead is
        * one org row now, and addresses like every other CRM record.
        *
-       * The two-segment form is still ACCEPTED, and deliberately: links to a
-       * lead were shared, bookmarked and mailed while the old shape was live,
-       * and the id it carries is the same person key either way. The site
-       * segment is simply dropped.
+       * The two-segment form is STILL ACCEPTED, and stays accepted past
+       * AGL-3277: links were shared, bookmarked and mailed while the old
+       * shape was live, and the id they carry is the same person key. What
+       * AGL-3277 removed is the storage behind the old shape, not the
+       * courtesy of honoring a link somebody already has.
        */
       return record ? (
         !props.hostId && detail.length >= 2 ? (

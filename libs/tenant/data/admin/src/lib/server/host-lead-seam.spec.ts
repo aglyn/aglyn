@@ -22,9 +22,10 @@
  *     note this migration is modeled on says a second writable path is a
  *     second boundary to enforce forever; a double that let a write land on
  *     the host row would make that regression green.
- *  2. A not-yet-backfilled lead is carried onto the org by the next write
- *     that touches it, stamped with the capturing site's consent scope — so a
- *     row written before the promotion cannot be amended in two places.
+ *  2. A host row is not consulted AT ALL. The carry and the read-fallback
+ *     that stood here through the migration window are gone with the path
+ *     (AGL-3277); a lead still sitting there is not a record the product
+ *     serves.
  *  3. The lookup is UNSCOPED. A sibling brand in the same consent group finds
  *     the person even when the row's `visibleTo` does not yet name it, which
  *     is the whole reason one person stopped being two records.
@@ -36,12 +37,7 @@
  * multi-brand capture reveals that the second brand minted a duplicate.
  */
 
-import {
-  leadForWrite,
-  legacyLeadExists,
-  orgLeadsForHost,
-  readLeadForHost,
-} from './host-visitor-records'
+import { leadForWrite, orgLeadsForHost, readLeadForHost } from './host-visitor-records'
 
 const ORG = 'org-1'
 const HOST_A = 'hostA'
@@ -116,30 +112,26 @@ const orgPath = `orgs/${ORG}/leads/${KEY}`
 const hostPath = (hostId: string) => `hosts/${hostId}/leads/${KEY}`
 
 describe('the write target', () => {
-  it('is the org, and the host row is left untouched', async () => {
-    docs.set(hostPath(HOST_A), { email: 'p@x.com', source: 'form:quote' })
+  /*
+   * THE HOST PATH IS GONE (AGL-3277), not merely unused.
+   *
+   * This file used to hold the other half of the window: that a write carried
+   * a not-yet-backfilled host row onto the org, and that the host row was
+   * read but never written. AGL-3276 emptied that path and AGL-3277 removed
+   * it, so those claims describe nothing — and are replaced by the one that
+   * matters now, which is that a host row is not consulted at all. A lead
+   * left there would otherwise be a record the product silently still served.
+   */
+  it('ignores a host row entirely — there is no fallback left', async () => {
+    docs.set(hostPath(HOST_A), { email: 'stale@x.com', source: 'form:quote' })
 
     const { ref, existed, carried } = await leadForWrite(HOST_A, KEY)
 
     expect(ref.path).toBe(orgPath)
-    expect(existed).toBe(true)
-    expect(carried).toBe(true)
-    // Claim 1: nothing was written to the legacy path.
-    expect(writes).toEqual([orgPath])
-    expect(await legacyLeadExists(HOST_A, KEY)).toBe(true)
-  })
-
-  it('carries the legacy row onto the org under the capturing group', async () => {
-    docs.set(hostPath(HOST_A), { email: 'p@x.com', source: 'form:quote' })
-
-    await leadForWrite(HOST_A, KEY)
-
-    expect(docs.get(orgPath)).toEqual({
-      email: 'p@x.com',
-      source: 'form:quote',
-      visibleTo: [`host:${HOST_A}`, `host:${HOST_B}`],
-      migratedFromHostId: HOST_A,
-    })
+    expect(existed).toBe(false)
+    expect(carried).toBe(false)
+    expect(writes).toEqual([])
+    expect(await readLeadForHost(HOST_A, KEY)).toBeNull()
   })
 
   it('does not re-carry a lead the org already holds', async () => {
@@ -151,7 +143,6 @@ describe('the write target', () => {
     expect(existed).toBe(true)
     expect(carried).toBe(false)
     expect(writes).toEqual([])
-    // The stale legacy row did not overwrite the org's.
     expect(docs.get(orgPath)).toEqual({
       email: 'p@x.com',
       visibleTo: [`host:${HOST_A}`],
@@ -169,17 +160,11 @@ describe('the write target', () => {
 })
 
 describe('the lookup', () => {
-  it('prefers the org row over a legacy one', async () => {
+  it('reads the org row, and a host row of the same key changes nothing', async () => {
     docs.set(orgPath, { email: 'current@x.com' })
     docs.set(hostPath(HOST_A), { email: 'stale@x.com' })
 
     expect((await readLeadForHost(HOST_A, KEY))?.get('email')).toBe('current@x.com')
-  })
-
-  it('falls back to a legacy row the backfill has not reached', async () => {
-    docs.set(hostPath(HOST_A), { email: 'p@x.com' })
-
-    expect((await readLeadForHost(HOST_A, KEY))?.get('email')).toBe('p@x.com')
   })
 
   /*
