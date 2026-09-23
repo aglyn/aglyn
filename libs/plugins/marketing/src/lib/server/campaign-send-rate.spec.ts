@@ -263,7 +263,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
       }),
   orgDataCollectionForHost: jest.fn(),
-  orgDataQueryForHost: jest.fn(),
+  // The scoped org query (AGL-3275): the leads audience reads through it now,
+  // as the contacts audience already did.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
+  }),
   meterHostEmail: async () => undefined,
   orgCampaignEmailSendsForMonth: async () => 0,
   reserveCampaignEmailSends: async ({ orgId, month, count, limit }: any) => {
@@ -372,7 +377,7 @@ const CONSENT_GRANTED = {
 function seedHost(leads: string[]) {
   mockState.store[`hosts/${HOST}`] = { subdomain: 'acme', orgId: 'org-1' }
   leads.forEach((email, index) => {
-    mockState.store[`hosts/${HOST}/leads/lead-${index}`] = {
+    mockState.store[`orgs/org-1/leads/lead-${index}`] = {
       email,
       visibleTo: [HOST],
       ...CONSENT_GRANTED,

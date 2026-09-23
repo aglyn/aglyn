@@ -102,9 +102,9 @@ export function createOutreachPreviewRoute(deps: OutreachRouteDeps): PluginWebAp
       sequence.hostId ? firestore.collection('hosts').doc(sequence.hostId).get() : null,
       step.templateId ? org.collection(CRM_COLLECTIONS.emailTemplates).doc(step.templateId).get() : null,
       contactId ? org.collection('contacts').doc(contactId).get() : null,
-      leadId && sequence.hostId
-        ? firestore.collection('hosts').doc(sequence.hostId).collection('leads').doc(leadId).get()
-        : null,
+      // One org row (AGL-3275); the site is still required because a lead
+      // preview is rendered in a site's context.
+      leadId && sequence.hostId ? org.collection('leads').doc(leadId).get() : null,
     ])
     const leadData = lead?.exists ? (lead.data() as Record<string, unknown>) : null
     if (leadId && !leadData) {

@@ -260,7 +260,7 @@ function seedLeads() {
   mockState.store = {
     'hosts/host-1': { subdomain: 'acme', memberRoles: {} },
     // Ticked the box, ON THIS SITE. Mailable under every policy.
-    'hosts/host-1/leads/l1': {
+    'orgs/org-1/leads/l1': {
       email: 'consented@example.com',
       name: 'Cora',
       marketingConsentByHost: {
@@ -273,7 +273,7 @@ function seedLeads() {
     },
     // Ticked the box for a SISTER BRAND on the same org, and never for this
     // one. The address book is shared; the basis is not. Not mailable here.
-    'hosts/host-1/leads/l5': {
+    'orgs/org-1/leads/l5': {
       email: 'othersite@example.com',
       name: 'Otto',
       marketingConsentByHost: {
@@ -285,19 +285,19 @@ function seedLeads() {
       createdAt: BEFORE_CUTOFF,
     },
     // Captured before consent was required, no basis. Reachable, reported.
-    'hosts/host-1/leads/l2': {
+    'orgs/org-1/leads/l2': {
       email: 'grandfathered@example.com',
       name: 'Glen',
       createdAt: BEFORE_CUTOFF,
     },
     // Captured AFTER consent was required, still no basis. Not mailable.
-    'hosts/host-1/leads/l3': {
+    'orgs/org-1/leads/l3': {
       email: 'nobasis@example.com',
       name: 'Nora',
       createdAt: AFTER_CUTOFF,
     },
     // Said no, and said it long ago. Never mailable.
-    'hosts/host-1/leads/l4': {
+    'orgs/org-1/leads/l4': {
       email: 'declined@example.com',
       name: 'Dev',
       marketingConsent: false,
@@ -581,7 +581,7 @@ describe('a marketing campaign sends only where a basis permits it', () => {
    */
   it('refuses the send, naming consent, when nobody is mailable', async () => {
     configurePolicy('strict')
-    delete mockState.store['hosts/host-1/leads/l1']
+    delete mockState.store['orgs/org-1/leads/l1']
     await expect(send()).rejects.toThrow(CampaignSendError)
     await expect(send()).rejects.toThrow(/consent record/i)
     expect(mockState.sent).toHaveLength(0)
@@ -717,7 +717,7 @@ describe('a basis given to one brand does not reach another', () => {
     configurePolicy('forward')
     mockState.store['hosts/host-2'] = { subdomain: 'acme-two', memberRoles: {} }
     mockState.store['hosts/host-2/leads/l5'] =
-      mockState.store['hosts/host-1/leads/l5']
+      mockState.store['orgs/org-1/leads/l5']
 
     await send({ hostId: 'host-2' })
     expect(delivered()).toContain('othersite@example.com')

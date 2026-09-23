@@ -318,7 +318,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
     }),
   orgDataCollectionForHost: jest.fn(),
-  orgDataQueryForHost: jest.fn(),
+  // The scoped org query (AGL-3275): the leads audience reads through it now,
+  // as the contacts audience already did.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
+  }),
   meterHostEmail: async () => undefined,
   updateExisting: async () => undefined,
   orgCampaignEmailSendsForMonth: async (orgId: string, month: string) =>
@@ -396,7 +401,7 @@ function seedLeads(count: number, offset = 0) {
     // Padded so the document-name order the sweep uses is the numeric one,
     // which is what makes "the first N" an answerable claim in an assertion.
     const id = `lead-${String(index).padStart(5, '0')}`
-    store.set(`hosts/${HOST}/leads/${id}`, {
+    store.set(`orgs/org-1/leads/${id}`, {
       email: `${id}@example.com`,
       name: id,
       // The basis belongs to the site sending, not to the org.
@@ -700,11 +705,11 @@ describe('the circuit breaker', () => {
     seedLeads(10)
     seedComplaints(1000, 10)
     const before = [...store.keys()].filter((key) =>
-      key.startsWith(`hosts/${HOST}/leads/`),
+      key.startsWith(`orgs/org-1/leads/`),
     )
     await expect(firstSend()).rejects.toMatchObject({ status: 409 })
     const after = [...store.keys()].filter((key) =>
-      key.startsWith(`hosts/${HOST}/leads/`),
+      key.startsWith(`orgs/org-1/leads/`),
     )
     // The audience is untouched: same people, same documents, and not one
     // suppression written. A capacity control gates the SEND, never the

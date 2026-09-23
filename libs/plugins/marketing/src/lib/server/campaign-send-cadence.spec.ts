@@ -185,7 +185,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
     }),
   orgDataCollectionForHost: jest.fn(),
-  orgDataQueryForHost: jest.fn(),
+  // The scoped org query (AGL-3275): the leads audience reads through it now,
+  // as the contacts audience already did.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
+  }),
   meterHostEmail: async () => undefined,
   orgCampaignEmailSendsForMonth: async () => 0,
   reserveCampaignEmailSends: async ({ count }: any) => ({
@@ -291,7 +296,7 @@ function seed() {
     ['lead-1', QUIET],
     ['lead-2', EAGER],
   ]) {
-    store.set(`hosts/${HOST}/leads/${id}`, {
+    store.set(`orgs/org-1/leads/${id}`, {
       email,
       name: 'Reader',
       marketingConsentByHost: {
@@ -384,12 +389,12 @@ describe('the cadence a recipient asked for', () => {
 
   it('records the held recipient nowhere — it refuses a SEND, not a person', async () => {
     seedCadence(QUIET, 'monthly', NOW - 3 * DAY)
-    const before = store.get(`hosts/${HOST}/leads/lead-1`)
+    const before = store.get(`orgs/org-1/leads/lead-1`)
 
     await send()
 
     // No suppression written, no membership touched, the lead unchanged.
-    expect(store.get(`hosts/${HOST}/leads/lead-1`)).toEqual(before)
+    expect(store.get(`orgs/org-1/leads/lead-1`)).toEqual(before)
     expect(
       [...store.keys()].some((key) => key.includes('emailSuppressions')),
     ).toBe(false)

@@ -185,7 +185,8 @@ export async function readOutreachEnrollCandidates(
 ): Promise<OutreachEnrollCandidate[]> {
   if (!input.people.length) return []
   const org = firestore.collection('orgs').doc(input.orgId)
-  const leads = firestore.collection('hosts').doc(input.hostId).collection('leads')
+  // Beside the contacts, on the org (AGL-3275).
+  const leads = org.collection('leads')
   const snapshots = await getAllChunked(
     firestore,
     input.people.map((person) =>

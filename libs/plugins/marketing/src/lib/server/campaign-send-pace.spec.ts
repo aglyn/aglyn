@@ -272,7 +272,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       platformFrom: 'noreply@aglyn.com',
     }),
   orgDataCollectionForHost: jest.fn(),
-  orgDataQueryForHost: jest.fn(),
+  // The scoped org query (AGL-3275): the leads audience reads through it now,
+  // as the contacts audience already did.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
+  }),
   meterHostEmail: async () => undefined,
   orgCampaignEmailSendsForMonth: async () => 0,
   reserveCampaignEmailSends: async ({ orgId, month, count, limit }: any) => ({
@@ -339,7 +344,7 @@ function seedHost(count: number) {
     // Padded so document-name order is numeric order, which is what makes
     // "the first three" an answerable claim below.
     const id = `lead-${String(index).padStart(3, '0')}`
-    mockState.store[`hosts/${HOST}/leads/${id}`] = {
+    mockState.store[`orgs/org-1/leads/${id}`] = {
       email: `${id}@example.com`,
       visibleTo: [HOST],
       marketingConsentByHost: {

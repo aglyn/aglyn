@@ -326,7 +326,7 @@ function seed() {
       'host-1': { marketingConsent: true, marketingConsentAtMs: Date.UTC(2026, 7, 1) },
     },
   })
-  store.set(`hosts/${HOST}/leads/lead-1`, {
+  store.set(`orgs/org-1/leads/lead-1`, {
     email: 'lead@example.com',
     name: 'Lee Lead',
     // The basis belongs to the site sending, not to the org.

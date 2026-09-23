@@ -118,7 +118,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
       }),
   orgDataCollectionForHost: jest.fn(),
-  orgDataQueryForHost: jest.fn(),
+  // The scoped org query (AGL-3275): the leads audience reads through it now,
+  // as the contacts audience already did.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
+  }),
   meterHostEmail: async () => undefined,
   /*
    * AGL-2267/AGL-2409. The barrel factory is a CLOSED WORLD — anything the
@@ -357,7 +362,7 @@ describe('the leads audience personalizes off `name`', () => {
   it('resolves the name the lead writers now store', async () => {
     // The shape `membership-register` and the bookings handler write since
     // AGL-2303: `email`, `name`, `source`, `createdAt`.
-    mockState.store['hosts/host-1/leads/l-1'] = {
+    mockState.store['orgs/org-1/leads/l-1'] = {
       email: 'dana@example.com',
       name: 'Dana Reed',
       source: 'signup',
@@ -368,7 +373,7 @@ describe('the leads audience personalizes off `name`', () => {
   })
 
   it('NEGATIVE CONTROL: a lead recorded before AGL-2303 still receives it', async () => {
-    mockState.store['hosts/host-1/leads/l-1'] = {
+    mockState.store['orgs/org-1/leads/l-1'] = {
       email: 'dana@example.com',
       source: 'signup',
       ...CONSENT_GRANTED,

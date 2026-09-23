@@ -62,7 +62,7 @@ import { followOutreachLeadToContact, markOutreachLeadWorking } from './lead-rec
 const HOST = 'site-1'
 const ORG = 'org-1'
 const LEAD = 'lead-key'
-const leadPath = `hosts/${HOST}/leads/${LEAD}`
+const leadPath = `orgs/${ORG}/leads/${LEAD}`
 const enrollment = (id: string, fields: Record<string, unknown>) =>
   docs.set(`orgs/${ORG}/outreachEnrollments/${id}`, fields)
 
@@ -74,9 +74,9 @@ beforeEach(() => {
 describe('markOutreachLeadWorking', () => {
   it('moves a lead nobody touched to Working, once', async () => {
     docs.set(leadPath, { email: 'dana@example.com' })
-    await expect(markOutreachLeadWorking(firestore, { hostId: HOST, leadId: LEAD })).resolves.toBe(true)
+    await expect(markOutreachLeadWorking(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(true)
     expect(docs.get(leadPath)).toMatchObject({ status: 'working' })
-    await expect(markOutreachLeadWorking(firestore, { hostId: HOST, leadId: LEAD })).resolves.toBe(false)
+    await expect(markOutreachLeadWorking(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(false)
   })
 
   it('leaves a worked, closed, converted or missing lead alone', async () => {
@@ -86,11 +86,11 @@ describe('markOutreachLeadWorking', () => {
       { status: 'qualified', convertedContactId: 'c-1' },
     ]) {
       docs.set(leadPath, { email: 'dana@example.com', ...lead })
-      await expect(markOutreachLeadWorking(firestore, { hostId: HOST, leadId: LEAD })).resolves.toBe(false)
+      await expect(markOutreachLeadWorking(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(false)
       expect(docs.get(leadPath)).toEqual({ email: 'dana@example.com', ...lead })
     }
     docs.delete(leadPath)
-    await expect(markOutreachLeadWorking(firestore, { hostId: HOST, leadId: LEAD })).resolves.toBe(false)
+    await expect(markOutreachLeadWorking(firestore, { orgId: ORG, leadId: LEAD })).resolves.toBe(false)
   })
 })
 

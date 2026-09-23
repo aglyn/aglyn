@@ -119,7 +119,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
       }),
   orgDataCollectionForHost: jest.fn(),
-  orgDataQueryForHost: jest.fn(),
+  // The scoped org query (AGL-3275): the leads audience reads through it now,
+  // as the contacts audience already did.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
+  }),
   meterHostEmail: async () => undefined,
   /*
    * AGL-2267/AGL-2409. The barrel factory is a CLOSED WORLD — anything the
@@ -257,7 +262,7 @@ const seed = (count: number, extra: Record<string, Record<string, unknown>> = {}
     'hosts/host-1': { subdomain: 'acme', memberRoles: {} },
     ...Object.fromEntries(
       Array.from({ length: count }, (_item, index) => [
-        `hosts/host-1/leads/lead-${index}`,
+        `orgs/org-1/leads/lead-${index}`,
         {
           email: `lead${index}@example.com`,
           name: `Lead ${index}`,
@@ -337,12 +342,12 @@ describe('a campaign recipient preview', () => {
 
   it('de-duplicates the way the send does', async () => {
     seed(0, {
-      'hosts/host-1/leads/a': { email: 'dana@example.com', ...CONSENT_GRANTED },
-      'hosts/host-1/leads/b': { email: 'DANA@example.com', ...CONSENT_GRANTED },
+      'orgs/org-1/leads/a': { email: 'dana@example.com', ...CONSENT_GRANTED },
+      'orgs/org-1/leads/b': { email: 'DANA@example.com', ...CONSENT_GRANTED },
       // No basis on the junk address, and it needs none: the address pattern
       // rejects it while the audience is being normalized, which is upstream
       // of the consent join.
-      'hosts/host-1/leads/c': { email: 'not-an-email' },
+      'orgs/org-1/leads/c': { email: 'not-an-email' },
     })
     const result = await preview()
     // Case-folded to one, and the junk address dropped — exactly what

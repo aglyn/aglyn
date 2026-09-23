@@ -115,11 +115,22 @@ function fakeFirestore(docs: Docs) {
     },
     delete: (path: string) => void docs.delete(path),
   }
-  type Filter = [string, unknown]
+  /** `[field, value]` for equality, or `[field, values, 'array-contains-any']`. */
+  type Filter = [string, unknown] | [string, unknown[], 'array-contains-any']
   /** The order a query asked for: by id, or by one field's value (a Leads view reads by `lastSeenAtMs`). */
   type Order = { field: string; desc: boolean } | null
   const query = (path: string, filters: Filter[], order: Order, max: number, after: string | null): any => ({
     where: (field: string, op: string, value: unknown) => {
+      /*
+       * `array-contains-any` is how a scoped read narrows an org collection by
+       * `visibleTo` (AGL-3275), so the double has to model it — a fake that
+       * ignored the clause would pass a Leads view that served one agency
+       * client another client's people.
+       */
+      if (op === 'array-contains-any') {
+        if (!Array.isArray(value)) throw new Error('array-contains-any wants an array')
+        return query(path, [...filters, [field, value, 'array-contains-any']], order, max, after)
+      }
       if (op !== '==') throw new Error(`unsupported operator ${op}`)
       return query(path, [...filters, [field, value]], order, max, after)
     },
@@ -130,7 +141,14 @@ function fakeFirestore(docs: Docs) {
     get: async () => {
       const keys = [...docs.keys()]
         .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes('/'))
-        .filter((key) => filters.every(([field, value]) => fieldOf(docs.get(key), field) === value))
+        .filter((key) =>
+          filters.every(([field, value, op]) => {
+            const held = fieldOf(docs.get(key), field)
+            if (op !== 'array-contains-any') return held === value
+            const tokens = Array.isArray(held) ? held : []
+            return (value as unknown[]).some((wanted) => tokens.includes(wanted))
+          }),
+        )
         .sort()
       if (order && order.field !== '__name__') {
         const value = (key: string) => Number(fieldOf(docs.get(key), order.field) ?? 0)
@@ -318,10 +336,18 @@ const cold = (id: string, name: string, email: string) => {
   })
 }
 
-/** A lead the shop holds (AGL-3234), keyed by its person key, at `hosts/{HOST}/leads`. */
+/** A lead the shop holds (AGL-3234), keyed by its person key, at `orgs/{ORG}/leads` (AGL-3275). */
 const lead = (email: string, fields: Data) => {
   const id = personKey(email) as string
-  docs.set(`hosts/${HOST}/leads/${id}`, { email, sources: ['import'], submissionCount: 1, ...fields })
+  // `visibleTo` names the site (AGL-3275): the collection is org-wide, and a
+  // lead with no scope is visible to nobody — including to a Leads view.
+  docs.set(`orgs/${ORG}/leads/${id}`, {
+    email,
+    sources: ['import'],
+    submissionCount: 1,
+    visibleTo: [`host:${HOST}`],
+    ...fields,
+  })
   return id
 }
 
@@ -967,7 +993,7 @@ describe('outreach/enroll (AGL-2980)', () => {
       'founder-icp2',
       'founder-icp1',
     ])
-    expect(docs.get(`hosts/${HOST}/leads/${leadId}`)?.['campaignIds']).toEqual(['founder-icp1', 'founder-icp2'])
+    expect(docs.get(`orgs/${ORG}/leads/${leadId}`)?.['campaignIds']).toEqual(['founder-icp1', 'founder-icp2'])
     expect(credits).toEqual([
       { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
       { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },

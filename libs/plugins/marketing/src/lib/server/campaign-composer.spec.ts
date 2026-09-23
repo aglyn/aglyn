@@ -257,7 +257,7 @@ function seed() {
     ['lead-3', 'faye@example.com', true],
     ['lead-4', 'gwen@example.com', false],
   ] as Array<[string, string, boolean]>) {
-    store.set(`hosts/${HOST}/leads/${id}`, {
+    store.set(`orgs/org-1/leads/${id}`, {
       email,
       name: 'Dana Reed',
       ...(consented
@@ -441,7 +441,8 @@ describe('rendering the campaign before it is sent', () => {
     expect(sweeps).toEqual([])
 
     await post({ hostId: HOST, action: 'preview' })
-    expect(sweeps).toContain(`hosts/${HOST}/leads`)
+    // The leads audience sweeps the ORG collection now (AGL-3275).
+    expect(sweeps).toContain('orgs/org-1/leads')
   })
 
   it('needs the same site role a send needs', async () => {

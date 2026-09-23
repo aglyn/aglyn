@@ -21,6 +21,7 @@ import {
   normalizeCampaignIds,
 } from '@aglyn/aglyn/app-utils/campaign-membership'
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
+import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   CRM_COLLECTIONS,
   crmLeadStatus,
@@ -262,20 +263,30 @@ const LEADS_VIEW_WINDOW = 200
  * The people a saved LEADS view selects (AGL-3234): the sequence's site's
  * most recently seen leads, narrowed by the view's status clause the way
  * the Leads list narrows its window — open leads when the view names no
- * status, one status when it does, everything for `all`. A lead is the
- * site's own, so there is no address to resolve: the person key IS the id.
+ * status, one status when it does, everything for `all`. The person key IS
+ * the id, so there is no address to resolve — and since AGL-3275 the window is
+ * narrowed by `visibleTo` rather than by the collection's parent.
  */
 async function leadsViewPeople(
   firestore: Firestore,
+  orgId: string,
   sequence: OutreachSequence,
   filters: ReturnType<typeof normalizeCrmViewFilters>,
 ): Promise<{ people: OutreachPersonRef[]; total: number; truncated: boolean }> {
   const statusClause = filters.find((clause) => clause.field === 'status' && clause.op === 'equals')
   const wanted = String(statusClause?.value ?? 'open')
+  /*
+   * SCOPED (AGL-3275). The collection is org-wide, so the window is narrowed
+   * to what the sequence's site may see before it is ordered — otherwise an
+   * agency's sequence would offer another client's people to enroll. The
+   * composite index for `visibleTo array-contains-any` + `lastSeenAtMs desc`
+   * is in `cloud/firestore.indexes.json`.
+   */
   const window = await firestore
-    .collection('hosts')
-    .doc(sequence.hostId)
+    .collection('orgs')
+    .doc(orgId)
     .collection('leads')
+    .where('visibleTo', 'array-contains-any', scopeTokensForHost(sequence.hostId))
     .orderBy('lastSeenAtMs', 'desc')
     .limit(LEADS_VIEW_WINDOW + 1)
     .get()
@@ -316,7 +327,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     try {
       const ref =
         candidate.target === 'lead' && candidate.leadId
-          ? firestore.collection('hosts').doc(sequence.hostId).collection('leads').doc(candidate.leadId)
+          ? firestore.collection('orgs').doc(orgId).collection('leads').doc(candidate.leadId)
           : candidate.contactId
             ? firestore.collection('orgs').doc(orgId).collection('contacts').doc(candidate.contactId)
             : null
@@ -394,7 +405,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       return outreachRefusal(404, 'view-not-found', 'That saved view no longer exists.')
     }
     if (data['section'] === 'leads') {
-      return leadsViewPeople(firestore, sequence, normalizeCrmViewFilters(data['filters']))
+      return leadsViewPeople(firestore, caller.orgId, sequence, normalizeCrmViewFilters(data['filters']))
     }
     if (data['section'] !== 'contacts') {
       return outreachRefusal(400, 'view-unsupported', 'Enroll from a saved view of Contacts or Leads.')
