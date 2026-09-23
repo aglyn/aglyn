@@ -54,6 +54,8 @@ const MONTH = new Date().toISOString().slice(0, 7)
 let counters: Record<string, Record<string, unknown> | undefined>
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead silo is the org's (AGL-3275), so these cards resolve it.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   useFirestoreCollection: () => ({
     data: [],
@@ -81,6 +83,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 jest.mock('firebase/firestore', () => ({
+  // The scope clause every lead read carries now (AGL-3275).
+  where: (...args: unknown[]) => ({ __where: args }),
   collection: (_db: unknown, ...segments: string[]) =>
     segments[segments.length - 1],
   query: (name: string) => name,

@@ -42,6 +42,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
   useFirestoreCollection,
+  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -62,9 +63,11 @@ import {
   limit,
   orderBy,
   query,
+  where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useRecordRouteContext } from './use-record-route-context'
+import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 
 /**
  * How many members and how many leads the contacts table reads.
@@ -131,15 +134,24 @@ export function ContactsCard({ hostId }: { hostId: string }) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  /*
+   * The lead silo is the org's (AGL-3275), narrowed to this site by
+   * `visibleTo`. Reading `hosts/{hostId}/leads` showed a site its
+   * pre-migration rows and nothing captured since.
+   */
+  const { orgId } = useOrgDataScope({ hostId })
   const siteMembers = (memberDocs ?? []).slice(0, CONTACT_CEILING)
   const { data: leadDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'leads'),
-        orderBy('createdAt', 'desc'),
-        limit(CONTACT_CEILING + 1),
-      ),
-    [firestore, hostId],
+      orgId
+        ? query(
+            collection(firestore, 'orgs', orgId, 'leads'),
+            where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId)),
+            orderBy('createdAt', 'desc'),
+            limit(CONTACT_CEILING + 1),
+          )
+        : null,
+    [firestore, orgId, hostId],
     { idField: '$id' },
   )
   const leads = (leadDocs ?? []).slice(0, CONTACT_CEILING)

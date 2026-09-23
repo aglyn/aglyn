@@ -36,6 +36,8 @@ let stored: Record<string, unknown> | null = null
 const enqueueSnackbar = jest.fn()
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead silo is the org's (AGL-3275), so these cards resolve it.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   usePagedCollection: () => ({

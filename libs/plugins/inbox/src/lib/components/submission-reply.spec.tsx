@@ -35,6 +35,8 @@ let host: Record<string, unknown> | undefined
 let sentReplies: Array<Record<string, unknown>>
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead silo is the org's (AGL-3275), so these cards resolve it.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   useFirestoreDoc: () => ({ data: host }),
   useFirestoreCollection: () => ({ data: sentReplies }),
@@ -71,6 +73,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 }))
 
 jest.mock('firebase/firestore', () => ({
+  // The scope clause every lead read carries now (AGL-3275).
+  where: (...args: unknown[]) => ({ __where: args }),
   collection: () => ({}),
   doc: () => ({}),
   limit: () => ({}),

@@ -60,15 +60,22 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
   const { id, hostId, org, basePath } = props
   const firestore = useFirestore()
   const routes = crmRoutes(basePath)
+  /*
+   * Resolved BEFORE the read that needs it (AGL-3275). A lead is an org row
+   * now, so the org has to be known to address one — and `orgId` is null
+   * while the host-index lookup settles. Handing that null to `doc()` is a
+   * thrown `TypeError`, which the page renders as a 500 rather than as a
+   * record still loading.
+   */
+  const { orgId } = useOrgDataScope({ hostId })
   const {
     data: lead,
     status,
     fromCache,
   } = useFirestoreDoc<LeadDocument>(
-    () => doc(firestore, 'orgs', orgId, 'leads', id),
-    [firestore, hostId, id],
+    () => (orgId ? doc(firestore, 'orgs', orgId, 'leads', id) : null),
+    [firestore, orgId, id],
   )
-  const { orgId } = useOrgDataScope({ hostId })
   const roster = useOrgMemberOptions(orgId)
   /*
    * The site's campaigns, read once for the page (AGL-3274): the header

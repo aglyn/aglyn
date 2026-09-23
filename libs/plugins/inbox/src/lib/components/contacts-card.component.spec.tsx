@@ -37,6 +37,8 @@ let mockLeads: Array<Record<string, unknown>> = []
 /** Held: a Firestore handle minted per render would re-run every read. */
 const mockFirestore = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead silo is the org's (AGL-3275), so these cards resolve it.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   __esModule: true,
   useFirestore: () => mockFirestore,
   useFirestoreCollection: (factory: () => { __name: string }) => {
@@ -50,6 +52,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 }))
 
 jest.mock('firebase/firestore', () => ({
+  // The scope clause every lead read carries now (AGL-3275).
+  where: (...args: unknown[]) => ({ __where: args }),
   __esModule: true,
   collection: (_db: unknown, ...segments: string[]) => ({
     __name: segments[segments.length - 1],

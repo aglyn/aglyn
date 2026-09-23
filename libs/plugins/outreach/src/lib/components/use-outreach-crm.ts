@@ -34,6 +34,7 @@ import {
 } from '@aglyn/aglyn/app-utils/crm-email-templates'
 import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
 import { nameSearchToken } from '@aglyn/aglyn/app-utils/name-search'
+import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
@@ -309,18 +310,19 @@ export const OUTREACH_LEADS_WINDOW = 200
  * enroll. `idle` until something is typed.
  */
 export function useOutreachLeadSearch(input: {
+  orgId: string | null
   hostId: string | null
   text: string
   enabled: boolean
 }): OutreachLoad<OutreachContactOption[]> & { idle: boolean } {
-  const { hostId, text, enabled } = input
+  const { orgId, hostId, text, enabled } = input
   const firestore = useFirestore()
   const [window, setWindow] = useState<OutreachLoad<OutreachContactOption[]>>({
     status: 'ready',
     data: [],
   })
   useEffect(() => {
-    if (!enabled || !hostId) {
+    if (!enabled || !hostId || !orgId) {
       setWindow({ status: 'ready', data: [] })
       return undefined
     }
@@ -328,7 +330,11 @@ export function useOutreachLeadSearch(input: {
     setWindow({ status: 'loading', data: [] })
     getDocs(
       query(
-        collection(firestore, 'hosts', hostId, 'leads'),
+        // The org collection, narrowed to the site this view belongs to
+        // (AGL-3275) — unscoped it would offer one agency client another
+        // client's people to enroll.
+        collection(firestore, 'orgs', orgId, 'leads'),
+        where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId)),
         orderBy('lastSeenAtMs', 'desc'),
         limit(OUTREACH_LEADS_WINDOW),
       ),
@@ -355,7 +361,7 @@ export function useOutreachLeadSearch(input: {
     return () => {
       current = false
     }
-  }, [firestore, hostId, enabled])
+  }, [firestore, orgId, hostId, enabled])
   const needle = text.trim().toLowerCase()
   const idle = !hostId || !needle
   const data = idle

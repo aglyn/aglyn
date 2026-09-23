@@ -125,7 +125,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
   useEffect(() => {
     let active = true
     setLeadKey(null)
-    if (!hostId) return undefined
+    if (!hostId || !orgId) return undefined
     void (async () => {
       const key = await personKeyInBrowser(email)
       if (!key || !active) return

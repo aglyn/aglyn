@@ -459,6 +459,13 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
 
   const writeLead = useCallback(
     async (lead: LeadRow, fields: Record<string, unknown>, done: string) => {
+      if (!orgId) {
+        enqueueSnackbar('Still loading this workspace — try again in a moment.', {
+          variant: 'warning',
+          persist: false,
+        })
+        return
+      }
       try {
         await updateDoc(
           doc(firestore, 'orgs', orgId, 'leads', lead.leadId),

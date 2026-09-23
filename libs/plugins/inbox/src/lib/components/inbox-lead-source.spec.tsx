@@ -46,6 +46,8 @@ import { INBOX_CONSOLE_SECTIONS } from './inbox-console-sections'
 let collections: Record<string, Array<Record<string, unknown>>>
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead silo is the org's (AGL-3275), so these cards resolve it.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   // Routed by the collection the factory addresses, exactly as Firestore
   // would. One shared blob would hand the leads table the form submissions

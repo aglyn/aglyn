@@ -123,6 +123,13 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
 
   const save = async () => {
     if (unchanged) return
+    if (!orgId) {
+      enqueueSnackbar('Still loading this workspace — try again in a moment.', {
+        variant: 'warning',
+        persist: false,
+      })
+      return
+    }
     setSaving(true)
     const next = campaignMembershipValue(selected)
     const verdict = await writeGuardedBySeed(

@@ -39,13 +39,14 @@ import {
 } from 'firebase/firestore'
 import { useParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { useOrgDataScope, useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { useRecordRouteContext } from './use-record-route-context'
 import {
   relativeTime,
   senderHue,
   submissionSender,
 } from '../model/submission-presenter'
+import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 
 /**
  * Rows on the card, plus one so it can say the inbox holds more.
@@ -107,13 +108,23 @@ export function InboxGlanceCard(props: { hostId: string }) {
   const leadsHref = routeContext
     ? pluginRecordListHref('lead', routeContext)
     : null
+  /*
+   * The lead silo is the org's (AGL-3275), narrowed to this site by
+   * `visibleTo`. Reading `hosts/{hostId}/leads` showed a site its
+   * pre-migration rows and nothing captured since.
+   */
+  const { orgId } = useOrgDataScope({ hostId })
   const [openLeads, setOpenLeads] = useState<number | null>(null)
   useEffect(() => {
     let active = true
-    const leads = collection(firestore, 'hosts', hostId, 'leads')
+    if (!orgId) return undefined
+    const leads = collection(firestore, 'orgs', orgId, 'leads')
+    const scoped = where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId))
     void Promise.all([
-      getCountFromServer(query(leads)),
-      getCountFromServer(query(leads, where('status', 'in', CRM_LEAD_CLOSED_STATUSES))),
+      getCountFromServer(query(leads, scoped)),
+      getCountFromServer(
+        query(leads, scoped, where('status', 'in', CRM_LEAD_CLOSED_STATUSES)),
+      ),
     ])
       .then(([all, closed]) => {
         if (!active) return

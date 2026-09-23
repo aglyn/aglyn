@@ -148,6 +148,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
     useFirestore: () => mockFirestore,
     useUser: () => mockUser,
     useHostOrgId: () => mockOrgId,
+    // The lead silo is the org's (AGL-3275), so the contacts card resolves it.
+    useOrgDataScope: () => ({ scope: ['orgs', mockOrgId.orgId], orgId: mockOrgId.orgId, ready: true }),
     useConsoleHostRoute: () => mockHostRoute,
     useOrgPlan: () => mockPlan,
     useHostResourceApi: () => mockResourceApi,
@@ -394,7 +396,7 @@ describe('inbox console read cost (AGL-2501)', () => {
     expect(listenKeys()).toEqual(
       [
         ...NOTICE_LISTENS,
-        'hosts/site1/leads#201',
+        'orgs/org1/leads#201',
         'hosts/site1/siteMembers#201',
       ].sort(),
     )
