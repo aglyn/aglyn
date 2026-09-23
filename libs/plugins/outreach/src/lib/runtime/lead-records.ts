@@ -54,10 +54,11 @@ const BATCH_LIMIT = 450
 /** A lead nobody has touched, once somebody replied: Working. `true` when it moved. */
 export async function markOutreachLeadWorking(
   firestore: Firestore,
-  input: { hostId: string; leadId: string },
+  input: { orgId: string; leadId: string },
 ): Promise<boolean> {
   try {
-    const ref = firestore.collection('hosts').doc(input.hostId).collection('leads').doc(input.leadId)
+    // A lead is one org row (AGL-3275), so the site no longer names it.
+    const ref = firestore.collection('orgs').doc(input.orgId).collection('leads').doc(input.leadId)
     const snapshot = await ref.get()
     if (!snapshot.exists) return false
     const lead = snapshot.data() ?? {}
@@ -65,7 +66,7 @@ export async function markOutreachLeadWorking(
     await ref.set({ status: 'working', updatedAt: FieldValue.serverTimestamp() }, { merge: true })
     return true
   } catch (error) {
-    console.error('[outreach] the lead could not be marked working', input.hostId, input.leadId, error)
+    console.error('[outreach] the lead could not be marked working', input.orgId, input.leadId, error)
     return false
   }
 }

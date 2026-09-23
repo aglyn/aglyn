@@ -30,6 +30,7 @@ import {
 } from '@mui/material'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
+import { useCrmScope } from '../hooks/use-crm-scope'
 
 /** The most a reason may say — shared with the bulk bar's one-reason-for-all (AGL-2662). */
 export const UNQUALIFY_REASON_MAX = 500
@@ -55,6 +56,9 @@ export interface LeadUnqualifyDialogProps {
  */
 export function LeadUnqualifyDialog(props: LeadUnqualifyDialogProps) {
   const { open, onClose, hostId, leadId, leadLabel } = props
+  // The lead's collection is the org's now (AGL-3275); the site still names
+  // the surface, and the scope hook resolves the org from it.
+  const { orgId } = useCrmScope({ hostId })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const [reason, setReason] = useState('')
@@ -73,7 +77,7 @@ export function LeadUnqualifyDialog(props: LeadUnqualifyDialogProps) {
         status: 'unqualified',
         unqualifiedReason: trimmed.slice(0, REASON_MAX),
       }
-      await updateDoc(doc(firestore, 'hosts', hostId, 'leads', leadId), {
+      await updateDoc(doc(firestore, 'orgs', orgId, 'leads', leadId), {
         ...fields,
         updatedAt: serverTimestamp(),
       })

@@ -207,7 +207,7 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const routes = crmRoutes(basePath)
-  const ref = doc(firestore, 'hosts', hostId, 'leads', leadId)
+  const ref = doc(firestore, 'orgs', orgId, 'leads', leadId)
   const status = Aglyn.crmLeadStatus(lead)
   const converted = Boolean(lead.convertedContactId)
   const open = Aglyn.isCrmLeadOpen(lead) && !converted

@@ -39,6 +39,21 @@ import { recordCrmBooking } from './crm-booking-activity'
 // ---------------------------------------------------------------------------
 
 const docs = new Map<string, Record<string, unknown>>()
+
+/*
+ * The lead silo is org-scoped (AGL-3275) and is reached through the seam,
+ * which would otherwise resolve a live org read. This file's claim is WHICH
+ * record a booking files against, so the double just serves the same store.
+ */
+jest.mock('./host-visitor-records', () => ({
+  __esModule: true,
+  readLeadForHost: async (_hostId: string, id: string) => {
+    const row = docs.get(`orgs/org-1/leads/${id}`)
+    return row
+      ? { exists: true, id, data: () => row, get: (f: string) => (row as any)?.[f] }
+      : null
+  },
+}))
 let minted = 0
 
 const snapshotFor = (path: string) => ({
@@ -308,7 +323,12 @@ describe('the record the booking link named', () => {
   })
 
   it('files under a lead of this site', async () => {
-    docs.set(`hosts/${HOST}/leads/lead-1`, { email: 'lead@example.com' })
+    // Scoped like every other org row (AGL-3275): a lead with no `visibleTo`
+    // is visible to nobody, which is the fail-closed direction.
+    docs.set(`orgs/${ORG}/leads/lead-1`, {
+      email: 'lead@example.com',
+      visibleTo: [`host:${HOST}`],
+    })
     const outcome = await file({}, {}, { crmRef: 'lead:lead-1' })
     expect(outcome).toMatchObject({ filed: true, matchedBy: 'crmRef', link: { leadId: 'lead-1' } })
   })

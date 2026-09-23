@@ -175,7 +175,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       })
   },
   orgDataCollectionForHost: jest.fn(),
-  orgDataQueryForHost: jest.fn(),
+  // The scoped org query (AGL-3275): the leads audience reads through it now,
+  // as the contacts audience already did.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
+  }),
   // The meter (AGL-1438). Recorded rather than executed: `email-metering.spec`
   // owns what a write does to the two counters; what matters HERE is that this
   // sender calls it exactly once, with the delivered count, as a campaign.
@@ -432,7 +437,7 @@ function seed(nodes: unknown) {
     // of the cap, the suppression filter and the meter and refuses an audience
     // in which nobody carries a basis, so a lead seeded for any other purpose
     // still has to declare one to reach the code under test.
-    'hosts/host-1/leads/lead-1': {
+    'orgs/org-1/leads/lead-1': {
       email: 'dana@example.com',
       name: 'Dana Reed',
       // The basis belongs to the site sending, not to the org.
@@ -749,9 +754,11 @@ describe('the campaign cap and the cost meter (AGL-1438)', () => {
     mockState.store['orgs/org-1/counters/campaignEmailSends'] = { [month]: CAP }
     // A DIFFERENT site of the same org, with no counter of its own.
     mockState.store['hosts/host-2'] = { subdomain: 'acme-two' }
-    mockState.store['hosts/host-2/leads/lead-1'] = {
+    // On the org, scoped to the sibling site (AGL-3275) — and with the real
+    // `host:` token, which the path used to make unnecessary.
+    mockState.store['orgs/org-1/leads/lead-1'] = {
       email: 'lead@example.com',
-      visibleTo: ['host-2'],
+      visibleTo: ['host:host-2'],
       // Consented, so the send is refused by the org's exhausted allowance
       // and not by the consent join sitting in front of it. Both refusals are
       // a 400, so without a basis here this would pass on the wrong message.

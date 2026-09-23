@@ -95,10 +95,24 @@ const LEAD_FUNNEL_HELP = Aglyn.pluginDocsHelp('crmReports', {
     'lead was first seen.',
 })
 
-/** One site's leads first seen in a range — a single-field range, no composite index. */
-function leadsBetween(firestore: Firestore, hostId: string, from: number, to: number) {
+/**
+ * The leads a scope may see, first seen in a range (AGL-3275).
+ *
+ * `visibleTo` is the site's tokens under a site, and `null` at the
+ * organization level where an org-wide member reads without a clause. The
+ * range stays a single-field one; with the scope clause it composes with the
+ * `visibleTo` + `firstSeenAtMs` entry in `cloud/firebase-firestore.indexes.json`.
+ */
+function leadsBetween(
+  firestore: Firestore,
+  orgId: string,
+  visibleTo: readonly string[] | null,
+  from: number,
+  to: number,
+) {
   return query(
-    collection(firestore, 'hosts', hostId, 'leads'),
+    collection(firestore, 'orgs', orgId, 'leads'),
+    ...(visibleTo ? [where('visibleTo', 'array-contains-any', [...visibleTo])] : []),
     where('firstSeenAtMs', '>=', from),
     where('firstSeenAtMs', '<', to),
   )
@@ -161,8 +175,10 @@ function SiteLeadFunnelCard(props: { report: CrmReportScope; hostId: string }) {
   const captured = useAggregateRead<CapturedFigures>(
     () =>
       Promise.all([
-        countOf(leadsBetween(firestore, hostId, range.from, range.to)),
-        countOf(leadsBetween(firestore, hostId, range.previousFrom, range.previousTo)),
+        countOf(leadsBetween(firestore, report.scope[1], report.tokens, range.from, range.to)),
+        countOf(
+          leadsBetween(firestore, report.scope[1], report.tokens, range.previousFrom, range.previousTo),
+        ),
       ]).then(([current, previous]) => ({ current, previous })),
     [firestore, hostId, range],
     { cacheKey: reportCacheKey(report, `leads:counts:${hostId}`) },
@@ -170,7 +186,7 @@ function SiteLeadFunnelCard(props: { report: CrmReportScope; hostId: string }) {
   const window = useWindowRead<LeadRow>(
     () =>
       query(
-        leadsBetween(firestore, hostId, range.from, range.to),
+        leadsBetween(firestore, report.scope[1], report.tokens, range.from, range.to),
         orderBy('firstSeenAtMs', 'desc'),
         limit(LEAD_CEILING + 1),
       ),
@@ -201,17 +217,14 @@ function SiteLeadFunnelCard(props: { report: CrmReportScope; hostId: string }) {
 SiteLeadFunnelCard.displayName = 'SiteLeadFunnelCard'
 
 /**
- * THE CROSS-SITE FUNNEL (AGL-2634): every site of the organization, one
- * window each, totaled.
+ * THE ORGANIZATION'S FUNNEL (AGL-2634, AGL-3275): every lead the org holds.
  *
- * The counts are one server aggregate per site per period, summed. The
- * windows are one bounded read per site — the site card's own query, the
- * same ceiling — merged newest-seen first and NOT cut again: the funnel
- * is a placement of leads by status, and cutting the merged list would
- * place a busy site's leads and drop a quiet site's. What the ceiling
- * bounds is the read per site, and the caption says so when any site had
- * more than its window. Held until the mount's site list has settled, so
- * a first round against a partial list is not answered and remembered.
+ * This totaled one aggregate and one window PER SITE, because the sites'
+ * lead collections were disjoint. They share one collection now, so a sum
+ * would count a lead that two brands in a consent group both hold once for
+ * each of them — and the merge that existed so a busy site could not crowd
+ * out a quiet one has nothing left to balance. One aggregate and one
+ * bounded read, unscoped, as an org-wide member's reads are.
  */
 function OrgLeadFunnelCard(props: { report: CrmReportScope }) {
   const { report } = props
@@ -224,62 +237,41 @@ function OrgLeadFunnelCard(props: { report: CrmReportScope }) {
   )
   const key = hostIds?.join('\n') ?? ''
 
+  /*
+   * ONE READ, not one per site (AGL-3275). The sites share a collection now,
+   * so a lead two brands in a consent group both hold would be counted once
+   * for each of them — and the org's funnel would report more leads than the
+   * org has. `null` tokens is the org-wide read that carries no clause.
+   */
   const captured = useAggregateRead<CapturedFigures>(
     () =>
-      hostIds
-        ? Promise.all(
-            hostIds.map((hostId) =>
-              Promise.all([
-                countOf(leadsBetween(firestore, hostId, range.from, range.to)),
-                countOf(leadsBetween(firestore, hostId, range.previousFrom, range.previousTo)),
-              ]),
-            ),
-          ).then((pairs) =>
-            pairs.reduce(
-              (sum, [current, previous]) => ({
-                current: sum.current + current,
-                previous: sum.previous + previous,
-              }),
-              { current: 0, previous: 0 },
-            ),
-          )
-        : null,
-    [firestore, key, range],
-    { cacheKey: reportCacheKey(report, `leads:counts:org:${key}`) },
+      Promise.all([
+        countOf(leadsBetween(firestore, report.scope[1], null, range.from, range.to)),
+        countOf(
+          leadsBetween(firestore, report.scope[1], null, range.previousFrom, range.previousTo),
+        ),
+      ]).then(([current, previous]) => ({ current, previous })),
+    [firestore, report.scope, range],
+    { cacheKey: reportCacheKey(report, 'leads:counts:org') },
   )
   const merged = useAggregateRead<{ rows: LeadRow[]; truncated: boolean }>(
     () =>
-      hostIds
-        ? Promise.all(
-            hostIds.map((hostId) =>
-              getDocs(
-                query(
-                  leadsBetween(firestore, hostId, range.from, range.to),
-                  orderBy('firstSeenAtMs', 'desc'),
-                  limit(LEAD_CEILING + 1),
-                ),
-              ).then((snapshot) =>
-                ceilingedWindow(
-                  snapshot.docs.map(
-                    (document) =>
-                      ({ ...document.data(), $id: `${hostId}/${document.id}` }) as unknown as LeadRow,
-                  ),
-                  LEAD_CEILING,
-                ),
-              ),
-            ),
-          ).then((windows) => ({
-            rows: windows
-              .flatMap((window) => window.rows)
-              .sort(
-                (a, b) =>
-                  Number(b['firstSeenAtMs'] ?? 0) - Number(a['firstSeenAtMs'] ?? 0),
-              ),
-            truncated: windows.some((window) => window.truncated),
-          }))
-        : null,
-    [firestore, key, range],
-    { cacheKey: reportCacheKey(report, `leads:window:org:${key}`) },
+      getDocs(
+        query(
+          leadsBetween(firestore, report.scope[1], null, range.from, range.to),
+          orderBy('firstSeenAtMs', 'desc'),
+          limit(LEAD_CEILING + 1),
+        ),
+      ).then((snapshot) =>
+        ceilingedWindow(
+          snapshot.docs.map(
+            (document) => ({ ...document.data(), $id: document.id }) as unknown as LeadRow,
+          ),
+          LEAD_CEILING,
+        ),
+      ),
+    [firestore, report.scope, range],
+    { cacheKey: reportCacheKey(report, 'leads:window:org') },
   )
   const window = useMemo<WindowRead<LeadRow>>(
     () => ({
@@ -303,12 +295,12 @@ function OrgLeadFunnelCard(props: { report: CrmReportScope }) {
       caption={
         sampled
           ? `Placed from the ${window.rows.length.toLocaleString()} most recently captured leads` +
-            ` across ${plural(sites, 'site')} — at most ${LEAD_CEILING.toLocaleString()} per site` +
+            ` — at most ${LEAD_CEILING.toLocaleString()}` +
             (figures !== null ? ` — of ${figures.current.toLocaleString()}` : '') +
             ' in the period; the captured tile is counted on the server.'
           : undefined
       }
-      errorText={'Some site’s leads could not be read.'}
+      errorText={'The organization’s leads could not be read.'}
     />
   )
 }

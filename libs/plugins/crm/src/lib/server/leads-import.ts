@@ -92,7 +92,7 @@ import {
   type LeadImportSkippedRow,
   normalizeLeadImportRow,
 } from '../model/crm-lead-import'
-import { addHostLead, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { addHostLead, firebaseAdmin, orgLeadsForHost } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   ownerDirectory,
@@ -216,7 +216,7 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
 
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(context.hostId)
-    const leadsRef = hostRef.collection('leads')
+    const leadsRef = await orgLeadsForHost(context.hostId)
     const refs = normalized.map((entry) => leadsRef.doc(entry.key))
     const namesCampaigns = normalized.some((entry) => entry.row.campaigns?.length)
     const [owners, before, campaigns] = await Promise.all([

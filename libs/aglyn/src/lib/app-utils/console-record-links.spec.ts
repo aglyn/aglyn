@@ -66,12 +66,20 @@ describe('the same hub with no site under it (AGL-2662)', () => {
   })
 
   /**
-   * A lead's id is a PERSON KEY — the same on every site that met the
-   * person — so an address that spans sites has to name one. The site
-   * segment comes first, as the hub's own route reads it.
+   * A LEAD IS NO LONGER THE EXCEPTION (AGL-3275).
+   *
+   * Its id is a person key, and while a lead lived under its site two sites
+   * held two documents carrying that one id — so an org-level address had to
+   * name the site to say which was meant. One org collection makes the key
+   * unambiguous, and a lead addresses like a contact or a deal.
+   *
+   * `crmOrgLeadHref` survives as a shim that IGNORES the site it is handed,
+   * so callers holding a `hostId` need not prove they no longer need one. It
+   * goes with the host path in AGL-3277.
    */
-  it('names the site before the lead', () => {
-    expect(crmOrgLeadHref('acme', 'host-1', 'l/1')).toBe('/acme/crm/leads/host-1/l%2F1')
+  it('addresses a lead by its id alone, ignoring any site it is handed', () => {
+    expect(crmOrgRecordHref('acme', 'lead', 'l/1')).toBe('/acme/crm/leads/l%2F1')
+    expect(crmOrgLeadHref('acme', 'host-1', 'l/1')).toBe('/acme/crm/leads/l%2F1')
   })
 })
 

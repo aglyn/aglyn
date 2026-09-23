@@ -600,11 +600,16 @@ describe('where a result row goes at the organization hub (AGL-2662)', () => {
    * person, so the address has to name the site the row was read from — and
    * a row that carries none cannot be addressed at all.
    */
-  it('names the site a lead was read from, and drops one that names none', () => {
-    expect(href('leads', { $id: 'l/1', $hostId: 'host-1' })).toBe(
-      '/acme/crm/leads/host-1/l%2F1',
-    )
-    expect(href('leads', { $id: 'l1' })).toBeNull()
+  it('addresses a lead by its id alone, whether or not the row names a site (AGL-3275)', () => {
+    /*
+     * The link used to carry the site: a lead's id is a person key, and while
+     * a lead lived under its site two sites held two documents with that one
+     * id — so a row that could not say WHICH site it came from addressed
+     * nothing and was dropped. One org collection makes the key unambiguous,
+     * so the site is ignored and a row without one still links.
+     */
+    expect(href('leads', { $id: 'l/1', $hostId: 'host-1' })).toBe('/acme/crm/leads/l%2F1')
+    expect(href('leads', { $id: 'l1' })).toBe('/acme/crm/leads/l1')
   })
 
   it('still refuses a site collection with no site', () => {
@@ -633,17 +638,8 @@ describe('where a result row goes at the organization hub (AGL-2662)', () => {
         ((r: any) => String(r)) as any,
       ),
     ).toBeNull()
-    // A lead off a site whose row does not name the site it came from: the
-    // id alone is a person key and addresses nothing. The other CRM kinds
-    // open in the org hub instead — see the org-level suite above.
-    expect(
-      buildResultHref(
-        'leads',
-        { $id: 'c1' },
-        { orgSlug: 'acme', hostSubdomain: null },
-        ((r: any) => String(r)) as any,
-      ),
-    ).toBeNull()
+    // A lead off a site links by its id alone since AGL-3275 — see the
+    // org-level suite above — so it is no longer one of the null cases.
     // And without a workspace slug nothing in the console is addressable.
     expect(
       buildResultHref(

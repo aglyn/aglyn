@@ -244,9 +244,11 @@ export async function convertHostLead(
 ): Promise<ConvertHostLeadResult> {
   const { firestore, hostId, orgId, org, leadId, actor, createCompany, deal } = input
   const requestedCompanyId = String(input.companyId ?? '').trim()
+  // The lead's one home, on the org (AGL-3275). `orgId` is already resolved
+  // by the caller, so this needs no second lookup to find it.
   const leadRef = firestore
-    .collection('hosts')
-    .doc(hostId)
+    .collection('orgs')
+    .doc(orgId)
     .collection('leads')
     .doc(leadId)
   const leadSnapshot = await leadRef.get()

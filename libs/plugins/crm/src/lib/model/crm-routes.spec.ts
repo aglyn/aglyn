@@ -77,9 +77,11 @@ describe('crmRoutes agrees with the console-side builders at the org hub', () =>
     expect(orgRoutes.deal('d/1')).toBe(crmOrgRecordHref('acme', 'deal', 'd/1'))
   })
 
-  it('names the site before the lead, on both sides', () => {
-    expect(orgRoutes.lead('l/1', 'host-1')).toBe(
-      crmOrgLeadHref('acme', 'host-1', 'l/1'),
-    )
+  it('names a lead by its id alone, like every other record (AGL-3275)', () => {
+    // The site segment is gone: one org collection makes the person key
+    // unambiguous, so a lead addresses the way a contact or a deal does.
+    expect(orgRoutes.lead('l/1')).toBe(crmOrgRecordHref('acme', 'lead', 'l/1'))
+    // The old two-argument helper still answers, and ignores the site.
+    expect(crmOrgLeadHref('acme', 'host-1', 'l/1')).toBe(orgRoutes.lead('l/1'))
   })
 })

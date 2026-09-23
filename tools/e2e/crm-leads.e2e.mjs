@@ -71,7 +71,7 @@ const UNQUALIFIED_REASON = 'Booked a one-off class; not a wholesale account.'
 
 const firestore = adminFirestore()
 const orgRef = firestore.collection('orgs').doc(ORG_ID)
-const leadRef = (lead) => firestore.collection('hosts').doc(HOST_ID).collection('leads').doc(lead.id)
+const leadRef = (lead) => orgRef.collection('leads').doc(lead.id)
 
 await seedCrmFixtures({
   firestore,

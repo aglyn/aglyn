@@ -480,7 +480,7 @@ async function applyMessages(
       }
       // A lead somebody wrote back to is being worked (AGL-3234).
       if (enrollment.target === 'lead' && enrollment.leadId) {
-        await markOutreachLeadWorking(firestore, { hostId: enrollment.hostId, leadId: enrollment.leadId })
+        await markOutreachLeadWorking(firestore, { orgId: context.orgId, leadId: enrollment.leadId })
       }
       context.delta.replies += 1
       event = { type: 'reply', atMs: decidedBy?.atMs || nowMs, detail: decidedBy?.evidence ?? null }

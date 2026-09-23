@@ -246,7 +246,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
     }),
   orgDataCollectionForHost: jest.fn(),
-  orgDataQueryForHost: jest.fn(),
+  // The scoped org query (AGL-3275): the leads audience reads through it now,
+  // as the contacts audience already did.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
+  }),
   meterHostEmail: async () => undefined,
   /*
    * The monthly allowance, backed by the same store the sender writes to, so
@@ -327,7 +332,7 @@ const SEND_ID = 'spring-2026'
 
 /** A lead with a recorded opt-in, which the consent join requires. */
 function seedLead(id: string, email: string) {
-  store.set(`hosts/${HOST}/leads/${id}`, {
+  store.set(`orgs/org-1/leads/${id}`, {
     email,
     name: id,
     // The basis belongs to the site sending, not to the org.
@@ -561,7 +566,7 @@ describe('a follow-up passes every gate the first send passed', () => {
     await firstSend()
     sent.length = 0
     seedLead('lead-3', 'cy@example.com')
-    store.set(`hosts/${HOST}/leads/lead-4`, {
+    store.set(`orgs/org-1/leads/lead-4`, {
       email: 'di@example.com',
       marketingConsent: false,
       marketingConsentAtMs: Date.UTC(2026, 7, 2),

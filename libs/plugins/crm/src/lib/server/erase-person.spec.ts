@@ -135,6 +135,20 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
   resolveOrgPermissions: (...args: unknown[]) => (mockResolveOrgPermissions as any)(...args),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  /*
+   * The lead a request NAMES is resolved through the seam (AGL-3275). The
+   * erasure MARKER still sweeps both homes — see the assertions below, which
+   * are unchanged because an erasure has to reach a legacy row too.
+   */
+  readLeadForHost: async (hostId: string, leadId: string) => {
+    for (const path of [`orgs/org1/leads/${leadId}`, `hosts/${hostId}/leads/${leadId}`]) {
+      const row = docs.get(path)
+      if (row) {
+        return { exists: true, id: leadId, data: () => row, get: (f: string) => (row as any)?.[f] }
+      }
+    }
+    return null
+  },
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: (...args: unknown[]) => (mockVerifyIdToken as any)(...args) }),

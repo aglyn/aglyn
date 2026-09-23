@@ -49,7 +49,7 @@ import {
   normalizeContactEmail,
   personKey,
 } from '@aglyn/aglyn/server'
-import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, getOrgForHost, leadForWrite } from '@aglyn/tenant-data-admin'
 import { handOffLeadRecords } from '@aglyn/tenant-runtime/hand-off-lead'
 import { FieldValue } from 'firebase-admin/firestore'
 
@@ -77,11 +77,12 @@ export async function convertOpenLeadOntoContact(
   if (!key || !input.contactId) return false
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const leadRef = firestore
-      .collection('hosts')
-      .doc(input.hostId)
-      .collection('leads')
-      .doc(key)
+    /*
+     * The org row, with any not-yet-backfilled predecessor carried onto it
+     * first (AGL-3275) — a conversion must not stamp `convertedContactId` on
+     * a host row that a later capture would then write past on the org.
+     */
+    const { ref: leadRef } = await leadForWrite(input.hostId, key)
     const snapshot = await leadRef.get()
     if (!snapshot.exists) return false
     const lead = (snapshot.data() ?? {}) as Record<string, unknown> & CrmLeadFields

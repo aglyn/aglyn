@@ -1461,6 +1461,58 @@ service cloud.firestore {
            resource.data.visibleTo.hasOnly(
              orgMember().get('scopeTokens', ['org'])));
       }
+      /**
+       * A lead, on the org and scoped by `visibleTo` (AGL-3275).
+       *
+       * Leads used to live at `hosts/{hostId}/leads/{leadId}`, where the PATH
+       * did the job `visibleTo` does. That isolated an agency correctly and
+       * could not serve a multi-brand org at all: a lead id is the sha256 of
+       * the address, so one person captured on two sibling brands was two
+       * documents with the same id under different parents. Here they are one
+       * document whose `visibleTo` names the consent group — which is also
+       * what the person was told when they consented, since the disclosure
+       * names those brands.
+       *
+       * READ answers to the contacts predicate, not a looser one. A lead is a
+       * person who has not converted yet; disclosing one discloses the same
+       * thing, so `canReadScopedPeople()` gates both.
+       *
+       * CREATED BY THE SERVER, as a contact is (AGL-2819). Every door that
+       * files a lead — a lead-routed form, a booking, an import, the New lead
+       * drawer, `POST /v1/leads` — is an Admin-SDK path that judges the
+       * audience band and dedupes on the address, so a client create is
+       * refused and the id can never be a client's guess at a person's hash.
+       *
+       * UPDATE is the Leads section's working state — status, owner, notes —
+       * which the console writes client-direct, so unlike a contact this is
+       * not narrowed to letting a holder go. It asks the plan last, as every
+       * CRM collection's client writes do, and it may not move the scope
+       * unless the member is org-wide: widening `visibleTo` from a client is
+       * how one agency client's lead would arrive on another's site.
+       *
+       * `emailState` (AGL-3245) stays closed, exactly as the host block had
+       * it: the senders write the platform's verdict on an address — a
+       * bounce, a gateway block, a do-not-contact mark — and a member who
+       * could clear it could email a person who asked not to be.
+       *
+       * DELETE IS SOLE-HOLDER ONLY, for the reason it is on a contact: in a
+       * multi-brand org the row is shared, and one brand removing a lead must
+       * not destroy the sibling brand's record of the same person. `hasOnly`
+       * is the reference count. Every other case is an update that drops this
+       * site's token.
+       */
+      match /leads/{leadId} {
+        allow read: if isStaff() || canReadScopedPeople();
+        allow create: if isStaff();
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
+           orgCarriesCrmSuite(orgId) &&
+           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState']));
+        allow delete: if isStaff() ||
+          (canWriteScopedOrgData() &&
+           resource.data.visibleTo.hasOnly(
+             orgMember().get('scopeTokens', ['org'])));
+      }
       // Segments are saved filters over the contacts above and are stamped
       // org-wide at creation, so they follow the same predicate: a segment
       // nobody may see is a campaign audience nobody may resolve, and a

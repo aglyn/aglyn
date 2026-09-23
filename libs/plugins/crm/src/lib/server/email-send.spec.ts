@@ -147,6 +147,17 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     }),
   },
   getOrgForHost: (...args: unknown[]) => getOrgForHost(...args),
+  /*
+   * The lead read moved to the seam (AGL-3275). This file's claims are about
+   * the RECIPIENT and the merge fields, so the double resolves the org row off
+   * the same fake store the rest of the file writes to.
+   */
+  readLeadForHost: async (_hostId: string, leadId: string) => {
+    const row = store[`orgs/org-1/leads/${leadId}`]
+    return row
+      ? { exists: true, id: leadId, data: () => row, get: (f: string) => (row as any)?.[f] }
+      : null
+  },
   getHostDocAdmin: (...args: unknown[]) => getHostDocAdmin(...args),
   getOrgDoc: async (orgId: string) => (orgId === ORG_ID ? orgDoc : null),
   logOrgActivity: (...args: unknown[]) => logOrgActivity(...args),
@@ -225,7 +236,7 @@ const HOST_ID = 'site-1'
 const ORG_ID = 'org-1'
 const CONTACT = `orgs/${ORG_ID}/contacts/contact-1`
 const DEAL = `orgs/${ORG_ID}/deals/deal-1`
-const LEAD = `hosts/${HOST_ID}/leads/lead-1`
+const LEAD = `orgs/${ORG_ID}/leads/lead-1`
 /** A plan that carries the suite; the cap is read off the real table. */
 const PLAN = 'starter'
 /** The org document the organization variant reads. */

@@ -147,6 +147,21 @@ export function createCrmRecordEmailStateWriter(deps: CrmRecordEmailStateDeps): 
         console.error('[crm] the contact could not be stamped with an email state', orgId, error)
       }
       try {
+        /*
+         * ONE ORG ROW, plus any legacy site row the backfill has not reached
+         * (AGL-3275). A bounce or a do-not-contact mark is the platform's
+         * verdict on the ADDRESS, so it has to reach every copy that still
+         * exists — an unmarked leftover is a person who asked not to be
+         * mailed and could be. AGL-3277 drops the second loop with the
+         * fallback.
+         */
+        if (await stampRecord(
+          firestore.collection('orgs').doc(orgId).collection('leads').doc(key),
+          state,
+          force,
+        )) {
+          records += 1
+        }
         for (const hostId of await orgHostIds(firestore, orgId)) {
           const lead = firestore.collection('hosts').doc(hostId).collection('leads').doc(key)
           if (await stampRecord(lead, state, force)) records += 1

@@ -88,7 +88,6 @@
 
 import { Route } from '@aglyn/aglyn/app-utils/console-routes'
 import {
-  crmOrgLeadHref,
   crmOrgRecordHref,
   crmOrgSectionHref,
   crmRecordHref,
@@ -792,11 +791,10 @@ export function buildResultHref(
         : crmOrgRecordHref(orgSlug, CRM_RECORD_KIND[entity], id)
     case 'leads':
       if (host) return crmRecordHref({ orgSlug, host }, 'lead', id)
-      // At the org level a lead's address has to name its site as well: the
-      // id is a person key, the same on every site that met the person, so
-      // the id alone addresses nothing. The row carries the site it was
-      // read from.
-      return row.$hostId ? crmOrgLeadHref(orgSlug, String(row.$hostId), id) : null
+      // A lead addresses by its id alone at both levels (AGL-3275): it is one
+      // org row, so the person key that used to need a site beside it to say
+      // WHICH copy was meant now names the only one there is.
+      return crmOrgRecordHref(orgSlug, 'lead', id)
     case 'tasks':
     case 'activities':
       return crmWorkHref(entity, row, orgSlug, host)

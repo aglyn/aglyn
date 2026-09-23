@@ -216,10 +216,74 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   memberHasOrgPermission: async (_orgId: string, _member: unknown, permission: string) =>
     mockLastMembership?.permissions?.[permission] === true,
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...(args as [])),
+  // The org lead silo (AGL-3275), reached through the barrel by the handler;
+  // the relative doubles above are what the capture door reaches.
+  orgLeadsForHost: async () => collectionRef(`orgs/${ORG}/leads`),
+  readLeadForHost: async (_hostId: string, key: string) => {
+    const row = docs.get(`orgs/${ORG}/leads/${key}`)
+    return row
+      ? { exists: true, id: key, data: () => row, get: (f: string) => (row as any)?.[f] }
+      : null
+  },
+  scopedToHost: (ref: any) => ref,
   // The real capture door — see the file docblock.
   ...jest.requireActual(
     '../../../../../tenant/data/admin/src/lib/server/host-visitor-records',
   ),
+}))
+
+/*
+ * The lead silo is org-scoped (AGL-3275), and the real capture door this file
+ * drives reaches it by RELATIVE path — doubled here as well as on the barrel,
+ * or the door would resolve a live org read. Where a lead lives is
+ * `host-lead-seam.spec.ts`'s claim; this file keeps its own.
+ */
+jest.mock('../../../../../tenant/data/admin/src/lib/server/host-visitor-records', () => ({
+  __esModule: true,
+  orgLeadsForHost: async () => collectionRef(`orgs/${ORG}/leads`),
+  readLeadForHost: async (_hostId: string, key: string) => {
+    const path = `orgs/${ORG}/leads/${key}`
+    const row = docs.get(path)
+    return row
+      ? { exists: true, id: key, data: () => row, get: (f: string) => (row as any)?.[f] }
+      : null
+  },
+  leadForWrite: async (_hostId: string, key: string) => ({
+    ref: collectionRef(`orgs/${ORG}/leads`).doc(key),
+    existed: docs.has(`orgs/${ORG}/leads/${key}`),
+    carried: false,
+  }),
+  leadScopeForHost: async (hostId: string) => [`host:${hostId}`],
+}))
+
+jest.mock('../../../../../tenant/data/admin/src/lib/server/firebase-admin', () => ({
+  __esModule: true,
+  // The LEGACY host path behind the seam's carry (AGL-3275). Empty here: what
+  // these files drive is the capture, and the carry is `host-lead-seam`'s.
+  default: {
+    app: () => ({
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  },
+}))
+
+jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  // The seam resolves the org collection through here (AGL-3275).
+  orgDataCollectionForHost: async (_hostId: string, name: string) =>
+    collectionRef(`orgs/${ORG}/${name}`),
+  resolveOrgIdForHost: async () => ORG,
+  consentGroupForSite: async (hostId: string) =>
+    jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
+  scopedToHost: (ref: any) => ref,
 }))
 
 import { personKey, readMarketingBasis, soloConsentGroup } from '@aglyn/aglyn/server'
@@ -259,7 +323,7 @@ async function call(body: unknown, options: { method?: string; token?: string | 
   return { status, body: answer, headers }
 }
 
-const leadAt = (email: string) => docs.get(`hosts/${HOST}/leads/${personKey(email)}`)
+const leadAt = (email: string) => docs.get(`orgs/${ORG}/leads/${personKey(email)}`)
 const leadPaths = () => [...docs.keys()].filter((path) => path.includes('/leads/'))
 
 beforeEach(() => {
@@ -365,9 +429,20 @@ describe('what is written', () => {
       ownerUid: 'rep-uid',
       notes: 'Met at the show',
     })
-    // No contact, no company: the conversion's to make.
-    expect([...docs.keys()].filter((path) => path.startsWith('orgs/'))).toEqual([])
-    expect(lead?.['visibleTo']).toBeUndefined()
+    /*
+     * No contact, no company: the conversion's to make.
+     *
+     * This used to read "nothing under `orgs/` at all", which said the same
+     * thing only while a lead lived under `hosts/`. The lead IS an org row now
+     * (AGL-3275), so the claim is spelled out: the two collections a create
+     * must not touch, named.
+     */
+    const orgPathsOtherThanLeads = [...docs.keys()].filter(
+      (path) => path.startsWith(`orgs/${ORG}/`) && !path.startsWith(`orgs/${ORG}/leads/`),
+    )
+    expect(orgPathsOtherThanLeads).toEqual([])
+    // Scoped like every other org row now, and still no per-holder facet map.
+    expect(lead?.['visibleTo']).toEqual([`host:${HOST}`])
     expect(lead?.['facets']).toBeUndefined()
     // No basis: a person typed in by the team did not tick a box.
     expect(readMarketingBasis(lead ?? null, soloConsentGroup(HOST)).basis).toBe('unrecorded')
@@ -387,7 +462,7 @@ describe('what is written', () => {
   it('files the lead under the site’s campaigns, and refuses one that is not the site’s', async () => {
     docs.set(`hosts/${HOST}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
     docs.set(`hosts/${HOST}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
-    docs.set(`hosts/${HOST}/leads/${personKey('dana@example.com')}`, {
+    docs.set(`orgs/${ORG}/leads/${personKey('dana@example.com')}`, {
       email: 'dana@example.com',
       sources: ['import'],
       submissionCount: 1,
@@ -426,7 +501,7 @@ describe('what is written', () => {
   })
 
   it('updates the lead the site already holds for the address, and says so', async () => {
-    docs.set(`hosts/${HOST}/leads/${personKey('dana@example.com')}`, {
+    docs.set(`orgs/${ORG}/leads/${personKey('dana@example.com')}`, {
       email: 'dana@example.com',
       sources: ['signup'],
       submissionCount: 1,
@@ -448,7 +523,7 @@ describe('what is written', () => {
 
   it('refuses a new person by name once the site is at the platform ceiling', async () => {
     leadCeiling = 1
-    docs.set(`hosts/${HOST}/leads/${personKey('first@example.com')}`, {
+    docs.set(`orgs/${ORG}/leads/${personKey('first@example.com')}`, {
       email: 'first@example.com',
     })
     const out = await call({ hostId: HOST, email: 'second@example.com' })

@@ -220,10 +220,83 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     jest
       .requireActual('@aglyn/aglyn/app-utils/consent-groups')
       .soloConsentGroup(hostId),
+  // The org lead silo (AGL-3275), reached through the barrel by the handler
+  // itself; the relative double below is what the capture door reaches.
+  orgLeadsForHost: async () => collectionRef(`orgs/${ORG_ID}/leads`),
+  scopedToHost: (ref: any) => ref,
   // The real capture door — see the file docblock.
   ...jest.requireActual(
     '../../../../../tenant/data/admin/src/lib/server/host-visitor-records',
   ),
+}))
+
+/*
+ * The lead silo is org-scoped now (AGL-3275), and the real capture door this
+ * file drives reaches it through these two modules by RELATIVE path — so they
+ * are doubled here as well as on the barrel above, or the door would resolve a
+ * live org read. Where a lead lives is `host-lead-seam.spec.ts`'s claim; this file
+ * keeps its own, which is what an imported ROW becomes.
+ */
+jest.mock('../../../../../tenant/data/admin/src/lib/server/host-visitor-records', () => ({
+  __esModule: true,
+  orgLeadsForHost: async () => collectionRef(`orgs/${ORG_ID}/leads`),
+  readLeadForHost: async (_hostId: string, key: string) => {
+    const path = `orgs/${ORG_ID}/leads/${key}`
+    const row = docs.get(path)
+    return row
+      ? { exists: true, id: key, data: () => row, get: (f: string) => (row as any)?.[f] }
+      : null
+  },
+  leadForWrite: async (_hostId: string, key: string) => ({
+    ref: collectionRef(`orgs/${ORG_ID}/leads`).doc(key),
+    existed: docs.has(`orgs/${ORG_ID}/leads/${key}`),
+    carried: false,
+  }),
+  // The org declared one group over both sites (see `org` below), so this
+  // resolves to BOTH — a group-of-one double would make the visibleTo claim
+  // below assert a scope the real resolver would never produce.
+  leadScopeForHost: async () => [`host:${HOST_ID}`, `host:${OTHER_HOST_ID}`],
+}))
+
+jest.mock('../../../../../tenant/data/admin/src/lib/server/firebase-admin', () => ({
+  __esModule: true,
+  // The LEGACY host path behind the seam's carry (AGL-3275). Empty here: what
+  // these files drive is the capture, and the carry is `host-lead-seam`'s.
+  default: {
+    app: () => ({
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  },
+}))
+
+jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () => ({
+  __esModule: true,
+  // The seam resolves the org collection through here (AGL-3275).
+  orgDataCollectionForHost: async (_hostId: string, name: string) =>
+    collectionRef(`orgs/${ORG_ID}/${name}`),
+  resolveOrgIdForHost: async () => ORG_ID,
+  /*
+   * The org below declares ONE group over both sites, so the real resolver
+   * would answer both — and `leadScopeForHost` stamps what it answers. A
+   * group-of-one double here would quietly assert a scope the product never
+   * produces for this fixture.
+   */
+  consentGroupForSite: async () => ({
+    hostId: HOST_ID,
+    groupId: 'brand',
+    name: 'Brand',
+    hostIds: [HOST_ID, OTHER_HOST_ID],
+    declared: true,
+  }),
+  scopedToHost: (ref: any) => ref,
 }))
 
 import { personKey, readMarketingBasis, soloConsentGroup } from '@aglyn/aglyn/server'
@@ -270,7 +343,7 @@ const importRows = (rows: unknown[], hostId = HOST_ID) => drive({ hostId, rows }
 
 /** The lead one address is filed under, on whichever site. */
 const leadAt = (email: string, hostId = HOST_ID) =>
-  docs.get(`hosts/${hostId}/leads/${personKey(email)}`)
+  docs.get(`orgs/${ORG_ID}/leads/${personKey(email)}`)
 
 const leadPaths = () => [...docs.keys()].filter((path) => path.includes('/leads/'))
 
@@ -338,7 +411,7 @@ describe('what a row becomes', () => {
       ownersUnresolved: [],
     })
     expect(leadPaths()).toEqual([
-      `hosts/${HOST_ID}/leads/${personKey('dana@example.com')}`,
+      `orgs/${ORG_ID}/leads/${personKey('dana@example.com')}`,
     ])
     expect(leadAt('dana@example.com')).toMatchObject({
       email: 'dana@example.com',
@@ -353,12 +426,21 @@ describe('what a row becomes', () => {
   })
 
   /**
-   * The one difference between a lead and the five org collections. A lead
-   * is private to its site by PATH, the rules admit the site's own members
-   * and the list reads it with no scope clause — so a `visibleTo` here
-   * would be a field nothing reads, describing a sharing decision the
-   * collection does not have. The org above pooled two sites, so the
-   * import context really did resolve tokens to drop.
+   * A lead is scoped like every other org collection now (AGL-3275).
+   *
+   * This file used to assert the opposite — no `visibleTo`, "because the site
+   * IS the scope" — and that was right while a lead lived at
+   * `hosts/{hostId}/leads`, private by path, read with no scope clause. The
+   * path is gone, so a lead without `visibleTo` would now be a row visible to
+   * NOBODY: both enforcement layers fail closed on the missing field.
+   *
+   * The org above pools two sites into one declared group, so the tokens the
+   * import context resolves are the ones that get stamped rather than dropped
+   * — which is the whole difference between a multi-brand org being served
+   * and being unable to share one person between its own brands.
+   *
+   * `facets` stays absent: that is the contact's shape for per-holder
+   * records, and a lead still has one holder's worth of state.
    */
   /**
    * The lead's own profile (AGL-3231) lands beside the working state, in
@@ -366,7 +448,7 @@ describe('what a row becomes', () => {
    * cell did not name.
    */
   it('writes the profile the file carries, and leaves what it does not', async () => {
-    docs.set(`hosts/${HOST_ID}/leads/${personKey('dana@example.com')}`, {
+    docs.set(`orgs/${ORG_ID}/leads/${personKey('dana@example.com')}`, {
       email: 'dana@example.com',
       sources: ['signup'],
       submissionCount: 1,
@@ -408,7 +490,7 @@ describe('what a row becomes', () => {
     docs.set(`hosts/${HOST_ID}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
     docs.set(`hosts/${HOST_ID}/emailCampaigns/founder-icp1`, { name: 'Founder · ICP 1' })
     docs.set(`hosts/${HOST_ID}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
-    docs.set(`hosts/${HOST_ID}/leads/${personKey('held@example.com')}`, {
+    docs.set(`orgs/${ORG_ID}/leads/${personKey('held@example.com')}`, {
       email: 'held@example.com',
       sources: ['signup'],
       submissionCount: 1,
@@ -434,26 +516,47 @@ describe('what a row becomes', () => {
     expect(leadAt('june@example.com')).toBeUndefined()
   })
 
-  it('stamps no visibleTo and no facet map, because the site IS the scope', async () => {
+  it('stamps the consent group as visibleTo, and still no facet map', async () => {
     await importRows([{ email: 'dana@example.com', status: 'working' }])
     const lead = leadAt('dana@example.com') as Record<string, unknown>
-    expect(lead).not.toHaveProperty('visibleTo')
+    expect(lead['visibleTo']).toEqual([`host:${HOST_ID}`, `host:${OTHER_HOST_ID}`])
     expect(lead).not.toHaveProperty('facets')
     expect(lead['capturedByHostIds']).toEqual([HOST_ID])
   })
 
   /**
-   * The site the drawer named, and no other. The import context's whole
-   * permission is granted for ONE host, so a second site's leads must be
-   * untouched by a file imported into the first.
+   * ISOLATION MOVED FROM THE PATH TO THE SCOPE (AGL-3275).
+   *
+   * This asserted that a file imported into one site wrote nothing under the
+   * other, which the path guaranteed. Both sites here are one DECLARED
+   * consent group, so under the new model they deliberately share a
+   * collection and each row says who may see it — and the two people below
+   * land as two documents in one place rather than one document in each of
+   * two places.
+   *
+   * The separation an agency needs is the same field with a different value:
+   * an undeclared group resolves to `['host:{id}']` and the sibling site is
+   * not in it. That case is `host-lead-seam.spec.ts`'s, because it is a property
+   * of the resolver and not of the importer.
    */
-  it('writes nothing under any other site', async () => {
+  it('files both sites\u2019 rows in one collection, each naming who may see it', async () => {
     await importRows([{ email: 'dana@example.com' }])
     await importRows([{ email: 'ada@example.com' }], OTHER_HOST_ID)
-    expect(leadAt('dana@example.com', OTHER_HOST_ID)).toBeUndefined()
-    expect(leadAt('ada@example.com', HOST_ID)).toBeUndefined()
-    expect(leadAt('dana@example.com', HOST_ID)).toBeDefined()
-    expect(leadAt('ada@example.com', OTHER_HOST_ID)).toBeDefined()
+
+    expect(leadPaths().sort()).toEqual(
+      [
+        `orgs/${ORG_ID}/leads/${personKey('ada@example.com')}`,
+        `orgs/${ORG_ID}/leads/${personKey('dana@example.com')}`,
+      ].sort(),
+    )
+    // Each row carries the group, so neither brand reads the other's people
+    // by accident of sharing the collection — it reads them by consent.
+    for (const email of ['dana@example.com', 'ada@example.com']) {
+      expect((leadAt(email) as Record<string, unknown>)['visibleTo']).toEqual([
+        `host:${HOST_ID}`,
+        `host:${OTHER_HOST_ID}`,
+      ])
+    }
   })
 
   /**
@@ -535,7 +638,7 @@ describe('one person is one document', () => {
 
   it('keeps the capture history a real visitor left, and adds the file to it', async () => {
     const key = personKey('dana@example.com') as string
-    docs.set(`hosts/${HOST_ID}/leads/${key}`, {
+    docs.set(`orgs/${ORG_ID}/leads/${key}`, {
       email: 'dana@example.com',
       sources: ['signup'],
       submissionCount: 3,

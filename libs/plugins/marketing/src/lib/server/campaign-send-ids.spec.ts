@@ -269,7 +269,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
         platformFrom: process.env.USAGE_EMAIL_FROM || 'noreply@aglyn.com',
       }),
   orgDataCollectionForHost: jest.fn(),
-  orgDataQueryForHost: jest.fn(),
+  // The scoped org query (AGL-3275): the leads audience reads through it now,
+  // as the contacts audience already did.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
+  }),
   meterHostEmail: async () => undefined,
   /*
    * AGL-2267/AGL-2409. The barrel factory is a CLOSED WORLD — anything the
@@ -360,7 +365,7 @@ function seed() {
     subdomain: 'acme',
     memberRoles: { 'uid-1': 'admin' },
   })
-  store.set(`hosts/${HOST}/leads/lead-1`, {
+  store.set(`orgs/org-1/leads/lead-1`, {
     email: 'dana@example.com',
     name: 'Dana Reed',
     // A recorded opt-in, in the shape every capture path writes it. The send

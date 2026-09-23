@@ -67,6 +67,9 @@ import {
   firebaseAdmin,
   getOrgForHost,
   logHostActivity,
+  orgLeadsForHost,
+  readLeadForHost,
+  scopedToHost,
 } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { normalizeCampaignIds, readCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
@@ -246,7 +249,7 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
 
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
-    const leadsRef = hostRef.collection('leads')
+    const leadsRef = await orgLeadsForHost(hostId)
     /*
      * The org's own lead fields (AGL-3272), judged before any write and
      * only when the body carried a map — a body without `custom` pays for
@@ -288,15 +291,17 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
     // Non-null by construction: the normalizer refused every address this
     // derivation could not key.
     const leadId = personKey(email) as string
-    const before = await leadsRef.doc(leadId).get()
-    const created = !before.exists
+    const before = await readLeadForHost(hostId, leadId)
+    const created = !before
     /*
      * The platform ceiling, judged here so the drawer can say WHY rather
      * than only that the lead could not be saved; the door re-judges it
      * inside its own transaction, so a race is still refused there.
      */
     if (created) {
-      const used = (await leadsRef.count().get()).data().count
+      // What THIS site may see, not the whole org's collection (AGL-3275) —
+      // the same narrowing `addHostLead` re-applies inside its transaction.
+      const used = (await scopedToHost(leadsRef, hostId).count().get()).data().count
       if (checkVisitorRecordCeiling(used, LEADS_MAX_PER_HOST).exceeded) {
         res.status(409).json({
           error:
@@ -351,7 +356,7 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
      * After the write and never before, and never failing it — the
      * membership is on the document; the entry records the act.
      */
-    const already = readCampaignIds(before.exists ? (before.data() as Record<string, unknown>) : null)
+    const already = readCampaignIds(before ? (before.data() as Record<string, unknown>) : null)
     await fileCampaignFilingActivities(firestore, {
       orgId: resolved.orgId,
       org: resolved.org as Record<string, unknown>,

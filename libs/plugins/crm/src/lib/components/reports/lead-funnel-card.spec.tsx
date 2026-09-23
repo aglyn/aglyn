@@ -146,10 +146,21 @@ beforeEach(() => {
 })
 
 describe('LeadFunnelCard at the organization level', () => {
-  it('totals every site’s captured count and places every site’s window', async () => {
+  it('places the organization’s leads from ONE read (AGL-3275)', async () => {
+    /*
+     * This seeded a set per site and expected the sum, because the sites'
+     * collections were disjoint. They share one now, so the org level is a
+     * single unscoped read — and a sum would have counted a lead two brands
+     * in a consent group both hold once for each of them.
+     */
     leadsBySite = {
-      'site-1': [lead('qualified'), lead(undefined), lead('unqualified', 2, 'No budget')],
-      'site-2': [lead('working'), lead('qualified', 3)],
+      'org-1': [
+        lead('qualified'),
+        lead(undefined),
+        lead('unqualified', 2, 'No budget'),
+        lead('working'),
+        lead('qualified', 3),
+      ],
     }
     render(<LeadFunnelCard report={report} hostId={null} />, { wrapper: orgMount(TWO_SITES) })
     expect(screen.getByText('Every site (2)')).toBeTruthy()
@@ -160,15 +171,14 @@ describe('LeadFunnelCard at the organization level', () => {
     expect(screen.getByTestId('caption').textContent).toBe('')
   })
 
-  it('says the window is per site when one site had more than its window', async () => {
+  it('says the window is bounded when the org had more than the ceiling', async () => {
     leadsBySite = {
-      'site-1': Array.from({ length: LEAD_CEILING + 1 }, (_, index) => lead('working', index % 20)),
-      'site-2': [lead('qualified')],
+      'org-1': Array.from({ length: LEAD_CEILING + 1 }, (_, index) => lead('working', index % 20)),
     }
     render(<LeadFunnelCard report={report} hostId={null} />, { wrapper: orgMount(TWO_SITES) })
     await waitFor(() =>
       expect(screen.getByTestId('caption').textContent).toContain(
-        `Placed from the ${LEAD_CEILING + 1} most recently captured leads across 2 sites — at most ${LEAD_CEILING} per site`,
+        `Placed from the ${LEAD_CEILING} most recently captured leads — at most ${LEAD_CEILING}`,
       ),
     )
   })

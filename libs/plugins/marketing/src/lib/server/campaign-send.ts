@@ -1075,7 +1075,12 @@ export async function performCampaignSend(
     }
   }
   if (audience === 'leads') {
-    const leads = await sweepAudience(hostRef.collection('leads'))
+    // Through the scoped org query (AGL-3275), as the contacts audience below
+    // already is: the collection is org-wide, so an unnarrowed sweep would
+    // MAIL a sibling brand's leads under this site's campaign.
+    const leads = await sweepAudience(
+      (await orgDataQueryForHost(hostId, 'leads')).query,
+    )
     audienceTruncated = leads.truncated
     recipients = leads.docs.map((doc) => {
       const email = String(doc.get('email') ?? '')
@@ -2964,11 +2969,8 @@ export async function proofPersonasForHost(
   }
 
   const [leads, members, contacts] = await Promise.all([
-    hostRef
-      .collection('leads')
-      .orderBy(byId)
-      .limit(PROOF_PERSONA_SAMPLE)
-      .get()
+    orgDataQueryForHost(hostId, 'leads')
+      .then(({ query }) => query.orderBy(byId).limit(PROOF_PERSONA_SAMPLE).get())
       .catch(() => null),
     hostRef
       .collection('siteMembers')

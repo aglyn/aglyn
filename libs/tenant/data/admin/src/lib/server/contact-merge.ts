@@ -145,36 +145,37 @@ async function repointContactId(
 /**
  * The leads converted into the merged contact, restamped at the survivor.
  *
- * A lead lives at `hosts/{hostId}/leads/{personKey(email)}`, so there is no
- * query: each site that met either record is asked for a lead under each of
- * the merged record's addresses, and one that names the merged contact is
- * moved. Bounded by sites times addresses, both small.
+ * A lead lives at `orgs/{orgId}/leads/{personKey(email)}` (AGL-3275), so there
+ * is still no query — one document per address, asked for directly. This used
+ * to be bounded by sites TIMES addresses because a lead lived under each site;
+ * it is bounded by addresses now, and the sites drop out of the signature
+ * because the collection no longer has one per site to walk.
  */
 async function repointLeads(
-  firestore: FirebaseFirestore.Firestore,
-  hostIds: readonly string[],
+  orgRef: FirebaseFirestore.DocumentReference,
   emails: readonly string[],
   from: string,
   to: string,
 ): Promise<number> {
   let moved = 0
-  for (const hostId of hostIds) {
-    for (const email of emails) {
-      const key = personKey(email)
-      if (!key) continue
-      const leadRef = firestore
-        .collection('hosts')
-        .doc(hostId)
-        .collection('leads')
-        .doc(key)
-      const lead = await leadRef.get()
-      if (!lead.exists || lead.get('convertedContactId') !== from) continue
-      await leadRef.update({
-        convertedContactId: to,
-        updatedAt: FieldValue.serverTimestamp(),
-      })
-      moved += 1
-    }
+  /*
+   * ONE ROW PER ADDRESS, on the org (AGL-3275). This walked the sites because
+   * there was a lead under each of them; re-pointing the same document once
+   * per site would now be the same write repeated, and the second would find
+   * `convertedContactId` already moved and skip — a silent undercount rather
+   * than a wrong answer, but an undercount the caller reports to the operator.
+   */
+  for (const email of emails) {
+    const key = personKey(email)
+    if (!key) continue
+    const leadRef = orgRef.collection('leads').doc(key)
+    const lead = await leadRef.get()
+    if (!lead.exists || lead.get('convertedContactId') !== from) continue
+    await leadRef.update({
+      convertedContactId: to,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    moved += 1
   }
   return moved
 }
@@ -225,8 +226,7 @@ export async function mergeContacts(
     ]),
   ]
   const leads = await repointLeads(
-    firestore,
-    leadHosts,
+    orgRef,
     contactEmails(mergedData),
     mergedId,
     survivorId,

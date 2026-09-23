@@ -35,6 +35,7 @@ import {
 import { Button, Stack } from '@mui/material'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
+import { useCrmScope } from '../hooks/use-crm-scope'
 
 /** The helper line under the picker — the contact card's, word for word. */
 export const LEAD_CAMPAIGNS_HELPER_TEXT =
@@ -99,6 +100,9 @@ export interface LeadCampaignsCardProps {
  */
 export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
   const { hostId, leadId, lead, leadStatus, fromCache, options, optionsReady, onFiled } = props
+  // The lead's collection is the org's now (AGL-3275); the site still names
+  // the surface, and the scope hook resolves the org from it.
+  const { orgId } = useCrmScope({ hostId })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const stored = readCampaignIds(lead)
@@ -124,7 +128,7 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
     const verdict = await writeGuardedBySeed(
       { subject: 'lead', fromCache, unreadable: leadStatus === 'error' },
       async () => {
-        await updateDoc(doc(firestore, 'hosts', hostId, 'leads', leadId), {
+        await updateDoc(doc(firestore, 'orgs', orgId, 'leads', leadId), {
           campaignIds: next,
           updatedAt: serverTimestamp(),
         })

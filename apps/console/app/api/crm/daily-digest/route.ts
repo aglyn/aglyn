@@ -67,6 +67,7 @@ import { isCronAuthorized, isCronDryRun } from '../../../../utils/cron-auth'
 import { recordCronBeat } from '../../../../utils/cron-beat'
 import { brandSupportLine } from '../../_lib/brand-support-line'
 import { consoleOrigin } from '../../_lib/usage-alert-email'
+import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller; it reads an org's CRM to remind its members and writes nothing a locked org could lose.
 
@@ -310,8 +311,18 @@ async function digestOrg(ctx: SweepContext, orgDoc: Snapshot): Promise<OrgReport
   const leadCutoff = nowMs - CRM_DIGEST_LEAD_AGE_MS
   const leads: CrmDigestLead[] = []
   for (const host of hosts.docs) {
-    const page = await host.ref
+    /*
+     * Still per site, but over the ORG collection narrowed to what that site
+     * may see (AGL-3275). The digest is a per-site message, so the loop stays;
+     * what changed is that a site's leads are selected by `visibleTo` rather
+     * than by the collection's parent, and a lead two brands share is in both
+     * of their digests — which is the honest answer, since both hold it.
+     */
+    const page = await firestore
+      .collection('orgs')
+      .doc(orgId)
       .collection('leads')
+      .where('visibleTo', 'array-contains-any', scopeTokensForHost(host.id))
       .where('firstSeenAtMs', '<=', leadCutoff)
       .orderBy('firstSeenAtMs', 'desc')
       .limit(CRM_DIGEST_LEAD_WINDOW)

@@ -74,6 +74,9 @@ export const HOST_SEEDED_COLLECTIONS = [
 export const ORG_SEEDED_COLLECTIONS = [
   'contacts',
   'contactSegments',
+  // Leads joined the org collections in AGL-3275, so the prune has to reach
+  // them here — under the host path they went with the site's own teardown.
+  'leads',
   'lists',
   'datasets',
   'invites',
@@ -287,7 +290,19 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
   // ── Leads / site members ─────────────────────────────────────────────────
   for (const lead of brand.leads ?? []) {
     const { id, ...fields } = lead
-    await put(hostRef.collection('leads').doc(id), { ...fields, createdAt: now })
+    // Org-scoped since AGL-3275.
+    /*
+     * Org-scoped since AGL-3275, which puts leads under the same two rules
+     * every other org row here follows: `visibleTo` names the brand that
+     * captured them, and `seedHostId` is what the prune matches on — without
+     * it, tearing down one brand would take a sibling's leads.
+     */
+    await put(orgRef.collection('leads').doc(scopedId(id, hostRef.id, orgRef)), {
+      ...fields,
+      visibleTo: [`host:${hostRef.id}`],
+      seedHostId: hostRef.id,
+      createdAt: now,
+    })
   }
   for (const member of brand.siteMembers ?? []) {
     const { id, ...fields } = member

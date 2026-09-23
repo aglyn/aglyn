@@ -268,17 +268,26 @@ function seed() {
   docs.set(`${ORG}/deals/d-2`, { title: 'Other', contactId: 'c-other' })
   docs.set(`${ORG}/crmTasks/t-1`, { title: 'Call', contactId: 'c-gone' })
   docs.set(`${ORG}/crmActivities/a-1`, { kind: 'call', contactId: 'c-gone' })
-  docs.set(`hosts/h2/leads/${personKey('jane@gmail.com')}`, {
+  docs.set(`${ORG}/leads/${personKey('jane@gmail.com')}`, {
     email: 'jane@gmail.com',
     convertedContactId: 'c-gone',
   })
-  docs.set(`hosts/h1/leads/${personKey('jd@example.org')}`, {
+  docs.set(`${ORG}/leads/${personKey('jd@example.org')}`, {
     email: 'jd@example.org',
     convertedContactId: 'c-gone',
   })
-  // A lead converted into somebody else under one of the merged addresses.
-  docs.set(`hosts/h1/leads/${personKey('jane@gmail.com')}`, {
-    email: 'jane@gmail.com',
+  /*
+   * A lead converted into SOMEBODY ELSE, which the merge must leave alone.
+   *
+   * This used to be the same address as the first, seeded under a second site
+   * — two leads for one person, converted to two different contacts. AGL-3275
+   * makes that state unrepresentable: one address is one row on the org, so
+   * the case is carried on its own address instead. The claim is unchanged and
+   * is the one that matters — a lead pointing at a contact this merge is not
+   * touching keeps pointing there.
+   */
+  docs.set(`${ORG}/leads/${personKey('jo@example.net')}`, {
+    email: 'jo@example.net',
     convertedContactId: 'c-other',
   })
 }
@@ -339,9 +348,9 @@ describe('mergeContacts', () => {
     expect(docs.get(`${ORG}/deals/d-2`)?.contactId).toBe('c-other')
     expect(docs.get(`${ORG}/crmTasks/t-1`)?.contactId).toBe('c-keep')
     expect(docs.get(`${ORG}/crmActivities/a-1`)?.contactId).toBe('c-keep')
-    expect(docs.get(`hosts/h2/leads/${personKey('jane@gmail.com')}`)?.convertedContactId).toBe('c-keep')
-    expect(docs.get(`hosts/h1/leads/${personKey('jd@example.org')}`)?.convertedContactId).toBe('c-keep')
-    expect(docs.get(`hosts/h1/leads/${personKey('jane@gmail.com')}`)?.convertedContactId).toBe('c-other')
+    expect(docs.get(`${ORG}/leads/${personKey('jane@gmail.com')}`)?.convertedContactId).toBe('c-keep')
+    expect(docs.get(`${ORG}/leads/${personKey('jd@example.org')}`)?.convertedContactId).toBe('c-keep')
+    expect(docs.get(`${ORG}/leads/${personKey('jo@example.net')}`)?.convertedContactId).toBe('c-other')
   })
 
   it('indexes every address the survivor answers to at the survivor', async () => {

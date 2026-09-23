@@ -242,13 +242,8 @@ async function assignOwner(policy: Policy): Promise<OwnerAssignment> {
     const contactRef = orgRef.collection('contacts').doc(input.contactId)
     const membersRef = orgRef.collection('members')
     const leadKey = personKey(input.email)
-    const leadRef = leadKey
-      ? firestore
-          .collection('hosts')
-          .doc(input.hostId)
-          .collection('leads')
-          .doc(leadKey)
-      : null
+    // Beside the contact on the org, keyed by the same address (AGL-3275).
+    const leadRef = leadKey ? orgRef.collection('leads').doc(leadKey) : null
 
     let contactName = ''
     const verdict = await firestore.runTransaction(

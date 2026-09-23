@@ -138,28 +138,37 @@ export function crmOrgSectionHref(orgSlug: string, section: string): string {
 /**
  * One record's page at the org level.
  *
- * A lead is excluded by the type rather than by a runtime check: a lead's id
- * is a PERSON KEY, the same on every site that met the person, and
- * `hosts/{hostId}/leads` is host-scoped by path — so an org-level address
- * has to name the site as well, which is {@link crmOrgLeadHref}.
+ * A LEAD IS NO LONGER EXCLUDED (AGL-3275). It was, by the type rather than a
+ * runtime check, because a lead's id is a person key — the same on every site
+ * that met the person — while `hosts/{hostId}/leads` was host-scoped by path,
+ * so two sites held two documents carrying one id and an org-level address
+ * had to name the site to tell them apart. One org collection makes the
+ * person key unambiguous, so a lead addresses like every other record.
  */
 export function crmOrgRecordHref(
   orgSlug: string,
-  kind: Exclude<CrmRecordKind, 'lead'>,
+  kind: CrmRecordKind,
   id: string,
 ): string {
   return `${crmOrgSectionHref(orgSlug, CRM_RECORD_SECTIONS[kind])}/${encodeURIComponent(id)}`
 }
 
-/** One site's lead, addressed from the org hub: the site, then the lead. */
+/**
+ * A lead addressed from the org hub.
+ *
+ * Kept as its own name so the callers that had a `hostId` in hand do not have
+ * to prove they no longer need one; it ignores the site and is exactly
+ * `crmOrgRecordHref(orgSlug, 'lead', leadId)`. New callers should use that.
+ *
+ * @deprecated Use {@link crmOrgRecordHref}. Removed with the host-path
+ *   fallback in AGL-3277.
+ */
 export function crmOrgLeadHref(
   orgSlug: string,
-  hostId: string,
+  _hostId: string,
   leadId: string,
 ): string {
-  return `${crmOrgSectionHref(orgSlug, CRM_RECORD_SECTIONS.lead)}/${encodeURIComponent(
-    hostId,
-  )}/${encodeURIComponent(leadId)}`
+  return crmOrgRecordHref(orgSlug, 'lead', leadId)
 }
 
 /**

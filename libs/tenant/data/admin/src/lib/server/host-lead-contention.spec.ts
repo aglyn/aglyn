@@ -122,12 +122,24 @@ function fakeLeadStore() {
     if (isCreate) bump(COLLECTION_PATH)
   }
 
-  const leadDoc = (id: string) => ({ __doc: id, id })
+  /*
+   * `.get()` is on the ref because the real `leadForWrite` probes the org row
+   * before it writes (AGL-3275). It reads OUTSIDE the transaction, so it is
+   * deliberately not counted against `counts` — what this file measures is
+   * the serialised aggregate inside it.
+   */
+  const leadDoc = (id: string) => ({
+    __doc: id,
+    id,
+    get: async () => ({ exists: leads.has(id), data: () => leads.get(id) }),
+  })
 
   const leadsCollection = {
     doc: (id?: string) => leadDoc(id ?? `auto-${(autoId += 1)}`),
     count: () => ({ __count: true }),
   }
+  // What the org seam hands `addHostLead` for this harness (AGL-3275).
+  mockLeadsCollection = leadsCollection
 
   const hostRef: any = {
     firestore: {
@@ -192,6 +204,45 @@ function fakeLeadStore() {
 
   return { leads, counts, hostRef, seed: write }
 }
+
+let mockLeadsCollection: any = null
+
+/*
+ * The lead silo is org-scoped now (AGL-3275). `addHostLead` resolves it
+ * through these two modules, so they are doubled onto the SAME store this
+ * file already drives — the claims here are about dedupe and contention, not
+ * about where the collection lives, which is `host-lead-seam.spec.ts`'s.
+ */
+/*
+ * The seam lives in the module under test (AGL-3275), so the doubles sit one
+ * layer down: the org collection it resolves, and the legacy read behind the
+ * carry, which is empty here.
+ */
+jest.mock('./firebase-admin', () => ({
+  __esModule: true,
+  default: {
+    app: () => ({
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  },
+}))
+
+jest.mock('./organizations', () => ({
+  __esModule: true,
+  orgDataCollectionForHost: async () => mockLeadsCollection,
+  resolveOrgIdForHost: async () => 'org-1',
+  consentGroupForSite: async (hostId: string) =>
+    jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
+  scopedToHost: (ref: any) => ref,
+}))
 
 import { addHostLead } from './host-visitor-records'
 

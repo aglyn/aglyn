@@ -1778,13 +1778,6 @@
       "lane": "marketing"
     },
     {
-      "path": "libs/tenant/data/admin/src/lib/server/email-flow-gate.ts",
-      "rules": [
-        "plugin-collection:crm"
-      ],
-      "lane": "crm"
-    },
-    {
       "path": "libs/tenant/data/admin/src/lib/server/email-metering.ts",
       "rules": [
         "domain-declares:marketing"

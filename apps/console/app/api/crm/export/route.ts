@@ -30,6 +30,7 @@ import {
   MAX_SCOPE_HOSTS,
   memberCanSee,
   memberScopeTokens,
+  scopeTokensForHost,
   planLabelGrantingFeature,
   pluginRequestFromWeb,
   type CrmExportOptions,
@@ -367,7 +368,19 @@ async function handler(request: Request): Promise<Response> {
       resource === 'leads'
         ? leadHostIds.map((id) => ({
             hostId: id,
-            reference: firestore.collection('hosts').doc(id).collection('leads'),
+            /*
+             * The org collection, narrowed per SITE (AGL-3275).
+             *
+             * One source per site is still right — the file names the site a
+             * row came from — but a site's leads are selected by `visibleTo`
+             * now rather than by the collection's parent, so the narrowing
+             * moves onto the reference itself. It cannot use the `scoped`
+             * flag below: that applies the MEMBER's tokens, and here each
+             * source needs the tokens of its own site.
+             */
+            reference: orgRef
+              .collection('leads')
+              .where('visibleTo', 'array-contains-any', scopeTokensForHost(id)),
             scoped: false,
           }))
         : [

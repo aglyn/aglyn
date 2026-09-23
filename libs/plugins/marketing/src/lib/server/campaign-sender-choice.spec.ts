@@ -372,7 +372,7 @@ function seed() {
     ['lead-2', 'evan@example.com'],
     ['lead-3', 'faye@example.com'],
   ] as Array<[string, string]>) {
-    store.set(`hosts/${HOST}/leads/${id}`, {
+    store.set(`orgs/org-1/leads/${id}`, {
       email,
       name: 'Dana Reed',
       marketingConsentByHost: {
@@ -639,7 +639,7 @@ describe('sending to more recipients later', () => {
       ...(store.get(`hosts/${HOST}`) ?? {}),
       sendingLocalPart: 'news',
     })
-    store.set(`hosts/${HOST}/leads/lead-4`, {
+    store.set(`orgs/org-1/leads/lead-4`, {
       email: 'gwen@example.com',
       name: 'Gwen Ali',
       marketingConsentByHost: {

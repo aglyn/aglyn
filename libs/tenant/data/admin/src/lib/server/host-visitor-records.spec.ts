@@ -37,10 +37,67 @@
 
 const mockNotifications: Array<Record<string, unknown>> = []
 
+/**
+ * The org leads collection the current harness is standing up (AGL-3275).
+ *
+ * A lead is written to `orgs/{orgId}/leads` now, so the doubles below reach
+ * the harness through here rather than through `hostRef.collection('leads')`.
+ * Module-level because `jest.mock` factories are hoisted above `harness()`.
+ */
+let mockLeads: any = null
+/** Every `scopedToHost` narrowing asked for — the ceiling claim reads this. */
+let mockScopeNarrowings: string[] = []
+
 jest.mock('./notifications', () => ({
   __esModule: true,
   notifyHostManagers: async (hostId: string, payload: Record<string, unknown>) => {
     mockNotifications.push({ hostId, ...payload })
+  },
+}))
+
+/*
+ * The seam lives in the module under test (AGL-3275), so the doubles go one
+ * layer down: the org collection it resolves, and the legacy read behind its
+ * carry. No legacy row exists in this file — the carry is
+ * `host-lead-seam.spec.ts`'s claim — so the host path answers empty.
+ */
+jest.mock('./firebase-admin', () => ({
+  __esModule: true,
+  default: {
+    app: () => ({
+      firestore: () => ({
+        collection: () => ({
+          doc: () => ({
+            collection: () => ({
+              doc: () => ({ get: async () => ({ exists: false, data: () => undefined }) }),
+            }),
+          }),
+        }),
+      }),
+    }),
+  },
+}))
+
+jest.mock('./organizations', () => ({
+  __esModule: true,
+  orgDataCollectionForHost: async () => mockLeads,
+  resolveOrgIdForHost: async () => 'org-1',
+  consentGroupForSite: async (hostId: string) => ({
+    hostId,
+    groupId: hostId,
+    name: null,
+    hostIds: [hostId],
+    declared: false,
+  }),
+  /*
+   * Identity, but RECORDED. The ceiling now counts what a site may see rather
+   * than the whole org collection, and a double that silently dropped the
+   * narrowing would let an unscoped count pass this file — which is the
+   * regression that would charge one agency client for another's leads.
+   */
+  scopedToHost: (ref: any, hostId: string) => {
+    mockScopeNarrowings.push(hostId)
+    return ref
   },
 }))
 
@@ -143,6 +200,8 @@ function harness(existingLeads: number): Harness {
     collection: (name: string) =>
       name === 'leads' ? leadsCollection : countersCollection,
   }
+  // What `orgLeadsForHost` hands back — the lead silo is org-scoped now.
+  mockLeads = leadsCollection
   return state
 }
 
@@ -156,6 +215,7 @@ const add = (state: Harness, ceiling?: number) =>
 
 beforeEach(() => {
   mockNotifications.length = 0
+  mockScopeNarrowings = []
 })
 
 describe('addHostLead is bounded by LEADS_MAX_PER_HOST (AGL-1529)', () => {
@@ -278,5 +338,44 @@ describe('a trip is visible to the site owner (AGL-1529)', () => {
         ceiling: 10,
       }),
     ).resolves.toBeUndefined()
+  })
+})
+
+/**
+ * The lead silo moved to the org (AGL-3275), and three things had to move
+ * with it. Each was correct while `hosts/{hostId}/leads` was private by path,
+ * and each is wrong now that the row is shared.
+ */
+describe('the lead is written as an org-scoped record (AGL-3275)', () => {
+  it('counts the ceiling over what the SITE may see, not the whole org', async () => {
+    // Without the narrowing, one agency client's leads would fill another
+    // client's allowance — and every single-brand org would still look fine,
+    // which is why this is asserted on the narrowing and not on a total.
+    const state = harness(0)
+    await add(state)
+
+    expect(state.countsInsideTransaction).toBe(1)
+    expect(mockScopeNarrowings).toEqual(['host-1'])
+  })
+
+  it('stamps visibleTo by union, so a capture widens and a lookup does not', async () => {
+    const state = harness(0)
+    await add(state)
+
+    expect(state.written[0]).toMatchObject({
+      visibleTo: { __arrayUnion: ['host:host-1'] },
+    })
+  })
+
+  it('records every site that captured the person, not only the first', async () => {
+    // On a shared row a sibling brand's capture has to appear here or the
+    // "Known by" answer silently omits it. `arrayUnion`, as the contact door
+    // has always written this field.
+    const state = harness(0)
+    await add(state)
+
+    expect(state.written[0]).toMatchObject({
+      capturedByHostIds: { __arrayUnion: ['host-1'] },
+    })
   })
 })

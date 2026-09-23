@@ -36,6 +36,7 @@ import {
   findContactByEmail,
   firebaseAdmin,
   orgDataCollectionForHost,
+  readLeadForHost,
   type UpsertHostContactOptions,
 } from '@aglyn/tenant-data-admin'
 import type { ResolvedCampaignTouch } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
@@ -144,15 +145,14 @@ async function heldAsContact(request: PluginContactCaptureRequest): Promise<bool
 /** Whether the site holds an OPEN lead for the address — neither converted nor closed. */
 async function openLeadFor(request: PluginContactCaptureRequest): Promise<boolean> {
   const key = personKey(request.identity.email) as string
-  const snapshot = await firebaseAdmin
-    .app()
-    .firestore()
-    .collection('hosts')
-    .doc(request.hostId)
-    .collection('leads')
-    .doc(key)
-    .get()
-  if (!snapshot.exists) return false
+  /*
+   * Through the seam, which reads the org row and falls back to a lead the
+   * backfill has not reached (AGL-3275). UNSCOPED on purpose: a sibling brand
+   * in the same consent group has to find this person, or its door concludes
+   * there is no lead and files the duplicate this migration exists to end.
+   */
+  const snapshot = await readLeadForHost(request.hostId, key)
+  if (!snapshot) return false
   const lead = (snapshot.data() ?? {}) as Record<string, unknown> & CrmLeadFields
   return !lead.convertedContactId && isCrmLeadOpen(lead)
 }
@@ -167,8 +167,9 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
   const email = normalizeContactEmail(request.identity.email) as string
   const key = personKey(email) as string
   const hostRef = firebaseAdmin.app().firestore().collection('hosts').doc(request.hostId)
-  const leadRef = hostRef.collection('leads').doc(key)
-  const created = !(await leadRef.get()).exists
+  // `addHostLead` resolves and writes the org collection itself (AGL-3275);
+  // this only needs to know whether the person is new, which decides the event.
+  const created = !(await readLeadForHost(request.hostId, key))
   const { formId } = entryPointOf(request.detail)
   const source =
     request.interaction.source === 'form' && formId

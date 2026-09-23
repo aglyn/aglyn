@@ -109,6 +109,22 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
 }))
 
+/*
+ * A lead is read through the seam now (AGL-3275), which prefers the org row
+ * and falls back to a site row the backfill has not reached. This file's
+ * subject is what a CONVERSION carries across, so the double reads the same
+ * fake by the org path and leaves the fallback to `host-lead-seam.spec.ts`.
+ */
+jest.mock('@aglyn/tenant-data-admin/server/host-visitor-records', () => ({
+  __esModule: true,
+  readLeadForHost: async (_hostId: string, leadId: string) => {
+    const path = `orgs/org-1/leads/${leadId}`
+    return docs.has(path)
+      ? { exists: true, data: () => docs.get(path), get: (f: string) => docs.get(path)?.[f] }
+      : null
+  },
+}))
+
 import {
   carryLeadCampaignsOnConversion,
   carryLeadCampaignsToContact,
@@ -129,7 +145,7 @@ beforeEach(() => {
 
 describe('carryLeadCampaignsToContact', () => {
   it('adds the lead’s campaigns to the contact’s facet for the site, keeping what was there', async () => {
-    docs.set('hosts/site-1/leads/lead-key', {
+    docs.set('orgs/org-1/leads/lead-key', {
       email: 'dana@example.com',
       campaignIds: ['founder-icp2', 'founder-icp1'],
     })
@@ -155,7 +171,7 @@ describe('carryLeadCampaignsToContact', () => {
 
   it('files "Filed under" on the contact per campaign carried, by the conversion, once across runs (AGL-3274)', async () => {
     docs.set('hosts/site-1/emailCampaigns/founder-icp2', { name: 'Founder · ICP 2' })
-    docs.set('hosts/site-1/leads/lead-key', { campaignIds: ['founder-icp2', 'gone'] })
+    docs.set('orgs/org-1/leads/lead-key', { campaignIds: ['founder-icp2', 'gone'] })
     docs.set('orgs/org-1/contacts/c-1', { facets: {} })
     await carryLeadCampaignsToContact(firestore, request)
     const entries = filed()
@@ -176,11 +192,11 @@ describe('carryLeadCampaignsToContact', () => {
   })
 
   it('writes nothing on the contact for a lead in no campaign, or one that is gone', async () => {
-    docs.set('hosts/site-1/leads/lead-key', { email: 'dana@example.com' })
+    docs.set('orgs/org-1/leads/lead-key', { email: 'dana@example.com' })
     expect(await carryLeadCampaignsToContact(firestore, request)).toEqual({
       campaigns: 0,
     })
-    docs.delete('hosts/site-1/leads/lead-key')
+    docs.delete('orgs/org-1/leads/lead-key')
     expect(await carryLeadCampaignsToContact(firestore, request)).toEqual({
       campaigns: 0,
     })
@@ -188,7 +204,7 @@ describe('carryLeadCampaignsToContact', () => {
   })
 
   it('the conversion seam’s entry resolves the Admin SDK’s Firestore itself', async () => {
-    docs.set('hosts/site-1/leads/lead-key', { campaignIds: ['founder-icp2'] })
+    docs.set('orgs/org-1/leads/lead-key', { campaignIds: ['founder-icp2'] })
     docs.set('orgs/org-1/contacts/c-1', { facets: {} })
     expect(await carryLeadCampaignsOnConversion(request)).toEqual({
       campaigns: 1,
@@ -202,7 +218,7 @@ describe('carryLeadCampaignsToContact', () => {
     const error = jest
       .spyOn(console, 'error')
       .mockImplementation(() => undefined)
-    docs.set('hosts/site-1/leads/lead-key', { campaignIds: ['founder-icp2'] })
+    docs.set('orgs/org-1/leads/lead-key', { campaignIds: ['founder-icp2'] })
     failUpdate = true
     expect(await carryLeadCampaignsToContact(firestore, request)).toEqual({
       campaigns: null,

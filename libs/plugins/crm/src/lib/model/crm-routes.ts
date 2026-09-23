@@ -66,16 +66,16 @@ export function crmRoutes(basePath: string) {
         [CONTACTS_LIST_EMAIL_PARAM]: email,
       }).toString()}`,
     /**
-     * A lead's page — and, at the ORGANIZATION level (AGL-2630), the site
-     * it lives under, as a segment before the id: a lead's id is a person
-     * key, the same on every site that met the person, and `hosts/{hostId}
-     * /leads` is host-scoped by path, so an address that spans sites has to
-     * name one. Under a site the address is the id alone, as it always was.
+     * A lead's page: the id alone, at both levels (AGL-3275).
+     *
+     * This carried the SITE as a segment before the id at the organization
+     * level, and had to: a lead's id is a person key, `hosts/{hostId}/leads`
+     * was host-scoped by path, and so an address that two sites had both met
+     * was two documents with the same id — which the id alone could not tell
+     * apart. One org collection makes the person key unambiguous again, and a
+     * lead addresses like every other CRM record.
      */
-    lead: (id: string, hostId?: string | null) =>
-      hostId
-        ? `${section('leads')}/${encodeURIComponent(hostId)}/${encodeURIComponent(id)}`
-        : `${section('leads')}/${encodeURIComponent(id)}`,
+    lead: (id: string) => `${section('leads')}/${encodeURIComponent(id)}`,
     company: (id: string) => `${section('companies')}/${encodeURIComponent(id)}`,
     deal: (id: string) => `${section('deals')}/${encodeURIComponent(id)}`,
     /**

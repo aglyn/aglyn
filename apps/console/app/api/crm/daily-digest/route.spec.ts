@@ -94,6 +94,17 @@ function mockMatches(data: Record<string, any>, id: string, filter: MockFilter):
       return typeof actual === 'number' && actual > expected
     case '>=':
       return typeof actual === 'number' && actual >= expected
+    /*
+     * How a scoped read narrows the org lead collection (AGL-3275). A double
+     * that refused the operator would fail the digest outright; one that
+     * ignored the clause would send a site a digest of a sibling's leads.
+     */
+    case 'array-contains-any':
+      return (
+        Array.isArray(actual) &&
+        Array.isArray(expected) &&
+        expected.some((wanted) => actual.includes(wanted))
+      )
     default:
       throw new Error(`mock firestore: operator ${filter.op} is not modelled`)
   }
@@ -307,14 +318,23 @@ function seedPlatform() {
   task('t-suspended', { dueAtMs: NOW - DAY, assigneeUid: 'sus' })
   // Leads: one nobody owns on the main site, one of Bob's on the shop, one
   // too young to count, one already being worked.
-  seed('hosts/site-a/leads/l-open', { email: 'jane@example.com', firstSeenAtMs: NOW - 3 * DAY })
-  seed('hosts/site-b/leads/l-bob', {
+  seed('orgs/org-a/leads/l-open', {
+    email: 'jane@example.com',
+    firstSeenAtMs: NOW - 3 * DAY,
+    visibleTo: ['host:site-a'],
+  })
+  seed('orgs/org-a/leads/l-bob', {
     email: 'joe@example.com',
     name: 'Joe',
     ownerUid: 'bob',
     firstSeenAtMs: NOW - 4 * DAY,
+    visibleTo: ['host:site-b'],
   })
-  seed('hosts/site-b/leads/l-young', { email: 'new@example.com', firstSeenAtMs: NOW - DAY })
+  seed('orgs/org-a/leads/l-young', {
+    email: 'new@example.com',
+    firstSeenAtMs: NOW - DAY,
+    visibleTo: ['host:site-b'],
+  })
   seed('hosts/site-b/leads/l-working', {
     email: 'busy@example.com',
     status: 'working',

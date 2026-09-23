@@ -125,12 +125,17 @@ jest.mock('./firebase-admin', () => ({
   firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
 }))
 
+/*
+ * The lead silo is an org collection now (AGL-3275), so it comes through the
+ * same scoped door the contacts lookup already used — and the double answers
+ * per collection rather than assuming every caller wants contacts.
+ */
 jest.mock('./organizations', () => ({
   __esModule: true,
-  orgDataQueryForHost: async () => ({
-    ref: contactsRef,
-    query: singleDocQuery(contact, 'contacts'),
-  }),
+  orgDataQueryForHost: async (_hostId: string, name: string) =>
+    name === 'leads'
+      ? { ref: contactsRef, query: singleDocQuery(lead, 'leads') }
+      : { ref: contactsRef, query: singleDocQuery(contact, 'contacts') },
 }))
 
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'

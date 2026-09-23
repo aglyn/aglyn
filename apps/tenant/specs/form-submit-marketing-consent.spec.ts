@@ -79,6 +79,13 @@ const mockCollectionHandle = (path: string): any => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  /*
+   * The lead lookup the CRM's capture door runs (AGL-3275). These files drive
+   * a form submission end to end, so the door is real and its seam has to
+   * answer; what they assert is the CAMPAIGN and consent bookkeeping, and no
+   * case here starts with a lead already on file.
+   */
+  readLeadForHost: async () => null,
   // The attribution seam the route resolves once per submission. Recorded
   // rather than executed — `campaign-conversion-attribution.spec.ts` owns
   // what the write does — and defined here at all because a mocked module

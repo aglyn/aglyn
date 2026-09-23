@@ -1058,6 +1058,13 @@ jobs:
       # yet run the one-record model.
       - run: npm run test:one-record-backfill
 
+      # AGL-3276. The org-lead fold's decisions — which site row wins the
+      # record, that a conversion on ANY site survives it, that the scope is
+      # the union and never the whole org, that the earliest consent grant is
+      # the one that happened, and which of two enrollments on one folded
+      # record is kept.
+      - run: npm run test:org-lead-backfill
+
       # AGL-2814. The members-video backfill's decisions: which files become
       # private, which download tokens are rotated, which stored links are
       # rewritten, and the public file used elsewhere that is listed and left

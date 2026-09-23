@@ -137,9 +137,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   getOrgForHost: async () => ({ orgId: 'org-1', org: { plan: 'pro' } }),
   orgDataCollectionForHost: async () =>
     mockFirestore().collection('orgs/org-1/contacts'),
-  orgDataQueryForHost: async () => ({
-    ref: mockFirestore().collection('orgs/org-1/contacts'),
-    query: mockFirestore().collection('orgs/org-1/contacts'),
+  // Answers per COLLECTION: leads come through this door too now (AGL-3275),
+  // and a double that always returned contacts would report every leads
+  // audience as empty.
+  orgDataQueryForHost: async (_hostId: string, name: string) => ({
+    ref: mockFirestore().collection(`orgs/org-1/${name}`),
+    query: mockFirestore().collection(`orgs/org-1/${name}`),
   }),
   meterHostEmail: async () => undefined,
   // Permissive: the cap and the hourly governor have their own files, and one
@@ -295,7 +298,7 @@ const seedLeads = (
       Array.from({ length: count }, (_item, index) => {
         const id = String(index).padStart(5, '0')
         return [
-          `hosts/${HOST}/leads/lead-${id}`,
+          `orgs/org-1/leads/lead-${id}`,
           {
             email: `lead${id}@example.com`,
             name: `Lead ${index}`,
@@ -446,7 +449,7 @@ describe('an audience that fits', () => {
     // `{ email, name, source }` and no date at all. Ordering on the document
     // NAME is what keeps this person in the audience.
     seedLeads(0, {
-      [`hosts/${HOST}/leads/lead-00000`]: {
+      [`orgs/org-1/leads/lead-00000`]: {
         email: 'bare@example.com',
         ...CONSENT_GRANTED,
       },
@@ -465,13 +468,13 @@ describe('both suppression lists', () => {
     // only its own site's list mails them anyway, from the one shared sending
     // domain every tenant's mail leaves by.
     seedLeads(0, {
-      [`hosts/${HOST}/leads/lead-00000`]: {
+      [`orgs/org-1/leads/lead-00000`]: {
         email: 'keep@example.com',
         ...CONSENT_GRANTED,
       },
       // Consented, so the SUPPRESSION list is the only thing that can hold
       // this address back and the assertion measures what it claims to.
-      [`hosts/${HOST}/leads/lead-00001`]: {
+      [`orgs/org-1/leads/lead-00001`]: {
         email: 'bounced@example.com',
         ...CONSENT_GRANTED,
       },
@@ -493,11 +496,11 @@ describe('both suppression lists', () => {
     // The half that already worked, kept as a control: a change that consulted
     // only the platform list would pass the case above and break this one.
     seedLeads(0, {
-      [`hosts/${HOST}/leads/lead-00000`]: {
+      [`orgs/org-1/leads/lead-00000`]: {
         email: 'keep@example.com',
         ...CONSENT_GRANTED,
       },
-      [`hosts/${HOST}/leads/lead-00001`]: {
+      [`orgs/org-1/leads/lead-00001`]: {
         email: 'gone@example.com',
         ...CONSENT_GRANTED,
       },
@@ -513,17 +516,17 @@ describe('both suppression lists', () => {
 
   it('counts both kinds in the preview, so the number matches the send', async () => {
     seedLeads(0, {
-      [`hosts/${HOST}/leads/lead-00000`]: {
+      [`orgs/org-1/leads/lead-00000`]: {
         email: 'keep@example.com',
         ...CONSENT_GRANTED,
       },
       // Both consented: `suppressed` counts what the suppression lists removed,
       // and a recipient the consent join had already withheld never reaches it.
-      [`hosts/${HOST}/leads/lead-00001`]: {
+      [`orgs/org-1/leads/lead-00001`]: {
         email: 'bounced@example.com',
         ...CONSENT_GRANTED,
       },
-      [`hosts/${HOST}/leads/lead-00002`]: {
+      [`orgs/org-1/leads/lead-00002`]: {
         email: 'gone@example.com',
         ...CONSENT_GRANTED,
       },

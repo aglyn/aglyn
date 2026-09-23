@@ -631,7 +631,8 @@ export async function seedCrmFixtures(options) {
    * the CRM has stamped yet. The section reads an absent status as New.
    */
   const lead = ({ id, email, name }, source, fields) => ({
-    ref: hostRef.collection('leads').doc(id),
+    // Org-scoped since AGL-3275 — the row names its site in `visibleTo`.
+    ref: orgRef.collection('leads').doc(id),
     data: {
       email,
       name,
@@ -639,6 +640,7 @@ export async function seedCrmFixtures(options) {
       sources: [source],
       submissionCount: 1,
       capturedByHostIds: [hostId],
+      visibleTo: [`host:${hostId}`],
       ...fields,
     },
   })

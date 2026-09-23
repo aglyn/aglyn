@@ -254,7 +254,11 @@ beforeEach(() => {
     visibleTo: ['host:site-1'],
   })
   mockStore.set('hosts/site-1', { orgId: ORG })
-  mockStore.set(`hosts/site-1/leads/${personKey('bob@lead.example')}`, { email: 'bob@lead.example' })
+  // On the org, scoped to the site (AGL-3275).
+  mockStore.set(`orgs/${ORG}/leads/${personKey('bob@lead.example')}`, {
+    email: 'bob@lead.example',
+    visibleTo: ['host:site-1'],
+  })
 })
 
 afterAll(() => {

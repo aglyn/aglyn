@@ -134,6 +134,8 @@ function mount(selected: string[], onSelectedChange = jest.fn()) {
       rows={rows}
       selected={selected}
       onSelectedChange={onSelectedChange}
+      // Every write targets `orgs/{orgId}/leads` now (AGL-3275).
+      orgId="org-1"
       roster={roster}
       csv={{ ownerEmail: roster.emailFor, siteName: (id: string) => (id === 'site-1' ? 'Shop' : undefined) }}
     />,
@@ -165,7 +167,7 @@ describe('the bar and its selection', () => {
 })
 
 describe('the owner', () => {
-  it('writes the chosen owner to every row, each under its own site, in one batch', async () => {
+  it('writes the chosen owner to every row, in one batch', async () => {
     mount(ALL.slice(0, 2))
     fireEvent.click(screen.getByRole('button', { name: 'Set owner' }))
     fireEvent.mouseDown(dialog().getByRole('combobox', { name: 'Owner' }))
@@ -173,8 +175,8 @@ describe('the owner', () => {
     fireEvent.click(dialog().getByRole('button', { name: 'Apply' }))
     await waitFor(() => expect(notices).toEqual(['Owner set on 2 leads']))
     expect(ops.map((op) => [op.via, op.path, (op.data as any).ownerUid])).toEqual([
-      ['batch', 'hosts/site-1/leads/l-open', 'uid-a'],
-      ['batch', 'hosts/site-2/leads/l-working', 'uid-a'],
+      ['batch', 'orgs/org-1/leads/l-open', 'uid-a'],
+      ['batch', 'orgs/org-1/leads/l-working', 'uid-a'],
     ])
   })
 })
@@ -206,8 +208,8 @@ describe('the campaign', () => {
     await waitFor(() => expect(notices).toEqual(['Added 2 leads to the campaign']))
     const writes = ops.filter((op) => op.kind === 'update')
     expect(writes.map((op) => [op.via, op.path, (op.data as any).campaignIds])).toEqual([
-      ['batch', 'hosts/site-1/leads/l-open', { op: 'arrayUnion', values: ['founder-icp2'] }],
-      ['batch', 'hosts/site-2/leads/l-working', { op: 'arrayUnion', values: ['founder-icp2'] }],
+      ['batch', 'orgs/org-1/leads/l-open', { op: 'arrayUnion', values: ['founder-icp2'] }],
+      ['batch', 'orgs/org-1/leads/l-working', { op: 'arrayUnion', values: ['founder-icp2'] }],
     ])
     /*
      * And each lead's Activity says so (AGL-3274): one "Filed under" per
@@ -268,9 +270,9 @@ describe('the status', () => {
     fireEvent.click(dialog().getByRole('button', { name: 'Apply' }))
     await waitFor(() => expect(notices).toEqual(['Status set on 2 leads']))
     expect(ops.map((op) => [op.path, (op.data as any).status, (op.data as any).unqualifiedReason])).toEqual([
-      ['hosts/site-1/leads/l-open', 'working', undefined],
+      ['orgs/org-1/leads/l-open', 'working', undefined],
       // Reopening a closed lead clears its reason.
-      ['hosts/site-2/leads/l-closed', 'working', { op: 'delete' }],
+      ['orgs/org-1/leads/l-closed', 'working', { op: 'delete' }],
     ])
     expect(screen.getByText(/june — was converted/)).toBeTruthy()
     expect(screen.getByText(/theo — already Working/)).toBeTruthy()
@@ -287,8 +289,8 @@ describe('unqualifying', () => {
     fireEvent.click(apply)
     await waitFor(() => expect(notices).toEqual(['Marked 2 leads unqualified']))
     expect(ops.map((op) => [op.path, (op.data as any).status, (op.data as any).unqualifiedReason])).toEqual([
-      ['hosts/site-1/leads/l-open', 'unqualified', 'No budget'],
-      ['hosts/site-2/leads/l-working', 'unqualified', 'No budget'],
+      ['orgs/org-1/leads/l-open', 'unqualified', 'No budget'],
+      ['orgs/org-1/leads/l-working', 'unqualified', 'No budget'],
     ])
     expect(screen.getByText(/june — was converted/)).toBeTruthy()
     expect(screen.getByText(/sam — is already closed/)).toBeTruthy()

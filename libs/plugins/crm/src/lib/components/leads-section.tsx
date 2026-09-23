@@ -142,14 +142,18 @@ import OrgLeadSurfacesNote from './org-lead-surfaces-note'
 const LEADS_WINDOW = 200
 
 /**
- * One row of the list. `$id` keys the grid — the document id under a site,
- * `{hostId}/{leadId}` at the organization level, where a lead's id is a
- * person key the same on every site that met the person — and `leadId`
- * and `hostId` say which document, under which site, a write or a link
- * names.
+ * One row of the list. `$id` keys the grid and `leadId` names the document,
+ * and they are the same value at both levels (AGL-3275).
+ *
+ * `$id` used to be `{hostId}/{leadId}` at the organization level, because a
+ * lead's id is a person key and the same person met by two sites was two
+ * documents carrying it — so the id alone could not key a list that spanned
+ * sites. One org collection ends that, and the row no longer carries a site
+ * at all: which sites hold this person is `capturedByHostIds`, a fact about
+ * the person rather than part of their address.
  */
 type LeadRow = Record<string, unknown> &
-  CrmLeadFields & { $id: string; leadId: string; hostId: string }
+  CrmLeadFields & { $id: string; leadId: string }
 
 /**
  * `/crm/leads` — the people a site has met but not yet qualified (AGL-2608).
@@ -200,14 +204,20 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     () => (hostId ? [] : (mount?.hosts ?? []).map((host) => host.id)),
     [hostId, mount?.hosts],
   )
+  /*
+   * ONE LISTENER (AGL-3275), where this used to fan out across the org's
+   * sites and merge. At the organization level an org-wide member reads with
+   * no scope clause, which is what `visibleTo: null` asks for.
+   */
   const orgLeads = useOrgLeads({
-    hostIds: orgHostIds,
+    orgId,
+    visibleTo: null,
     windowSize: LEADS_WINDOW,
   })
   const leadDocs = useMemo<LeadRow[]>(
     () =>
       hostId
-        ? site.data.map((row) => ({ ...row, leadId: row.$id, hostId }))
+        ? site.data.map((row) => ({ ...row, leadId: row.$id }))
         : orgLeads.data,
     [hostId, site.data, orgLeads.data],
   )
@@ -442,7 +452,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     async (lead: LeadRow, fields: Record<string, unknown>, done: string) => {
       try {
         await updateDoc(
-          doc(firestore, 'hosts', lead.hostId, 'leads', lead.leadId),
+          doc(firestore, 'orgs', orgId, 'leads', lead.leadId),
           {
             ...fields,
             updatedAt: serverTimestamp(),
@@ -572,8 +582,18 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
               headerName: 'Site',
               flex: 0.9,
               minWidth: 140,
-              valueGetter: (_value: unknown, row: LeadRow) =>
-                mount?.siteName(row.hostId) ?? row.hostId,
+              /*
+               * KNOWN BY, not "the site" (AGL-3275). A lead is one org row
+               * and several sites in a consent group can hold the same
+               * person, so this names every site that captured them — the
+               * answer the Contacts list has always given in its own column.
+               */
+              valueGetter: (_value: unknown, row: LeadRow) => {
+                const held = Array.isArray(row['capturedByHostIds'])
+                  ? (row['capturedByHostIds'] as string[])
+                  : []
+                return held.map((id) => mount?.siteName(id) ?? id).join(', ')
+              },
             } satisfies GridColDef,
           ]),
       {
@@ -655,7 +675,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                     icon: (
                       <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />
                     ),
-                    href: routes.lead(row.leadId, hostId ? null : row.hostId),
+                    href: routes.lead(row.leadId),
                   },
                   {
                     key: 'convert',
@@ -859,7 +879,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                   loading={status === 'loading'}
                   onOpen={(_id, row: LeadRow) =>
                     router.push(
-                      routes.lead(row.leadId, hostId ? null : row.hostId),
+                      routes.lead(row.leadId),
                     )
                   }
                   // Columns and sort are the view's, controlled (AGL-2617).
@@ -924,19 +944,26 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       <LeadUnqualifyDialog
         open={Boolean(unqualifying)}
         onClose={() => setUnqualifying(null)}
-        hostId={unqualifying?.hostId ?? hostId ?? ''}
+        hostId={hostId ?? ''}
         leadId={unqualifying?.leadId ?? ''}
         leadLabel={String(
           unqualifying?.['name'] || unqualifying?.['email'] || '',
         )}
       />
-      {/* The row's site, not the mounted one: at the organization level a
-          lead is its own site's record, and the conversion is that site's
-          capture (AGL-2641). Under a site the two are the same. */}
+      {/* The site the conversion is filed as (AGL-2641), which since
+          AGL-3275 is the first site that captured this person rather than
+          "the site the row lives under" — a lead shared by a consent group
+          lives under none of them in particular. Under a site the mounted
+          one is used, and the two agree for every single-brand org. */}
       <LeadConvertDialog
         open={Boolean(converting)}
         onClose={() => setConverting(null)}
-        hostId={converting?.hostId ?? hostId ?? ''}
+        hostId={
+          hostId ??
+          (Array.isArray(converting?.['capturedByHostIds'])
+            ? String((converting['capturedByHostIds'] as string[])[0] ?? '')
+            : '')
+        }
         orgId={orgId}
         org={org as Record<string, unknown> | undefined}
         leadId={converting?.leadId ?? ''}

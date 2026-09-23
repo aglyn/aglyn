@@ -9,6 +9,31 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.166 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.165...v1.0.0-beta.166)
+
+### Added
+
+- **crm:** a lead's address is its id alone, at both levels ([AGL-3275](https://linear.app/aglyn/issue/AGL-3275), [AGL-3277](https://linear.app/aglyn/issue/AGL-3277))
+- **crm:** outreach and campaign sends read the org lead collection ([AGL-3275](https://linear.app/aglyn/issue/AGL-3275))
+- **crm:** the runtime and admin lead readers take the org row ([AGL-3275](https://linear.app/aglyn/issue/AGL-3275))
+- **crm:** every lead door writes the org record ([AGL-3275](https://linear.app/aglyn/issue/AGL-3275), [AGL-3277](https://linear.app/aglyn/issue/AGL-3277))
+- **crm:** a lead gets an org home and a consent-group scope ([AGL-3275](https://linear.app/aglyn/issue/AGL-3275), [AGL-3232](https://linear.app/aglyn/issue/AGL-3232), [AGL-1050](https://linear.app/aglyn/issue/AGL-1050), [AGL-3276](https://linear.app/aglyn/issue/AGL-3276), [AGL-3277](https://linear.app/aglyn/issue/AGL-3277))
+
+### Changed
+
+- **crm:** the lead seam moves into the lead writer's own file ([AGL-3275](https://linear.app/aglyn/issue/AGL-3275), [AGL-3080](https://linear.app/aglyn/issue/AGL-3080))
+
+<details>
+<summary>Also in this release: 2 test, 1 chore</summary>
+
+- **crm:** the lead doubles follow the seam into its new home ([AGL-3275](https://linear.app/aglyn/issue/AGL-3275))
+- **outreach:** the reply's stop line follows the reply on the record ([AGL-3274](https://linear.app/aglyn/issue/AGL-3274))
+- **tools:** the Linear ceiling rises to AGL-3277 ([AGL-3277](https://linear.app/aglyn/issue/AGL-3277), [AGL-3275](https://linear.app/aglyn/issue/AGL-3275), [AGL-3276](https://linear.app/aglyn/issue/AGL-3276), [AGL-136](https://linear.app/aglyn/issue/AGL-136), [AGL-3274](https://linear.app/aglyn/issue/AGL-3274))
+
+</details>
+
 ## v1.0.0-beta.165 — 2026-09-22
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.164...v1.0.0-beta.165)
