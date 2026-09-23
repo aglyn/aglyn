@@ -15,7 +15,11 @@
  * limitations under the License.
  */
 
-import { CRM_CONTACTS_EMAIL_PARAM, type ConsolePluginPageProps } from '@aglyn/aglyn'
+// Each from its own module, not the `@aglyn/aglyn` barrel: the server-side
+// person matcher builds its links here, and the barrel reaches the client
+// contexts no server graph may load.
+import { CRM_CONTACTS_EMAIL_PARAM } from '@aglyn/aglyn/app-utils/console-record-links'
+import type { ConsolePluginPageProps } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import type { CrmConsoleSectionId } from '../components/crm-console-sections'
 import { CRM_VIEW_PARAM } from './crm-view-param'
 

@@ -34,6 +34,8 @@ import {
   seedUserProfile,
   upsertOrgMember,
 } from '@aglyn/tenant-data-admin'
+import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
+import { recordAccountAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -57,7 +59,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 const ORG_ROLES = new Set<OrgRole>(['admin', 'editor', 'viewer'])
 
 async function handler(request: Request): Promise<Response> {
-  const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, headers: rawHeaders, body } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -256,6 +258,29 @@ async function handler(request: Request): Promise<Response> {
         { acceptedAt: FieldValue.serverTimestamp(), acceptedBy: decoded.uid },
         { merge: true },
       )
+    }
+    // Where this account came from (AGL-3289), when this sign-in is what
+    // created it. A first join is every new SSO account's first stop, and
+    // the window inside the writer refuses an older account joining a second
+    // workspace. Best-effort: attribution never costs anyone their access.
+    try {
+      const account = await auth.tenantManager().authForTenant(tenantId).getUser(decoded.uid)
+      const createdAtMs = Date.parse(account.metadata.creationTime)
+      await recordAccountAcquisition({
+        uid: decoded.uid,
+        accountCreatedAtMs: Number.isFinite(createdAtMs) ? createdAtMs : null,
+        touch:
+          (body as { touch?: unknown } | undefined)?.touch ??
+          readFirstTouchCookie(request.headers.get('cookie')),
+        door: 'sso',
+        provider: String(decoded.firebase?.sign_in_provider ?? '') || null,
+        email,
+        invitedToOrgId: invite ? orgId : null,
+        headers: request.headers,
+        recordedBy: 'sso',
+      })
+    } catch (error) {
+      console.error('[auth/sso-jit] acquisition record failed', error)
     }
     void logOrgActivity(
       orgId,

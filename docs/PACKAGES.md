@@ -169,6 +169,7 @@ marked where it sits.
 | `shared-util-email` | `@aglyn/shared-util-email` | `libs/shared/util/email` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-errors` | `@aglyn/shared-util-errors` | `libs/shared/util/errors` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-fbserver` | `@aglyn/shared-util-fbserver` | `libs/shared/util/fbserver` | `scope:shared` `type:util` | `.`, `./*` |
+| `shared-util-first-touch` | `@aglyn/shared-util-first-touch` | `libs/shared/util/first-touch` | `scope:shared` `type:util` | `.`, `./*` — also served as one script tag by `/api/first-touch` on the console and the tenant (AGL-3289) |
 | `shared-util-http` | `@aglyn/shared-util-http` | `libs/shared/util/http` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-logger` | `@aglyn/shared-util-logger` | `libs/shared/util/logger` | `scope:shared` `type:util` | `.`, `./*` |
 | `shared-util-next` | `@aglyn/shared-util-next` | `libs/shared/util/next` | `scope:shared` `type:util` | `.`, `./*` |

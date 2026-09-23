@@ -40,6 +40,7 @@ import {
   AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { CardColumns } from '@aglyn/shared-ui-jsx/components/card-columns'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import StaffAcquisitionCard from '../../../../../components/staff-acquisition-card.component'
 import OrgActivityCard from '../../../../../components/org-activity-card.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
@@ -1154,6 +1155,11 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                       }
                     />
                   ),
+                },
+                {
+                  // Where the workspace came from: its creator's record,
+                  // copied at creation (AGL-3289).
+                  children: <StaffAcquisitionCard orgId={orgId} />,
                 },
                 {
                   children: (

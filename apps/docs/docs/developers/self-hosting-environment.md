@@ -701,6 +701,32 @@ fires, and the only trace is a CSP violation — on the
 [health board](../staff-console/platform-health.md#csp-violations) as an
 enforced `script-src-elem` row whose blocked origin is `inline`.
 
+### Sign-up attribution is built in, and needs nothing {#first-touch}
+
+Where each account came from — the first page a visitor landed on, the site that
+sent them, campaign tags, which ad click ids were present, and the door they
+signed up through — is captured by the platform itself and written on the
+account when it is created, for the staff console's Acquisition card. **There is
+nothing to configure and nothing to add to your env file**, and no analytics
+vendor is involved at any step:
+
+- the hosts it treats as your own come from values you already set —
+  `NEXT_PUBLIC_WORKSPACE_DOMAIN` and every subdomain of it,
+  `NEXT_PUBLIC_CONSOLE_URL`, `NEXT_PUBLIC_DOCS_ORIGIN` and
+  `NEXT_PUBLIC_PLATFORM_HOME_URL` — plus any a `super` staff member adds on
+  **Staff → Platform settings**;
+- a hop between two of your hosts that share no cookie is sealed with
+  `TOKEN_SIGNING_SECRET`, which the console and the site runtime already share;
+- where the account was created from is read from the same geo headers as the
+  sign-in history ([proxy and geo](#proxy));
+- the "already known?" check reads the CRM of the workspace behind
+  `PLATFORM_MARKETING_HOST_ID` when you set it, and says so on the card when you
+  have not;
+- your docs build includes it when `DOCS_ERROR_BEACON_ENDPOINT` points at your
+  console, because that is the console it already reports to.
+
+See [Adding a first-party surface](../staff-console/first-party-surfaces.md).
+
 `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` is different in kind — it belongs to your
 own Firebase project. See [Firebase client config](#firebase-client).
 

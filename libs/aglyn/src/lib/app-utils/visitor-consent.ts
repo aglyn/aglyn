@@ -1073,8 +1073,29 @@ export function readStoredVisitorConsent(
 ): StoredVisitorConsent | null {
   if (!hostId || typeof window === 'undefined') return null
   try {
-    const raw = window.localStorage.getItem(visitorConsentStorageKey(hostId))
-    if (!raw) return null
+    return parseStoredVisitorConsent(
+      window.localStorage.getItem(visitorConsentStorageKey(hostId)),
+    )
+  } catch {
+    // No storage (privacy mode) — the visitor is simply undecided, which is
+    // the safe reading.
+    return null
+  }
+}
+
+/**
+ * A stored record's text as the record it may claim to be, or null.
+ *
+ * The one validation every copy of a record passes through — the per-origin
+ * store above, and the `aglyn_consent` mirror a server reads off a request
+ * (AGL-3289) — so a copy read anywhere grants exactly what its status
+ * supports and nothing a hand edit added.
+ */
+export function parseStoredVisitorConsent(
+  raw: string | null | undefined,
+): StoredVisitorConsent | null {
+  if (!raw) return null
+  try {
     const parsed = JSON.parse(raw)
     if (
       parsed?.v !== 1 ||
@@ -1099,8 +1120,8 @@ export function readStoredVisitorConsent(
       country: typeof parsed.country === 'string' ? parsed.country : null,
     }
   } catch {
-    // No storage (privacy mode) or corrupt JSON — the visitor is simply
-    // undecided, which is the safe reading.
+    // Corrupt JSON — the visitor is simply undecided, which is the safe
+    // reading.
     return null
   }
 }

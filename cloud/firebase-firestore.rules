@@ -618,7 +618,7 @@ service cloud.firestore {
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
-             'suspendedEnforcement', 'crmInbound'])) ||
+             'suspendedEnforcement', 'crmInbound', 'acquisition'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -631,7 +631,7 @@ service cloud.firestore {
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
-             'erasureRequestedAt', 'crmInbound'])) ||
+             'erasureRequestedAt', 'crmInbound', 'acquisition'])) ||
         // `isVerified()` here rather than inside `canManageOrg()` (AGL-2589):
         // that helper is a READ gate too — `billing/stripe` and the member
         // roster ask it — and folding verification in would refuse those.
@@ -675,7 +675,11 @@ service cloud.firestore {
              // reachable by somebody else's brand, or reachable by nothing at
              // all while looking perfectly normal on the staff list.
              'nameLower', 'nameTokens', 'nameReversed',
-             'crmInbound']));
+             'crmInbound',
+             // AGL-3289. Where the workspace came from: its creator's record,
+             // copied by `createOrganization` at birth and never written
+             // again. On all three lists, because nobody may restate it.
+             'acquisition']));
 
       /**
        * The commercial keys, moved off the org doc so a scoped site
@@ -3704,8 +3708,19 @@ service cloud.firestore {
     // users/{uid}; the AGL-42 hardening dropped the blanket rule without
     // adding this match, which default-denied the collection.
     match /users/{userId} {
-      allow read, write: if isStaff() ||
+      allow read, delete: if isStaff() ||
         (isSignedIn() && request.auth.uid == userId);
+      // `acquisition` — where the account came from — is written once, by
+      // the platform, at account creation (AGL-3289), and never by a client:
+      // not the owner, not staff. A record its subject could restate would
+      // be a record nobody could trust.
+      allow create: if (isStaff() ||
+          (isSignedIn() && request.auth.uid == userId)) &&
+        !('acquisition' in request.resource.data);
+      allow update: if (isStaff() ||
+          (isSignedIn() && request.auth.uid == userId)) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+          ['acquisition']);
 
       // "My organizations" reverse index (AGL-233): API-maintained
       // beside the member docs; each user reads only their own.

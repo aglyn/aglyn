@@ -24,6 +24,7 @@ import {
   setCampaignForwardingConsent,
 } from '@aglyn/aglyn/app-utils/campaign-forwarding'
 import { setCampaignTouchConsent } from '@aglyn/aglyn/app-utils/campaign-touch'
+import { setPageFirstTouchStorage } from '@aglyn/shared-util-first-touch/first-touch-page'
 import { installWebVitalsReporting } from '@aglyn/aglyn/app-utils/web-vitals-rum'
 import {
   INTERNAL_TRAFFIC_FORCED_SNIPPET,
@@ -449,6 +450,12 @@ export default function SiteAnalytics({
   // labels are still on the address bar and the door reads them there, with
   // nothing written to the device and nothing to consent to.
   setCampaignTouchConsent(analyticsStorageAllowed)
+  // And to the first-touch capture (AGL-3289), where the page includes it —
+  // only the platform's own sites do. Keeping the first visit across the walk
+  // to the sign-up is the same `analytics_storage`, so it takes the same
+  // resolved gate: held in memory while unresolved, written once granted,
+  // erased on a refusal. A page without the capture keeps only the answer.
+  setPageFirstTouchStorage(analyticsStorageAllowed)
 
   return (
     <>

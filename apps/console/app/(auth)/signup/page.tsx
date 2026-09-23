@@ -105,6 +105,7 @@ import {
 } from '../../../utils/signup-workspace'
 import { rememberOnboardingPlanIntent } from '../../../utils/onboarding-plan-intent'
 import { rememberSignUpCampaign } from '../../../utils/signup-campaign'
+import { rememberAccountAcquisition } from '../../../utils/account-acquisition'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createGoogleOAuthProvider } from '../../../utils/oauth-providers'
 import { aimAuthAtPool } from '../../../utils/pooled-custom-token'
@@ -438,6 +439,10 @@ function SignUp() {
       // phone — so leaving it out would attribute the minority of them
       // (AGL-1731/AGL-1942).
       await rememberSignUpCampaign(firestore, credential.user.uid, campaign)
+      // Where the visit that became this account began (AGL-3289), before
+      // the workspace below is created: it copies its creator's record at
+      // birth.
+      await rememberAccountAcquisition(credential.user)
       await provisionAndLandSignUp(
         firestore,
         credential,
@@ -618,6 +623,12 @@ function SignUp() {
           // memory of a URL. Awaited alongside the intent because the
           // provision below can end in a hard navigation.
           await rememberSignUpCampaign(firestore, credential.user.uid, campaign)
+          // Where the visit began, first touch and all (AGL-3289) — before the
+          // provision below, whose workspace copies its creator's record. The
+          // server decides from the verified token whether this account is
+          // new, so a returning Google account through this door writes
+          // nothing.
+          await rememberAccountAcquisition(credential.user)
           // Only the email/password branch has form values to keep; the
           // Google branches carry their name on the token, and the session
           // route seeds from that (AGL-1127).

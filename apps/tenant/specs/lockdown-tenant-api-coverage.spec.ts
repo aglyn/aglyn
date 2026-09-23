@@ -243,6 +243,8 @@ const TENANT_EXEMPT_AUDIT: Record<string, string> = {
   // cannot authenticate. Markers pre-dated this guard and were never read.
   'apps/tenant/app/api/attribution/route.ts':
     'anonymous browser beacon; a counter on the host doc, no org-scoped action',
+  'apps/tenant/app/api/first-touch/route.ts':
+    'the platform first-touch capture script and its anonymous hand-off seal; writes nothing, acts for no site',
   'apps/tenant/app/api/csp-report/route.ts':
     'anonymous browser beacon, aggregate-only write into a platform collection',
   'apps/tenant/app/api/errors/route.ts':

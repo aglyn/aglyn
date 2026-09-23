@@ -2331,6 +2331,24 @@ Pinned as an executable assertion in
 GPC, because the console has no gate"), so that answering the question requires
 deliberately changing that test rather than silently changing the product.
 
+#### 12c. The account's acquisition record — first-party, and not this property's (AGL-3289)
+
+`users/{uid}.signupCampaign` above answers one question for GA4 and for
+revenue: which of three `utm_*` labels the sign-up carried. It cannot say
+where a visit began when no tag was on the link — a review site's referral, a
+search result that landed on the docs — and nothing in it survives a walk
+across two of our hosts.
+
+`users/{uid}.acquisition` is that answer, and it involves no analytics vendor:
+the first-touch capture (`@aglyn/shared-util-first-touch`) runs on every host
+the first-party registry names, keeps the first EXTERNAL referrer or landing in
+a cookie on the registrable domain (analytics storage, behind the same consent
+gate as the tag), and the platform writes it once at account creation,
+server-side, with its own channel rule table rather than GA4's grouping. The
+rules refuse the field to every client. The staff console's Acquisition card
+reads it; see `apps/docs/docs/staff-console/acquisition.md`. `signupCampaign`
+is unchanged and still feeds `sign_up`.
+
 ### 13. Why a server event can still report nothing with the credentials in place (AGL-2327)
 
 Three distinct causes have been mistaken for each other, twice. Check them in

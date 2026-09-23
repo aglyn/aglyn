@@ -28,6 +28,7 @@
     "@aglyn/aglyn": "1.0.0-beta.176",
     "@aglyn/shared-util-email": "1.0.0-beta.176",
     "@aglyn/shared-util-fbserver": "1.0.0-beta.176",
+    "@aglyn/shared-util-first-touch": "1.0.0-beta.176",
     "@aglyn/shared-util-http": "1.0.0-beta.176",
     "@aglyn/shared-util-tools": "1.0.0-beta.176",
     "@msgpack/msgpack": "^3.1.3",

@@ -285,6 +285,19 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
   // return is prepared for and under whose registration number it is signed.
   // Like the send-rate and free-workspace cards, this one reads the role off
   // its OWN endpoint's response rather than the claim hook.
+  // Where an account came from (AGL-3289). Reading is staff-wide; the
+  // city-level geography inside it is `super` only, and the card says so
+  // rather than letting a country read as the whole answer.
+  'acquisition/route.ts': {
+    ui: ['components/staff-acquisition-card.component.tsx'],
+    via: /cityLevel/,
+  },
+  // The first-party host registry (AGL-3289): reading is staff-wide,
+  // changing it is `super`, and the card offers the edit only to that role.
+  'first-party-hosts/route.ts': {
+    ui: ['components/staff-first-party-hosts-card.component.tsx'],
+    via: /canEdit/,
+  },
   'tax-filing/route.ts': {
     ui: ['components/staff-tax-filing-card.component.tsx'],
     via: /isSuper/,

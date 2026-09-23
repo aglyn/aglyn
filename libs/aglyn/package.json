@@ -37,6 +37,7 @@
     "@aglyn/shared-data-mdi": "1.0.0-beta.176",
     "@aglyn/shared-data-types": "1.0.0-beta.176",
     "@aglyn/shared-util-email": "1.0.0-beta.176",
+    "@aglyn/shared-util-first-touch": "1.0.0-beta.176",
     "@aglyn/shared-util-http": "1.0.0-beta.176",
     "@aglyn/shared-util-logger": "1.0.0-beta.176",
     "@aglyn/shared-util-timestamp": "1.0.0-beta.176",

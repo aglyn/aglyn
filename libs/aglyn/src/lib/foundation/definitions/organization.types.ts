@@ -24,6 +24,7 @@
  */
 
 import type { ITimestamp } from '@aglyn/shared-util-timestamp'
+import type { AccountAcquisition } from '../../app-utils/account-acquisition'
 import type {
   OrgCrmInbound,
   OrgCrmSettings,
@@ -127,6 +128,14 @@ export interface AglynOrganization extends AglynDocument {
    * always were.
    */
   createdByUid?: UserUid
+  /**
+   * Where the workspace came from (AGL-3289): its creator's acquisition
+   * record, copied by `createOrganization` at birth and naming the account it
+   * was copied from. Written by nothing else, and denied to client writes on
+   * every rules branch, for the reason `createdByUid` is: it is the
+   * platform's record about the workspace, not the workspace's about itself.
+   */
+  acquisition?: AccountAcquisition
   /** Directory of the org's hosts (mirrors AglynOrgBilling.hosts). */
   hosts?: Record<HostUid, true>
 

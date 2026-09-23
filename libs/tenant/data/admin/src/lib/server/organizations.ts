@@ -53,6 +53,10 @@ import {
   type OrgRole,
 } from '@aglyn/aglyn/server'
 import type { PluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
+import {
+  ACCOUNT_ACQUISITION_FIELD,
+  organizationAcquisition,
+} from '@aglyn/aglyn/app-utils/account-acquisition'
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
 import {
   nameSearchKey,
@@ -277,6 +281,11 @@ export async function createOrganization(
     ) {
       throw new OrgSlugTakenError(slug)
     }
+    // Where the workspace came from is where its creator came from
+    // (AGL-3289): the creator's acquisition is copied onto the org at birth,
+    // naming the account it was copied from. Read here, before the ceiling's
+    // first write, because a transaction reads everything first.
+    const creator = await tx.get(db.collection('users').doc(ownerUid))
     // Last read, first write: the ceiling counts inside this transaction, so
     // a retry recounts, and it writes the per-owner marker that makes two
     // concurrent creates by one account contend. Throws
@@ -352,6 +361,13 @@ export async function createOrganization(
       // stops "hand the workspace to an alt account, create another, take it
       // back" from being a way past the free-workspace ceiling.
       createdByUid: ownerUid,
+      // Written once, here, and denied to every client by the rules: an
+      // organization's origin is the platform's record, never its own.
+      [ACCOUNT_ACQUISITION_FIELD]: organizationAcquisition(
+        creator.exists ? creator.get(ACCOUNT_ACQUISITION_FIELD) : null,
+        ownerUid,
+        Date.now(),
+      ),
       hosts: {},
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
