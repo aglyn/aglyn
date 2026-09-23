@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.168 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.167...v1.0.0-beta.168)
+
+### Fixed
+
+- **crm:** a lead surface never composes a ref from a null org ([AGL-3275](https://linear.app/aglyn/issue/AGL-3275))
+
 ## v1.0.0-beta.167 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.166...v1.0.0-beta.167)
