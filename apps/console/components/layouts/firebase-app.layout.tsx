@@ -52,6 +52,7 @@ import { useUrlNamedOrg } from '../../hooks/use-url-names-org'
 import { useOrgPlans } from '../../hooks/use-org-plans'
 import { buildOrgUserProperties } from '../../utils/analytics-user-properties'
 import BootSplash from '../boot-splash.component'
+import useCrossPoolTabRecovery from '../../hooks/use-cross-pool-tab-recovery'
 import useSessionCookie from '../../hooks/use-session-cookie'
 import {
   buildConsolePageTitle,
@@ -211,6 +212,14 @@ function AnalyticsGlobalEvents({ children }) {
    * instance, which module scope has none of.
    */
   useCrossTabSessionHeal()
+  /*
+   * And the sibling that stopped RECEIVING those events (AGL-3280): a
+   * cross-pool sign-in elsewhere makes the SDK throw inside its own storage
+   * listener, after which this tab tracks nothing. Mounted here for the same
+   * reason as the heal above — it needs the `Auth` instance, and this tree
+   * stays mounted throughout.
+   */
+  useCrossPoolTabRecovery()
   const analytics = useAnalytics()
 
   // ONE gate for every Firebase Analytics binding in this app (AGL-1979).
