@@ -91,6 +91,41 @@ const CONSOLE_URL = process.env.AGLYN_CONSOLE_URL?.trim()?.replace(/\/+$/, '')
 const PROBE_TOKEN = process.env.AGLYN_PROBE_TOKEN?.trim()
 
 /**
+ * VERCEL'S PROTECTION BYPASS FOR AUTOMATION (AGL-3281), sent as
+ * `x-vercel-protection-bypass` on every request these functions make to a
+ * Vercel-hosted origin of ours.
+ *
+ * `PROBE_TOKEN` above is matched by a CUSTOM firewall rule, and custom rules
+ * are the wrong tool for the failure that prompted this. On 2026-09-19 the
+ * console and the plugin job runner answered 403 with the Security
+ * Checkpoint page for fifteen hours — 65 of the 95 ERROR log entries that
+ * week — while the `Cron bypass` and `Plugin job runner bypass` rules were
+ * in place and, probed afterwards, working. What a custom rule cannot
+ * exempt is ATTACK CHALLENGE MODE, which challenges everything at the edge
+ * ahead of them; the status is the tell, 403 under attack mode against the
+ * 429 the bot-protection rule answers with normally.
+ *
+ * This secret is the one thing Vercel honours above it. Generated per
+ * project (`automation-bypass` scope, same value on the console and the
+ * tenant so rotating it is one act) and verified against a protected
+ * deployment URL, which answers 302 without the header and 200 with it.
+ *
+ * ABSENT MEANS NOT SENT, exactly as for `PROBE_TOKEN` and for the same
+ * reason: a self-hoster with no Vercel firewall in front of their console
+ * needs nothing here, and `defineSecret` would make the function
+ * undeployable for them.
+ */
+const VERCEL_BYPASS = process.env.AGLYN_VERCEL_BYPASS?.trim()
+
+/** The headers that get a request of ours past our own edge, when configured. */
+function edgeBypassHeaders(): Record<string, string> {
+  return {
+    ...(PROBE_TOKEN ? { 'x-aglyn-probe': PROBE_TOKEN } : {}),
+    ...(VERCEL_BYPASS ? { 'x-vercel-protection-bypass': VERCEL_BYPASS } : {}),
+  }
+}
+
+/**
  * How long one beat waits on the tenant job runner (AGL-3281).
  *
  * Below the function's own 120s so a hung runner is reported rather than
@@ -163,6 +198,9 @@ export const pluginJobsBeat = onSchedule(
           headers: {
             'Content-Type': 'application/json',
             'x-plugin-jobs-secret': PLUGIN_JOBS_SECRET.value(),
+            // The beat crosses the same edge the console crons do, and on
+            // 2026-09-19 it was challenged for fifteen hours (AGL-3281).
+            ...edgeBypassHeaders(),
           },
           // The runner decides what is due; this carries no instructions.
           body: '{}',
@@ -347,8 +385,8 @@ async function postConsoleCron(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'x-cron-secret': CONSOLE_CRON_SECRET.value(),
+    ...edgeBypassHeaders(),
   }
-  if (PROBE_TOKEN) headers['x-aglyn-probe'] = PROBE_TOKEN
 
   const refused: ConsoleCronChunk = {
     accepted: false,
