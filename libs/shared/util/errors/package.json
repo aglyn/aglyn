@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-util-errors",
-  "version": "1.0.0-beta.176",
+  "version": "1.0.0-beta.177",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,8 +25,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-enums": "1.0.0-beta.176",
-    "@aglyn/shared-util-tools": "1.0.0-beta.176",
+    "@aglyn/shared-data-enums": "1.0.0-beta.177",
+    "@aglyn/shared-util-tools": "1.0.0-beta.177",
     "@swc/helpers": "0.5.23"
   },
   "sideEffects": false

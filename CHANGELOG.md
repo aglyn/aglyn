@@ -9,6 +9,18 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.177 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/a9c18b289...v1.0.0-beta.177)
+
+### Added
+
+- **acquisition:** record where each account came from, on the account ([AGL-3289](https://linear.app/aglyn/issue/AGL-3289))
+
+### Documentation
+
+- **console:** the unknown-address refusal is defined above the gate that calls it ([AGL-3290](https://linear.app/aglyn/issue/AGL-3290))
+
 ## v1.0.0-beta.176 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/0fbadbb1a...v1.0.0-beta.176)
