@@ -35,7 +35,7 @@ Platform settings → First-party hosts**, one entry per line:
 | Entry | Means |
 | --- | --- |
 | `forum.example.com` | That host exactly |
-| `*.example.community` | Every subdomain of it, at any depth — but not `example.community` itself |
+| `*.example.org` | Every subdomain of it, at any depth — but not `example.org` itself |
 | `!*.sites.example.com` | EXCLUDE these, whatever else matches them |
 
 Every change needs a reason and is written to the audit trail. It reaches every server

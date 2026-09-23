@@ -20,16 +20,17 @@
 
 /**
  * The sign-up write, end to end (AGL-3289): the REAL route handler against a
- * REAL Firestore, with REAL tokens minted by the Auth emulator, and the REAL
- * `createOrganization` for the workspace that follows. No mocks on the code
- * under test.
+ * REAL Firestore, with REAL tokens minted by the Auth emulator. No mocks on
+ * the code under test.
  *
  * What it holds: the door writes where the account came from ONCE; a second
  * call — a retry, another tab, a returning Google account — never restates
  * it; the request's own cookie is the fallback when the page could not read
- * the record; an address with an invitation waiting is the invite door; an
- * account older than the creation window is not written at all; and the
- * workspace the account creates is born carrying its creator's record.
+ * the record; and an address with an invitation waiting is the invite door.
+ * The writer's creation window and the workspace's copy are held beside the
+ * writer, in `account-acquisition.emulator.spec.ts`: reaching that library
+ * from here through a deferred import would make nx treat it as lazy-loaded
+ * across the whole console.
  *
  * Skipped unless both emulator hosts are set, so an ordinary `jest` run is
  * unaffected and this can never reach production. Main Gate does not run
@@ -155,40 +156,6 @@ describeEmulated('the sign-up acquisition write (emulator)', () => {
     const user = await getAuth().createUser({ email, password: PASSWORD })
     await call(await mintIdToken(email), { touch: touch() })
     expect(await stored(user.uid)).toMatchObject({ door: 'invite', invitedToOrgId: inviting, provider: 'password' })
-  }, 60_000)
-
-  it('writes nothing for an account older than the creation window', async () => {
-    const account = await signUp('old')
-    const { recordAccountAcquisition } = await import(
-      '@aglyn/tenant-data-admin/server/account-acquisition'
-    )
-    const result = await recordAccountAcquisition({
-      uid: account.uid,
-      accountCreatedAtMs: Date.now() - 2 * 60 * 60_000,
-      touch: touch(),
-      door: 'signup-password',
-      provider: 'password',
-      email: account.email,
-      headers: new Headers(),
-      recordedBy: 'signup',
-    })
-    expect(result).toEqual({ status: 'not-new' })
-    expect(await stored(account.uid)).toBeUndefined()
-  }, 60_000)
-
-  it('the workspace the account creates is born carrying its creator’s record', async () => {
-    const account = await signUp('workspace')
-    await call(account.token, { touch: touch() })
-    const { createOrganization } = await import('@aglyn/tenant-data-admin/server/organizations')
-    const orgId = await createOrganization({
-      name: 'Review',
-      slug: `acq-review-${RUN}`,
-      ownerUid: account.uid,
-      ownerEmail: account.email,
-      bypassFreeWorkspaceCap: true,
-    })
-    const org = await db.collection('orgs').doc(orgId).get()
-    expect(org.get('acquisition')).toEqual({ ...(await stored(account.uid)), copiedFromUid: account.uid })
   }, 60_000)
 })
 

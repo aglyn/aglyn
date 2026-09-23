@@ -92,7 +92,7 @@ describe('what staff may register', () => {
   it.each([
     ['forum.example.com', 'forum.example.com'],
     [' https://Status.Example.com/incidents ', 'status.example.com'],
-    ['*.example.community', '*.example.community'],
+    ['*.example.org', '*.example.org'],
     ['!*.sites.example.com', '!*.sites.example.com'],
     ['status.example.com/', 'status.example.com'],
   ])('%s → %s', (input, expected) => {
