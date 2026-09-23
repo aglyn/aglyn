@@ -42,8 +42,11 @@
 // younger than the live window is skipped outright, because its own door may
 // still be writing the real thing.
 //
-// Accounts in an SSO tenant's user pool are not in the project pool this
-// reads, so they are stamped without a creation time or provider.
+// Auth facts come from every user pool: the project's first, then each SSO
+// tenant's, so an account created through SSO keeps its creation time and
+// provider. The record is written once, and a fact missed here is missed for
+// good. An account no pool knows (its auth record deleted, its user document
+// left behind) is stamped with neither.
 
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -72,12 +75,31 @@ const args = parseDeployArgs({
 })
 const apply = Boolean(args.apply)
 
-/** Auth facts for a batch of uids, from the project pool. */
+/** Every SSO tenant's id, for the pools beyond the project's. */
+async function tenantIds() {
+  const ids = []
+  let pageToken
+  do {
+    const page = await getAuth().tenantManager().listTenants(100, pageToken)
+    ids.push(...page.tenants.map((tenant) => tenant.tenantId))
+    pageToken = page.pageToken
+  } while (pageToken)
+  return ids
+}
+
+/** Auth facts for a batch of uids, from whichever pool holds each. */
 async function factsFor(uids) {
   const facts = new Map()
-  for (let i = 0; i < uids.length; i += 100) {
-    const { users } = await getAuth().getUsers(uids.slice(i, i + 100).map((uid) => ({ uid })))
-    for (const user of users) facts.set(user.uid, authFacts(user))
+  const pools = [getAuth()]
+  for (const tenantId of await tenantIds()) {
+    pools.push(getAuth().tenantManager().authForTenant(tenantId))
+  }
+  for (const pool of pools) {
+    const unknown = uids.filter((uid) => !facts.has(uid))
+    for (let i = 0; i < unknown.length; i += 100) {
+      const { users } = await pool.getUsers(unknown.slice(i, i + 100).map((uid) => ({ uid })))
+      for (const user of users) facts.set(user.uid, authFacts(user))
+    }
   }
   return facts
 }
