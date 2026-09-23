@@ -155,7 +155,9 @@ describe('product email on the staff user page (AGL-3292)', () => {
       />,
     )
     expect(
-      screen.getByText('no marketing site is configured on this deployment'),
+      screen.getByText(
+        'no marketing site is configured (PLATFORM_MARKETING_HOST_ID), so no contact was checked',
+      ),
     ).toBeTruthy()
   })
 

@@ -265,6 +265,14 @@ campaign the sequence joins later does not claim the people already in it,
 and one it leaves keeps what it was credited with. Filing a sequence under a
 campaign changes nothing about who is enrolled or what is sent.
 
+**Add a mail-client unsubscribe button** is off unless you turn it on. On,
+every email the sequence sends carries the `List-Unsubscribe` header, so the
+recipient's mail app shows its own **Unsubscribe** button. That is the easiest
+way out for them, and people who have it mark fewer emails as spam, but Apple
+Mail, Gmail and Outlook then label the email as coming from a mailing list — a
+poor fit for one-to-one email. Off, the footer's "reply no" line is the way
+out, and it is on every email either way. See [Unsubscribe](#unsubscribe).
+
 The **Preview** beside the editor shows each email as it would reach a sample
 contact, with the real footer, and the editor lists anything that stops the
 sequence from being saved beside the field it is about.
@@ -405,7 +413,7 @@ Each connected mailbox is read every 15 minutes for what came back:
 | --- | --- |
 | **The person replies** | Stops the sequence (**Replied**), files the reply on the contact's timeline with a line saying the sequence stopped, and gives the rep the task **Reply from** *their name*. |
 | **An out-of-office reply** | Keeps the sequence going, and moves the next step to at least five business days after the reply. |
-| **They ask not to be emailed** — a reply such as "no" or "unsubscribe", the unsubscribe link, or a message to the unsubscribe address | Stops the sequence (**Opted out**), puts the address on your do-not-contact list, unsubscribes it from the site's **Sales outreach** email, and stops it in every other sequence. |
+| **They ask not to be emailed** — a reply such as "no" or "unsubscribe", or, when the sequence adds the [mail-client unsubscribe button](#unsubscribe), that button's link or a message to the unsubscribe address | Stops the sequence (**Opted out**), puts the address on your do-not-contact list, unsubscribes it from the site's **Sales outreach** email, and stops it in every other sequence. |
 | **The email hard-bounces** | Stops the sequence (**Bounced**) and puts the address on your do-not-contact list and on the platform's suppression list. When the bounce says the recipient's mail gateway refused it rather than that the address is unknown, the whole [domain](#do-not-contact-domains) goes on the list too, and the enrollment says so. |
 | **A check refuses them before the next email** — a customer now, a member of your workspace, on a suppression list | Stops the sequence, saying which check. |
 | **The mailbox is disconnected or removed, or the member who connected it leaves the organization** | Stops the sequences that send from it. |
@@ -429,19 +437,29 @@ line of its own — the sent email already reads **Bounced**.
 
 ## Unsubscribe {#unsubscribe}
 
-Every email a sequence sends carries two ways out beside the footer's
-"reply no":
+Every email a sequence sends ends with the footer's "reply no", and a reply
+asking not to be emailed stops the person everywhere. An email with no footer,
+or with no legal name or postal address to put in it, is never sent.
 
-- a **one-click unsubscribe link** in the email's `List-Unsubscribe` header,
-  which Gmail, Yahoo and most mail apps show as an **Unsubscribe** button;
+A sequence with **Add a mail-client unsubscribe button** turned on also
+carries two more ways out, in the email's `List-Unsubscribe` header:
+
+- a **one-click unsubscribe link**, which Gmail, Yahoo and most mail apps show
+  as an **Unsubscribe** button;
 - an **unsubscribe address** — the rep's own address with `+unsubscribe`
   added — for mail apps that unsubscribe by email.
+
+The setting is off by default, because the header is what makes mail apps
+present an email as coming from a mailing list. Gmail and Yahoo require it of
+bulk senders — 5,000 or more emails a day — which a mailbox sending a
+sequence is not. With it on, an email whose link cannot be made waits rather
+than going out without it.
 
 Either one stops the person's sequences, puts the address on your
 do-not-contact list and unsubscribes it from the site's **Sales outreach**
 email. The link needs no sign-in, shows a plain page saying it is done, and
-keeps working for good — including after Sequences is paused for your
-workspace.
+keeps working for good — including after the setting is turned off, and after
+Sequences is paused for your workspace.
 
 When a person is erased from your workspace, their enrollments are deleted
 with them. Their do-not-contact entry stays — it holds no address, only a

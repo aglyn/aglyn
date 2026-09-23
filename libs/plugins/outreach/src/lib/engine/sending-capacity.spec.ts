@@ -201,7 +201,7 @@ describe('which due enrollments run', () => {
     id: 'sequence-1',
     status: 'active',
     steps,
-    settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false },
+    settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false },
     ...overrides,
   })
 
@@ -274,7 +274,7 @@ describe('which due enrollments run', () => {
       candidate('sequence-paused', 0, now - 1, {}, { status: 'paused' }),
       candidate('mismatched', 0, now - 1, { sequenceId: 'sequence-2' }),
       candidate('past-last-step', 9, now - 1),
-      candidate('weekend-only', 0, now - 1, {}, { settings: { window: { days: [0, 6], startMinute: 540, endMinute: 1020 }, allowedCountries: ['US'], allowCustomers: false, trackClicks: false } }),
+      candidate('weekend-only', 0, now - 1, {}, { settings: { window: { days: [0, 6], startMinute: 540, endMinute: 1020 }, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false } }),
       candidate('due', 0, now - 1),
     ])
     expect(ids(result.emails)).toEqual(['due'])
@@ -284,7 +284,7 @@ describe('which due enrollments run', () => {
 
   it("sends a sequence's own window when the mailbox's is closed", () => {
     const saturday = at('2026-09-19T15:00:00Z')
-    const weekend = { window: { days: [6], startMinute: 540, endMinute: 1020 }, allowedCountries: ['US'], allowCustomers: false, trackClicks: false }
+    const weekend = { window: { days: [6], startMinute: 540, endMinute: 1020 }, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false }
     const result = select(
       [candidate('weekend', 0, saturday - 1, {}, { settings: weekend }), candidate('weekday', 0, saturday - 1)],
       10,

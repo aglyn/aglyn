@@ -16,6 +16,7 @@
  */
 
 import {
+  consoleLabelUnder,
   generateSubdomain,
   isBlockedSubdomain,
   SUBDOMAIN_PATTERN,
@@ -145,5 +146,38 @@ describe('TENANT_APEX is configuration, not our infrastructure (AGL-2121)', () =
     // A half-finished `NEXT_PUBLIC_TENANT_DOMAIN=` line would otherwise make
     // every canonical URL `https://acme.` — worse than either apex.
     expect(loadWith('   ').TENANT_APEX).toBe('aglyn.app')
+  })
+})
+
+describe('consoleLabelUnder (AGL-3295)', () => {
+  /*
+   * The label a self-hosted console occupies under its workspace domain. The
+   * host gate treats it as the console and the org-slug blocklist refuses it,
+   * so both must derive the same answer from the same two settings.
+   */
+  it('names the one label a console sits on under the workspace domain', () => {
+    expect(consoleLabelUnder('https://studio.example.com', 'example.com')).toBe('studio')
+    expect(consoleLabelUnder('https://console.example.com/', 'example.com')).toBe('console')
+    // Aglyn's own configuration is just the ordinary case.
+    expect(consoleLabelUnder('https://app.aglyn.com', 'aglyn.com')).toBe('app')
+  })
+
+  it('ignores case, a port and a path', () => {
+    expect(consoleLabelUnder('https://Studio.Example.com:8443/x', 'EXAMPLE.com')).toBe('studio')
+  })
+
+  it('names nothing that cannot collide with a workspace address', () => {
+    // The apex itself, a deeper host, a host elsewhere, a lookalike suffix.
+    expect(consoleLabelUnder('https://example.com', 'example.com')).toBeNull()
+    expect(consoleLabelUnder('https://a.b.example.com', 'example.com')).toBeNull()
+    expect(consoleLabelUnder('https://console.acme.net', 'example.com')).toBeNull()
+    expect(consoleLabelUnder('https://studio.evil-example.com', 'example.com')).toBeNull()
+  })
+
+  it('names nothing when a setting is missing or unusable', () => {
+    expect(consoleLabelUnder(undefined, 'example.com')).toBeNull()
+    expect(consoleLabelUnder('https://studio.example.com', undefined)).toBeNull()
+    expect(consoleLabelUnder('   ', 'example.com')).toBeNull()
+    expect(consoleLabelUnder('studio.example.com', 'example.com')).toBeNull()
   })
 })

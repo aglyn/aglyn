@@ -33,6 +33,7 @@ const settings = (trackClicks: boolean): OutreachSequence['settings'] => ({
   allowedCountries: ['US'],
   allowCustomers: false,
   trackClicks,
+  listUnsubscribe: false,
 })
 
 const noLinks: OutreachSequenceLinksLoad = { status: 'ready', data: null }

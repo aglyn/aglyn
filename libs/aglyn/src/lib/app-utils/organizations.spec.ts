@@ -545,3 +545,49 @@ describe('countCollaboratorSeats: an account holds several addresses (AGL-2486)'
     ).toBe(1)
   })
 })
+
+describe('a self-hosted console reserves its own label (AGL-3295)', () => {
+  const saved = {
+    console: process.env.NEXT_PUBLIC_CONSOLE_URL,
+    workspace: process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN,
+  }
+  const restore = (name: string, value: string | undefined) => {
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
+  afterEach(() => {
+    restore('NEXT_PUBLIC_CONSOLE_URL', saved.console)
+    restore('NEXT_PUBLIC_WORKSPACE_DOMAIN', saved.workspace)
+    jest.resetModules()
+  })
+
+  /** The module reads both settings once, at load, as a browser bundle does. */
+  function loadWith(consoleUrl: string | undefined, workspaceDomain: string | undefined) {
+    restore('NEXT_PUBLIC_CONSOLE_URL', consoleUrl)
+    restore('NEXT_PUBLIC_WORKSPACE_DOMAIN', workspaceDomain)
+    jest.resetModules()
+    return require('./organizations') as typeof import('./organizations')
+  }
+
+  it('refuses the label the console is configured on', () => {
+    // Otherwise an organization could claim `studio.example.com`, the address
+    // the console itself answers.
+    const orgs = loadWith('https://studio.example.com', 'example.com')
+    expect(orgs.isBlockedOrgSlug('studio')).toBe(true)
+    expect(orgs.isBlockedOrgSlug('Studio')).toBe(true)
+    expect(orgs.isValidOrgSlug('studio')).toBe(false)
+    // Negative control: nothing else became reserved.
+    expect(orgs.isValidOrgSlug('studio-2')).toBe(true)
+  })
+
+  it('reserves nothing extra when the console is not a workspace-domain label', () => {
+    const outside = loadWith('https://console.acme.net', 'example.com')
+    expect(outside.isValidOrgSlug('acme-studio')).toBe(true)
+    const unset = loadWith(undefined, undefined)
+    expect(unset.isValidOrgSlug('studio')).toBe(true)
+    // The platform labels stay reserved on every install.
+    expect(unset.isBlockedOrgSlug('app')).toBe(true)
+    expect(unset.isBlockedOrgSlug('console')).toBe(true)
+  })
+})
+

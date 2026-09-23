@@ -535,6 +535,39 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
                   counting an open needs a tracking image.
                 </Typography>
               </Stack>
+              {/*
+                * The mail-client unsubscribe button (AGL-3296), off by
+                * default: the header is what makes Apple Mail, Gmail and
+                * Outlook present a one-to-one email as a mailing list. The
+                * footer's "reply 'no'" line is the way out either way.
+                */}
+              <Stack spacing={0}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={draft.settings.listUnsubscribe}
+                      onChange={(event) =>
+                        update({
+                          settings: {
+                            ...draft.settings,
+                            listUnsubscribe: event.target.checked,
+                          },
+                        })
+                      }
+                      disabled={archived}
+                    />
+                  }
+                  label="Add a mail-client unsubscribe button"
+                />
+                <Typography variant="caption" color="text.secondary">
+                  Adds the List-Unsubscribe header, so the recipient’s mail
+                  app shows its own Unsubscribe button. It’s the easiest way
+                  out for them, and fewer people mark you as spam when they
+                  have it, but mail apps then label the email as coming from
+                  a mailing list. Off, the footer’s “reply ‘no’” line is the
+                  way out, and it’s always there.
+                </Typography>
+              </Stack>
               <OutreachSendWindowFields
                 window={draft.settings.window}
                 onChange={(window) =>

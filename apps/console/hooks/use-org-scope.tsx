@@ -37,6 +37,7 @@ import {
   type ReactNode,
 } from 'react'
 import { isAuthFailure } from '../utils/auth-failure'
+import { currentWorkspaceSlug } from '../constants/workspace-domain'
 import { resolveNavSection } from './nav-section'
 import { useAuthRecovery } from './use-auth-recovery'
 import { MAX_RETRIES, retryDelayMs } from './use-host-resolution'
@@ -59,22 +60,6 @@ const SELECTED_ORG_STORAGE_KEY = 'aglyn.selectedOrgId'
  * it is inside the window at all.
  */
 export const ORG_PAGE_SIZE = 50
-
-/**
- * Console hostnames that are NOT org workspaces. Anything else with a
- * subdomain (e.g. business1.aglyn.com) resolves through orgSlugs.
- */
-const APEX_LABELS = new Set(['console', 'www', 'app', 'localhost', 'aglyn'])
-
-function subdomainSlugFromLocation(): string | null {
-  if (typeof window === 'undefined') return null
-  const [label, ...rest] = window.location.hostname.split('.')
-  if (rest.length < 1) return null // localhost, bare hosts
-  if (APEX_LABELS.has(label)) return null
-  // Vercel previews (foo.vercel.app) and IPs are not workspaces either.
-  if (window.location.hostname.endsWith('.vercel.app')) return null
-  return label
-}
 
 export interface OrgScopeContextValue {
   /** Every org the user belongs to, from the reverse index. */
@@ -229,7 +214,9 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
     key: string
     org: UserOrgMembership | null
   } | null>(null)
-  const orgSlug = useMemo(subdomainSlugFromLocation, [])
+  // The workspace the HOST names, by the middleware's own rule (AGL-3295):
+  // only a subdomain of the configured workspace domain names one.
+  const orgSlug = useMemo(currentWorkspaceSlug, [])
 
   useEffect(() => {
     if (!user?.uid) {

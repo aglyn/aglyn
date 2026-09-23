@@ -265,12 +265,6 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
       'WORKSPACE_DOMAIN — the console reader of NEXT_PUBLIC_WORKSPACE_DOMAIN.',
   },
   {
-    file: 'apps/console/utils/auth-delegation.ts',
-    count: 1,
-    reason:
-      'Reader of NEXT_PUBLIC_WORKSPACE_DOMAIN with the same default.',
-  },
-  {
     file: 'apps/console/utils/tenant-dns.ts',
     count: 1,
     reason:

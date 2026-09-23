@@ -25,7 +25,10 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthFormComponent from '../../../../components/auth-form.component'
 // One declaration of the workspace apex, for the AGL-1135 reason recorded on
 // the constant itself.
-import { WORKSPACE_DOMAIN } from '../../../../constants/workspace-domain'
+import {
+  CONSOLE_HOSTNAME,
+  WORKSPACE_DOMAIN,
+} from '../../../../constants/workspace-domain'
 import { mintSession } from '../../../../hooks/use-session-cookie'
 
 /**
@@ -116,7 +119,7 @@ function HandoffContinue() {
 
   const workspace = orgSlug
     ? `https://${orgSlug}.${WORKSPACE_DOMAIN}/`
-    : `https://app.${WORKSPACE_DOMAIN}/`
+    : `https://${CONSOLE_HOSTNAME}/`
 
   if (phase === 'not-a-member') {
     return (
@@ -130,7 +133,7 @@ function HandoffContinue() {
         headingAfter={
           <Button
             variant="contained"
-            onClick={() => window.location.replace(`https://app.${WORKSPACE_DOMAIN}/`)}
+            onClick={() => window.location.replace(`https://${CONSOLE_HOSTNAME}/`)}
           >
             {'Go to your workspaces'}
           </Button>

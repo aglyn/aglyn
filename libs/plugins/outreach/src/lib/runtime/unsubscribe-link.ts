@@ -23,9 +23,12 @@ import {
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
 
 /**
- * THE WAY OUT EVERY OUTREACH EMAIL CARRIES (AGL-2981).
+ * THE MAIL-CLIENT WAY OUT A SEQUENCE MAY CARRY (AGL-2981, AGL-3296).
  *
- * Two, in the `List-Unsubscribe` header, beside the footer's "reply no":
+ * Every email carries the footer's "reply no". A sequence with its
+ * `listUnsubscribe` setting on also carries two more, in the
+ * `List-Unsubscribe` header (see {@link outreachListUnsubscribe}); the route
+ * below answers every link ever sent, whatever the setting says now:
  *
  * - a signed HTTPS link on the console, `/api/outreach/unsubscribe?t=…`,
  *   which a mailbox provider POSTs with no person present (RFC 8058) and a
@@ -147,4 +150,31 @@ export function outreachUnsubscribeMailbox(accountEmail: string): { address: str
   if (!local) return null
   const address = `${local}+${OUTREACH_UNSUBSCRIBE_SUBADDRESS}@${email.slice(at + 1)}`
   return { address, uri: `mailto:${address}?subject=unsubscribe` }
+}
+
+/** The `List-Unsubscribe` pair a send carries, or why it carries none. */
+export type OutreachListUnsubscribe =
+  | { status: 'off' }
+  | { status: 'unavailable' }
+  | { status: 'ready'; url: string; mailto: string }
+
+/**
+ * Decides what one send's `List-Unsubscribe` header says (AGL-3296).
+ *
+ * `off` unless the sequence's setting is exactly `true`: a sequence is
+ * one-to-one mail, and a setting nobody stored is not a choice to present it
+ * as a mailing list. On, both halves are minted, and `unavailable` when
+ * either cannot be — no signing secret, no HTTPS console origin, no mailbox
+ * address — which the runtime holds the send on rather than send the email
+ * without the way out its sequence promised.
+ */
+export function outreachListUnsubscribe(input: {
+  enabled: boolean | null | undefined
+  mintUrl: () => string | null
+  mailboxEmail: string
+}): OutreachListUnsubscribe {
+  if (input.enabled !== true) return { status: 'off' }
+  const url = input.mintUrl()
+  const mailto = outreachUnsubscribeMailbox(input.mailboxEmail)?.uri
+  return url && mailto ? { status: 'ready', url, mailto } : { status: 'unavailable' }
 }

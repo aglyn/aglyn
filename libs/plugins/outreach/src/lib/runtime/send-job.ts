@@ -62,7 +62,7 @@ import { outreachSendDigest, withRecentSend } from './mailbox-health-store'
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 import { fileOutreachEmail, fileOutreachTask, OUTREACH_TASK_KIND_TO_RECORD } from './timeline'
-import { outreachUnsubscribeMailbox } from './unsubscribe-link'
+import { outreachListUnsubscribe } from './unsubscribe-link'
 
 /*==========================================
  * THE SEND JOB (AGL-2981): every fifteen minutes, on the console.
@@ -720,12 +720,20 @@ async function runEmailStep(
   })
   if (!gate.allowed) return stop(gateEvent(gate.blocks, nowMs), 'stopped')
 
-  // The email, with its way out.
-  const listUnsubscribeUrl = deps.unsubscribeUrl({ orgId: run.orgId, enrollmentId: enrollment.id })
-  const mailto = outreachUnsubscribeMailbox(mailbox.email)
-  if (!listUnsubscribeUrl || !mailto) {
-    // No link can be minted — no secret, or no HTTPS console origin — and an
-    // email without its one-click way out does not leave.
+  /*
+   * The email, with its way out. The footer's "reply 'no'" line and the
+   * postal address are always there (compose refuses without them). The
+   * `List-Unsubscribe` header is the sequence's own setting (AGL-3296), read
+   * here per send like click tracking, and absent reads as off.
+   */
+  const unsubscribe = outreachListUnsubscribe({
+    enabled: sequence.settings.listUnsubscribe,
+    mintUrl: () => deps.unsubscribeUrl({ orgId: run.orgId, enrollmentId: enrollment.id }),
+    mailboxEmail: mailbox.email,
+  })
+  if (unsubscribe.status === 'unavailable') {
+    // On, but no link can be minted — no secret, or no HTTPS console origin
+    // — and an email without the way out its sequence promised does not leave.
     console.error('[outreach] no unsubscribe link could be minted; nothing sends until one can')
     run.stopped = true
     report.held += 1
@@ -765,8 +773,8 @@ async function runEmailStep(
       site: { name: input.siteName },
     },
     templateBody: step?.kind === 'email' && step.templateId ? await templateBody(firestore, run, step.templateId) : null,
-    listUnsubscribeUrl,
-    listUnsubscribeMailto: mailto.uri,
+    listUnsubscribeUrl: unsubscribe.status === 'ready' ? unsubscribe.url : null,
+    listUnsubscribeMailto: unsubscribe.status === 'ready' ? unsubscribe.mailto : null,
   })
   if (composed.error || !composed.email) {
     const code = composed.error?.code

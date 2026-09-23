@@ -245,6 +245,35 @@ and four things follow from that:
   silent zero. Setting it to an **empty** value is not a way to opt out
   either way: forwarding switches off entirely rather than falling back to us.
 
+### The console's own host, and unknown addresses {#console-host}
+
+`NEXT_PUBLIC_CONSOLE_URL` is also how the console knows which host is its own.
+Put the console on any label under `NEXT_PUBLIC_WORKSPACE_DOMAIN` —
+`console.example.com`, `app.example.com`, or a name of your choosing such as
+`studio.example.com` — or on a host outside it entirely. Three things follow
+from that one setting:
+
+- **The label is the console's, never a workspace's.** Nobody can create an
+  organization with that slug, and the console does not read its own host as a
+  workspace. Only a subdomain of `NEXT_PUBLIC_WORKSPACE_DOMAIN` ever names a
+  workspace, so a console reached by IP address (`http://192.168.1.10:4200`) or
+  on a host of its own opens every organization normally.
+- **Everything that sends people back to the console sends them here:** an
+  unknown workspace subdomain, a custom console domain that has lapsed, and a
+  white-label sign-in. Unset, that host is `app.<NEXT_PUBLIC_WORKSPACE_DOMAIN>`.
+- **A console outside the workspace domain keeps its sessions.** It is your
+  own origin, so it is not treated as a customer's re-pointable domain.
+
+An address on the console that names nothing — a typo, an old bookmark —
+answers a real **404**, so crawlers and link checkers see it for what it is.
+The page itself sends a person on: a visitor who is not signed in goes to sign
+in, and after signing in (or straight away, for someone who already is) lands
+on the console's own "This page isn't here" page, with the address they typed
+still in the address bar. That page carries your
+`NEXT_PUBLIC_PLATFORM_BRAND_NAME` and the brand icon
+`apps/console/public/_static/images/brand/icon-256x256.png`, the same file your
+favicon set replaces (see [Renaming the product](#platform-brand)).
+
 ### `AGLYN_STANDALONE` {#aglyn-standalone}
 
 The variable that tells the software it is a real deployment rather than a

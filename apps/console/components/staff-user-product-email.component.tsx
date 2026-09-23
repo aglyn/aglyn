@@ -166,7 +166,9 @@ export default function StaffUserProductEmail({
           <Typography variant="caption" color="text.secondary">
             {reach.status === 'no-email'
               ? 'no address to look up'
-              : 'no marketing site is configured on this deployment'}
+              : // Named, so a self-hosted install's operator knows the switch
+                // (AGL-3295) — the same wording the acquisition card uses.
+                'no marketing site is configured (PLATFORM_MARKETING_HOST_ID), so no contact was checked'}
           </Typography>
         )}
         {contactHref ? (

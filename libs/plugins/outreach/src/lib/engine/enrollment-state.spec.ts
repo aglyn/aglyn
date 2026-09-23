@@ -60,7 +60,7 @@ const sequence = {
   hostId: 'host-1',
   mailboxId: 'mailbox-1',
   steps: [first, second, linkedIn, newThread],
-  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false },
+  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false },
 }
 
 describe('the enrollment state machine', () => {

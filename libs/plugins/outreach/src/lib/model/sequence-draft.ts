@@ -233,6 +233,9 @@ export function emptyOutreachSequenceDraft(input: {
       // predate it: a tracked link is visible in the body a cold recipient
       // reads, so it is turned on deliberately or not at all.
       trackClicks: false,
+      // Off for a new sequence (AGL-3296): a sequence is one-to-one mail,
+      // and the header makes mail clients present it as a mailing list.
+      listUnsubscribe: false,
     },
     campaignIds: [],
   }

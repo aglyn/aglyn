@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.178 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/e699d93ea...v1.0.0-beta.178)
+
+### Added
+
+- **outreach:** the List-Unsubscribe header is a per-sequence setting, off by default ([AGL-3296](https://linear.app/aglyn/issue/AGL-3296))
+
+### Fixed
+
+- **docs:** the docs load the first-touch capture from the console their status page names ([AGL-3289](https://linear.app/aglyn/issue/AGL-3289))
+- **console:** the acquisition route asks every auth pool, and its specs import statically ([AGL-3289](https://linear.app/aglyn/issue/AGL-3289))
+- **console:** a self-hosted console works on any host, not only Aglyn's layout ([AGL-3295](https://linear.app/aglyn/issue/AGL-3295))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3297 ([AGL-3297](https://linear.app/aglyn/issue/AGL-3297), [AGL-3296](https://linear.app/aglyn/issue/AGL-3296))
+- **tools:** the Linear id ceiling reads AGL-3295 ([AGL-3295](https://linear.app/aglyn/issue/AGL-3295))
+
+</details>
+
 ## v1.0.0-beta.177 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/a9c18b289...v1.0.0-beta.177)

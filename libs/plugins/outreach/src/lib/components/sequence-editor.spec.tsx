@@ -143,7 +143,7 @@ const stored = (
   status: 'draft',
   createdAtMs: 1,
   updatedAtMs: 1,
-  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false },
+  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false },
   steps: [
     {
       id: 'step-a',

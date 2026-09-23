@@ -422,6 +422,20 @@ export interface OutreachSequenceSettings {
    * `../engine/click-tracking.ts`.
    */
   trackClicks: boolean
+  /**
+   * Whether this sequence's emails carry `List-Unsubscribe` and
+   * `List-Unsubscribe-Post` (RFC 8058) (AGL-3296). Default `false`, and
+   * `false` on every sequence written before the setting existed.
+   *
+   * On, mail clients draw their own unsubscribe button — Apple Mail as "This
+   * message is from a mailing list" — which is the easiest way out for the
+   * recipient and makes a one-to-one email read as bulk. Off, the footer's
+   * "reply 'no'" line is the way out; the footer and its postal address are
+   * mandatory either way, and the reply classifier stops on a "no". The
+   * Gmail/Yahoo one-click requirement binds bulk senders (5,000 a day), not a
+   * mailbox sending a sequence.
+   */
+  listUnsubscribe: boolean
 }
 
 /*==========================================

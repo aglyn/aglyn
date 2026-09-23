@@ -16,6 +16,7 @@
  */
 
 import { safeSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
+import { APEX_LABELS, WORKSPACE_DOMAIN } from '../constants/workspace-domain'
 
 /**
  * Central auth origin (AGL-465). Interactive sign-in can only run where
@@ -25,11 +26,9 @@ import { safeSameOriginPath } from '@aglyn/shared-util-http/safe-redirect'
  * So workspace subdomains delegate interactive sign-in to
  * `auth.<workspaceDomain>` (which IS the authDomain → same-origin OAuth)
  * and pick the session back up via the shared parent-domain `__session`
- * cookie (AGL-236 silent sign-in).
+ * cookie (AGL-236 silent sign-in). The workspace domain is the console's one
+ * shared constant (`constants/workspace-domain.ts`), not a copy of its own.
  */
-
-const WORKSPACE_DOMAIN =
-  process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 
 /**
  * First-party infrastructure labels that host their own sign-in (or are
@@ -49,6 +48,10 @@ const RESERVED_LABELS = new Set([
   'io',
   'proxy',
   'tenant',
+  // The label this install's own console is configured on (AGL-3295), which
+  // the middleware's set already carries: a console at `studio.example.com`
+  // signs in where it stands, like `app.` does, rather than as a workspace.
+  ...APEX_LABELS,
 ])
 
 export function authSignInHost(workspaceDomain = WORKSPACE_DOMAIN): string {

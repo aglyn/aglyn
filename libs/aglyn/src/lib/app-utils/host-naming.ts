@@ -73,6 +73,40 @@ const BLOCKED_FRAGMENTS = [
   'nazi',
 ]
 
+/**
+ * The one label a console URL occupies directly under a workspace domain
+ * (AGL-3295): `studio` for `https://studio.example.com` under `example.com`.
+ *
+ * `null` when either setting is missing or unparseable, and when the console
+ * is the apex itself, sits deeper, or lies outside the domain — none of those
+ * can collide with a workspace address, so none needs reserving.
+ *
+ * Pure, and in this dependency-free module, so the console's host gate and the
+ * organization-slug blocklist derive the same label from the same two
+ * settings. An install whose console is not at `app.` or `console.` is the
+ * case it exists for: without it, that label is read as a workspace nobody
+ * owns.
+ */
+export function consoleLabelUnder(
+  consoleUrl: string | null | undefined,
+  workspaceDomain: string | null | undefined,
+): string | null {
+  const domain = String(workspaceDomain ?? '')
+    .trim()
+    .toLowerCase()
+  const raw = String(consoleUrl ?? '').trim()
+  if (!domain || !raw) return null
+  let hostname: string
+  try {
+    hostname = new URL(raw).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+  if (!hostname.endsWith(`.${domain}`)) return null
+  const label = hostname.slice(0, -(domain.length + 1))
+  return label && !label.includes('.') ? label : null
+}
+
 /** True when the subdomain is reserved or contains a blocked fragment. */
 export function isBlockedSubdomain(subdomain: string): boolean {
   const normalized = subdomain.toLowerCase()
