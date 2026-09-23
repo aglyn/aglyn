@@ -314,6 +314,11 @@ export interface CustomCssFormProps {
    * plain node; defaults to the component root.
    */
   overrideKey?: string
+  /**
+   * True when the node is a placed form whose design resolves, so its edits
+   * land in the same override slice the Styles panel writes (AGL-3285).
+   */
+  placedFormResolves?: boolean
 }
 
 type BuilderRow = { property: string; value: string }
@@ -326,13 +331,13 @@ type BuilderRow = { property: string; value: string }
  * nested selectors) verbatim.
  */
 export const CustomCssForm = observer((props: CustomCssFormProps) => {
-  const { node, breakpoint, overrideKey } = props
+  const { node, breakpoint, overrideKey, placedFormResolves } = props
   // Same target the rest of the Styles panel writes (AGL-1306/1332): a
   // plain node's own sx, or the instance override slice the panel's style
   // target names — root, or one leaf inside the component.
   const target = useMemo(
-    () => getNodeStyleTarget(node, overrideKey),
-    [node, overrideKey],
+    () => getNodeStyleTarget(node, overrideKey, { placedFormResolves }),
+    [node, overrideKey, placedFormResolves],
   )
   const nodeSx = (target.sx ?? {}) as Record<string, any>
   const [mode, setMode] = useState<'builder' | 'css' | 'json'>('builder')

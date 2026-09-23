@@ -18,9 +18,10 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
-  components,
+  isPlacedFormNode,
   listInstanceStyleTargets,
-  REUSABLE_INSTANCE_COMPONENT_ID,
+  placementDefinitionFor,
+  REUSABLE_INSTANCE_PROP_VALUES_KEY,
   STYLE_OVERRIDES_ROOT_KEY,
 } from '@aglyn/aglyn'
 import { BoxStyler, Measurements } from '../box-styler'
@@ -80,12 +81,12 @@ import {
   FormControlLabel,
   FormHelperText,
   FormLabel,
-  MenuItem,
   Switch,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
+  Typography,
 } from '@mui/material'
 import Button from '@mui/material/Button'
 import FormControl from '@mui/material/FormControl'
@@ -103,7 +104,6 @@ import {
 } from 'react'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
 import type { LayoutElementSelection } from '../contexts/layout-style-selection'
-import { getLayoutStyleTarget } from '../utils/style-target'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import {
   buildStyleMute,
@@ -146,7 +146,21 @@ import {
   STYLE_SECTION_ENTRIES,
   styleFieldEntry,
 } from '../utils/style-field-search'
-import { getNodeStyleTarget } from '../utils/style-target'
+import {
+  type PartNode,
+  placementCopy,
+  styleChangeLabel,
+} from '../utils/placement-override-copy'
+import {
+  getPlacementPartPick,
+  resolvePickedPart,
+} from '../utils/placement-part-pick'
+import {
+  countLayoutStyleChanges,
+  countStyleChanges,
+  getLayoutStyleTarget,
+  getNodeStyleTarget,
+} from '../utils/style-target'
 import { buildStyleThemeScales } from '../utils/theme-scale-options'
 import {
   readHiddenBands,
@@ -158,6 +172,7 @@ import { Accordion } from './accordion-list.component'
 import CustomCssForm from './custom-css-form.component'
 import ElementClassesField from './element-classes-field.component'
 import ElementStylesFormTemplate from './element-styles-form-template.component'
+import { PlacementPartsHeader } from './placement-parts-header.component'
 
 const alignItems: ButtonGroupFormControl = {
   name: 'alignItems',
@@ -624,58 +639,87 @@ export interface ElementStylesFormProps extends Partial<FormRendererProps> {
  * `style-field-search.ts`; the filtered group is also what each form SAVES
  * through, so hiding a field can never clear it.
  */
-/** A property chip's name: a slice is a whole block, not a property. */
-const overrideChipLabel = (property: string) =>
-  property === SX_SCHEME_DARK_KEY
-    ? 'dark scheme'
-    : (sxStateSliceLabel(property) ?? property)
-
 /**
  * The head of the Styles tab while a shared-layout element is the target
- * (AGL-3286): what is being styled, where the edits go, and each property
- * this page overrides as a chip whose ✕ returns it to the layout's value.
+ * (AGL-3286): what is being styled, where the edits go, how many changes
+ * this page makes to the layout, and each setting changed on this element as
+ * a chip whose ✕ returns it to the layout's value. Worded from the same copy
+ * as a component or form placement (AGL-3288), so the three read alike.
  */
 const LayoutOverrideSummary = observer(
   (props: {
     label: string
     properties: string[]
+    changeCount: number
+    labelFor: (property: string) => string
     onClear: (property: string) => () => void
-    onReset: () => void
+    onResetAll: () => void
   }) => {
-    const { label, properties, onClear, onReset } = props
+    const { label, properties, changeCount, labelFor, onClear, onResetAll } =
+      props
+    const copy = placementCopy('layout')
     return (
       <Container gutterY={[1]} dense>
+        <Typography
+          variant="overline"
+          color="text.secondary"
+          component="div"
+        >
+          {copy.sectionTitle}
+        </Typography>
         <Alert severity="info" sx={{ fontSize: '0.8125rem', mb: 1 }}>
           {`Styling the layout's ${label} on this page only. ` +
             'Other pages using this layout are unchanged.'}
         </Alert>
-        <Chip
-          size="small"
-          color={properties.length ? 'secondary' : 'default'}
-          label={
-            properties.length
-              ? `Page overrides: ${properties.length}`
-              : "Using the layout's styles"
-          }
-        />
-        {properties.map((property) => (
-          <Tooltip
-            key={property}
-            title="Clear this override — the element returns to the layout's own value"
-          >
-            <Chip
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}
+        >
+          <Typography variant="caption" color="text.secondary">
+            {copy.summary(changeCount)}
+          </Typography>
+          {changeCount > 0 ? (
+            <Button
               size="small"
-              variant="outlined"
-              sx={{ ml: 1, mt: 0.5 }}
-              label={overrideChipLabel(property)}
-              onDelete={onClear(property)}
-            />
-          </Tooltip>
-        ))}
+              onClick={onResetAll}
+              aria-label={copy.resetAllAria}
+            >
+              {copy.resetAll}
+            </Button>
+          ) : null}
+        </Box>
         {properties.length ? (
-          <Button size="small" onClick={onReset} sx={{ ml: 1, mt: 0.5 }}>
-            {'Reset'}
-          </Button>
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 0.5,
+            }}
+          >
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              component="span"
+            >
+              {copy.changedListLabel}
+            </Typography>
+            {properties.map((property) => {
+              const name = labelFor(property)
+              const resetLabel = copy.resetField(name)
+              return (
+                <Tooltip key={property} title={resetLabel}>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    label={name}
+                    onDelete={onClear(property)}
+                    aria-label={resetLabel}
+                  />
+                </Tooltip>
+              )
+            })}
+          </Box>
         ) : null}
       </Container>
     )
@@ -713,14 +757,16 @@ const ElementStylesForm = observer(
     // its node tree to offer the leaves an author may style. Read from the
     // same context the canvas renders instances through, so the picker can
     // only ever offer targets the graft will actually consult.
-    const { definitions } = useContext(ComponentPromotionContext)
-    const definition = useMemo(() => {
-      if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) {
-        return undefined
-      }
-      const refId = (node?.props as { refId?: string } | undefined)?.refId
-      return refId ? definitions?.[refId] : undefined
-    }, [node, definitions])
+    //
+    // A placed form is the same kind of placement (AGL-3285): its published
+    // design is the tree, and its fields are the leaves a page may restyle.
+    const { definitions, formDesigns } = useContext(ComponentPromotionContext)
+    const definition = useMemo(
+      () => placementDefinitionFor(node, { definitions, formDesigns }),
+      [node, definitions, formDesigns],
+    )
+    const isPlacedForm = isPlacedFormNode(node)
+    const placedFormResolves = isPlacedForm && Boolean(definition)
     const styleTargets = useMemo(
       () => listInstanceStyleTargets(definition),
       [definition],
@@ -730,13 +776,16 @@ const ElementStylesForm = observer(
     // selection rather than in an effect: switching nodes must land on the
     // component root, and deriving that from the current `node.$id` cannot
     // render one frame aimed at the PREVIOUS instance's leaf.
-    const [picked, setPicked] = useState<{ nodeId?: string; key: string }>({
-      key: STYLE_OVERRIDES_ROOT_KEY,
-    })
-    const pickedKey =
-      picked.nodeId && picked.nodeId === node?.$id
-        ? picked.key
-        : STYLE_OVERRIDES_ROOT_KEY
+    //
+    // A click on the canvas newer than the menu's last choice moves it
+    // (AGL-3288) — see `placement-part-pick.ts`.
+    const canvasPick = getPlacementPartPick()
+    const [picked, setPicked] = useState<{
+      nodeId?: string
+      key: string
+      seq: number
+    }>({ key: STYLE_OVERRIDES_ROOT_KEY, seq: 0 })
+    const pickedKey = resolvePickedPart(node?.$id, picked, canvasPick)
     // A leaf the component no longer has falls back to the root instead of
     // aiming the panel at a slice nothing renders (the definition may have
     // been edited since). An unloaded definition offers nothing yet, so it
@@ -763,8 +812,14 @@ const ElementStylesForm = observer(
       () =>
         layoutTargetLayoutId && layoutTargetNodeId
           ? getLayoutStyleTarget(node, layoutTargetLayoutId, layoutTargetNodeId)
-          : getNodeStyleTarget(node, overrideKey),
-      [node, overrideKey, layoutTargetLayoutId, layoutTargetNodeId],
+          : getNodeStyleTarget(node, overrideKey, { placedFormResolves }),
+      [
+        node,
+        overrideKey,
+        placedFormResolves,
+        layoutTargetLayoutId,
+        layoutTargetNodeId,
+      ],
     )
     // What the canvas-only aids (held state, muted declarations) and the form
     // seeds key on. For a layout element that is its id in the layout, which
@@ -1175,23 +1230,69 @@ const ElementStylesForm = observer(
         )
       : new Set<string>()
 
-    /** The picker's name for one target — the author's word, then the component's. */
-    const styleTargetLabel = useCallback(
-      (entry: Aglyn.InstanceStyleTarget) =>
-        entry.isRoot
-          ? 'Component root'
-          : entry.name ||
-            (entry.componentId && components.getLabel(entry.componentId)) ||
-            entry.componentInternalId,
-      [],
+    const canvasSeq = canvasPick.seq
+    const handleStyleTargetChange = useCallback(
+      (key: string) => {
+        setPicked({ nodeId: node?.$id, key, seq: canvasSeq })
+      },
+      [node?.$id, canvasSeq],
     )
 
-    const handleStyleTargetChange = useCallback(
-      (event: ChangeEvent<HTMLInputElement>) => {
-        setPicked({ nodeId: node?.$id, key: event.target.value })
-      },
-      [node?.$id],
+    // "Reset all" (AGL-3288): every style change this page makes, on every
+    // part, in one undoable step.
+    const handleResetAllStyles = useCallback(() => {
+      canvas.transact(() => target.clearAll())
+    }, [target])
+
+    const placementKind = isPlacedForm ? 'form' : 'component'
+    const placementText = placementCopy(placementKind)
+    const styleChangeCount = target.isInstanceOverride
+      ? countStyleChanges(node)
+      : 0
+    const placementPropValues = (
+      node?.props as Record<string, any> | undefined
+    )?.[REUSABLE_INSTANCE_PROP_VALUES_KEY] as
+      | Record<string, unknown>
+      | undefined
+
+    /**
+     * Every style field's on-screen label by its stored name, so a changed
+     * setting is listed as "Corner Radius", never as `borderRadius`
+     * (AGL-3288).
+     */
+    const styleFieldLabels = useMemo(() => {
+      const labels: Record<string, string> = {}
+      for (const group of [...styleGroups, flexGridGroup]) {
+        for (const field of group.fields) {
+          if (typeof field.label === 'string' && field.label) {
+            labels[field.name] = field.label
+          }
+        }
+      }
+      return labels
+    }, [styleGroups, flexGridGroup])
+
+    /**
+     * What a changed setting is called on screen: its field label, "Dark
+     * mode" for the dark-scheme block, and a state's name for a state block —
+     * a state slice is a whole nested block, not a property, and printing the
+     * raw `&:hover` would show an author a selector they never typed
+     * (AGL-2486, AGL-3288).
+     */
+    const styleChangeDisplayLabel = useCallback(
+      (property: string) =>
+        property === SX_SCHEME_DARK_KEY
+          ? 'Dark mode'
+          : (sxStateSliceLabel(property) ??
+            styleChangeLabel(property, styleFieldLabels)),
+      [styleFieldLabels],
     )
+    // The layout's own "N changes on this page" (AGL-3286): every element of
+    // this layout the page restyles, which is exactly what its Reset all
+    // clears.
+    const layoutChangeCount = layoutTargetLayoutId
+      ? countLayoutStyleChanges(node, layoutTargetLayoutId)
+      : 0
 
     // Panel search (AGL-2486, item 13). The panel is seven accordions plus
     // the box stylers and the toggles, so "which section is Corner Radius
@@ -1417,108 +1518,83 @@ const ElementStylesForm = observer(
             ) : null}
           </Container>
         ) : null}
-        {/* Instance override layer (AGL-1306): on a component instance the
-            whole panel writes per-instance overrides, never the component.
-            The chip names the mode; each overridden property lists as a
-            deletable chip whose ✕ returns that property to the
-            component's own value. */}
         {target.isLayoutOverride && layoutTarget ? (
           <LayoutOverrideSummary
             label={layoutTarget.label}
             properties={overrideProperties}
+            changeCount={layoutChangeCount}
+            labelFor={styleChangeDisplayLabel}
             onClear={handleClearOverride}
-            onReset={() => canvas.transact(() => target.setSx(undefined))}
+            onResetAll={handleResetAllStyles}
           />
         ) : null}
+        {/* "Change it on this page only" (AGL-1306, AGL-1332, AGL-3288):
+            on a placement the whole panel writes this page's changes, never
+            the component or form itself. "Which part?" picks the element
+            inside it being restyled — root-only changes could recolor a
+            background but never a headline that sets its own color, so a
+            white band rendered white-on-white. Each changed setting lists
+            by its field label, with a reset that returns it to the shared
+            value. */}
         {target.isInstanceOverride && !target.isLayoutOverride ? (
           <Container gutterY={[1]} dense>
-            {/* Which part of the component this instance is restyling
-                (AGL-1332). Root-only overrides could change an instance's
-                background but never the colour its headline sets for
-                itself, so a white band rendered white-on-white; picking the
-                headline here writes a slice keyed by that leaf's definition
-                id, merged over the leaf at graft time. Content stays the
-                component's — this styles the instance's copy, it does not
-                unlock the component's text. */}
-            {styleTargets.length > 1 ? (
-              <TextField
-                select
-                fullWidth
-                size="small"
-                margin="dense"
-                label="Style target"
-                value={overrideKey}
-                onChange={handleStyleTargetChange}
-                helperText={
-                  target.isLeafOverride
-                    ? 'Styling one element inside the component, on this ' +
-                      'instance only. Its content still comes from the ' +
-                      'component.'
-                    : "Styling the component's outer element on this " +
-                      'instance. Pick an element inside it to restyle that ' +
-                      'part — a headline that sets its own color ignores ' +
-                      'one set out here.'
-                }
-              >
-                {styleTargets.map((entry) => (
-                  <MenuItem
-                    key={entry.key}
-                    value={entry.key}
-                    // Nesting reads as nesting: the definition's tree is the
-                    // only map an author has of what is inside a component.
-                    sx={{ pl: 2 + entry.depth * 1.5 }}
-                  >
-                    {styleTargetLabel(entry)}
-                    {overriddenKeys.has(entry.key) ? ' •' : ''}
-                  </MenuItem>
-                ))}
-              </TextField>
-            ) : null}
-            <Tooltip
-              title={
-                'This element is a component instance: style edits here ' +
-                'apply to this instance only, layered over the ' +
-                "component's own styles. Other placements keep the " +
-                'component look, and component updates still flow ' +
-                'through. Use "Edit component" on the Attributes tab to ' +
-                'change the component for everyone.'
+            <PlacementPartsHeader
+              kind={placementKind}
+              parts={styleTargets}
+              definitionNodes={
+                definition?.nodes as Record<string, PartNode> | undefined
               }
-            >
-              <Chip
-                size="small"
-                color={overrideProperties.length ? 'secondary' : 'default'}
-                label={
-                  overrideProperties.length
-                    ? `Instance overrides: ${overrideProperties.length}`
-                    : 'Styling this instance'
-                }
-              />
-            </Tooltip>
-            {overrideProperties.map((property) => (
-              <Tooltip
-                key={property}
-                title={
-                  'Clear this override — the instance returns to the ' +
-                  "component's own value"
-                }
+              propValues={placementPropValues}
+              value={overrideKey}
+              onChange={handleStyleTargetChange}
+              changedKeys={overriddenKeys}
+              helperText={
+                target.isLeafOverride
+                  ? placementText.styleOnePartHelper
+                  : placementText.styleWholePartHelper
+              }
+              changeCount={styleChangeCount}
+              onResetAll={handleResetAllStyles}
+              helpExcerpt={placementText.styleHelpExcerpt}
+              helpHref={besignerDocsUrl(
+                'reusableComponents',
+                '#restyle-one-instance',
+              )}
+            />
+            {overrideProperties.length ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 0.5,
+                }}
               >
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  sx={{ ml: 1, mt: 0.5 }}
-                  label={
-                    property === SX_SCHEME_DARK_KEY
-                      ? 'dark scheme'
-                      : // A state slice is a whole nested block, not a
-                        // property — printing the raw `&:hover` here would
-                        // show an author a selector they never typed
-                        // (AGL-2486).
-                        (sxStateSliceLabel(property) ?? property)
-                  }
-                  onDelete={handleClearOverride(property)}
-                />
-              </Tooltip>
-            ))}
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  component="span"
+                >
+                  {placementText.changedListLabel}
+                </Typography>
+                {overrideProperties.map((property) => {
+                  const label = styleChangeDisplayLabel(property)
+                  const resetLabel = placementText.resetField(label)
+                  return (
+                    <Tooltip key={property} title={resetLabel}>
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color="secondary"
+                        label={label}
+                        onDelete={handleClearOverride(property)}
+                        aria-label={resetLabel}
+                      />
+                    </Tooltip>
+                  )
+                })}
+              </Box>
+            ) : null}
           </Container>
         ) : null}
         {matchesSection('box') ? (
@@ -1758,6 +1834,7 @@ const ElementStylesForm = observer(
               node={node}
               breakpoint={activeBreakpoint}
               overrideKey={overrideKey}
+              placedFormResolves={placedFormResolves}
             />
           </Accordion>
         ) : null}

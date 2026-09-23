@@ -438,3 +438,82 @@ describe('an attribute override, written and then grafted (AGL-1899)', () => {
     expect(composed['a']).toBeDefined()
   })
 })
+
+describe('a placed form is an attribute-override target (AGL-3285)', () => {
+  const FIELD_ID = 'specPlacedFormField'
+  const placedForm = (extra: Record<string, unknown> = {}) =>
+    ({
+      $id: 'form-1',
+      componentId: 'form',
+      props: { formId: 'contact' },
+      ...extra,
+    }) as any
+
+  afterEach(() => {
+    delete (Aglyn.components.schemas as Record<string, any>)[FIELD_ID]
+  })
+
+  it('resolves as an override target once its design resolves', () => {
+    const node = placedForm()
+    const target = getNodeAttrTarget(node, 'f-email', {
+      placedFormResolves: true,
+    })
+    expect(target.isInstanceOverride).toBe(true)
+    expect(target.isLeafOverride).toBe(true)
+    target.setAttrs({ label: 'Your email', placeholder: 'you@company.com' })
+    expect(node.attrOverrides).toEqual({
+      'f-email': { label: 'Your email', placeholder: 'you@company.com' },
+    })
+  })
+
+  it('stays a plain node while its design does not resolve', () => {
+    // An unresolved form renders the page's own fields, so a slice written
+    // here would save and never render.
+    const node = placedForm()
+    const target = getNodeAttrTarget(node, 'f-email')
+    expect(target.isInstanceOverride).toBe(false)
+    target.setAttrs({ label: 'Ignored' })
+    expect(node.attrOverrides).toBeUndefined()
+  })
+
+  it('never writes a prop that changes what the form submits', () => {
+    const node = placedForm()
+    getNodeAttrTarget(node, 'f-email', { placedFormResolves: true }).setAttrs({
+      fieldName: 'renamed',
+      fieldType: 'text',
+      required: false,
+      options: 'a, b',
+      label: 'Email',
+    })
+    expect(node.attrOverrides).toEqual({ 'f-email': { label: 'Email' } })
+  })
+
+  it('offers labels but not the submission contract', () => {
+    ;(Aglyn.components.schemas as Record<string, any>)[FIELD_ID] = {
+      $id: FIELD_ID,
+      attributes: [
+        { name: 'fieldName', component: Aglyn.FieldComponentType.TEXT_FIELD },
+        { name: 'label', component: Aglyn.FieldComponentType.TEXT_FIELD },
+        { name: 'placeholder', component: Aglyn.FieldComponentType.TEXT_FIELD },
+        { name: 'fieldType', component: Aglyn.FieldComponentType.SELECT },
+        { name: 'options', component: Aglyn.FieldComponentType.TEXTAREA },
+        { name: 'required', component: Aglyn.FieldComponentType.SWITCH },
+      ],
+    }
+    const defNode = { componentId: FIELD_ID, props: { label: 'Email' } }
+    expect(
+      listInstanceAttrFields(defNode, placedForm()).map((f) => f.name),
+    ).toEqual(['label', 'placeholder'])
+    // The same field inside a reusable INSTANCE keeps every attribute.
+    expect(
+      listInstanceAttrFields(defNode, instance()).map((f) => f.name),
+    ).toEqual([
+      'fieldName',
+      'label',
+      'placeholder',
+      'fieldType',
+      'options',
+      'required',
+    ])
+  })
+})

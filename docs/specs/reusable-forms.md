@@ -376,11 +376,37 @@ to find the enclosing `Form`'s dataset, and the same walk finds the enclosing
 **Reuse across pages is the reusable-component system, unchanged.** Promote the
 bound `Form` subtree once; place instances anywhere; the `formId` travels
 inside the definition, so every instance writes the same form's submissions
-without the author retyping a label. Per-page variation uses the
-`attrOverrides` mechanism that already exists (`compose-reusable-components.ts:165-219`).
-This is worth stating plainly: **the reuse half of "reusable forms" is already
+without the author retyping a label. This is worth stating plainly: **the reuse half of "reusable forms" is already
 built and sold** as `reusableComponents` on Starter and above. What is missing
 is the entity that makes the reuse *mean* something.
+
+**Per-page variation — what ships (AGL-3285).** A form placed on a page
+(`form` node with a `formId` whose published design resolves) carries the same
+two per-placement layers a component instance does, stored on the placed node
+and applied by the one graft (`composeReusableComponentNodes`) that the canvas,
+Preview and the published page all run:
+
+- **Styles** (`styleOverrides`). The Styles tab's *Which part?* picker lists
+  *Whole form* and every part of the form's design; picking a field restyles
+  that field's copy on this page only. Keys are the design's own node ids (or
+  `root`), exactly as for an instance.
+- **Attributes** (`attrOverrides`). The Attributes tab's *Which part?* picker
+  offers the same parts (both under *Change it on this page only*, AGL-3288). A page may change a field's label or
+  placeholder, the submit button's text and the success message.
+
+What a page may **not** change is anything that alters what the form submits.
+`PLACED_FORM_REFUSED_ATTR_PROPS` in `compose-reusable-components.ts` is the
+list — `formId`, `formName`, the dataset binding, the after-submit outcome, and
+each field's `fieldName`, `datasetFieldId`, `fieldType`, `options` and
+`required`, plus the raw `name`/`type`/`value`/`action`/`method`/`disabled`
+attributes and the hide directives. The panel never offers them, and the graft
+drops them if they reach storage by any other path. Per page, a form may
+*look* different; it may not *collect* something different.
+
+A placed form whose design does not resolve (unpublished, missing, or no
+`formId`) renders the fields drawn on the page and has no override layer: the
+panels style and edit that node directly, as before. Forms cannot be detached,
+so there is no detach path to carry overrides through.
 
 ⚠️ **Two instances of one definition are one form, and that is the point.**
 Twelve pages, one submission list, one conversion denominator, one field

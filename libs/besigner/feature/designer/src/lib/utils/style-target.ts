@@ -17,6 +17,7 @@
 
 import type * as Aglyn from '@aglyn/aglyn'
 import {
+  isPlacedFormNode,
   mergeNodeSx,
   REUSABLE_INSTANCE_COMPONENT_ID,
   STYLE_OVERRIDES_ROOT_KEY,
@@ -86,6 +87,12 @@ export interface NodeStyleTarget {
   readonly isLayoutOverride?: boolean
   /** Replaces the target sx wholesale (MobX action inside). */
   setSx(next: Record<string, any> | undefined): void
+  /**
+   * Removes every style change a placement carries, on every part — the
+   * "Reset all" of AGL-3288. Does nothing on a plain node, whose sx is its
+   * own and has nothing to reset to (MobX action inside).
+   */
+  clearAll(): void
 }
 
 const isPlainRecord = (value: unknown): value is Record<string, any> =>
@@ -227,20 +234,53 @@ function writeComposedNodeSx(
 }
 
 /**
+ * Options for {@link getNodeStyleTarget} and {@link getNodeAttrTarget}.
+ */
+export interface PlacementTargetOptions {
+  /**
+   * True when the selected node is a placed form whose form design RESOLVES
+   * — the graft will replace its fields with the form's own, so the page
+   * styles them through override slices (AGL-3285).
+   *
+   * Asked of the caller because only it holds the form designs. A placed
+   * form whose design is missing or unpublished renders the fields drawn on
+   * the page, exactly as authored, and an override slice there would save
+   * and never render; such a form stays a plain node. Ignored for a
+   * reusable-component instance, which has no other layer to write.
+   */
+  placedFormResolves?: boolean
+}
+
+/**
+ * Whether the selected node's style/attribute edits land in its override
+ * slices — an instance always, a placed form only when its design resolves
+ * (see {@link PlacementTargetOptions}).
+ */
+export function isOverridePlacement(
+  node: Aglyn.NodeSchema<any> | null | undefined,
+  options?: PlacementTargetOptions,
+): boolean {
+  if (node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID) return true
+  return Boolean(options?.placedFormResolves) && isPlacedFormNode(node)
+}
+
+/**
  * The style target for a selected node — see {@link NodeStyleTarget}.
  *
- * `overrideKey` selects WHICH slice of an instance's overrides is edited;
+ * `overrideKey` selects WHICH slice of a placement's overrides is edited;
  * it is ignored for a plain node. A falsy key falls back to the root, so a
  * caller that has not resolved a definition yet still edits something real
  * rather than writing an `undefined`-keyed slice no renderer reads.
+ *
+ * A placed form is a placement exactly like an instance (AGL-3285), once the
+ * caller says its design resolves — see {@link PlacementTargetOptions}.
  */
 export function getNodeStyleTarget(
   node: Aglyn.NodeSchema<any> | null | undefined,
   overrideKey?: string | null,
+  options?: PlacementTargetOptions,
 ): NodeStyleTarget {
-  const isInstance =
-    node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
-  if (!node || !isInstance) {
+  if (!node || !isOverridePlacement(node, options)) {
     return {
       isInstanceOverride: false,
       overrideKey: '',
@@ -258,6 +298,7 @@ export function getNodeStyleTarget(
         if (!node) return
         writeComposedNodeSx(node, next)
       }),
+      clearAll: () => undefined,
     }
   }
   // An instance's target is deliberately NOT composed with anything
@@ -292,6 +333,9 @@ export function getNodeStyleTarget(
       }
       node.styleOverrides =
         Object.keys(overrides).length > 0 ? overrides : undefined
+    }),
+    clearAll: action(() => {
+      if (node.styleOverrides !== undefined) node.styleOverrides = undefined
     }),
   }
 }
@@ -343,7 +387,55 @@ export function getLayoutStyleTarget(
       screenRoot.layoutStyleOverrides =
         Object.keys(all).length > 0 ? all : undefined
     }),
+    // "Reset all" (AGL-3288) on a layout element clears every element of
+    // THIS layout the page restyles — the same scope the "N changes on this
+    // page" line counts ({@link countLayoutStyleChanges}). Other layouts in
+    // the chain keep theirs.
+    clearAll: action(() => {
+      if (!screenRoot?.layoutStyleOverrides?.[layoutId]) return
+      const all = { ...toJS(screenRoot.layoutStyleOverrides) }
+      delete all[layoutId]
+      screenRoot.layoutStyleOverrides =
+        Object.keys(all).length > 0 ? all : undefined
+    }),
   }
+}
+
+/**
+ * How many style settings a page changes on one of its shared layout's
+ * elements, across every element of that layout (AGL-3286, AGL-3288) — the
+ * count behind the layout's "N changes on this page" line, and the scope of
+ * its "Reset all".
+ */
+export function countLayoutStyleChanges(
+  screenRoot: { layoutStyleOverrides?: unknown } | null | undefined,
+  layoutId: string,
+): number {
+  const perLayout = screenRoot?.layoutStyleOverrides
+  if (!isPlainRecord(perLayout)) return 0
+  const perNode = perLayout[layoutId]
+  if (!isPlainRecord(perNode)) return 0
+  let count = 0
+  for (const slice of Object.values(perNode)) {
+    if (isPlainRecord(slice)) count += Object.keys(slice).length
+  }
+  return count
+}
+
+/**
+ * How many style settings a placement changes across all of its parts — the
+ * count the "N changes on this page" line reads (AGL-3288).
+ */
+export function countStyleChanges(
+  node: { styleOverrides?: unknown } | null | undefined,
+): number {
+  const overrides = node?.styleOverrides
+  if (!isPlainRecord(overrides)) return 0
+  let count = 0
+  for (const slice of Object.values(overrides)) {
+    if (isPlainRecord(slice)) count += Object.keys(slice).length
+  }
+  return count
 }
 
 export default getNodeStyleTarget
