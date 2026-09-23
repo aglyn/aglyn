@@ -34,6 +34,7 @@
  * is reported once per test that has run so far.
  */
 import {
+  describeRejectionReason,
   installErrorBeacon,
   isHydrationMismatch,
   isInjectedThirdPartyFrame,
@@ -272,5 +273,73 @@ describe('the installed beacon applies both rules end to end (AGL-2523)', () => 
     expect(long.indexOf(OWN_FRAME)).toBeGreaterThan(8_192)
     throwInPage('long bridge stack', long)
     expect(reported()).toHaveLength(1)
+  })
+})
+
+/**
+ * A rejection is only sometimes an `Error` (AGL-3279).
+ *
+ * The report that prompted this carried the literal words "Unhandled promise
+ * rejection" and nothing else — no message, no stack, no code — which names
+ * the handler rather than the failure and cannot be acted on.
+ */
+describe('describeRejectionReason', () => {
+  it('prefers the error own message', () => {
+    expect(describeRejectionReason(new Error('the save was refused'))).toBe(
+      'the save was refused',
+    )
+  })
+
+  it('takes a string rejection as itself', () => {
+    expect(describeRejectionReason('not signed in')).toBe('not signed in')
+  })
+
+  it('assembles the code/message shape every API rejection takes', () => {
+    // A Firebase error, an aborted fetch and a failed response all land here.
+    expect(
+      describeRejectionReason({
+        code: 'auth/tenant-id-mismatch',
+        message: 'Firebase: Error (auth/tenant-id-mismatch).',
+      }),
+    ).toBe('auth/tenant-id-mismatch: Firebase: Error (auth/tenant-id-mismatch).')
+    expect(describeRejectionReason({ name: 'AbortError' })).toBe('AbortError')
+    expect(describeRejectionReason({ status: 503, statusText: 'Unavailable' })).toBe(
+      'Unavailable',
+    )
+  })
+
+  it('falls back to a toString that says something', () => {
+    expect(
+      describeRejectionReason({ toString: () => 'CanvasCommand(paste) failed' }),
+    ).toBe('CanvasCommand(paste) failed')
+  })
+
+  it('names the shape when the value says nothing at all', () => {
+    // Still not much — but it says WHAT rejected, which the old default did
+    // not, and that is the difference between a report and a tally mark.
+    expect(describeRejectionReason({ step: 3, surface: 'besigner' })).toBe(
+      'Unhandled promise rejection (object with step, surface)',
+    )
+    expect(describeRejectionReason({})).toBe(
+      'Unhandled promise rejection (empty object)',
+    )
+    expect(describeRejectionReason(undefined)).toBe(
+      'Unhandled promise rejection (undefined)',
+    )
+    expect(describeRejectionReason(false)).toBe(
+      'Unhandled promise rejection (boolean: false)',
+    )
+  })
+
+  it('never throws, whatever the reason does', () => {
+    const hostile = {
+      get name(): string {
+        throw new Error('nope')
+      },
+    }
+
+    expect(describeRejectionReason(hostile)).toBe(
+      'Unhandled promise rejection (undescribable)',
+    )
   })
 })

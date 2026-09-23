@@ -17,6 +17,10 @@
 'use client'
 
 import { redispatchCaughtError } from '@aglyn/aglyn/app-utils/redispatch-caught-error'
+import {
+  isStaleBuildError,
+  shouldReloadForStaleBuild,
+} from '@aglyn/aglyn/app-utils/stale-build-error'
 import { PLATFORM_DEFAULT_LOCALE } from '@aglyn/aglyn/app-utils/seo-locale'
 import { useEffect } from 'react'
 import StatusScreenPlain from '@aglyn/shared-ui-jsx/components/status-screen-plain.component'
@@ -49,18 +53,39 @@ export default function RootError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  useEffect(() => redispatchCaughtError(error), [error])
+  /*
+   * A TAB OPEN ACROSS A DEPLOY (AGL-3279). The document names chunks the
+   * origin no longer serves, so this is not a crash to report and **Try
+   * again** cannot fix it — `reset()` re-renders the same tree, which asks
+   * for the same missing file. One reload per tab per half hour puts the
+   * visitor on the build that is actually deployed.
+   */
+  const stale = isStaleBuildError(error)
+  useEffect(() => {
+    if (shouldReloadForStaleBuild(error)) {
+      window.location.reload()
+      return
+    }
+    redispatchCaughtError(error)
+  }, [error])
 
   return (
     <DocumentShell lang={PLATFORM_DEFAULT_LOCALE}>
       <StatusScreenPlain
-        code="500"
-        title={'Something went wrong'}
-        message={'This page didn’t load properly. Please try again.'}
+        // Not a server error: the deploy is fine and this tab is behind it.
+        code={stale ? 'Update' : '500'}
+        // NAMES NOBODY: this boundary renders on a white-labeled site, so
+        // the sentence is about the tab, not about whose software it is.
+        title={stale ? 'This page is out of date' : 'Something went wrong'}
+        message={
+          stale
+            ? 'This tab was open while a new version shipped. Reload to pick it up.'
+            : 'This page didn’t load properly. Please try again.'
+        }
         action={
           <button
             type="button"
-            onClick={() => reset()}
+            onClick={() => (stale ? window.location.reload() : reset())}
             style={{
               padding: '0.6rem 1.1rem',
               borderRadius: '0.5rem',
@@ -73,7 +98,7 @@ export default function RootError({
               cursor: 'pointer',
             }}
           >
-            {'Try again'}
+            {stale ? 'Reload' : 'Try again'}
           </button>
         }
       />

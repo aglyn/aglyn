@@ -31,6 +31,28 @@ export interface OutreachSettingsLoad {
 }
 
 /**
+ * Whether two answers from the settings route say the same thing.
+ *
+ * Compared by their serialization rather than field by field: the document
+ * carries whatever the route returns, and a comparison that named today's
+ * fields would silently stop noticing a new one. Guarded, because a value
+ * that cannot be serialized must read as "different" — the safe direction,
+ * which merely costs a render.
+ */
+function sameSettings(
+  left: OutreachComplianceSettingsDocument | null,
+  right: OutreachComplianceSettingsDocument | null,
+): boolean {
+  if (left === right) return true
+  if (!left || !right) return false
+  try {
+    return JSON.stringify(left) === JSON.stringify(right)
+  } catch {
+    return false
+  }
+}
+
+/**
  * The organization's compliance settings, read through `outreach/settings`
  * (AGL-2980): the Compliance page edits them, and the sequence editor's
  * preview prints the footer from them.
@@ -48,20 +70,47 @@ export function useOutreachComplianceSettings(
   useEffect(() => {
     if (!orgId) return undefined
     let current = true
-    setState((previous) => ({
-      ...previous,
-      status: previous.settings ? previous.status : 'loading',
-    }))
+    /*
+     * THE SAME OBJECT WHEN NOTHING CHANGED (AGL-3279).
+     *
+     * This used to spread unconditionally, which stores a NEW state object
+     * on every run and re-renders even when the status is what it already
+     * was. That is harmless while the effect's dependencies are stable and
+     * a render loop the moment one of them is not — a re-render remakes
+     * the dependency, the effect runs, the state changes identity, and
+     * React stops it at "Maximum update depth exceeded" (the minified
+     * error #185 this page reported on 2026-09-21).
+     *
+     * Returning `previous` unchanged makes the hook immune to that: the
+     * effect may run as often as it likes without ever being the reason it
+     * runs again.
+     */
+    setState((previous) => {
+      const status = previous.settings ? previous.status : 'loading'
+      return status === previous.status ? previous : { ...previous, status }
+    })
     api
       .readSettings()
       .then(
         (answer) =>
           current &&
-          setState({
-            status: 'ready',
-            settings: answer.settings,
-            message: null,
-          }),
+          setState((previous) =>
+            // IDEMPOTENT (AGL-3279): a read that answers what the hook
+            // already holds leaves the state object alone. Identity is what
+            // a caller's effects and memos key on, so a fresh object for an
+            // unchanged answer is a re-render at best and, with an unstable
+            // dependency above, the render loop that ends in "Maximum
+            // update depth exceeded".
+            previous.status === 'ready' &&
+            previous.message === null &&
+            sameSettings(previous.settings, answer.settings)
+              ? previous
+              : {
+                  status: 'ready',
+                  settings: answer.settings,
+                  message: null,
+                },
+          ),
       )
       .catch((error: unknown) => {
         if (!current) return
