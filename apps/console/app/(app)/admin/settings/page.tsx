@@ -22,6 +22,7 @@ import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Stack, Typography } from '@mui/material'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../components/staff-only.component'
+import StaffFirstPartyHostsCard from '../../../../components/staff-first-party-hosts-card.component'
 import StaffFreeWorkspaceCapCard from '../../../../components/staff-free-workspace-cap-card.component'
 import StaffTaxFilingCard from '../../../../components/staff-tax-filing-card.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
@@ -46,6 +47,10 @@ import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
  * card down, and for the same reason the ceiling does: a business registering
  * in a new state is an operator action, and it used to require an environment
  * edit and a redeploy.
+ *
+ * The first-party host registry (AGL-3289) is the third: which hosts are the
+ * platform's own is a fact about the platform, and registering a new surface
+ * must not need a deploy either.
  */
 const AdminSettings: NextPageWithLayout<Record<string, never>> = () => {
   return (
@@ -70,6 +75,7 @@ const AdminSettings: NextPageWithLayout<Record<string, never>> = () => {
             </Typography>
             <StaffFreeWorkspaceCapCard />
             <StaffTaxFilingCard />
+            <StaffFirstPartyHostsCard />
           </Stack>
         </StaffOnly>
       </Container>

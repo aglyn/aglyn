@@ -39,6 +39,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthErrorAlertComponent from '../../../components/auth-error-alert.component'
 import AuthFormTemplateComponent from '../../../components/auth-form-template.component'
 import AuthFormComponent from '../../../components/auth-form.component'
+import { currentFirstTouch } from '../../../utils/account-acquisition'
 import { markInteractiveSignIn } from '../../../utils/interactive-signin'
 import isMobileBrowser from '../../../utils/is-mobile-browser'
 import { createAuthProvider } from '../../../utils/oauth-providers'
@@ -146,6 +147,10 @@ function SsoSignIn() {
         }
         const jit = await authorizedFetch(result.user, '/api/auth/sso-jit', {
           method: 'POST',
+          // The first touch, for the account this sign-in may be creating
+          // (AGL-3289); the route records it only for a brand-new account.
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ touch: currentFirstTouch() }),
         })
         if (!jit.ok) {
           if (!cancelled) {
@@ -240,6 +245,10 @@ function SsoSignIn() {
         const result = await signInWithPopup(firebaseAuth, provider)
         const jit = await authorizedFetch(result.user, '/api/auth/sso-jit', {
           method: 'POST',
+          // The first touch, for the account this sign-in may be creating
+          // (AGL-3289); the route records it only for a brand-new account.
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ touch: currentFirstTouch() }),
         })
         if (!jit.ok) {
           const jitPayload = await jit.json().catch(() => ({}))

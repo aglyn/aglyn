@@ -25,6 +25,8 @@ import {
   toOpenGraphLocale,
 } from '@aglyn/aglyn/app-utils/seo-locale'
 import { deferLazyPanelNodes } from '@aglyn/tenant-runtime/defer-lazy-panels'
+import { isFirstPartySite } from '@aglyn/tenant-data-admin/server/first-party-hosts'
+import { FIRST_TOUCH_ROUTE_PATH } from '@aglyn/tenant-data-admin/server/first-touch-route'
 import {
   ELEMENT_ANIMATION_STYLE_ID,
   pageAnimationAssets,
@@ -1493,6 +1495,13 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
   // keyframes plus, only when a scroll trigger is present, ~700 bytes of
   // inline IntersectionObserver. See the module for the full reasoning.
   const animation = pageAnimationAssets(clientProps.nodes)
+  // The first-touch capture (AGL-3289), on the platform's OWN sites only —
+  // the marketing site, never a customer's: a custom domain the first-party
+  // host registry names. Decided here on the server, so a customer's page
+  // carries no tag and makes no request at all.
+  const firstTouch = await isFirstPartySite(
+    result.props.data?.host as { cname?: unknown } | undefined,
+  )
   return (
     <>
       {animation ? (
@@ -1543,6 +1552,12 @@ export default async function CatchAllPage({ params }: CatchAllPageProps) {
         host={result.props.data?.host as any}
         screenId={(result.props.data?.screen?.data as any)?.$id}
       />
+      {firstTouch ? (
+        // Same origin, so the site's `connect-src` needs nothing new. Pending,
+        // because the site's consent tool decides after load and
+        // `SiteAnalytics` forwards its answer to the capture.
+        <script src={FIRST_TOUCH_ROUTE_PATH} async data-consent="pending" />
+      ) : null}
       {/* The client suspends until the org-enabled site plugins register
           (AGL-417). Deliberately NO Suspense boundary here (AGL-1541): with
           one, the plugin-gate suspension pushed the ENTIRE page out of the

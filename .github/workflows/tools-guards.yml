@@ -1071,6 +1071,12 @@ jobs:
       # deferred, and that an id two sites hold is refused rather than chosen.
       - run: npm run test:org-campaign-backfill
 
+      # AGL-3289. The account-acquisition backfill's decisions: an account or
+      # workspace that already holds a record is never touched, an account
+      # young enough for its own sign-up door is skipped, and nothing is
+      # invented beyond what the auth record and first device can still say.
+      - run: npm run test:account-acquisition-backfill
+
       # AGL-2814. The members-video backfill's decisions: which files become
       # private, which download tokens are rotated, which stored links are
       # rewritten, and the public file used elsewhere that is listed and left

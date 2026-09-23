@@ -78,6 +78,10 @@ export type AdminAuditKind = 'access' | 'change'
  */
 const ADMIN_AUDIT_ACCESS_ACTIONS: ReadonlySet<string> = new Set([
   'email.message-viewed',
+  // The acquisition card (AGL-3289): where an account or a workspace came
+  // from, cross-checked against the sales workspace's people. Read only.
+  'user.acquisition-viewed',
+  'org.acquisition-viewed',
 ])
 
 /**

@@ -5282,6 +5282,78 @@ describe('legal acceptance records are owner-read, never client-written (AGL-150
 })
 
 /**
+ * Where an account came from (AGL-3289). `users/{uid}.acquisition` and
+ * `orgs/{orgId}.acquisition` are written once, by the platform, when the
+ * account and its workspace are created — the Admin SDK paths rules never
+ * apply to — and never by a client. The owner is refused in particular: the
+ * record is ABOUT them, and a record its subject could restate would answer
+ * "where did this person come from?" with whatever they chose to say. The
+ * rest of the user document stays owner-writable, which is asserted too, so
+ * the guard cannot be satisfied by closing the document.
+ */
+describe('acquisition is the platform\'s to write, never a client\'s (AGL-3289)', () => {
+  const RECORD = { v: 1, source: 'g2.com', channel: 'referral', recordedAt: 1 }
+
+  it('the owner still creates and edits their own user document', async () => {
+    await mustAllow(
+      'the owner creating their user doc without the field',
+      setDoc(doc(authed(OWNER), 'users', OWNER), { firstName: 'Z' }, { merge: true }),
+    )
+    await mustAllow(
+      'the owner editing another field',
+      setDoc(doc(authed(OWNER), 'users', OWNER), { lastName: 'G' }, { merge: true }),
+    )
+  })
+
+  it('the owner can neither create nor add the record', async () => {
+    await mustDeny(
+      'the owner creating their user doc WITH the field',
+      setDoc(doc(authed(OWNER), 'users', OWNER), { firstName: 'Z', acquisition: RECORD }),
+    )
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', OWNER), { firstName: 'Z' })
+    })
+    await mustDeny(
+      'the owner merging the field onto an existing doc',
+      setDoc(doc(authed(OWNER), 'users', OWNER), { acquisition: RECORD }, { merge: true }),
+    )
+  })
+
+  it('once written, nobody on a client restates it — owner or staff', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users', OWNER), { firstName: 'Z', acquisition: RECORD })
+    })
+    await mustDeny(
+      'the owner rewriting it',
+      setDoc(
+        doc(authed(OWNER), 'users', OWNER),
+        { acquisition: { ...RECORD, source: 'google' } },
+        { merge: true },
+      ),
+    )
+    await mustDeny(
+      'staff rewriting it',
+      setDoc(
+        doc(authed(STAFF, { staff: true }), 'users', OWNER),
+        { acquisition: { ...RECORD, source: 'google' } },
+        { merge: true },
+      ),
+    )
+    await mustAllow(
+      'the owner editing another field beside it',
+      setDoc(doc(authed(OWNER), 'users', OWNER), { firstName: 'Zach' }, { merge: true }),
+    )
+  })
+
+  it('an org manager cannot write the workspace\'s copy', async () => {
+    await mustDeny(
+      'the owner setting the org record',
+      setDoc(doc(authed(OWNER), 'orgs', ORG), { acquisition: RECORD }, { merge: true }),
+    )
+  })
+})
+
+/**
  * The AGL-1501 lockdown surface (AGL-1507), live in ruleset 0370ace4.
  *
  * `lockdowns/{id}` holds the platform and per-user panic records. Reads are

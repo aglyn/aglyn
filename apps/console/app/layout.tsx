@@ -146,6 +146,7 @@ export const viewport: Viewport = {
 // whole App Router tree out of static generation (AGL-401).
 import ServiceWorkerRegistrar from '../components/service-worker-registrar.component'
 import ErrorBeacon from '../components/error-beacon.component'
+import FirstTouchConsentBridge from '../components/first-touch-consent-bridge.component'
 import WebVitalsReporter from '../components/web-vitals-reporter.component'
 
 export const dynamic = 'force-dynamic'
@@ -198,6 +199,14 @@ export default async function RootLayout({
                 beacon above: module-scope install, null render, outside every
                 page boundary so a wedged page still measures. */}
             <WebVitalsReporter />
+            {/* The first-touch capture (AGL-3289): where a visitor first
+                arrived from, kept until an account is created. Served by this
+                app so the sign-in and sign-up doors carry the capture every
+                other surface of ours includes; the request's nonce, because
+                the console's script-src is enforcing; pending, because the
+                bridge beside it forwards the console's own consent answer. */}
+            <script src="/api/first-touch" async nonce={nonce} data-consent="pending" />
+            <FirstTouchConsentBridge />
           </Providers>
         </AppRouterCacheProvider>
       </body>

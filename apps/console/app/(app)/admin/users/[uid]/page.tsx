@@ -50,6 +50,7 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import StaffAcquisitionCard from '../../../../../components/staff-acquisition-card.component'
 import AuthenticatedLayout from '../../../../../components/layouts/authenticated.layout'
 import DashboardLayout from '../../../../../components/layouts/dashboard.layout'
 import StaffOnly from '../../../../../components/staff-only.component'
@@ -810,6 +811,12 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                             </Stack>
                           </CardDisplay>
                         ),
+                      },
+                      {
+                        // Where the account came from (AGL-3289), beside who
+                        // it is: the first question a new sign-up raises.
+                        key: 'acquisition',
+                        children: <StaffAcquisitionCard uid={uid} />,
                       },
                       {
                         key: 'organizations',

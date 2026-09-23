@@ -42,6 +42,28 @@ const docsGaTrackingId = env('DOCS_GA_TRACKING_ID')
 const docsErrorBeaconEndpoint = env('DOCS_ERROR_BEACON_ENDPOINT')
 
 /**
+ * The first-touch capture (AGL-3289), served by the console this build
+ * already reports its errors to. Every surface of ours includes it, so a
+ * reader who finds a guide through a search engine and signs up two pages
+ * later is attributed to the search engine rather than to these docs.
+ *
+ * Derived from {@link docsErrorBeaconEndpoint} rather than named by a variable
+ * of its own: that endpoint IS the console's API, the capture is served beside
+ * it at `/api/first-touch`, and a second variable naming the same console
+ * could only ever disagree with the first. Unset → no tag, the same "unset
+ * means off, never ours" rule as every value here — a self-hosted build that
+ * reports its errors nowhere loads nothing from anybody.
+ */
+const docsFirstTouchScript = (() => {
+  if (!docsErrorBeaconEndpoint) return undefined
+  try {
+    return new URL('/api/first-touch', docsErrorBeaconEndpoint).toString()
+  } catch {
+    return undefined
+  }
+})()
+
+/**
  * Comma-separated `name|label|origin|description|path` targets the /status
  * page probes. UNSET → it probes nothing and says so, instead of live-probing
  * Aglyn's infrastructure and reporting OUR uptime as the operator's.
@@ -243,6 +265,12 @@ const config: Config = {
   // registrable domain. See src/advertising-tags.ts, and
   // `apps/console/specs/docs-advertising-tags.spec.ts` for the drift guard.
   clientModules: ['./src/error-beacon.ts', './src/advertising-tags.ts'],
+
+  // One script tag, served by the console with this install's host registry
+  // and the visitor's storage default already decided (AGL-3289). Absolute,
+  // and rendered into the head by Docusaurus itself, so the owned template
+  // below never prefixes it with the base URL.
+  scripts: docsFirstTouchScript ? [{ src: docsFirstTouchScript, async: true }] : [],
 
   // The one channel Docusaurus offers from build config to browser code
   // (AGL-2124). Read via `useDocusaurusContext().siteConfig.customFields`.

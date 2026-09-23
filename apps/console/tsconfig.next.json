@@ -266,6 +266,12 @@
       "@aglyn/shared-util-errors/*": [
         "../../libs/shared/util/errors/src/lib/*"
       ],
+      "@aglyn/shared-util-first-touch": [
+        "../../libs/shared/util/first-touch/src/index.ts"
+      ],
+      "@aglyn/shared-util-first-touch/*": [
+        "../../libs/shared/util/first-touch/src/lib/*"
+      ],
       "@aglyn/shared-util-http": [
         "../../libs/shared/util/http/src/index.ts"
       ],

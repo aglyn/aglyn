@@ -22,6 +22,7 @@ import {
   type PluginContactCaptureWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { registerPluginLeadConversionListener } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
+import { registerPluginPersonMatcher } from '@aglyn/aglyn/plugin-manager/plugin-person-matches'
 import { BUNDLE_ID } from './constants/bundle-common'
 
 /**
@@ -80,6 +81,16 @@ export function registerCrmServerDeclarations(): void {
       const { carryLeadCampaignsOnConversion } =
         await import('./server/lead-campaign-carry')
       return carryLeadCampaignsOnConversion(request)
+    },
+    { pluginId: BUNDLE_ID },
+  )
+  // "Did this workspace already know this person?" (AGL-3289), asked by the
+  // staff console's acquisition card. Deferred like the rest: the reads load
+  // when a staff member first opens a card, not when the process starts.
+  registerPluginPersonMatcher(
+    async (request) => {
+      const { matchCrmPeople } = await import('./server/person-matches')
+      return matchCrmPeople(request)
     },
     { pluginId: BUNDLE_ID },
   )

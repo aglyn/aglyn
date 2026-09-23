@@ -111,6 +111,17 @@ A person who hits it sees the number, and is told to upgrade one, delete one,
 or ask us — so "support raised it for this account" is a real answer. Today
 that is done by raising the platform number; there is no per-account override.
 
+#### First-party hosts {#first-party-hosts}
+
+The hosts the platform serves itself, on **Staff → Platform settings**. The
+first-touch capture treats a visit between two of them as one visit, so only a
+site that is not ours can be where a sign-up started, and it runs only on a host
+listed here. Most of the list is built from configuration (the workspace domain
+and every subdomain of it, and the console, docs and home addresses); add a
+surface the configuration cannot name — a forum, a status page, another domain —
+here. Changing it needs the **super** staff role and a reason, and is audited.
+See [Adding a first-party surface](first-party-surfaces.md).
+
 ### Entitlement editor {#entitlement-editor}
 
 Full override editor for an organization's entitlements,
@@ -241,6 +252,16 @@ account can also legitimately have no record — accounts created before clickwr
 capture, and SSO/invite doors, never passed a consent checkbox. Those accounts are
 asked to accept by a banner in the console the next time they sign in, as is anyone
 whose accepted version has been superseded by a newer publish.
+
+### Acquisition {#acquisition}
+
+An **Acquisition** card on the detail page — and on each organization's page, for
+the account that created it — says where the account came from in one line
+("Referral from g2.com → /pricing → signed up with password"): the first visit's
+landing page, referrer, campaign tags and ad click ids, the door it signed up
+through, where it signed up from, and whether the sales workspace already knew
+the person by address or, as a labeled guess, by name. It is recorded once, at
+account creation, and read-only. See [Acquisition](acquisition.md).
 
 ### Password help {#password-help}
 

@@ -1,0 +1,31 @@
+{
+  "name": "@aglyn/shared-util-first-touch",
+  "version": "1.0.0-beta.177",
+  "license": "Apache-2.0",
+  "homepage": "https://aglyn.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aglyn/aglyn.git",
+    "directory": "libs/shared/util/first-touch"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./*": {
+      "types": "./src/lib/*.d.ts",
+      "default": "./src/lib/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@swc/helpers": "0.5.23"
+  },
+  "sideEffects": false
+}

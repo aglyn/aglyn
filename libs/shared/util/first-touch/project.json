@@ -1,0 +1,30 @@
+{
+  "name": "shared-util-first-touch",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/shared/util/first-touch/src",
+  "projectType": "library",
+  "tags": ["scope:lib", "scope:shared", "scope:util", "type:util"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:swc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/util/first-touch",
+        "main": "libs/shared/util/first-touch/src/index.ts",
+        "tsConfig": "libs/shared/util/first-touch/tsconfig.lib.json",
+        "assets": ["libs/shared/util/first-touch/*.md"]
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"]
+    },
+    "test": {
+      "executor": "@nx/jest:jest",
+      "outputs": ["{workspaceRoot}/coverage/libs/shared/util/first-touch"],
+      "options": {
+        "jestConfig": "libs/shared/util/first-touch/jest.config.ts"
+      }
+    }
+  }
+}

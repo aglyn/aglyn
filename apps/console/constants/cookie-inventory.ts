@@ -172,6 +172,41 @@ export const COOKIE_WRITERS: Record<string, CookieWriter> = {
       },
     ],
   },
+  'libs/shared/util/first-touch/src/lib/first-touch.ts': {
+    note:
+      'The first-touch capture (AGL-3289): where a visitor first arrived ' +
+      'from, kept until an account is created and the platform writes it on ' +
+      'the account. `Domain`-scoped to the registrable domain of the page, ' +
+      "so every one of our hosts reads the same record; it runs only on a " +
+      'host the first-party registry names, so it is never written on a ' +
+      "customer's site. Analytics storage: written only once the visitor's " +
+      'consent allows it, erased on a refusal, and held in memory until then. ' +
+      'No identifier — a landing page, a referring host, campaign tags and ' +
+      'which ad click ids were present, never their values.',
+    cookies: [
+      {
+        name: 'aglyn_ft',
+        token: "'aglyn_ft'",
+        surface: `the marketing site, the docs and the console, at .${WORKSPACE_DOMAIN}`,
+        purpose:
+          'Remembers where your first visit came from — the page you landed on, ' +
+          'the site that sent you and any campaign tags — so the account you ' +
+          'create can record it',
+        duration: '180 days, renewed on each visit; erased if you refuse analytics',
+        httpOnly: false,
+      },
+      {
+        name: 'aglyn_ft_probe',
+        token: "'aglyn_ft_probe'",
+        surface: 'the same hosts, for an instant',
+        purpose:
+          'Finds which domain the cookie above may be set on; it is removed ' +
+          'the moment it is read back',
+        duration: 'Removed immediately',
+        httpOnly: false,
+      },
+    ],
+  },
   'apps/console/app/auth/handoff/start/route.ts': {
     note:
       'Sets the cross-domain handoff VERIFIER before bouncing to the auth ' +

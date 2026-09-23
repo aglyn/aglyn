@@ -657,7 +657,7 @@ export async function middleware(request: NextRequest) {
 
       The refusal is for a PERSON (AGL-3290). This is where a typo or an old
       bookmark lands, so its body forwards rather than just saying no — see
-      `refuseUnknownAddress` below. The status is untouched: still a 404,
+      `refuseUnknownAddress` above. The status is untouched: still a 404,
       still settled here, still no render.
     */
     const first = firstSegment(request)
