@@ -77,6 +77,7 @@ const mockEntries = {
       title: 'Hello world',
       slug: 'hello-world',
       status: 'published',
+      authorName: 'Pen Name',
       publishedAt: {
         seconds: PUBLISHED_AT_SECONDS,
         toDate: () => new Date(PUBLISHED_AT_SECONDS * 1000),
@@ -88,6 +89,7 @@ const mockEntries = {
       title: 'Going out Monday',
       slug: 'going-out-monday',
       status: 'scheduled',
+      authorName: 'Pen Name',
       publishAt: {
         seconds: PUBLISH_AT_SECONDS,
         toDate: () => new Date(PUBLISH_AT_SECONDS * 1000),
@@ -98,6 +100,7 @@ const mockEntries = {
       title: 'Never published',
       slug: 'never-published',
       status: 'draft',
+      authorName: 'Pen Name',
     },
   ] as Array<Record<string, unknown>>,
   status: 'success' as 'success' | 'error',

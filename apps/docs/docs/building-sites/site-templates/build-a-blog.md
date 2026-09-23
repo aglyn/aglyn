@@ -92,9 +92,9 @@ Each entry carries, besides the title, excerpt, cover image, and markdown body:
 - **Category** — a single bucket (e.g. `Guides`) used for filtering and related posts,
   **picked from the collection's category list** (see below), never typed free-form.
 - **Tags** — comma-separated labels (e.g. `nextjs, seo`).
-- **Author** — the entry's byline: an **author record** from the Authors tab, a
-  one-off **custom byline**, or the site's own publisher entity when both are blank.
-  See [Authors](#authors).
+- **Author** — the entry's byline: an **author record** from the Authors tab or a
+  one-off **custom byline**. **An entry needs one to be published or scheduled**; a
+  draft can be saved without it. See [Authors](#authors).
 - **SEO title / SEO description** — search & social overrides; they fall back to the
   title and excerpt when blank.
 - **Featured video** — a film for the entry's page: one from your media library, a video

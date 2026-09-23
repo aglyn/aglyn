@@ -24,6 +24,7 @@ import {
   contentAuthorSchemaType,
   hostSeoEntityJsonLd,
   normalizeContentAuthor,
+  entryHasByline,
   resolveEntryAuthor,
   resolveEntryAuthorName,
   hostSeoEntityImageJsonLd,
@@ -959,5 +960,24 @@ describe('xHandleFromProfiles (AGL-3148)', () => {
     expect(xHandleFromProfiles(['@AglynSoftware', '', 'not a url'])).toBeUndefined()
     expect(xHandleFromProfiles(null)).toBeUndefined()
     expect(xHandleFromProfiles([])).toBeUndefined()
+  })
+})
+
+describe('entryHasByline — publishing requires an author', () => {
+  it('refuses an entry that would fall back to the site', () => {
+    expect(entryHasByline({})).toBe(false)
+    expect(entryHasByline({ authorId: '', authorName: '  ' })).toBe(false)
+    expect(entryHasByline(null)).toBe(false)
+  })
+
+  it('accepts an author record or a custom byline', () => {
+    expect(entryHasByline({ authorId: 'a1' })).toBe(true)
+    expect(entryHasByline({ authorName: 'Zach Gover' })).toBe(true)
+  })
+
+  it('accepts a deleted record that still carries its stored name', () => {
+    expect(entryHasByline({ authorId: 'gone', authorName: 'Pen Name' })).toBe(
+      true,
+    )
   })
 })

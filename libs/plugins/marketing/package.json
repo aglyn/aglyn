@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-marketing",
-  "version": "1.0.0-beta.171",
+  "version": "1.0.0-beta.172",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,20 +25,20 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.171",
-    "@aglyn/shared-data-enums": "1.0.0-beta.171",
-    "@aglyn/shared-data-mdi": "1.0.0-beta.171",
-    "@aglyn/shared-ui-email-campaigns": "1.0.0-beta.171",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.171",
-    "@aglyn/shared-ui-jsx-forms": "1.0.0-beta.171",
-    "@aglyn/shared-ui-next": "1.0.0-beta.171",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.171",
-    "@aglyn/shared-util-email": "1.0.0-beta.171",
-    "@aglyn/shared-util-http": "1.0.0-beta.171",
-    "@aglyn/shared-util-timestamp": "1.0.0-beta.171",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.171",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.171",
-    "@aglyn/tenant-runtime": "1.0.0-beta.171",
+    "@aglyn/aglyn": "1.0.0-beta.172",
+    "@aglyn/shared-data-enums": "1.0.0-beta.172",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.172",
+    "@aglyn/shared-ui-email-campaigns": "1.0.0-beta.172",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.172",
+    "@aglyn/shared-ui-jsx-forms": "1.0.0-beta.172",
+    "@aglyn/shared-ui-next": "1.0.0-beta.172",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.172",
+    "@aglyn/shared-util-email": "1.0.0-beta.172",
+    "@aglyn/shared-util-http": "1.0.0-beta.172",
+    "@aglyn/shared-util-timestamp": "1.0.0-beta.172",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.172",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.172",
+    "@aglyn/tenant-runtime": "1.0.0-beta.172",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {

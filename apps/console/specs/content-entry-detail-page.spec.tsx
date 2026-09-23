@@ -101,6 +101,7 @@ const mockEntries = {
       title: 'Hello world',
       slug: 'hello-world',
       status: 'published',
+      authorName: 'Pen Name',
       body: 'the stored body',
       excerpt: 'the stored excerpt',
       publishedAt: {
@@ -114,6 +115,7 @@ const mockEntries = {
       title: 'Never published',
       slug: 'never-published',
       status: 'draft',
+      authorName: 'Pen Name',
     },
   ] as Array<Record<string, unknown>>,
   status: 'success' as 'success' | 'error' | 'loading',
@@ -448,6 +450,7 @@ beforeEach(() => {
       title: 'Hello world',
       slug: 'hello-world',
       status: 'published',
+      authorName: 'Pen Name',
       body: 'the stored body',
       excerpt: 'the stored excerpt',
       publishedAt: {
@@ -461,6 +464,7 @@ beforeEach(() => {
       title: 'Never published',
       slug: 'never-published',
       status: 'draft',
+      authorName: 'Pen Name',
     },
   ]
   // Every test starts ON the collection, which is where the rewrite puts a

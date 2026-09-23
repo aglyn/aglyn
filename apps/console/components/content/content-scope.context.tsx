@@ -799,6 +799,12 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
     async (entry: any) => {
       if (!selected) return
       const publish = entry.status !== 'published'
+      // Unpublishing is never gated: pulling a post must always work.
+      if (publish && !Aglyn.entryHasByline(entry)) {
+        return void enqueueSnackbar(Aglyn.ENTRY_BYLINE_REQUIRED_MESSAGE, {
+          variant: 'warning',
+        })
+      }
       await updateDoc(
         entryRef(entry.$id),
         /**
@@ -951,6 +957,11 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         'Scheduled publishing requires a Business plan — see Billing to upgrade',
         { variant: 'warning', persist: false },
       )
+    }
+    if (!Aglyn.entryHasByline(scheduler.entry)) {
+      return enqueueSnackbar(Aglyn.ENTRY_BYLINE_REQUIRED_MESSAGE, {
+        variant: 'warning',
+      })
     }
     const publishAt = new Date(scheduler.at)
     if (Number.isNaN(publishAt.getTime()) || publishAt <= new Date()) {

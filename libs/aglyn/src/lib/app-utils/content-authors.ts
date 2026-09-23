@@ -878,6 +878,32 @@ export function resolveEntryAuthorName(
   return resolveEntryAuthor(entry, authors)?.name ?? ''
 }
 
+/**
+ * Does the entry name a byline of its OWN — an author record or a custom
+ * byline — rather than falling back to the site?
+ *
+ * A byline is required to publish or schedule an entry. The site fallback in
+ * {@link resolveEntryAuthor} stays for what is already stored, but a post that
+ * goes live from here on must say who wrote it: an unattributed article reads
+ * as unowned to a visitor, and Entry Meta prints no name at all for it.
+ *
+ * Asks what is STORED, not whether it resolves. An `authorId` whose record was
+ * deleted still carries its denormalized `authorName` and still renders a
+ * name, so refusing it would block unpublishing-and-republishing a post that
+ * reads correctly today.
+ */
+export function entryHasByline(
+  entry: AuthorBearingEntry | null | undefined,
+): boolean {
+  return Boolean(
+    (entry?.authorId ?? '').trim() || (entry?.authorName ?? '').trim(),
+  )
+}
+
+/** The refusal a publish or schedule without a byline shows. */
+export const ENTRY_BYLINE_REQUIRED_MESSAGE =
+  'Add an author before publishing — pick one or type a custom byline'
+
 
 /** The site fields {@link siteEntityJsonLd} falls back to. */
 export interface SiteEntityHost {
