@@ -9,6 +9,15 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.172 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/ee9a3c92c...v1.0.0-beta.172)
+
+### Fixed
+
+- **content:** an entry needs an author to go live; the admin bar edits the entry too ([AGL-3282](https://linear.app/aglyn/issue/AGL-3282))
+- **functions:** the beats carry Vercel's automation bypass past the edge ([AGL-3281](https://linear.app/aglyn/issue/AGL-3281))
+
 ## v1.0.0-beta.171 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.170...v1.0.0-beta.171)
