@@ -57,6 +57,7 @@ import {
   NODE_ANIMATION_STAGGER_STEP_PROP,
   NODE_ANIMATION_TRIGGER_PROP,
   NODE_HIDE_IF_PROP,
+  isPlacedFormNode,
   NODE_HIDE_UNLESS_PROP,
   normalizeBindingTokens,
   readInstanceIconValue,
@@ -2788,7 +2789,7 @@ const ElementPropsFormRaw = forwardRef<any, ElementPropsFormProps>(
                     than from this node's props, so it shares no value plumbing
                     with the form above and cannot become a second writer on
                     anything the form above owns. */}
-                {isInstance ? (
+                {isInstance || isPlacedFormNode(node) ? (
                   <InstanceAttrOverrides
                     node={node}
                     componentMapper={elementPropsComponentMapper}

@@ -17,6 +17,7 @@
 
 import type * as Aglyn from '@aglyn/aglyn'
 import {
+  isPlacedFormNode,
   mergeNodeSx,
   REUSABLE_INSTANCE_COMPONENT_ID,
   STYLE_OVERRIDES_ROOT_KEY,
@@ -220,20 +221,53 @@ function writeComposedNodeSx(
 }
 
 /**
+ * Options for {@link getNodeStyleTarget} and {@link getNodeAttrTarget}.
+ */
+export interface PlacementTargetOptions {
+  /**
+   * True when the selected node is a placed form whose form design RESOLVES
+   * — the graft will replace its fields with the form's own, so the page
+   * styles them through override slices (AGL-3285).
+   *
+   * Asked of the caller because only it holds the form designs. A placed
+   * form whose design is missing or unpublished renders the fields drawn on
+   * the page, exactly as authored, and an override slice there would save
+   * and never render; such a form stays a plain node. Ignored for a
+   * reusable-component instance, which has no other layer to write.
+   */
+  placedFormResolves?: boolean
+}
+
+/**
+ * Whether the selected node's style/attribute edits land in its override
+ * slices — an instance always, a placed form only when its design resolves
+ * (see {@link PlacementTargetOptions}).
+ */
+export function isOverridePlacement(
+  node: Aglyn.NodeSchema<any> | null | undefined,
+  options?: PlacementTargetOptions,
+): boolean {
+  if (node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID) return true
+  return Boolean(options?.placedFormResolves) && isPlacedFormNode(node)
+}
+
+/**
  * The style target for a selected node — see {@link NodeStyleTarget}.
  *
- * `overrideKey` selects WHICH slice of an instance's overrides is edited;
+ * `overrideKey` selects WHICH slice of a placement's overrides is edited;
  * it is ignored for a plain node. A falsy key falls back to the root, so a
  * caller that has not resolved a definition yet still edits something real
  * rather than writing an `undefined`-keyed slice no renderer reads.
+ *
+ * A placed form is a placement exactly like an instance (AGL-3285), once the
+ * caller says its design resolves — see {@link PlacementTargetOptions}.
  */
 export function getNodeStyleTarget(
   node: Aglyn.NodeSchema<any> | null | undefined,
   overrideKey?: string | null,
+  options?: PlacementTargetOptions,
 ): NodeStyleTarget {
-  const isInstance =
-    node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
-  if (!node || !isInstance) {
+  if (!node || !isOverridePlacement(node, options)) {
     return {
       isInstanceOverride: false,
       overrideKey: '',

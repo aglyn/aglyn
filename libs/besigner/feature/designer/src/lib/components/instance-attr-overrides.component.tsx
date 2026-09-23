@@ -19,8 +19,9 @@ import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
   components,
+  isPlacedFormNode,
   listInstanceStyleTargets,
-  REUSABLE_INSTANCE_COMPONENT_ID,
+  placementDefinitionFor,
   STYLE_OVERRIDES_ROOT_KEY,
 } from '@aglyn/aglyn'
 import {
@@ -176,13 +177,16 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
     ? (canvas.getNode(selectedNode.$id) ?? selectedNode)
     : selectedNode) as Aglyn.NodeSchema<any> | undefined
 
-  const { definitions } = useContext(ComponentPromotionContext)
-  const isInstance = node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
-  const definition = useMemo(() => {
-    if (!isInstance) return undefined
-    const refId = (node?.props as { refId?: string } | undefined)?.refId
-    return refId ? definitions?.[refId] : undefined
-  }, [isInstance, node, definitions])
+  // A placed form is the same kind of placement (AGL-3285): its published
+  // design is the tree, and a page may set a label or placeholder on its copy
+  // — never anything that changes what the form submits.
+  const { definitions, formDesigns } = useContext(ComponentPromotionContext)
+  const definition = useMemo(
+    () => placementDefinitionFor(node, { definitions, formDesigns }),
+    [node, definitions, formDesigns],
+  )
+  const isPlacedForm = isPlacedFormNode(node)
+  const placedFormResolves = isPlacedForm && Boolean(definition)
 
   // The SAME target list the Styles panel offers, from the same walker, so
   // the two panels name the same parts of a component in the same order and
@@ -212,8 +216,8 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
       : STYLE_OVERRIDES_ROOT_KEY
 
   const target = useMemo(
-    () => getNodeAttrTarget(node, overrideKey),
-    [node, overrideKey],
+    () => getNodeAttrTarget(node, overrideKey, { placedFormResolves }),
+    [node, overrideKey, placedFormResolves],
   )
 
   const pickedTarget = targets.find((entry) => entry.key === overrideKey)
@@ -222,7 +226,10 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
         pickedTarget.componentInternalId
       ]
     : undefined
-  const attrFields = useMemo(() => listInstanceAttrFields(defNode), [defNode])
+  const attrFields = useMemo(
+    () => listInstanceAttrFields(defNode, node),
+    [defNode, node],
+  )
 
   // Read during render (observer): tracks the live slice, so the chips update
   // as edits land and as they are cleared.
@@ -234,11 +241,13 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
   const targetLabel = useCallback(
     (entry: Aglyn.InstanceStyleTarget) =>
       entry.isRoot
-        ? 'Component root'
+        ? isPlacedForm
+          ? 'Whole form'
+          : 'Component root'
         : entry.name ||
           (entry.componentId && components.getLabel(entry.componentId)) ||
           entry.componentInternalId,
-    [],
+    [isPlacedForm],
   )
 
   const handleTargetChange = useCallback(
@@ -278,7 +287,7 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
     [seedKey],
   )
 
-  if (!isInstance || !targets.length) return null
+  if (!target.isInstanceOverride || !targets.length) return null
 
   return (
     <Box sx={{ mt: 2 }}>
@@ -291,7 +300,11 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
         {'Attribute overrides'}
         <HelpTip
           title="Attribute overrides"
-          excerpt="Give one placement of a component its own attribute values — a different button variant, size or link — without changing the component or detaching. Empty means the component's own value."
+          excerpt={
+            isPlacedForm
+              ? "Give this form its own labels, placeholders or button text on this page only, without changing the form. What the form collects stays the form's. Empty means the form's own value."
+              : "Give one placement of a component its own attribute values — a different button variant, size or link — without changing the component or detaching. Empty means the component's own value."
+          }
           href={besignerDocsUrl(
             'reusableComponents',
             '#override-an-attribute-on-one-instance',
@@ -309,12 +322,17 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
           value={overrideKey}
           onChange={handleTargetChange}
           helperText={
-            target.isLeafOverride
-              ? 'Setting attributes on one element inside the component, on ' +
-                'this instance only.'
-              : "Setting attributes on the component's outer element, on " +
-                'this instance only. Pick an element inside it to override ' +
-                'that part.'
+            isPlacedForm
+              ? target.isLeafOverride
+                ? "Changing one part of this form's copy on this page only."
+                : 'Changing the whole form, on this page only. Pick a field ' +
+                  'to change its label or placeholder.'
+              : target.isLeafOverride
+                ? 'Setting attributes on one element inside the component, ' +
+                  'on this instance only.'
+                : "Setting attributes on the component's outer element, on " +
+                  'this instance only. Pick an element inside it to override ' +
+                  'that part.'
           }
         >
           {targets.map((entry) => (
@@ -334,10 +352,15 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
       <Box sx={{ mt: 0.5, mb: 1 }}>
         <Tooltip
           title={
-            'Attributes set here apply to this instance only, layered over ' +
-            "the component's own values. Other placements keep the " +
-            'component, and component updates still flow through. Leave a ' +
-            "field empty to use the component's value."
+            isPlacedForm
+              ? 'Values set here apply to this form on this page only. ' +
+                'Other pages keep the form as it is, and changes to the form ' +
+                "still flow through. Leave a field empty to use the form's " +
+                'value.'
+              : 'Attributes set here apply to this instance only, layered ' +
+                "over the component's own values. Other placements keep the " +
+                'component, and component updates still flow through. Leave ' +
+                "a field empty to use the component's value."
           }
         >
           <Chip
@@ -346,7 +369,9 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
             label={
               overriddenProps.length
                 ? `Overridden here: ${overriddenProps.length}`
-                : "Using the component's attributes"
+                : isPlacedForm
+                  ? "Using the form's own values"
+                  : "Using the component's attributes"
             }
           />
         </Tooltip>
@@ -354,8 +379,11 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
           <Tooltip
             key={prop}
             title={
-              "Clear this override — the instance returns to the component's " +
-              'own value'
+              isPlacedForm
+                ? "Clear this override — this page returns to the form's own " +
+                  'value'
+                : "Clear this override — the instance returns to the " +
+                  "component's own value"
             }
           >
             <Chip
@@ -385,8 +413,11 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
         // of layout elements genuinely has nothing to override here, and an
         // author should not be left wondering whether the panel failed.
         <Typography variant="caption" color="text.secondary">
-          {'This part of the component has no attributes that can be ' +
-            'overridden per instance.'}
+          {isPlacedForm
+            ? 'This part of the form has nothing that can be changed per ' +
+              'page.'
+            : 'This part of the component has no attributes that can be ' +
+              'overridden per instance.'}
         </Typography>
       )}
     </Box>

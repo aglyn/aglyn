@@ -756,3 +756,52 @@ describe('a panel style edit is undoable on either target (AGL-1204)', () => {
     expect(canvas.canUndo).toBe(false)
   })
 })
+
+describe('a placed form is a style-override target (AGL-3285)', () => {
+  const placedForm = () =>
+    ({
+      $id: 'form-1',
+      componentId: 'form',
+      props: { formId: 'contact' },
+      sx: { mt: 2 },
+    }) as any
+
+  it("styles a field's slice once the form's design resolves", () => {
+    const node = placedForm()
+    const target = getNodeStyleTarget(node, 'f-email', {
+      placedFormResolves: true,
+    })
+    expect(target.isInstanceOverride).toBe(true)
+    expect(target.overrideKey).toBe('f-email')
+    expect(target.isLeafOverride).toBe(true)
+    target.setSx({ color: 'primary.main' })
+    expect(node.styleOverrides).toEqual({ 'f-email': { color: 'primary.main' } })
+    // The placement's own sx is not the target.
+    expect(node.sx).toEqual({ mt: 2 })
+  })
+
+  it('falls back to the whole-form root slice without a key', () => {
+    const target = getNodeStyleTarget(placedForm(), null, {
+      placedFormResolves: true,
+    })
+    expect(target.overrideKey).toBe(Aglyn.STYLE_OVERRIDES_ROOT_KEY)
+    expect(target.isLeafOverride).toBe(false)
+  })
+
+  it('stays a plain node while its design does not resolve', () => {
+    const node = placedForm()
+    const target = getNodeStyleTarget(node, 'f-email')
+    expect(target.isInstanceOverride).toBe(false)
+    target.setSx({ mt: 4 })
+    expect(node.sx).toEqual({ mt: 4 })
+    expect(node.styleOverrides).toBeUndefined()
+  })
+
+  it('an unbound form is always a plain node', () => {
+    const node = { $id: 'f', componentId: 'form', props: {} } as any
+    expect(
+      getNodeStyleTarget(node, null, { placedFormResolves: true })
+        .isInstanceOverride,
+    ).toBe(false)
+  })
+})

@@ -19,8 +19,9 @@ import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
   components,
+  isPlacedFormNode,
   listInstanceStyleTargets,
-  REUSABLE_INSTANCE_COMPONENT_ID,
+  placementDefinitionFor,
   STYLE_OVERRIDES_ROOT_KEY,
 } from '@aglyn/aglyn'
 import { BoxStyler, Measurements } from '../box-styler'
@@ -646,14 +647,16 @@ const ElementStylesForm = observer(
     // its node tree to offer the leaves an author may style. Read from the
     // same context the canvas renders instances through, so the picker can
     // only ever offer targets the graft will actually consult.
-    const { definitions } = useContext(ComponentPromotionContext)
-    const definition = useMemo(() => {
-      if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) {
-        return undefined
-      }
-      const refId = (node?.props as { refId?: string } | undefined)?.refId
-      return refId ? definitions?.[refId] : undefined
-    }, [node, definitions])
+    //
+    // A placed form is the same kind of placement (AGL-3285): its published
+    // design is the tree, and its fields are the leaves a page may restyle.
+    const { definitions, formDesigns } = useContext(ComponentPromotionContext)
+    const definition = useMemo(
+      () => placementDefinitionFor(node, { definitions, formDesigns }),
+      [node, definitions, formDesigns],
+    )
+    const isPlacedForm = isPlacedFormNode(node)
+    const placedFormResolves = isPlacedForm && Boolean(definition)
     const styleTargets = useMemo(
       () => listInstanceStyleTargets(definition),
       [definition],
@@ -688,8 +691,8 @@ const ElementStylesForm = observer(
     // (empty = the component's own look), the same way a fresh plain node
     // starts empty.
     const target = useMemo(
-      () => getNodeStyleTarget(node, overrideKey),
-      [node, overrideKey],
+      () => getNodeStyleTarget(node, overrideKey, { placedFormResolves }),
+      [node, overrideKey, placedFormResolves],
     )
     const nodeSx = target.sx
     const hostThemeDoc = useHostThemeDocument()
@@ -1098,11 +1101,13 @@ const ElementStylesForm = observer(
     const styleTargetLabel = useCallback(
       (entry: Aglyn.InstanceStyleTarget) =>
         entry.isRoot
-          ? 'Component root'
+          ? isPlacedForm
+            ? 'Whole form'
+            : 'Component root'
           : entry.name ||
             (entry.componentId && components.getLabel(entry.componentId)) ||
             entry.componentInternalId,
-      [],
+      [isPlacedForm],
     )
 
     const handleStyleTargetChange = useCallback(
@@ -1361,14 +1366,20 @@ const ElementStylesForm = observer(
                 value={overrideKey}
                 onChange={handleStyleTargetChange}
                 helperText={
-                  target.isLeafOverride
-                    ? 'Styling one element inside the component, on this ' +
-                      'instance only. Its content still comes from the ' +
-                      'component.'
-                    : "Styling the component's outer element on this " +
-                      'instance. Pick an element inside it to restyle that ' +
-                      'part — a headline that sets its own color ignores ' +
-                      'one set out here.'
+                  isPlacedForm
+                    ? target.isLeafOverride
+                      ? "Styling one part of this form's copy on this page " +
+                        'only. The form itself does not change.'
+                      : 'Styling the whole form, on this page only. Pick a ' +
+                        'field or label to restyle just that part.'
+                    : target.isLeafOverride
+                      ? 'Styling one element inside the component, on this ' +
+                        'instance only. Its content still comes from the ' +
+                        'component.'
+                      : "Styling the component's outer element on this " +
+                        'instance. Pick an element inside it to restyle ' +
+                        'that part — a headline that sets its own color ' +
+                        'ignores one set out here.'
                 }
               >
                 {styleTargets.map((entry) => (
@@ -1387,12 +1398,17 @@ const ElementStylesForm = observer(
             ) : null}
             <Tooltip
               title={
-                'This element is a component instance: style edits here ' +
-                'apply to this instance only, layered over the ' +
-                "component's own styles. Other placements keep the " +
-                'component look, and component updates still flow ' +
-                'through. Use "Edit component" on the Attributes tab to ' +
-                'change the component for everyone.'
+                isPlacedForm
+                  ? 'This form comes from the Forms page: style edits here ' +
+                    'apply to this form on this page only. Other pages ' +
+                    'keep the form as it is, and changes to the form ' +
+                    'still flow through.'
+                  : 'This element is a component instance: style edits ' +
+                    'here apply to this instance only, layered over the ' +
+                    "component's own styles. Other placements keep the " +
+                    'component look, and component updates still flow ' +
+                    'through. Use "Edit component" on the Attributes tab ' +
+                    'to change the component for everyone.'
               }
             >
               <Chip
@@ -1400,8 +1416,10 @@ const ElementStylesForm = observer(
                 color={overrideProperties.length ? 'secondary' : 'default'}
                 label={
                   overrideProperties.length
-                    ? `Instance overrides: ${overrideProperties.length}`
-                    : 'Styling this instance'
+                    ? `${isPlacedForm ? 'Page overrides' : 'Instance overrides'}: ${overrideProperties.length}`
+                    : isPlacedForm
+                      ? 'Styling this form on this page only'
+                      : 'Styling this instance'
                 }
               />
             </Tooltip>
@@ -1409,8 +1427,11 @@ const ElementStylesForm = observer(
               <Tooltip
                 key={property}
                 title={
-                  'Clear this override — the instance returns to the ' +
-                  "component's own value"
+                  isPlacedForm
+                    ? "Clear this override — this page returns to the form's " +
+                      'own value'
+                    : 'Clear this override — the instance returns to the ' +
+                      "component's own value"
                 }
               >
                 <Chip
@@ -1667,6 +1688,7 @@ const ElementStylesForm = observer(
               node={node}
               breakpoint={activeBreakpoint}
               overrideKey={overrideKey}
+              placedFormResolves={placedFormResolves}
             />
           </Accordion>
         ) : null}

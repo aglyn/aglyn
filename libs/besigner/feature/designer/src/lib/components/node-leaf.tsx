@@ -604,6 +604,20 @@ export const NodeLeaf = observer(
             componentId: FORM_COMPONENT_ID,
             // Plain snapshot: props are MobX observables, as above.
             props: JSON.parse(JSON.stringify(node.props ?? {})),
+            // The placement's own sx and its per-page override slices
+            // (AGL-3285) ride the snapshot as they do for an instance above:
+            // the replacement below is what this leaf draws, so a slice left
+            // out here would render on Preview and the live page but not on
+            // the canvas.
+            ...(node.sx !== undefined && {
+              sx: JSON.parse(JSON.stringify(node.sx)),
+            }),
+            ...(node.styleOverrides && {
+              styleOverrides: JSON.parse(JSON.stringify(node.styleOverrides)),
+            }),
+            ...(node.attrOverrides && {
+              attrOverrides: JSON.parse(JSON.stringify(node.attrOverrides)),
+            }),
             nodes: [],
           } as any,
         },
@@ -634,7 +648,15 @@ export const NodeLeaf = observer(
       return trees.length ? { replacement, trees } : undefined
       // Observable props: the JSON string keys the memo, as above.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [node, JSON.stringify(node?.props ?? {}), definitions, formDesigns])
+    }, [
+      node,
+      JSON.stringify(node?.props ?? {}),
+      JSON.stringify(node?.sx ?? {}),
+      JSON.stringify(node?.styleOverrides ?? {}),
+      JSON.stringify(node?.attrOverrides ?? {}),
+      definitions,
+      formDesigns,
+    ])
 
     /**
      * The element this leaf DRAWS, once a placed form resolves.
