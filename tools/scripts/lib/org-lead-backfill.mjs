@@ -19,6 +19,20 @@
 // sight so the test can drive them directly. `backfill-org-leads.mjs` reads,
 // prints and writes; nothing here touches a database.
 //
+// ## The key is derived from the ADDRESS, never from the source doc id
+//
+// The org id for a lead is `personKey(email)` by definition. Most host rows
+// already carry it, because `addHostLead` wrote them — but not all do, and
+// grouping by the id a row happens to have is how four different people get
+// merged into one record. The 2026-09-23 dry run found exactly that: the demo
+// packs seeded `seed-lead-1` under four brands, and those four rows are
+// `newpatient@`, `founder@`, `trial@` and `catering@` — four strangers who
+// share a literal id and nothing else.
+//
+// So every row is re-keyed by its own address on the way over, and two rows
+// fold only when they are the same address. A row whose email cannot be keyed
+// keeps the id it had, which is the auto-id case `addHostLead` already makes.
+//
 // ## The fold
 //
 // A lead's id is `personKey(email)`, so the same address under two sites is
@@ -82,6 +96,25 @@ const asNumber = (value) => (typeof value === 'number' && Number.isFinite(value)
 const nonEmpty = (value) =>
   value !== undefined && value !== null && value !== '' &&
   !(Array.isArray(value) && value.length === 0)
+
+/**
+ * Re-key every site row by the address it carries.
+ *
+ * @param rows `[{ hostId, id, data }]`, whatever ids they arrived with.
+ * @param personKeyOf the derivation — `personKey`, passed so this file stays
+ *   free of `node:crypto` and the test can drive it.
+ * @returns `personKey -> rows`, and a row whose address cannot be keyed under
+ *   the id it already had.
+ */
+export function keyByAddress(rows, personKeyOf) {
+  const byKey = new Map()
+  for (const row of rows) {
+    const key = personKeyOf(row.data?.email) ?? row.id
+    if (!byKey.has(key)) byKey.set(key, [])
+    byKey.get(key).push({ ...row, rekeyedFrom: row.id === key ? null : row.id })
+  }
+  return byKey
+}
 
 /**
  * The order rows fold in: earliest created first, then by site id so two rows

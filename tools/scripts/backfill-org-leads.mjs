@@ -64,9 +64,11 @@ import { fileURLToPath } from 'node:url'
 import {
   archiveIdFor,
   foldNoteIdFor,
+  keyByAddress,
   pickEnrollment,
   planOrgLeads,
 } from './lib/org-lead-backfill.mjs'
+import { personKey } from './lib/crm-lifecycle-backfill.mjs'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
 import { collect, commitAll, connectFirestore } from './lib/firestore-backfill.mjs'
 
@@ -109,17 +111,20 @@ async function hostsByOrg() {
   return byOrg
 }
 
-/** Every site row under this org's hosts, grouped by person key. */
+/**
+ * Every site row under this org's hosts, keyed by the ADDRESS it carries.
+ *
+ * Not by the id it arrived with — see `keyByAddress`. The row keeps its own
+ * id in `id`, which is what the archive and the delete still address.
+ */
 async function siteLeads(hostIds) {
-  const byKey = new Map()
+  const rows = []
   for (const hostId of hostIds) {
-    const rows = await collect(db.collection('hosts').doc(hostId).collection('leads'))
-    for (const row of rows) {
-      if (!byKey.has(row.id)) byKey.set(row.id, [])
-      byKey.get(row.id).push({ hostId, id: row.id, data: row.data })
+    for (const row of await collect(db.collection('hosts').doc(hostId).collection('leads'))) {
+      rows.push({ hostId, id: row.id, data: row.data })
     }
   }
-  return byKey
+  return keyByAddress(rows, personKey)
 }
 
 /** The enrollments naming each lead, so a fold can refuse the duplicate. */

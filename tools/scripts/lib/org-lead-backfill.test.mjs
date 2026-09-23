@@ -21,7 +21,7 @@
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { foldLeads, pickEnrollment, planOrgLeads } from './org-lead-backfill.mjs'
+import { foldLeads, keyByAddress, pickEnrollment, planOrgLeads } from './org-lead-backfill.mjs'
 
 const row = (hostId, data) => ({ hostId, id: 'key-1', data })
 
@@ -187,4 +187,46 @@ test('the plan is stable: the same corpus plans the same way twice', () => {
     first.writes.map((w) => [w.id, w.data.migratedFromHostIds]),
     second.writes.map((w) => [w.id, w.data.migratedFromHostIds]),
   )
+})
+
+/*
+ * THE 2026-09-23 DRY RUN'S FINDING.
+ *
+ * Grouping by the id a row arrived with assumes every id is a person key.
+ * Most are — `addHostLead` wrote them — but the demo packs seeded
+ * `seed-lead-1` under four brands, and those four rows are four different
+ * people. A fold by doc id would have merged strangers into one record.
+ */
+const keyOf = (email) => {
+  const normalized = String(email ?? '').trim().toLowerCase()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? `key(${normalized})` : null
+}
+
+test('rows sharing a literal id but NOT an address are kept apart', () => {
+  const byKey = keyByAddress(
+    [
+      { hostId: 'demo-dental', id: 'seed-lead-1', data: { email: 'newpatient@example.com' } },
+      { hostId: 'demo-legal', id: 'seed-lead-1', data: { email: 'founder@example.com' } },
+    ],
+    keyOf,
+  )
+  assert.equal(byKey.size, 2, 'two addresses are two people, whatever id they carried')
+  for (const rows of byKey.values()) assert.equal(rows.length, 1)
+})
+
+test('rows sharing an address are folded however they were keyed', () => {
+  const byKey = keyByAddress(
+    [
+      { hostId: 'site-a', id: 'legacy-id', data: { email: 'Dana@X.com' } },
+      { hostId: 'site-b', id: 'key(dana@x.com)', data: { email: 'dana@x.com' } },
+    ],
+    keyOf,
+  )
+  assert.equal(byKey.size, 1, 'case and spelling fold through the normalizer')
+  assert.equal([...byKey.values()][0].length, 2)
+})
+
+test('a row whose address cannot be keyed keeps the id it had', () => {
+  const byKey = keyByAddress([{ hostId: 'site-a', id: 'auto-1', data: { email: 'not-an-address' } }], keyOf)
+  assert.deepEqual([...byKey.keys()], ['auto-1'])
 })

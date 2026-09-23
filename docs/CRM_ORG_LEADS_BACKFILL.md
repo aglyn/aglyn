@@ -47,6 +47,20 @@ GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-org-leads.mjs --org=
 GOOGLE_CLOUD_PROJECT=aglyn-main node tools/scripts/backfill-org-leads.mjs --org=<orgId> --apply
 ```
 
+## The key comes from the address, not the source id
+
+The org id for a lead is `personKey(email)` by definition, and every row is
+re-keyed by its own address on the way over. Grouping by the id a row happens
+to carry assumes every id is already a person key — most are, because
+`addHostLead` wrote them, but the demo packs seeded `seed-lead-1` under four
+brands. Those four rows are `newpatient@`, `founder@`, `trial@` and
+`catering@`: four strangers sharing a literal id and nothing else. The
+2026-09-23 dry run found them, and folding by doc id would have merged them
+into one record.
+
+A row whose address cannot be keyed keeps the id it had — the auto-id case
+`addHostLead` already makes for a malformed address.
+
 ## The merge
 
 Every decision is in `tools/scripts/lib/org-lead-backfill.mjs` and pinned by
