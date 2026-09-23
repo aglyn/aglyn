@@ -25,7 +25,10 @@ import {
 // The workspace apex in ONE place. Re-declaring it here is the shape of the
 // AGL-1135 bug: the value could differ between the code that grants a session
 // and the code that decides who may ask for one.
-import { WORKSPACE_DOMAIN } from '../../../../constants/workspace-domain'
+import {
+  CONSOLE_HOSTNAME,
+  WORKSPACE_DOMAIN,
+} from '../../../../constants/workspace-domain'
 
 // lockdown-423: exempt — the first leg of signing in, like its two siblings.
 // The lockdown gate for auth is on the session mint this flow ends at.
@@ -77,7 +80,7 @@ async function handler(request: Request): Promise<Response> {
     // one, and they still have a workspace subdomain.
     const fallback = verdict.orgSlug
       ? `https://${verdict.orgSlug}.${WORKSPACE_DOMAIN}/`
-      : `https://app.${WORKSPACE_DOMAIN}/`
+      : `https://${CONSOLE_HOSTNAME}/`
     return Response.redirect(`${fallback}?console-domain=inactive`, 307)
   }
 
@@ -94,7 +97,7 @@ async function handler(request: Request): Promise<Response> {
   }
   if (!started) {
     return Response.redirect(
-      `https://app.${WORKSPACE_DOMAIN}/?console-domain=inactive`,
+      `https://${CONSOLE_HOSTNAME}/?console-domain=inactive`,
       307,
     )
   }
@@ -107,7 +110,7 @@ async function handler(request: Request): Promise<Response> {
   // racing it (the AGL-466 loop).
   const authContinue = `/auth/handoff/continue?handoff=${encodeURIComponent(started.requestId)}`
   const destination =
-    `https://app.${WORKSPACE_DOMAIN}/signin` +
+    `https://${CONSOLE_HOSTNAME}/signin` +
     `?continue=${encodeURIComponent(authContinue)}`
 
   const response = new Response(null, {

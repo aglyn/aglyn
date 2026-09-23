@@ -21,6 +21,9 @@
 // behind it. A type-only import is erased at compile time, so the edge
 // bundle is unchanged and the two files still agree on the union.
 import type { AuthPersistenceClass } from '@aglyn/tenant-feature-instance'
+// Deep import of a dependency-free module: this file is bundled into the
+// edge middleware, and the helper is shared with the org-slug blocklist.
+import { consoleLabelUnder } from '@aglyn/aglyn/app-utils/host-naming'
 
 /**
  * The workspace apex domain, in ONE place.
@@ -41,13 +44,68 @@ export const WORKSPACE_DOMAIN =
   process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN ?? 'aglyn.com'
 
 /**
+ * The host this console serves itself on, from `NEXT_PUBLIC_CONSOLE_URL`
+ * (AGL-3295), or `app.<workspace domain>` when that is unset.
+ *
+ * Every "send them back to the console" in the host gates and the custom-domain
+ * handoff used to spell `app.<workspace domain>`, which is Aglyn's layout and
+ * nobody else's: an install whose console lives at `console.example.com` — the
+ * address the self-hosting docs use — sent an unknown workspace, a lapsed
+ * custom domain and a white-label sign-in to a host it does not have. The
+ * console URL is already the setting every other "where is the console"
+ * question reads, and it is documented as required for a self-hosted install;
+ * the fallback keeps an install that has not set it exactly where it was.
+ */
+export const CONSOLE_HOSTNAME = consoleHostnameFrom(
+  process.env.NEXT_PUBLIC_CONSOLE_URL,
+  WORKSPACE_DOMAIN,
+)
+
+/** {@link CONSOLE_HOSTNAME}'s rule, with its inputs named for the specs. */
+export function consoleHostnameFrom(
+  consoleUrl: string | null | undefined,
+  workspaceDomain: string,
+): string {
+  const raw = String(consoleUrl ?? '').trim()
+  if (raw) {
+    try {
+      const hostname = new URL(raw).hostname.toLowerCase()
+      if (hostname) return hostname
+    } catch {
+      // Unparseable: the documented fallback, not a guess at what was meant.
+    }
+  }
+  return `app.${workspaceDomain}`
+}
+
+/**
+ * The label the console occupies under the workspace domain, when the
+ * configured console is one (AGL-3295) — `studio` for `studio.example.com`.
+ * The org-slug blocklist reserves the same label from the same settings.
+ */
+const CONSOLE_LABEL = consoleLabelUnder(
+  process.env.NEXT_PUBLIC_CONSOLE_URL,
+  WORKSPACE_DOMAIN,
+)
+
+/**
  * Subdomain labels that are never org workspaces.
  *
  * `auth` hosts the Firebase OAuth helper origin (auth.aglyn.com, AGL-462) —
  * without it the `/__/auth/*` handshake resolves as an unknown slug and gets
  * redirected away, breaking Google sign-in.
+ *
+ * Plus the label the console itself is configured on (AGL-3295). The four
+ * fixed ones are Aglyn's; a console at any other label was read as a
+ * workspace nobody owns and redirected off its own host.
  */
-export const APEX_LABELS = new Set(['www', 'console', 'app', 'auth'])
+export const APEX_LABELS = new Set([
+  'www',
+  'console',
+  'app',
+  'auth',
+  ...(CONSOLE_LABEL ? [CONSOLE_LABEL] : []),
+])
 
 /**
  * The bare hostname of a `Host` header, lowercased and without its port.
@@ -94,6 +152,25 @@ export function workspaceSlugFromHost(host: string | null): string | null {
   const slug = hostname.slice(0, -(WORKSPACE_DOMAIN.length + 1))
   if (!slug || slug.includes('.') || APEX_LABELS.has(slug)) return null
   return slug
+}
+
+/**
+ * {@link workspaceSlugFromHost} for the origin this browser is on (AGL-3295):
+ * the workspace a page was opened under by its HOST, or `null`.
+ *
+ * The client's org scope used to answer this with a rule of its own — the
+ * first label of any host outside a short Aglyn-shaped list — so a self-hosted
+ * console on an IP address or a host of its own named a workspace that does
+ * not exist, and `OrgGuard` 404'd every organization page on the confirmed
+ * miss. The server's rule is the only rule. A named seam for the same reason
+ * `currentOriginPersistenceClass` below is one: `window.location` cannot be
+ * faked under this repo's jsdom, so the read is proved by booting a spec file
+ * on the origin in question.
+ */
+export function currentWorkspaceSlug(): string | null {
+  return workspaceSlugFromHost(
+    typeof window === 'undefined' ? null : window.location.host,
+  )
 }
 
 /**
@@ -184,6 +261,11 @@ export function originPersistenceClass(
   const hostname = hostnameOf(host)
   if (!hostname) return 'ephemeral'
   if (isWorkspaceDomainHost(hostname)) return 'durable'
+  // The operator's own configured console (AGL-3295). A self-hosted console
+  // outside the workspace domain — `console.acme.net` beside workspaces on
+  // `acme.io` — is theirs by definition, not a customer's re-pointable
+  // domain, so it keeps the session a console is meant to keep.
+  if (hostname === CONSOLE_HOSTNAME) return 'durable'
   if (LOCAL_HOSTNAMES.has(hostname)) return 'durable'
   if (hostname.endsWith(PREVIEW_HOST_SUFFIX)) return 'durable'
   return 'ephemeral'

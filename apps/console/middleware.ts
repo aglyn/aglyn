@@ -18,6 +18,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import {
   APEX_LABELS,
+  CONSOLE_HOSTNAME,
   hostnameOf,
   isWorkspaceDomainHost,
   WORKSPACE_DOMAIN,
@@ -679,8 +680,9 @@ export async function middleware(request: NextRequest) {
     const rewritten = orgScopedPath(request, slug)
     return rewritten ? rewriteTo(rewritten) : pass()
   }
+  // The console's own host, which is `app.` only on Aglyn's layout (AGL-3295).
   const apex = request.nextUrl.clone()
-  apex.hostname = `app.${WORKSPACE_DOMAIN}`
+  apex.hostname = CONSOLE_HOSTNAME
   apex.pathname = '/'
   apex.search = `?unknown-workspace=${encodeURIComponent(slug)}`
   return NextResponse.redirect(apex)
@@ -728,7 +730,7 @@ async function serveConsoleDomain(
   const fallback = request.nextUrl.clone()
   fallback.hostname = verdict.orgSlug
     ? `${verdict.orgSlug}.${WORKSPACE_DOMAIN}`
-    : `app.${WORKSPACE_DOMAIN}`
+    : CONSOLE_HOSTNAME
 
   if (!verdict.servable || !verdict.orgSlug) {
     fallback.pathname = '/'
@@ -759,7 +761,7 @@ async function serveConsoleDomain(
   }
   if (AUTH_PATH_SEGMENTS.has(first)) {
     const authHost = request.nextUrl.clone()
-    authHost.hostname = `app.${WORKSPACE_DOMAIN}`
+    authHost.hostname = CONSOLE_HOSTNAME
     return NextResponse.redirect(authHost, 307)
   }
 

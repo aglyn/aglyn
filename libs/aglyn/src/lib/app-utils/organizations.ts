@@ -31,6 +31,7 @@ import type {
   UserOrgMembership,
 } from '../foundation'
 import {
+  consoleLabelUnder,
   generateSubdomain,
   isBlockedSubdomain,
   SUBDOMAIN_PATTERN,
@@ -50,8 +51,28 @@ export const ORG_SLUG_PATTERN = SUBDOMAIN_PATTERN
  */
 const RESERVED_ORG_ONLY = new Set(['staff', 'org', 'orgs', 'workspace'])
 
+/**
+ * The label this deployment serves its own console on, when it has one
+ * (AGL-3295).
+ *
+ * `app` and `console` are reserved above for every install. One whose console
+ * lives at, say, `studio.example.com` needs `studio` refused as well, or an
+ * organization could claim a workspace address the console itself answers.
+ * Read from the same two settings the console's host gate reads; with either
+ * unset nothing extra is reserved, because nothing extra is shadowed.
+ */
+const CONSOLE_LABEL = consoleLabelUnder(
+  process.env.NEXT_PUBLIC_CONSOLE_URL,
+  process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN,
+)
+
 export function isBlockedOrgSlug(slug: string): boolean {
-  return RESERVED_ORG_ONLY.has(slug.toLowerCase()) || isBlockedSubdomain(slug)
+  const normalized = slug.toLowerCase()
+  return (
+    RESERVED_ORG_ONLY.has(normalized) ||
+    normalized === CONSOLE_LABEL ||
+    isBlockedSubdomain(slug)
+  )
 }
 
 export function isValidOrgSlug(slug: string): boolean {

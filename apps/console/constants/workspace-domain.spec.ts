@@ -17,7 +17,9 @@
 
 import {
   APEX_LABELS,
+  CONSOLE_HOSTNAME,
   WORKSPACE_DOMAIN,
+  consoleHostnameFrom,
   isServableWorkspaceHost,
   originPersistenceClass,
   workspaceSlugFromHost,
@@ -172,3 +174,76 @@ describe('workspace domain', () => {
     })
   })
 })
+
+describe('the console host comes from configuration (AGL-3295)', () => {
+  it('reads NEXT_PUBLIC_CONSOLE_URL, and falls back to app.<workspace domain>', () => {
+    expect(consoleHostnameFrom('https://console.example.com', 'example.com')).toBe(
+      'console.example.com',
+    )
+    expect(consoleHostnameFrom('https://Studio.Example.com:8443/', 'example.com')).toBe(
+      'studio.example.com',
+    )
+    // Unset or unusable keeps an install exactly where it was.
+    expect(consoleHostnameFrom(undefined, 'example.com')).toBe('app.example.com')
+    expect(consoleHostnameFrom('  ', 'example.com')).toBe('app.example.com')
+    expect(consoleHostnameFrom('not a url', 'example.com')).toBe('app.example.com')
+  })
+
+  it('is app.aglyn.com on Aglyn’s own configuration', () => {
+    // The spec environment either leaves the variable unset (fallback) or
+    // carries the development example, `https://app.aglyn.com`. Both land on
+    // the host every redirect used before this setting was read.
+    expect(CONSOLE_HOSTNAME).toBe('app.aglyn.com')
+  })
+
+  describe('on a self-hosted install whose console is at studio.example.com', () => {
+    const saved = {
+      console: process.env.NEXT_PUBLIC_CONSOLE_URL,
+      workspace: process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN,
+    }
+    const restore = (name: string, value: string | undefined) => {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+    afterEach(() => {
+      restore('NEXT_PUBLIC_CONSOLE_URL', saved.console)
+      restore('NEXT_PUBLIC_WORKSPACE_DOMAIN', saved.workspace)
+      jest.resetModules()
+    })
+    /** The module reads its settings at load, as the edge bundle does. */
+    function loadWith(consoleUrl: string, workspaceDomain: string) {
+      process.env.NEXT_PUBLIC_CONSOLE_URL = consoleUrl
+      process.env.NEXT_PUBLIC_WORKSPACE_DOMAIN = workspaceDomain
+      jest.resetModules()
+      return require('./workspace-domain') as typeof import('./workspace-domain')
+    }
+
+    it('serves the console on its own label instead of reading it as a workspace', () => {
+      const domain = loadWith('https://studio.example.com', 'example.com')
+      expect(domain.CONSOLE_HOSTNAME).toBe('studio.example.com')
+      expect(domain.APEX_LABELS.has('studio')).toBe(true)
+      expect(domain.workspaceSlugFromHost('studio.example.com')).toBeNull()
+      // Workspaces keep working beside it, and the fixed labels stay put.
+      expect(domain.workspaceSlugFromHost('acme.example.com')).toBe('acme')
+      expect(domain.workspaceSlugFromHost('auth.example.com')).toBeNull()
+    })
+
+    it('names no workspace for an IP address or a host outside the domain', () => {
+      const domain = loadWith('https://studio.example.com', 'example.com')
+      expect(domain.workspaceSlugFromHost('192.168.1.10:4200')).toBeNull()
+      expect(domain.workspaceSlugFromHost('aglyn.fly.dev')).toBeNull()
+      expect(domain.workspaceSlugFromHost('acme.aglyn.com')).toBeNull()
+    })
+
+    it('keeps a configured console outside the workspace domain durable', () => {
+      // `console.acme.net` beside workspaces on `acme.io` is the operator's
+      // own origin, not a customer's re-pointable domain.
+      const domain = loadWith('https://console.acme.net', 'acme.io')
+      expect(domain.originPersistenceClass('console.acme.net')).toBe('durable')
+      expect(domain.originPersistenceClass('acme.acme.io')).toBe('durable')
+      // Negative control: an unrecognized host is still ephemeral.
+      expect(domain.originPersistenceClass('portal.agency.example')).toBe('ephemeral')
+    })
+  })
+})
+

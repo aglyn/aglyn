@@ -1229,6 +1229,81 @@ describe('an unknown address sends a person on, and still answers 404 (AGL-3290)
   })
 })
 
+describe('a self-hosted install: its own domain, console host and brand (AGL-3295)', () => {
+  /*
+   * Everything above runs on Aglyn's configuration. This is an OSS install:
+   * workspaces under `example.com`, the console at `studio.example.com` — a
+   * label the code never heard of — and the product renamed `Acme`. The
+   * middleware reads all three at load, so it is loaded fresh with them set.
+   */
+  const SELF_HOSTED: Record<string, string> = {
+    NEXT_PUBLIC_WORKSPACE_DOMAIN: 'example.com',
+    NEXT_PUBLIC_CONSOLE_URL: 'https://studio.example.com',
+    NEXT_PUBLIC_PLATFORM_BRAND_NAME: 'Acme',
+  }
+  const saved: Record<string, string | undefined> = {}
+  let selfHosted: typeof middleware
+
+  beforeAll(() => {
+    for (const [name, value] of Object.entries(SELF_HOSTED)) {
+      saved[name] = process.env[name]
+      process.env[name] = value
+    }
+    jest.resetModules()
+    selfHosted = (require('./middleware') as typeof import('./middleware')).middleware
+  })
+  afterAll(() => {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+    jest.resetModules()
+  })
+  beforeEach(() => {
+    // This install's own workspaces.
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      fetchCalls.push(url.toString())
+      const body = url.pathname.endsWith('/console-domain-verdict')
+        ? { known: false, servable: false, orgSlug: null }
+        : { known: url.searchParams.get('slug') === 'acme', movedTo: null }
+      return Response.json(body)
+    }) as unknown as typeof fetch
+  })
+
+  it('serves the console on its own label, without asking whether it is a workspace', async () => {
+    const response = await selfHosted(request('studio.example.com', '/'))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('location')).toBeNull()
+    expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+    expect(fetchCalls).toHaveLength(0)
+  })
+
+  it('answers an unknown address with a 404 that carries THIS install’s brand', async () => {
+    const response = await selfHosted(request('studio.example.com', '/sign'))
+    expect(response.status).toBe(404)
+    const html = await response.text()
+    expect(html).toContain('<title>Page not found · Acme</title>')
+    expect(html).toContain('Sign in to Acme')
+    expect(html).not.toMatch(/Aglyn/i)
+    expect(html).toContain('url=/signin?continue=%2F_missing%3Ffrom%3D%252Fsign')
+  })
+
+  it('sends an unknown workspace back to THIS console, not to app.<domain>', async () => {
+    const response = await selfHosted(request('typo.example.com', '/'))
+    expect(response.status).toBe(307)
+    const location = new URL(response.headers.get('location') ?? '')
+    expect(location.hostname).toBe('studio.example.com')
+    expect(location.searchParams.get('unknown-workspace')).toBe('typo')
+  })
+
+  it('still serves its real workspaces by subdomain', async () => {
+    const response = await selfHosted(request('acme.example.com', '/hosts'))
+    const rewritten = response.headers.get('x-middleware-rewrite')
+    expect(new URL(rewritten ?? '').pathname).toBe('/acme/hosts')
+  })
+})
+
 describe('the org-agnostic support entry point (AGL-3265)', () => {
   it('is served at the apex rather than read as a workspace nobody claims', async () => {
     // Without `support` in `CONSOLE_TOP_LEVEL_SEGMENTS` the AGL-3017 gate asks
