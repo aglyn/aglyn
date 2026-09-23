@@ -411,6 +411,12 @@ const SEEDS: Array<{
       hostId: 'host-1',
       // This screen's values for its layout's properties (AGL-2893).
       layoutPropValues: { 'layout-1': { showBanner: true, bannerText: 'Hi' } },
+      // …and its restyling of that layout's elements (AGL-3286).
+      layoutStyleOverrides: {
+        'layout-1': {
+          nav: { bgcolor: 'transparent', '@scheme dark': { color: '#fff' } },
+        },
+      },
     },
   },
   {

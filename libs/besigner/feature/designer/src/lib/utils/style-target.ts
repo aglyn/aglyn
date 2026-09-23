@@ -77,6 +77,13 @@ export interface NodeStyleTarget {
    * never landed.
    */
   readonly isComposed: boolean
+  /**
+   * True when edits land in the screen's per-page restyling of one of its
+   * shared layout's elements (AGL-3286) — see {@link getLayoutStyleTarget}.
+   * Such a target also reports `isInstanceOverride`, because it behaves as
+   * one: it starts empty, and empty means "the layout's own look".
+   */
+  readonly isLayoutOverride?: boolean
   /** Replaces the target sx wholesale (MobX action inside). */
   setSx(next: Record<string, any> | undefined): void
 }
@@ -285,6 +292,56 @@ export function getNodeStyleTarget(
       }
       node.styleOverrides =
         Object.keys(overrides).length > 0 ? overrides : undefined
+    }),
+  }
+}
+
+/**
+ * The style target for one element of the screen's shared LAYOUT (AGL-3286).
+ *
+ * The layout's elements are locked on a screen — its content belongs to the
+ * layout — but a page may restyle them for itself: a transparent nav over
+ * this page's hero. The edits land in the screen's `layoutStyleOverrides`,
+ * layout id → layout node id → sx, which the editor parks on the screen
+ * canvas ROOT (`injectLayoutStyleOverrides`) so an edit is an ordinary,
+ * undoable, draft-carried change to the screen. Composition merges the slice
+ * over the layout element on every surface.
+ *
+ * Reported as an instance override because it behaves as one: the slice is
+ * read uncomposed, it starts empty, and empty means the layout's own styling
+ * — so the per-property override chips and their clear apply unchanged.
+ */
+export function getLayoutStyleTarget(
+  screenRoot: Aglyn.NodeSchema<any> | null | undefined,
+  layoutId: string,
+  layoutNodeId: string,
+): NodeStyleTarget {
+  return {
+    isInstanceOverride: true,
+    isLayoutOverride: true,
+    overrideKey: layoutNodeId,
+    isLeafOverride: false,
+    isComposed: false,
+    get sx() {
+      return screenRoot?.layoutStyleOverrides?.[layoutId]?.[layoutNodeId] as
+        | Record<string, any>
+        | undefined
+    },
+    setSx: action((next: Record<string, any> | undefined) => {
+      if (!screenRoot) return
+      const all: Record<string, Record<string, Record<string, unknown>>> = {
+        ...toJS(screenRoot.layoutStyleOverrides ?? {}),
+      }
+      const perNode = { ...(all[layoutId] ?? {}) }
+      // Emptied slices are REMOVED at both levels, for the reason an
+      // instance's are: "no override" must read the same everywhere, and a
+      // stored `{}` would keep the screen dirty over nothing.
+      if (next && Object.keys(next).length > 0) perNode[layoutNodeId] = next
+      else delete perNode[layoutNodeId]
+      if (Object.keys(perNode).length > 0) all[layoutId] = perNode
+      else delete all[layoutId]
+      screenRoot.layoutStyleOverrides =
+        Object.keys(all).length > 0 ? all : undefined
     }),
   }
 }

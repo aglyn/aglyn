@@ -427,6 +427,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
       let rootId = parent?.rootId
       let layoutBinding = parent?.layoutId
       let layoutPropValues: unknown
+      let layoutStyleOverrides: unknown
 
       if (kind !== 'template') {
         // The version the URL names, or — for a link that named none — the
@@ -465,6 +466,8 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         // VERSION; the parent's is the fallback for one saved before it was.
         rootId = data?.rootId ?? rootId
         layoutPropValues = data?.layoutPropValues
+        // The page's restyling of its layout's elements (AGL-3286).
+        layoutStyleOverrides = data?.layoutStyleOverrides
         // Version-first with a document fallback — the rule the besigner and
         // `composeScreenNodes` both follow. A key PRESENT on the version
         // wins, because a `null` there means explicitly no layout.
@@ -497,6 +500,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
           chain as any,
           tree as any,
           layoutPropValues as any,
+          layoutStyleOverrides,
         ) as Aglyn.NodesMap,
       )
     }

@@ -102,6 +102,8 @@ import {
   useState,
 } from 'react'
 import ComponentPromotionContext from '../contexts/component-promotion-context'
+import type { LayoutElementSelection } from '../contexts/layout-style-selection'
+import { getLayoutStyleTarget } from '../utils/style-target'
 import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import {
   buildStyleMute,
@@ -592,6 +594,12 @@ const TextAlignToggleButtonGroup = (props: {
  */
 export interface ElementStylesFormProps extends Partial<FormRendererProps> {
   node?: Aglyn.NodeSchema
+  /**
+   * A shared-layout element this screen is restyling for itself (AGL-3286).
+   * When set, `node` is the screen canvas ROOT — where the page's layout
+   * overrides are kept — and every edit lands in this element's slice.
+   */
+  layoutTarget?: LayoutElementSelection | null
 }
 
 /**
@@ -616,9 +624,68 @@ export interface ElementStylesFormProps extends Partial<FormRendererProps> {
  * `style-field-search.ts`; the filtered group is also what each form SAVES
  * through, so hiding a field can never clear it.
  */
+/** A property chip's name: a slice is a whole block, not a property. */
+const overrideChipLabel = (property: string) =>
+  property === SX_SCHEME_DARK_KEY
+    ? 'dark scheme'
+    : (sxStateSliceLabel(property) ?? property)
+
+/**
+ * The head of the Styles tab while a shared-layout element is the target
+ * (AGL-3286): what is being styled, where the edits go, and each property
+ * this page overrides as a chip whose ✕ returns it to the layout's value.
+ */
+const LayoutOverrideSummary = observer(
+  (props: {
+    label: string
+    properties: string[]
+    onClear: (property: string) => () => void
+    onReset: () => void
+  }) => {
+    const { label, properties, onClear, onReset } = props
+    return (
+      <Container gutterY={[1]} dense>
+        <Alert severity="info" sx={{ fontSize: '0.8125rem', mb: 1 }}>
+          {`Styling the layout's ${label} on this page only. ` +
+            'Other pages using this layout are unchanged.'}
+        </Alert>
+        <Chip
+          size="small"
+          color={properties.length ? 'secondary' : 'default'}
+          label={
+            properties.length
+              ? `Page overrides: ${properties.length}`
+              : "Using the layout's styles"
+          }
+        />
+        {properties.map((property) => (
+          <Tooltip
+            key={property}
+            title="Clear this override — the element returns to the layout's own value"
+          >
+            <Chip
+              size="small"
+              variant="outlined"
+              sx={{ ml: 1, mt: 0.5 }}
+              label={overrideChipLabel(property)}
+              onDelete={onClear(property)}
+            />
+          </Tooltip>
+        ))}
+        {properties.length ? (
+          <Button size="small" onClick={onReset} sx={{ ml: 1, mt: 0.5 }}>
+            {'Reset'}
+          </Button>
+        ) : null}
+      </Container>
+    )
+  },
+)
+LayoutOverrideSummary.displayName = 'LayoutOverrideSummary'
+
 const ElementStylesForm = observer(
   forwardRef<any, ElementStylesFormProps>((props, ref) => {
-    const { node: selectedNode } = props
+    const { node: selectedNode, layoutTarget } = props
     const deleteElementCallback = useDeleteElementCallback()
 
     // The node as the CANVAS currently holds it (AGL-2486).
@@ -687,10 +754,24 @@ const ElementStylesForm = observer(
     // panel shows exactly what THIS instance overrides for THIS target
     // (empty = the component's own look), the same way a fresh plain node
     // starts empty.
+    //
+    // A layout element (AGL-3286) is the same kind of target: the page's
+    // override slice for that element, kept on the screen root.
+    const layoutTargetLayoutId = layoutTarget?.layoutId
+    const layoutTargetNodeId = layoutTarget?.nodeId
     const target = useMemo(
-      () => getNodeStyleTarget(node, overrideKey),
-      [node, overrideKey],
+      () =>
+        layoutTargetLayoutId && layoutTargetNodeId
+          ? getLayoutStyleTarget(node, layoutTargetLayoutId, layoutTargetNodeId)
+          : getNodeStyleTarget(node, overrideKey),
+      [node, overrideKey, layoutTargetLayoutId, layoutTargetNodeId],
     )
+    // What the canvas-only aids (held state, muted declarations) and the form
+    // seeds key on. For a layout element that is its id in the layout, which
+    // is the id the chrome canvas renders it under — so holding hover shows
+    // the nav hovered — and never the screen root's, whose own declarations
+    // a mute must not reach.
+    const styleNodeId = layoutTarget ? layoutTarget.nodeId : node?.$id
     const nodeSx = target.sx
     const hostThemeDoc = useHostThemeDocument()
     const siteTheme = useAglynSiteTheme({ theme: hostThemeDoc })
@@ -775,9 +856,9 @@ const ElementStylesForm = observer(
       (next: SxState | null) => {
         heldRef.current = next
         setHeldState(next ?? undefined)
-        setHeldStateNodeId(next ? node?.$id : undefined)
+        setHeldStateNodeId(next ? styleNodeId : undefined)
       },
-      [setHeldState, setHeldStateNodeId, node],
+      [setHeldState, setHeldStateNodeId, styleNodeId],
     )
 
     /** Ends the hold, and writes nothing when there is nothing to end. */
@@ -800,7 +881,7 @@ const ElementStylesForm = observer(
     useEffect(() => {
       releaseHold()
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [node?.$id])
+    }, [styleNodeId])
 
     /** Drops a whole state slice — the clear affordance, one level up. */
     const clearState = useCallback(
@@ -944,7 +1025,7 @@ const ElementStylesForm = observer(
     const styleMute = useCallback(
       (name: string, label?: unknown) =>
         buildStyleMute(name, label, {
-          nodeId: node?.$id,
+          nodeId: styleNodeId,
           state: activeState,
           breakpoint: activeBreakpoint,
           scopeValues,
@@ -953,7 +1034,7 @@ const ElementStylesForm = observer(
             setMutedStyles((current) => toggleMutedStyle(current, muteTarget)),
         }),
       [
-        node,
+        styleNodeId,
         activeState,
         activeBreakpoint,
         scopeValues,
@@ -965,7 +1046,7 @@ const ElementStylesForm = observer(
     const withStyleMutes = useCallback(
       (fields: any[]) =>
         withStyleMuteControls(fields, {
-          nodeId: node?.$id,
+          nodeId: styleNodeId,
           state: activeState,
           breakpoint: activeBreakpoint,
           scopeValues,
@@ -974,7 +1055,7 @@ const ElementStylesForm = observer(
             setMutedStyles((current) => toggleMutedStyle(current, muteTarget)),
         }),
       [
-        node,
+        styleNodeId,
         activeState,
         activeBreakpoint,
         scopeValues,
@@ -1171,7 +1252,7 @@ const ElementStylesForm = observer(
     // Re-seeds a group form's initial values when the selection, the
     // override target or the artboard scope changes (AGL-540/588/1332).
     const formSeedKey =
-      `${node?.$id ?? ''}:${overrideKey}:${activeBreakpoint ?? 'base'}` +
+      `${styleNodeId ?? ''}:${overrideKey}:${activeBreakpoint ?? 'base'}` +
       `:${activeScheme ?? 'light'}:${activeState ?? 'base'}`
 
     return (
@@ -1341,7 +1422,15 @@ const ElementStylesForm = observer(
             The chip names the mode; each overridden property lists as a
             deletable chip whose ✕ returns that property to the
             component's own value. */}
-        {target.isInstanceOverride ? (
+        {target.isLayoutOverride && layoutTarget ? (
+          <LayoutOverrideSummary
+            label={layoutTarget.label}
+            properties={overrideProperties}
+            onClear={handleClearOverride}
+            onReset={() => canvas.transact(() => target.setSx(undefined))}
+          />
+        ) : null}
+        {target.isInstanceOverride && !target.isLayoutOverride ? (
           <Container gutterY={[1]} dense>
             {/* Which part of the component this instance is restyling
                 (AGL-1332). Root-only overrides could change an instance's
@@ -1647,7 +1736,9 @@ const ElementStylesForm = observer(
           )
         })}
 
-        {matchesSection('classes') ? (
+        {/* A layout element is styled through the panel's fields only: its
+            classes and raw sx belong to the layout (AGL-3286). */}
+        {matchesSection('classes') && !target.isLayoutOverride ? (
           <Accordion
             key={`classes:${accordionKey}`}
             expanded={searching}
@@ -1671,7 +1762,11 @@ const ElementStylesForm = observer(
           </Accordion>
         ) : null}
 
-        <Container gutterY={[2]} dense>
+        <Container
+          gutterY={[2]}
+          dense
+          sx={target.isLayoutOverride ? { display: 'none' } : undefined}
+        >
           <FormControl margin="none" fullWidth>
             <Button
               onClick={() => deleteElementCallback(node)}
