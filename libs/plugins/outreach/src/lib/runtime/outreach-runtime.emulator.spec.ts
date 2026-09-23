@@ -230,7 +230,7 @@ const SEQUENCE: OutreachSequence = {
       templateId: null,
     },
   ],
-  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false },
+  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false },
   status: 'active',
   createdAtMs: 1,
   updatedAtMs: 1,
@@ -373,10 +373,9 @@ describeEmulated('the send job (AGL-2981)', () => {
     const headers = gmail.sentHeaders(0)
     expect(headers['To']).toBe('person1@example.org')
     expect(headers['Subject']).toBe('A question about Company 1')
-    expect(headers['List-Unsubscribe']).toMatch(
-      /^<https:\/\/console\.example\.com\/api\/outreach\/unsubscribe\?t=[^>]+>, <mailto:rep\+unsubscribe@example\.com\?subject=unsubscribe>$/,
-    )
-    expect(headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
+    // No mail-client unsubscribe unless the sequence turned it on (AGL-3296).
+    expect(headers['List-Unsubscribe']).toBeUndefined()
+    expect(headers['List-Unsubscribe-Post']).toBeUndefined()
     // The footer, however the body was encoded for the wire.
     expect(gmail.sent[0].body.replace(/=\r\n/g, '')).toContain('This is a sales email from Example Co.')
 
@@ -401,6 +400,34 @@ describeEmulated('the send job (AGL-2981)', () => {
       link: { contactId: 'contact-1' },
       email: { direction: 'outbound', messageId: headers['Message-ID'], to: 'person1@example.org' },
     })
+  })
+
+  it('adds the one-click unsubscribe when the sequence turned it on (AGL-3296)', async () => {
+    await seedOrg()
+    await org().collection('outreachSequences').doc(SEQUENCE.id).update({ 'settings.listUnsubscribe': true })
+    await enroll(1)
+
+    await tick()
+
+    const headers = gmail.sentHeaders(0)
+    expect(headers['List-Unsubscribe']).toMatch(
+      /^<https:\/\/console\.example\.com\/api\/outreach\/unsubscribe\?t=[^>]+>, <mailto:rep\+unsubscribe@example\.com\?subject=unsubscribe>$/,
+    )
+    expect(headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')
+  })
+
+  it('sends without a mintable unsubscribe link when the sequence has the header off (AGL-3296)', async () => {
+    await seedOrg()
+    await enroll(1)
+    expect(await tick({ unsubscribeUrl: () => null })).toMatchObject({ sent: 1, held: 0 })
+  })
+
+  it('holds a send whose sequence wants the unsubscribe when no link can be minted (AGL-3296)', async () => {
+    await seedOrg()
+    await org().collection('outreachSequences').doc(SEQUENCE.id).update({ 'settings.listUnsubscribe': true })
+    await enroll(1)
+    expect(await tick({ unsubscribeUrl: () => null })).toMatchObject({ sent: 0, held: 1 })
+    expect(gmail.sent).toHaveLength(0)
   })
 
   it('counts the send on the sequence, and counts a person once however many steps they take (AGL-3239)', async () => {

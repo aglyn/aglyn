@@ -71,7 +71,7 @@ const sequence = (overrides: Partial<OutreachSequence> = {}) => ({
   name: 'Agencies, first touch',
   mailboxId: 'mailbox-1',
   steps: [firstEmail(), email(), email({ delayBusinessDays: 5 }), email({ delayBusinessDays: 7 })],
-  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false },
+  settings: { window: null, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false },
   ...overrides,
 })
 
@@ -282,14 +282,23 @@ describe('settings', () => {
       // Off unless it was stored on (AGL-3239): a sequence written before
       // the setting existed tracked nothing, and reads that way.
       trackClicks: false,
+      // Off unless it was stored on (AGL-3296): no header is the default.
+      listUnsubscribe: false,
     })
     expect(
       readOutreachSequenceSettings({
         allowedCountries: ['us', 'CA', 'ca', 'Canada'],
         allowCustomers: 'yes',
         trackClicks: 'yes',
+        listUnsubscribe: 'yes',
       }),
-    ).toEqual({ window: null, allowedCountries: ['US', 'CA'], allowCustomers: false, trackClicks: false })
+    ).toEqual({ window: null, allowedCountries: ['US', 'CA'], allowCustomers: false, trackClicks: false, listUnsubscribe: false })
+  })
+
+  it('reads the unsubscribe header setting only when it was stored on (AGL-3296)', () => {
+    expect(readOutreachSequenceSettings({ listUnsubscribe: true }).listUnsubscribe).toBe(true)
+    expect(readOutreachSequenceSettings({ listUnsubscribe: false }).listUnsubscribe).toBe(false)
+    expect(readOutreachSequenceSettings({}).listUnsubscribe).toBe(false)
   })
 
   it('normalizes typed country codes', () => {
@@ -299,11 +308,11 @@ describe('settings', () => {
 
   it('refuses an empty country list and a code that is not two letters', () => {
     const issues = validateOutreachSequence(
-      sequence({ settings: { window: null, allowedCountries: [], allowCustomers: false, trackClicks: false } }),
+      sequence({ settings: { window: null, allowedCountries: [], allowCustomers: false, trackClicks: false, listUnsubscribe: false } }),
     )
     expect(codes(issues)).toEqual(['countries_required'])
     const typed = validateOutreachSequence(
-      sequence({ settings: { window: null, allowedCountries: ['US', 'usa'], allowCustomers: false, trackClicks: false } }),
+      sequence({ settings: { window: null, allowedCountries: ['US', 'usa'], allowCustomers: false, trackClicks: false, listUnsubscribe: false } }),
     )
     expect(typed.map((issue) => [issue.path, issue.code])).toEqual([
       ['settings.allowedCountries.1', 'country_invalid'],
@@ -329,7 +338,7 @@ describe('settings', () => {
     ])
     const issues = validateOutreachSequence(
       sequence({
-        settings: { window: { days: [], startMinute: 9, endMinute: 5 }, allowedCountries: ['US'], allowCustomers: false, trackClicks: false },
+        settings: { window: { days: [], startMinute: 9, endMinute: 5 }, allowedCountries: ['US'], allowCustomers: false, trackClicks: false, listUnsubscribe: false },
       }),
     )
     expect(issues.map((issue) => issue.path)).toEqual(['settings.window.days', 'settings.window'])

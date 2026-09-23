@@ -248,6 +248,9 @@ export function readOutreachSequenceSettings(
     // Absent is off (AGL-3239). Every sequence written before the setting
     // existed reads as untracked, which is what it was.
     trackClicks: data['trackClicks'] === true,
+    // Absent is off (AGL-3296): a sequence is one-to-one mail, and every
+    // sequence written before the setting existed reads as headerless.
+    listUnsubscribe: data['listUnsubscribe'] === true,
   }
 }
 

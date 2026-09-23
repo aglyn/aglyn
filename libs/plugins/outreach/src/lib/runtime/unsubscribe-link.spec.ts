@@ -22,6 +22,7 @@ import {
   mintOutreachUnsubscribeToken,
   OUTREACH_UNSUBSCRIBE_PATH,
   OUTREACH_UNSUBSCRIBE_PURPOSE,
+  outreachListUnsubscribe,
   outreachUnsubscribeMailbox,
   outreachUnsubscribeUrl,
   readOutreachUnsubscribeToken,
@@ -93,5 +94,37 @@ describe('the Outreach unsubscribe link (AGL-2981)', () => {
     // An address that already carries a subaddress keeps its base.
     expect(outreachUnsubscribeMailbox('rep+sales@example.com')?.address).toBe('rep+unsubscribe@example.com')
     expect(outreachUnsubscribeMailbox('not-an-address')).toBeNull()
+  })
+})
+
+describe('outreachListUnsubscribe (AGL-3296)', () => {
+  const mintUrl = jest.fn(() => 'https://app.example.com/api/outreach/unsubscribe?t=abc')
+
+  beforeEach(() => mintUrl.mockClear())
+
+  it('is off, and mints nothing, unless the sequence stored it on', () => {
+    for (const enabled of [false, undefined, null]) {
+      expect(outreachListUnsubscribe({ enabled, mintUrl, mailboxEmail: 'rep@example.com' })).toEqual({ status: 'off' })
+    }
+    // Off is off even when no link could be minted: the send is not held.
+    expect(outreachListUnsubscribe({ enabled: false, mintUrl: () => null, mailboxEmail: '' })).toEqual({ status: 'off' })
+    expect(mintUrl).not.toHaveBeenCalled()
+  })
+
+  it('carries both halves when on', () => {
+    expect(outreachListUnsubscribe({ enabled: true, mintUrl, mailboxEmail: 'rep@example.com' })).toEqual({
+      status: 'ready',
+      url: 'https://app.example.com/api/outreach/unsubscribe?t=abc',
+      mailto: 'mailto:rep+unsubscribe@example.com?subject=unsubscribe',
+    })
+  })
+
+  it('is unavailable when on and either half cannot be minted', () => {
+    expect(outreachListUnsubscribe({ enabled: true, mintUrl: () => null, mailboxEmail: 'rep@example.com' })).toEqual({
+      status: 'unavailable',
+    })
+    expect(outreachListUnsubscribe({ enabled: true, mintUrl, mailboxEmail: 'not-an-address' })).toEqual({
+      status: 'unavailable',
+    })
   })
 })
