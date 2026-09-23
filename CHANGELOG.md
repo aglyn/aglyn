@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.170 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.169...v1.0.0-beta.170)
+
+### Fixed
+
+- **web:** three of the client-error sweep's five, at the source ([AGL-3279](https://linear.app/aglyn/issue/AGL-3279), [AGL-2486](https://linear.app/aglyn/issue/AGL-2486))
+- **crm:** the lead's page resolves its org at the organization level ([AGL-3278](https://linear.app/aglyn/issue/AGL-3278), [AGL-3275](https://linear.app/aglyn/issue/AGL-3275))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **rules:** the host CRM-plan helper goes with the block it served ([AGL-3277](https://linear.app/aglyn/issue/AGL-3277))
+
+</details>
+
 ## v1.0.0-beta.169 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.168...v1.0.0-beta.169)
