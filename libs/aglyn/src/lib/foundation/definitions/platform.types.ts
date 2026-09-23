@@ -1091,6 +1091,18 @@ export interface AglynScreenVersion<N = AglynNodeSchema>
     LayoutUid,
     Record<string, ReusableComponentPropValue>
   >
+  /**
+   * This version's restyling of the layouts it renders inside (AGL-3286),
+   * stored beside {@link layoutPropValues}: layout id → that layout's own
+   * node id → an sx record merged over the element's styling for this page
+   * only. The layout's content stays the layout's, and every other screen
+   * using it is unaffected. A node id the layout no longer has is ignored.
+   * Read on screen versions only — see `layout-style-overrides.ts`.
+   */
+  layoutStyleOverrides?: Record<
+    LayoutUid,
+    Record<string, Record<string, unknown>>
+  >
 }
 
 /** Unique id of a host-level reusable component definition. */

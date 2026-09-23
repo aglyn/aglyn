@@ -70,6 +70,32 @@ Pages the site builds without a screen of their own — search results, author p
 collection with no template screen — render inside the site's built-in page layout with its
 properties' defaults.
 
+## Restyle the layout on one page
+
+A screen can change how the layout's elements **look** on that page alone: a transparent
+nav over this page's hero, a different footer background on a landing page. The layout's
+content stays the layout's, and every other screen using it keeps the layout's own styling.
+
+1. Open the screen in the Besigner. The banner above the canvas names the shared layout that
+   frames it.
+2. Choose **Style the layout on this page** and pick an element. The list follows the
+   layout's hierarchy, and a dot marks each element this page already restyles.
+3. The **Styles** tab opens on that element, marked **Styles only**, and says *Styling the
+   layout's … on this page only.* Every control works as it does on the page's own
+   elements, including breakpoints, the dark scheme and hover states. Each property you
+   change is listed as a chip: its ✕ returns that property to the layout's value, and
+   **Reset** clears them all.
+4. Save or publish the screen as usual. The styling is part of the screen version, so it
+   is undoable, kept in a saved draft, and goes live when that version does.
+
+The **Attributes** tab points you to the layout for anything else: an element's text, links
+and settings are edited in the layout itself (**Edit layout**). Select any element on the
+page to leave this mode.
+
+If the layout is later edited and an element you restyled is removed, that styling is simply
+ignored. A reusable component the layout places, such as a site nav, can be restyled the
+same way: the change applies to its outer element.
+
 ## Duplicate
 
 **Duplicate…** in a layout's row menu (and under **More** on its detail page)

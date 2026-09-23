@@ -24,14 +24,19 @@ import {
   LeafSxTransformContext,
 } from '@aglyn/aglyn-node-renderer'
 import * as Besigner from '@aglyn/besigner'
-import { useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
+import {
+  useAglynSiteSchemeThemes,
+  useAglynSiteTheme,
+} from '@aglyn/aglyn-node-renderer'
 import {
   MuiShadowDom,
   type MuiShadowRootProps,
   useMuiShadowDomContext,
 } from '@aglyn/shared-ui-jsx'
 import {
+  SiteSchemeThemesContext,
   styled,
+  type Theme,
   ThemeProvider,
   useHostThemeDocument,
 } from '@aglyn/shared-ui-theme'
@@ -198,6 +203,20 @@ const ThemedElementContainer = ({ children }) => {
         : createDevicePinnedTheme(hostTheme, deviceWidth),
     [hostTheme, deviceWidth],
   )
+  // The other scheme, for an "Always light" / "Always dark" element
+  // (AGL-3284), pinned to the same device width so a forced band re-resolves
+  // its responsive values at the artboard width like everything around it.
+  const pinToDevice = useCallback(
+    (theme: Theme) =>
+      deviceWidth == null ? theme : createDevicePinnedTheme(theme, deviceWidth),
+    [deviceWidth],
+  )
+  const schemeThemes = useAglynSiteSchemeThemes({
+    container: shadowDom,
+    theme: hostThemeDoc,
+    active: canvasTheme,
+    finish: pinToDevice,
+  })
   // Interaction-state hold (AGL-2486): while the Styles panel is editing a
   // state slice, the SELECTED element renders as if it were in that state —
   // you cannot hover an element from a side panel, so a state you cannot see
@@ -236,18 +255,20 @@ const ThemedElementContainer = ({ children }) => {
   // Classes switched off for comparison (AGL-2486), subscribed the same way.
   const [mutedClasses] = useAglynBesignerFlag('mutedClasses')
   return (
-    <ThemeProvider theme={canvasTheme}>
-      <CssBaseline />
-      <CanvasRevealContext.Provider value={revealedNodeIds}>
-        <CanvasMutedClassesContext.Provider value={mutedClasses}>
-          <LeafSxTransformContext.Provider value={sxTransform}>
-            {/* The site whose host variables every leaf fills in (AGL-2881),
-                decided once for the editable document and its chrome alike. */}
-            <CanvasHostTokensProvider>{children}</CanvasHostTokensProvider>
-          </LeafSxTransformContext.Provider>
-        </CanvasMutedClassesContext.Provider>
-      </CanvasRevealContext.Provider>
-    </ThemeProvider>
+    <SiteSchemeThemesContext.Provider value={schemeThemes}>
+      <ThemeProvider theme={canvasTheme}>
+        <CssBaseline />
+        <CanvasRevealContext.Provider value={revealedNodeIds}>
+          <CanvasMutedClassesContext.Provider value={mutedClasses}>
+            <LeafSxTransformContext.Provider value={sxTransform}>
+              {/* The site whose host variables every leaf fills in (AGL-2881),
+                  decided once for the editable document and its chrome alike. */}
+              <CanvasHostTokensProvider>{children}</CanvasHostTokensProvider>
+            </LeafSxTransformContext.Provider>
+          </CanvasMutedClassesContext.Provider>
+        </CanvasRevealContext.Provider>
+      </ThemeProvider>
+    </SiteSchemeThemesContext.Provider>
   )
 }
 

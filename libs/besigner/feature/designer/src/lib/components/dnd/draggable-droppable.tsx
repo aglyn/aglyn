@@ -21,6 +21,8 @@ import {
   FEATURE_FLAG,
   getInstanceEffectivePropText,
   inheritedMediaAlt,
+  isDefinitionPlacement,
+  placementDefinitionFor,
   resolveInstanceLeafBinding,
   REUSABLE_INSTANCE_COMPONENT_ID,
   REUSABLE_INSTANCE_PROP_VALUES_KEY,
@@ -50,7 +52,11 @@ import {
   isInlineEditWithin,
 } from '../../utils/inline-text-edit.store'
 import { requestCanvasContextMenu } from '../../utils/canvas-context-menu'
-import { findInstanceLeafAtPoint } from '../../utils/instance-leaf-hit'
+import {
+  findInstanceLeafAtPoint,
+  findPlacementPartAtPoint,
+} from '../../utils/instance-leaf-hit'
+import { pickPlacementPart } from '../../utils/placement-part-pick'
 import { findLeafTextElement } from '../../utils/in-place-edit-surface'
 
 export interface DraggableDroppableProps<T extends Aglyn.NodeSchema<any>> {
@@ -145,10 +151,10 @@ export const DraggableDroppable = observer(
     // definitions (hit-test) and the host's media picker (image props).
     // Read through a ref so the listener effect below keeps its `[node]`
     // dependency — context updates must not re-register DOM listeners.
-    const { definitions } = useContext(ComponentPromotionContext)
+    const { definitions, formDesigns } = useContext(ComponentPromotionContext)
     const { onPickMedia } = useContext(MediaPickerContext)
-    const instanceEditRef = useRef({ definitions, onPickMedia })
-    instanceEditRef.current = { definitions, onPickMedia }
+    const instanceEditRef = useRef({ definitions, formDesigns, onPickMedia })
+    instanceEditRef.current = { definitions, formDesigns, onPickMedia }
 
     useEffect(() => {
       Besigner.refs.set(node.$id, ref)
@@ -266,7 +272,42 @@ export const DraggableDroppable = observer(
             node,
             pointer.metaKey || pointer.ctrlKey,
           )
+          if (!pointer.metaKey && !pointer.ctrlKey) pickPartUnder(pointer)
         }
+      }
+      /**
+       * A plain click on a placement (a component instance or a placed form)
+       * also says WHICH part of it was under the pointer (AGL-3288), so the
+       * Styles and Attributes tabs aim "Which part?" at what the author just
+       * clicked. The parts themselves stay unselectable — they are drawn
+       * inert — so this is the only way a click can reach one.
+       */
+      function pickPartUnder(pointer: globalThis.MouseEvent) {
+        if (!isDefinitionPlacement(node)) return
+        const container = ref.current
+        if (!container || typeof pointer.clientX !== 'number') return
+        const { definitions, formDesigns } = instanceEditRef.current
+        const definition = placementDefinitionFor(node, {
+          definitions,
+          formDesigns,
+        })
+        if (!definition) return
+        const key = findPlacementPartAtPoint(
+          container,
+          pointer.clientX,
+          pointer.clientY,
+          node.$id,
+          (graftedId) =>
+            resolveInstanceLeafBinding(
+              graftedId,
+              node.$id,
+              definition,
+              'children',
+              definition.rootId,
+            ),
+          definition.rootId,
+        )
+        pickPlacementPart(node.$id, key ?? '')
       }
       function handleDoubleClick(e: Event) {
         // Prop-fed instance internals (AGL-1304): the rendered preview sits

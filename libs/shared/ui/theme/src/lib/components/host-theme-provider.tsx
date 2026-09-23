@@ -30,6 +30,10 @@ import {
 } from '../hocs/create-with-theme-provider'
 import { createResponsiveTheme } from '../util/create-responsive-theme'
 import {
+  createSiteSchemeThemes,
+  SiteSchemeThemesContext,
+} from './site-scheme-themes'
+import {
   hasHostTheme,
   hostThemeToThemeOptions,
   mergeThemeOptions,
@@ -163,41 +167,68 @@ export function HostThemeProvider(props: HostThemeProviderProps) {
     [themeModeState, toggleThemeMode, cookieMode, canGoDark],
   )
 
-  const activeTheme = useMemo<Theme>(() => {
-    if (!hasHostTheme(hostTheme)) {
-      const [light, dark] = _isArr(fallback) ? fallback : [fallback, fallback]
-      return scheme === 'dark' ? dark : light
-    }
-    // Layer the host's overrides onto the brand base rather than replacing
-    // it (AGL-1180) — otherwise customizing one value repaints every other
-    // slot in MUI's stock palette.
-    const [lightBase, darkBase] = _isArr(baseOptions)
-      ? baseOptions
-      : [baseOptions, baseOptions]
-    const base = (scheme === 'dark' ? darkBase : lightBase) ?? {}
-    const converted = mergeThemeOptions(
-      base,
-      hostThemeToThemeOptions(hostTheme, scheme),
-    )
-    return createResponsiveTheme({
-      themeOptions: {
-        ...converted,
-        ...themeOptions,
-        palette: { ...converted.palette, ...themeOptions?.palette },
-        components: { ...converted.components, ...themeOptions?.components },
-      },
-    })
-  }, [hostTheme, fallback, baseOptions, themeOptions, scheme])
+  // One builder for both schemes (AGL-3284): the active theme and the theme
+  // an "Always light" / "Always dark" element forces are the SAME
+  // construction, so a pinned band can never drift from what the site would
+  // render in that scheme. Built lazily, per scheme, on first ask.
+  const schemeThemes = useMemo(
+    () =>
+      createSiteSchemeThemes((forScheme): Theme => {
+        if (!hasHostTheme(hostTheme)) {
+          const [light, dark] = _isArr(fallback)
+            ? fallback
+            : [fallback, fallback]
+          return forScheme === 'dark' ? dark : light
+        }
+        // Layer the host's overrides onto the brand base rather than
+        // replacing it (AGL-1180) — otherwise customizing one value repaints
+        // every other slot in MUI's stock palette.
+        const [lightBase, darkBase] = _isArr(baseOptions)
+          ? baseOptions
+          : [baseOptions, baseOptions]
+        const base = (forScheme === 'dark' ? darkBase : lightBase) ?? {}
+        const converted = mergeThemeOptions(
+          base,
+          hostThemeToThemeOptions(hostTheme, forScheme),
+        )
+        return createResponsiveTheme({
+          themeOptions: {
+            ...converted,
+            ...themeOptions,
+            palette: { ...converted.palette, ...themeOptions?.palette },
+            components: {
+              ...converted.components,
+              ...themeOptions?.components,
+            },
+          },
+        })
+      }),
+    [hostTheme, fallback, baseOptions, themeOptions],
+  )
+
+  const activeTheme = useMemo<Theme>(
+    () => schemeThemes(scheme),
+    [schemeThemes, scheme],
+  )
 
   return (
     <ThemeContextDispatch.Provider value={modeContext}>
-      <ThemeProvider theme={activeTheme}>
-        {disableCssBaseline ? (
-          children
-        ) : (
-          <CssBaseline enableColorScheme>{children}</CssBaseline>
-        )}
-      </ThemeProvider>
+      {/*
+       * Deliberately NOT gated on `canGoDark`. `darkScheme: 'off'` keeps the
+       * VISITOR's choice from turning the page dark; an element the author
+       * set to "Always dark" is the author's own content decision about one
+       * band of it, made in the editor where they can see the result, so it
+       * still resolves against the site's dark theme (AGL-3284).
+       */}
+      <SiteSchemeThemesContext.Provider value={schemeThemes}>
+        <ThemeProvider theme={activeTheme}>
+          {disableCssBaseline ? (
+            children
+          ) : (
+            <CssBaseline enableColorScheme>{children}</CssBaseline>
+          )}
+        </ThemeProvider>
+      </SiteSchemeThemesContext.Provider>
     </ThemeContextDispatch.Provider>
   )
 }

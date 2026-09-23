@@ -40,6 +40,7 @@ export * from './lib/console.theme'
 export * from './lib/tenant.theme'
 
 export * from './lib/components/host-theme-provider'
+export * from './lib/components/site-scheme-themes'
 export * from './lib/components/theme-css-var-provider'
 
 export * from './lib/hocs/create-with-emotion-client-cache'

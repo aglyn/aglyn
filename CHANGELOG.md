@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.173 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.172...v1.0.0-beta.173)
+
+### Added
+
+- **besigner:** "Change it on this page only" — overrides in plain words ([AGL-3288](https://linear.app/aglyn/issue/AGL-3288), [AGL-3285](https://linear.app/aglyn/issue/AGL-3285), [AGL-3286](https://linear.app/aglyn/issue/AGL-3286))
+- **besigner:** a screen can restyle its layout's elements for that page ([AGL-3286](https://linear.app/aglyn/issue/AGL-3286), [AGL-1306](https://linear.app/aglyn/issue/AGL-1306), [AGL-1332](https://linear.app/aglyn/issue/AGL-1332), [AGL-2893](https://linear.app/aglyn/issue/AGL-2893))
+- **besigner:** a section can be always light or always dark ([AGL-3284](https://linear.app/aglyn/issue/AGL-3284), [AGL-1899](https://linear.app/aglyn/issue/AGL-1899))
+- **besigner:** a placed form's fields can be styled per page ([AGL-3285](https://linear.app/aglyn/issue/AGL-3285))
+
+### Fixed
+
+- **mui:** color scheme imports from the package entry; the AI palette learns it ([AGL-3284](https://linear.app/aglyn/issue/AGL-3284))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3288 ([AGL-3288](https://linear.app/aglyn/issue/AGL-3288), [AGL-3284](https://linear.app/aglyn/issue/AGL-3284))
+
+</details>
+
 ## v1.0.0-beta.172 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/ee9a3c92c...v1.0.0-beta.172)

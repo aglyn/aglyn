@@ -18,11 +18,13 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   canvas,
-  components,
+  isPlacedFormNode,
   listInstanceStyleTargets,
-  REUSABLE_INSTANCE_COMPONENT_ID,
+  placementDefinitionFor,
+  REUSABLE_INSTANCE_PROP_VALUES_KEY,
   STYLE_OVERRIDES_ROOT_KEY,
 } from '@aglyn/aglyn'
+import { mdiRestore } from '@aglyn/shared-data-mdi'
 import {
   FormRenderer,
   type FormRendererProps,
@@ -30,20 +32,20 @@ import {
   FormSpy,
   useFormApi,
 } from '@aglyn/shared-ui-jsx-forms'
-import { HelpTip } from '@aglyn/shared-ui-jsx'
+import { MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
   Box,
   Chip,
   Grid,
-  MenuItem,
-  TextField,
+  IconButton,
   Tooltip,
   Typography,
 } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { toJS } from 'mobx'
 import {
-  type ChangeEvent,
+  Fragment,
+  type KeyboardEvent,
   memo,
   useCallback,
   useContext,
@@ -56,9 +58,20 @@ import { ComponentPromotionContext } from '../contexts/component-promotion-conte
 import { useDebouncedCommit } from '../hooks/use-debounced-commit'
 import { besignerDocsUrl } from '../utils/docs-help'
 import {
+  countAttrChanges,
   getNodeAttrTarget,
   listInstanceAttrFields,
 } from '../utils/attr-target'
+import {
+  type PartNode,
+  type PlacementCopy,
+  placementCopy,
+} from '../utils/placement-override-copy'
+import {
+  getPlacementPartPick,
+  resolvePickedPart,
+} from '../utils/placement-part-pick'
+import { PlacementPartsHeader } from './placement-parts-header.component'
 
 /**
  * Schedules a commit when the form's values change and it is dirty — the same
@@ -92,30 +105,119 @@ const AttrOverrideAutoSave = memo(function AttrOverrideAutoSave({
   return null
 })
 
+/** What each field row needs to say it was changed here, and undo it. */
+interface ChangedFieldsProps {
+  /** Names of the fields this page changes, on the picked part. */
+  changed: ReadonlySet<string>
+  /** Resets one field to the definition's value. */
+  onReset: (name: string) => void
+  copy: PlacementCopy
+}
+
 /**
- * The override form's shell (AGL-1899).
+ * One field's "Changed here" badge and its ↺ reset, drawn on the row under
+ * the field (AGL-3288) — the per-field replacement for a row of chips that
+ * named each change by its stored key.
+ */
+function ChangedFieldRow({
+  label,
+  name,
+  onReset,
+  copy,
+}: {
+  label: string
+  name: string
+  onReset: (name: string) => void
+  copy: PlacementCopy
+}) {
+  const resetLabel = copy.resetField(label)
+  return (
+    <Grid size={12} sx={{ mt: -1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Chip
+          size="small"
+          color="secondary"
+          variant="outlined"
+          label={copy.changedBadge}
+          sx={{ height: 20, fontSize: '0.7rem' }}
+        />
+        <Tooltip title={resetLabel}>
+          <IconButton
+            size="small"
+            aria-label={resetLabel}
+            onClick={() => onReset(name)}
+          >
+            <MdiIcon path={mdiRestore.path} fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    </Grid>
+  )
+}
+
+/**
+ * The per-page form's shell (AGL-1899).
  *
  * Autosaving on a debounce, exactly like the Attributes form's own template
- * (AGL-567) — an override is an attribute edit and should not need a second
+ * (AGL-567) — a change here is an attribute edit and should not need a second
  * kind of Save button — but with NO submit button of its own: this form is
  * nested inside the Attributes panel, and a second `type="submit"` control
  * beside "Save Element" is two buttons that look like they do the same thing
  * and do not.
  *
  * `onBlur` flushes, so switching selection or clicking away cannot strand an
- * edit inside the debounce window.
+ * edit inside the debounce window. Return in a text box also flushes, and is
+ * stopped here: the section renders inside the Attributes panel's own
+ * `<form>` (AGL-3288), where the browser would otherwise treat it as a submit
+ * of THAT form.
+ *
+ * `formFields` arrive one per schema field, in schema order, so each changed
+ * field's badge row is drawn directly under it.
  */
 const InstanceAttrFormTemplate = ({
   formFields,
   schema,
-}: FormTemplateRenderProps) => {
+  changed,
+  onReset,
+  copy,
+}: FormTemplateRenderProps & ChangedFieldsProps) => {
   const { handleSubmit } = useFormApi()
   const { schedule, flush } = useDebouncedCommit(handleSubmit)
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>) => {
+      const target = event.target as HTMLElement
+      if (event.key === 'Enter' && target.tagName === 'INPUT') {
+        event.preventDefault()
+        flush()
+      }
+    },
+    [flush],
+  )
+  const fields = (schema?.fields ?? []) as Array<{
+    name?: string
+    label?: string
+  }>
+  const rendered = (formFields ?? []) as unknown as JSX.Node[]
   return (
-    <Box onBlur={flush}>
+    <Box onBlur={flush} onKeyDown={handleKeyDown}>
       {schema?.title}
       <Grid spacing={2} container>
-        {formFields as unknown as JSX.Node}
+        {rendered.map((field, index) => {
+          const name = fields[index]?.name
+          return (
+            <Fragment key={name ?? index}>
+              {field}
+              {name && changed.has(name) ? (
+                <ChangedFieldRow
+                  name={name}
+                  label={fields[index]?.label || name}
+                  onReset={onReset}
+                  copy={copy}
+                />
+              ) : null}
+            </Fragment>
+          )
+        })}
       </Grid>
       <FormSpy subscription={{ values: true, pristine: true, valid: true }}>
         {({ values, pristine, valid }) => (
@@ -176,13 +278,18 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
     ? (canvas.getNode(selectedNode.$id) ?? selectedNode)
     : selectedNode) as Aglyn.NodeSchema<any> | undefined
 
-  const { definitions } = useContext(ComponentPromotionContext)
-  const isInstance = node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
-  const definition = useMemo(() => {
-    if (!isInstance) return undefined
-    const refId = (node?.props as { refId?: string } | undefined)?.refId
-    return refId ? definitions?.[refId] : undefined
-  }, [isInstance, node, definitions])
+  // A placed form is the same kind of placement (AGL-3285): its published
+  // design is the tree, and a page may set a label or placeholder on its copy
+  // — never anything that changes what the form submits.
+  const { definitions, formDesigns } = useContext(ComponentPromotionContext)
+  const definition = useMemo(
+    () => placementDefinitionFor(node, { definitions, formDesigns }),
+    [node, definitions, formDesigns],
+  )
+  const isPlacedForm = isPlacedFormNode(node)
+  const placedFormResolves = isPlacedForm && Boolean(definition)
+  const kind = isPlacedForm ? 'form' : 'component'
+  const copy = placementCopy(kind)
 
   // The SAME target list the Styles panel offers, from the same walker, so
   // the two panels name the same parts of a component in the same order and
@@ -192,17 +299,18 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
     [definition],
   )
 
-  // Which target is being edited, held per selection rather than in an
-  // effect: switching nodes must land on the component root, and deriving it
-  // from the current `node.$id` cannot render one frame aimed at the
-  // PREVIOUS instance's leaf.
-  const [picked, setPicked] = useState<{ nodeId?: string; key: string }>({
-    key: STYLE_OVERRIDES_ROOT_KEY,
-  })
-  const pickedKey =
-    picked.nodeId && picked.nodeId === node?.$id
-      ? picked.key
-      : STYLE_OVERRIDES_ROOT_KEY
+  // Which part is being edited, held per selection rather than in an
+  // effect: switching nodes must land on the whole placement, and deriving
+  // it from the current `node.$id` cannot render one frame aimed at the
+  // PREVIOUS instance's leaf. A click on the canvas newer than the menu's
+  // last choice moves it (AGL-3288) — see `placement-part-pick.ts`.
+  const canvasPick = getPlacementPartPick()
+  const [picked, setPicked] = useState<{
+    nodeId?: string
+    key: string
+    seq: number
+  }>({ key: STYLE_OVERRIDES_ROOT_KEY, seq: 0 })
+  const pickedKey = resolvePickedPart(node?.$id, picked, canvasPick)
   // A leaf the component no longer has falls back to the root rather than
   // aiming the panel at a slice nothing renders. An unloaded definition
   // offers nothing yet, so it is not evidence the key is stale.
@@ -212,40 +320,41 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
       : STYLE_OVERRIDES_ROOT_KEY
 
   const target = useMemo(
-    () => getNodeAttrTarget(node, overrideKey),
-    [node, overrideKey],
+    () => getNodeAttrTarget(node, overrideKey, { placedFormResolves }),
+    [node, overrideKey, placedFormResolves],
   )
 
   const pickedTarget = targets.find((entry) => entry.key === overrideKey)
+  const definitionNodes = definition?.nodes as
+    | Record<string, PartNode>
+    | undefined
   const defNode = pickedTarget
-    ? (definition?.nodes as Record<string, any> | undefined)?.[
+    ? (definitionNodes as Record<string, any> | undefined)?.[
         pickedTarget.componentInternalId
       ]
     : undefined
-  const attrFields = useMemo(() => listInstanceAttrFields(defNode), [defNode])
+  const attrFields = useMemo(
+    () => listInstanceAttrFields(defNode, node),
+    [defNode, node],
+  )
 
-  // Read during render (observer): tracks the live slice, so the chips update
-  // as edits land and as they are cleared.
-  const overriddenProps = Object.keys(target.attrs ?? {})
-  const overriddenKeys = new Set(
+  // Read during render (observer): tracks the live slice, so the badges
+  // update as edits land and as they are reset.
+  const changedFields = new Set(Object.keys(target.attrs ?? {}))
+  const changedKeys = new Set(
     Object.keys((node?.attrOverrides as Record<string, any> | undefined) ?? {}),
   )
+  const changeCount = countAttrChanges(node)
+  const propValues = (node?.props as Record<string, any> | undefined)?.[
+    REUSABLE_INSTANCE_PROP_VALUES_KEY
+  ] as Record<string, unknown> | undefined
 
-  const targetLabel = useCallback(
-    (entry: Aglyn.InstanceStyleTarget) =>
-      entry.isRoot
-        ? 'Component root'
-        : entry.name ||
-          (entry.componentId && components.getLabel(entry.componentId)) ||
-          entry.componentInternalId,
-    [],
-  )
-
+  const canvasSeq = canvasPick.seq
   const handleTargetChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      setPicked({ nodeId: node?.$id, key: event.target.value })
+    (key: string) => {
+      setPicked({ nodeId: node?.$id, key, seq: canvasSeq })
     },
-    [node?.$id],
+    [node?.$id, canvasSeq],
   )
 
   const handleSave = useCallback(
@@ -258,116 +367,61 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
     [target],
   )
 
-  const handleClear = useCallback(
-    (prop: string) => () => {
-      // Undoable and uncoalesced: clearing a chip DISCARDS an override, which
-      // is the one edit here that most needs a way back.
+  // Bumped by every reset so the form re-seeds from the slice as it now is:
+  // the form owns its typed values, and one still holding a reset value
+  // would write it straight back on the next edit.
+  const [resetCount, setResetCount] = useState(0)
+
+  const handleReset = useCallback(
+    (prop: string) => {
+      // Undoable and uncoalesced: a reset DISCARDS a change, which is the
+      // one edit here that most needs a way back.
       canvas.transact(() => target.clearAttr(prop))
+      setResetCount((count) => count + 1)
     },
     [target],
   )
 
-  // Re-seeds the form when the selection or the target changes. NOT keyed on
-  // the slice's contents: the form owns the typed value while the author is
-  // in it, and re-seeding on every commit would fight the field for the
-  // cursor — the shape behind an update loop, not merely a nuisance.
-  const seedKey = `${node?.$id ?? ''}:${overrideKey}`
+  const handleResetAll = useCallback(() => {
+    // One transaction for every part, so one undo brings them all back.
+    canvas.transact(() => target.clearAll())
+    setResetCount((count) => count + 1)
+  }, [target])
+
+  // Re-seeds the form when the selection, the part or a reset changes. NOT
+  // keyed on the slice's contents: the form owns the typed value while the
+  // author is in it, and re-seeding on every commit would fight the field for
+  // the cursor — the shape behind an update loop, not merely a nuisance.
+  const seedKey = `${node?.$id ?? ''}:${overrideKey}:${resetCount}`
   const initialValues = useMemo(
     () => (toJS(target.attrs) ?? {}) as Record<string, unknown>,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [seedKey],
   )
 
-  if (!isInstance || !targets.length) return null
+  if (!target.isInstanceOverride || !targets.length) return null
 
   return (
-    <Box sx={{ mt: 2 }}>
-      <Typography
-        variant="overline"
-        color="text.secondary"
-        component="div"
-        sx={{ display: 'flex', alignItems: 'center' }}
-      >
-        {'Attribute overrides'}
-        <HelpTip
-          title="Attribute overrides"
-          excerpt="Give one placement of a component its own attribute values — a different button variant, size or link — without changing the component or detaching. Empty means the component's own value."
-          href={besignerDocsUrl(
-            'reusableComponents',
-            '#override-an-attribute-on-one-instance',
-          )}
-          sx={{ ml: 0.25, fontSize: '0.9em' }}
-        />
-      </Typography>
-      {targets.length > 1 ? (
-        <TextField
-          select
-          fullWidth
-          size="small"
-          margin="dense"
-          label="Override target"
-          value={overrideKey}
-          onChange={handleTargetChange}
-          helperText={
-            target.isLeafOverride
-              ? 'Setting attributes on one element inside the component, on ' +
-                'this instance only.'
-              : "Setting attributes on the component's outer element, on " +
-                'this instance only. Pick an element inside it to override ' +
-                'that part.'
-          }
-        >
-          {targets.map((entry) => (
-            <MenuItem
-              key={entry.key}
-              value={entry.key}
-              // Nesting reads as nesting: the definition's tree is the only
-              // map an author has of what is inside a component.
-              sx={{ pl: 2 + entry.depth * 1.5 }}
-            >
-              {targetLabel(entry)}
-              {overriddenKeys.has(entry.key) ? ' •' : ''}
-            </MenuItem>
-          ))}
-        </TextField>
-      ) : null}
-      <Box sx={{ mt: 0.5, mb: 1 }}>
-        <Tooltip
-          title={
-            'Attributes set here apply to this instance only, layered over ' +
-            "the component's own values. Other placements keep the " +
-            'component, and component updates still flow through. Leave a ' +
-            "field empty to use the component's value."
-          }
-        >
-          <Chip
-            size="small"
-            color={overriddenProps.length ? 'secondary' : 'default'}
-            label={
-              overriddenProps.length
-                ? `Overridden here: ${overriddenProps.length}`
-                : "Using the component's attributes"
-            }
-          />
-        </Tooltip>
-        {overriddenProps.map((prop) => (
-          <Tooltip
-            key={prop}
-            title={
-              "Clear this override — the instance returns to the component's " +
-              'own value'
-            }
-          >
-            <Chip
-              size="small"
-              variant="outlined"
-              sx={{ ml: 1, mt: 0.5 }}
-              label={prop}
-              onDelete={handleClear(prop)}
-            />
-          </Tooltip>
-        ))}
-      </Box>
+    <Box sx={{ mt: 2, mb: 1 }}>
+      <PlacementPartsHeader
+        kind={kind}
+        parts={targets}
+        definitionNodes={definitionNodes}
+        propValues={propValues}
+        value={overrideKey}
+        onChange={handleTargetChange}
+        changedKeys={changedKeys}
+        helperText={
+          target.isLeafOverride ? copy.onePartHelper : copy.wholePartHelper
+        }
+        changeCount={changeCount}
+        onResetAll={handleResetAll}
+        helpExcerpt={copy.helpExcerpt}
+        helpHref={besignerDocsUrl(
+          'reusableComponents',
+          '#override-an-attribute-on-one-instance',
+        )}
+      />
       {attrFields.length ? (
         <FormRenderer
           key={seedKey}
@@ -377,16 +431,20 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
           schema={{ fields: attrFields.map((entry) => entry.field) }}
         >
           {(templateProps: FormTemplateRenderProps) => (
-            <InstanceAttrFormTemplate {...templateProps} />
+            <InstanceAttrFormTemplate
+              {...templateProps}
+              changed={changedFields}
+              onReset={handleReset}
+              copy={copy}
+            />
           )}
         </FormRenderer>
       ) : (
         // Said out loud rather than rendering an empty box: a component made
-        // of layout elements genuinely has nothing to override here, and an
+        // of layout elements genuinely has nothing to change here, and an
         // author should not be left wondering whether the panel failed.
         <Typography variant="caption" color="text.secondary">
-          {'This part of the component has no attributes that can be ' +
-            'overridden per instance.'}
+          {copy.nothingToChange}
         </Typography>
       )}
     </Box>

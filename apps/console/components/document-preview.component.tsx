@@ -27,11 +27,16 @@ import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 // Deep import for the same reason as `consent-banner-ui` above (AGL-2486):
 // the plugin-manager barrel is server-reachable and this hook is not.
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
-import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
+import {
+  AglynNodeRenderer,
+  useAglynSiteSchemeThemes,
+  useAglynSiteTheme,
+} from '@aglyn/aglyn-node-renderer'
 // Deep, not the designer barrel: Preview renders no besigner.
 import { useMediaAssetFactsOverlay } from '@aglyn/besigner-ui/hooks/use-media-asset-facts-overlay'
 import {
   getGoogleFontsUrl,
+  SiteSchemeThemesContext,
   ThemeProvider,
   useThemeModeState,
 } from '@aglyn/shared-ui-theme'
@@ -422,6 +427,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
       let rootId = parent?.rootId
       let layoutBinding = parent?.layoutId
       let layoutPropValues: unknown
+      let layoutStyleOverrides: unknown
 
       if (kind !== 'template') {
         // The version the URL names, or — for a link that named none — the
@@ -460,6 +466,8 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
         // VERSION; the parent's is the fallback for one saved before it was.
         rootId = data?.rootId ?? rootId
         layoutPropValues = data?.layoutPropValues
+        // The page's restyling of its layout's elements (AGL-3286).
+        layoutStyleOverrides = data?.layoutStyleOverrides
         // Version-first with a document fallback — the rule the besigner and
         // `composeScreenNodes` both follow. A key PRESENT on the version
         // wins, because a `null` there means explicitly no layout.
@@ -492,6 +500,7 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
           chain as any,
           tree as any,
           layoutPropValues as any,
+          layoutStyleOverrides,
         ) as Aglyn.NodesMap,
       )
     }
@@ -921,6 +930,12 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   const [[, themeMode]] = useThemeModeState()
   const scheme = themeMode === 'dark' ? 'dark' : 'light'
   const siteTheme = useAglynSiteTheme({ theme: hostTheme, scheme })
+  // The other scheme, for an "Always light" / "Always dark" element
+  // (AGL-3284) — Preview shows a pinned band exactly as the site will.
+  const schemeThemes = useAglynSiteSchemeThemes({
+    theme: hostTheme,
+    active: siteTheme,
+  })
   const fontsHref = getGoogleFontsUrl(hostTheme?.fonts)
 
   if (missing) {
@@ -974,168 +989,170 @@ function DocumentPreviewSurface(props: DocumentPreviewProps) {
   }
 
   return (
-    <ThemeProvider theme={siteTheme}>
-      {fontsHref ? (
-        <>
-          <link
-            key="host-fonts-preconnect"
-            rel="preconnect"
-            href="https://fonts.gstatic.com"
-            crossOrigin="anonymous"
-          />
-          <link key="host-fonts" rel="stylesheet" href={fontsHref} />
-        </>
-      ) : null}
-      <CssBaseline enableColorScheme />
-      {/* Shared hidden-class rule (AGL-562/830): the tenant page ships this in
-          its SSR HTML so author-hidden elements (a mega-menu panel carries the
-          class to start closed) paint hidden from the first frame. Preview
-          renders the same nodes, so it ships the same rule — without it the
-          panel is stuck open. */}
-      <style>{Aglyn.ELEMENT_HIDDEN_STYLE_TEXT}</style>
-      {/* Plugin stylesheets (AGL-2486), same reasoning as the hidden-class
-          rule above: Preview renders the same nodes as the published page, so
-          it ships the same plugin CSS in the same unlayered slot. `document`
-          scope — Preview is NOT shadow-rooted, so a mirrored sheet is already
-          applying to it from the console document's own head. */}
-      <PluginStyles scope="document" />
-      {root ? (
-        // Preview renders draft state outside the tenant site: screen links
-        // show their content but must not navigate the console origin.
-        // suppressNavigation only — NOT editorInert — so interactions run for
-        // real and hover-to-open menus behave like the live site (AGL-830).
-        <Aglyn.ScreenLinkContext.Provider value={SUPPRESSED_SCREEN_LINKS}>
-          {/* The site's identity, which Preview knew all along and never
-              passed on (AGL-1139). Thirty `if (!hostId)` guards across the
-              plugin blocks took their placeholder branch without it, so a
-              shop previewed as a grid of dashed boxes — and the cart, being
-              inert markup rather than a broken button, had nothing to click.
-              `preview` rides alongside so `useSiteFetch` can refuse the
-              writes that same hostId now makes possible. */}
-          <Aglyn.SiteContext.Provider value={siteContext}>
-            <AglynNodeRenderer node={root} />
-          </Aglyn.SiteContext.Provider>
-        </Aglyn.ScreenLinkContext.Provider>
-      ) : null}
-      <Snackbar
-        open={Boolean(blocked)}
-        autoHideDuration={5000}
-        onClose={() => setBlocked(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        // Same defect as the picker's menu: bottom-centre is where the consent
-        // banner sits, and 1400 loses to it (AGL-2486).
-        sx={ABOVE_PREVIEW_CHROME}
-      >
-        <Alert severity="info" onClose={() => setBlocked(null)}>
-          {blocked}
-        </Alert>
-      </Snackbar>
-      {/* Site runtimes (AGL-419/830): the marketing automations engine arms
-          the authored hover/click triggers and drives the menu/drawer command
-          buses — the same components the tenant catch-all mounts. */}
-      {runtimePages
-        ? Aglyn.listSiteRuntimes().map((runtime, index) => (
-            <runtime.Component
-              key={runtime.runtimeId}
-              hostId={hostId as string}
-              page={runtimePages[index] ?? {}}
+    <SiteSchemeThemesContext.Provider value={schemeThemes}>
+      <ThemeProvider theme={siteTheme}>
+        {fontsHref ? (
+          <>
+            <link
+              key="host-fonts-preconnect"
+              rel="preconnect"
+              href="https://fonts.gstatic.com"
+              crossOrigin="anonymous"
             />
-          ))
-        : null}
-      {/* Consent region simulator (AGL-1498) — see ConsentSimulation. The
-          picker is console chrome; the banner below it is the REAL shared
-          component the tenant mounts, fed simulated state, so what the author
-          sees is what an EU/US/unknown/GPC visitor gets. */}
-      <Paper
-        elevation={4}
-        sx={{
-          position: 'fixed',
-          top: 12,
-          right: 12,
-          zIndex: PREVIEW_PANEL_Z_INDEX,
-          padding: 1.5,
-          width: 250,
-        }}
-      >
-        <Stack spacing={1}>
-          <TextField
-            select
-            size="small"
-            label="Consent preview"
-            value={consentSim}
-            onChange={(event) => {
-              setSimDecision(null)
-              setConsentSim(event.target.value as ConsentSimulation)
-            }}
-            // The menu portals to `<body>`, so it does NOT inherit the panel's
-            // stack and has to be told (AGL-2486). `slotProps.select`, not the
-            // `SelectProps` this would have been written as — MUI removed that
-            // one, and on v9 it is silently ignored rather than rejected, so
-            // the wrong spelling looks exactly like a fix that did not work.
-            slotProps={{ select: { MenuProps: { sx: ABOVE_PREVIEW_CHROME } } }}
-          >
-            {CONSENT_SIMULATIONS.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </TextField>
-          {consentPreview ? (
-            consentPreview.required ? (
-              <Typography
-                variant="caption"
-                color={
-                  consentPreview.allowed ? 'warning.main' : 'text.secondary'
-                }
-              >
-                {(consentPreview.allowed
-                  ? 'Google Analytics: WOULD LOAD'
-                  : 'Google Analytics: blocked') +
-                  (consentPreview.stored
-                    ? ` — recorded "${consentPreview.stored.status}"`
-                    : ' — awaiting the visitor choice') +
-                  // The advertising verdict, reported only where the site asks
-                  // very caption; it named one category because it only ever
-                  // knew about one.
-                  (consentPreview.asksAds
-                    ? consentPreview.adsAllowed
-                      ? '. Advertising storage: GRANTED'
-                      : '. Advertising storage: denied'
-                    : '. Advertising: not asked on this site') +
-                  '. Simulated: nothing is saved.'}
-              </Typography>
-            ) : (
+            <link key="host-fonts" rel="stylesheet" href={fontsHref} />
+          </>
+        ) : null}
+        <CssBaseline enableColorScheme />
+        {/* Shared hidden-class rule (AGL-562/830): the tenant page ships this in
+            its SSR HTML so author-hidden elements (a mega-menu panel carries the
+            class to start closed) paint hidden from the first frame. Preview
+            renders the same nodes, so it ships the same rule — without it the
+            panel is stuck open. */}
+        <style>{Aglyn.ELEMENT_HIDDEN_STYLE_TEXT}</style>
+        {/* Plugin stylesheets (AGL-2486), same reasoning as the hidden-class
+            rule above: Preview renders the same nodes as the published page, so
+            it ships the same plugin CSS in the same unlayered slot. `document`
+            scope — Preview is NOT shadow-rooted, so a mirrored sheet is already
+            applying to it from the console document's own head. */}
+        <PluginStyles scope="document" />
+        {root ? (
+          // Preview renders draft state outside the tenant site: screen links
+          // show their content but must not navigate the console origin.
+          // suppressNavigation only — NOT editorInert — so interactions run for
+          // real and hover-to-open menus behave like the live site (AGL-830).
+          <Aglyn.ScreenLinkContext.Provider value={SUPPRESSED_SCREEN_LINKS}>
+            {/* The site's identity, which Preview knew all along and never
+                passed on (AGL-1139). Thirty `if (!hostId)` guards across the
+                plugin blocks took their placeholder branch without it, so a
+                shop previewed as a grid of dashed boxes — and the cart, being
+                inert markup rather than a broken button, had nothing to click.
+                `preview` rides alongside so `useSiteFetch` can refuse the
+                writes that same hostId now makes possible. */}
+            <Aglyn.SiteContext.Provider value={siteContext}>
+              <AglynNodeRenderer node={root} />
+            </Aglyn.SiteContext.Provider>
+          </Aglyn.ScreenLinkContext.Provider>
+        ) : null}
+        <Snackbar
+          open={Boolean(blocked)}
+          autoHideDuration={5000}
+          onClose={() => setBlocked(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+          // Same defect as the picker's menu: bottom-centre is where the consent
+          // banner sits, and 1400 loses to it (AGL-2486).
+          sx={ABOVE_PREVIEW_CHROME}
+        >
+          <Alert severity="info" onClose={() => setBlocked(null)}>
+            {blocked}
+          </Alert>
+        </Snackbar>
+        {/* Site runtimes (AGL-419/830): the marketing automations engine arms
+            the authored hover/click triggers and drives the menu/drawer command
+            buses — the same components the tenant catch-all mounts. */}
+        {runtimePages
+          ? Aglyn.listSiteRuntimes().map((runtime, index) => (
+              <runtime.Component
+                key={runtime.runtimeId}
+                hostId={hostId as string}
+                page={runtimePages[index] ?? {}}
+              />
+            ))
+          : null}
+        {/* Consent region simulator (AGL-1498) — see ConsentSimulation. The
+            picker is console chrome; the banner below it is the REAL shared
+            component the tenant mounts, fed simulated state, so what the author
+            sees is what an EU/US/unknown/GPC visitor gets. */}
+        <Paper
+          elevation={4}
+          sx={{
+            position: 'fixed',
+            top: 12,
+            right: 12,
+            zIndex: PREVIEW_PANEL_Z_INDEX,
+            padding: 1.5,
+            width: 250,
+          }}
+        >
+          <Stack spacing={1}>
+            <TextField
+              select
+              size="small"
+              label="Consent preview"
+              value={consentSim}
+              onChange={(event) => {
+                setSimDecision(null)
+                setConsentSim(event.target.value as ConsentSimulation)
+              }}
+              // The menu portals to `<body>`, so it does NOT inherit the panel's
+              // stack and has to be told (AGL-2486). `slotProps.select`, not the
+              // `SelectProps` this would have been written as — MUI removed that
+              // one, and on v9 it is silently ignored rather than rejected, so
+              // the wrong spelling looks exactly like a fix that did not work.
+              slotProps={{ select: { MenuProps: { sx: ABOVE_PREVIEW_CHROME } } }}
+            >
+              {CONSENT_SIMULATIONS.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            {consentPreview ? (
+              consentPreview.required ? (
+                <Typography
+                  variant="caption"
+                  color={
+                    consentPreview.allowed ? 'warning.main' : 'text.secondary'
+                  }
+                >
+                  {(consentPreview.allowed
+                    ? 'Google Analytics: WOULD LOAD'
+                    : 'Google Analytics: blocked') +
+                    (consentPreview.stored
+                      ? ` — recorded "${consentPreview.stored.status}"`
+                      : ' — awaiting the visitor choice') +
+                    // The advertising verdict, reported only where the site asks
+                    // very caption; it named one category because it only ever
+                    // knew about one.
+                    (consentPreview.asksAds
+                      ? consentPreview.adsAllowed
+                        ? '. Advertising storage: GRANTED'
+                        : '. Advertising storage: denied'
+                      : '. Advertising: not asked on this site') +
+                    '. Simulated: nothing is saved.'}
+                </Typography>
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  {'No analytics configured (or the consent tool is off) — ' +
+                    'no consent UI renders on this site.'}
+                </Typography>
+              )
+            ) : consentSim !== 'off' ? (
               <Typography variant="caption" color="text.secondary">
-                {'No analytics configured (or the consent tool is off) — ' +
-                  'no consent UI renders on this site.'}
+                {'Loading site consent settings…'}
               </Typography>
-            )
-          ) : consentSim !== 'off' ? (
-            <Typography variant="caption" color="text.secondary">
-              {'Loading site consent settings…'}
-            </Typography>
-          ) : null}
-        </Stack>
-      </Paper>
-      {consentPreview?.required && hostId ? (
-        <ConsentBannerUi
-          hostId={hostId}
-          stored={consentPreview.stored}
-          posture={consentPreview.posture}
-          country={consentPreview.country}
-          // AGL-2486. This prop's own doc comment names the console preview as
-          // the reason it exists ("resolved by the caller from the host
-          // document, because this component is also mounted by the console
-          // preview against a simulated host") — and the console preview was
-          // the one caller that never passed it, so the preview rendered the
-          // analytics-only banner on every site, including sites that DO ask.
-          advertising={consentPreview.asksAds}
-          onDecision={(status, advertising) =>
-            setSimDecision({ status, advertising: advertising === true })
-          }
-        />
-      ) : null}
-    </ThemeProvider>
+            ) : null}
+          </Stack>
+        </Paper>
+        {consentPreview?.required && hostId ? (
+          <ConsentBannerUi
+            hostId={hostId}
+            stored={consentPreview.stored}
+            posture={consentPreview.posture}
+            country={consentPreview.country}
+            // AGL-2486. This prop's own doc comment names the console preview as
+            // the reason it exists ("resolved by the caller from the host
+            // document, because this component is also mounted by the console
+            // preview against a simulated host") — and the console preview was
+            // the one caller that never passed it, so the preview rendered the
+            // analytics-only banner on every site, including sites that DO ask.
+            advertising={consentPreview.asksAds}
+            onDecision={(status, advertising) =>
+              setSimDecision({ status, advertising: advertising === true })
+            }
+          />
+        ) : null}
+      </ThemeProvider>
+    </SiteSchemeThemesContext.Provider>
   )
 }
 

@@ -23,6 +23,10 @@ import type {
 import { NODE_ROOT_ID } from '../canvas-manager/canvas-manager'
 import { composeLayoutChainAndScreenNodes } from './compose-layout-nodes'
 import { applyDeclaredProps } from './compose-reusable-components'
+import {
+  applyLayoutStyleOverrides,
+  layoutStyleOverridesFor,
+} from './layout-style-overrides'
 
 /**
  * Layout properties (AGL-2893): a shared layout declares properties exactly as
@@ -94,7 +98,11 @@ export function applyLayoutProps<N extends AglynNodeSchema = AglynNodeSchema>(
 /**
  * A screen grafted through its whole layout chain, innermost first, with each
  * layout's properties applied from the screen's values for that layout
- * (`layoutPropValues`, keyed by layout id).
+ * (`layoutPropValues`, keyed by layout id), and then the screen's per-page
+ * restyling of that layout's elements (`layoutStyleOverrides`, AGL-3286) —
+ * after the properties, so a page's style wins over whatever a property
+ * bound, and before the graft, so an element the layout hides for this page
+ * is simply not there to be styled.
  *
  * The one composition the published page, the besigner's Preview and its
  * layout chrome all run, so none of them can disagree about which value a
@@ -106,13 +114,17 @@ export function composeLayoutChainWithProps<
   chain: ReadonlyArray<LayoutChainEntry<N> | null | undefined>,
   screenNodes: NormalizedNodes<N>,
   layoutPropValues?: unknown,
+  layoutStyleOverrides?: unknown,
 ): NormalizedNodes<N> {
   return composeLayoutChainAndScreenNodes(
     chain.map((entry) =>
-      applyLayoutProps(
-        entry?.nodes,
-        entry?.props,
-        layoutPropValuesFor(layoutPropValues, entry?.layoutId),
+      applyLayoutStyleOverrides(
+        applyLayoutProps(
+          entry?.nodes,
+          entry?.props,
+          layoutPropValuesFor(layoutPropValues, entry?.layoutId),
+        ),
+        layoutStyleOverridesFor(layoutStyleOverrides, entry?.layoutId),
       ),
     ),
     screenNodes,

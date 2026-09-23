@@ -25,13 +25,17 @@ import {
 } from '@aglyn/aglyn'
 // Deep import, NOT the barrel (AGL-2486) — see `plugin-styles-ui.tsx`.
 import { PluginStyles } from '@aglyn/aglyn/plugin-manager/plugin-styles-ui'
-import { AglynNodeRenderer, useAglynSiteTheme } from '@aglyn/aglyn-node-renderer'
+import {
+  AglynNodeRenderer,
+  useAglynSiteSchemeThemes,
+  useAglynSiteTheme,
+} from '@aglyn/aglyn-node-renderer'
 import {
   MuiShadowDom,
   type MuiShadowRootProps,
   useMuiShadowDomContext,
 } from '@aglyn/shared-ui-jsx'
-import { ThemeProvider } from '@aglyn/shared-ui-theme'
+import { SiteSchemeThemesContext, ThemeProvider } from '@aglyn/shared-ui-theme'
 import { Box, GlobalStyles, Typography } from '@mui/material'
 import { observer } from 'mobx-react-lite'
 import { useResolvedHostThemeDocument } from '../utils/active-host-theme'
@@ -377,23 +381,31 @@ function PreviewThemed({ hostThemeDoc, children }: any) {
     theme: hostThemeDoc,
     scheme: 'light',
   })
+  // An "Always dark" element previews dark here too (AGL-3284).
+  const schemeThemes = useAglynSiteSchemeThemes({
+    container: shadowDom,
+    theme: hostThemeDoc,
+    active: theme,
+  })
   return (
-    <ThemeProvider theme={theme}>
-      {/* `:host { all: initial }` cuts the console's inherited styles, which
-          means the body-level baseline never arrives either — so the stage
-          carries it, exactly as the canvas viewport does. */}
-      <GlobalStyles styles={{ ':host': { all: 'initial' } }} />
-      <Box
-        sx={{
-          ...(theme.typography as any).body1,
-          color: 'text.primary',
-          backgroundColor: 'background.default',
-          width: 1,
-        }}
-      >
-        {children}
-      </Box>
-    </ThemeProvider>
+    <SiteSchemeThemesContext.Provider value={schemeThemes}>
+      <ThemeProvider theme={theme}>
+        {/* `:host { all: initial }` cuts the console's inherited styles, which
+            means the body-level baseline never arrives either — so the stage
+            carries it, exactly as the canvas viewport does. */}
+        <GlobalStyles styles={{ ':host': { all: 'initial' } }} />
+        <Box
+          sx={{
+            ...(theme.typography as any).body1,
+            color: 'text.primary',
+            backgroundColor: 'background.default',
+            width: 1,
+          }}
+        >
+          {children}
+        </Box>
+      </ThemeProvider>
+    </SiteSchemeThemesContext.Provider>
   )
 }
 

@@ -118,6 +118,13 @@ unnamed; two cannot.
 
 `main` is on none of these lists; see below.
 
+### Light or dark, whatever the visitor picked
+
+**Section**, **Container**, **Stack**, **Box** and **Grid** have a **Color scheme**
+attribute — **Match the site**, **Always light** or **Always dark** — that keeps that
+part of the page in one mode, with everything inside it using your site's colors for
+that mode. See [Keep one part of the page light or dark](responsive-styling.md#pin-a-color-scheme).
+
 ### Which link groups want to be a `nav`
 
 `nav` marks a **major** block of navigation, not every group of links — the more you
@@ -144,7 +151,7 @@ banner and contentinfo regions around it. Those are yours to place.
 
 - A **Reusable component** placement renders as the component's own root element — the
   placement adds nothing of its own to the page. To make one placement a landmark, use
-  **Attribute overrides → Component root → Component** on it: set the nav's to `header`
+  **Change it on this page only → Which part? → Whole component → Component** on it: set the nav's to `header`
   and the footer's to `footer`, and the published page carries both landmarks around the
   slot's `main`, without a wrapper between them.
 - A **Section** anywhere inside a page can be `header` or `footer` too. So can any of the

@@ -37,6 +37,7 @@ import {
   semanticElementLabelAttribute,
 } from '../utils/element-picker'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import { colorSchemeAttribute } from '../utils/color-scheme-attribute'
 import { dropClearedProps } from '../utils/drop-cleared-props'
 import { generatePresetId } from '../utils/generate-preset-id'
 
@@ -312,6 +313,7 @@ export const schema: Aglyn.ComponentSchema<GridElementProps> = {
       ],
       condition: CONTAINER_ONLY,
     },
+    colorSchemeAttribute(),
   ],
 }
 

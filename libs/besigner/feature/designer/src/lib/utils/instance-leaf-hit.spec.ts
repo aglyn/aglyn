@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { findInstanceLeafAtPoint } from './instance-leaf-hit'
+import {
+  findInstanceLeafAtPoint,
+  findPlacementPartAtPoint,
+} from './instance-leaf-hit'
 
 /** jsdom has no layout — stamp each element with the rect it "occupies". */
 function mockRect(
@@ -127,5 +130,71 @@ describe('findInstanceLeafAtPoint (AGL-1304)', () => {
     expect(findInstanceLeafAtPoint(container, 25, 50)?.graftedId).toBe(
       'cmp__inst__under',
     )
+  })
+})
+
+describe('findPlacementPartAtPoint (AGL-3288)', () => {
+  /**
+   * A placed form's preview, with a nested component's leaf inside one of
+   * its fields — a second graft prefix the form's definition cannot resolve.
+   */
+  function buildFormPreview() {
+    const container = document.createElement('div')
+    container.innerHTML = `
+      <div data-aglyn-form-preview="">
+        <div data-aglyn="leaf:form1">
+          <label data-aglyn="leaf:cmp__form1__email">
+            <span data-aglyn="leaf:cmp__cmp__form1__email__deep"></span>
+          </label>
+        </div>
+      </div>`
+    const root = container.querySelector('[data-aglyn="leaf:form1"]')!
+    const email = container.querySelector(
+      '[data-aglyn="leaf:cmp__form1__email"]',
+    )!
+    const deep = container.querySelector(
+      '[data-aglyn="leaf:cmp__cmp__form1__email__deep"]',
+    )!
+    mockRect(root, { left: 0, top: 0, width: 400, height: 300 })
+    mockRect(email, { left: 20, top: 20, width: 300, height: 60 })
+    mockRect(deep, { left: 30, top: 30, width: 100, height: 20 })
+    return container
+  }
+
+  const resolve = (graftedId: string) =>
+    graftedId.startsWith('cmp__form1__') &&
+    !graftedId.slice('cmp__form1__'.length).includes('__')
+      ? { componentInternalId: graftedId.slice('cmp__form1__'.length) }
+      : null
+
+  it("resolves the part under the point from the placement's own definition", () => {
+    const container = buildFormPreview()
+    expect(
+      findPlacementPartAtPoint(container, 200, 70, 'form1', resolve, 'top'),
+    ).toBe('email')
+  })
+
+  it('climbs past a nested leaf it cannot resolve', () => {
+    const container = buildFormPreview()
+    expect(
+      findPlacementPartAtPoint(container, 40, 35, 'form1', resolve, 'top'),
+    ).toBe('email')
+  })
+
+  it('reads the placement itself, or its definition root, as the whole', () => {
+    const container = buildFormPreview()
+    expect(
+      findPlacementPartAtPoint(container, 380, 250, 'form1', resolve, 'top'),
+    ).toBe('root')
+    expect(
+      findPlacementPartAtPoint(container, 200, 70, 'form1', resolve, 'email'),
+    ).toBe('root')
+  })
+
+  it('misses cleanly outside the preview', () => {
+    const container = buildFormPreview()
+    expect(
+      findPlacementPartAtPoint(container, 450, 350, 'form1', resolve),
+    ).toBeNull()
   })
 })

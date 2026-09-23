@@ -19,10 +19,11 @@ import type * as Aglyn from '@aglyn/aglyn'
 import {
   components,
   FieldComponentType,
-  REUSABLE_INSTANCE_COMPONENT_ID,
+  isAttrOverrideRefused,
   STYLE_OVERRIDES_ROOT_KEY,
 } from '@aglyn/aglyn'
 import { action, toJS } from 'mobx'
+import { isOverridePlacement, type PlacementTargetOptions } from './style-target'
 
 /**
  * Props an instance override must never write (AGL-1899).
@@ -98,6 +99,11 @@ export interface NodeAttrTarget {
   setAttrs(next: Record<string, any> | undefined): void
   /** Removes ONE overridden prop, leaving this instance's others (MobX action inside). */
   clearAttr(prop: string): void
+  /**
+   * Removes every attribute change this placement carries, on every part —
+   * the "Reset all" of AGL-3288 (MobX action inside).
+   */
+  clearAll(): void
 }
 
 const isPlainRecord = (value: unknown): value is Record<string, any> =>
@@ -143,16 +149,33 @@ export function isAttrOverrideValue(value: unknown): boolean {
  * override layer is built as a single merge point to prevent.
  */
 function storableSlice(
+  placement: Aglyn.NodeSchema<any>,
   next: Record<string, any> | undefined,
 ): Record<string, any> {
   const slice: Record<string, any> = {}
   if (!isPlainRecord(next)) return slice
   for (const [prop, value] of Object.entries(next)) {
-    if (!prop || ATTR_OVERRIDE_REFUSED_WRITE_PROPS.has(prop)) continue
+    if (!prop || isAttrOverrideRefusedHere(placement, prop)) continue
     if (!isAttrOverrideValue(value)) continue
     slice[prop] = value
   }
   return slice
+}
+
+/**
+ * The writer's refusals and the render layer's, asked together: `children`
+ * and `html` here, `sx` everywhere, and on a placed form every prop that
+ * would change what the form submits (`PLACED_FORM_REFUSED_ATTR_PROPS`,
+ * AGL-3285).
+ */
+function isAttrOverrideRefusedHere(
+  placement: { componentId?: string; props?: unknown } | null | undefined,
+  prop: string,
+): boolean {
+  return (
+    ATTR_OVERRIDE_REFUSED_WRITE_PROPS.has(prop) ||
+    isAttrOverrideRefused(placement, prop)
+  )
 }
 
 /** A no-op target for nodes with no attribute-override layer. */
@@ -166,6 +189,7 @@ function plainNodeTarget(): NodeAttrTarget {
     },
     setAttrs: () => undefined,
     clearAttr: () => undefined,
+    clearAll: () => undefined,
   }
 }
 
@@ -173,17 +197,21 @@ function plainNodeTarget(): NodeAttrTarget {
  * The attribute-override target for a selected node — see
  * {@link NodeAttrTarget}.
  *
- * `overrideKey` selects WHICH slice of an instance's overrides is edited. A
+ * `overrideKey` selects WHICH slice of a placement's overrides is edited. A
  * falsy key falls back to the root, so a caller that has not resolved a
  * definition yet still edits something real rather than writing an
  * `undefined`-keyed slice no renderer reads.
+ *
+ * A placed form whose design resolves is a placement too (AGL-3285) — see
+ * `PlacementTargetOptions` — and refuses every prop that would change what
+ * the form submits.
  */
 export function getNodeAttrTarget(
   node: Aglyn.NodeSchema<any> | null | undefined,
   overrideKey?: string | null,
+  options?: PlacementTargetOptions,
 ): NodeAttrTarget {
-  const isInstance = node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID
-  if (!node || !isInstance) return plainNodeTarget()
+  if (!node || !isOverridePlacement(node, options)) return plainNodeTarget()
   const key = overrideKey || STYLE_OVERRIDES_ROOT_KEY
   return {
     isInstanceOverride: true,
@@ -196,7 +224,7 @@ export function getNodeAttrTarget(
       const overrides: Record<string, any> = {
         ...toJS(node.attrOverrides ?? {}),
       }
-      const slice = storableSlice(next)
+      const slice = storableSlice(node, next)
       if (Object.keys(slice).length > 0) {
         overrides[key] = slice
       } else {
@@ -224,7 +252,26 @@ export function getNodeAttrTarget(
       node.attrOverrides =
         Object.keys(overrides).length > 0 ? overrides : undefined
     }),
+    clearAll: action(() => {
+      if (node.attrOverrides !== undefined) node.attrOverrides = undefined
+    }),
   }
+}
+
+/**
+ * How many attribute changes a placement carries across all of its parts —
+ * the count the "N changes on this page" line reads (AGL-3288).
+ */
+export function countAttrChanges(
+  node: { attrOverrides?: unknown } | null | undefined,
+): number {
+  const overrides = node?.attrOverrides
+  if (!isPlainRecord(overrides)) return 0
+  let count = 0
+  for (const slice of Object.values(overrides)) {
+    if (isPlainRecord(slice)) count += Object.keys(slice).length
+  }
+  return count
 }
 
 /**
@@ -287,6 +334,8 @@ export function listInstanceAttrFields(
     | { componentId?: string; props?: Record<string, unknown> }
     | null
     | undefined,
+  /** The selected placement, whose kind decides what is refused (AGL-3285). */
+  placement?: { componentId?: string; props?: unknown } | null,
 ): InstanceAttrField[] {
   const attributes = defNode?.componentId
     ? (components.getSchema(defNode.componentId)?.attributes ?? [])
@@ -298,7 +347,7 @@ export function listInstanceAttrFields(
     const component = (attribute as { component?: string })?.component
     if (!name || seen.has(name)) continue
     if (name.includes('.') || name.includes('[')) continue
-    if (ATTR_OVERRIDE_REFUSED_WRITE_PROPS.has(name)) continue
+    if (isAttrOverrideRefusedHere(placement, name)) continue
     if (!component || !ATTR_OVERRIDE_SUPPORTED_EDITORS.has(component)) continue
     seen.add(name)
     const inherited = (defNode?.props as Record<string, unknown> | undefined)?.[

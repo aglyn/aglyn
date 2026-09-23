@@ -62,6 +62,7 @@ jest.mock('@aglyn/aglyn-node-renderer', () => {
   const actualReact = jest.requireActual('react')
   return {
     __esModule: true,
+    useAglynSiteSchemeThemes: () => undefined,
     useAglynSiteTheme: (args: { theme?: unknown; scheme?: string }) => {
       mockThemeCalls.push(args)
       return {}
@@ -75,6 +76,9 @@ jest.mock('@aglyn/shared-ui-theme', () => ({
   __esModule: true,
   ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
   getGoogleFontsUrl: () => undefined,
+  SiteSchemeThemesContext: {
+    Provider: ({ children }: { children: unknown }) => children,
+  },
   useThemeModeState: () => [['light', 'light']],
 }))
 

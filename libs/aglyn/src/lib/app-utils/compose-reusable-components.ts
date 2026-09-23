@@ -44,6 +44,7 @@ import {
   repeatKey,
   withoutRepeatDirective,
 } from './expand-repeatables'
+import { FORM_COMPONENT_ID, FORM_ID_PROP } from './forms'
 import { mergeNodeSx } from './merge-node-sx'
 import {
   hasUrlScheme,
@@ -80,10 +81,84 @@ function joinClassNames(...lists: unknown[]): string | undefined {
 }
 
 /**
+ * Whether a node is a placed form that names a form entity — the second kind
+ * of node that stands for a tree stored on another document (see
+ * {@link PlacementKind}). A `form` node with no `formId` is an ordinary form
+ * whose fields are its own children, and has no override layer.
+ *
+ * The ref test matches the graft's own resolution rule (a non-empty string),
+ * so the editor and the renderer agree about which forms are placements.
+ */
+export function isPlacedFormNode(
+  node: { componentId?: string; props?: unknown } | undefined | null,
+): boolean {
+  if (node?.componentId !== FORM_COMPONENT_ID) return false
+  const formId = (node.props as Record<string, unknown> | undefined)?.[
+    FORM_ID_PROP
+  ]
+  return typeof formId === 'string' && formId !== ''
+}
+
+/**
+ * Whether a node is a placement that GRAFTS a definition — a reusable
+ * component instance or a placed form — and therefore carries the two
+ * per-placement override layers (`styleOverrides`, `attrOverrides`, AGL-3285).
+ *
+ * One predicate for both kinds on purpose: the graft already expands them in
+ * one pass, and an override layer that one kind honoured and the other
+ * silently ignored would be the canvas/Preview/tenant disagreement this file
+ * exists to prevent.
+ */
+export function isDefinitionPlacement(
+  node: { componentId?: string; props?: unknown } | undefined | null,
+): boolean {
+  return (
+    node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID ||
+    isPlacedFormNode(node)
+  )
+}
+
+/**
+ * The tree a placement grafts, from whichever map its kind reads — the
+ * component definitions for an instance, the published form designs for a
+ * placed form — or `undefined` when it is not a placement or its ref resolves
+ * to nothing (AGL-3285). The editor panels use it to offer the same targets
+ * the graft will consult.
+ */
+export function placementDefinitionFor<
+  N extends AglynNodeSchema = AglynNodeSchema,
+>(
+  node: { componentId?: string; props?: unknown } | undefined | null,
+  sources: {
+    definitions?: Record<string, ReusableComponentTree<N> | undefined>
+    formDesigns?: Record<
+      string,
+      Pick<ReusableComponentTree<N>, 'rootId' | 'nodes'> | undefined
+    >
+  },
+): Pick<ReusableComponentTree<N>, 'rootId' | 'nodes'> | undefined {
+  const props = node?.props as Record<string, unknown> | undefined
+  if (node?.componentId === REUSABLE_INSTANCE_COMPONENT_ID) {
+    const refId = props?.['refId']
+    return typeof refId === 'string' && refId
+      ? sources.definitions?.[refId]
+      : undefined
+  }
+  if (isPlacedFormNode(node)) {
+    const design = sources.formDesigns?.[props?.[FORM_ID_PROP] as string]
+    // The graft's resolution rule: a design whose root is not among its own
+    // nodes grafts nothing, so it offers nothing to override either.
+    return design?.rootId && design.nodes?.[design.rootId] ? design : undefined
+  }
+  return undefined
+}
+
+/**
  * Every per-instance style override an instance node carries, keyed the way
  * it is stored (AGL-1332): {@link STYLE_OVERRIDES_ROOT_KEY} for the
  * component root, and a DEFINITION-internal node id for each overridden
- * leaf. Empty for a node that is not an instance or carries none.
+ * leaf. Empty for a node that is not a placement ({@link
+ * isDefinitionPlacement}: an instance or a placed form) or carries none.
  *
  * Keyed on the definition's own id, never the grafted `cmp__…` id: the
  * graft id is DERIVED from the instance id, so keying on it would break the
@@ -100,9 +175,12 @@ function joinClassNames(...lists: unknown[]): string | undefined {
  * what an override means.
  */
 export function getInstanceStyleOverrides(
-  node: { componentId?: string; styleOverrides?: unknown } | undefined | null,
+  node:
+    | { componentId?: string; props?: unknown; styleOverrides?: unknown }
+    | undefined
+    | null,
 ): Record<string, Record<string, unknown>> {
-  if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) return {}
+  if (!isDefinitionPlacement(node)) return {}
   const overrides = node?.styleOverrides as Record<string, unknown> | undefined
   if (!isStyleRecord(overrides)) return {}
   const clean: Record<string, Record<string, unknown>> = {}
@@ -118,7 +196,10 @@ export function getInstanceStyleOverrides(
  * AGL-1306 half of {@link getInstanceStyleOverrides}.
  */
 export function getInstanceRootStyleOverride(
-  node: { componentId?: string; styleOverrides?: unknown } | undefined | null,
+  node:
+    | { componentId?: string; props?: unknown; styleOverrides?: unknown }
+    | undefined
+    | null,
 ): Record<string, unknown> | undefined {
   return getInstanceStyleOverrides(node)[STYLE_OVERRIDES_ROOT_KEY]
 }
@@ -176,6 +257,72 @@ function instanceSxPatch(
 const ATTR_OVERRIDE_REFUSED_PROPS = new Set(['sx'])
 
 /**
+ * Props a placed form's attribute overrides must never address, on any node
+ * of its design (AGL-3285).
+ *
+ * A form is edited once and every page placing it follows — that is the
+ * whole point of the form entity. Its submission list, its dataset columns,
+ * its consent tick and its routing are all keyed to what the ENTITY declares,
+ * so a page that renamed a field, retyped it, made it optional, rewrote its
+ * choices or re-pointed where the form sends would file answers the form's
+ * own schema does not describe, from one page only, with nothing on the
+ * Forms page saying so. Per page, a form may LOOK different; it may not
+ * collect something different.
+ *
+ * - The form node's identity and submission config: `formId`, `formName`,
+ *   `datasetId`, `datasetName`, and the after-submit outcome
+ *   (`afterSubmit`, `redirectScreenId`, `redirectUrl`, `revealNodeId`).
+ * - Each field's contract: `fieldName` (the submission key),
+ *   `datasetFieldId`, `fieldType`, `options` (a ticked option's TEXT is the
+ *   posted value, and the consent check reads it) and `required`.
+ * - Element attributes a browser submission reads directly: `name`, `type`
+ *   (a submit button made a plain button no longer submits), `value`,
+ *   `action`, `method`, and `disabled` (a disabled input is not posted).
+ * - The hide directives: a hidden field is pruned from the page, so its
+ *   value is never sent.
+ *
+ * Label, placeholder, help text, the submit label and success message, and
+ * everything about styling stay overridable.
+ */
+export const PLACED_FORM_REFUSED_ATTR_PROPS: ReadonlySet<string> = new Set([
+  FORM_ID_PROP,
+  'formName',
+  'datasetId',
+  'datasetName',
+  'afterSubmit',
+  'redirectScreenId',
+  'redirectUrl',
+  'revealNodeId',
+  'fieldName',
+  'datasetFieldId',
+  'fieldType',
+  'options',
+  'required',
+  'name',
+  'type',
+  'value',
+  'action',
+  'method',
+  'disabled',
+  NODE_HIDE_IF_PROP,
+  NODE_HIDE_UNLESS_PROP,
+])
+
+/**
+ * Whether `prop` may never be an attribute override on this placement — `sx`
+ * on every placement, plus {@link PLACED_FORM_REFUSED_ATTR_PROPS} on a placed
+ * form. The render layer and the editor's writer both ask this, so a refused
+ * prop can neither be offered nor take effect.
+ */
+export function isAttrOverrideRefused(
+  placement: { componentId?: string; props?: unknown } | undefined | null,
+  prop: string,
+): boolean {
+  if (ATTR_OVERRIDE_REFUSED_PROPS.has(prop)) return true
+  return isPlacedFormNode(placement) && PLACED_FORM_REFUSED_ATTR_PROPS.has(prop)
+}
+
+/**
  * Every per-instance ATTRIBUTE override an instance node carries, keyed the
  * way {@link getInstanceStyleOverrides} keys styles — `root` for the
  * definition root, a definition-internal node id for anything else
@@ -186,9 +333,12 @@ const ATTR_OVERRIDE_REFUSED_PROPS = new Set(['sx'])
  * go through the panel) still cannot take effect.
  */
 export function getInstanceAttrOverrides(
-  node: { componentId?: string; attrOverrides?: unknown } | undefined | null,
+  node:
+    | { componentId?: string; props?: unknown; attrOverrides?: unknown }
+    | undefined
+    | null,
 ): Record<string, Record<string, unknown>> {
-  if (node?.componentId !== REUSABLE_INSTANCE_COMPONENT_ID) return {}
+  if (!isDefinitionPlacement(node)) return {}
   const overrides = node?.attrOverrides as Record<string, unknown> | undefined
   if (!isStyleRecord(overrides)) return {}
   const clean: Record<string, Record<string, unknown>> = {}
@@ -196,7 +346,7 @@ export function getInstanceAttrOverrides(
     if (!key || !isStyleRecord(value)) continue
     const slice: Record<string, unknown> = {}
     for (const [prop, propValue] of Object.entries(value)) {
-      if (ATTR_OVERRIDE_REFUSED_PROPS.has(prop)) continue
+      if (isAttrOverrideRefused(node, prop)) continue
       slice[prop] = propValue
     }
     if (Object.keys(slice).length > 0) clean[key] = slice
@@ -1160,6 +1310,9 @@ export function composeReusableComponentNodes<
       // Per-leaf is not a nicety: a component's text leaves usually set
       // their OWN colour, so a root-level `color` never reaches them and an
       // instance given a white background renders white-on-white (AGL-1318).
+      //
+      // A placed form carries the same two layers (AGL-3285), so one page can
+      // restyle a field's label without editing the form for every page.
       const styleOverrides = getInstanceStyleOverrides(
         instanceNode as { componentId?: string; styleOverrides?: unknown },
       )
@@ -1263,7 +1416,31 @@ export function composeReusableComponentNodes<
           }
         }
         delete next[graftedRootId]
-        next[instanceId] = { ...instanceNode, nodes: adopted }
+        /*
+         * The root's own override slices land on the instance, because the
+         * instance IS the root here (AGL-3285). The grafted root carried them
+         * and has just been dropped; without this a placed form's `root`
+         * target would save and never render. Same precedence as the merge
+         * branch below: the slice first, the placement's own `sx` over it.
+         */
+        const rootSx = styleOverrides[STYLE_OVERRIDES_ROOT_KEY]
+        const rootAttrs = attrOverrides[STYLE_OVERRIDES_ROOT_KEY]
+        const unwrappedSx = rootSx
+          ? mergeNodeSx(rootSx, instanceNode.sx)
+          : undefined
+        next[instanceId] = {
+          ...instanceNode,
+          ...(unwrappedSx === undefined ? {} : { sx: unwrappedSx as N['sx'] }),
+          ...(rootAttrs
+            ? {
+                props: {
+                  ...((instanceNode.props as object | undefined) ?? {}),
+                  ...rootAttrs,
+                },
+              }
+            : {}),
+          nodes: adopted,
+        }
       } else if (graftedRoot) {
         /*
          * THE INSTANCE AND THE DEFINITION'S ROOT ARE ONE ELEMENT (AGL-2521).

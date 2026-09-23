@@ -372,6 +372,18 @@ export async function composeNodesWithChrome(options: {
     | null
     | Promise<Aglyn.AglynScreenVersion['layoutPropValues'] | null | undefined>
   /**
+   * The screen's per-page restyling of its layouts' elements (AGL-3286),
+   * keyed by layout id then layout node id — or a PROMISE of it, for the same
+   * reason as `layoutPropValues`, beside which it is stored. Absent, every
+   * layout renders with its own styling.
+   */
+  layoutStyleOverrides?:
+    | Aglyn.AglynScreenVersion['layoutStyleOverrides']
+    | null
+    | Promise<
+        Aglyn.AglynScreenVersion['layoutStyleOverrides'] | null | undefined
+      >
+  /**
    * The screen's own nodes, or a PROMISE of them (AGL-1428).
    *
    * Accepting the unresolved form is what lets `composeScreenNodes` hand the
@@ -538,11 +550,13 @@ export async function composeNodesWithChrome(options: {
   // Settled by now: it is read off the same version document the layout
   // binding the walk above waited on came from.
   const layoutPropValues = await options.layoutPropValues
+  const layoutStyleOverrides = await options.layoutStyleOverrides
 
   const composedNodes = Aglyn.composeLayoutChainWithProps(
     layoutChain as any,
     screenNodes as any,
     layoutPropValues,
+    layoutStyleOverrides,
   )
   const graftedComponents = Aglyn.composeReusableComponentNodes(
     composedNodes as any,
@@ -819,6 +833,14 @@ export async function composeScreenNodes(options: {
     layoutPropValues: versionPromise.then(
       (res) =>
         (res.version as Aglyn.AglynScreenVersion | undefined)?.layoutPropValues,
+      () => undefined,
+    ),
+    // …and its per-page restyling of their elements (AGL-3286), from the same
+    // document; a failed read renders the layouts' own styling.
+    layoutStyleOverrides: versionPromise.then(
+      (res) =>
+        (res.version as Aglyn.AglynScreenVersion | undefined)
+          ?.layoutStyleOverrides,
       () => undefined,
     ),
     screenNodes: versionPromise.then(

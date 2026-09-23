@@ -169,6 +169,8 @@ export * from './email-topics'
 export * from './compose-layout-nodes'
 // Layout properties applied through the chain (AGL-2893).
 export * from './compose-layout-props'
+// A screen's per-page restyling of its layout's elements (AGL-3286).
+export * from './layout-style-overrides'
 export * from './document-landmark'
 export * from './functions'
 export * from './compose-reusable-components'
@@ -176,6 +178,8 @@ export * from './compress'
 export * from './merge-node-sx'
 export * from './palette-sx'
 export * from './scheme-sx'
+// An element pinned to one color scheme (AGL-3284).
+export * from './element-color-scheme'
 export * from './create-resource-uid'
 export * from './decompress'
 export * from './stored-nodes'

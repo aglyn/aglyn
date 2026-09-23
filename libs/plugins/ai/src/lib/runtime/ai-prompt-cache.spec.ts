@@ -638,12 +638,14 @@ describe('the ledger: what each request caches, against its model’s minimum', 
       // 2,945 before AGL-3024 told the planner what a layout's fields are:
       // the regions it has, which is what the build is then held to.
       plan: { prefixTokens: 2_980, minimum: 1_024, caches: true, toolsStable: true },
-      layout: { prefixTokens: 4_414, minimum: 1_024, caches: true, toolsStable: true },
-      template: { prefixTokens: 4_956, minimum: 1_024, caches: true, toolsStable: true },
-      component: { prefixTokens: 5_022, minimum: 1_024, caches: true, toolsStable: true },
+      // The layout, template, component and section doors each grew 20 when
+      // the palette learned the layout elements' Color scheme (AGL-3284).
+      layout: { prefixTokens: 4_434, minimum: 1_024, caches: true, toolsStable: true },
+      template: { prefixTokens: 4_976, minimum: 1_024, caches: true, toolsStable: true },
+      component: { prefixTokens: 5_042, minimum: 1_024, caches: true, toolsStable: true },
       email: { prefixTokens: 2_901, minimum: 1_024, caches: true, toolsStable: true },
       form: { prefixTokens: 2_730, minimum: 1_024, caches: true, toolsStable: true },
-      'page-section': { prefixTokens: 4_598, minimum: 1_024, caches: true, toolsStable: true },
+      'page-section': { prefixTokens: 4_618, minimum: 1_024, caches: true, toolsStable: true },
       theme: { prefixTokens: 3_326, minimum: 1_024, caches: true, toolsStable: true },
       // The automation tool carries a variant per step type, each with only its
       // own fields and none a `null` union: the bytes that keep a request

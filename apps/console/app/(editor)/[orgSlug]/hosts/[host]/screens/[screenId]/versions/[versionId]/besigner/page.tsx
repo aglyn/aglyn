@@ -35,13 +35,16 @@ import {
   composeLayoutChainWithProps,
   composeScreenRoutePath,
   decodeStoredNodes,
+  extractLayoutStyleOverrides,
   findScreenIdByRoutePath,
   HostViewType,
+  injectLayoutStyleOverrides,
   layoutPropValuesFor,
   MAX_LAYOUT_CHAIN_DEPTH,
   normalizeScreenSlug,
   ownScreenSlugFromRoutePath,
   reservedScreenRouteMessage,
+  replaceUnderMerge,
   reservedScreenRouteSegment,
   SCREEN_SLUG_PATH_SEPARATOR_MESSAGE,
   ScreenLinkContext,
@@ -60,7 +63,10 @@ import {
   describeComponentPropagation,
   recoverableRoomSessions,
   LayoutChromeContext,
+  LayoutStylePickerButton,
+  layoutStyleSelection,
   PropertiesDialogComponent,
+  useCanvasLayoutStyleOverrides,
   useAddElementDrawerCallback,
   useBesignerDocument,
   useComponentPropagationNotice,
@@ -394,6 +400,11 @@ function BesignerPage(props) {
     useHostComponentDefinitions(hostId)
   // The layout's properties, with this version's values for them (AGL-2893)
   // — the chrome draws what this screen will publish with.
+  //
+  // …and with this page's restyling of the layout's elements (AGL-3286), read
+  // live off the canvas root so the chrome follows the Styles panel as it is
+  // edited, before anything is saved.
+  const layoutStyleOverridesLive = useCanvasLayoutStyleOverrides(layoutId)
   const layoutChromeProps = useMemo(
     () => ({
       props: (
@@ -404,9 +415,13 @@ function BesignerPage(props) {
           ?.layoutPropValues,
         layoutId,
       ),
+      styleOverrides: layoutStyleOverridesLive,
     }),
-    [layoutVersionResult?.data, result?.data, layoutId],
+    [layoutVersionResult?.data, result?.data, layoutId, layoutStyleOverridesLive],
   )
+  // The layout-element target belongs to this screen and this layout; it
+  // must not outlive either (AGL-3286).
+  useEffect(() => () => layoutStyleSelection.clear(), [layoutId])
   const chromeCanvas = useLayoutChromeCanvas(
     layoutId && componentDefinitions
       ? layoutVersionResult?.data?.nodes
@@ -420,7 +435,19 @@ function BesignerPage(props) {
     versionId: versionId as string,
   })
   const { data, status, error, hasPendingWrites } = result
-  const nodes = data?.nodes
+  // The page's layout style overrides (AGL-3286) are stored on the version
+  // beside `nodes`, and ride on the canvas root while the editor is open — so
+  // an edit to one is an undoable, draft-carried change like any other.
+  // `saveScreenVersion` lifts them back out before anything is stored.
+  const storedLayoutStyleOverrides = (
+    data as Aglyn.AglynScreenVersion | undefined
+  )?.layoutStyleOverrides
+  const nodes = useMemo(
+    () => injectLayoutStyleOverrides(data?.nodes, storedLayoutStyleOverrides),
+    [data?.nodes, storedLayoutStyleOverrides],
+  )
+  const storedLayoutStyleOverridesRef = useRef(storedLayoutStyleOverrides)
+  storedLayoutStyleOverridesRef.current = storedLayoutStyleOverrides
 
   // Say so when a component on this page changed under the author
   // (AGL-1898 phase 2). The re-graft itself already happened — the
@@ -483,10 +510,32 @@ function BesignerPage(props) {
       nextNodes: Record<string, unknown>,
       baseline?: BesignerSaveBaseline,
     ) => {
+      // The layout style overrides leave the node map here (AGL-3286): the
+      // stored `nodes` never carries them, and the baseline is compared with
+      // what IS stored, so it sheds them too.
+      const { nodes: storedNodes, layoutStyleOverrides } =
+        extractLayoutStyleOverrides(nextNodes)
+      const overridesWrite = replaceUnderMerge(
+        storedLayoutStyleOverridesRef.current,
+        layoutStyleOverrides,
+        deleteField,
+      )
       await saveNodesGuarded(
         screenVersionRef,
-        { nodes: nextNodes as unknown as Aglyn.AglynScreenVersion['nodes'] },
-        baseline,
+        {
+          nodes: storedNodes as unknown as Aglyn.AglynScreenVersion['nodes'],
+          ...(overridesWrite === undefined
+            ? {}
+            : { layoutStyleOverrides: overridesWrite as any }),
+        },
+        baseline && {
+          ...baseline,
+          baseNodes: baseline.baseNodes
+            ? (extractLayoutStyleOverrides(
+                baseline.baseNodes as Record<string, any>,
+              ).nodes as typeof baseline.baseNodes)
+            : baseline.baseNodes,
+        },
       )
     },
     [screenVersionRef],
@@ -1746,10 +1795,16 @@ function BesignerPage(props) {
         }
       }
     }
+    // The page's layout style overrides as the canvas holds them now, saved
+    // or not — Preview shows what the author is looking at (AGL-3286).
+    const previewScreen = extractLayoutStyleOverrides(
+      canvas.toJSON().nodes as Record<string, any>,
+    )
     const composed = composeLayoutChainWithProps(
       chain as any,
-      canvas.toJSON().nodes as any,
+      previewScreen.nodes as any,
       (result?.data as Aglyn.AglynScreenVersion | undefined)?.layoutPropValues,
+      previewScreen.layoutStyleOverrides,
     )
     writePreviewState(ids, composed as any, hostTheme)
     window.open(
@@ -2107,31 +2162,40 @@ function BesignerPage(props) {
                               zIndex: 'appBar',
                             }}
                             action={
-                              <Button
-                                color="inherit"
-                                size="small"
-                                component={AppLink}
-                                componentVariant="naked"
-                                nativeButton={false}
-                                disabled={!layoutVersionId}
-                                href={
-                                  layoutVersionId
-                                    ? buildRoute(Route.LAYOUT_BESIGNER, {
-                                        orgSlug,
-                                        host,
-                                        layoutId,
-                                        versionId: layoutVersionId,
-                                      })
-                                    : undefined
-                                }
-                              >
-                                {'Edit layout'}
-                              </Button>
+                              <Stack direction="row" spacing={0.5}>
+                                {/* The page may restyle the layout's elements
+                                    for itself (AGL-3286) — content stays the
+                                    layout's. */}
+                                <LayoutStylePickerButton
+                                  layoutId={layoutId}
+                                  layoutName={layoutResult?.data?.displayName}
+                                />
+                                <Button
+                                  color="inherit"
+                                  size="small"
+                                  component={AppLink}
+                                  componentVariant="naked"
+                                  nativeButton={false}
+                                  disabled={!layoutVersionId}
+                                  href={
+                                    layoutVersionId
+                                      ? buildRoute(Route.LAYOUT_BESIGNER, {
+                                          orgSlug,
+                                          host,
+                                          layoutId,
+                                          versionId: layoutVersionId,
+                                        })
+                                      : undefined
+                                  }
+                                >
+                                  {'Edit layout'}
+                                </Button>
+                              </Stack>
                             }
                           >
                             {`Shared layout "${
                               layoutResult?.data?.displayName ?? layoutId
-                            }" frames this screen — its elements are locked here.`}
+                            }" frames this screen — its content is locked here, but you can restyle its elements for this page.`}
                           </Alert>
                         ) : null}
                         <LayoutChromeContext.Provider

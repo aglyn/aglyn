@@ -136,8 +136,9 @@ export const schema: Aglyn.ComponentSchema<ReusableInstanceProps> = {
    * the definition's root in its place, so the only node that reaches a
    * published page is the component's own (AGL-2521). An element picker here
    * briefly existed (AGL-2514) and configured a wrapper that no longer
-   * exists — what it was reaching for is **Attribute overrides → Component
-   * root**, which sets the definition root's element for this placement.
+   * exists — what it was reaching for is **Change it on this page only →
+   * Whole component**, which sets the definition root's element for this
+   * placement (AGL-3288).
    */
   attributes: [],
 }

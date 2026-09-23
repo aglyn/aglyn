@@ -83,6 +83,14 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
    */
   public attrOverrides?: Record<string, Record<string, unknown>>
   /**
+   * A screen's layout style overrides, on the canvas root only (AGL-3286) —
+   * see `NodeSchema`. Same three touch points as the fields around it.
+   */
+  public layoutStyleOverrides?: Record<
+    string,
+    Record<string, Record<string, unknown>>
+  >
+  /**
    * Interactions authored on this element — see `NodeSchema`.
    * Third field under the same three-touch-point rule as the two above:
    * declared here, assigned in the constructor, emitted in `toJSON`.
@@ -158,6 +166,9 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     this.attrOverrides = schema.attrOverrides
       ? { ...schema.attrOverrides }
       : undefined
+    this.layoutStyleOverrides = schema.layoutStyleOverrides
+      ? { ...schema.layoutStyleOverrides }
+      : undefined
     this.interactions = Array.isArray(schema.interactions)
       ? [...schema.interactions]
       : undefined
@@ -210,6 +221,14 @@ export class AglynNode<P = JSX.AnyProps> implements NodeSchema<P> {
     const attrOverrides = stripUndefinedDeep(toJS(this.attrOverrides))
     if (attrOverrides && Object.keys(attrOverrides).length > 0) {
       json['attrOverrides'] = attrOverrides
+    }
+    // Layout style overrides (AGL-3286): same treatment. Only the screen
+    // editor's root ever carries them, and its save lifts them out of the map.
+    const layoutStyleOverrides = stripUndefinedDeep(
+      toJS(this.layoutStyleOverrides),
+    )
+    if (layoutStyleOverrides && Object.keys(layoutStyleOverrides).length > 0) {
+      json['layoutStyleOverrides'] = layoutStyleOverrides
     }
     // Element interactions: emitted like the bags above, absent
     // when empty. This is the field that makes them versioned with the
