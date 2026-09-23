@@ -223,9 +223,19 @@ describe('every client-written suite collection asks the plan (AGL-2801)', () =>
     expect(allowStatement(leads, 'delete')).not.toContain('orgCarriesCrmSuite')
     // `emailState` stays closed to clients (AGL-3245).
     expect(allowStatement(leads, 'update')).toContain('emailState')
-    // The host catch-all no longer names leads at all.
+    /*
+     * THE HOST PATH IS CLOSED, NOT REOPENED.
+     *
+     * The dedicated `hosts/{hostId}/leads` block is gone, but `leads` STAYS
+     * in the catch-all's create and update exclusions — dropping it there
+     * would let the catch-all re-grant client writes to a collection nothing
+     * reads any more, which is orphan data by invitation. The exclusion with
+     * no block behind it is a denial, which is what a dead path should be.
+     */
     const catchAll = parseHostSubcollectionRules(SOURCE)
-    expect(catchAll.excluded.create).not.toContain('leads')
-    expect(catchAll.excluded.update).not.toContain('leads')
+    expect(catchAll.excluded.create).toContain('leads')
+    expect(catchAll.excluded.update).toContain('leads')
+    // Delete was never excluded, and still is not.
+    expect(catchAll.excluded.delete).not.toContain('leads')
   })
 })

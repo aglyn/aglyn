@@ -9458,7 +9458,10 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
       : {}),
   })
   const record = (uid, name, id) => doc(authed(uid), 'orgs', ORG, name, id)
-  const lead = (uid, id) => doc(authed(uid), 'hosts', HOST, 'leads', id)
+  /** A lead lives on the ORG since AGL-3275. */
+  const lead = (uid, id) => doc(authed(uid), 'orgs', ORG, 'leads', id)
+  /** The path leads USED to live at, kept to prove AGL-3277 closed it. */
+  const deadLead = (uid, id) => doc(authed(uid), 'hosts', HOST, 'leads', id)
   /** Merged onto the seeded org, which starts on Pro. */
   const setOrg = (fields) =>
     env.withSecurityRulesDisabled(async (context) => {
@@ -9471,8 +9474,12 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
       for (const name of SUITE) {
         await setDoc(doc(db, 'orgs', ORG, name, 'held'), payload(name, OWNER))
       }
-      await setDoc(doc(db, 'hosts', HOST, 'leads', 'lead-held'), {
-        email: 'lead@example.test', status: 'new',
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'lead-held'), {
+        email: 'lead@example.test',
+        status: 'new',
+        // Scoped, or the row is visible to nobody and every read below
+        // would be refused for the wrong reason.
+        visibleTo: [`host:${HOST}`],
       })
     })
   })
@@ -9608,24 +9615,49 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
       updateDoc(lead(OWNER, 'lead-held'), { status: 'contacted' }),
     )
     await mustDeny(
-      'an editor creating a lead on Free',
+      // Server-only on the org block (AGL-3275), as a contact's create is:
+      // refused on every plan, not just Free.
+      'an editor creating a lead',
       setDoc(lead(EDITOR, 'lead-new'), { email: 'new@example.test' }),
     )
     await mustAllow('an editor reading a lead on Free', getDoc(lead(EDITOR, 'lead-held')))
     await mustAllow('an editor deleting a lead on Free', deleteDoc(lead(EDITOR, 'lead-held')))
   })
 
-  it("admits a lead's authoring on Starter", async () => {
+  it("admits a lead's authoring on Starter, but never its creation (AGL-3275)", async () => {
     await setOrg({ plan: 'starter' })
-    await mustAllow(
+    // Server-only, on every plan — see the campaign case below for why the
+    // id being the address's hash is what makes a client create unsafe.
+    await mustDeny(
       'an editor creating a lead on Starter',
       setDoc(lead(EDITOR, 'lead-new'), { email: 'new@example.test' }),
     )
+    // The WORKING state is the client's, which is what Starter buys.
     await mustAllow(
       'an editor setting a lead status on Starter',
-      updateDoc(lead(EDITOR, 'lead-new'), { status: 'contacted' }),
+      updateDoc(lead(EDITOR, 'lead-held'), { status: 'contacted' }),
     )
-    await mustAllow('an editor deleting a lead on Starter', deleteDoc(lead(EDITOR, 'lead-new')))
+    await mustAllow('an editor deleting a lead on Starter', deleteDoc(lead(EDITOR, 'lead-held')))
+  })
+
+  it('closes the host path a lead used to live at (AGL-3277)', async () => {
+    /*
+     * The dedicated `hosts/{hostId}/leads` block is gone, but `leads` stays
+     * in the catch-all's create and update exclusions — so the path REFUSES
+     * rather than falling back to the catch-all's own terms. Dropping it from
+     * the exclusions would let a client write to a collection nothing reads,
+     * which is orphan data by invitation, and is exactly what this caught
+     * when the block was first removed.
+     */
+    await setOrg({ plan: 'pro' })
+    await mustDeny(
+      'an editor creating a lead at the old host path',
+      setDoc(deadLead(EDITOR, 'ghost'), { email: 'ghost@example.test' }),
+    )
+    await mustDeny(
+      'the owner updating a lead at the old host path',
+      setDoc(deadLead(OWNER, 'ghost'), { status: 'working' }, { merge: true }),
+    )
   })
 
   it("keeps a lead's email state the platform's (AGL-3245): no client writes, clears or creates it", async () => {
@@ -9633,17 +9665,23 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
     const verdict = { status: 'bounced', atMs: 1, source: 'outreach', detail: null }
     await mustDeny(
       'an editor creating a lead with an email state',
-      setDoc(lead(EDITOR, 'lead-verdict'), { email: 'new@example.test', emailState: verdict }),
+      setDoc(lead(EDITOR, 'lead-verdict'), {
+        email: 'new@example.test',
+        emailState: verdict,
+        visibleTo: [`host:${HOST}`],
+      }),
     )
     await mustDeny(
       'the owner stamping an email state on a lead',
       updateDoc(lead(OWNER, 'lead-held'), { emailState: verdict }),
     )
     await env.withSecurityRulesDisabled(async (context) => {
-      await setDoc(
-        doc(context.firestore(), 'hosts', HOST, 'leads', 'lead-held'),
-        { email: 'lead@example.test', status: 'new', emailState: verdict },
-      )
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'leads', 'lead-held'), {
+        email: 'lead@example.test',
+        status: 'new',
+        emailState: verdict,
+        visibleTo: [`host:${HOST}`],
+      })
     })
     await mustDeny(
       'the owner clearing a lead’s email state',
@@ -9661,8 +9699,23 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
       'an editor filing a lead under a campaign',
       updateDoc(lead(EDITOR, 'lead-held'), { campaignIds: ['founder-icp2'] }),
     )
-    await mustAllow(
-      'an editor adding a lead with its campaigns',
+    /*
+     * A CLIENT MAY NOT CREATE A LEAD (AGL-3275), which this used to allow.
+     *
+     * It is not only tidier than the host block's create — it is what makes
+     * the model hold. A lead's id IS `sha256(normalizeContactEmail(email))`,
+     * and a client create picks its own document id, so one client write can
+     * put a person at an id that is not their key and the "one person, one
+     * record" invariant is gone with it. Every door that files a lead is an
+     * Admin-SDK path that derives the id and dedupes on the address.
+     *
+     * Nothing in the console creates a lead client-side; this asserted a
+     * capability the host block happened to grant rather than one the
+     * product uses. FILING an existing lead under a campaign — the actual
+     * subject of AGL-3254 — is the update above, and still allowed.
+     */
+    await mustDeny(
+      'an editor creating a lead with its campaigns',
       setDoc(lead(EDITOR, 'lead-filed'), { email: 'filed@example.test', campaignIds: ['founder-icp2'] }),
     )
     await mustDeny(
