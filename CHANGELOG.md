@@ -9,6 +9,29 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.176 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/0fbadbb1a...v1.0.0-beta.176)
+
+### Added
+
+- **console:** the org strip puts Marketplace just before Plugins ([AGL-3294](https://linear.app/aglyn/issue/AGL-3294))
+
+### Fixed
+
+- **besigner:** "Which part?" places each part in its own card ([AGL-3293](https://linear.app/aglyn/issue/AGL-3293))
+
+### Documentation
+
+- **marketing:** record the org-campaign backfill's production runs ([AGL-3273](https://linear.app/aglyn/issue/AGL-3273))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3294 ([AGL-3294](https://linear.app/aglyn/issue/AGL-3294), [AGL-3293](https://linear.app/aglyn/issue/AGL-3293))
+
+</details>
+
 ## v1.0.0-beta.175 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/6e19462d8...v1.0.0-beta.175)

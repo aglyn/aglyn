@@ -163,6 +163,9 @@ export default function BookingsConsolePage({
    never the Besigner canvas bundle — so plugin canvas code stays out of the
    general console bundle.
 2. `hostNavTabItems` splices `listConsoleNavItems()` into the host tab strip.
+   Plugin tabs keep registration order unless an item declares `tabOrder`
+   (lower first; absent is 0) — the organization strip reads it too, which is
+   how Marketplace sits directly before Plugins.
    Nav gating is unchanged: an item's `navTabId` maps to a release flag, so
    staff still preview flagged-off surfaces. The strip itself is built by
    `useSecondaryNav()` from the current route and rendered once by

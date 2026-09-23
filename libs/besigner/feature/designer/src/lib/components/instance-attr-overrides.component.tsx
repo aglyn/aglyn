@@ -66,6 +66,7 @@ import {
   type PartNode,
   type PlacementCopy,
   placementCopy,
+  propDefaultsOf,
 } from '../utils/placement-override-copy'
 import {
   getPlacementPartPick,
@@ -325,6 +326,10 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
   )
 
   const pickedTarget = targets.find((entry) => entry.key === overrideKey)
+  // The definition's declared defaults, so a part whose words come from a
+  // property this page leaves unset is named by what the page shows
+  // (AGL-3293).
+  const propDefaults = useMemo(() => propDefaultsOf(definition), [definition])
   const definitionNodes = definition?.nodes as
     | Record<string, PartNode>
     | undefined
@@ -408,6 +413,7 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
         parts={targets}
         definitionNodes={definitionNodes}
         propValues={propValues}
+        propDefaults={propDefaults}
         value={overrideKey}
         onChange={handleTargetChange}
         changedKeys={changedKeys}

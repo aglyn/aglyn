@@ -69,4 +69,23 @@ describe('marketplace plugin', () => {
     expect(slots.sort()).toEqual(['hostArtifactPublish', 'pluginSiteSet'])
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
   })
+
+  it('is the last plugin tab on the org strip, beside Plugins (AGL-3294)', () => {
+    /*
+     * The strip draws plugin tabs as one block between the CRM and the
+     * shell's Plugins tab, in `tabOrder` and then registration order. An org
+     * surface registered AFTER the marketplace with no order still sorts
+     * before it, which is what puts Marketplace next to Plugins.
+     */
+    registerMarketplaceConsole()
+    Aglyn.registerConsoleExtension({
+      pluginId: 'outreach',
+      displayName: 'Sequences',
+      orgNavItems: [{ label: 'Sequences', href: '/outreach', Component: () => null }],
+    })
+    const hrefs = Aglyn.listConsoleOrgNavItems().map((entry) => entry.navItem.href)
+    expect(hrefs.indexOf('/marketplace')).toBe(hrefs.length - 1)
+    expect(hrefs).toContain('/outreach')
+    Aglyn.unregisterConsoleExtension('outreach')
+  })
 })

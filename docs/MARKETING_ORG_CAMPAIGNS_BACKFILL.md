@@ -85,3 +85,6 @@ so nothing is removed before its copy is committed.
 
 | date | org | result |
 | -- | -- | -- |
+| 2026-09-23, after v1.0.0-beta.174 went live (rules ruleset `8d18c0d9`, three `campaigns` indexes) | `jWmGooWE3L` (aglyn-org), `--org-wide` | 5 campaigns (all now `['org']`), 8 emails across both sites (`hostId` stamped), 2 sequence rollups; 18 archive rows; 0 deferred, 0 refused |
+| 2026-09-23, same window | `hz_KgetqSq` (demo brands) | 4 seeded emails, the shared `seed-campaign-1` re-keyed `seed-campaign-1-{hostId}`; 4 archive rows |
+| 2026-09-23, re-run | every org | plans nothing: converged |

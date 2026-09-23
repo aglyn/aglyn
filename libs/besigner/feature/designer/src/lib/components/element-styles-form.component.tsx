@@ -149,6 +149,7 @@ import {
 import {
   type PartNode,
   placementCopy,
+  propDefaultsOf,
   styleChangeLabel,
 } from '../utils/placement-override-copy'
 import {
@@ -1249,6 +1250,12 @@ const ElementStylesForm = observer(
     const styleChangeCount = target.isInstanceOverride
       ? countStyleChanges(node)
       : 0
+    // The definition's declared defaults, for part names whose words come
+    // from a property this page leaves unset (AGL-3293).
+    const placementPropDefaults = useMemo(
+      () => propDefaultsOf(definition),
+      [definition],
+    )
     const placementPropValues = (
       node?.props as Record<string, any> | undefined
     )?.[REUSABLE_INSTANCE_PROP_VALUES_KEY] as
@@ -1545,6 +1552,7 @@ const ElementStylesForm = observer(
                 definition?.nodes as Record<string, PartNode> | undefined
               }
               propValues={placementPropValues}
+              propDefaults={placementPropDefaults}
               value={overrideKey}
               onChange={handleStyleTargetChange}
               changedKeys={overriddenKeys}
