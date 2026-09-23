@@ -28,7 +28,7 @@ import { consentGroupForSite } from '@aglyn/tenant-data-admin/server/organizatio
 import { readLeadForHost } from '@aglyn/tenant-data-admin/server/host-visitor-records'
 import { FieldValue } from 'firebase-admin/firestore'
 import { CAMPAIGN_FILING_CARRY_BY_NAME } from '../model/campaign-filing-activity'
-import { fileCampaignFilingActivities, siteCampaignRefs } from './campaign-filing-activity'
+import { fileCampaignFilingActivities, orgCampaignRefs } from './campaign-filing-activity'
 
 /**
  * WHAT A LEAD'S CAMPAIGNS BECOME WHEN IT CONVERTS (AGL-3254).
@@ -88,7 +88,7 @@ export async function carryLeadCampaignsToContact(
       action: 'filed',
       // Named where the containers answer; by id where a read fails, so a
       // name lookup can never unmake a carry that has landed.
-      campaigns: await siteCampaignRefs(firestore, request.hostId, campaignIds).catch(() =>
+      campaigns: await orgCampaignRefs(firestore, request.orgId, campaignIds).catch(() =>
         campaignIds.map((id) => ({ id, name: id })),
       ),
       atMs: Date.now(),

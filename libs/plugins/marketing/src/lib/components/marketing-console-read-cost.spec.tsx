@@ -42,7 +42,10 @@
 
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { MARKETING_CONSOLE_SECTIONS } from './marketing-console-sections'
+import {
+  MARKETING_CONSOLE_SECTIONS,
+  MARKETING_ORG_CONSOLE_SECTIONS,
+} from './marketing-console-sections'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 
 /**
@@ -467,11 +470,11 @@ describe('marketing console read cost (AGL-2501)', () => {
     expect(mockListens.every((listen) => listen.limit === 1)).toBe(true)
     expect(documentCeiling(mockListens)).toBeLessThanOrEqual(5)
     expect(mockListens.map((listen) => listen.path)).toEqual([
-      'hosts/site1/emailCampaigns/camp_1',
-      'hosts/site1/campaigns/camp_1',
-      'hosts/site1/campaigns/camp_1/reports/links',
-      'hosts/site1/campaigns/camp_1/reports/revenue',
-      'hosts/site1/campaigns/camp_1/reports/conversions',
+      'orgs/org1/emailCampaigns/camp_1',
+      'orgs/org1/campaigns/camp_1',
+      'orgs/org1/campaigns/camp_1/reports/links',
+      'orgs/org1/campaigns/camp_1/reports/revenue',
+      'orgs/org1/campaigns/camp_1/reports/conversions',
     ])
   })
 
@@ -507,8 +510,8 @@ describe('marketing console read cost (AGL-2501)', () => {
     // And it reads nothing else — not the campaigns it links to, not the
     // submissions the landing-page join would need.
     const paths = mockListens.map((listen) => listen.path)
-    expect(paths).not.toContain('hosts/site1/campaigns')
-    expect(paths).not.toContain('hosts/site1/emailCampaigns')
+    expect(paths).not.toContain('orgs/org1/campaigns')
+    expect(paths).not.toContain('orgs/org1/emailCampaigns')
     expect(paths).not.toContain('hosts/site1/formSubmissions')
   })
 
@@ -520,8 +523,8 @@ describe('marketing console read cost (AGL-2501)', () => {
     // for one campaign's numbers must not pay for any of it — and
     // `emailDeliveries` must never appear at all, at any limit.
     const paths = mockListens.map((listen) => listen.path)
-    expect(paths).not.toContain('hosts/site1/campaigns')
-    expect(paths).not.toContain('hosts/site1/emailCampaigns')
+    expect(paths).not.toContain('orgs/org1/campaigns')
+    expect(paths).not.toContain('orgs/org1/emailCampaigns')
     // The rollup says how many; the RECORDS behind it are a paged read on
     // another section, reached by a link. Listening for them here would put a
     // collection query back on the page this ceiling protects.
@@ -594,5 +597,77 @@ describe('marketing console read cost (AGL-2501)', () => {
       expect(seen).not.toContain('experiments')
       expect(seen).not.toContain('contactSegments')
     })
+  })
+})
+
+/*==========================================
+ * THE ORGANIZATION'S HUB, `/[orgSlug]/marketing`.
+ *
+ * Mounted with no site and an org mount, it lists every campaign and every
+ * send of the org. Those two reads are unfiltered — the org route admits only
+ * org-wide members — and they are the same ceilinged windows the site hub
+ * reads, so the org hub costs what one site's does, not one per site. Nothing
+ * under `hosts/` is read at all: overlays, experiments and conversions are
+ * site sections the org rail does not carry.
+ *=========================================*/
+describe('the org Marketing hub’s read cost', () => {
+  const ORG_BASE = '/acme/marketing'
+
+  afterEach(() => {
+    mockSection = ''
+    mockListens.length = 0
+  })
+
+  async function renderOrgConsole(section: string, detail: string[] = []) {
+    mockSection = [section, ...detail].filter(Boolean).join('/')
+    mockListens.length = 0
+    const { MarketingConsolePage } = await import('./marketing-console-page')
+    return render(
+      <MarketingConsolePage
+        hostId={null}
+        orgMount={{
+          orgId: 'org1',
+          orgSlug: 'acme',
+          hosts: [{ id: 'site1', name: 'Site', subdomain: 'site' }],
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+        }}
+        entitled
+        org={{ plan: 'business' } as never}
+        permissions={{} as never}
+        basePath={ORG_BASE}
+        sections={MARKETING_ORG_CONSOLE_SECTIONS.map((item) => ({
+          id: item.id,
+          label: item.label,
+          href: `${ORG_BASE}/${item.id}`,
+          visible: true,
+        }))}
+        section={section}
+        segments={[section, ...detail]}
+      /> as ReactNode as never,
+    )
+  }
+
+  it('lists campaigns from the org collections, and nothing of any one site', async () => {
+    await renderOrgConsole('campaigns')
+    summarize('org campaigns section', mockListens)
+
+    const paths = mockListens.map((listen) => listen.path)
+    expect(paths).toContain('orgs/org1/emailCampaigns')
+    expect(paths).toContain('orgs/org1/campaigns')
+    expect(paths.some((path) => path.startsWith('hosts/'))).toBe(false)
+    expect(
+      mockListens.find((listen) => listen.path === 'orgs/org1/campaigns')?.limit,
+    ).toBe(31)
+  })
+
+  it('lists every site’s emails from one ceilinged read', async () => {
+    await renderOrgConsole('emails')
+    summarize('org emails section', mockListens)
+
+    expect(mockListens.map((listen) => listen.path)).toEqual([
+      'orgs/org1/campaigns',
+    ])
+    expect(mockListens[0].limit).toBe(31)
   })
 })

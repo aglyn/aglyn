@@ -512,14 +512,14 @@ describe('the campaign record', () => {
   it('stores the RESOLVED topic, so the report and the page agree', async () => {
     const result = await send('newsletter')
     expect(
-      store.get(`hosts/${HOST}/campaigns/${result.campaignId}`),
+      store.get(`orgs/org-1/campaigns/${result.campaignId}`),
     ).toMatchObject({ topicId: 'newsletter' })
   })
 
   it('stores the default rather than nothing when none was chosen', async () => {
     const result = await send()
     expect(
-      store.get(`hosts/${HOST}/campaigns/${result.campaignId}`),
+      store.get(`orgs/org-1/campaigns/${result.campaignId}`),
     ).toMatchObject({ topicId: DEFAULT_CAMPAIGN_TOPIC_ID })
   })
 
@@ -537,7 +537,7 @@ describe('the campaign record', () => {
     })
     expect(result.status).toBe(200)
     expect(
-      store.get(`hosts/${HOST}/campaigns/${result.body.campaignId}`),
+      store.get(`orgs/org-1/campaigns/${result.body.campaignId}`),
     ).toMatchObject({ topicId: 'newsletter', status: 'scheduled' })
   })
 })

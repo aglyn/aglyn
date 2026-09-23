@@ -69,23 +69,38 @@ const args = parseDeployArgs({
 const apply = Boolean(args.apply)
 const onlyOrg = args.org
 
-/** The names of one site's campaigns, by id, read once per site. */
+/** The live containers of one collection, by id → name. */
+async function liveNames(collection) {
+  const names = new Map()
+  for (const row of await collect(collection)) {
+    const name = String(row.data?.name ?? '').trim()
+    if (name && !row.data?.deletedAt) names.set(row.id, name)
+  }
+  return names
+}
+
+/**
+ * The names of an org's campaigns, by id: `orgs/{orgId}/emailCampaigns`,
+ * read once per org. A container the org does not hold is looked for under
+ * the enrollment's site (`hosts/{hostId}/emailCampaigns`), where every
+ * container lived before campaigns became the org's — read once per site,
+ * and only when an id is missing, so a run after the move reads no site.
+ */
 class CampaignNames {
-  constructor(db) {
+  constructor(db, orgId) {
     this.db = db
+    this.orgId = orgId
+    this.org = null
     this.byHost = new Map()
   }
 
-  async forHost(hostId) {
+  async name(hostId, campaignId) {
+    this.org ??= await liveNames(this.db.collection('orgs').doc(this.orgId).collection('emailCampaigns'))
+    if (this.org.has(campaignId) || !hostId) return this.org.get(campaignId)
     if (!this.byHost.has(hostId)) {
-      const names = new Map()
-      for (const row of await collect(this.db.collection('hosts').doc(hostId).collection('emailCampaigns'))) {
-        const name = String(row.data?.name ?? '').trim()
-        if (name && !row.data?.deletedAt) names.set(row.id, name)
-      }
-      this.byHost.set(hostId, names)
+      this.byHost.set(hostId, await liveNames(this.db.collection('hosts').doc(hostId).collection('emailCampaigns')))
     }
-    return this.byHost.get(hostId)
+    return this.byHost.get(hostId).get(campaignId)
   }
 }
 
@@ -101,8 +116,9 @@ async function existingActivityIds(db, orgId, ids) {
   return existing
 }
 
-async function runOrg(db, orgId, campaignNames, totals) {
+async function runOrg(db, orgId, totals) {
   const orgRef = db.collection('orgs').doc(orgId)
+  const campaignNames = new CampaignNames(db, orgId)
   const org = (await orgRef.get()).data() ?? {}
   const sequences = new Map()
   for (const row of await collect(orgRef.collection('outreachSequences'))) {
@@ -123,14 +139,15 @@ async function runOrg(db, orgId, campaignNames, totals) {
   const report = { seen: enrollments.length, filed: 0, alreadyFiled: existing.size, skipped: 0 }
   for (const row of enrollments) {
     const hostId = String(row.data.hostId ?? '').trim()
-    const names = hostId ? await campaignNames.forHost(hostId) : new Map()
+    const names = []
+    for (const id of Array.isArray(row.data.campaignIds) ? row.data.campaignIds : []) {
+      names.push(await campaignNames.name(hostId, String(id)))
+    }
     const plan = planEnrollmentActivity({
       enrollmentId: row.id,
       enrollment: row.data,
       sequenceName: sequences.get(String(row.data.sequenceId ?? '')) ?? '',
-      campaignNames: (Array.isArray(row.data.campaignIds) ? row.data.campaignIds : [])
-        .map((id) => names.get(String(id)))
-        .filter(Boolean),
+      campaignNames: names.filter(Boolean),
       org,
       existing: existing.has(enrolledActivityId(row.id)),
     })
@@ -161,12 +178,11 @@ async function runOrg(db, orgId, campaignNames, totals) {
 
 async function main() {
   const db = connectFirestore({ repoRoot: REPO_ROOT, apply })
-  const campaignNames = new CampaignNames(db)
   const orgIds = onlyOrg ? [onlyOrg] : (await collect(db.collection('orgs'))).map((row) => row.id).sort()
   const totals = { filed: 0, seen: 0 }
   for (const orgId of orgIds) {
     console.log(`org ${orgId}`)
-    await runOrg(db, orgId, campaignNames, totals)
+    await runOrg(db, orgId, totals)
   }
   console.log(
     `${apply ? 'filed' : 'would file'} ${totals.filed} entr${totals.filed === 1 ? 'y' : 'ies'}` +

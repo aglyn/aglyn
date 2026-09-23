@@ -172,15 +172,26 @@ function millisOf(value: unknown): number {
   return typeof toMillis === 'function' ? toMillis.call(value) : 0
 }
 
-/** The send time a list's past sends on this site suggest, or `null` with too little history. */
+/**
+ * The send time a list's past sends on this site suggest, or `null` with too
+ * little history.
+ *
+ * Sends are the organization's (`orgs/{orgId}/campaigns`), and a list is too,
+ * so the org's sends to the list are narrowed to the ones sent AS this site
+ * (`hostId`): another site's audience opening at another hour is not this
+ * site's history. Three equality filters, which Firestore serves by merging
+ * single-field indexes — no composite index.
+ */
 export async function readAiListSendTime(
   firestore: Firestore,
-  input: { hostId: string; listId: string },
+  input: { orgId: string; hostId: string; listId: string },
 ): Promise<CampaignSendTimeSuggestion | null> {
+  if (!input.orgId || !input.hostId) return null
   const snapshot = await firestore
-    .collection('hosts')
-    .doc(input.hostId)
+    .collection('orgs')
+    .doc(input.orgId)
     .collection('campaigns')
+    .where('hostId', '==', input.hostId)
     .where('listId', '==', input.listId)
     .where('status', '==', 'sent')
     .select('sentAt', 'stats.delivered', 'stats.uniqueOpens')

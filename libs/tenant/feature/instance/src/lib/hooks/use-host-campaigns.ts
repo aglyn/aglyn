@@ -16,11 +16,17 @@
  */
 'use client'
 
-import { collection } from 'firebase/firestore'
+import {
+  hostIdsFromScope,
+  isOrgWideScope,
+  scopeTokensForHost,
+} from '@aglyn/aglyn'
+import { collection, query, where } from 'firebase/firestore'
 import { useMemo } from 'react'
 import { collectionCeiling } from './host-collection-queries'
 import { useFirestore } from './firebase/firebase-services'
 import { useFirestoreCollection } from './use-firestore-collection'
+import { useHostOrgIdState } from './use-host-org-id'
 
 /**
  * How many campaigns a picker offers.
@@ -32,6 +38,8 @@ import { useFirestoreCollection } from './use-firestore-collection'
  */
 export const HOST_CAMPAIGN_CEILING = 50
 
+const NO_ROWS: ReadonlyArray<Record<string, unknown>> = Object.freeze([])
+
 /** One campaign, as much of it as a picker needs. */
 export interface HostCampaignOption {
   value: string
@@ -39,14 +47,59 @@ export interface HostCampaignOption {
   /** The campaign window, for a caller that wants to say when it ran. */
   startAtMs?: number | null
   endAtMs?: number | null
+  /**
+   * The sites the campaign is placed on, `null` when it is on every site.
+   * Read from its `visibleTo`; an unscoped campaign is on no site (`[]`).
+   */
+  siteIds?: string[] | null
 }
 
 export interface HostCampaigns {
   options: HostCampaignOption[]
-  /** The site holds more campaigns than the ceiling offers. */
+  /** The org holds more matching campaigns than the ceiling offers. */
   truncated: boolean
   /** The read has answered — false while it is still settling or disabled. */
   ready: boolean
+}
+
+/**
+ * The picker's shape, from a ceilinged read of campaign containers.
+ *
+ * One mapping for both hooks below, so a campaign reads the same on a site's
+ * picker and on the organization's.
+ */
+export function hostCampaignOptions(
+  data: ReadonlyArray<Record<string, unknown>> | null | undefined,
+  ready: boolean,
+): HostCampaigns {
+  const rows = data ?? []
+  const truncated = rows.length > HOST_CAMPAIGN_CEILING
+  const live = rows
+    .slice(0, HOST_CAMPAIGN_CEILING)
+    // A campaign the console soft-deleted is not a campaign a record may be
+    // filed under. The campaigns table filters the same field for the same
+    // reason.
+    .filter((row) => !row['deletedAt'])
+  return {
+    options: live
+      .map((row) => {
+        const visibleTo = Array.isArray(row['visibleTo'])
+          ? (row['visibleTo'] as string[])
+          : []
+        return {
+          value: String(row['$id']),
+          label: String(row['name'] ?? row['$id']),
+          startAtMs: (row['startAtMs'] as number | null | undefined) ?? null,
+          endAtMs: (row['endAtMs'] as number | null | undefined) ?? null,
+          siteIds: isOrgWideScope(visibleTo)
+            ? null
+            : hostIdsFromScope(visibleTo),
+        }
+      })
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    truncated,
+    ready,
+  }
 }
 
 /**
@@ -56,6 +109,19 @@ export interface HostCampaigns {
  * not import a feature plugin — a screen's detail page is an app route — and
  * the form and contact surfaces that need the same list are two other
  * libraries again. One read, one shape, three callers.
+ *
+ * ## The org's campaigns, as this site sees them
+ *
+ * Campaign containers belong to the organization
+ * (`orgs/{orgId}/emailCampaigns`), and each is placed on some of its sites
+ * by its `visibleTo`. A site's picker offers the ones placed on it: `'org'`
+ * (every site) or `host:{hostId}`, which is `scopeTokensForHost`. The clause
+ * is also what makes the read provable for a collaborator scoped to this
+ * site — the rules evaluate `visibleTo` per document on a list, and an
+ * unfiltered query is refused whole rather than narrowed.
+ *
+ * The org comes from the `hostIndex` lookup. Nothing is read until it
+ * answers, and a host with no org settles as ready with no campaigns.
  *
  * ## It is OFF unless a caller asks
  *
@@ -72,7 +138,9 @@ export interface HostCampaigns {
  * ordering on a date would not mis-sort the picker, it would DROP the
  * campaigns that have no dates. The labels are sorted by name here, over the
  * whole ceiling rather than a slice of it, which is the one case sorting a
- * window is honest.
+ * window is honest. It is also the one ordering the automatic single-field
+ * index on `visibleTo` serves beside `array-contains-any`, so the query
+ * needs no composite index.
  */
 export function useHostCampaigns(
   hostId: string | undefined,
@@ -80,40 +148,75 @@ export function useHostCampaigns(
 ): HostCampaigns {
   const enabled = options?.enabled ?? false
   const firestore = useFirestore()
+  const org = useHostOrgIdState(enabled ? hostId : undefined)
+  const orgId = org.orgId
+  // Memoised: a listener dependency, and a fresh array each render would
+  // reopen the subscription every time.
+  const tokens = useMemo(
+    () => (hostId ? scopeTokensForHost(hostId) : null),
+    [hostId],
+  )
   const { data, status } = useFirestoreCollection<Record<string, unknown>>(
     () =>
-      enabled && hostId
+      enabled && hostId && orgId && tokens
         ? collectionCeiling(
-            collection(firestore, 'hosts', hostId, 'emailCampaigns'),
+            query(
+              collection(firestore, 'orgs', orgId, 'emailCampaigns'),
+              where('visibleTo', 'array-contains-any', tokens),
+            ),
             HOST_CAMPAIGN_CEILING,
           )
         : null,
-    [firestore, hostId, enabled],
+    [firestore, hostId, orgId, tokens, enabled],
     { idField: '$id' },
   )
 
-  return useMemo(() => {
-    const rows = data ?? []
-    const truncated = rows.length > HOST_CAMPAIGN_CEILING
-    const live = rows
-      .slice(0, HOST_CAMPAIGN_CEILING)
-      // A campaign the console soft-deleted is not a campaign a record may be
-      // filed under. The campaigns table filters the same field for the same
-      // reason.
-      .filter((row) => !row['deletedAt'])
-    return {
-      options: live
-        .map((row) => ({
-          value: String(row['$id']),
-          label: String(row['name'] ?? row['$id']),
-          startAtMs: (row['startAtMs'] as number | null | undefined) ?? null,
-          endAtMs: (row['endAtMs'] as number | null | undefined) ?? null,
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-      truncated,
-      ready: enabled && status !== 'loading',
-    }
-  }, [data, enabled, status])
+  const ready =
+    enabled &&
+    Boolean(hostId) &&
+    org.loaded &&
+    (orgId ? status !== 'loading' : true)
+  return useMemo(
+    () => hostCampaignOptions(orgId ? data : NO_ROWS, ready),
+    [data, orgId, ready],
+  )
+}
+
+/**
+ * THE ORGANIZATION'S CAMPAIGNS, for a picker on an org-level record — a
+ * lead on the org's Leads page, an outbound sequence.
+ *
+ * Every live container, whichever sites it is placed on: the records these
+ * pickers file belong to the organization, and so does the campaign. The
+ * read is unfiltered because the surfaces that call it are the org-level
+ * hubs, whose readers are org-wide members — the rules admit them to every
+ * container, and a `visibleTo` clause would only need the org's whole site
+ * list and still miss a site it did not carry. Each option carries its
+ * `siteIds`, for a caller that wants to say where a campaign runs.
+ *
+ * Off unless a caller asks, and ceilinged and ordered, for the reasons
+ * {@link useHostCampaigns} gives.
+ */
+export function useOrgCampaigns(
+  orgId: string | null | undefined,
+  options?: { enabled?: boolean },
+): HostCampaigns {
+  const enabled = options?.enabled ?? false
+  const firestore = useFirestore()
+  const { data, status } = useFirestoreCollection<Record<string, unknown>>(
+    () =>
+      enabled && orgId
+        ? collectionCeiling(
+            collection(firestore, 'orgs', orgId, 'emailCampaigns'),
+            HOST_CAMPAIGN_CEILING,
+          )
+        : null,
+    [firestore, orgId, enabled],
+    { idField: '$id' },
+  )
+
+  const ready = enabled && Boolean(orgId) && status !== 'loading'
+  return useMemo(() => hostCampaignOptions(data, ready), [data, ready])
 }
 
 export default useHostCampaigns

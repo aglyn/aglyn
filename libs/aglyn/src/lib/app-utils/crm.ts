@@ -900,9 +900,9 @@ export function buildCrmEmailActivity(input: CrmEmailActivityInput): CrmActivity
 export interface ContactCampaignEmail {
   /** The provider's message id — distinct per send, and the entry's key. */
   messageId: string
-  /** The site the campaign went out from. */
+  /** The site the campaign went out from — the send's `hostId`. */
   hostId: string
-  /** `hosts/{hostId}/campaigns/{campaignId}` — the email, whose report the entry links to. */
+  /** `orgs/{orgId}/campaigns/{campaignId}` — the email, whose report the entry links to. */
   campaignId: string
   /**
    * The email as the team named it in the Emails console — its display name,
@@ -2385,7 +2385,7 @@ export interface CrmLeadFields extends CrmLeadProfile {
   emailState?: EmailState
   /**
    * The campaigns the lead is filed under (AGL-3254): container ids from
-   * `hosts/{hostId}/emailCampaigns`, at the top of the document the way a
+   * `orgs/{orgId}/emailCampaigns`, at the top of the document the way a
    * form carries them (`campaign-membership.ts`), never names. Written by
    * the New lead drawer, the import, the bulk bar and a sequence's enroll;
    * handed to the contact's facet when the lead converts.

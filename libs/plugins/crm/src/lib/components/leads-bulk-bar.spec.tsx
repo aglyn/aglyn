@@ -66,11 +66,21 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-a' } }),
   useUserName: () => 'Ada Lovelace',
-  // The site's campaigns the Add to campaign picker offers (AGL-3254).
+  // The campaigns the Add to campaign picker offers (AGL-3254): those
+  // placed on the site under a site, and every one in the org above them.
   useHostCampaigns: () => ({
     options: [
       { value: 'founder-icp1', label: 'Founder · ICP 1' },
       { value: 'founder-icp2', label: 'Founder · ICP 2' },
+    ],
+    truncated: false,
+    ready: true,
+  }),
+  useOrgCampaigns: () => ({
+    options: [
+      { value: 'founder-icp1', label: 'Founder · ICP 1' },
+      { value: 'founder-icp2', label: 'Founder · ICP 2' },
+      { value: 'org-launch', label: 'Org launch' },
     ],
     truncated: false,
     ready: true,
@@ -182,9 +192,10 @@ describe('the owner', () => {
 })
 
 /*
- * Add to campaign (AGL-3254): under a site, the site's campaigns by name,
- * ADDED to each selected lead in one batch; nothing offered at the
- * organization level, where a selection spans sites.
+ * Add to campaign (AGL-3254): the campaigns by name, ADDED to each selected
+ * lead in one batch — under a site the ones placed on it, and at the
+ * organization level every campaign in the org, each lead's filing entry
+ * carrying the site that captured that lead.
  */
 describe('the campaign', () => {
   it('adds the picked campaigns to every selected lead, in one batch', async () => {
@@ -255,9 +266,41 @@ describe('the campaign', () => {
     expect(filings()).toEqual([])
   })
 
-  it('is not offered at the organization level', () => {
-    mount(ALL.slice(0, 2))
-    expect(screen.queryByRole('button', { name: 'Add to campaign' })).toBeNull()
+  it("offers the org's campaigns at the organization level, filing each lead as its own site", async () => {
+    render(
+      <LeadsBulkBar
+        rows={[
+          lead('site-1', 'l-one', 'one@example.com', { capturedByHostIds: ['site-1'] }),
+          lead('site-2', 'l-two', 'two@example.com', { capturedByHostIds: ['site-2'] }),
+        ]}
+        selected={['site-1/l-one', 'site-2/l-two']}
+        onSelectedChange={jest.fn()}
+        roster={roster}
+        orgId="org-1"
+        hostId={null}
+        org={{}}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Add to campaign' }))
+    fireEvent.mouseDown(dialog().getByRole('combobox', { name: 'Campaigns' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Org launch' }))
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    fireEvent.click(dialog().getByRole('button', { name: 'Add' }))
+    await waitFor(() => expect(notices).toEqual(['Added 2 leads to the campaign']))
+    expect(
+      ops.filter((op) => op.kind === 'update').map((op) => [op.path, (op.data as any).campaignIds]),
+    ).toEqual([
+      ['orgs/org-1/leads/l-one', { op: 'arrayUnion', values: ['org-launch'] }],
+      ['orgs/org-1/leads/l-two', { op: 'arrayUnion', values: ['org-launch'] }],
+    ])
+    await waitFor(() => expect(filings()).toHaveLength(2))
+    expect(
+      filings().map((op) => [(op.data as any).leadId, (op.data as any).hostId, (op.data as any).visibleTo]),
+    ).toEqual([
+      ['l-one', 'site-1', ['host:site-1']],
+      ['l-two', 'site-2', ['host:site-2']],
+    ])
   })
 })
 

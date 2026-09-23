@@ -57,6 +57,10 @@ import {
   recordCrmEmailDelivery,
 } from '@aglyn/tenant-data-admin/server/crm-email-activity'
 import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
+// The leaf again: which document a delivery event counts against is the
+// question every counter below depends on, and a stub would answer it for
+// them.
+import { resolveCampaignSendRef } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
 import { recordEmailReputationFailure } from '@aglyn/tenant-data-admin/server/email-sender-reputation'
 // The link rollup's key derivation and its cap live beside the READER that
 // renders them (`@aglyn/shared-ui-email-campaigns/model`) rather than here, so
@@ -441,10 +445,34 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     const hostRef = isDocumentId(hostId)
       ? firestore.collection('hosts').doc(hostId)
       : null
-    /** The campaign this event belongs to, or null when it names none. */
+    /**
+     * The send this event belongs to, or null when it names none or the send
+     * no longer exists.
+     *
+     * Found rather than built. A send is recorded under the organization, but
+     * the event carries what was tagged on the message when it went out —
+     * the site and the send id always, the org only on mail sent since sends
+     * moved up — and a message sent before that is still delivering, opening
+     * and bouncing. `resolveCampaignSendRef` asks the org and then the site,
+     * so both are counted against the document that exists. Null skips every
+     * counter below, which is what a deleted send's events should do: an
+     * open never re-creates the email it belonged to.
+     *
+     * A failed lookup is null too. The counters are worth less than the
+     * suppression the bounce path owes, and that must not be lost to a read
+     * that failed while finding a counter to increment.
+     */
+    const orgTag = tags['orgId']
     const campaignRef =
       hostRef && isDocumentId(campaignId)
-        ? hostRef.collection('campaigns').doc(campaignId)
+        ? await resolveCampaignSendRef({
+            hostId,
+            sendId: campaignId,
+            orgId: isDocumentId(orgTag)
+              ? orgTag
+              : ((await getOrgForHost(hostId).catch(() => null))?.orgId ?? null),
+            firestore,
+          }).catch(() => null)
         : null
 
     /*==========================================
@@ -563,7 +591,9 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
 
     // Opens and clicks ARE per-campaign, so this pair still needs both ids —
     // and therefore still needs the host, which the failure path above no
-    // longer does.
+    // longer does. A send that no longer exists still gets past here: its
+    // counters are skipped below, but the click it carried is still a
+    // conversion for its experiment and a touch for the person.
     if (!hostRef || !isDocumentId(campaignId)) {
       return res.status(200).json({ ignored: true })
     }
@@ -651,7 +681,7 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
           type === 'email.opened' ? 'stats.uniqueOpens' : 'stats.uniqueClicks'
         ] = FieldValue.increment(firstSeen)
       }
-      await updateExisting(hostRef.collection('campaigns').doc(campaignId), totals)
+      if (campaignRef) await updateExisting(campaignRef, totals)
 
       /*==========================================
        * LINK-LEVEL CLICKS — the aggregate `data.click.link` never had.
@@ -677,11 +707,13 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
        * number the whole report leans on.
        *=========================================*/
       if (type === 'email.clicked') {
-        await recordCampaignLinkClick({
-          firestore,
-          campaignRef: hostRef.collection('campaigns').doc(campaignId),
-          link: campaignLinkKey(data?.click?.link),
-        }).catch(() => undefined)
+        if (campaignRef) {
+          await recordCampaignLinkClick({
+            firestore,
+            campaignRef,
+            link: campaignLinkKey(data?.click?.link),
+          }).catch(() => undefined)
+        }
 
         /*==========================================
          * THE TOUCH REVENUE ATTRIBUTION IS TAKEN OVER.

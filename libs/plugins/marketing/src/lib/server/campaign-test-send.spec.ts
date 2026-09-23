@@ -140,11 +140,7 @@ jest.mock('./email-campaign-reach', () => ({
    * record" is an assertion about a CALL not happening, and a `jest.fn()` that
    * silently succeeds would let the opposite pass.
    */
-  recordCampaignReach: async (
-    _hostId: string,
-    _campaignId: string,
-    reached: string[],
-  ) => {
+  recordCampaignReach: async (_sendRef: unknown, reached: string[]) => {
     reachWrites.push(reached)
   },
   recordCampaignSkipped: async () => undefined,
@@ -721,7 +717,7 @@ describe('each half of the reduction is load-bearing on its own', () => {
      * request would survive as a durable field and reach the resolver from a
      * direction nobody was inspecting.
      */
-    const draft = store.get(`hosts/${HOST}/campaigns/draft-1`) ?? {}
+    const draft = store.get(`orgs/org-1/campaigns/draft-1`) ?? {}
     expect(draft['sendingIdentity']).toBeUndefined()
   })
 
@@ -745,7 +741,7 @@ describe('each half of the reduction is load-bearing on its own', () => {
       fromName: 'Northwind Coffee',
     })
 
-    const draft = store.get(`hosts/${HOST}/campaigns/draft-2`) ?? {}
+    const draft = store.get(`orgs/org-1/campaigns/draft-2`) ?? {}
     expect(draft['fromName']).toBe('Northwind Coffee')
     // And the removed field is stored by nothing, however it arrives.
     expect(draft['sendingIdentity']).toBeUndefined()

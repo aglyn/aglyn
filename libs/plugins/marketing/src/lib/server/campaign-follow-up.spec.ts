@@ -427,9 +427,9 @@ const addressed = () => sent.map((message) => String(message.to)).sort()
 const windowKey = (email: string) =>
   require('crypto').createHash('sha256').update(email).digest('hex')
 
-const storedSend = () => store.get(`hosts/${HOST}/campaigns/${SEND_ID}`) ?? {}
+const storedSend = () => store.get(`orgs/org-1/campaigns/${SEND_ID}`) ?? {}
 const storedReach = () =>
-  store.get(`hosts/${HOST}/campaigns/${SEND_ID}/reports/reached`) ?? {}
+  store.get(`orgs/org-1/campaigns/${SEND_ID}/reports/reached`) ?? {}
 
 let previousSecret: string | undefined
 beforeAll(() => {
@@ -685,7 +685,7 @@ describe('the recorded populations add rather than replace', () => {
      * `sent` is replaced rather than added to: three delivered over one sent
      * is a delivery rate of 300%.
      */
-    const path = `hosts/${HOST}/campaigns/${SEND_ID}`
+    const path = `orgs/org-1/campaigns/${SEND_ID}`
     store.set(
       path,
       mergeInto(store.get(path) ?? {}, {
@@ -771,7 +771,7 @@ describe('a follow-up is refused when it cannot be made safely', () => {
      */
     await firstSend()
     seedLead('lead-3', 'cy@example.com')
-    store.delete(`hosts/${HOST}/campaigns/${SEND_ID}/reports/reached`)
+    store.delete(`orgs/org-1/campaigns/${SEND_ID}/reports/reached`)
     sent.length = 0
 
     const result = await followUp()
@@ -784,7 +784,7 @@ describe('a follow-up is refused when it cannot be made safely', () => {
   it('refuses when the record is short of what the email has sent', async () => {
     await firstSend()
     seedLead('lead-3', 'cy@example.com')
-    const path = `hosts/${HOST}/campaigns/${SEND_ID}/reports/reached`
+    const path = `orgs/org-1/campaigns/${SEND_ID}/reports/reached`
     store.set(path, { keys: [store.get(path)?.keys[0]], count: 1 })
     sent.length = 0
 
@@ -795,7 +795,7 @@ describe('a follow-up is refused when it cannot be made safely', () => {
   })
 
   it('refuses an email that has not been sent', async () => {
-    store.set(`hosts/${HOST}/campaigns/${SEND_ID}`, {
+    store.set(`orgs/org-1/campaigns/${SEND_ID}`, {
       subject: 'Spring sale',
       body: 'Ends Sunday',
       audience: 'leads',
@@ -825,14 +825,14 @@ describe('a follow-up is refused when it cannot be made safely', () => {
      * refuses it. What matters here is the SHAPE of the stored record — an
      * audience whose membership was never written down.
      */
-    store.set(`hosts/${HOST}/campaigns/${SEND_ID}`, {
+    store.set(`orgs/org-1/campaigns/${SEND_ID}`, {
       subject: 'Spring sale',
       body: 'Ends Sunday',
       audience: 'manual',
       status: 'sent',
       stats: { recipients: 1, sent: 1 },
     })
-    store.set(`hosts/${HOST}/campaigns/${SEND_ID}/reports/reached`, {
+    store.set(`orgs/org-1/campaigns/${SEND_ID}/reports/reached`, {
       keys: [windowKey('ada@example.com')],
       count: 1,
     })
@@ -881,12 +881,12 @@ describe('the reach record stays inside what one document can hold', () => {
      */
     await firstSend()
     seedLead('lead-3', 'cy@example.com')
-    const path = `hosts/${HOST}/campaigns/${SEND_ID}/reports/reached`
+    const path = `orgs/org-1/campaigns/${SEND_ID}/reports/reached`
     const filler = Array.from({ length: CAMPAIGN_REACH_CEILING }, (_, index) =>
       windowKey(`filler-${index}@example.com`),
     )
     store.set(path, { keys: filler, count: filler.length })
-    store.set(`hosts/${HOST}/campaigns/${SEND_ID}`, {
+    store.set(`orgs/org-1/campaigns/${SEND_ID}`, {
       ...storedSend(),
       stats: { ...storedSend().stats, sent: filler.length },
     })

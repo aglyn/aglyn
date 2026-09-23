@@ -31,6 +31,8 @@ import {
   EMAIL_CREATED_AT_FIELD,
   emailSendTimeMs,
 } from '@aglyn/shared-ui-email-campaigns/model/email-record'
+import { CAMPAIGN_SEND_HOST_FIELD } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+import { orgCampaignSends } from './campaign-org-refs'
 import { compareVariants, summarizeVariantStats, type HostExperiment } from '../model/experiments'
 
 /**
@@ -82,11 +84,15 @@ export function marketingFigureReaders(firestore: () => Firestore): PluginFigure
         if (!WINDOWS.includes(request.days)) {
           return { ok: false, status: 400, error: 'That window is not one campaigns are read over' }
         }
+        if (!request.orgId) return { ok: false, status: 400, error: 'This site is not part of an organization' }
         const { current } = pluginFigureWindows(request.now, request.days)
-        const snapshot = await firestore()
-          .collection('hosts')
-          .doc(request.hostId)
-          .collection('campaigns')
+        /*
+         * The organization's sends, narrowed to the ones sent as this site.
+         * Served by the composite index on the site field and the creation
+         * stamp — the equality and the ordering together are one index.
+         */
+        const snapshot = await orgCampaignSends(firestore(), request.orgId)
+          .where(CAMPAIGN_SEND_HOST_FIELD, '==', request.hostId)
           .orderBy(EMAIL_CREATED_AT_FIELD, 'desc')
           .limit(CAMPAIGN_FIGURES_READ_LIMIT)
           .get()

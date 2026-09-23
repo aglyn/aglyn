@@ -455,13 +455,19 @@ describe('what is written', () => {
   })
 
   /*
-   * The campaigns (AGL-3254): the site's live containers pass and are
-   * ADDED to what the lead carries; anything else is refused under the
-   * field before a write.
+   * The campaigns (AGL-3254): the org's live containers pass and are
+   * ADDED to what the lead carries; anything else — a deleted container,
+   * an unknown id, one still at the retired site path — is refused under
+   * the field before a write. A lead is an org record, so a campaign placed
+   * only on a sibling site still qualifies.
    */
-  it('files the lead under the site’s campaigns, and refuses one that is not the site’s', async () => {
-    docs.set(`hosts/${HOST}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
-    docs.set(`hosts/${HOST}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
+  it('files the lead under the org’s campaigns, and refuses one that is not the org’s', async () => {
+    docs.set(`orgs/${ORG}/emailCampaigns/founder-icp2`, {
+      name: 'Founder · ICP 2',
+      visibleTo: ['host:another-site'],
+    })
+    docs.set(`orgs/${ORG}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
+    docs.set(`hosts/${HOST}/emailCampaigns/site-only`, { name: 'Site only' })
     docs.set(`orgs/${ORG}/leads/${personKey('dana@example.com')}`, {
       email: 'dana@example.com',
       sources: ['import'],
@@ -492,7 +498,7 @@ describe('what is written', () => {
       }),
     ])
 
-    for (const campaignIds of [['gone'], ['nope'], ['founder-icp2', 'hosts/x']]) {
+    for (const campaignIds of [['gone'], ['nope'], ['site-only'], ['founder-icp2', 'hosts/x']]) {
       const refused = await call({ hostId: HOST, email: 'new@example.com', campaignIds })
       expect(refused.status).toBe(400)
       expect(refused.body).toEqual({ error: expect.stringContaining('campaigns picked'), field: 'campaignIds' })

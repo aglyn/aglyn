@@ -33,7 +33,10 @@ import {
   EXPERIMENT_RESULT_ZONE,
   EXPERIMENT_VARIANTS_ZONE,
 } from './components/experiment-zones'
-import { MARKETING_CONSOLE_SECTIONS } from './components/marketing-console-sections'
+import {
+  MARKETING_CONSOLE_SECTIONS,
+  MARKETING_ORG_CONSOLE_SECTIONS,
+} from './components/marketing-console-sections'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerMarketingRecordRoutes } from './model/marketing-record-routes'
 
@@ -218,6 +221,33 @@ export function registerMarketingConsole(): void {
           title: 'Marketing',
           icon: { path: mdiBullhornOutline.path },
           docsTopic: 'marketingOverlays',
+        },
+        Component: MarketingConsolePage,
+      },
+    ],
+    /*
+     * The ORGANIZATION's Marketing hub, at `/[orgSlug]/marketing`. Campaigns,
+     * their emails and their sequence rollups belong to the organization, so
+     * this is where one campaign is placed across several sites and where
+     * every site's mail is read at once. The page is the same component;
+     * handed no site, it renders the org sections.
+     *
+     * It carries the SITE tab's id on purpose, the way the org CRM tab does:
+     * `release_marketing` names `nav-tab-marketing`, so one flag holds both
+     * halves of the surface, and the org half cannot ship while the site half
+     * is switched off.
+     */
+    orgNavItems: [
+      {
+        label: 'Marketing',
+        href: '/marketing',
+        sections: MARKETING_ORG_CONSOLE_SECTIONS,
+        navTabId: 'nav-tab-marketing',
+        icon: { path: mdiBullhornOutline.path },
+        header: {
+          title: 'Marketing',
+          icon: { path: mdiBullhornOutline.path },
+          docsTopic: 'emailCampaigns',
         },
         Component: MarketingConsolePage,
       },

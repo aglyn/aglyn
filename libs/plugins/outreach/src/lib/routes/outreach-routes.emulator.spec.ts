@@ -190,9 +190,8 @@ describeEmulated('Outreach routes on Firestore (AGL-2980)', () => {
    * beside the one it already carried, and `enrolled` is credited once.
    */
   it('stamps the sequence’s campaigns on the enrollment and the lead, and credits the enroll', async () => {
-    const hostRef = firestore.collection('hosts').doc(HOST)
-    await hostRef.collection('emailCampaigns').doc('founder-icp2').set({ name: 'Founder · ICP 2' })
-    await hostRef.collection('emailCampaigns').doc('founder-icp1').set({ name: 'Founder · ICP 1' })
+    await orgRef().collection('emailCampaigns').doc('founder-icp2').set({ name: 'Founder · ICP 2', visibleTo: ['org'] })
+    await orgRef().collection('emailCampaigns').doc('founder-icp1').set({ name: 'Founder · ICP 1', visibleTo: ['org'] })
     const leadId = personKey('sam@initech.example') as string
     // The lead is an org row scoped by `visibleTo` (AGL-3275); an unscoped
     // one is visible to nobody, including to the enroll route reading it.
@@ -240,7 +239,7 @@ describeEmulated('Outreach routes on Firestore (AGL-2980)', () => {
     const lead = await orgRef().collection('leads').doc(leadId).get()
     expect(lead.get('campaignIds')).toEqual(['founder-icp1', 'founder-icp2'])
     expect(credits).toEqual([
-      { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
+      { hostId: HOST, orgId: ORG, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
     ])
   })
 

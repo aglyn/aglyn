@@ -648,7 +648,7 @@ describe('what a real send writes onto the campaign', () => {
       senderUid: 'uid-1',
     })
     return (
-      mockState.store[`hosts/host-1/campaigns/${result.campaignId}`] as any
+      mockState.store[`orgs/org-1/campaigns/${result.campaignId}`] as any
     ).stats
   }
 

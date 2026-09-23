@@ -24,9 +24,9 @@ import {
   Typography,
 } from '@mui/material'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
-import { useHostCampaigns } from '@aglyn/tenant-feature-instance'
 import { useEffect, useState } from 'react'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
+import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import { useCrmScope } from '../hooks/use-crm-scope'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import {
@@ -145,14 +145,12 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
   const [phoneError, setPhoneError] = useState('')
   const [websiteError, setWebsiteError] = useState('')
   /*
-   * The site's campaigns, for the picker (AGL-3254): read while the drawer
-   * is open, under the site the lead will be filed under — at the
-   * organization level, the picked one — and re-read when that changes,
-   * since a campaign belongs to one site.
+   * The campaigns, for the picker (AGL-3254): read while the drawer is
+   * open. Under a site, the ones placed on it; at the organization level,
+   * every campaign in the org — the lead is the org's record whichever
+   * site it is captured by, so the site picked above does not narrow them.
    */
-  const campaigns = useHostCampaigns(createHostId ?? undefined, {
-    enabled: open && Boolean(createHostId),
-  })
+  const campaigns = useCrmCampaigns({ hostId, orgId }, { enabled: open })
 
   // A fresh form on every opening: a person typed and then abandoned must
   // not reappear half-filled the next time somebody reaches for New lead.
@@ -177,8 +175,6 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
     setPhoneError('')
     setWebsiteError('')
   }, [open])
-  // A campaign picked under one site is not one of another site's.
-  useEffect(() => setCampaignIds([]), [createHostId])
 
   const handleSubmit = () => {
     const normalizedEmail = normalizeContactEmail(email)
@@ -365,17 +361,19 @@ export function NewLeadDrawer(props: NewLeadDrawerProps) {
             form's page picks them. Grouping, not consent: it decides which
             campaign pages list the lead, never whether anything mails them.
            */}
-          {createHostId ? (
-            <CampaignPicker
-              options={campaigns.options}
-              value={campaignIds}
-              onChange={setCampaignIds}
-              helperText="The campaigns this lead is part of. It does not decide who a campaign mails."
-              disabled={Boolean(busy)}
-              empty={campaigns.ready && !campaigns.options.length}
-              emptyText="This site has no campaigns yet. Create one from Marketing to file leads under it."
-            />
-          ) : null}
+          <CampaignPicker
+            options={campaigns.options}
+            value={campaignIds}
+            onChange={setCampaignIds}
+            helperText="The campaigns this lead is part of. It does not decide who a campaign mails."
+            disabled={Boolean(busy)}
+            empty={campaigns.ready && !campaigns.options.length}
+            emptyText={
+              hostId
+                ? 'This site has no campaigns yet. Create one from Marketing to file leads under it.'
+                : 'There are no campaigns yet. Create one from Marketing to file leads under it.'
+            }
+          />
           <Typography variant="subtitle2">{'Address'}</Typography>
           <ContactAddressFields value={address} onChange={setAddress} />
           {/* The org's own lead fields (AGL-3272), the same controls the

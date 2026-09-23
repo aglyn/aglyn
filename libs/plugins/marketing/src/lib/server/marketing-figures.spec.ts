@@ -26,24 +26,44 @@ import { marketingFigureReaders } from './marketing-figures'
 const NOW = new Date('2026-09-16T15:00:00.000Z')
 const sentAt = (daysAgo: number) => ({ toMillis: () => Date.UTC(2026, 8, 16) - daysAgo * 86_400_000 + 3_600_000 })
 
+/** Every collection a reader read, by full path. */
+let reads: string[] = []
+
 function firestoreOf(collections: Record<string, Array<{ id: string; data: Record<string, unknown>; stats?: Array<{ id: string; data: Record<string, unknown> }> }>>) {
-  const collection = (name: string): any => ({
-    orderBy: () => collection(name),
-    limit: () => collection(name),
-    get: async () => ({
-      docs: (collections[name] ?? []).map((entry) => ({
-        id: entry.id,
-        data: () => entry.data,
-        ref: {
-          collection: () => ({
-            get: async () => ({ docs: (entry.stats ?? []).map((stat) => ({ id: stat.id, data: () => stat.data })) }),
-          }),
-        },
-      })),
-    }),
+  // Equality filters are honored, so a read that forgot to narrow to its site
+  // is handed a sibling's documents here as it would be by Firestore.
+  const collection = (path: string, where: Array<[string, unknown]> = []): any => ({
+    where: (field: string, _op: string, value: unknown) => collection(path, [...where, [field, value]]),
+    orderBy: () => collection(path, where),
+    limit: () => collection(path, where),
+    get: async () => {
+      reads.push(path)
+      const entries = collections[path.split('/').pop() as string] ?? []
+      return {
+        docs: entries
+          .filter((entry) => where.every(([field, value]) => entry.data[field] === value))
+          .map((entry) => ({
+            id: entry.id,
+            data: () => entry.data,
+            ref: {
+              collection: () => ({
+                get: async () => ({ docs: (entry.stats ?? []).map((stat) => ({ id: stat.id, data: () => stat.data })) }),
+              }),
+            },
+          })),
+      }
+    },
   })
-  return { collection: () => ({ doc: () => ({ collection }) }) } as unknown as FirebaseFirestore.Firestore
+  return {
+    collection: (root: string) => ({
+      doc: (id: string) => ({ collection: (name: string) => collection(`${root}/${id}/${name}`) }),
+    }),
+  } as unknown as FirebaseFirestore.Firestore
 }
+
+beforeEach(() => {
+  reads = []
+})
 
 const readerFor = (id: string, firestore: FirebaseFirestore.Firestore) => {
   const reader = marketingFigureReaders(() => firestore).find((entry) => entry.id === id)
@@ -55,10 +75,12 @@ describe('campaigns', () => {
   it('reads the sends of the window, pooling their rates on the first row', async () => {
     const firestore = firestoreOf({
       campaigns: [
-        { id: 'c1', data: { subject: 'Fall sale', sentAt: sentAt(1), stats: { sent: 100, delivered: 100, uniqueOpens: 50, uniqueClicks: 10, htmlPart: true } } },
-        { id: 'c2', data: { subject: 'New arrivals', sentAt: sentAt(3), stats: { sent: 300, delivered: 300, uniqueOpens: 60, uniqueClicks: 30, htmlPart: true } } },
-        { id: 'c3', data: { subject: 'Old news', sentAt: sentAt(20), stats: { delivered: 50 } } },
-        { id: 'c4', data: { subject: 'Draft' } },
+        { id: 'c1', data: { hostId: 'host-1', subject: 'Fall sale', sentAt: sentAt(1), stats: { sent: 100, delivered: 100, uniqueOpens: 50, uniqueClicks: 10, htmlPart: true } } },
+        { id: 'c2', data: { hostId: 'host-1', subject: 'New arrivals', sentAt: sentAt(3), stats: { sent: 300, delivered: 300, uniqueOpens: 60, uniqueClicks: 30, htmlPart: true } } },
+        { id: 'c3', data: { hostId: 'host-1', subject: 'Old news', sentAt: sentAt(20), stats: { delivered: 50 } } },
+        { id: 'c4', data: { hostId: 'host-1', subject: 'Draft' } },
+        // The same org's other site, in the same window: not this site's figures.
+        { id: 'c5', data: { hostId: 'host-2', subject: 'Their sale', sentAt: sentAt(1), stats: { sent: 999, delivered: 999 } } },
       ],
     })
     const read = await readerFor('marketing.campaigns', firestore).read({
@@ -70,6 +92,7 @@ describe('campaigns', () => {
       params: {},
     })
     if (read.ok === false) throw new Error(read.error)
+    expect(reads).toEqual(['orgs/org-1/campaigns'])
     expect(read.table.rows.map((row) => [row['campaign'], row['delivered']])).toEqual([
       ['All campaigns', 400],
       ['Fall sale', 100],
@@ -107,6 +130,8 @@ describe('A/B tests', () => {
       params: {},
     })
     if (read.ok === false) throw new Error(read.error)
+    // A/B tests stay the site's own.
+    expect(reads[0]).toBe('hosts/host-1/experiments')
     expect(read.table.rows).toEqual([
       { test: 'Hero headline', variant: 'Control', shown: 1_000, conversions: 50, rate: 5, lift: null, confidence: null },
       { test: 'Hero headline', variant: 'Shorter', shown: 1_000, conversions: 80, rate: 8, lift: 60, confidence: expect.any(Number) },

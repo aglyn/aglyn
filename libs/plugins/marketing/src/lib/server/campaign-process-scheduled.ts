@@ -24,12 +24,66 @@ import {
   type CampaignSendResult,
 } from './campaign-send'
 
+/** The most sends one run delivers. */
+const PROCESS_BATCH = 10
+
+/**
+ * How many due sends one run reads to find {@link PROCESS_BATCH} it may
+ * deliver.
+ *
+ * Wider than the batch because the collection-group query cannot be narrowed
+ * to one parent without a composite index, and it also returns sends still
+ * at the site path that are waiting for the migration (see
+ * {@link scheduledSendSite}). Those are skipped, so without the margin ten
+ * of them would crowd every organization's sends out of every run until the
+ * migration reached them.
+ */
+const PROCESS_READ = 30
+
+/**
+ * Which site a due send is sent as, or why it is not this run's to send.
+ *
+ * `collectionGroup('campaigns')` matches every collection of that name, so
+ * the answer depends on where the document is:
+ *
+ * - `orgs/{orgId}/campaigns/{id}` — a send, whose site is its own
+ *   `hostId` field. One that records none cannot be delivered, because the
+ *   sender, the consent group and the unsubscribe signature are all the
+ *   site's; it is skipped and logged rather than guessed at.
+ * - `hosts/{hostId}/campaigns/{id}` — a send the migration has not moved
+ *   yet. NOT delivered and NOT claimed: the send core records every send
+ *   under the org, so delivering this one would split it across two
+ *   documents, the counters on one and the copy on the other. It stays
+ *   `scheduled`, and the migration moves it with its site stamped, after
+ *   which the next run delivers it.
+ * - anything else — some other collection named `campaigns`, never ours.
+ */
+export function scheduledSendSite(
+  ref: { path: string },
+  data: Record<string, unknown>,
+):
+  | { kind: 'send'; hostId: string }
+  | { kind: 'legacy' }
+  | { kind: 'unsited' }
+  | { kind: 'foreign' } {
+  const segments = String(ref?.path ?? '').split('/')
+  const ownerCollection = segments.length === 4 ? segments[0] : ''
+  if (ownerCollection === 'orgs') {
+    const hostId = data['hostId']
+    return typeof hostId === 'string' && hostId && !hostId.includes('/')
+      ? { kind: 'send', hostId }
+      : { kind: 'unsited' }
+  }
+  if (ownerCollection === 'hosts') return { kind: 'legacy' }
+  return { kind: 'foreign' }
+}
+
 /**
  * Scheduled-campaign processor (AGL-272): scheduler-invoked (Cloud
  * Scheduler / cron, x-cron-secret like report-usage), it claims due
- * `status: 'scheduled'` campaigns across every host and delivers them
+ * `status: 'scheduled'` sends across every organization and delivers them
  * through the shared send core. A transaction flips scheduled → sending
- * so overlapping runs never double-send; failures mark the campaign
+ * so overlapping runs never double-send; failures mark the send
  * `failed` with the reason instead of retrying forever.
  */
 export const campaignProcessScheduledHandler: PluginApiHandler = async (
@@ -64,13 +118,34 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
       .collectionGroup('campaigns')
       .where('status', '==', 'scheduled')
       .where('sendAtMs', '<=', Date.now())
-      .limit(10)
+      .limit(PROCESS_READ)
       .get()
 
     const results: Array<Record<string, unknown> | CampaignSendResult> = []
+    /** Due sends still at a site path, left for the migration. */
+    let awaitingMigration = 0
+    /** Due org sends that name no site, and so cannot be sent. */
+    let unsited = 0
+    let attempted = 0
     for (const campaignDoc of due.docs) {
-      const hostRef = campaignDoc.ref.parent.parent
-      if (!hostRef) continue
+      if (attempted >= PROCESS_BATCH) break
+      const site = scheduledSendSite(
+        campaignDoc.ref,
+        (campaignDoc.data() ?? {}) as Record<string, unknown>,
+      )
+      if (site.kind === 'legacy') {
+        awaitingMigration += 1
+        continue
+      }
+      if (site.kind === 'unsited') {
+        unsited += 1
+        console.error(
+          `[campaigns] scheduled send ${campaignDoc.ref.path} names no site and was not sent`,
+        )
+        continue
+      }
+      if (site.kind !== 'send') continue
+      attempted += 1
       const claimed = await firestore.runTransaction(async (transaction) => {
         const fresh = await transaction.get(campaignDoc.ref)
         if (fresh.get('status') !== 'scheduled') return false
@@ -99,7 +174,7 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
         Math.max(0, Math.floor(Number(data['resume']?.batch ?? 0)) || 0) > 0
       try {
         const result = await performCampaignSend({
-          hostId: hostRef.id,
+          hostId: site.hostId,
           ...(resumingBatch ? { continuation: true } : {}),
           subject: String(data['subject'] ?? ''),
           body: String(data['body'] ?? ''),
@@ -206,7 +281,17 @@ export const campaignProcessScheduledHandler: PluginApiHandler = async (
         results.push({ campaignId: campaignDoc.id, error: message })
       }
     }
-    return res.status(200).json({ processed: results.length, results })
+    if (awaitingMigration) {
+      console.warn(
+        `[campaigns] ${awaitingMigration} due send(s) are still at a site path and wait for the migration`,
+      )
+    }
+    return res.status(200).json({
+      processed: results.length,
+      results,
+      ...(awaitingMigration ? { awaitingMigration } : {}),
+      ...(unsited ? { unsited } : {}),
+    })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Processing failed' })

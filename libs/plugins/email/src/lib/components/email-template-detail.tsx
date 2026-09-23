@@ -34,6 +34,7 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
+  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -63,6 +64,8 @@ import { Suspense, useMemo, useState } from 'react'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   CAMPAIGN_SEND_CONTAINER_FIELD,
+  campaignSendVisibleTo,
+  orgCampaignSendsPath,
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import {
   emailSendTimeMs,
@@ -244,21 +247,34 @@ export function EmailTemplateDetail(props: EmailTemplateDetailProps) {
    * carries `sentAt`, a scheduled one carries `sendAtMs`, and no writer
    * stamps a `createdAt` — so `orderBy` on either would not mis-sort this
    * list, it would DROP every message written by the other branch. Ordering
-   * on the document id is the one ordering every message satisfies, it needs
-   * no composite index beside the equality filter, and the rows are sorted by
-   * date below over a window this component already holds.
+   * on the document id is the one ordering every message satisfies, and the
+   * rows are sorted by date below over a window this component already holds.
+   * The index the filters need is `visibleTo` + `templateScreenId`, declared
+   * in `cloud/firebase-firestore.indexes.json`.
    *
    * One MORE than the ceiling, so truncation is a fact rather than a guess.
+   *
+   * The sends are the ORGANIZATION'S, each stamped with the one site it is
+   * sent as. The `visibleTo` clause names this site: it keeps a sibling
+   * site's sends of a same-id design out, and it is what makes the read
+   * provable for a collaborator scoped to this site — the rules evaluate a
+   * list per document, and an unfiltered one is refused whole. Nothing is
+   * read until the site's org is known.
    */
+  const { orgId } = useOrgDataScope({ hostId })
+  const sendScope = useMemo(() => campaignSendVisibleTo(hostId), [hostId])
   const { data: messageDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'campaigns'),
-        where('templateScreenId', '==', screenId),
-        orderBy(documentId()),
-        limit(TEMPLATE_CAMPAIGN_CEILING + 1),
-      ),
-    [firestore, hostId, screenId],
+      orgId
+        ? query(
+            collection(firestore, ...orgCampaignSendsPath(orgId)),
+            where('visibleTo', 'array-contains-any', sendScope),
+            where('templateScreenId', '==', screenId),
+            orderBy(documentId()),
+            limit(TEMPLATE_CAMPAIGN_CEILING + 1),
+          )
+        : null,
+    [firestore, orgId, sendScope, screenId],
     { idField: '$id' },
   )
 

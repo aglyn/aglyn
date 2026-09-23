@@ -33,6 +33,17 @@
  */
 
 import { FieldValue } from 'firebase-admin/firestore'
+
+/*
+ * The site → org index (`hostIndex/{hostId}.orgId`), which the rollups
+ * resolve through: sends and sequence reports are the ORG's. One site in
+ * one org, and a site with no org at all.
+ */
+jest.mock('./organizations', () => ({
+  __esModule: true,
+  resolveOrgIdForHost: async (hostId: string) => (hostId === 'host1' ? 'org1' : null),
+}))
+
 import {
   CAMPAIGN_SEQUENCE_REPORTS_COLLECTION,
   campaignConversionId,
@@ -190,17 +201,23 @@ function fakeFirestore() {
           refId,
         )}`,
       ),
-    /** Spec helper: a campaign's conversion rollup. */
-    conversions: (hostId: string, campaignId: string) =>
-      store.get(`hosts/${hostId}/campaigns/${campaignId}/reports/conversions`),
-    /** Spec helper: a campaign's sequences rollup (AGL-3254). */
-    sequences: (hostId: string, campaignId: string) =>
-      store.get(`hosts/${hostId}/${CAMPAIGN_SEQUENCE_REPORTS_COLLECTION}/${campaignId}`),
+    /** Spec helper: a send's conversion rollup, at the org. */
+    conversions: (orgId: string, sendId: string) =>
+      store.get(`orgs/${orgId}/campaigns/${sendId}/reports/conversions`),
+    /** Spec helper: a send's conversion rollup, at the retired site path. */
+    siteConversions: (hostId: string, sendId: string) =>
+      store.get(`hosts/${hostId}/campaigns/${sendId}/reports/conversions`),
+    /** Spec helper: seed a document. */
+    seed: (path: string, data: Record<string, any>) => store.set(path, data),
+    /** Spec helper: a campaign's sequences rollup (AGL-3254), at the org. */
+    sequences: (orgId: string, campaignId: string) =>
+      store.get(`orgs/${orgId}/${CAMPAIGN_SEQUENCE_REPORTS_COLLECTION}/${campaignId}`),
     paths: () => [...store.keys()],
   }
 }
 
 const HOST = 'host1'
+const ORG = 'org1'
 const VISITOR = 'visitor@example.com'
 const DAY = 24 * 60 * 60 * 1000
 const LANDED_AT = 1_700_000_000_000
@@ -507,6 +524,7 @@ describe('attributeCampaignConversion', () => {
 
   it('THE EMAIL CHANNEL rolls up under the campaign, by kind', async () => {
     const firestore = fakeFirestore()
+    firestore.seed(`orgs/${ORG}/campaigns/spring`, { hostId: HOST })
     await clickedMail(firestore, 'spring', LANDED_AT)
     const touch = await resolveCampaignTouch(
       { hostId: HOST, email: VISITOR, atMs: LANDED_AT + DAY },
@@ -524,11 +542,47 @@ describe('attributeCampaignConversion', () => {
 
     // Never summed across kinds: one visitor action writes a submission AND a
     // lead, and adding them would double every campaign's conversions.
-    expect(firestore.conversions(HOST, 'spring')).toMatchObject({
+    expect(firestore.conversions(ORG, 'spring')).toMatchObject({
       byKind: { form: 1, lead: 1 },
       model: ATTRIBUTION_MODEL,
       windowDays: ATTRIBUTION_WINDOW_DAYS,
     })
+    expect(firestore.siteConversions(HOST, 'spring')).toBeUndefined()
+  })
+
+  it('THE EMAIL CHANNEL rolls up at the site for a send the migration has not reached', async () => {
+    const firestore = fakeFirestore()
+    firestore.seed(`hosts/${HOST}/campaigns/spring`, { subject: 'Spring' })
+    await clickedMail(firestore, 'spring', LANDED_AT)
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, email: VISITOR, atMs: LANDED_AT + DAY },
+      firestore,
+    )
+
+    await attributeCampaignConversion(
+      { hostId: HOST, kind: 'form', refId: 's1', touch, convertedAtMs: LANDED_AT + DAY },
+      firestore,
+    )
+
+    expect(firestore.siteConversions(HOST, 'spring')).toMatchObject({ byKind: { form: 1 } })
+    expect(firestore.conversions(ORG, 'spring')).toBeUndefined()
+  })
+
+  it('THE EMAIL CHANNEL writes the record and no rollup for a send that is gone', async () => {
+    const firestore = fakeFirestore()
+    await clickedMail(firestore, 'discarded', LANDED_AT)
+    const touch = await resolveCampaignTouch(
+      { hostId: HOST, email: VISITOR, atMs: LANDED_AT + DAY },
+      firestore,
+    )
+
+    const record = await attributeCampaignConversion(
+      { hostId: HOST, kind: 'form', refId: 's1', touch, convertedAtMs: LANDED_AT + DAY },
+      firestore,
+    )
+
+    expect(record).toMatchObject({ channel: 'email', campaignId: 'discarded' })
+    expect(firestore.paths().filter((path) => path.includes('/reports/'))).toEqual([])
   })
 
   /*
@@ -582,11 +636,11 @@ describe('attributeCampaignConversion', () => {
     // The meeting rolls up under the campaign's SEQUENCES report; the form
     // stands as a record and never in `byKind`, which promises the reader
     // campaign emails only.
-    expect(firestore.sequences(HOST, 'founder-icp2')).toMatchObject({
+    expect(firestore.sequences(ORG, 'founder-icp2')).toMatchObject({
       byOutcome: { meetings: 1 },
       updatedAtMs: LANDED_AT + DAY,
     })
-    expect(firestore.conversions(HOST, 'founder-icp2')).toBeUndefined()
+    expect(firestore.conversions(ORG, 'founder-icp2')).toBeUndefined()
   })
 
   it('a later campaign click takes the sequence off the touch', async () => {
@@ -639,6 +693,7 @@ describe('attributeCampaignConversion', () => {
 
   it('IDEMPOTENT — a retried conversion does not credit the campaign twice', async () => {
     const firestore = fakeFirestore()
+    firestore.seed(`orgs/${ORG}/campaigns/spring`, { hostId: HOST })
     await clickedMail(firestore, 'spring', LANDED_AT)
     const touch = await resolveCampaignTouch(
       { hostId: HOST, email: VISITOR, atMs: LANDED_AT + DAY },
@@ -659,7 +714,7 @@ describe('attributeCampaignConversion', () => {
     expect(await call()).not.toBe(null)
     expect(await call()).toBe(null)
 
-    expect(firestore.conversions(HOST, 'spring').byKind.booking).toBe(1)
+    expect(firestore.conversions(ORG, 'spring').byKind.booking).toBe(1)
   })
 
   it('refuses a reference that is not one path component', async () => {
@@ -703,12 +758,33 @@ describe('creditCampaignSequenceOutcome', () => {
     )
 
     expect(credited).toBe(2)
-    expect(firestore.sequences(HOST, 'founder-icp2')).toMatchObject({
+    expect(firestore.sequences(ORG, 'founder-icp2')).toMatchObject({
       byOutcome: { enrolled: 1, sent: 1 },
       updatedAtMs: LANDED_AT + 1,
     })
-    expect(firestore.sequences(HOST, 'founder-icp1')).toMatchObject({ byOutcome: { enrolled: 1 } })
+    expect(firestore.sequences(ORG, 'founder-icp1')).toMatchObject({ byOutcome: { enrolled: 1 } })
     expect(firestore.paths().filter((path) => path.includes('bad'))).toEqual([])
+    expect(firestore.paths().filter((path) => path.startsWith('hosts/'))).toEqual([])
+  })
+
+  it('credits the org the caller names without resolving the site', async () => {
+    const firestore = fakeFirestore()
+    await creditCampaignSequenceOutcome(
+      { hostId: 'unindexed-site', orgId: 'org2', campaignIds: ['c1'], outcome: 'replied' },
+      firestore,
+    )
+    expect(firestore.sequences('org2', 'c1')).toMatchObject({ byOutcome: { replied: 1 } })
+  })
+
+  it('writes nothing for a site that belongs to no org', async () => {
+    const firestore = fakeFirestore()
+    expect(
+      await creditCampaignSequenceOutcome(
+        { hostId: 'unindexed-site', campaignIds: ['c1'], outcome: 'sent' },
+        firestore,
+      ),
+    ).toBe(0)
+    expect(firestore.paths()).toEqual([])
   })
 
   it('writes nothing for an outcome it does not name, or a host that is not a document id', async () => {

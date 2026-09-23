@@ -16,6 +16,7 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn'
+import { pluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { registerMarketingConsole } from './plugin'
 
@@ -72,5 +73,44 @@ describe('marketing plugin', () => {
       'overlays',
       'experiments',
     ])
+  })
+
+  /*
+   * THE ORGANIZATION'S HUB. Campaigns and their emails belong to the org, so
+   * the same page is declared at `/[orgSlug]/marketing` too, with the two
+   * sections that make sense over every site — and it carries the SITE tab's
+   * id, so `release_marketing` holds both halves behind one flag.
+   */
+  it('declares an org-level Marketing hub behind the same release flag', () => {
+    registerMarketingConsole()
+    const extension = Aglyn.listConsoleExtensions().find(
+      (entry) => entry.pluginId === BUNDLE_ID,
+    )
+    const orgItem = extension?.orgNavItems?.[0]
+    expect(orgItem?.href).toBe('/marketing')
+    expect(orgItem?.Component).toBe(extension?.navItems?.[0]?.Component)
+    expect((orgItem?.sections ?? []).map((section) => section.id)).toEqual([
+      'campaigns',
+      'emails',
+    ])
+    expect(orgItem?.navTabId).toBe(extension?.navItems?.[0]?.navTabId)
+    expect(
+      Aglyn.RELEASE_FLAGS.find((flag) => flag.navTabId === orgItem?.navTabId)
+        ?.key,
+    ).toBe('release_marketing')
+  })
+
+  it('publishes a campaign’s address at both levels', () => {
+    registerMarketingConsole()
+    const route = pluginRecordRoute('campaign')?.route
+    expect(route?.record({ orgSlug: 'acme', host: 'shop' }, 'camp-1')).toBe(
+      '/acme/hosts/shop/marketing/campaigns/camp-1',
+    )
+    expect(route?.record({ orgSlug: 'acme', host: null }, 'camp-1')).toBe(
+      '/acme/marketing/campaigns/camp-1',
+    )
+    expect(route?.list({ orgSlug: 'acme', host: null })).toBe(
+      '/acme/marketing/campaigns',
+    )
   })
 })

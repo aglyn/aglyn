@@ -282,6 +282,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
   resolveOrgIdForHost: async () => orgIdForHost,
+  // The REAL send lookup over this file's store (the org's `campaigns`,
+  // then the site's for a send the migration has not reached).
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/campaign-conversion-attribution'),
   EMAIL_FREQUENCY_SUBCOLLECTION: 'emailFrequency',
   setMarketingCadence: async (
     hostId: string,
@@ -332,7 +335,8 @@ const RECIPIENT = 'dana@example.com'
 const KEY = createHash('sha256').update(RECIPIENT).digest('hex')
 const SUPPRESSION_PATH = `hosts/${HOST}/suppressions/${KEY}`
 const OPT_OUT_PATH = `hosts/${HOST}/topicOptOuts/${KEY}`
-const CAMPAIGN_PATH = `hosts/${HOST}/campaigns/${CAMPAIGN}`
+/** The send, at the org that owns the site. */
+const CAMPAIGN_PATH = `orgs/org-1/campaigns/${CAMPAIGN}`
 
 /** Signs whichever of the three forms the arguments describe. */
 function sign(options?: {

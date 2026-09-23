@@ -152,12 +152,17 @@ function childKeys(path: string): string[] {
     .sort()
 }
 
-function queryRef(path: string): Record<string, unknown> {
+/** Equality filters are applied, so a read narrowed to one site is seen to be. */
+function queryRef(path: string, equals: Array<[string, unknown]> = []): Record<string, unknown> {
   const query: Record<string, unknown> = {
-    where: () => query,
+    where: (field: string, _op: string, value: unknown) => queryRef(path, [...equals, [field, value]]),
     select: () => query,
     limit: () => query,
-    get: async () => ({ docs: childKeys(path).map(snapshotOf) }),
+    get: async () => ({
+      docs: childKeys(path)
+        .filter((key) => equals.every(([field, value]) => valueAt(mockDocs.get(key), field) === value))
+        .map(snapshotOf),
+    }),
   }
   return query
 }
@@ -456,9 +461,11 @@ describe('who a drafted campaign is for', () => {
     // A second list the brief does not name: the org's list inventory is read
     // on the server and must not travel with the request.
     mockLists.push({ id: 'list-2', name: OTHER_LIST_NAME })
-    // Past sends of that list, which the send-time rule reads and the model never sees.
+    // Past sends of that list, which the send-time rule reads and the model
+    // never sees: the org's sends, sent as this site.
     for (let index = 0; index < 4; index += 1) {
-      mockDocs.set(`hosts/host-1/campaigns/sent-${index}`, {
+      mockDocs.set(`orgs/org-1/campaigns/sent-${index}`, {
+        hostId: 'host-1',
         listId: 'list-1',
         status: 'sent',
         // A Tuesday at 09:00Z, four weeks running.
@@ -492,6 +499,24 @@ describe('who a drafted campaign is for', () => {
     const briefLine = `Brief: Announce the box to the ${LIST_NAME}.`
     expect(sent.split(LIST_NAME)).toHaveLength(2)
     expect(sent).toContain(JSON.stringify(briefLine).slice(1, -1))
+  })
+
+  it('reads the list’s history as sent from this site only', async () => {
+    // The same list mailed as a sibling site: the org's sends, not this site's.
+    for (let index = 0; index < 4; index += 1) {
+      mockDocs.delete(`orgs/org-1/campaigns/sent-${index}`)
+      mockDocs.set(`orgs/org-1/campaigns/sibling-${index}`, {
+        hostId: 'host-2',
+        listId: 'list-1',
+        status: 'sent',
+        sentAt: new Date(Date.UTC(2026, 7, 4 + index * 7, 9, 0, 0)),
+        stats: { delivered: Number(DELIVERED), uniqueOpens: Number(OPENS) },
+      })
+    }
+    mockRunAiRequest.mockResolvedValueOnce(emailAnswer(GOLDENS['launch']))
+    const outcome = await run({ brief: `Announce the box to the ${LIST_NAME}.` })
+    const campaign = outcome.outputs.find((output) => output.resource === 'campaign')
+    expect(campaign?.note).toContain('too little send history on this site')
   })
 
   it('says so plainly when the brief names no list', async () => {

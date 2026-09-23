@@ -251,6 +251,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     '@aglyn/tenant-data-admin/server/email-unsubscribe-link',
   ),
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
+  /*
+   * The site's org, and the REAL send lookup over this file's store: the
+   * counter is written wherever the send is — the org's `campaigns`, or the
+   * site's for a send the migration has not reached.
+   */
+  resolveOrgIdForHost: async () => 'org-1',
+  ...jest.requireActual('@aglyn/tenant-data-admin/server/campaign-conversion-attribution'),
 }))
 
 import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
@@ -526,7 +533,10 @@ describe('email/resubscribe', () => {
  *=========================================*/
 
 const CAMPAIGN = 'camp-1'
-const CAMPAIGN_PATH = `hosts/${HOST}/campaigns/${CAMPAIGN}`
+/** The send, at the org that owns the site. */
+const CAMPAIGN_PATH = `orgs/org-1/campaigns/${CAMPAIGN}`
+/** The same send at the retired site path, before the migration reaches it. */
+const SITE_CAMPAIGN_PATH = `hosts/${HOST}/campaigns/${CAMPAIGN}`
 
 /** The three-part signature a link minted since attribution carries. */
 const signWithCampaign = (
@@ -616,20 +626,40 @@ describe('unsubscribe attribution', () => {
    */
   it('does not re-attribute an existing unsubscribe to a later link', async () => {
     docs.set(CAMPAIGN_PATH, { subject: 'Spring sale', stats: { sent: 10 } })
-    docs.set(`hosts/${HOST}/campaigns/camp-2`, { stats: { sent: 10 } })
+    docs.set(`orgs/org-1/campaigns/camp-2`, { stats: { sent: 10 } })
 
     await call({ method: 'POST', query: attributedQuery() })
     await call({ method: 'POST', query: attributedQuery('camp-2') })
 
     expect(docs.get(SUPPRESSION_PATH)).toMatchObject({ campaignId: CAMPAIGN })
-    expect((docs.get('hosts/host-1/campaigns/camp-2')?.stats as any)
+    expect((docs.get('orgs/org-1/campaigns/camp-2')?.stats as any)
       .unsubscribes).toBeUndefined()
+  })
+
+  it('counts against the site’s copy of a send the migration has not reached', async () => {
+    docs.set(SITE_CAMPAIGN_PATH, { subject: 'Spring sale', stats: { sent: 10 } })
+
+    await call({ method: 'POST', query: attributedQuery() })
+
+    expect((docs.get(SITE_CAMPAIGN_PATH)?.stats as any).unsubscribes).toBe(1)
+    expect(docs.has(CAMPAIGN_PATH)).toBe(false)
+  })
+
+  it('counts against the org’s send, not a stale site copy beside it', async () => {
+    docs.set(CAMPAIGN_PATH, { subject: 'Spring sale', stats: { sent: 10 } })
+    docs.set(SITE_CAMPAIGN_PATH, { subject: 'Spring sale', stats: { sent: 10 } })
+
+    await call({ method: 'POST', query: attributedQuery() })
+
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).unsubscribes).toBe(1)
+    expect((docs.get(SITE_CAMPAIGN_PATH)?.stats as any).unsubscribes).toBeUndefined()
   })
 
   it('does not re-create a campaign the merchant deleted', async () => {
     await call({ method: 'POST', query: attributedQuery() })
 
     expect(docs.has(CAMPAIGN_PATH)).toBe(false)
+    expect(docs.has(SITE_CAMPAIGN_PATH)).toBe(false)
     // The suppression is the write that must happen whatever the counter does.
     expect(docs.get(SUPPRESSION_PATH)).toMatchObject({ reason: 'unsubscribe' })
   })

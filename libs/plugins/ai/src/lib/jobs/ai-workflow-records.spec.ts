@@ -101,8 +101,16 @@ describe('readAiAutomationRecords', () => {
     mockDocs.set('orgs/org-1/lists/list-a', { name: 'Newsletter' })
     mockDocs.set('orgs/org-1/lists/list-b', { name: '  ' })
     mockDocs.set('orgs/org-1/lists/list-c', { name: 'Gone', deletedAt: 5 })
-    mockDocs.set('hosts/host-1/emailCampaigns/cmp-a', { name: 'Spring sale' })
-    mockDocs.set('hosts/host-1/campaigns/send-a', { name: 'A single email send' })
+    // The org's containers: one on every site, one placed here, one placed
+    // only on a sibling, one placed nowhere, one deleted — and a leftover
+    // at the retired site path, which is not read.
+    mockDocs.set('orgs/org-1/emailCampaigns/cmp-a', { name: 'Spring sale', visibleTo: ['org'] })
+    mockDocs.set('orgs/org-1/emailCampaigns/cmp-b', { name: 'Site push', visibleTo: ['host:host-1'] })
+    mockDocs.set('orgs/org-1/emailCampaigns/cmp-c', { name: 'Sibling push', visibleTo: ['host:host-2'] })
+    mockDocs.set('orgs/org-1/emailCampaigns/cmp-d', { name: 'Unplaced' })
+    mockDocs.set('orgs/org-1/emailCampaigns/cmp-e', { name: 'Gone', visibleTo: ['org'], deletedAt: 1 })
+    mockDocs.set('hosts/host-1/emailCampaigns/cmp-old', { name: 'Stale site copy' })
+    mockDocs.set('orgs/org-1/campaigns/send-a', { name: 'A single email send' })
     mockDocs.set('hosts/host-1/workflows/wf-a', { name: 'Quote calculator' })
     mockDocs.set('hosts/host-1/webhooks/hook-a', { name: 'Zapier', direction: 'outbound' })
     mockDocs.set('hosts/host-1/webhooks/hook-b', { name: 'Stripe in', direction: 'inbound' })
@@ -120,8 +128,12 @@ describe('readAiAutomationRecords', () => {
       ],
       datasets: [{ id: 'ds-a', name: 'Leads' }],
       lists: [{ id: 'list-a', name: 'Newsletter' }],
-      // The campaign containers an Assign step runs against, not the email sends beside them.
-      campaigns: [{ id: 'cmp-a', name: 'Spring sale' }],
+      // The campaign containers an Assign step runs against here — live and
+      // placed on this site — not the email sends beside them.
+      campaigns: [
+        { id: 'cmp-a', name: 'Spring sale' },
+        { id: 'cmp-b', name: 'Site push' },
+      ],
       workflows: [{ id: 'wf-a', name: 'Quote calculator' }],
       webhooks: [{ id: 'hook-a', name: 'Zapier' }],
       stages: [
@@ -129,13 +141,13 @@ describe('readAiAutomationRecords', () => {
         { id: 'won', name: 'Won' },
       ],
     })
-    expect(readOf('hosts/host-1/campaigns')).toBeUndefined()
+    expect(readOf('orgs/org-1/campaigns')).toBeUndefined()
+    expect(readOf('hosts/host-1/emailCampaigns')).toBeUndefined()
   })
 
   it('reads each as a projection, in the editor’s window, scoped to the site where the org shares them', async () => {
     await readAiAutomationRecords(firestore, { orgId: 'org-1', hostId: 'host-1', crm: true })
     expect(mockReads.sort((a, b) => a.path.localeCompare(b.path))).toEqual([
-      { path: 'hosts/host-1/emailCampaigns', fields: ['name', 'deletedAt'], limit: AI_WORKFLOW_RECORDS_WINDOW, scopedTo: null },
       {
         path: 'hosts/host-1/forms',
         fields: ['displayName', 'slug', 'fields', 'archivedAt'],
@@ -154,6 +166,13 @@ describe('readAiAutomationRecords', () => {
         fields: ['displayName', 'name', 'deletedAt'],
         limit: AI_WORKFLOW_RECORDS_WINDOW,
         scopedTo: 'host-1',
+      },
+      // Campaign containers are the org's; placement narrows them in memory.
+      {
+        path: 'orgs/org-1/emailCampaigns',
+        fields: ['name', 'deletedAt', 'visibleTo'],
+        limit: AI_WORKFLOW_RECORDS_WINDOW,
+        scopedTo: null,
       },
       // Lists belong to the whole org, as the editor's picker and the executor read them.
       { path: 'orgs/org-1/lists', fields: ['name', 'deletedAt'], limit: AI_WORKFLOW_RECORDS_WINDOW, scopedTo: null },

@@ -20,7 +20,10 @@ import {
   CORE_GENERIC_SCAN_COLLECTIONS,
   decodeStoredNodes,
 } from '@aglyn/aglyn/server'
-import { pluginHostCollectionsScannedGenerically } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
+import {
+  pluginHostCollectionsScannedGenerically,
+  pluginOrgCollectionsScannedGenerically,
+} from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { TENANT_EMAILS } from '@aglyn/shared-util-email'
 
 /**
@@ -725,6 +728,63 @@ export async function scanMediaReferences(
           }
         }),
       )
+    }
+  }
+
+  // ── Pass 2c: the plugins' ORG collections ─────────────────────────────
+  // Some plugin storage is the organization's rather than one site's —
+  // Marketing's email sends live at `orgs/{orgId}/campaigns`, each naming the
+  // site it was sent as — and the loop above only walks sites. Declared by
+  // the owning plugin like the host rows, read generically the same way, and
+  // live-tier for the same reason: a send is the copy that went out.
+  //
+  // The org is the library's own when this is an org-library scan, else the
+  // site's: a site asset can be in that site's sends, which are org rows. A
+  // row names the site its document records, and links into that site's hub
+  // only when the site is one this scan visited — otherwise there is no
+  // subdomain to link with, and the row renders as text.
+  const scanOrgId =
+    org?.id || (typeof hosts[0]?.data?.['orgId'] === 'string' ? String(hosts[0].data['orgId']) : '')
+  const orgRef = scanOrgId && hosts[0] ? hosts[0].ref.firestore.collection('orgs').doc(scanOrgId) : null
+  const subdomainOf = new Map(hosts.map((host) => [host.id, host.subdomain]))
+  for (const declared of orgRef ? pluginOrgCollectionsScannedGenerically() : []) {
+    if (!budget.open) {
+      liveTruncated = true
+      break
+    }
+    let page: FirebaseFirestore.QuerySnapshot
+    try {
+      page = await orgRef
+        .collection(declared.name)
+        .limit(PLUGIN_DOCS_PER_COLLECTION + 1)
+        .get()
+    } catch (error) {
+      // A failed read is not an empty one — the same rule, for the same
+      // reason, as the per-site loop above.
+      console.error(
+        'media reference scan could not read org collection',
+        { orgId: scanOrgId, collection: declared.name },
+        error,
+      )
+      liveTruncated = true
+      continue
+    }
+    budget.charge(page.size)
+    if (page.size > PLUGIN_DOCS_PER_COLLECTION) liveTruncated = true
+    for (const document of page.docs.slice(0, PLUGIN_DOCS_PER_COLLECTION)) {
+      if (document.get('deletedAt')) continue
+      if (!isReferenced(documentHaystack(document.data()))) continue
+      const site = declared.siteField ? document.get(declared.siteField) : undefined
+      const siteId = typeof site === 'string' ? site : ''
+      references.push({
+        kind: 'plugin',
+        id: document.id,
+        name: pluginRowNameOf(document),
+        hostId: siteId,
+        hostSubdomain: subdomainOf.get(siteId) ?? '',
+        collectionId: declared.name,
+        field: referencingFieldPath(document.data(), isReferenced) ?? undefined,
+      })
     }
   }
 

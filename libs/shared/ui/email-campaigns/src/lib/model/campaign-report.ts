@@ -651,7 +651,10 @@ export const CAMPAIGN_SEQUENCE_OUTCOMES = [
 
 export type CampaignSequenceOutcome = (typeof CAMPAIGN_SEQUENCE_OUTCOMES)[number]
 
-/** The per-host collection holding one document per campaign. */
+/**
+ * The org collection holding one document per campaign container,
+ * `orgs/{orgId}/campaignSequenceReports/{campaignId}`.
+ */
 export const CAMPAIGN_SEQUENCE_REPORTS_COLLECTION = 'campaignSequenceReports'
 
 /** What a reader calls each outcome, and what the count means. */

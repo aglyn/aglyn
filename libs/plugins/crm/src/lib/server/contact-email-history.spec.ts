@@ -30,23 +30,23 @@ const resolveOrgMembership = jest.fn()
 const memberHasOrgPermission = jest.fn()
 const readEmailDeliveryHistory = jest.fn()
 
-/** `hosts/{hostId}/campaigns/{campaignId}` → the email document. */
+/** `orgs/{orgId}/campaigns/{sendId}` → the email document. */
 let campaigns: Record<string, Record<string, unknown>> = {}
 /** `orgs/org-1/contacts/{id}` → the contact document. */
 let contacts: Record<string, Record<string, unknown>> = {}
 let groupHostIds: string[] = ['site-1']
 
-const campaignRef = (hostId: string, campaignId: string) => ({
-  id: campaignId,
-  path: `hosts/${hostId}/campaigns/${campaignId}`,
-  parent: { parent: { id: hostId } },
+const campaignRef = (root: string, id: string, sub: string, subId: string) => ({
+  id: subId,
+  path: `${root}/${id}/${sub}/${subId}`,
+  parent: { parent: { id } },
 })
 
 const firestoreHandle = {
   collection: (name: string) => ({
     doc: (id: string) => ({
       collection: (sub: string) => ({
-        doc: (subId: string) => campaignRef(id, subId),
+        doc: (subId: string) => campaignRef(name, id, sub, subId),
       }),
     }),
   }),
@@ -194,11 +194,12 @@ beforeEach(() => {
     },
   }
   campaigns = {
-    [`hosts/${HOST_ID}/campaigns/camp-1`]: {
+    [`orgs/${ORG_ID}/campaigns/camp-1`]: {
       displayName: 'Spring sale',
       subject: 'Spring sale ends Sunday',
+      hostId: HOST_ID,
     },
-    [`hosts/${HOST_ID}/campaigns/camp-2`]: { subject: 'Summer preview' },
+    [`orgs/${ORG_ID}/campaigns/camp-2`]: { subject: 'Summer preview', hostId: HOST_ID },
   }
   groupHostIds = [HOST_ID]
   verifyIdToken.mockReset().mockResolvedValue({ uid: READER })
@@ -426,9 +427,29 @@ describe('what comes back', () => {
     expect(body.emails.map((entry: any) => entry.messageId)).toEqual(['ours'])
   })
 
+  it('names each send from the org, and a discarded one as nothing', async () => {
+    // A document at the old site path is never read: the name comes from the
+    // org copy, and an id the org does not hold is a send that is gone.
+    campaigns[`hosts/${HOST_ID}/campaigns/camp-1`] = { displayName: 'Stale site copy' }
+    readEmailDeliveryHistory.mockResolvedValueOnce({
+      lookupFailed: false,
+      rows: [
+        delivery({ messageId: 'moved', campaignId: 'camp-1' }),
+        delivery({ messageId: 'discarded', campaignId: 'camp-gone' }),
+      ],
+    })
+
+    const { body } = await ask()
+
+    const byMessage = Object.fromEntries(
+      body.emails.map((entry: any) => [entry.messageId, entry.campaignName]),
+    )
+    expect(byMessage).toEqual({ moved: 'Spring sale', discarded: null })
+  })
+
   it('keeps a sibling site’s campaign when the two are one consent group', async () => {
     groupHostIds = [HOST_ID, 'site-2']
-    campaigns['hosts/site-2/campaigns/camp-s2'] = { displayName: 'Sister brand launch' }
+    campaigns[`orgs/${ORG_ID}/campaigns/camp-s2`] = { displayName: 'Sister brand launch', hostId: 'site-2' }
     readEmailDeliveryHistory.mockResolvedValueOnce({
       lookupFailed: false,
       rows: [

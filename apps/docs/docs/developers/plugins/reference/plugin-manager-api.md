@@ -309,6 +309,7 @@ registerPluginHostCollections([
 | `pluginHostCollectionRouteSlug(name)` / `pluginHostCollectionLabel(name)` | A reference row's deep link and its wording. The label is derived from the name when the owner declares none (`productCategories` → "Product category"), so a new collection reads correctly with no second list. |
 | `pluginHostArtifactCollections()` | The collections whose documents a site counts beside its screens, layouts and components. |
 | `listPluginHostCollections()` / `pluginHostCollection(name)` / `pluginIdForHostCollection(name)` | Everything declared, one by name, and its owner. |
+| `listPluginOrgCollections()` / `pluginOrgCollection(name)` / `pluginOrgCollectionsScannedGenerically()` | Storage that lives on the ORGANIZATION (`orgs/{orgId}/…`) rather than on a site, declared by a first-party plugin in the `orgCollections` block of `plugins.config.json` and compiled, with no runtime door. Scanned by default like a host collection (`mediaScan` is `generic` or `none`); `siteField` names the document field that says which site a row belongs to, so a reference row can name the site and link into its hub. Marketing's email sends are the first: `orgs/{orgId}/campaigns`, each carrying `hostId`. |
 
 **The default is to scan**, and a declaration says only why it should not be.
 That is inverted on purpose: "does this carry media?" needs a judgment about a

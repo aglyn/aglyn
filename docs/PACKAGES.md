@@ -412,7 +412,7 @@ declaration itself is **owed** (AGL-3124) — the same contract row 15 needs.
 Whatever replaces it keeps the split the package has now: `src/index.ts` exports
 only the model, with `components/report-figures` reached by its own `./*`
 subpath, so a server handler reading a stored field name never pulls a component
-graph — and MUI — behind it. Firestore rules name `hosts/{hostId}/campaigns`;
+graph — and MUI — behind it. Firestore rules name `orgs/{orgId}/campaigns`;
 rules are the last step, not the first. Dissolving the lib is its own AGL-3080
 child and not this section's commit, so the package keeps its map row above
 until that child lands.

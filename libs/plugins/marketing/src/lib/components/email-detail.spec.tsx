@@ -100,6 +100,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // Signed in and able to mint an ID token: every campaign call this page
   // makes is authorized from one, and issues nothing without it.
   useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'token' } }),
+  // The site's org: the message and its rollups are the org's documents.
+  useOrgDataScope: () => ({
+    scope: ['orgs', 'org-1'],
+    orgId: 'org-1',
+    ready: true,
+  }),
   useFirestoreDoc: (build: () => { __path?: string } | null) => {
     const path = build()?.__path ?? ''
     const data = mockDocs.get(path)
@@ -140,8 +146,8 @@ jest.mock('./email-recipients-card', () => ({
 /** The props the composer was mounted with — always null on this page now. */
 let composerProps: Record<string, any> | null = null
 
-const EMAIL_PATH = 'hosts/site1/campaigns/msg_1'
-const LINKS_PATH = 'hosts/site1/campaigns/msg_1/reports/links'
+const EMAIL_PATH = 'orgs/org-1/campaigns/msg_1'
+const LINKS_PATH = 'orgs/org-1/campaigns/msg_1/reports/links'
 const TEMPLATE_PATH = 'hosts/site1/screens/scr_1'
 const TEMPLATE_VERSION_PATH = 'hosts/site1/screens/scr_1/versions/ver_1'
 
@@ -187,6 +193,8 @@ const STATS: CampaignStats = {
 async function renderEmail(options?: {
   email?: Record<string, unknown> | null
   links?: unknown
+  /** Mount on the org hub, with no site, rather than under `site1`. */
+  atOrg?: boolean
 }): Promise<void> {
   mockDocs.clear()
   composerProps = null
@@ -211,14 +219,34 @@ async function renderEmail(options?: {
   })
   mockDocs.set(TEMPLATE_VERSION_PATH, { nodes: NODES })
   const { EmailDetail } = await import('./email-detail')
+  const { MarketingOrgMountProvider } = await import('./marketing-org-mount')
   render(
     (
       <ConsoleWidgetSlotContext.Provider value={ZoneRenderer}>
-        <EmailDetail
-          hostId="site1"
-          emailId="msg_1"
-          basePath="/acme/hosts/site/emails"
-        />
+        {options?.atOrg ? (
+          <MarketingOrgMountProvider
+            value={{
+              orgId: 'org-1',
+              orgSlug: 'acme',
+              hosts: [{ id: 'site1', name: 'Site', subdomain: 'site' }],
+              hostsReady: true,
+              hostsPath: '/acme/hosts',
+              basePath: '/acme/marketing',
+            }}
+          >
+            <EmailDetail
+              hostId={null}
+              emailId="msg_1"
+              basePath="/acme/marketing"
+            />
+          </MarketingOrgMountProvider>
+        ) : (
+          <EmailDetail
+            hostId="site1"
+            emailId="msg_1"
+            basePath="/acme/hosts/site/emails"
+          />
+        )}
       </ConsoleWidgetSlotContext.Provider>
     ) as ReactNode as never,
   )
@@ -953,5 +981,38 @@ describe('the preview sits below the recipients', () => {
     await renderEmail()
     expect(screen.getByText('Preview')).toBeTruthy()
     expect(document.querySelector('[title="Preview"]')).toBeNull()
+  })
+})
+
+/*==========================================
+ * ON THE ORG HUB, THE SEND'S OWN SITE.
+ *
+ * The message is the org's document, but its template, its sender and every
+ * action on it belong to the site it was sent as. With no site in the URL,
+ * that is the send's own `hostId`; a send that records none is shown, and
+ * nothing on it can be acted on.
+ *=========================================*/
+describe('a message opened on the org hub', () => {
+  it('reads the template from the site the send was sent as', async () => {
+    await renderEmail({ atOrg: true, email: { hostId: 'site1' } })
+    expect(previewProps?.hostId).toBe('site1')
+    expect(previewProps?.nodes).toEqual(NODES)
+  })
+
+  it('links back to the org hub’s own Emails section, and the template on its site', async () => {
+    await renderEmail({ atOrg: true, email: { hostId: 'site1' } })
+    expect(
+      screen.getByText('All messages').closest('a')?.getAttribute('href'),
+    ).toBe('/acme/marketing/emails')
+    expect(
+      screen.getByText('Open template').closest('a')?.getAttribute('href'),
+    ).toBe('/acme/hosts/site/emails/templates/scr_1')
+  })
+
+  it('says a send with no site cannot be managed here, and draws no preview', async () => {
+    await renderEmail({ atOrg: true })
+    expect(screen.getByText(/does not record which site/i)).toBeTruthy()
+    expect(previewProps).toBeNull()
+    expect(screen.queryByText('Recipients')).toBeNull()
   })
 })

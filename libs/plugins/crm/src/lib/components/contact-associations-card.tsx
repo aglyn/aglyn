@@ -36,7 +36,6 @@ import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
-  useHostCampaigns,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Chip, Divider, Stack, Typography } from '@mui/material'
@@ -46,6 +45,7 @@ import { useContactUpdate } from '../hooks/use-contact-update'
 import type { ContactRecord } from '../model/contact-record'
 import { crmRoutes } from '../model/crm-routes'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 
 export interface ContactAssociationsCardProps {
   /**
@@ -148,10 +148,11 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
   }, [recordId])
 
   /*
-   * The site's campaigns, read because this page IS the ask: one picker on
-   * one record, and nothing in the list ever paid for the campaign list.
+   * The campaigns, read because this page IS the ask: one picker on one
+   * record, and nothing in the list ever paid for the campaign list. Under
+   * a site, the ones placed on it; at the organization level, every one.
    */
-  const siteCampaigns = useHostCampaigns(hostId ?? undefined, { enabled: Boolean(hostId) })
+  const siteCampaigns = useCrmCampaigns({ hostId, orgId }, { enabled: true })
 
   const consent = useMemo(
     () => readMarketingBasis(row, consentGroup),
@@ -299,7 +300,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           label="Filed under campaigns"
           helperText="Your own filing. It never adds anyone to a send — a campaign mails its lists."
           empty={siteCampaigns.ready && !siteCampaigns.options.length}
-          emptyText="This site has no campaigns yet."
+          emptyText={hostId ? 'This site has no campaigns yet.' : 'There are no campaigns yet.'}
         />
         <Stack direction="row">
           <Button

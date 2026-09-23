@@ -22,6 +22,7 @@ import {
   EMAIL_ATTRIBUTION_WINDOW_MS,
   emailTouchIsInWindow,
 } from '@aglyn/shared-util-email'
+import { resolveCampaignSendRef } from './campaign-conversion-attribution'
 import { readEmailCampaignTouch } from './email-delivery-log'
 import { isDocumentId } from './document-id'
 import firebaseAdmin from './firebase-admin'
@@ -245,11 +246,16 @@ export async function attributeOrderToEmail(
      * proven to exist a moment ago, when its click wrote the touch.
      *
      * Every amount is an increment, so two orders settling at once both land.
+     *
+     * The send is found where it is — the org's `campaigns`, or the site's
+     * for a send the migration has not reached — and a send in neither
+     * place was discarded: the record above stands, and no report is
+     * conjured under nothing.
      */
     const currency = record.currency
-    await hostRef
-      .collection('campaigns')
-      .doc(touch.campaignId)
+    const sendRef = await resolveCampaignSendRef({ hostId, sendId: touch.campaignId, firestore: db })
+    if (!sendRef) return record
+    await sendRef
       .collection('reports')
       .doc(CAMPAIGN_REVENUE_REPORT_DOC)
       .set(
@@ -350,11 +356,14 @@ export async function reverseEmailAttributedRevenue(
      * — which happens when the credit was the charge and the refund includes
      * something the credit did not. The stored pair keeps both true figures
      * and the reader clamps the net it prints.
+     *
+     * The send is found where it is, as the credit found it; a send that
+     * has since been discarded has no rollup left to reverse, and the
+     * record below still takes the refund.
      */
-    await hostRef
-      .collection('campaigns')
-      .doc(campaignId)
-      .collection('reports')
+    const sendRef = await resolveCampaignSendRef({ hostId, sendId: campaignId, firestore: db })
+    await sendRef
+      ?.collection('reports')
       .doc(CAMPAIGN_REVENUE_REPORT_DOC)
       .set(
         {

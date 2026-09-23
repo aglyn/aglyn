@@ -74,6 +74,7 @@ import {
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
+import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 // The leaf, not the barrel: this library's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
@@ -1014,19 +1015,48 @@ async function runServerStep(
        * reference audit already reports a step pointing at a campaign that
        * does not exist; a run that wrote the dangling name anyway would
        * make the audit's finding untrue the moment it fired.
+       *
+       * The containers are the ORGANIZATION's, and this run is one site's,
+       * so a campaign counts only while it is live and placed on this site
+       * (`visibleTo` holds `org` or `host:{hostId}`) — the same set the
+       * site's picker offers. One the console deleted, or one placed only
+       * on a sibling site, is refused like a missing one: filing a person
+       * under it would put them in a campaign nobody at this site can open.
+       * A name lookup reads a few matches rather than one, so a deleted or
+       * sibling campaign sharing the name cannot shadow the live one.
        */
-      const campaignsRef = hostRef.collection('emailCampaigns')
+      const campaignLabel = step.campaignName || step.campaignId
+      const campaignOrgId = env.orgId ?? (await resolveOrgIdForHost(hostId))
+      if (!campaignOrgId) return failed(`unknown campaign "${campaignLabel}"`)
+      const campaignsRef = firebaseAdmin
+        .app()
+        .firestore()
+        .collection('orgs')
+        .doc(campaignOrgId)
+        .collection('emailCampaigns')
+      const usable = (doc: FirebaseFirestore.DocumentSnapshot | undefined) =>
+        Boolean(
+          doc?.exists &&
+            !doc.get('deletedAt') &&
+            visibleToHost(doc.get('visibleTo') as string[] | undefined, hostId),
+        )
       const namedId = step.campaignId?.trim() ?? ''
       const campaignDoc = namedId
         ? await campaignsRef.doc(namedId).get()
         : (
             await campaignsRef
               .where('name', '==', step.campaignName?.trim() ?? '')
-              .limit(1)
+              .limit(10)
               .get()
-          ).docs[0]
+          ).docs.find(usable)
       if (!campaignDoc?.exists) {
-        return failed(`unknown campaign "${step.campaignName || step.campaignId}"`)
+        return failed(`unknown campaign "${campaignLabel}"`)
+      }
+      if (campaignDoc.get('deletedAt')) {
+        return failed(`campaign "${campaignLabel}" was deleted`)
+      }
+      if (!usable(campaignDoc)) {
+        return failed(`campaign "${campaignLabel}" is not placed on this site`)
       }
       /*
        * INSIDE THIS SITE'S FACET, not at the top of the document.

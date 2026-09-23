@@ -248,6 +248,12 @@ function seed() {
     subdomain: 'acme',
     memberRoles: { 'uid-1': 'admin' },
   })
+  // The campaign the composer files sends under: the org's, placed on this
+  // site.
+  store.set(`orgs/org-1/emailCampaigns/camp-1`, {
+    name: 'Spring',
+    visibleTo: [`host:${HOST}`],
+  })
   // Three leads with a recorded opt-in and one with none: enough for a
   // `sendable` of 3 against an `audienceSize` of 4, which is the shape the
   // confirm dialog and the consent line both have to state.
@@ -519,8 +525,65 @@ describe('the composer’s sender fields', () => {
       emailCampaignId: 'camp-1',
     })
 
-    const stored = store.get(`hosts/${HOST}/campaigns/${result.body.campaignId}`)
+    const stored = store.get(`orgs/org-1/campaigns/${result.body.campaignId}`)
     expect(stored?.emailCampaignId).toBe('camp-1')
+    // Sent AS this site, and visible to this site alone.
+    expect(stored?.hostId).toBe(HOST)
+    expect(stored?.visibleTo).toEqual([`host:${HOST}`])
+  })
+
+  /*
+   * THE CAMPAIGN HAS TO BE ONE THIS SITE CAN SEE. The org holds every site's
+   * campaigns, so an id from the request could name one placed only on a
+   * sibling site, or one that was deleted — and a send filed under either
+   * would be one this site's editors could never find again.
+   */
+  it.each([
+    ['one that does not exist', null],
+    ['one placed only on a sibling site', { name: 'Theirs', visibleTo: ['host:host-2'] }],
+    ['one placed on no site at all', { name: 'Nobody' }],
+    ['one that was deleted', { name: 'Gone', visibleTo: ['org'], deletedAt: 1 }],
+  ])('refuses to file a send under %s', async (_label, container) => {
+    if (container) store.set(`orgs/org-1/emailCampaigns/camp-x`, container)
+    for (const action of ['send', 'draft', 'schedule']) {
+      const result = await post({
+        hostId: HOST,
+        action,
+        subject: 'Spring sale',
+        body: 'Ends Sunday',
+        audience: 'leads',
+        sendAtMs: Date.now() + 3_600_000,
+        emailCampaignId: 'camp-x',
+      })
+      expect([action, result.status, result.body]).toEqual([
+        action,
+        400,
+        { error: 'Unknown campaign' },
+      ])
+    }
+    expect(sent).toEqual([])
+    expect(
+      [...store.keys()].filter((key) => key.startsWith('orgs/org-1/campaigns/')),
+    ).toEqual([])
+  })
+
+  it('files a send under a campaign placed on every site', async () => {
+    store.set(`orgs/org-1/emailCampaigns/camp-all`, { name: 'All', visibleTo: ['org'] })
+    const result = await post({
+      hostId: HOST,
+      action: 'draft',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+      emailCampaignId: 'camp-all',
+    })
+    expect(result.status).toBe(200)
+    expect(store.get(`orgs/org-1/campaigns/${result.body.campaignId}`)).toMatchObject({
+      emailCampaignId: 'camp-all',
+      hostId: HOST,
+      visibleTo: [`host:${HOST}`],
+      status: 'draft',
+    })
   })
 
   it('records WHICH LIST a list send addressed', async () => {
@@ -547,7 +610,7 @@ describe('the composer’s sender fields', () => {
     })
 
     expect(result.status).toBe(200)
-    const stored = store.get(`hosts/${HOST}/campaigns/${result.body.campaignId}`)
+    const stored = store.get(`orgs/org-1/campaigns/${result.body.campaignId}`)
     expect(stored?.audience).toBe('list')
     expect(stored?.listId).toBe('list-7')
   })
@@ -580,7 +643,7 @@ describe('the composer’s sender fields', () => {
       emailCampaignId: 'camp-1',
     })
 
-    const stored = store.get(`hosts/${HOST}/campaigns/${result.body.campaignId}`)
+    const stored = store.get(`orgs/org-1/campaigns/${result.body.campaignId}`)
     expect(stored?.emailCampaignId).toBe('camp-1')
     expect(stored?.fromName).toBe('Acme Studio')
     expect(stored?.replyTo).toBe('hello@acme.example')
@@ -673,7 +736,7 @@ describe('what a campaign is written from', () => {
     })
 
     expect(result.status).toBe(400)
-    expect(store.get(`hosts/${HOST}/campaigns/msg_1`)).toBeUndefined()
+    expect(store.get(`orgs/org-1/campaigns/msg_1`)).toBeUndefined()
   })
 
   it('mails a plain-text campaign from the typed body, with an HTML part', async () => {
@@ -817,7 +880,7 @@ describe('the plain-text half a designed email sends', () => {
       audience: 'leads',
     })
 
-    const stored = store.get(`hosts/${HOST}/campaigns/${result.body.campaignId}`)
+    const stored = store.get(`orgs/org-1/campaigns/${result.body.campaignId}`)
     expect(stored?.plainText).toBe('Sale ends Sunday.')
   })
 
@@ -833,7 +896,7 @@ describe('the plain-text half a designed email sends', () => {
       plainTextVersionId: 'ver_1',
     })
 
-    const stored = store.get(`hosts/${HOST}/campaigns/msg_1`)
+    const stored = store.get(`orgs/org-1/campaigns/msg_1`)
     expect(stored?.plainText).toBe('Sale ends Sunday.')
     // What a composer compares against the design's current version to say
     // whether the two have parted. Without it staleness is unanswerable, and
@@ -879,7 +942,7 @@ describe('a draft that changes how it is written', () => {
       plainText: 'Sale ends Sunday.',
       plainTextVersionId: 'ver_1',
     })
-    expect(store.get(`hosts/${HOST}/campaigns/msg_1`)?.templateScreenId).toBe(
+    expect(store.get(`orgs/org-1/campaigns/msg_1`)?.templateScreenId).toBe(
       'scr_1',
     )
 
@@ -891,7 +954,7 @@ describe('a draft that changes how it is written', () => {
       body: 'Ends Sunday',
     })
 
-    const stored = store.get(`hosts/${HOST}/campaigns/msg_1`)
+    const stored = store.get(`orgs/org-1/campaigns/msg_1`)
     expect(stored?.body).toBe('Ends Sunday')
     expect(stored?.templateScreenId).toBeUndefined()
     // The text half goes with the design it belonged to, version stamp and
@@ -919,7 +982,7 @@ describe('a draft that changes how it is written', () => {
       templateScreenId: 'scr_1',
     })
 
-    const stored = store.get(`hosts/${HOST}/campaigns/msg_1`)
+    const stored = store.get(`orgs/org-1/campaigns/msg_1`)
     expect(stored?.templateScreenId).toBe('scr_1')
     // Not left behind to be read as a second source by anything later.
     expect(stored?.body).toBe('')

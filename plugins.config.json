@@ -729,10 +729,6 @@
       },
       "hostCollections": [
         {
-          "name": "campaigns",
-          "routeSlug": "marketing"
-        },
-        {
           "name": "experiments",
           "routeSlug": "marketing"
         },
@@ -741,14 +737,21 @@
           "routeSlug": "marketing"
         },
         {
-          "name": "emailCampaigns",
-          "mediaScan": "none",
-          "mediaScanReason": "The campaign CONTAINER — a name, a date window, the list ids it is aimed at and a topic. Distinct from `campaigns`, which holds the sends and IS scanned because a send carries the copy that went out. A container carries no copy and no asset reference: the design a send renders is a screen, and the screen is where the picker writes."
-        },
-        {
           "name": "campaignAttributions",
           "mediaScan": "none",
           "mediaScanReason": "One row per conversion — a form submission, a lead, a contact or a booking — recording which campaign the visitor arrived from. Written only by the Admin SDK, and the whole record is three sanitized UTM strings capped at a hundred characters: there is no field an asset could occupy and no surface that could pick one into it. Unbounded on the same footing as the conversions it credits."
+        }
+      ],
+      "orgCollections": [
+        {
+          "name": "campaigns",
+          "routeSlug": "marketing",
+          "siteField": "hostId"
+        },
+        {
+          "name": "emailCampaigns",
+          "mediaScan": "none",
+          "mediaScanReason": "The campaign CONTAINER — a name, a date window, the list ids it is aimed at, a topic and the sites it runs on. Distinct from `campaigns`, which holds the sends and IS scanned because a send carries the copy that went out. A container carries no copy and no asset reference: the design a send renders is a screen, and the screen is where the picker writes."
         }
       ],
       "contributes": {
@@ -760,6 +763,9 @@
         "console": {
           "shell": true,
           "routes": [
+            "/marketing"
+          ],
+          "orgRoutes": [
             "/marketing"
           ],
           "slots": [

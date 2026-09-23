@@ -34,7 +34,8 @@ two are treated differently.
 ## Send a campaign
 
 1. **Create a campaign** on **Marketing → Campaigns** — a name, the dates it runs
-   between, and the lists it is aimed at.
+   between, the lists it is aimed at, and the sites it runs on. Your organization
+   has its own **Marketing** page beside CRM, and every site has one too.
 2. Open it and **write an email** inside it. Pick the audience for that email — leads,
    site members, [segments](../../content-and-data/crm/overview.md#segments), or an
    email list. An audience built from a rule can also reuse a
@@ -47,6 +48,25 @@ set of lists, a topic and the revenue it earned, which happens to reach people b
 email. The individual **messages** it sent, the **templates** they are built from, the
 **audiences**, the **topics**, the **sending domains** and the **suppression list** are
 all on the **Emails** page, and each message links back to the campaign it belongs to.
+
+### Campaigns belong to your organization {#campaigns-belong-to-the-organization}
+
+A campaign is your **organization's**, like its contacts, lists and topics, so one
+campaign can coordinate a push across every site you run, the sequences your reps send
+and the leads they produce.
+
+- **Which sites it runs on.** A campaign is placed on **every site** or on the sites you
+  choose. It is offered in a site's pickers — on its forms, screens and automations —
+  only where it is placed, and a collaborator invited to one site sees only the campaigns
+  placed there. A campaign created from a site's own **Marketing** page starts on that
+  site; one created from the organization's starts on every site, and you can change
+  either later from the organization's page.
+- **Which site an email is sent as.** Each email goes out **as one site**: that site's
+  sender, its unsubscribe page and the consent people gave it. Writing an email from the
+  organization's page asks which site first. A site's **Marketing** and **Emails** pages
+  list the emails sent as that site; the organization's lists all of them.
+- **The monthly allowance** was always your organization's, not a site's, and is
+  unchanged.
 
 ### A campaign holds many emails {#campaigns-group-emails}
 

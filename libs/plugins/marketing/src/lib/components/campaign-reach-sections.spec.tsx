@@ -234,6 +234,21 @@ describe('what a campaign caused', () => {
     ).toBe('/acme/hosts/store/marketing/conversions')
   })
 
+  it('offers no link when the site’s hub has no address', async () => {
+    // The org hub hands the site's own marketing path, and a site with no
+    // subdomain yet has none — a link to nowhere is worse than no link.
+    render(
+      <CampaignConversionsSection
+        hostId="host-1"
+        sendIds={['send-1']}
+        truncated={false}
+        basePath={null}
+      />,
+    )
+    await settle()
+    expect(screen.queryByText('All conversions')).toBeNull()
+  })
+
   it('chunks past Firestore’s cap and sums the chunks', async () => {
     // Thirty-five emails is two `in` filters per kind. A single filter would
     // be refused by Firestore; taking only the first thirty would silently
@@ -316,7 +331,7 @@ describe('where a campaign sent people', () => {
   it('reads NOTHING until it is asked, and says what asking costs', async () => {
     render(
       <CampaignDestinationsSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2']}
         truncated={false}
       />,
@@ -331,20 +346,20 @@ describe('where a campaign sent people', () => {
 
   it('merges the rollups, counting emails and summing clicks', async () => {
     documents.set(
-      'hosts/host-1/campaigns/send-1/reports/links',
+      'orgs/org-1/campaigns/send-1/reports/links',
       rollup({
         a: { url: 'https://shop.test/sale', clicks: 9 },
         b: { url: 'https://shop.test/new', clicks: 2 },
       }),
     )
     documents.set(
-      'hosts/host-1/campaigns/send-2/reports/links',
+      'orgs/org-1/campaigns/send-2/reports/links',
       rollup({ a: { url: 'https://shop.test/sale', clicks: 4 } }),
     )
 
     render(
       <CampaignDestinationsSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2']}
         truncated={false}
       />,
@@ -356,8 +371,8 @@ describe('where a campaign sent people', () => {
     )
 
     expect(docCalls).toEqual([
-      'hosts/host-1/campaigns/send-1/reports/links',
-      'hosts/host-1/campaigns/send-2/reports/links',
+      'orgs/org-1/campaigns/send-1/reports/links',
+      'orgs/org-1/campaigns/send-2/reports/links',
     ])
     // Clicks descending, and the leading row names BOTH emails that carried
     // the link — a destination reached by two mailings is one row about two
@@ -371,7 +386,7 @@ describe('where a campaign sent people', () => {
 
   it('states the clicks no row accounts for', async () => {
     documents.set(
-      'hosts/host-1/campaigns/send-1/reports/links',
+      'orgs/org-1/campaigns/send-1/reports/links',
       rollup(
         { a: { url: 'https://shop.test/sale', clicks: 3 } },
         { overflowClicks: 6, unattributedClicks: 2 },
@@ -380,7 +395,7 @@ describe('where a campaign sent people', () => {
 
     render(
       <CampaignDestinationsSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1']}
         truncated={false}
       />,
@@ -403,7 +418,7 @@ describe('where a campaign sent people', () => {
   it('says so when no email has recorded a followed link', async () => {
     render(
       <CampaignDestinationsSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1']}
         truncated={false}
       />,
@@ -445,7 +460,7 @@ describe('what a campaign earned', () => {
       .filter(Boolean)
 
   const revenuePath = (sendId: string): string =>
-    `hosts/host-1/campaigns/${sendId}/reports/revenue`
+    `orgs/org-1/campaigns/${sendId}/reports/revenue`
 
   const show = async () => {
     fireEvent.click(screen.getByText('Show revenue'))
@@ -455,7 +470,7 @@ describe('what a campaign earned', () => {
   it('reads NOTHING until it is asked, and says what asking costs', async () => {
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2', 'send-3']}
         truncated={false}
       />,
@@ -490,7 +505,7 @@ describe('what a campaign earned', () => {
 
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2']}
         truncated={false}
       />,
@@ -520,7 +535,7 @@ describe('what a campaign earned', () => {
 
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2', 'send-3']}
         truncated={false}
       />,
@@ -579,7 +594,7 @@ describe('what a campaign earned', () => {
 
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2', 'send-3']}
         truncated={false}
       />,
@@ -599,7 +614,7 @@ describe('what a campaign earned', () => {
 
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2']}
         truncated={false}
       />,
@@ -619,7 +634,7 @@ describe('what a campaign earned', () => {
     // store, and the copy names both rather than printing a confident 0.
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2']}
         truncated={false}
       />,
@@ -645,7 +660,7 @@ describe('what a campaign earned', () => {
 
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2']}
         truncated={false}
       />,
@@ -678,7 +693,7 @@ describe('what a campaign earned', () => {
 
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1']}
         truncated={false}
       />,
@@ -707,7 +722,7 @@ describe('what a campaign earned', () => {
 
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1']}
         truncated={false}
       />,
@@ -742,7 +757,7 @@ describe('what a campaign earned', () => {
 
     render(
       <CampaignRevenueSection
-        hostId="host-1"
+        orgId="org-1"
         sendIds={['send-1', 'send-2']}
         truncated={false}
       />,
@@ -760,7 +775,7 @@ describe('what a campaign earned', () => {
 
   it('asks for nothing at all when the campaign has sent nothing', async () => {
     render(
-      <CampaignRevenueSection hostId="host-1" sendIds={[]} truncated={false} />,
+      <CampaignRevenueSection orgId="org-1" sendIds={[]} truncated={false} />,
     )
     await settle()
 
@@ -775,7 +790,7 @@ describe('what a campaign earned', () => {
     })
 
     render(
-      <CampaignRevenueSection hostId="host-1" sendIds={['send-1']} truncated />,
+      <CampaignRevenueSection orgId="org-1" sendIds={['send-1']} truncated />,
     )
     await settle()
     await show()
@@ -785,7 +800,7 @@ describe('what a campaign earned', () => {
 
   it('names the population behind an EMPTY answer too', async () => {
     render(
-      <CampaignRevenueSection hostId="host-1" sendIds={['send-1']} truncated />,
+      <CampaignRevenueSection orgId="org-1" sendIds={['send-1']} truncated />,
     )
     await settle()
     await show()
@@ -802,11 +817,11 @@ describe('what a campaign earned', () => {
  * container's id, five figures in funnel order, absent told from zero.
  */
 describe('what a campaign’s sequences produced', () => {
-  const SEQUENCES = 'hosts/host-1/campaignSequenceReports/camp-1'
+  const SEQUENCES = 'orgs/org-1/campaignSequenceReports/camp-1'
 
   it('reads the campaign’s one sequences report and draws the funnel', async () => {
     documents.set(SEQUENCES, { byOutcome: { enrolled: 40, sent: 38, replied: 6 } })
-    render(<CampaignSequencesSection hostId="host-1" campaignId="camp-1" />)
+    render(<CampaignSequencesSection orgId="org-1" campaignId="camp-1" />)
     await settle()
 
     expect(docCalls).toEqual([SEQUENCES])
@@ -820,15 +835,21 @@ describe('what a campaign’s sequences produced', () => {
   })
 
   it('says no sequence has been in the campaign when there is no report', async () => {
-    render(<CampaignSequencesSection hostId="host-1" campaignId="camp-1" />)
+    render(<CampaignSequencesSection orgId="org-1" campaignId="camp-1" />)
     await settle()
     expect(screen.getByText(/No sequence has been in this campaign/)).toBeTruthy()
     expect(screen.queryByText('Enrolled')).toBeNull()
   })
 
+  it('reads nothing until the org is known', async () => {
+    render(<CampaignSequencesSection orgId={null} campaignId="camp-1" />)
+    await settle()
+    expect(docCalls).toEqual([])
+  })
+
   it('WITHHOLDS the figures when the read is refused', async () => {
     docRefusals.add(SEQUENCES)
-    render(<CampaignSequencesSection hostId="host-1" campaignId="camp-1" />)
+    render(<CampaignSequencesSection orgId="org-1" campaignId="camp-1" />)
     await settle()
     expect(screen.getByText(/could not be read/)).toBeTruthy()
     expect(screen.queryByText('Enrolled')).toBeNull()

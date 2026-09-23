@@ -49,6 +49,12 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => ({ __firestore: true }),
+  // The site's org: a send and its rollups are the org's documents.
+  useOrgDataScope: () => ({
+    scope: ['orgs', 'org-1'],
+    orgId: 'org-1',
+    ready: true,
+  }),
   useFirestoreDoc: (build: () => { __path?: string } | null) => ({
     data: mockDocs.get(build()?.__path ?? ''),
   }),
@@ -71,8 +77,8 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 
-const CAMPAIGN_PATH = 'hosts/site1/campaigns/camp_1'
-const LINKS_PATH = 'hosts/site1/campaigns/camp_1/reports/links'
+const CAMPAIGN_PATH = 'orgs/org-1/campaigns/camp_1'
+const LINKS_PATH = 'orgs/org-1/campaigns/camp_1/reports/links'
 
 /**
  * 1,000 sent, 900 delivered — the two differ, and by the bounce count, so an

@@ -54,6 +54,11 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     truncated: false,
     ready: true,
   }),
+  useOrgCampaigns: () => ({
+    options: [{ id: 'spring', label: 'Spring push' }],
+    truncated: false,
+    ready: true,
+  }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
 }))

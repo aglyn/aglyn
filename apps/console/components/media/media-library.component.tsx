@@ -2908,7 +2908,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
         const slug = reference.collectionId
           ? pluginHostCollectionRouteSlug(reference.collectionId)
           : undefined
-        return slug
+        // An org-owned document whose site the scan did not visit carries no
+        // subdomain, and a hub link without one points nowhere.
+        return slug && reference.hostSubdomain
           ? buildRoute(Route.HOST_PLUGIN, {
               orgSlug,
               host: reference.hostSubdomain,

@@ -16,6 +16,16 @@
  */
 
 import { FieldValue } from 'firebase-admin/firestore'
+
+/*
+ * The site → org index the send lookup resolves through: a send is the
+ * ORG's (`orgs/{orgId}/campaigns/{sendId}`). One site in one org.
+ */
+jest.mock('./organizations', () => ({
+  __esModule: true,
+  resolveOrgIdForHost: async (hostId: string) => (hostId === 'host1' ? 'org1' : null),
+}))
+
 import {
   attributeOrderToEmail,
   reverseEmailAttributedRevenue,
@@ -86,8 +96,16 @@ function applyWrite(
   return next
 }
 
-function fakeFirestore() {
+/**
+ * A fresh double. The sends every case clicks are seeded at the org, where
+ * the rollups are written; `paths()` leaves the seeds out, so a case that
+ * asserts nothing was written still means nothing.
+ */
+function fakeFirestore(
+  seeded: readonly string[] = ['orgs/org1/campaigns/spring', 'orgs/org1/campaigns/summer'],
+) {
   const store = new Map<string, Record<string, any>>()
+  for (const path of seeded) store.set(path, { hostId: 'host1' })
 
   const docRef = (path: string): any => ({
     path,
@@ -125,8 +143,11 @@ function fakeFirestore() {
         get: async (ref: any) => ref.get(),
         set: async (ref: any, update: Record<string, any>) => ref.set(update),
       }),
-    /** Spec helper: a campaign's revenue rollup. */
+    /** Spec helper: a send's revenue rollup, at the org that holds the site. */
     revenue: (hostId: string, campaignId: string) =>
+      store.get(`orgs/${hostId === 'host1' ? 'org1' : '-'}/campaigns/${campaignId}/reports/revenue`),
+    /** Spec helper: a send's revenue rollup, at the retired site path. */
+    siteRevenue: (hostId: string, campaignId: string) =>
       store.get(`hosts/${hostId}/campaigns/${campaignId}/reports/revenue`),
     /** Spec helper: one order's attribution record. */
     attribution: (hostId: string, orderId: string) =>
@@ -134,7 +155,7 @@ function fakeFirestore() {
     /** Spec helper: the person document the touch lives on. */
     person: (email: string) =>
       store.get(`emailDeliveries/${emailSuppressionKey(email)}`),
-    paths: () => [...store.keys()],
+    paths: () => [...store.keys()].filter((path) => !seeded.includes(path)),
   }
 }
 
@@ -527,6 +548,54 @@ describe('attributeOrderToEmail', () => {
         firestore,
       ),
     ).toBeNull()
+  })
+})
+
+describe('where the rollup is written', () => {
+  const order = (firestore: any, campaignId: string) =>
+    attributeOrderToEmail(
+      { hostId: HOST, orderId: `order-${campaignId}`, email: BUYER, amountCents: 5_000, orderedAtMs: CLICK_AT + DAY },
+      firestore,
+    )
+
+  it('writes under the org’s send, never at the site', async () => {
+    const firestore = fakeFirestore()
+    await clicked(firestore, 'spring', CLICK_AT)
+    await order(firestore, 'spring')
+    expect(firestore.revenue(HOST, 'spring')).toMatchObject({ byCurrency: { usd: { grossCents: 5_000 } } })
+    expect(firestore.siteRevenue(HOST, 'spring')).toBeUndefined()
+  })
+
+  it('writes at the site for a send the migration has not reached, and reverses there too', async () => {
+    const firestore = fakeFirestore([`hosts/${HOST}/campaigns/legacy`])
+    await clicked(firestore, 'legacy', CLICK_AT)
+    await order(firestore, 'legacy')
+    expect(firestore.siteRevenue(HOST, 'legacy')).toMatchObject({ byCurrency: { usd: { grossCents: 5_000 } } })
+    expect(firestore.revenue(HOST, 'legacy')).toBeUndefined()
+
+    await reverseEmailAttributedRevenue(
+      { hostId: HOST, orderId: 'order-legacy', amountCents: 1_000, closedTheOrder: false },
+      firestore,
+    )
+    expect(firestore.siteRevenue(HOST, 'legacy').byCurrency.usd.refundedCents).toBe(1_000)
+  })
+
+  it('keeps the record and writes no report for a send that is gone', async () => {
+    const firestore = fakeFirestore([])
+    await clicked(firestore, 'discarded', CLICK_AT)
+    const record = await order(firestore, 'discarded')
+    expect(record).toMatchObject({ campaignId: 'discarded' })
+    expect(firestore.attribution(HOST, 'order-discarded')).toBeDefined()
+    expect(firestore.paths().filter((path: string) => path.includes('/reports/'))).toEqual([])
+
+    expect(
+      await reverseEmailAttributedRevenue(
+        { hostId: HOST, orderId: 'order-discarded', amountCents: 1_000, closedTheOrder: true },
+        firestore,
+      ),
+    ).toBe(true)
+    expect(firestore.attribution(HOST, 'order-discarded')).toMatchObject({ refundedCents: 1_000 })
+    expect(firestore.paths().filter((path: string) => path.includes('/reports/'))).toEqual([])
   })
 })
 

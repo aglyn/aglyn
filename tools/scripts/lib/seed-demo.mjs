@@ -39,6 +39,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { buildHomeNodes } from './demo-brands.mjs'
 import { putMediaDocument } from './media-counter.mjs'
+import { seedSendId } from './org-campaign-backfill.mjs'
 
 /** Every host subcollection the seeder writes into. Order is cosmetic. */
 export const HOST_SEEDED_COLLECTIONS = [
@@ -64,7 +65,6 @@ export const HOST_SEEDED_COLLECTIONS = [
   'reviews',
   'bookableUnits',
   'reservations',
-  'campaigns',
   'overlays',
   'experiments',
   'redirects',
@@ -80,6 +80,10 @@ export const ORG_SEEDED_COLLECTIONS = [
   'lists',
   'datasets',
   'invites',
+  // Email sends joined the org collections in AGL-3273. Each carries the
+  // site it is sent as, and a per-site id, because every demo brand seeds
+  // the same `seed-campaign-1` and one org holds several brands.
+  'campaigns',
 ]
 
 const SEED_PREFIX = 'seed-'
@@ -415,10 +419,16 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
 
   // ── Marketing ────────────────────────────────────────────────────────────
   const marketing = brand.marketing ?? {}
-  for (const campaign of marketing.campaigns ?? []) {
+  if (!orgRef && marketing.campaigns?.length) {
+    log?.('Host has no orgId — skipped the seeded email sends, which live on the org.')
+  }
+  for (const campaign of orgRef ? (marketing.campaigns ?? []) : []) {
     const { id, ...fields } = campaign
-    await put(hostRef.collection('campaigns').doc(id), {
+    await put(orgRef.collection('campaigns').doc(seedSendId(id, hostRef.id)), {
       ...fields,
+      hostId: hostRef.id,
+      visibleTo: [`host:${hostRef.id}`],
+      seedHostId: hostRef.id,
       status: 'sent',
       sentAt: now,
       createdAt: now,

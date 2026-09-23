@@ -31,6 +31,7 @@ import { campaignProcessScheduledHandler } from './server/campaign-process-sched
 import { listsMaterializeHandler } from './server/lists-materialize'
 import {
   campaignManageHandler,
+  campaignManageSubject,
   registerCampaignDraftWriter,
 } from './server/campaign-manage'
 import { campaignSendHandler } from './server/campaign-send'
@@ -143,8 +144,12 @@ export function registerMarketingConsoleApi(): void {
   registerPluginApiRoute('campaigns/send', campaignSendHandler)
   // Taking a campaign or an abandoned draft away, which is the one class of
   // change the send route may not carry: both write to the SEND collection,
-  // which no client may touch, and neither of them mails anything.
-  registerPluginApiRoute('campaigns/manage', campaignManageHandler)
+  // which no client may touch, and neither of them mails anything. The
+  // organization hub reaches it naming its org and no site, so the route
+  // names that org as its subject for the release gate.
+  registerPluginApiRoute('campaigns/manage', campaignManageHandler, {
+    subject: campaignManageSubject,
+  })
   // The other direction through the per-recipient delivery log: not "what did
   // we send this person" but "who did this design reach, and which of them
   // opened it". Server-side because the log is a platform-level collection no

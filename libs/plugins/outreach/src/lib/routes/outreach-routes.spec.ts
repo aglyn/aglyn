@@ -453,22 +453,30 @@ describe('outreach/sequences/save (AGL-2980)', () => {
   })
 
   /*
-   * A sequence joins the site's campaigns (AGL-3254): the ids are stored
-   * as picked, `[]` for none, and only the site's live containers pass.
+   * A sequence joins the org's campaigns (AGL-3254): the ids are stored
+   * as picked, `[]` for none, and only the org's live containers pass —
+   * whichever sites they are placed on, because a sequence is an org
+   * record. Another org's container, a deleted one, and one left at the
+   * retired site path are refused.
    */
-  it('stores the campaigns picked, and refuses one that is not the site’s live container', async () => {
-    docs.set(`hosts/${HOST}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
-    docs.set(`hosts/${HOST}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
-    docs.set(`hosts/${OTHER_HOST}/emailCampaigns/theirs`, { name: 'Theirs' })
+  it('stores the campaigns picked, and refuses one that is not the org’s live container', async () => {
+    docs.set(`orgs/${ORG}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2', visibleTo: ['org'] })
+    docs.set(`orgs/${ORG}/emailCampaigns/sibling`, { name: 'Sibling push', visibleTo: [`host:${OTHER_HOST}`] })
+    docs.set(`orgs/${ORG}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
+    docs.set(`orgs/another-org/emailCampaigns/theirs`, { name: 'Theirs' })
+    docs.set(`hosts/${HOST}/emailCampaigns/site-only`, { name: 'Site only' })
 
     const saved = await post(sequences().save, REP, {
-      sequence: draft({ campaignIds: ['founder-icp2', 'founder-icp2'] }),
+      sequence: draft({ campaignIds: ['founder-icp2', 'founder-icp2', 'sibling'] }),
     })
     expect(saved.status).toBe(200)
-    expect(docs.get(org(`outreachSequences/${saved.body.sequence.id}`))?.['campaignIds']).toEqual(['founder-icp2'])
+    expect(docs.get(org(`outreachSequences/${saved.body.sequence.id}`))?.['campaignIds']).toEqual([
+      'founder-icp2',
+      'sibling',
+    ])
     expect(docs.get(org(`outreachSequences/${(await post(sequences().save, REP, { sequence: draft() })).body.sequence.id}`))?.['campaignIds']).toEqual([])
 
-    for (const campaignId of ['gone', 'theirs', 'nope']) {
+    for (const campaignId of ['gone', 'theirs', 'site-only', 'nope']) {
       const refused = await post(sequences().save, REP, { sequence: draft({ campaignIds: [campaignId] }) })
       expect(refused.status).toBe(400)
       expect(refused.body.issues.map((issue: { path: string; code: string }) => [issue.path, issue.code])).toEqual([
@@ -964,8 +972,8 @@ describe('outreach/enroll (AGL-2980)', () => {
    * stamps and credits nothing.
    */
   it('stamps the sequence’s campaigns on the enrollment, the lead and the contact, and credits the enroll', async () => {
-    docs.set(`hosts/${HOST}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
-    docs.set(`hosts/${HOST}/emailCampaigns/founder-icp1`, { name: 'Founder · ICP 1' })
+    docs.set(`orgs/${ORG}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2', visibleTo: ['org'] })
+    docs.set(`orgs/${ORG}/emailCampaigns/founder-icp1`, { name: 'Founder · ICP 1', visibleTo: ['org'] })
     const sequenceId = await activeSequence({ campaignIds: ['founder-icp2', 'founder-icp1'] })
     warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
     docs.set(org('contacts/c-warm'), {
@@ -994,9 +1002,11 @@ describe('outreach/enroll (AGL-2980)', () => {
       'founder-icp1',
     ])
     expect(docs.get(`orgs/${ORG}/leads/${leadId}`)?.['campaignIds']).toEqual(['founder-icp1', 'founder-icp2'])
+    // Credited under the org that holds the campaigns, which the route
+    // already knows — no site-to-org lookup per person.
     expect(credits).toEqual([
-      { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
-      { hostId: HOST, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
+      { hostId: HOST, orgId: ORG, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
+      { hostId: HOST, orgId: ORG, campaignIds: ['founder-icp2', 'founder-icp1'], outcome: 'enrolled', atMs: AT },
     ])
     /*
      * And each person's record says so (AGL-3274): one note by "Sequences",

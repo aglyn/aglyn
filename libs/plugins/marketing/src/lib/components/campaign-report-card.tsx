@@ -32,7 +32,6 @@ import {
   TableRow,
   Typography,
 } from '@mui/material'
-import { doc } from 'firebase/firestore'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import {
   campaignLinkReport,
@@ -68,6 +67,12 @@ import {
   campaignSendDisplay,
   campaignSendProgress,
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+import { campaignSendDoc, campaignSendReportDoc } from './campaign-queries'
+import {
+  orgSiteHubPath,
+  useMarketingOrgId,
+  useMarketingOrgMount,
+} from './marketing-org-mount'
 import { useEmailsHubPath } from './use-emails-hub-path'
 
 /**
@@ -86,7 +91,8 @@ const reportDocsHelp = pluginDocsHelp('emailCampaigns', {
 })
 
 export interface CampaignReportCardProps {
-  hostId: string
+  /** The site, or `null` on the org Marketing hub. */
+  hostId: string | null
   campaignId: string
   /** The marketing hub URL, for the way back to the campaigns list. */
   basePath: string
@@ -166,6 +172,12 @@ export interface CampaignReportCardProps {
  * design on a server that has already checked the reader's site role, and
  * returns only rows tagged with that site.
  *
+ * ## The same four documents at the org level
+ *
+ * A send and its rollups are the org's, so the org hub reads the same four
+ * documents. The one link that leads to a SITE fact — the conversions list,
+ * which is that site's visitors — goes to the site the send was sent as.
+ *
  * The other per-recipient view — the staff delivery log on the user detail
  * page — spans every site on the install and is behind a staff claim that
  * records who looked. Neither reaches this card: adding a recipient list here
@@ -176,13 +188,15 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
   const { hostId, campaignId, basePath } = props
   // The sibling hub: the message's own page belongs to the Emails console.
   const emailsHub = useEmailsHubPath()
+  const orgMount = useMarketingOrgMount()
+  const { orgId } = useMarketingOrgId(hostId)
   const firestore = useFirestore()
 
-  const { data: campaign } = useFirestoreDoc<
+  const { data: campaign, status } = useFirestoreDoc<
     Record<string, unknown> & { stats?: CampaignStats }
   >(
-    () => doc(firestore, 'hosts', hostId, 'campaigns', campaignId),
-    [firestore, hostId, campaignId],
+    () => (orgId ? campaignSendDoc(firestore, orgId, campaignId) : null),
+    [firestore, orgId, campaignId],
   )
   /*
    * The link rollup, its own document rather than a field on the campaign.
@@ -193,8 +207,9 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
    * larger. Split, the rollup is read by exactly the screen that renders it.
    */
   const { data: links } = useFirestoreDoc<CampaignLinkRollup>(
-    () => doc(firestore, 'hosts', hostId, 'campaigns', campaignId, 'reports', 'links'),
-    [firestore, hostId, campaignId],
+    () =>
+      orgId ? campaignSendReportDoc(firestore, orgId, campaignId, 'links') : null,
+    [firestore, orgId, campaignId],
   )
   /*
    * The revenue rollup, a third single-document listen.
@@ -209,16 +224,10 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
    */
   const { data: revenue } = useFirestoreDoc<CampaignRevenueRollup>(
     () =>
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'campaigns',
-        campaignId,
-        'reports',
-        'revenue',
-      ),
-    [firestore, hostId, campaignId],
+      orgId
+        ? campaignSendReportDoc(firestore, orgId, campaignId, 'revenue')
+        : null,
+    [firestore, orgId, campaignId],
   )
 
   /*
@@ -234,17 +243,24 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
    */
   const { data: conversions } = useFirestoreDoc<CampaignConversionsRollup>(
     () =>
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'campaigns',
-        campaignId,
-        'reports',
-        'conversions',
-      ),
-    [firestore, hostId, campaignId],
+      orgId
+        ? campaignSendReportDoc(firestore, orgId, campaignId, 'conversions')
+        : null,
+    [firestore, orgId, campaignId],
   )
+  /*
+   * Where this send's links lead. The message's page is the Emails console's
+   * under a site and the org hub's own Emails section over the org; the
+   * conversions list is always the sending site's.
+   */
+  const messageHref = orgMount
+    ? `${orgMount.basePath}/emails/${campaignId}`
+    : emailsHub
+      ? `${emailsHub}/messages/${campaignId}`
+      : null
+  const conversionsHub = orgMount
+    ? orgSiteHubPath(orgMount, String(campaign?.hostId ?? ''), 'marketing')
+    : basePath
 
   const report = campaignReport(campaign?.stats)
   const linkReport = campaignLinkReport(links)
@@ -285,6 +301,9 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
       {'All campaigns'}
     </Button>
   )
+
+  // Nothing to say until the read has had its chance to answer.
+  if (!campaign && (status === 'loading' || !orgId)) return null
 
   if (!campaign) {
     return (
@@ -384,20 +403,22 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
                 a paged read and this page's whole cost model is a fixed
                 number of documents whatever the audience.
                */}
-              <Box>
-                <Button
-                  component={AppLink as any}
-                  {...({
-                    componentVariant: 'naked',
-                    nativeButton: false,
-                  } as any)}
-                  href={`${basePath}/conversions/${campaignId}`}
-                  size="small"
-                  color="primary"
-                >
-                  {'See these conversions'}
-                </Button>
-              </Box>
+              {conversionsHub ? (
+                <Box>
+                  <Button
+                    component={AppLink as any}
+                    {...({
+                      componentVariant: 'naked',
+                      nativeButton: false,
+                    } as any)}
+                    href={`${conversionsHub}/conversions/${campaignId}`}
+                    size="small"
+                    color="primary"
+                  >
+                    {'See these conversions'}
+                  </Button>
+                </Box>
+              ) : null}
             </Stack>
           ) : (
             <Typography variant="body2" color="text.secondary">
@@ -649,10 +670,8 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
                 worse than none, and the subject is what the reader came for
                 either way.
                */}
-              {emailsHub ? (
-                <AppLink href={`${emailsHub}/messages/${campaignId}`}>
-                  {subject}
-                </AppLink>
+              {messageHref ? (
+                <AppLink href={messageHref}>{subject}</AppLink>
               ) : (
                 <Typography variant="body2">{subject}</Typography>
               )}

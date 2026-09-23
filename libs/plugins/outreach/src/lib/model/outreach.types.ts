@@ -513,7 +513,7 @@ export interface OutreachSequence extends OutreachTimestamps {
   status: OutreachSequenceStatus
   /**
    * The campaigns the sequence is in (AGL-3254): container ids from the
-   * site's `emailCampaigns`, under the field every campaign member carries
+   * org's `emailCampaigns`, under the field every campaign member carries
    * (`CAMPAIGN_MEMBERSHIP_FIELD`). Everyone enrolled gains them on their
    * own record at enroll time, and what the sequence produces is credited
    * to them. Absent on a sequence saved before it could join one.

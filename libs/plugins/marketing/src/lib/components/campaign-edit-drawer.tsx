@@ -30,6 +30,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
+import { campaignSiteIds } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 
 /** One option in the list or topic picker. */
 export interface CampaignEditOption {
@@ -44,6 +45,12 @@ export interface CampaignEditValues {
   endAtMs: number | null
   listIds: string[]
   topicId: string
+  /**
+   * The sites it is placed on — `null` for every site. Present only when the
+   * drawer was handed `sites`, which only the org hub does (a site hub never
+   * moves a campaign's placement), and only when the field was changed.
+   */
+  siteIds?: string[] | null
 }
 
 export interface CampaignEditDrawerProps {
@@ -56,11 +63,18 @@ export interface CampaignEditDrawerProps {
     endAtMs?: number | null
     listIds?: string[]
     topicId?: string
+    visibleTo?: string[]
   } | null
   /** The org's email lists, which this campaign may be aimed at. */
   lists: CampaignEditOption[]
   /** The org's active topics — the stream its emails open on. */
   topics: CampaignEditOption[]
+  /**
+   * The org's sites, which turns on the placement field. Passed by the org
+   * hub alone: moving a campaign between sites is an org-wide decision, and
+   * the rules refuse it from anyone narrower.
+   */
+  sites?: CampaignEditOption[]
   busy?: boolean
   /** A refusal from the write, shown where the form still is. */
   error?: string | null
@@ -111,7 +125,7 @@ function dayInputMs(value: string): number | null {
  * ones already sent.
  */
 export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
-  const { open, onClose, campaign, lists, topics, busy, error, onSubmit } =
+  const { open, onClose, campaign, lists, topics, sites, busy, error, onSubmit } =
     props
 
   const [name, setName] = useState('')
@@ -119,6 +133,15 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
   const [endAt, setEndAt] = useState('')
   const [listIds, setListIds] = useState<string[]>([])
   const [topicId, setTopicId] = useState('')
+  /** The chosen sites; empty is every site, as the create drawer reads it. */
+  const [siteIds, setSiteIds] = useState<string[]>([])
+  /*
+   * Whether the placement was CHANGED here. An untouched field submits
+   * nothing, so saving a name cannot rewrite where a campaign is offered —
+   * least of all turn a campaign placed on no site (an absent `visibleTo`,
+   * which the field has no way to draw) into one on every site.
+   */
+  const [sitesTouched, setSitesTouched] = useState(false)
 
   /*
    * Re-seeded whenever the drawer opens rather than held from the last time.
@@ -132,6 +155,8 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
     setEndAt(dayInputValue(campaign?.endAtMs))
     setListIds((campaign?.listIds ?? []).map(String))
     setTopicId(String(campaign?.topicId ?? ''))
+    setSiteIds(campaignSiteIds(campaign) ?? [])
+    setSitesTouched(false)
   }, [open, campaign])
 
   const startAtMs = dayInputMs(startAt)
@@ -262,6 +287,55 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
               </MenuItem>
             ))}
           </TextField>
+          {sites ? (
+            <TextField
+              select
+              label="Sites"
+              value={siteIds}
+              onChange={(event) => {
+                setSitesTouched(true)
+                setSiteIds(
+                  (event.target.value as unknown as string[]).map(String),
+                )
+              }}
+              helperText="The sites this campaign is offered on. Leave empty for every site."
+              slotProps={{
+                select: {
+                  multiple: true,
+                  displayEmpty: true,
+                  renderValue: (selected: unknown) =>
+                    (selected as string[]).length ? (
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        sx={{ flexWrap: 'wrap' }}
+                      >
+                        {(selected as string[]).map((id) => (
+                          <Chip
+                            key={id}
+                            size="small"
+                            label={
+                              sites.find((site) => site.value === id)?.label ??
+                              id
+                            }
+                          />
+                        ))}
+                      </Stack>
+                    ) : (
+                      'Every site'
+                    ),
+                },
+                inputLabel: { shrink: true },
+              }}
+              fullWidth
+            >
+              {sites.map((site) => (
+                <MenuItem key={site.value} value={site.value}>
+                  {site.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : null}
           {backwards ? (
             <Alert severity="warning">
               {'The end date is before the start date.'}
@@ -278,6 +352,9 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
                 endAtMs,
                 listIds,
                 topicId,
+                ...(sites && sitesTouched
+                  ? { siteIds: siteIds.length ? siteIds : null }
+                  : {}),
               })
             }
           >

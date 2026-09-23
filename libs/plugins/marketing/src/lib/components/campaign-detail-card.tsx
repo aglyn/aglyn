@@ -50,14 +50,15 @@ import {
   Button,
   Chip,
   Divider,
+  MenuItem,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   deleteField,
-  doc,
   documentId,
   limit,
   orderBy,
@@ -72,11 +73,12 @@ import {
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
-  useOrgDataScope,
 } from '@aglyn/tenant-feature-instance'
 import {
   campaignRollup,
   campaignSendDisplay,
+  campaignSiteIds,
+  campaignVisibleTo,
   campaignWindowState,
   emailListTimeMs,
   type CampaignAggregate,
@@ -95,6 +97,15 @@ import {
 } from './campaign-reach-sections'
 import CampaignMembersSection from './campaign-members-section'
 import CampaignReportCard from './campaign-report-card'
+import { campaignContainerDoc, campaignSendsQuery } from './campaign-queries'
+import {
+  orgSiteHubPath,
+  orgSiteName,
+  orgSiteOptions,
+  topicCatalogHostId,
+  useMarketingOrgId,
+  useMarketingOrgMount,
+} from './marketing-org-mount'
 import { useCampaignManageApi } from './use-campaign-send-api'
 import { useEmailsHubPath } from './use-emails-hub-path'
 import { useCampaignTopicOptions } from './use-campaign-topic-options'
@@ -129,7 +140,8 @@ const rolled = (
 })
 
 export interface CampaignDetailCardProps {
-  hostId: string
+  /** The site, or `null` on the org Marketing hub. */
+  hostId: string | null
   /** A campaign container id, or a send id from before containers existed. */
   campaignId: string
   /** The marketing hub URL, for the way back to the campaigns list. */
@@ -178,6 +190,16 @@ export interface CampaignDetailCardProps {
  *
  * The extra read is one document, and it buys the guarantee that a pasted
  * report link resolves whichever kind of id it carries.
+ *
+ * ## Under a site, and over the organization
+ *
+ * The container and its sends are the org's, so the same page renders on the
+ * org hub with `hostId` null. What changes there is everything that is a SITE
+ * fact: the emails listed are every site's rather than the ones sent as this
+ * site, the forms and screens filed under the campaign are gathered from each
+ * site it is placed on, the conversions are one chosen site's (they are
+ * recorded per site), and writing an email first asks which site it is sent
+ * as — its sender, its designs and its consent all belong to that site.
  */
 export function CampaignDetailCard(props: CampaignDetailCardProps) {
   const { hostId, campaignId, basePath } = props
@@ -186,10 +208,19 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
   // each message's report and the template it was built from.
   const emailsHub = useEmailsHubPath()
   const router = useRouter()
-  const { scope: dataScope } = useOrgDataScope({ hostId })
+  const orgMount = useMarketingOrgMount()
+  const { orgId } = useMarketingOrgId(hostId)
   const { confirm } = useConfirmationContext()
   const { enqueueSnackbar } = useSnackbar()
-  const manageApi = useCampaignManageApi(hostId)
+  const manageApi = useCampaignManageApi(hostId, orgId)
+  /*
+   * The site an email written here is sent AS. Under a site it is that site
+   * and never asked; on the org hub it is chosen before the composer opens.
+   * Empty means nobody has chosen yet.
+   */
+  const [composeHostId, setComposeHostId] = useState('')
+  /** The site whose conversions the org hub is showing; empty until chosen. */
+  const [conversionsHostId, setConversionsHostId] = useState('')
   const [composing, setComposing] = useState(false)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -197,8 +228,8 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
   const [deleting, setDeleting] = useState(false)
 
   const { data: campaign, status } = useFirestoreDoc<EmailCampaign>(
-    () => doc(firestore, 'hosts', hostId, 'emailCampaigns', campaignId),
-    [firestore, hostId, campaignId],
+    () => (orgId ? campaignContainerDoc(firestore, orgId, campaignId) : null),
+    [firestore, orgId, campaignId],
   )
 
   /*
@@ -212,8 +243,11 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * to avoid. Not listening is what a null builder means.
    *
    * The campaign's emails come back by the field each send carries: equality
-   * on one field ordered by DOCUMENT NAME, which Firestore's automatic
-   * single-field index serves without a composite one. Ordering on a date
+   * on one field ordered by DOCUMENT NAME. On the org hub that is all the
+   * query says, and the automatic single-field index serves it. Under a site
+   * the sends are also narrowed to the ones sent as that site — the scope
+   * filter that makes the read provable for a site collaborator — and that
+   * pair is the one composite index this page needs. Ordering on a date
    * would need that index AND would drop every send missing that particular
    * date — a sent send carries `sentAt`, a scheduled one `sendAtMs`, and
    * neither is on both. Sorted by date below, over a window this page holds
@@ -223,28 +257,29 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * listed" is a fact rather than a guess.
    */
   const { data: sendDocs } = useFirestoreCollection<any>(
-    () =>
-      campaign
+    () => {
+      const sends = campaign
+        ? campaignSendsQuery(firestore, orgId, hostId)
+        : null
+      return sends
         ? query(
-            collection(firestore, 'hosts', hostId, 'campaigns'),
+            sends,
             where('emailCampaignId', '==', campaignId),
             orderBy(documentId()),
             limit(CAMPAIGN_EMAIL_CEILING + 1),
           )
-        : null,
-    [firestore, hostId, campaignId, Boolean(campaign)],
+        : null
+    },
+    [firestore, orgId, hostId, campaignId, Boolean(campaign)],
     { idField: '$id' },
   )
 
   const { data: listDocs } = useFirestoreCollection<any>(
     () =>
-      campaign && dataScope
-        ? query(
-            collection(firestore, dataScope[0], dataScope[1], 'lists'),
-            limit(50),
-          )
+      campaign && orgId
+        ? query(collection(firestore, 'orgs', orgId, 'lists'), limit(50))
         : null,
-    [firestore, dataScope, Boolean(campaign)],
+    [firestore, orgId, Boolean(campaign)],
     { idField: '$id' },
   )
 
@@ -257,9 +292,10 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * carries its own read of the same catalog, behind its own button, for the
    * same reason.
    */
-  const { topics, source: topicSource } = useCampaignTopicOptions(hostId, {
-    enabled: editing,
-  })
+  const { topics, source: topicSource } = useCampaignTopicOptions(
+    topicCatalogHostId(hostId, orgMount),
+    { enabled: editing },
+  )
   const topicOptions = useMemo(
     () =>
       topics.map((topic) => ({
@@ -314,23 +350,28 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * A cleared date is written as `null` — the absence the model already
    * spells — and a cleared topic REMOVES the field, because the model has no
    * null topic and `campaignTopicId` is handed to the composer as one.
+   *
+   * `visibleTo` is written only from the org hub, and only when its drawer
+   * says the placement changed. A site hub never touches it: the rules let a
+   * site collaborator edit a campaign only while its scope is unchanged, and
+   * a site hub has no field for it anyway.
    *=========================================*/
   const handleSave = useCallback(
     async (values: CampaignEditValues) => {
-      if (saving) return
+      if (saving || !orgId) return
       setSaving(true)
       setSaveError(null)
       try {
-        await updateDoc(
-          doc(firestore, 'hosts', hostId, 'emailCampaigns', campaignId),
-          {
-            name: values.name,
-            startAtMs: values.startAtMs,
-            endAtMs: values.endAtMs,
-            listIds: values.listIds,
-            topicId: values.topicId ? values.topicId : deleteField(),
-          },
-        )
+        await updateDoc(campaignContainerDoc(firestore, orgId, campaignId), {
+          name: values.name,
+          startAtMs: values.startAtMs,
+          endAtMs: values.endAtMs,
+          listIds: values.listIds,
+          topicId: values.topicId ? values.topicId : deleteField(),
+          ...(!hostId && values.siteIds !== undefined
+            ? { visibleTo: campaignVisibleTo(values.siteIds) }
+            : {}),
+        })
         setEditing(false)
         enqueueSnackbar('Campaign updated', {
           variant: 'success',
@@ -343,7 +384,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         setSaving(false)
       }
     },
-    [campaignId, enqueueSnackbar, firestore, hostId, saving],
+    [campaignId, enqueueSnackbar, firestore, hostId, orgId, saving],
   )
 
   /*==========================================
@@ -432,8 +473,9 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
   ])
 
   // Still settling. Falling through to the send report here would flash "this
-  // campaign could not be loaded" on every open of a campaign that exists.
-  if (!campaign && status === 'loading') return null
+  // campaign could not be loaded" on every open of a campaign that exists —
+  // and under a site nothing is read at all until the site's org is known.
+  if (!campaign && (status === 'loading' || !orgId)) return null
 
   /*
    * NOT A CONTAINER — so it is a send id, and the send's own report is what
@@ -476,8 +518,23 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * thing to be wrong about an id that is inside an HMAC; a page that keeps
    * working has nothing to get wrong, and it costs nothing to leave standing.
    *=========================================*/
+  /*
+   * On the org hub there is no Emails console to send a reader to, so a
+   * message opens on the org hub's own Emails section — the same page, over
+   * every site.
+   */
+  const messagesPath = orgMount
+    ? `${orgMount.basePath}/emails`
+    : emailsHub
+      ? `${emailsHub}/messages`
+      : null
   const sendHref = (send: CampaignSend) =>
-    emailsHub ? `${emailsHub}/messages/${send.$id}` : undefined
+    messagesPath ? `${messagesPath}/${send.$id}` : undefined
+  /** A template is a site's design, so it opens on the site the send used. */
+  const templatesPath = (send: CampaignSend): string | null => {
+    const hub = orgMount ? orgSiteHubPath(orgMount, send.hostId, 'emails') : emailsHub
+    return hub ? `${hub}/templates` : null
+  }
 
   /**
    * What one of this campaign's emails can be opened into.
@@ -493,6 +550,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    */
   const sendActions = (send: CampaignSend): RowActionsMenuItem[] => {
     const templateScreenId = String((send as any).templateScreenId ?? '')
+    const templates = templatesPath(send)
     return [
       {
         key: 'details',
@@ -507,10 +565,10 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         label: 'Open its template',
         icon: <MdiIcon path={mdiPaletteOutline.path} size={0.8} />,
         href:
-          templateScreenId && emailsHub
-            ? `${emailsHub}/templates/${templateScreenId}`
+          templateScreenId && templates
+            ? `${templates}/${templateScreenId}`
             : undefined,
-        disabled: !templateScreenId || !emailsHub,
+        disabled: !templateScreenId || !templates,
         disabledReason: templateScreenId
           ? 'This site’s console URL has not resolved yet'
           : 'This message was not built from a template',
@@ -641,6 +699,29 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
     ? new Date(campaign.endAtMs).toLocaleDateString()
     : ''
 
+  /*
+   * THE SITES IT IS PLACED ON, which the org hub needs three times over: the
+   * forms and screens filed under it are gathered from each of them, its
+   * conversions are read for one of them, and an email written here is sent
+   * as one of them. Every site when it is placed everywhere. Under a site the
+   * answer is that site, and none of this is read.
+   */
+  const placedIds = campaignSiteIds(campaign)
+  const placedSites = orgMount
+    ? orgMount.hosts.filter(
+        (site) => placedIds === null || placedIds.includes(site.id),
+      )
+    : []
+  const conversionsHost =
+    hostId ?? (conversionsHostId || placedSites[0]?.id || '')
+  const conversionsBasePath = hostId
+    ? basePath
+    : orgSiteHubPath(orgMount, conversionsHost, 'marketing')
+  /** Asked only when there is a choice to make; one site answers itself. */
+  const writeAsHostId =
+    hostId ??
+    (placedSites.length === 1 ? placedSites[0].id : composeHostId)
+
   /* The card, named so the page chrome above it is a plain list of
      what this surface publishes upward. */
   const card = (
@@ -721,6 +802,17 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
             </Typography>
           )}
         </Stack>
+        {orgMount ? (
+          <Typography variant="body2" color="text.secondary">
+            {placedIds === null
+              ? 'Offered on every site'
+              : placedIds.length
+                ? `Offered on ${placedIds
+                    .map((id) => orgSiteName(orgMount, id))
+                    .join(', ')}`
+                : 'Not offered on any site yet — edit the campaign to place it'}
+          </Typography>
+        ) : null}
 
         <Divider />
         {/*
@@ -742,12 +834,41 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           exists, and why the web channel is named there rather than quietly
           omitted.
          */}
-        <CampaignConversionsSection
-          hostId={hostId}
-          sendIds={sendIds}
-          truncated={sendsTruncated}
-          basePath={basePath}
-        />
+        {/*
+          Conversions are recorded per SITE — they are that site's visitors —
+          so the org hub reads them for one site at a time, defaulting to the
+          first site the campaign is placed on.
+         */}
+        {orgMount && placedSites.length > 1 ? (
+          <TextField
+            select
+            size="small"
+            label="Conversions on"
+            value={conversionsHost}
+            onChange={(event) => setConversionsHostId(event.target.value)}
+            sx={{ maxWidth: 320 }}
+          >
+            {placedSites.map((site) => (
+              <MenuItem key={site.id} value={site.id}>
+                {site.name || site.subdomain || site.id}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+        {conversionsHost ? (
+          <CampaignConversionsSection
+            key={conversionsHost}
+            hostId={conversionsHost}
+            sendIds={sendIds}
+            truncated={sendsTruncated}
+            basePath={conversionsBasePath}
+          />
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {'Conversions are counted per site, and this campaign is not ' +
+              'placed on one yet.'}
+          </Typography>
+        )}
 
         <Divider />
         {/*
@@ -757,7 +878,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           campaign's numbers too. Joined on the container's own id, since a
           sequence's emails are not the campaign's sends.
          */}
-        <CampaignSequencesSection hostId={hostId} campaignId={campaignId} />
+        <CampaignSequencesSection orgId={orgId} campaignId={campaignId} />
 
         <Divider />
         {/*
@@ -773,14 +894,14 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           currencies are reported apart and never totalled.
          */}
         <CampaignRevenueSection
-          hostId={hostId}
+          orgId={orgId}
           sendIds={sendIds}
           truncated={sendsTruncated}
         />
 
         <Divider />
         <CampaignDestinationsSection
-          hostId={hostId}
+          orgId={orgId}
           sendIds={sendIds}
           truncated={sendsTruncated}
         />
@@ -806,12 +927,31 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           campaign without one is told so, and says its figures are lifetime
           rather than implying they are its own.
          */}
-        <CampaignMembersSection
-          hostId={hostId}
-          campaignId={campaignId}
-          startAtMs={campaign.startAtMs}
-          endAtMs={campaign.endAtMs}
-        />
+        {hostId ? (
+          <CampaignMembersSection
+            hostId={hostId}
+            campaignId={campaignId}
+            startAtMs={campaign.startAtMs}
+            endAtMs={campaign.endAtMs}
+          />
+        ) : (
+          /*
+           * Forms and screens are a site's records, so on the org hub each
+           * site the campaign is placed on answers for its own. One section
+           * per site keeps each one's figures and ceilings its own rather
+           * than merging lists that were bounded separately.
+           */
+          placedSites.map((site) => (
+            <CampaignMembersSection
+              key={site.id}
+              hostId={site.id}
+              siteName={site.name || site.subdomain || site.id}
+              campaignId={campaignId}
+              startAtMs={campaign.startAtMs}
+              endAtMs={campaign.endAtMs}
+            />
+          ))
+        )}
 
         <Divider />
         {/*
@@ -903,13 +1043,46 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         {composing ? (
           <Box>
             <Divider sx={{ mb: 2 }} />
-            <CampaignComposer
-              hostId={hostId}
-              emailCampaignId={campaignId}
-              campaignListIds={listIds}
-              campaignTopicId={campaign.topicId}
-              onSent={() => setComposing(false)}
-            />
+            {/*
+              WHICH SITE IT IS SENT AS, asked first on the org hub. The sender,
+              the designs, the consent a recipient gave and the unsubscribe
+              signature are all one site's, so the composer cannot open
+              without one — and the choice is limited to the sites this
+              campaign is placed on.
+             */}
+            {!hostId && placedSites.length > 1 ? (
+              <TextField
+                select
+                size="small"
+                label="Send as"
+                value={composeHostId}
+                onChange={(event) => setComposeHostId(event.target.value)}
+                helperText="The site this email is sent from — its sender, designs and unsubscribe page"
+                sx={{ mb: 2, maxWidth: 420 }}
+                fullWidth
+              >
+                {placedSites.map((site) => (
+                  <MenuItem key={site.id} value={site.id}>
+                    {site.name || site.subdomain || site.id}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : null}
+            {writeAsHostId ? (
+              <CampaignComposer
+                key={writeAsHostId}
+                hostId={writeAsHostId}
+                emailCampaignId={campaignId}
+                campaignListIds={listIds}
+                campaignTopicId={campaign.topicId}
+                onSent={() => setComposing(false)}
+              />
+            ) : !placedSites.length && !hostId ? (
+              <Typography variant="body2" color="text.secondary">
+                {'Place this campaign on a site before writing an email in ' +
+                  'it — every email is sent as one site.'}
+              </Typography>
+            ) : null}
           </Box>
         ) : null}
       </Stack>
@@ -931,6 +1104,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           label: String(list.name ?? list.$id),
         }))}
         topics={topicOptions}
+        sites={orgMount ? orgSiteOptions(orgMount) : undefined}
         busy={saving}
         error={saveError}
         onSubmit={(values) => void handleSave(values)}

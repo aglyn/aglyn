@@ -250,7 +250,7 @@ export function createAiJobCampaignStep(deps: AiJobCampaignStepDeps = {}): AiJob
     // Who it is for and when to send it: read from the site, told to the
     // person, and never sent to the model.
     const list = await suggestAiCampaignList({ hostId, brief: job.brief })
-    const sendTime = list ? await readAiListSendTime(firestore, { hostId, listId: list.id }) : null
+    const sendTime = list ? await readAiListSendTime(firestore, { orgId: job.orgId, hostId, listId: list.id }) : null
     const note = aiCampaignAudienceNote(list, sendTime)
 
     // A design an earlier run wrote is drafted into its campaign, unspent.

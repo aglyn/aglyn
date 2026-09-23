@@ -224,35 +224,34 @@ export function contactCampaignEmailFromDelivery(
  * trip however many there are, and it needs no index. An email the team has
  * since deleted reads as `null`, which the timeline draws as the subject the
  * person received with no report to link to.
+ *
+ * A send is the organization's (`orgs/{orgId}/campaigns/{sendId}`); the
+ * rows reaching here were already narrowed to the reading group's sites,
+ * all of which belong to that org.
  */
 async function readCampaignNames(
+  orgId: string,
   rows: readonly EmailDeliveryRecord[],
 ): Promise<Map<string, string | null>> {
   const names = new Map<string, string | null>()
   const firestore = firebaseAdmin.app().firestore()
-  const refs: FirebaseFirestore.DocumentReference[] = []
+  const pending: { key: string; hostId: string; sendId: string }[] = []
   for (const row of rows) {
     const key = `${row.hostId}/${row.campaignId}`
     if (names.has(key)) continue
     names.set(key, null)
-    refs.push(
-      firestore
-        .collection('hosts')
-        .doc(String(row.hostId))
-        .collection('campaigns')
-        .doc(String(row.campaignId)),
-    )
+    pending.push({ key, hostId: String(row.hostId), sendId: String(row.campaignId) })
   }
-  if (!refs.length) return names
-  const snapshots = await firestore.getAll(...refs)
-  for (const snapshot of snapshots) {
-    if (!snapshot.exists) continue
-    const hostId = snapshot.ref.parent.parent?.id ?? ''
-    const name =
-      String(snapshot.get('displayName') ?? '').trim() ||
-      String(snapshot.get('subject') ?? '').trim()
-    names.set(`${hostId}/${snapshot.id}`, name || null)
-  }
+  if (!pending.length) return names
+  const nameOf = (snapshot: FirebaseFirestore.DocumentSnapshot) =>
+    String(snapshot.get('displayName') ?? '').trim() ||
+    String(snapshot.get('subject') ?? '').trim() ||
+    null
+  const sends = firestore.collection('orgs').doc(orgId).collection('campaigns')
+  const found = await firestore.getAll(...pending.map((entry) => sends.doc(entry.sendId)))
+  found.forEach((snapshot, index) => {
+    if (snapshot.exists) names.set(pending[index].key, nameOf(snapshot))
+  })
   return names
 }
 
@@ -307,7 +306,7 @@ export const contactEmailHistoryHandler: PluginApiHandler = async (req, res) => 
         Boolean(row.hostId) &&
         group.hostIds.includes(String(row.hostId)),
     )
-    const names = await readCampaignNames(rows)
+    const names = await readCampaignNames(reader.orgId, rows)
     const emails = rows
       .map((row) =>
         contactCampaignEmailFromDelivery(

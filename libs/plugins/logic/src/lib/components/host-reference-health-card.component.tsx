@@ -113,9 +113,6 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   const workflowDocs = useHostCollection('workflows')
   const variableDocs = useHostCollection('variables')
   const functionDocs = useHostCollection('functions')
-  // The campaign containers an "Assign to a campaign" step runs against
-  // (AGL-3052); `campaigns` holds the email sends, which no step names.
-  const campaignDocs = useHostCollection('emailCampaigns')
   const overlayDocs = useHostCollection('overlays')
   const webhookDocs = useHostCollection('webhooks')
   // New reference kinds (AGL-345): screen links, commerce entities.
@@ -161,6 +158,30 @@ export function HostReferenceHealthCard(props: HostReferenceHealthCardProps) {
   const datasetDocs = useMemo(
     () => ceilingedWindow<any>(datasetRead, REFERENCE_CEILING),
     [datasetRead],
+  )
+  /*
+   * The campaign containers an "Assign to a campaign" step runs against
+   * (AGL-3052); `campaigns` holds the email sends, which no step names.
+   * They are the org's, and the audit judges against the ones placed on
+   * THIS site, by the same host tokens as the datasets above.
+   */
+  const { data: campaignRead } = useFirestoreCollection<any>(
+    () =>
+      dataScope
+        ? collectionCeiling(
+            query(
+              collection(firestore, dataScope[0], dataScope[1], 'emailCampaigns'),
+              where('visibleTo', 'array-contains-any', scopeTokens),
+            ),
+            REFERENCE_CEILING,
+          )
+        : null,
+    [firestore, dataScope, scopeTokens],
+    { idField: '$id' },
+  )
+  const campaignDocs = useMemo(
+    () => ceilingedWindow<any>(campaignRead, REFERENCE_CEILING),
+    [campaignRead],
   )
   const { data: listRead } = useFirestoreCollection<any>(
     () =>

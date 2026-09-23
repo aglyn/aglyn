@@ -63,6 +63,12 @@ import {
 } from '@aglyn/shared-ui-email-campaigns/model/email-record'
 import { emailPlainTextState } from '@aglyn/aglyn/app-utils/recipient-email-render'
 import { useMarketingHubPath } from './use-marketing-hub-path'
+import { campaignSendDoc, campaignSendReportDoc } from './campaign-queries'
+import {
+  orgSiteHubPath,
+  useMarketingOrgId,
+  useMarketingOrgMount,
+} from './marketing-org-mount'
 import { CampaignDesignPreview as EmailDesignPreview } from './campaign-email-zones'
 import EmailEditDrawer from './email-edit-drawer'
 import EmailRecipientsCard from './email-recipients-card'
@@ -94,8 +100,9 @@ const emailDocsHelp = pluginDocsHelp('emailCampaigns', {
 })
 
 export interface EmailDetailProps {
-  hostId: string
-  /** The message document under `hosts/{hostId}/campaigns`. */
+  /** The site, or `null` on the org Marketing hub. */
+  hostId: string | null
+  /** The message document under `orgs/{orgId}/campaigns`. */
   emailId: string
   /** The emails hub URL, for the way back and for sibling links. */
   basePath: string
@@ -128,20 +135,47 @@ export interface EmailDetailProps {
  * template's version. None of them grows with the size of the send. The
  * recipient list is the one read that does, and it is its own card with its
  * own request.
+ *
+ * ## The site it is sent as
+ *
+ * The message is the org's, but its template, its sender, its recipients and
+ * every action on it belong to the one site it is sent as. Under a site that
+ * is the site. On the org hub it is the send's own `hostId` — and a send
+ * written before sends named their site cannot be acted on from there, so it
+ * says so instead of guessing a site.
  */
 export function EmailDetail(props: EmailDetailProps) {
-  const { hostId, emailId, basePath } = props
+  const { emailId, basePath } = props
   // The sibling hub: a campaign's page belongs to the Marketing console.
   const marketingHub = useMarketingHubPath()
+  const orgMount = useMarketingOrgMount()
+  const { orgId } = useMarketingOrgId(props.hostId)
   const firestore = useFirestore()
 
   const { data: email, status } = useFirestoreDoc<
     Record<string, any> & { stats?: CampaignStats }
   >(
-    () => doc(firestore, 'hosts', hostId, 'campaigns', emailId),
-    [firestore, hostId, emailId],
+    () => (orgId ? campaignSendDoc(firestore, orgId, emailId) : null),
+    [firestore, orgId, emailId],
   )
   const notFound = status !== 'loading' && !email
+  /**
+   * The site this email is sent as — every site-scoped read and action below
+   * is that site's. `null` on the org hub for a send that names none.
+   */
+  const hostId: string | null =
+    props.hostId ?? (email?.hostId ? String(email.hostId) : null)
+  /** On the org hub, a send with no site: readable, but nothing to act as. */
+  const siteless = !props.hostId && Boolean(email) && !hostId
+  /*
+   * The message pages' own addresses. Under a site they are the Emails
+   * console's; on the org hub, its Emails section. A template is always the
+   * sending site's design, so on the org hub it opens on that site.
+   */
+  const messagesPath = orgMount ? `${orgMount.basePath}/emails` : `${basePath}/messages`
+  const templatesHub = orgMount
+    ? orgSiteHubPath(orgMount, hostId, 'emails')
+    : basePath
 
   /*
    * The link rollup, its own document rather than a field on the message.
@@ -152,14 +186,14 @@ export function EmailDetail(props: EmailDetailProps) {
    */
   const { data: links } = useFirestoreDoc<CampaignLinkRollup>(
     () =>
-      doc(firestore, 'hosts', hostId, 'campaigns', emailId, 'reports', 'links'),
-    [firestore, hostId, emailId],
+      orgId ? campaignSendReportDoc(firestore, orgId, emailId, 'links') : null,
+    [firestore, orgId, emailId],
   )
 
   const templateScreenId: string | undefined = email?.templateScreenId
   const { data: template } = useFirestoreDoc<any>(
     () =>
-      templateScreenId
+      templateScreenId && hostId
         ? doc(firestore, 'hosts', hostId, 'screens', templateScreenId)
         : null,
     [firestore, hostId, templateScreenId],
@@ -167,7 +201,7 @@ export function EmailDetail(props: EmailDetailProps) {
   const templateVersionId: string | undefined = template?.versionId
   const { data: templateVersion } = useFirestoreDoc<any>(
     () =>
-      templateScreenId && templateVersionId
+      templateScreenId && templateVersionId && hostId
         ? doc(
             firestore,
             'hosts',
@@ -584,7 +618,7 @@ export function EmailDetail(props: EmailDetailProps) {
         )
       }
       enqueueSnackbar('Draft discarded', { variant: 'success', persist: false })
-      router.push(`${basePath}/messages`)
+      router.push(messagesPath)
     } catch (error) {
       console.error(error)
       enqueueSnackbar('This draft could not be discarded', {
@@ -594,7 +628,7 @@ export function EmailDetail(props: EmailDetailProps) {
     } finally {
       setBusy('')
     }
-  }, [basePath, busy, confirm, emailId, enqueueSnackbar, manageApi, router])
+  }, [busy, confirm, emailId, enqueueSnackbar, manageApi, messagesPath, router])
 
   const handleRename = useCallback(
     async (values: { displayName?: string }) => {
@@ -756,20 +790,20 @@ export function EmailDetail(props: EmailDetailProps) {
    * link off a message that is already reaching inboxes — the same distinction
    * "Send now" is withheld on.
    */
-  const editHref = `${basePath}/messages/${emailId}/edit`
+  const editHref = `${messagesPath}/${emailId}/edit`
 
   const headerActions = (
     <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
       <Button
         component={AppLink as any}
         {...({ componentVariant: 'naked', nativeButton: false } as any)}
-        href={`${basePath}/messages`}
+        href={messagesPath}
         size="small"
         color="primary"
       >
         {'All messages'}
       </Button>
-      {(draft || scheduled) && !midFlight ? (
+      {(draft || scheduled) && !midFlight && !siteless ? (
         <Button
           component={AppLink as any}
           {...({ componentVariant: 'naked', nativeButton: false } as any)}
@@ -780,19 +814,21 @@ export function EmailDetail(props: EmailDetailProps) {
           {'Write this email'}
         </Button>
       ) : null}
-      {templateScreenId ? (
+      {templateScreenId && templatesHub ? (
         <Button
           component={AppLink as any}
           {...({ componentVariant: 'naked', nativeButton: false } as any)}
-          href={`${basePath}/templates/${templateScreenId}`}
+          href={`${templatesHub}/templates/${templateScreenId}`}
           size="small"
           color="primary"
         >
           {'Open template'}
         </Button>
       ) : null}
-      {primaryAction}
-      <RowActionsMenu label={subject} items={overflowItems} />
+      {siteless ? null : primaryAction}
+      {siteless ? null : (
+        <RowActionsMenu label={subject} items={overflowItems} />
+      )}
     </Stack>
   )
 
@@ -823,6 +859,13 @@ export function EmailDetail(props: EmailDetailProps) {
       {/* The page heading and the trail name the message; this card is
           then free to say what it holds rather than repeating the title. */}
       <PageHeaderRecord title={email ? subject : undefined} />
+      {siteless ? (
+        <Alert severity="info">
+          {'This email does not record which site it was sent as, so it can ' +
+            'only be managed from that site’s own Emails page. Its figures ' +
+            'below are complete.'}
+        </Alert>
+      ) : null}
       <CardDisplay
         header={'Email'}
         help={emailDocsHelp}
@@ -1017,9 +1060,9 @@ export function EmailDetail(props: EmailDetailProps) {
                 <TableRow>
                   <TableCell>{'Template'}</TableCell>
                   <TableCell align="right">
-                    {templateScreenId ? (
+                    {templateScreenId && templatesHub ? (
                       <AppLink
-                        href={`${basePath}/templates/${templateScreenId}`}
+                        href={`${templatesHub}/templates/${templateScreenId}`}
                       >
                         {template?.displayName ?? 'Untitled template'}
                       </AppLink>
@@ -1260,7 +1303,7 @@ export function EmailDetail(props: EmailDetailProps) {
         </Stack>
       </CardDisplay>
 
-      <EmailRecipientsCard hostId={hostId} emailId={emailId} />
+      {hostId ? <EmailRecipientsCard hostId={hostId} emailId={emailId} /> : null}
 
       {/*
        * Last, and its own card. The numbers are what a reader came for and
@@ -1273,47 +1316,50 @@ export function EmailDetail(props: EmailDetailProps) {
        * are named for the same reason — without them the 640px frame sits
        * flush against the card's edge.
        */}
-      <CardDisplay
-        header={'Preview'}
-        help={previewDocsHelp}
-        contentGutterX
-        contentGutterY
-      >
-        {templateScreenId ? (
-          <EmailDesignPreview
-            hostId={hostId}
-            nodes={templateVersion?.nodes}
-            loading={template === undefined || templateVersion === undefined}
-            subject={subject}
-            preheader={String(template?.emailPreheader ?? '')}
-            emptyMessage={
-              'The template this email was built from is empty or has ' +
-              'been deleted, so there is nothing to draw.'
-            }
-            note={
-              'The template as it stands today. The mail itself is ' +
-              'rendered per recipient at send time and not kept, so a ' +
-              'template edited since this went out previews as it is now.'
-            }
-          />
-        ) : (
-          <EmailDesignPreview
-            hostId={hostId}
-            nodes={undefined}
-            text={composedBody}
-            loading={email === undefined}
-            subject={subject}
-            emptyMessage={
-              'This email carries no body, so there is nothing to draw.'
-            }
-            note={
-              'Written as plain text in the composer. Merge tokens are ' +
-              'left standing here — the mail itself resolves them per ' +
-              'recipient at send time and is not kept.'
-            }
-          />
-        )}
-      </CardDisplay>
+      {/* A design is the sending site's, so there is none to draw without one. */}
+      {hostId ? (
+        <CardDisplay
+          header={'Preview'}
+          help={previewDocsHelp}
+          contentGutterX
+          contentGutterY
+        >
+          {templateScreenId ? (
+            <EmailDesignPreview
+              hostId={hostId}
+              nodes={templateVersion?.nodes}
+              loading={template === undefined || templateVersion === undefined}
+              subject={subject}
+              preheader={String(template?.emailPreheader ?? '')}
+              emptyMessage={
+                'The template this email was built from is empty or has ' +
+                'been deleted, so there is nothing to draw.'
+              }
+              note={
+                'The template as it stands today. The mail itself is ' +
+                'rendered per recipient at send time and not kept, so a ' +
+                'template edited since this went out previews as it is now.'
+              }
+            />
+          ) : (
+            <EmailDesignPreview
+              hostId={hostId}
+              nodes={undefined}
+              text={composedBody}
+              loading={email === undefined}
+              subject={subject}
+              emptyMessage={
+                'This email carries no body, so there is nothing to draw.'
+              }
+              note={
+                'Written as plain text in the composer. Merge tokens are ' +
+                'left standing here — the mail itself resolves them per ' +
+                'recipient at send time and is not kept.'
+              }
+            />
+          )}
+        </CardDisplay>
+      ) : null}
 
       {/*
        * Editing in a DRAWER, never a form above the content. The name is the

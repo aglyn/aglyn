@@ -179,7 +179,7 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
           helperText={LEAD_CAMPAIGNS_HELPER_TEXT}
           disabled={saving}
           empty={empty}
-          emptyText="This site has no campaigns yet. Create one from Marketing to file leads under it."
+          emptyText="There are no campaigns to file this lead under yet. Create one from Marketing."
         />
         {empty ? null : (
           <Stack direction="row">

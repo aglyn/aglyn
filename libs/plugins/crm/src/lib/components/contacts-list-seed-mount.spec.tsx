@@ -67,6 +67,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] as const, orgId: 'org-1' }),
   useHostCampaigns: () => ({ options: [], truncated: false, ready: true }),
+  useOrgCampaigns: () => ({ options: [], truncated: false, ready: true }),
   useFirestoreCollection: (build: () => unknown) => {
     const built = build() as { name: string; constraints: unknown[] } | null
     if (built?.name === 'contacts') lastConstraints = built.constraints

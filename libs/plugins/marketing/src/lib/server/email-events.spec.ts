@@ -497,7 +497,12 @@ import {
 const SECRET = 'whsec_' + Buffer.from('resend-signing-key').toString('base64')
 const HOST = 'host-1'
 const CAMPAIGN = 'camp-1'
-const CAMPAIGN_PATH = `hosts/${HOST}/campaigns/${CAMPAIGN}`
+/** The org the site belongs to, as the mocked `getOrgForHost` answers it. */
+const ORG = `org-of-${HOST}`
+/** Where a send is recorded: under the organization. */
+const CAMPAIGN_PATH = `orgs/${ORG}/campaigns/${CAMPAIGN}`
+/** Where a send the migration has not reached still is. */
+const LEGACY_CAMPAIGN_PATH = `hosts/${HOST}/campaigns/${CAMPAIGN}`
 const EXPERIMENT = 'exp-1'
 const EXPERIMENT_PATH = `hosts/${HOST}/experiments/${EXPERIMENT}`
 const RECIPIENT = 'dana@example.com'
@@ -2141,5 +2146,62 @@ describe('a one-to-one CRM email', () => {
     // starts at `sent` when it is written, so nothing is owed here.
     await deliver(withMessage('email.sent', CRM_TAGS))
     expect(recordedCrmDeliveries).toEqual([])
+  })
+})
+
+/*==========================================
+ * WHICH DOCUMENT AN EVENT COUNTS AGAINST.
+ *
+ * A send is recorded under the organization, but an event carries only what
+ * was tagged on the message when it went out: the site and the send id
+ * always, the org only on mail sent since sends moved up. Mail sent before
+ * that is still delivering and bouncing, and a send the migration has not
+ * reached is still at the site — so the send is FOUND, org first, and an
+ * event whose send exists in neither place counts against nothing.
+ *=========================================*/
+describe('the send an event counts against', () => {
+  it('uses the org the message was tagged with, without asking which org the site is in', async () => {
+    const tagged = `orgs/org-tagged/campaigns/${CAMPAIGN}`
+    docs.set(tagged, { ...REAL_CAMPAIGN })
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', { ...TAGS, orgId: 'org-tagged' }))
+
+    expect((docs.get(tagged)?.stats as any).opens).toBe(3)
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).opens).toBe(2)
+  })
+
+  it('resolves the site’s org when the message carries none, or carries one that is a path', async () => {
+    docs.set(CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.opened', TAGS))
+    await deliver(event('email.opened', { ...TAGS, orgId: 'org-x/campaigns/evil' }))
+
+    expect((docs.get(CAMPAIGN_PATH)?.stats as any).opens).toBe(4)
+    expect(writtenPaths().some((key) => key.includes('evil'))).toBe(false)
+  })
+
+  it('counts against a send still at the site, and creates nothing under the org', async () => {
+    docs.set(LEGACY_CAMPAIGN_PATH, { ...REAL_CAMPAIGN })
+
+    await deliver(event('email.clicked', { ...TAGS, orgId: ORG }))
+    await deliver(deliveryEvent('email.delivered'))
+
+    const legacy = docs.get(LEGACY_CAMPAIGN_PATH)?.stats as any
+    expect(legacy.clicks).toBe(6)
+    expect(legacy.delivered).toBe(1)
+    expect(docs.has(`${LEGACY_CAMPAIGN_PATH}/reports/links`)).toBe(true)
+    expect(writtenPaths().filter((key) => key.startsWith('orgs/'))).toEqual([])
+  })
+
+  it('writes no counter anywhere for a send that exists in neither place', async () => {
+    await deliver(event('email.opened', TAGS))
+    await deliver(event('email.clicked', { ...TAGS, orgId: ORG }))
+    await deliver(deliveryEvent('email.delivered'))
+
+    // No phantom send at either location, and no link rollup under one.
+    expect(writtenPaths()).toEqual([])
+    // The person's touch is still recorded: the click happened.
+    expect(recordedTouches).toHaveLength(1)
   })
 })

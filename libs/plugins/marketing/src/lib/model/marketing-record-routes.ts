@@ -37,24 +37,26 @@ export function registerMarketingRecordRoutes(): void {
   registerPluginRecordRoute(
     'campaign',
     {
-      // Campaigns belong to one site, so the organization has no address.
-      list: (context) =>
-        context.host
-          ? `${hub(context.orgSlug, context.host)}/campaigns`
-          : null,
+      /*
+       * Campaigns belong to the organization, so both levels have an address:
+       * a site's hub lists the campaigns placed on it, and the org hub lists
+       * every one. A caller on a site page is sent to that site's copy of the
+       * page so it keeps the site's rail and trail around it.
+       */
+      list: (context) => `${hub(context.orgSlug, context.host)}/campaigns`,
       record: (context, id) =>
-        context.host
-          ? `${hub(context.orgSlug, context.host)}/campaigns/${id}`
-          : null,
+        `${hub(context.orgSlug, context.host)}/campaigns/${id}`,
     },
     { pluginId: BUNDLE_ID },
   )
 }
 
-function hub(orgSlug: string, host: string): string {
-  return buildRoute(Route.HOST_PLUGIN, {
-    orgSlug,
-    host,
-    pluginSlug: MARKETING_SLUG,
-  })
+function hub(orgSlug: string, host: string | null): string {
+  return host
+    ? buildRoute(Route.HOST_PLUGIN, {
+        orgSlug,
+        host,
+        pluginSlug: MARKETING_SLUG,
+      })
+    : buildRoute(Route.ORG_PLUGIN, { orgSlug, pluginSlug: MARKETING_SLUG })
 }

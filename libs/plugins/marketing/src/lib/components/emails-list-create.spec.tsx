@@ -77,6 +77,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // `useCampaignSendApi`, which reads the user to mint a token; no test here
   // creates, so the hook only has to exist.
   useUser: () => ({ data: null }),
+  // The site's org, settled: sends and campaigns are the org's collections.
+  useOrgDataScope: () => ({
+    scope: ['orgs', 'org-1'],
+    orgId: 'org-1',
+    ready: true,
+  }),
   useFirestoreCollection: (build: () => any) => {
     const built = build()
     // A null builder opens NO listener. Recording only the built ones is what
@@ -99,6 +105,9 @@ jest.mock('firebase/firestore', () => ({
     constraints: [...(base?.constraints ?? []), ...constraints],
   }),
   limit: (value: number) => ({ limit: value }),
+  where: (field: string, op: string, value: unknown) => ({
+    where: [field, op, value],
+  }),
   orderBy: (field: unknown) => ({ orderBy: field }),
   documentId: () => '__name__',
 }))
@@ -168,7 +177,11 @@ const SEND = {
   stats: { recipients: 100, opens: 40, clicks: 5 },
 }
 
-async function mount(options?: { sends?: any[] }): Promise<void> {
+async function mount(options?: {
+  sends?: any[]
+  /** Mount on the org hub, over these sites, rather than under `site1`. */
+  orgHosts?: Array<{ id: string; name: string; subdomain: string }>
+}): Promise<void> {
   listened = []
   drawerFields = []
   posted = []
@@ -183,10 +196,24 @@ async function mount(options?: { sends?: any[] }): Promise<void> {
     ],
   }
   const { EmailsListCard } = await import('./emails-list-card')
+  const { MarketingOrgMountProvider } = await import('./marketing-org-mount')
   render(
-    (
+    (options?.orgHosts ? (
+      <MarketingOrgMountProvider
+        value={{
+          orgId: 'org-1',
+          orgSlug: 'acme',
+          hosts: options.orgHosts,
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+          basePath: '/acme/marketing',
+        }}
+      >
+        <EmailsListCard hostId={null} basePath="/acme/marketing" />
+      </MarketingOrgMountProvider>
+    ) : (
       <EmailsListCard hostId="site1" basePath="/acme/hosts/site/emails" />
-    ) as ReactNode as never,
+    )) as ReactNode as never,
   )
 }
 
@@ -351,15 +378,15 @@ describe('the list costs what it always did until somebody asks to write', () =>
   it('reads no campaigns until the drawer is opened', async () => {
     await mount()
 
-    expect(listened).toEqual(['hosts/site1/campaigns'])
-    expect(listened).not.toContain('hosts/site1/emailCampaigns')
+    expect(listened).toEqual(['orgs/org-1/campaigns'])
+    expect(listened).not.toContain('orgs/org-1/emailCampaigns')
   })
 
   it('reads them once it is', async () => {
     await mount()
     await openDrawer()
 
-    expect(listened).toContain('hosts/site1/emailCampaigns')
+    expect(listened).toContain('orgs/org-1/emailCampaigns')
   })
 
   it('posts nothing until the drawer submits', async () => {
@@ -379,5 +406,89 @@ describe('the list costs what it always did until somebody asks to write', () =>
     await submitDrawer()
 
     expect(screen.queryByText('Submit email')).toBeNull()
+  })
+})
+
+/*==========================================
+ * ON THE ORG HUB, AN EMAIL IS FIRST A SITE'S.
+ *
+ * The org hub lists every site's messages, but a message is always sent AS
+ * one site — its sender, its designs and its unsubscribe page are that
+ * site's. So creating one there asks which site, unless the org has only one
+ * and the question answers itself.
+ *=========================================*/
+describe('writing an email from the org hub', () => {
+  const TWO_SITES = [
+    { id: 'site1', name: 'Store', subdomain: 'store' },
+    { id: 'site2', name: 'Blog', subdomain: 'blog' },
+  ]
+
+  it('asks which site it is sent as when the org has several', async () => {
+    await mount({ orgHosts: TWO_SITES })
+    await openDrawer()
+
+    const site = drawerFields.find((field) => field.name === 'hostId')
+    expect(site.label).toBe('Send as')
+    expect(site.options).toEqual([
+      { value: 'site1', label: 'Store' },
+      { value: 'site2', label: 'Blog' },
+    ])
+  })
+
+  it('creates the draft AS the chosen site, and opens it on the org hub', async () => {
+    await mount({ orgHosts: TWO_SITES })
+    formValues = { displayName: 'Blog digest', hostId: 'site2' }
+    await openDrawer()
+    await submitDrawer()
+
+    expect(posted[0]).toMatchObject({ action: 'draft', hostId: 'site2' })
+    expect(pushed).toBe('/acme/marketing/emails/msg_new/edit')
+  })
+
+  it('refuses to create with no site chosen', async () => {
+    await mount({ orgHosts: TWO_SITES })
+    formValues = { displayName: 'Nowhere' }
+    await openDrawer()
+    await submitDrawer()
+
+    expect(posted).toHaveLength(0)
+  })
+
+  it('does not ask when the org has one site', async () => {
+    await mount({ orgHosts: [TWO_SITES[0]] })
+    await openDrawer()
+
+    expect(drawerFields.find((field) => field.name === 'hostId')).toBeUndefined()
+    await submitDrawer()
+    expect(posted[0]).toMatchObject({ action: 'draft', hostId: 'site1' })
+  })
+
+  it('names a campaign that is not offered on the chosen site, and posts nothing', async () => {
+    await mount({ orgHosts: TWO_SITES })
+    served.emailCampaigns = [
+      { $id: 'camp_store', name: 'Store only', visibleTo: ['host:site1'] },
+      { $id: 'camp_all', name: 'Everywhere', visibleTo: ['org'] },
+    ]
+    formValues = { displayName: 'Blog digest', hostId: 'site2', emailCampaignId: 'camp_store' }
+    await openDrawer()
+    await submitDrawer()
+
+    expect(posted).toHaveLength(0)
+  })
+
+  it('files the email under a campaign placed on every site', async () => {
+    await mount({ orgHosts: TWO_SITES })
+    served.emailCampaigns = [{ $id: 'camp_all', name: 'Everywhere', visibleTo: ['org'] }]
+    formValues = { displayName: 'Blog digest', hostId: 'site2', emailCampaignId: 'camp_all' }
+    await openDrawer()
+    await submitDrawer()
+
+    expect(posted[0]).toMatchObject({ hostId: 'site2', emailCampaignId: 'camp_all' })
+  })
+
+  it('reads every site’s messages, unfiltered', async () => {
+    await mount({ orgHosts: TWO_SITES })
+
+    expect(listened).toEqual(['orgs/org-1/campaigns'])
   })
 })

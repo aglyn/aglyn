@@ -19,10 +19,11 @@ The plugin declares four registrars in `plugins.config.json`, plus a `site` modu
 **Console** (`registerMarketingConsole`, the `console` registrar):
 
 - A `Marketing` nav item at `/marketing` with the sections Overview, Campaigns, Conversions, Overlays and A/B testing. Each section is a route; the page is code-split.
+- The same page at the organization level, `/[orgSlug]/marketing`, declared in `orgNavItems` with the sections Campaigns and Emails. Campaigns and their sends belong to the organization (`orgs/{orgId}/emailCampaigns`, `orgs/{orgId}/campaigns`): the org hub lists every one, places a campaign on every site or on chosen sites (`visibleTo`), and asks which site an email is sent as before writing it. A site's hub lists the campaigns placed on that site and the emails sent as it. Both levels share the `release_marketing` flag.
 - Campaigns end to end. The plugin owns the campaign composer, test sends, scheduling, reports and recipients. The individual messages are listed on the Emails page, but that page belongs to the email plugin, which hosts an `emailMessages` zone; this plugin fills it with the message list, one message's page and its composer. It also fills `emailTemplateRecipients` (who received the sends built from a template).
 - Widgets in other hosts' slots: the "Last campaign" card on the site dashboard (`hostDashboard`), the campaigns card in the Inbox (`inboxCampaigns`), and campaign attribution on a record's page (`crmRecordAttribution`, `inboxRecordAttribution`).
 - Zones this plugin hosts for other plugins to fill, registered with `registerPluginZone`: two on the A/B testing card (beside the variants, and below a test's results), and five bare zones in the campaign composer and on a message's page for whichever plugin keeps the mail itself: the topic picker, the topic options, the add-a-sender editor, the design creator and the sent-design preview.
-- A record route for `campaign`, so another plugin can link to a campaign without knowing this plugin's URLs.
+- A record route for `campaign`, at both the site and the organization level, so another plugin can link to a campaign without knowing this plugin's URLs.
 
 **Server**, exported from `@aglyn/plugins-marketing/server`:
 

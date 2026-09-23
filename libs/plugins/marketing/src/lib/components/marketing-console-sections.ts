@@ -23,6 +23,7 @@ export type MarketingConsoleSectionId =
   | 'conversions'
   | 'overlays'
   | 'experiments'
+  | 'emails'
 
 /**
  * The marketing console's sections, in rail order (AGL-2501).
@@ -74,3 +75,22 @@ export const MARKETING_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
  * is deliberately no separate default constant — a second place to say which
  * section is first is a second place for it to disagree with the rail.
  */
+
+/**
+ * The ORGANIZATION-level Marketing hub's sections, at `/[orgSlug]/marketing`.
+ *
+ * Campaigns and their emails belong to the organization, so the org hub lists
+ * every one of them over every site. The rest of the site rail stays on the
+ * site: overlays and A/B tests are drawn on one site's pages, and the
+ * conversions list is one site's visitors — each campaign's page links to
+ * the conversions of the site it asks about.
+ *
+ * `emails` is here and not on the site rail because a site's messages
+ * already have a page — the Emails console's Messages section, which this
+ * plugin fills through a zone. With no site there is no Emails console, so
+ * the org hub carries the same list itself.
+ */
+export const MARKETING_ORG_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
+  { id: 'campaigns', label: 'Campaigns' },
+  { id: 'emails', label: 'Emails' },
+]

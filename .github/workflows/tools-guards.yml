@@ -1065,6 +1065,12 @@ jobs:
       # record is kept.
       - run: npm run test:org-lead-backfill
 
+      # AGL-3273. The org-campaign move's decisions — that ids never change,
+      # which scope a moved container is stamped with, that the org copy wins
+      # a merge while sequence counters add, that a send mid-flight is
+      # deferred, and that an id two sites hold is refused rather than chosen.
+      - run: npm run test:org-campaign-backfill
+
       # AGL-2814. The members-video backfill's decisions: which files become
       # private, which download tokens are rotated, which stored links are
       # rewritten, and the public file used elsewhere that is listed and left

@@ -28,7 +28,9 @@
  *     resolving the org from the hub's mount, and renders the record.
  *  2. THE SITE-DEPENDENT SURFACES are handed the lead's own first capturing
  *     site — the conversion, the activity feed, the consent basis — because
- *     each of them is one site's to answer and the mount names none.
+ *     each of them is one site's to answer and the mount names none. The
+ *     campaigns are not one of them: a lead is the org's record, and at the
+ *     org level it is offered every campaign in the org.
  *  3. A SETTLED LOOKUP WITH NO ORG says so, rather than spinning.
  *
  * The scope hook is REAL: it is the thing under test. What is doubled is
@@ -61,8 +63,13 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       fromCache: false,
     }
   },
-  useHostCampaigns: (hostId: string | undefined) => {
-    rendered['campaigns'] = { hostId: hostId ?? null }
+  // Which campaign list the page enabled: a site's, or the org's.
+  useHostCampaigns: (hostId: string | undefined, options?: { enabled?: boolean }) => {
+    if (options?.enabled) rendered['campaigns'] = { level: 'site', hostId: hostId ?? null }
+    return { options: [], ready: true, truncated: false }
+  },
+  useOrgCampaigns: (orgId: string | null | undefined, options?: { enabled?: boolean }) => {
+    if (options?.enabled) rendered['campaigns'] = { level: 'org', orgId: orgId ?? null }
     return { options: [], ready: true, truncated: false }
   },
   useOrgDataScope: (options: { hostId?: string; orgId?: string }) => {
@@ -212,8 +219,13 @@ describe('the lead page at the organization level', () => {
     expect(rendered['convert']?.['hostId']).toBe('site-3')
     expect(rendered['activity']?.['hostId']).toBe('site-3')
     expect(rendered['history']?.['hostId']).toBe('site-3')
-    expect(rendered['campaigns']?.['hostId']).toBe('site-3')
     expect(rendered['erase']?.['hostId']).toBe('site-3')
+  })
+
+  it("offers the org's campaigns, not the capturing site's", () => {
+    renderAtOrg()
+
+    expect(rendered['campaigns']).toEqual({ level: 'org', orgId: 'org-1' })
   })
 
   it('reads the consent basis against the whole DECLARED group, not that site alone', () => {
@@ -259,6 +271,7 @@ describe('the lead page under a site', () => {
     expect(paths).toEqual(['orgs/org-1/leads/person-key'])
     expect(rendered['properties']?.['hostId']).toBe('site-2')
     expect(rendered['convert']?.['hostId']).toBe('site-2')
+    expect(rendered['campaigns']).toEqual({ level: 'site', hostId: 'site-2' })
   })
 
   it('says so when the lookup settles with no org, rather than loading forever', () => {

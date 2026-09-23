@@ -48,15 +48,17 @@ import {
   type CrmLeadStatus,
   crmLeadStatus,
   isCrmLeadOpen,
+  leadPrimaryGroup,
   readCampaignIds,
 } from '@aglyn/aglyn'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
-import { useFirestore, useHostCampaigns } from '@aglyn/tenant-feature-instance'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Button, MenuItem, TextField } from '@mui/material'
 import { arrayUnion, deleteField, doc, serverTimestamp } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useCampaignFilingLog } from '../hooks/use-campaign-filing-log'
 import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
+import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { downloadTextFile } from '../model/contacts-csv'
 import {
@@ -146,15 +148,16 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [value, setValue] = useState('')
   /*
-   * The campaigns to add the selection to (AGL-3254), and the site's
-   * containers the picker offers — read only while that dialog is open.
-   * Under a site alone: a campaign belongs to one site, and at the
-   * organization level a selection spans them.
+   * The campaigns to add the selection to (AGL-3254), and the containers
+   * the picker offers — read only while that dialog is open. Under a site,
+   * the campaigns placed on it; at the organization level, where a
+   * selection spans sites, every campaign in the org.
    */
   const [campaignIds, setCampaignIds] = useState<string[]>([])
-  const campaigns = useHostCampaigns(hostId ?? undefined, {
-    enabled: pending === 'campaign' && Boolean(hostId),
-  })
+  const campaigns = useCrmCampaigns(
+    { hostId, orgId },
+    { enabled: pending === 'campaign' },
+  )
   const logFiling = useCampaignFilingLog({ orgId, hostId, org: props.org })
 
   // The reference a write names is the row's own site and document.
@@ -238,7 +241,15 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
         if (refused.has(labelOf(lead))) continue
         const already = readCampaignIds(lead)
         const filed = named.filter((campaign) => !already.includes(campaign.id))
-        if (filed.length) await logFiling({ leadId: lead.leadId }, { filed })
+        // At the organization level each entry carries its own lead's first
+        // capturing site, the one the lead's page files as.
+        if (filed.length) {
+          await logFiling(
+            { leadId: lead.leadId },
+            { filed },
+            hostId ? null : leadPrimaryGroup(lead, props.org ?? null).hostId || null,
+          )
+        }
       }
       return
     }
@@ -296,7 +307,7 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       { writes, skipped },
       (count) => `Marked ${countNoun(count, NOUN)} unqualified`,
     )
-  }, [pending, value, campaignIds, campaigns.options, selectedRows, runPlan, logFiling])
+  }, [pending, value, campaignIds, campaigns.options, selectedRows, runPlan, logFiling, hostId, props.org])
 
   const handleExport = useCallback(() => {
     downloadTextFile('leads-selected.csv', 'text/csv', leadsCsv(selectedRows, csv))
@@ -365,7 +376,11 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
               onChange={setCampaignIds}
               helperText="Added to the campaigns each selected lead is already in. It does not decide who a campaign mails."
               empty={campaigns.ready && !campaigns.options.length}
-              emptyText="This site has no campaigns yet. Create one from Marketing to file leads under it."
+              emptyText={
+                hostId
+                  ? 'This site has no campaigns yet. Create one from Marketing to file leads under it.'
+                  : 'There are no campaigns yet. Create one from Marketing to file leads under it.'
+              }
             />
           ) : null}
         </CrmBulkValueDialog>
@@ -380,11 +395,9 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       <Button size="small" disabled={busy} onClick={() => openAction('unqualify')}>
         {'Unqualify'}
       </Button>
-      {hostId ? (
-        <Button size="small" disabled={busy} onClick={() => openAction('campaign')}>
-          {'Add to campaign'}
-        </Button>
-      ) : null}
+      <Button size="small" disabled={busy} onClick={() => openAction('campaign')}>
+        {'Add to campaign'}
+      </Button>
       <Button size="small" disabled={busy} onClick={handleExport}>
         {'Export CSV'}
       </Button>

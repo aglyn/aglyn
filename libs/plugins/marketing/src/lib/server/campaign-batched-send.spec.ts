@@ -440,7 +440,7 @@ const firstSend = (options: Record<string, unknown> = {}) =>
   } as any)
 
 /** The stored send, as the console would read it. */
-const sendDoc = () => store.get(`hosts/${HOST}/campaigns/${SEND_ID}`) ?? {}
+const sendDoc = () => store.get(`orgs/org-1/campaigns/${SEND_ID}`) ?? {}
 
 /** Addresses `sendEmail` was handed, in order. */
 const addressed = () => sent.map((message) => String(message.to))

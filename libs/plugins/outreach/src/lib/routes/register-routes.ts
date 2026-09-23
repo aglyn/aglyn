@@ -71,9 +71,9 @@ export function defaultOutreachRouteDeps(): OutreachEnrollRouteDeps {
     stampRecordEmailState: async (stamp) => {
       await (await platform()).stampRecordEmailState(stamp)
     },
-    creditCampaign: async ({ hostId, campaignIds, outcome, atMs }) => {
+    creditCampaign: async ({ hostId, orgId, campaignIds, outcome, atMs }) => {
       await (await platform()).creditCampaignSequenceOutcome(
-        { hostId, campaignIds, outcome, atMs },
+        { hostId, orgId, campaignIds, outcome, atMs },
         firebaseAdmin.app().firestore(),
       )
     },

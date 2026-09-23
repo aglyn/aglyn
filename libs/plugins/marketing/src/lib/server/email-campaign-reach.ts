@@ -68,11 +68,10 @@ import { EMAIL_MAX_AUDIENCE_PER_SEND } from '@aglyn/shared-util-email'
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { emailSuppressionKey } from '@aglyn/tenant-data-admin/server/email-suppression'
 
-const defaultFirestore = () => firebaseAdmin.app().firestore()
-
 /**
  * Where the record lives: beside the link rollup, under the send it belongs
- * to.
+ * to — whichever document the caller holds for that send, so the record
+ * always travels with it.
  *
  * A subcollection document rather than a field on the send, for the reason
  * the link rollup is one — the send document is read by the emails list, the
@@ -95,15 +94,9 @@ export const CAMPAIGN_REACH_SUBCOLLECTION = 'reports'
 export const CAMPAIGN_REACH_CEILING = EMAIL_MAX_AUDIENCE_PER_SEND
 
 function reachDoc(
-  hostId: string,
-  sendId: string,
-  firestore?: any,
+  sendRef: FirebaseFirestore.DocumentReference,
 ): FirebaseFirestore.DocumentReference {
-  return (firestore ?? defaultFirestore())
-    .collection('hosts')
-    .doc(hostId)
-    .collection('campaigns')
-    .doc(sendId)
+  return sendRef
     .collection(CAMPAIGN_REACH_SUBCOLLECTION)
     .doc(CAMPAIGN_REACH_DOC)
 }
@@ -152,11 +145,9 @@ export interface CampaignSettledRecord {
  * @throws when the record cannot be read.
  */
 export async function readCampaignReach(
-  hostId: string,
-  sendId: string,
-  firestore?: any,
+  sendRef: FirebaseFirestore.DocumentReference,
 ): Promise<Set<string>> {
-  const snapshot = await reachDoc(hostId, sendId, firestore).get()
+  const snapshot = await reachDoc(sendRef).get()
   const stored = snapshot.exists ? snapshot.get('keys') : null
   if (!Array.isArray(stored)) return new Set<string>()
   return new Set<string>(stored.map((key: unknown) => String(key)))
@@ -191,11 +182,9 @@ export async function readCampaignReach(
  * @throws when the record cannot be read.
  */
 export async function readCampaignSettled(
-  hostId: string,
-  sendId: string,
-  firestore?: any,
+  sendRef: FirebaseFirestore.DocumentReference,
 ): Promise<CampaignSettledRecord> {
-  const snapshot = await reachDoc(hostId, sendId, firestore).get()
+  const snapshot = await reachDoc(sendRef).get()
   const keys = snapshot.exists ? snapshot.get('keys') : null
   const skipped = snapshot.exists ? snapshot.get('skipped') : null
   const toSet = (stored: unknown) =>
@@ -257,10 +246,8 @@ export function partitionByCampaignReach(
  * the follow-up rather than by pretending the record is whole.
  */
 export async function recordCampaignReach(
-  hostId: string,
-  sendId: string,
+  sendRef: FirebaseFirestore.DocumentReference,
   emails: readonly string[],
-  firestore?: any,
 ): Promise<number> {
   const keys = [
     ...new Set(
@@ -269,9 +256,9 @@ export async function recordCampaignReach(
         .filter((key): key is string => Boolean(key)),
     ),
   ]
-  if (!keys.length || !hostId || !sendId) return 0
+  if (!keys.length || !sendRef) return 0
   try {
-    await reachDoc(hostId, sendId, firestore).set(
+    await reachDoc(sendRef).set(
       {
         keys: firebaseAdmin.firestore.FieldValue.arrayUnion(...keys),
         count: firebaseAdmin.firestore.FieldValue.increment(keys.length),
@@ -296,10 +283,8 @@ export async function recordCampaignReach(
  * addresses in here are the ones nothing may mail at all.
  */
 export async function recordCampaignSkipped(
-  hostId: string,
-  sendId: string,
+  sendRef: FirebaseFirestore.DocumentReference,
   emails: readonly string[],
-  firestore?: any,
 ): Promise<number> {
   const keys = [
     ...new Set(
@@ -308,9 +293,9 @@ export async function recordCampaignSkipped(
         .filter((key): key is string => Boolean(key)),
     ),
   ]
-  if (!keys.length || !hostId || !sendId) return 0
+  if (!keys.length || !sendRef) return 0
   try {
-    await reachDoc(hostId, sendId, firestore).set(
+    await reachDoc(sendRef).set(
       {
         skipped: firebaseAdmin.firestore.FieldValue.arrayUnion(...keys),
         skippedCount: firebaseAdmin.firestore.FieldValue.increment(keys.length),

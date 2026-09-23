@@ -482,14 +482,19 @@ describe('what a row becomes', () => {
   })
 
   /*
-   * The campaigns column (AGL-3254): names resolved against the site's own
+   * The campaigns column (AGL-3254): names resolved against the org's own
    * live containers, added to what the lead carries, and a row naming a
-   * campaign the site does not have refused whole.
+   * campaign the org does not have refused whole. A container left at the
+   * retired site path is not the org's.
    */
-  it('files the row under the campaigns it names, by name, and refuses a name the site does not have', async () => {
-    docs.set(`hosts/${HOST_ID}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2' })
-    docs.set(`hosts/${HOST_ID}/emailCampaigns/founder-icp1`, { name: 'Founder · ICP 1' })
-    docs.set(`hosts/${HOST_ID}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
+  it('files the row under the campaigns it names, by name, and refuses a name the org does not have', async () => {
+    docs.set(`orgs/${ORG_ID}/emailCampaigns/founder-icp2`, { name: 'Founder · ICP 2', visibleTo: ['org'] })
+    docs.set(`orgs/${ORG_ID}/emailCampaigns/founder-icp1`, {
+      name: 'Founder · ICP 1',
+      visibleTo: ['host:another-site'],
+    })
+    docs.set(`orgs/${ORG_ID}/emailCampaigns/gone`, { name: 'Gone', deletedAt: 1 })
+    docs.set(`hosts/${HOST_ID}/emailCampaigns/nope`, { name: 'Nope' })
     docs.set(`orgs/${ORG_ID}/leads/${personKey('held@example.com')}`, {
       email: 'held@example.com',
       sources: ['signup'],
@@ -514,6 +519,13 @@ describe('what a row becomes', () => {
     expect(leadAt('held@example.com')?.['campaignIds']).toEqual(['founder-icp1', 'founder-icp2'])
     expect(leadAt('sam@example.com')).toBeUndefined()
     expect(leadAt('june@example.com')).toBeUndefined()
+  })
+
+  it('resolves a name two org campaigns share to the one placed on the importing site', async () => {
+    docs.set(`orgs/${ORG_ID}/emailCampaigns/a-sibling`, { name: 'Launch', visibleTo: ['host:another-site'] })
+    docs.set(`orgs/${ORG_ID}/emailCampaigns/b-here`, { name: 'Launch', visibleTo: [`host:${HOST_ID}`] })
+    await importRows([{ email: 'dana@example.com', campaigns: 'Launch' }])
+    expect(leadAt('dana@example.com')?.['campaignIds']).toEqual(['b-here'])
   })
 
   it('stamps the consent group as visibleTo, and still no facet map', async () => {

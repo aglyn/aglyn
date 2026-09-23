@@ -340,7 +340,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       console.error('[outreach] the enrolled person could not join the sequence’s campaigns', error)
     }
     try {
-      await deps.creditCampaign({ hostId: sequence.hostId, campaignIds, outcome: 'enrolled', atMs: nowMs })
+      await deps.creditCampaign({ hostId: sequence.hostId, orgId, campaignIds, outcome: 'enrolled', atMs: nowMs })
     } catch (error) {
       console.error('[outreach] the enrollment could not be credited to the sequence’s campaigns', error)
     }
@@ -348,15 +348,19 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
 
   /**
    * The names of the sequence's campaigns as they stand, for the entry the
-   * enroll files on the person's record (AGL-3274). Read once per request,
-   * not per person; a container that is gone answers nothing and the entry
-   * names the rest.
+   * enroll files on the person's record (AGL-3274) — the org's containers,
+   * `orgs/{orgId}/emailCampaigns`. Read once per request, not per person; a
+   * container that is gone answers nothing and the entry names the rest.
    */
-  async function sequenceCampaignNames(firestore: Firestore, sequence: OutreachSequence): Promise<string[]> {
+  async function sequenceCampaignNames(
+    firestore: Firestore,
+    orgId: string,
+    sequence: OutreachSequence,
+  ): Promise<string[]> {
     const campaignIds = normalizeCampaignIds(sequence.campaignIds)
-    if (!campaignIds.length) return []
+    if (!campaignIds.length || !orgId) return []
     try {
-      const containers = firestore.collection('hosts').doc(sequence.hostId).collection('emailCampaigns')
+      const containers = firestore.collection('orgs').doc(orgId).collection('emailCampaigns')
       const found = await firestore.getAll(...campaignIds.map((id) => containers.doc(id)))
       return found.map((snapshot) => String(snapshot.get('name') ?? '').trim()).filter(Boolean)
     } catch (error) {
@@ -547,7 +551,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       [...requested.values()].map((entry) => entry.ref),
     )
     const enrollments = outreachOrgCollection(firestore, caller.orgId, 'enrollments')
-    const campaignNames = await sequenceCampaignNames(firestore, sequence)
+    const campaignNames = await sequenceCampaignNames(firestore, caller.orgId, sequence)
     const results: OutreachEnrollOutcome[] = await Promise.all(
       candidates.map(async (candidate): Promise<OutreachEnrollOutcome> => {
         const named = {

@@ -113,7 +113,15 @@ jest.mock('firebase/firestore', () => {
     },
     getDocs: async () => ({ docs: [], empty: true, size: 0 }),
     getDocsFromServer: async () => ({ docs: [], empty: true, size: 0 }),
-    getDoc: async () => ({ exists: () => false, data: () => undefined }),
+    /*
+     * The site's `hostIndex` entry names its org, so the org-owned picker
+     * lists (datasets, lists, campaigns) are built and land on the meter
+     * rather than staying unissued behind a lookup that never answers.
+     */
+    getDoc: async (ref: { __path?: string }) =>
+      ref?.__path === 'hostIndex/site1'
+        ? { exists: () => true, data: () => ({ orgId: 'org1' }) }
+        : { exists: () => false, data: () => undefined },
     getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
     getAggregateFromServer: async () => ({ data: () => ({}) }),
     addDoc: async () => ({ id: 'x' }),
@@ -416,10 +424,12 @@ describe('workflows console read cost (AGL-2501)', () => {
     // that lets the dialog say a picker ran short instead of quietly offering
     // a partial list of targets.
     expect(opened).toEqual([
-      'hosts/site1/emailCampaigns#101',
       'hosts/site1/overlays#101',
       'hosts/site1/webhooks#101',
       'hosts/site1/workflows#101',
+      'orgs/org1/datasets#101',
+      'orgs/org1/emailCampaigns#101',
+      'orgs/org1/lists#101',
     ])
   })
 
@@ -476,11 +486,13 @@ describe('workflows console read cost (AGL-2501)', () => {
       .filter((listen) => !before.includes(listen))
       .sort()
     expect(opened).toEqual([
-      'hosts/site1/emailCampaigns#101',
       'hosts/site1/functions#101',
       'hosts/site1/overlays#101',
       'hosts/site1/variables#101',
       'hosts/site1/webhooks#101',
+      'orgs/org1/datasets#101',
+      'orgs/org1/emailCampaigns#101',
+      'orgs/org1/lists#101',
     ])
   })
 })

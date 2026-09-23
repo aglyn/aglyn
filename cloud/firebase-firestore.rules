@@ -1754,6 +1754,65 @@ service cloud.firestore {
         allow delete: if isStaff();
       }
 
+      /**
+       * Marketing at the org level (AGL-3273): campaign CONTAINERS, the
+       * email SENDS inside them, and each campaign's sequence rollup.
+       *
+       * A container is authored content like a topic, but its reach is a
+       * set of sites, so it carries `visibleTo` and answers to the scoped
+       * predicates a dataset does: `['org']` is placed on every site and
+       * readable by every member; `['host:{id}']` is one site's and readable
+       * by its collaborators. Only an org-wide member may re-scope one.
+       * Deleting is the manage route's, because it first detaches the
+       * campaign from every form, screen, lead, contact and sequence that
+       * names it — a client delete would leave all of them pointing at
+       * nothing.
+       */
+      match /emailCampaigns/{campaignId} {
+        allow read: if isStaff() || canReadScoped();
+        allow create: if isStaff() || (canWriteOrgData() && canCreateScoped());
+        allow update: if isStaff() ||
+          (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()));
+        allow delete: if false;
+      }
+      /**
+       * One document per email SEND, stamped `visibleTo: ['host:{id}']` for
+       * the site it is sent as. Server-written only, on the footing the site
+       * rule always gave it: `campaign-send.ts` records the audience and the
+       * consent and suppression populations, and the delivery webhook and
+       * the unsubscribe handler count `stats`. A client write would author
+       * the campaign report and the send-time compliance record of who the
+       * send was allowed to reach.
+       *
+       * `reports/*` (reach, links, revenue, conversions) is read through the
+       * parent's scope, because the parent's match does not reach a
+       * subcollection and a report has no `visibleTo` of its own.
+       */
+      match /campaigns/{sendId} {
+        allow read: if isStaff() || canReadScoped();
+        allow write: if false;
+        match /reports/{reportId} {
+          allow read: if isStaff() || isOrgWideMember() ||
+            (isOrgMember() &&
+             get(/databases/$(database)/documents/orgs/$(orgId)/campaigns/$(sendId))
+               .data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
+          allow write: if false;
+        }
+      }
+      // What the sequences filed under a campaign produced — enrolled, sent,
+      // replied, meetings, converted — written only by the Outreach runtime
+      // through `campaign-conversion-attribution.ts`. Read through the
+      // campaign's own scope, because the rollup is shown on the campaign's
+      // page: counts, never a person, so a collaborator who may open the
+      // campaign may read what it produced.
+      match /campaignSequenceReports/{campaignId} {
+        allow read: if isStaff() || isOrgWideMember() ||
+          (isOrgMember() &&
+           get(/databases/$(database)/documents/orgs/$(orgId)/emailCampaigns/$(campaignId))
+             .data.get('visibleTo', []).hasAny(orgMember().get('scopeTokens', ['org'])));
+        allow write: if false;
+      }
+
       // Email lists (AGL-254): static audiences shared across the org's
       // hosts; the enrollList automation step writes members server-side.
       // Deleting the LIST doc is API-only (AGL-946): its `members` are
@@ -3258,7 +3317,7 @@ service cloud.firestore {
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
-              'topicOptOuts', 'emailFrequency', 'campaigns',
+              'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads']));
@@ -3292,11 +3351,12 @@ service cloud.firestore {
         //    on the Admin SDK. A client that could write one would author
         //    the numbers a campaign is judged by. READ stays for the
         //    campaign's page; it holds counts and no address.
-        //  - NOT `emailCampaigns`, the campaign CONTAINER (a name, a date
-        //    window, its lists), created client-side by the campaigns card's
-        //    drawer. It holds no counter and no entitlement input (the send cap
-        //    is claimed against the ORG counter by the send route), and the
-        //    report, the emails list and the marketing summary read it.
+        //  - `emailCampaigns`, the campaign CONTAINER. It belongs to the org
+        //    (`orgs/{orgId}/emailCampaigns`, AGL-3273), and nothing writes the
+        //    site copy any more; a stale tab that could still create one here
+        //    would mint a campaign no console lists. `campaigns` and
+        //    `campaignSequenceReports` above moved to the org for the same
+        //    reason and stay denied here for the one they always were.
         //  - `emailFrequency`: the per-recipient marketing send window the
         //    `sendEmail` gate keeps on the Admin SDK, keyed by
         //    `sha256(address)`. Writing it decides how much mail a person gets
@@ -3363,7 +3423,7 @@ service cloud.firestore {
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
-              'topicOptOuts', 'emailFrequency', 'campaigns',
+              'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments', 'leads']));
@@ -3412,7 +3472,7 @@ service cloud.firestore {
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
-              'topicOptOuts', 'emailFrequency', 'campaigns',
+              'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
               'flowEnrollments']));

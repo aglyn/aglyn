@@ -85,10 +85,15 @@ import {
   campaignReachCovers,
   partitionByCampaignReach,
   readCampaignReach,
+  recordCampaignReach,
 } from './email-campaign-reach'
 import { emailSuppressionKey } from '@aglyn/tenant-data-admin/server/email-suppression'
 
 const key = (email: string) => emailSuppressionKey(email) as string
+
+/** The send the record belongs to, wherever the caller found it. */
+const SEND_PATH = 'orgs/org-1/campaigns/send1'
+const sendRef = () => mockFirestore().collection('orgs').doc('org-1').collection('campaigns').doc('send1')
 
 beforeEach(() => {
   store.clear()
@@ -190,18 +195,18 @@ describe('whether the record accounts for everything the email has sent', () => 
 
 describe('reading the record', () => {
   it('answers the stored keys', async () => {
-    store.set('hosts/site1/campaigns/send1/reports/reached', {
+    store.set(`${SEND_PATH}/reports/reached`, {
       keys: ['k1', 'k2'],
       count: 2,
     })
 
-    const reached = await readCampaignReach('site1', 'send1')
+    const reached = await readCampaignReach(sendRef())
 
     expect([...reached].sort()).toEqual(['k1', 'k2'])
   })
 
   it('answers an empty set for an email with no record', async () => {
-    const reached = await readCampaignReach('site1', 'send1')
+    const reached = await readCampaignReach(sendRef())
 
     expect(reached.size).toBe(0)
   })
@@ -215,8 +220,18 @@ describe('reading the record', () => {
      */
     readThrows = true
 
-    await expect(readCampaignReach('site1', 'send1')).rejects.toThrow(
+    await expect(readCampaignReach(sendRef())).rejects.toThrow(
       /firestore unavailable/,
     )
+  })
+})
+
+describe('where the record lives', () => {
+  it('is under the send document the caller holds', async () => {
+    await recordCampaignReach(sendRef(), ['ada@example.com'])
+    expect([...store.keys()]).toEqual([`${SEND_PATH}/reports/reached`])
+    expect(store.get(`${SEND_PATH}/reports/reached`)).toMatchObject({
+      keys: { __arrayUnion: [key('ada@example.com')] },
+    })
   })
 })

@@ -16,10 +16,14 @@
  */
 'use client'
 
-import type { AglynOrgBilling, ConsolePluginPageProps } from '@aglyn/aglyn'
+import type {
+  AglynOrgBilling,
+  ConsolePluginOrgMount,
+  ConsolePluginPageProps,
+} from '@aglyn/aglyn'
 import { GridItems } from '@aglyn/shared-ui-jsx'
 import { HubSections } from '@aglyn/shared-ui-next'
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import AnnouncementBarCard from './announcement-bar-card.component'
 import CampaignDetailCard from './campaign-detail-card'
 import CampaignsCard from './campaigns-card'
@@ -28,7 +32,14 @@ import HostExperimentsCard from './host-experiments-card.component'
 import HostMarketingSummaryCard from './host-marketing-summary-card.component'
 import HostOverlaysCard from './host-overlays-card.component'
 import PopupCard from './popup-card.component'
+import EmailComposeCard from './email-compose-card'
+import EmailDetail from './email-detail'
+import EmailsListCard from './emails-list-card'
 import type { MarketingConsoleSectionId } from './marketing-console-sections'
+import {
+  MarketingOrgMountProvider,
+  type MarketingOrgMount,
+} from './marketing-org-mount'
 
 /**
  * The body of one marketing section, built only when that section is the one
@@ -124,6 +135,71 @@ function sectionBody(
 }
 
 /**
+ * The body of one ORGANIZATION-level section: the campaigns and the emails,
+ * over every site.
+ *
+ * The same cards as the site hub, handed no site. Each reads the org's
+ * collections unfiltered and takes what stays a site fact — the sender, the
+ * designs, the conversions — from the site a send is sent as, or asks which
+ * site when it is about to create one.
+ */
+function orgSectionBody(
+  section: MarketingConsoleSectionId,
+  detail: readonly string[],
+  basePath: string,
+): ReactNode {
+  switch (section) {
+    case 'campaigns':
+      return detail[0] ? (
+        <CampaignDetailCard
+          hostId={null}
+          campaignId={detail[0]}
+          basePath={basePath}
+        />
+      ) : (
+        <CampaignsCard hostId={null} basePath={basePath} />
+      )
+    case 'emails':
+      /*
+       * `…/emails` lists them, `…/emails/{id}` reports on one and
+       * `…/emails/{id}/edit` writes it — the Emails console's Messages
+       * grammar, under the org hub because there is no site to host it.
+       */
+      return detail[0] ? (
+        detail[1] === 'edit' ? (
+          <EmailComposeCard
+            hostId={null}
+            emailId={detail[0]}
+            basePath={basePath}
+          />
+        ) : (
+          <EmailDetail hostId={null} emailId={detail[0]} basePath={basePath} />
+        )
+      ) : (
+        <EmailsListCard hostId={null} basePath={basePath} />
+      )
+    default:
+      return null
+  }
+}
+
+/** The shell's org mount, as the Marketing cards read it through context. */
+function marketingOrgMount(
+  orgMount: ConsolePluginOrgMount | undefined,
+  basePath: string | undefined,
+): MarketingOrgMount | null {
+  if (!orgMount || !basePath) return null
+  return {
+    orgId: orgMount.orgId,
+    orgSlug: orgMount.orgSlug,
+    hosts: orgMount.hosts,
+    hostsReady: orgMount.hostsReady,
+    hostsPath: orgMount.hostsPath,
+    basePath,
+  }
+}
+
+/**
  * Marketing page (AGL-251 → AGL-395): the at-a-glance rollup, the email
  * campaigns, the overlay managers (multi-overlay + announcement bar + popup),
  * and A/B testing — owned by the marketing plugin and rendered by the shell's
@@ -146,7 +222,16 @@ function sectionBody(
  * and "mount only what is open" is structural rather than a `lazy` flag.
  */
 export function MarketingConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, org, section, sections, basePath, segments } = props
+  const { hostId, orgMount, org, section, sections, basePath, segments } = props
+  /*
+   * Mounted with no site: the organization's hub. Memoised because every card
+   * below reads it through context, and a fresh object each render would
+   * re-render all of them for nothing.
+   */
+  const mount = useMemo(
+    () => (hostId == null ? marketingOrgMount(orgMount, basePath) : null),
+    [hostId, orgMount, basePath],
+  )
 
   /*
    * Nothing until the URL names a section. The shell redirects a bare hub URL
@@ -155,6 +240,25 @@ export function MarketingConsolePage(props: ConsolePluginPageProps) {
    * listens on a URL that is already being replaced.
    */
   if (!section || !sections?.length || !basePath) return null
+  // `segments[0]` IS the section — the shell resolved it into `section`
+  // already — so what a section owns is everything after it.
+  const detail = (segments ?? []).slice(1)
+
+  if (hostId == null) {
+    // No site and no org to stand in for it: nothing this page can scope.
+    if (!mount) return null
+    return (
+      <MarketingOrgMountProvider value={mount}>
+        <HubSections sections={sections}>
+          {orgSectionBody(
+            section as MarketingConsoleSectionId,
+            detail,
+            basePath,
+          )}
+        </HubSections>
+      </MarketingOrgMountProvider>
+    )
+  }
 
   return (
     <HubSections sections={sections}>
@@ -162,9 +266,7 @@ export function MarketingConsolePage(props: ConsolePluginPageProps) {
         section as MarketingConsoleSectionId,
         hostId,
         org,
-        // `segments[0]` IS the section — the shell resolved it into `section`
-        // already — so what a section owns is everything after it.
-        (segments ?? []).slice(1),
+        detail,
         basePath,
       )}
     </HubSections>
