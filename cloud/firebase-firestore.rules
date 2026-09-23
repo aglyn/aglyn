@@ -3423,35 +3423,6 @@ service cloud.firestore {
               'campaignSequenceReports',
               'flowEnrollments']));
       }
-      // A site's leads (AGL-2801, AGL-2851). A capture door files one on
-      // every plan — a form, a sign-up, a booking, an import — through the
-      // Admin SDK, which these rules do not gate. What the console writes
-      // client-direct is a lead's WORKING state, its status, owner and notes
-      // in the CRM's Leads section, and the CRM is included from Starter: a
-      // workspace whose plan does not carry it creates and changes no lead
-      // from a client.
-      //
-      // The catch-all's create and update lists name `leads`, and this block
-      // re-grants both on the catch-all's own terms plus the plan: sibling
-      // matches are OR'd and the looser one wins, so without the exclusions
-      // this block would narrow nothing. Read and delete stay with the
-      // catch-all on every plan: an export reads a lead, and removing one is
-      // the workspace's own act.
-      //
-      // `emailState` (AGL-3245) is the platform's verdict on the address —
-      // a bounce, a gateway block, a do-not-contact mark — written by the
-      // senders through the Admin SDK and never from a client: a member who
-      // could clear it could email a person who asked not to be.
-      match /leads/{leadId} {
-        allow create: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
-            hostOrgCarriesCrmSuite(hostId) &&
-            !('emailState' in request.resource.data));
-        allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
-            hostOrgCarriesCrmSuite(hostId) &&
-            !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState']));
-      }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
       // writer and it runs on the Admin SDK — and this block re-grants the

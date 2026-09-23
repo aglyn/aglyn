@@ -19,7 +19,6 @@ import {
   crmContactByEmailHref,
   crmHubHref,
   crmOrgHubHref,
-  crmOrgLeadHref,
   crmOrgRecordHref,
   crmOrgSectionHref,
   crmRecordHref,
@@ -81,7 +80,5 @@ describe('crmRoutes agrees with the console-side builders at the org hub', () =>
     // The site segment is gone: one org collection makes the person key
     // unambiguous, so a lead addresses the way a contact or a deal does.
     expect(orgRoutes.lead('l/1')).toBe(crmOrgRecordHref('acme', 'lead', 'l/1'))
-    // The old two-argument helper still answers, and ignores the site.
-    expect(crmOrgLeadHref('acme', 'host-1', 'l/1')).toBe(orgRoutes.lead('l/1'))
   })
 })

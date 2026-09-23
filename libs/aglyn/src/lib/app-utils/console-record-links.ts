@@ -153,23 +153,9 @@ export function crmOrgRecordHref(
   return `${crmOrgSectionHref(orgSlug, CRM_RECORD_SECTIONS[kind])}/${encodeURIComponent(id)}`
 }
 
-/**
- * A lead addressed from the org hub.
- *
- * Kept as its own name so the callers that had a `hostId` in hand do not have
- * to prove they no longer need one; it ignores the site and is exactly
- * `crmOrgRecordHref(orgSlug, 'lead', leadId)`. New callers should use that.
- *
- * @deprecated Use {@link crmOrgRecordHref}. Removed with the host-path
- *   fallback in AGL-3277.
- */
-export function crmOrgLeadHref(
-  orgSlug: string,
-  _hostId: string,
-  leadId: string,
-): string {
-  return crmOrgRecordHref(orgSlug, 'lead', leadId)
-}
+// `crmOrgLeadHref` is gone with the host-path fallback (AGL-3277). It took a
+// site it had already stopped using; `crmOrgRecordHref(orgSlug, 'lead', id)`
+// is the whole of what it did.
 
 /**
  * The query keys a site record page reads on arrival, so a CRM timeline can

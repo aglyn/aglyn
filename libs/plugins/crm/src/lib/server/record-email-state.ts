@@ -66,12 +66,6 @@ export interface CrmRecordEmailStateDeps {
 
 const NONE: PluginRecordEmailStateReport = { records: 0 }
 
-/** The sites an organization owns, by id: `hosts` where `orgId` is the org's. */
-async function orgHostIds(firestore: Firestore, orgId: string): Promise<string[]> {
-  const hosts = await firestore.collection('hosts').where('orgId', '==', orgId).select().get()
-  return hosts.docs.map((doc) => doc.id)
-}
-
 /**
  * Applies the verdict to one record; answers whether it moved. A read then
  * a merge rather than a transaction: two verdicts landing together each
@@ -148,12 +142,10 @@ export function createCrmRecordEmailStateWriter(deps: CrmRecordEmailStateDeps): 
       }
       try {
         /*
-         * ONE ORG ROW, plus any legacy site row the backfill has not reached
-         * (AGL-3275). A bounce or a do-not-contact mark is the platform's
-         * verdict on the ADDRESS, so it has to reach every copy that still
-         * exists — an unmarked leftover is a person who asked not to be
-         * mailed and could be. AGL-3277 drops the second loop with the
-         * fallback.
+         * ONE ORG ROW. A bounce or a do-not-contact mark is the platform's
+         * verdict on the ADDRESS, and since AGL-3277 there is one document
+         * carrying it — the per-site loop beside this had nothing left to
+         * find once AGL-3276 emptied the host path.
          */
         if (await stampRecord(
           firestore.collection('orgs').doc(orgId).collection('leads').doc(key),
@@ -161,10 +153,6 @@ export function createCrmRecordEmailStateWriter(deps: CrmRecordEmailStateDeps): 
           force,
         )) {
           records += 1
-        }
-        for (const hostId of await orgHostIds(firestore, orgId)) {
-          const lead = firestore.collection('hosts').doc(hostId).collection('leads').doc(key)
-          if (await stampRecord(lead, state, force)) records += 1
         }
       } catch (error) {
         console.error('[crm] the leads could not be stamped with an email state', orgId, error)

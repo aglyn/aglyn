@@ -141,7 +141,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    * are unchanged because an erasure has to reach a legacy row too.
    */
   readLeadForHost: async (hostId: string, leadId: string) => {
-    for (const path of [`orgs/org1/leads/${leadId}`, `hosts/${hostId}/leads/${leadId}`]) {
+    for (const path of [`orgs/org1/leads/${leadId}`]) {
       const row = docs.get(path)
       if (row) {
         return { exists: true, id: leadId, data: () => row, get: (f: string) => (row as any)?.[f] }
@@ -206,9 +206,10 @@ function seed() {
   docs.set('hosts/h2', { orgId: ORG })
   docs.set('hosts/other', { orgId: 'org2' })
   docs.set(`orgs/${ORG}/contacts/c1`, { email: EMAIL, name: 'Jane' })
-  docs.set(`hosts/${HOST}/leads/${KEY}`, { email: EMAIL })
-  docs.set(`hosts/h2/leads/${KEY}`, { email: EMAIL })
-  docs.set(`hosts/other/leads/${KEY}`, { email: EMAIL })
+  // One lead per org since AGL-3275/3277: the workspace's own, and another
+  // workspace's copy of the same address, which an erasure must not reach.
+  docs.set(`orgs/${ORG}/leads/${KEY}`, { email: EMAIL })
+  docs.set(`orgs/org2/leads/${KEY}`, { email: EMAIL })
 }
 
 beforeEach(() => {
@@ -309,14 +310,13 @@ describe('filing from a contact', () => {
     expect(docs.has(`hosts/other/suppressions/${KEY}`)).toBe(false)
   })
 
-  it('stamps the contact and each of the workspace\'s leads so their pages can say so', async () => {
+  it('stamps the contact and the workspace\'s lead so their pages can say so', async () => {
     seed()
     await call({ hostId: HOST, contactId: 'c1', email: EMAIL })
     const stamp = docs.get(`personErasures/${ORG}__${KEY}`)?.pendingSinceMs
     expect(docs.get(`orgs/${ORG}/contacts/c1`)?.erasureRequestedAtMs).toBe(stamp)
-    expect(docs.get(`hosts/${HOST}/leads/${KEY}`)?.erasureRequestedAtMs).toBe(stamp)
-    expect(docs.get(`hosts/h2/leads/${KEY}`)?.erasureRequestedAtMs).toBe(stamp)
-    expect(docs.get(`hosts/other/leads/${KEY}`)).not.toHaveProperty('erasureRequestedAtMs')
+    expect(docs.get(`orgs/${ORG}/leads/${KEY}`)?.erasureRequestedAtMs).toBe(stamp)
+    expect(docs.get(`orgs/org2/leads/${KEY}`)).not.toHaveProperty('erasureRequestedAtMs')
   })
 
   it('records the act on the site feed and the audit log without the address', async () => {
@@ -405,8 +405,8 @@ describe('the door at the organization level', () => {
     expect(request).not.toHaveProperty('hostId')
     // Both of the org's sites, and not the other org's.
     expect(mockSuppress.mock.calls.map((call) => (call as any)[0].hostId).sort()).toEqual(['h1', 'h2'])
-    expect(docs.get(`hosts/${HOST}/leads/${KEY}`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
-    expect(docs.get(`hosts/other/leads/${KEY}`)?.['erasureRequestedAtMs']).toBeUndefined()
+    expect(docs.get(`orgs/${ORG}/leads/${KEY}`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
+    expect(docs.get(`orgs/org2/leads/${KEY}`)?.['erasureRequestedAtMs']).toBeUndefined()
     expect(docs.get(`orgs/${ORG}/contacts/c1`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
     expect(mockLogOrgActivity).toHaveBeenCalledWith(
       ORG,
@@ -483,8 +483,8 @@ describe('filing by address alone', () => {
     expect(request).not.toHaveProperty('leadId')
     expect(mockSuppress.mock.calls.map((entry) => (entry as any)[0].hostId).sort()).toEqual(['h1', 'h2'])
     expect(docs.get(`orgs/${ORG}/contacts/c1`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
-    expect(docs.get(`hosts/h2/leads/${KEY}`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
-    expect(docs.get(`hosts/other/leads/${KEY}`)?.['erasureRequestedAtMs']).toBeUndefined()
+    expect(docs.get(`orgs/${ORG}/leads/${KEY}`)?.['erasureRequestedAtMs']).toEqual(expect.any(Number))
+    expect(docs.get(`orgs/org2/leads/${KEY}`)?.['erasureRequestedAtMs']).toBeUndefined()
     expect(mockLogOrgActivity).toHaveBeenCalledWith(ORG, expect.anything(), 'Requested privacy erasure', {
       type: 'org',
     })

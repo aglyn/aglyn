@@ -292,14 +292,9 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
       )
     }
     /*
-     * THE ORG ROW, AND EVERY LEGACY ROW STILL STANDING.
-     *
-     * An erasure may not be the one caller that trusts the migration to be
-     * finished: until AGL-3276 has folded every site and AGL-3277 has deleted
-     * the fallback, a person can still be held at `hosts/{siteId}/leads`, and
-     * a marker that reached only the org row would leave that copy unmarked.
-     * So this marks whatever exists, in both homes, and the sweep costs one
-     * read per site exactly as it did before.
+     * THE ORG ROW. One document for the person, since AGL-3276 emptied the
+     * host path and AGL-3277 removed it — the per-site sweep this used to do
+     * beside it had nothing left to find.
      */
     const eraseLeadAt = async (
       ref: FirebaseFirestore.DocumentReference,
@@ -317,12 +312,6 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
         })
     }
     await eraseLeadAt(firestore.collection('orgs').doc(orgId).collection('leads').doc(key), orgId)
-    for (const siteId of hostIds) {
-      await eraseLeadAt(
-        firestore.collection('hosts').doc(siteId).collection('leads').doc(key),
-        siteId,
-      )
-    }
     try {
       const contacts = await firestore
         .collection('orgs')

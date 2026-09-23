@@ -44,7 +44,16 @@ function docRef(path: string): any {
   return {
     id: path.slice(path.lastIndexOf('/') + 1),
     path,
-    get: async () => snapshot(path),
+    get: async () => {
+      /*
+       * The LEAD read, refusing (AGL-3277). This used to break the `hosts`
+       * query the per-site sweep ran; there is one org row now, and it is
+       * read by id — so the refusal has to live on the document read or the
+       * "never throws" claim would be asserting nothing.
+       */
+      if (mockFailHosts && path.includes('/leads/')) throw new Error('UNAVAILABLE')
+      return snapshot(path)
+    },
     set: async (data: Data) => {
       mockDocs.set(path, { ...(mockDocs.get(path) ?? {}), ...data })
       mockWrites.push(path)
@@ -60,7 +69,6 @@ function collectionRef(path: string): any {
     limit: () => query(filter),
     where: (field: string, _op: string, value: unknown) => query((data) => filter(data) && data[field] === value),
     get: async () => {
-      if (path === 'hosts' && mockFailHosts) throw new Error('UNAVAILABLE')
       const found = rows()
         .filter((key) => filter(mockDocs.get(key) ?? {}))
         .map(snapshot)
@@ -105,8 +113,10 @@ beforeEach(() => {
   mockDocs.set('hosts/site-b', { orgId: ORG })
   mockDocs.set('hosts/site-elsewhere', { orgId: 'org-2' })
   mockDocs.set(`orgs/${ORG}/contacts/c-1`, { email: EMAIL, name: 'Morgan' })
-  mockDocs.set(`hosts/site-a/leads/${KEY}`, { email: EMAIL })
-  mockDocs.set(`hosts/site-elsewhere/leads/${KEY}`, { email: EMAIL })
+  // One lead per ORG since AGL-3275/3277, so the other organization's copy
+  // of the same address is the thing this must not touch.
+  mockDocs.set(`orgs/${ORG}/leads/${KEY}`, { email: EMAIL })
+  mockDocs.set(`orgs/org-2/leads/${KEY}`, { email: EMAIL })
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
 })
 
@@ -119,14 +129,14 @@ describe('the CRM on the record email-state seam (AGL-3245)', () => {
     expect(pluginRecordEmailStateWriter()?.pluginId).toBe('crm')
   })
 
-  it('stamps the contact and every lead the organization’s sites hold, and no other organization’s', async () => {
+  it('stamps the contact and the organization’s lead, and no other organization’s', async () => {
     expect(await writer.stamp({ orgId: ORG, email: ' Morgan@KCorp.Example ', state: BLOCKED })).toEqual({ records: 2 })
     const expected = { status: 'blocked', atMs: AT, source: 'sequence', detail: '550 (the address:blocked)', enrollmentId: 'seq-1_c-1' }
     expect(mockDocs.get(`orgs/${ORG}/contacts/c-1`)?.['emailState']).toEqual(expected)
-    expect(mockDocs.get(`hosts/site-a/leads/${KEY}`)?.['emailState']).toEqual(expected)
-    expect(mockDocs.get(`hosts/site-elsewhere/leads/${KEY}`)?.['emailState']).toBeUndefined()
-    // No lead was minted under a site that had none.
-    expect(mockDocs.has(`hosts/site-b/leads/${KEY}`)).toBe(false)
+    expect(mockDocs.get(`orgs/${ORG}/leads/${KEY}`)?.['emailState']).toEqual(expected)
+    // The same address under another workspace is a different person's record
+    // as far as this verdict goes, and is left alone.
+    expect(mockDocs.get(`orgs/org-2/leads/${KEY}`)?.['emailState']).toBeUndefined()
   })
 
   it('keeps the stronger verdict, and writes nothing when the record already holds it', async () => {
@@ -146,6 +156,11 @@ describe('the CRM on the record email-state seam (AGL-3245)', () => {
 
   it('stamps nothing for a value that is not an address, and never throws when a read fails', async () => {
     expect(await writer.stamp({ orgId: ORG, email: 'nobody', state: BLOCKED })).toEqual({ records: 0 })
+    // A refusing read is REPORTED as nothing stamped, never thrown: a verdict
+    // that took the caller down with it would cost the send its own answer.
+    // The contact still stamps; only the lead read refuses, and a refusing
+    // read is REPORTED rather than thrown — a verdict that took the caller
+    // down with it would cost the send its own answer.
     mockFailHosts = true
     expect(await writer.stamp({ orgId: ORG, email: EMAIL, state: BLOCKED })).toEqual({ records: 1 })
   })
@@ -154,7 +169,7 @@ describe('the CRM on the record email-state seam (AGL-3245)', () => {
     expect(
       await writer.stamp({ hostId: 'site-b', email: EMAIL, state: { status: 'unsubscribed', atMs: AT, source: 'campaign', detail: null } }),
     ).toEqual({ records: 2 })
-    expect(mockDocs.get(`hosts/site-a/leads/${KEY}`)?.['emailState']).toMatchObject({ status: 'unsubscribed', source: 'campaign' })
+    expect(mockDocs.get(`orgs/${ORG}/leads/${KEY}`)?.['emailState']).toMatchObject({ status: 'unsubscribed', source: 'campaign' })
     expect(await writer.stamp({ hostId: 'site-unknown', email: EMAIL, state: BLOCKED })).toEqual({ records: 0 })
     expect(await writer.stamp({ email: EMAIL, state: BLOCKED })).toEqual({ records: 0 })
   })

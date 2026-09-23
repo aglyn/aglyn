@@ -1852,7 +1852,6 @@
     {
       "path": "libs/tenant/data/admin/src/lib/server/host-visitor-records.ts",
       "rules": [
-        "plugin-collection:crm",
         "domain-declares:crm",
         "domain-declares:marketing"
       ],
