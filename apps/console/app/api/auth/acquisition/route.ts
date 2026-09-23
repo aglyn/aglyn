@@ -19,6 +19,7 @@ import type { AcquisitionDoor } from '@aglyn/aglyn/app-utils/account-acquisition
 import { readFirstTouchCookie } from '@aglyn/shared-util-first-touch'
 import { firebaseAdmin, isImpersonationSession } from '@aglyn/tenant-data-admin'
 import { recordAccountAcquisition } from '@aglyn/tenant-data-admin/server/account-acquisition'
+import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — records the caller's own sign-up attribution while the account is being created; pre-org, so no org, host or user scope exists to bind a verdict to, and the session mint carries the scope gate for this flow
@@ -60,8 +61,7 @@ async function handler(request: Request): Promise<Response> {
   const body = await request.json().catch(() => null)
 
   try {
-    const auth = firebaseAdmin.app().auth()
-    const decoded = await auth.verifyIdToken(idToken)
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
     // A staff member signed in AS somebody did not create their account.
     if (isImpersonationSession(decoded)) {
       return Response.json({ error: 'Not during impersonation' }, { status: 403 })
@@ -71,8 +71,10 @@ async function handler(request: Request): Promise<Response> {
     if (!door) {
       return Response.json({ error: 'Not a sign-up door' }, { status: 400 })
     }
-    const account = await auth.getUser(decoded.uid)
-    const createdAtMs = Date.parse(account.metadata.creationTime)
+    // Across every pool, not the project's alone (AGL-1122): a lookup that
+    // cannot see an account answers "not new", which writes nothing.
+    const pooled = await findUserByUidAcrossPools(decoded.uid)
+    const createdAtMs = Date.parse(pooled?.record.metadata.creationTime ?? '')
     const result = await recordAccountAcquisition({
       uid: decoded.uid,
       accountCreatedAtMs: Number.isFinite(createdAtMs) ? createdAtMs : null,

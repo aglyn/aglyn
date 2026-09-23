@@ -123,6 +123,16 @@ export async function firstTouchPreflightResponse(request: Request): Promise<Res
   return new Response(null, { status: origin ? 204 : 403, headers: corsHeaders(origin) })
 }
 
+/** The request's plain-text JSON body, or null for anything unreadable or oversized. */
+async function readBody(request: Request): Promise<Record<string, unknown> | null> {
+  try {
+    const text = await request.text()
+    return text.length <= 8192 ? JSON.parse(text) : null
+  } catch {
+    return null
+  }
+}
+
 /** POST — seal a record for a hop, or open one a hop brought. */
 export async function firstTouchHandoffResponse(request: Request): Promise<Response> {
   const origin = firstPartyOrigin(request.headers.get('origin'), await resolveFirstPartyHosts())
@@ -130,13 +140,7 @@ export async function firstTouchHandoffResponse(request: Request): Promise<Respo
   // Browsers name the origin on every POST a page makes. A request that
   // names none, or one that is not ours, is not a hop between our hosts.
   if (!origin) return Response.json({ error: 'Not a first-party origin' }, { status: 403, headers })
-  let body: Record<string, unknown> | null = null
-  try {
-    const text = await request.text()
-    body = text.length <= 8192 ? JSON.parse(text) : null
-  } catch {
-    body = null
-  }
+  const body = await readBody(request)
   if (body && 'seal' in body) {
     const sealed = sealFirstTouch(body['seal'])
     return sealed
