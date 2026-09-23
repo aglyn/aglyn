@@ -61,7 +61,12 @@
 
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { planOrgLeads, pickEnrollment } from './lib/org-lead-backfill.mjs'
+import {
+  archiveIdFor,
+  foldNoteIdFor,
+  pickEnrollment,
+  planOrgLeads,
+} from './lib/org-lead-backfill.mjs'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
 import { collect, commitAll, connectFirestore } from './lib/firestore-backfill.mjs'
 
@@ -182,7 +187,7 @@ async function run() {
       for (const activity of write.activities) {
         writes.push({
           kind: 'set',
-          ref: orgRef.collection('crmActivities').doc(`backfill~${write.id}~${activity.hostId}`),
+          ref: orgRef.collection('crmActivities').doc(foldNoteIdFor(write.id, activity.hostId)),
           value: activity,
         })
       }
@@ -191,7 +196,7 @@ async function run() {
       for (const row of plan.archives) {
         writes.push({
           kind: 'set',
-          ref: orgRef.collection('crmBackfillArchive').doc(`leads~${row.hostId}~${row.id}`),
+          ref: orgRef.collection('crmBackfillArchive').doc(archiveIdFor(row.hostId, row.id)),
           value: {
             collection: 'leads',
             hostId: row.hostId,

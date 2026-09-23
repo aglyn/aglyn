@@ -41,6 +41,24 @@
 //  - A marketing basis is carried forward and never cleared, keeping the
 //    EARLIEST grant — the one that actually happened.
 
+/**
+ * The archive id for one site row, and the id of the note a fold leaves.
+ *
+ * Named key functions rather than templates at the `.doc()` call, because
+ * `check:id-minting` (AGL-3079) refuses a document named by an id the
+ * platform did not mint unless the meaning lives in a function — and the
+ * meaning here is exactly the point: both are keyed by the pair they
+ * describe, so a re-run re-archives the same row instead of minting a second
+ * copy of it.
+ */
+export function archiveIdFor(hostId, leadId) {
+  return `leads~${hostId}~${leadId}`
+}
+
+export function foldNoteIdFor(leadId, hostId) {
+  return `backfill~${leadId}~${hostId}`
+}
+
 /** The lead fields that merge by taking the first non-empty value. */
 const FIRST_WINS = [
   'email',
