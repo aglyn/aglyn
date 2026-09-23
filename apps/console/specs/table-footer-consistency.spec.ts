@@ -997,6 +997,16 @@ const NOT_A_LIST: Array<[string, string]> = [
       'existed, so there is no second page for a footer to turn to.',
   ],
   [
+    'libs/plugins/crm/src/lib/components/lead-source-values-card.tsx',
+    'The organization’s LEAD SOURCE picklist values (AGL-3298) — a settings ' +
+      'table, one row per value the merchant declared, bounded by ' +
+      '`CRM_PICKLIST_VALUES_MAX` (200) where the picklist is read and ' +
+      'written: the values live in one `crmPicklists/leadSource` document, ' +
+      'in the order the arrows on each row move. The bound is what a ' +
+      'dropdown can carry, not how long the account has existed, so there ' +
+      'is no second page for a footer to turn to.',
+  ],
+  [
     'libs/plugins/crm/src/lib/components/settings-section.tsx',
     'The organization’s owner ASSIGNMENT RULES (AGL-2618) — a settings ' +
       'table, one row per rule the merchant declared, bounded by ' +
@@ -1821,7 +1831,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // dropped and `notification-scope-table.component.tsx` took its place.
     // One entry out, one in — the same two tables this console has always
     // drawn here.
-    expect(NOT_A_LIST).toHaveLength(64)
+    //
+    // 65 after AGL-3298, and this one IS a new table: the lead source
+    // picklist's values, a settings table capped at `CRM_PICKLIST_VALUES_MAX`
+    // like the other CRM settings rows above it.
+    expect(NOT_A_LIST).toHaveLength(65)
   })
 })
 
