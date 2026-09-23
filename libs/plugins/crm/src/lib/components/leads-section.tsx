@@ -39,6 +39,7 @@ import {
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { customFieldColumns } from './contact-custom-columns'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
@@ -81,6 +82,7 @@ import {
   query,
   serverTimestamp,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
@@ -161,16 +163,16 @@ type LeadRow = Record<string, unknown> &
  * A section of its own, the way Salesforce keeps Leads apart from Contacts:
  * a lead is a capture — a form, a booking, a sign-up — that somebody has
  * still to work, and it converts into a contact, a company and a deal when
- * it is real. Reads `hosts/{hostId}/leads`, host-scoped by path, so there is
- * no `visibleTo` filter; the Firestore rules admit any member of the site to
- * read it and an admin, editor or author to update it, which is what makes
- * the inline status and owner changes client-direct writes.
+ * it is real. Reads `orgs/{orgId}/leads` narrowed by `visibleTo` to the sites
+ * this viewer may see (AGL-3275) — the same collection and the same clause at
+ * both levels, which is what lets ONE listener serve a section that used to
+ * open one per site.
  *
- * At the ORGANIZATION level (AGL-2630) there is no one site to read: the
- * section opens the same query under every site the org has (`useOrgLeads`)
- * and lists the merged window with a Site column, every row naming the site
- * its writes and its link go to. The per-site notes — which of a site's
- * forms file a lead — belong to a site's own hub and are not drawn here.
+ * Under a site the clause names that site; at the ORGANIZATION level an
+ * org-wide member reads without one, since the rules short-circuit on
+ * `isOrgWideMember()` and a clause would only narrow what they may already
+ * read. The per-site notes — which of a site's forms file a lead — belong to
+ * a site's own hub and are not drawn here.
  */
 export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const { hostId, org, basePath } = props
@@ -184,19 +186,26 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const leadFields = useContactFieldDefinitions(orgId, 'lead')
   const routes = crmRoutes(basePath ?? '')
 
-  // Under a site: the site's own window, rows keyed by document id.
+  /*
+   * Under a site: the ORG collection, narrowed to what this site may see
+   * (AGL-3275). It read `hosts/{hostId}/leads` until the silo moved, and
+   * leaving it there would have shown a site its pre-migration rows and
+   * nothing captured since — then nothing at all, once AGL-3276 emptied the
+   * path it was reading.
+   */
   const site = useFirestoreCollection<
     Record<string, unknown> & CrmLeadFields & { $id: string }
   >(
     () =>
-      hostId
+      hostId && orgId
         ? query(
-            collection(firestore, 'hosts', hostId, 'leads'),
+            collection(firestore, 'orgs', orgId, 'leads'),
+            where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId)),
             orderBy('lastSeenAtMs', 'desc'),
             limit(LEADS_WINDOW + 1),
           )
         : null,
-    [firestore, hostId],
+    [firestore, hostId, orgId],
     { idField: '$id' },
   )
   // At the organization level: every site's window, merged.

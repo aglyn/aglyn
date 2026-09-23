@@ -139,7 +139,14 @@ jest.mock('./lead-convert-dialog', () => ({
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
-  useFirestoreCollection: () => ({ data: siteRows, status: 'success', fromCache: false }),
+  useFirestoreCollection: (factory: () => unknown) => {
+    // CALLED, not ignored. The double used to drop the factory on the floor,
+    // so nothing here could see which collection the section read — which is
+    // how the site branch went on reading the host path after AGL-3275 moved
+    // the silo, with this file still green.
+    factory()
+    return { data: siteRows, status: 'success', fromCache: false }
+  },
   // The site's campaigns, for the Campaign filter and column (AGL-3254).
   useHostCampaigns: () => ({
     options: [
@@ -150,11 +157,24 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     ready: true,
   }),
 }))
+/** Every collection path and scope clause the section asked Firestore for. */
+const mockPaths: string[] = []
+const mockScopes: unknown[][] = []
+
 jest.mock('firebase/firestore', () => ({
-  collection: () => ({}),
+  collection: (_db: unknown, ...segments: string[]) => {
+    mockPaths.push(segments.join('/'))
+    return {}
+  },
+  where: (field: string, _op: string, value: unknown) => {
+    if (field === 'visibleTo') mockScopes.push(value as unknown[])
+    return {}
+  },
   query: () => ({}),
   orderBy: () => ({}),
   limit: () => ({}),
+  startAfter: () => ({}),
+  documentId: () => '__name__',
   doc: () => ({}),
   updateDoc: jest.fn(),
   deleteField: () => ({ op: 'delete' }),
@@ -452,5 +472,30 @@ describe('The search box narrows the whole loaded window (AGL-3246)', () => {
     )
     expect(listed()).toEqual(['icp2@example.com', 'both@example.com'])
     expect(screen.getByText('1–2 of 2')).toBeTruthy()
+  })
+})
+
+
+/**
+ * WHICH COLLECTION THE LIST READS (AGL-3275).
+ *
+ * Asserted because it was not: the section's site branch kept reading
+ * `hosts/{hostId}/leads` after the silo moved, and every test here still
+ * passed — the `useFirestoreCollection` double never ran the factory, so no
+ * assertion could reach the path. On production that shows a site its
+ * pre-migration rows and nothing captured since, then nothing at all once the
+ * backfill empties the path.
+ */
+describe('the collection the section reads', () => {
+  beforeEach(() => {
+    mockPaths.length = 0
+    mockScopes.length = 0
+  })
+
+  it('reads the ORG collection under a site, narrowed to that site', () => {
+    renderSite()
+    expect(mockPaths).toContain('orgs/org-1/leads')
+    expect(mockPaths.some((path) => path.startsWith('hosts/'))).toBe(false)
+    expect(mockScopes).toContainEqual(['org', 'host:site-1'])
   })
 })
