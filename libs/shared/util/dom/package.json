@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-util-dom",
-  "version": "1.0.0-beta.175",
+  "version": "1.0.0-beta.176",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,7 +25,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-util-tools": "1.0.0-beta.175",
+    "@aglyn/shared-util-tools": "1.0.0-beta.176",
     "@swc/helpers": "0.5.23",
     "mobx": "^6.16.1",
     "rxjs": "^7.8.2"
