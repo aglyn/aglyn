@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-ui-theme",
-  "version": "1.0.0-beta.165",
+  "version": "1.0.0-beta.166",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,9 +25,9 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-types": "1.0.0-beta.165",
-    "@aglyn/shared-util-tools": "1.0.0-beta.165",
-    "@aglyn/shared-util-vendor": "1.0.0-beta.165",
+    "@aglyn/shared-data-types": "1.0.0-beta.166",
+    "@aglyn/shared-util-tools": "1.0.0-beta.166",
+    "@aglyn/shared-util-vendor": "1.0.0-beta.166",
     "@emotion/cache": "^11.14.0",
     "@emotion/react": "11.14.0",
     "@swc/helpers": "0.5.23",
