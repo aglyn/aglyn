@@ -35,6 +35,9 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: (...args: unknown[]) => updateDoc(...(args as [])),
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead collection is the org's now (AGL-3275), so the surface resolves
+  // its org through the shared scope hook.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   writeGuardedBySeed: async (_seed: unknown, run: () => Promise<unknown>) => {
     await run()
@@ -105,7 +108,7 @@ describe('LeadCampaignsCard', () => {
     fireEvent.click(save)
     await waitFor(() => expect(notices).toEqual(['Filing saved']))
     expect(updateDoc).toHaveBeenCalledWith(
-      { path: 'hosts/site-1/leads/lead-key' },
+      { path: 'orgs/org-1/leads/lead-key' },
       { campaignIds: ['founder-icp2'], updatedAt: { op: 'serverTimestamp' } },
     )
     expect(onFiled).toHaveBeenCalledWith({ added: ['founder-icp2'], removed: ['founder-icp1'] })

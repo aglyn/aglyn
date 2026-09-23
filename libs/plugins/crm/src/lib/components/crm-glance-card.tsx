@@ -37,7 +37,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
 import { crmRoutes } from '../model/crm-routes'
-import { openLeadsAcrossSites } from './reports/lead-counts'
+import { openLeadsForScope } from './reports/lead-counts'
 import { scopedCollection, visibleToClause } from './reports/report-scope'
 import { ReportStatTile } from './reports/report-stat-tile'
 import { useAggregateRead } from './reports/use-aggregate-read'
@@ -164,7 +164,9 @@ export function CrmGlanceCard(props: CrmGlanceCardProps) {
           where('dueAtMs', '<', day.end),
         ),
       ),
-      openLeadsAcrossSites(firestore, leadSites),
+      // One scoped count over the org collection (AGL-3275) — see the
+      // function's note on why summing per site would double-count.
+      openLeadsForScope(firestore, scope[1], tokens),
     ]).then(([contacts, newThisWeek, pipelineCents, tasksDue, leadsToWork]) => ({
       contacts,
       newThisWeek,

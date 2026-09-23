@@ -60,6 +60,42 @@ const mockNotifyAssigned = jest.fn()
 const mockLogActivity = jest.fn()
 let mockAssignment: Record<string, unknown> = { outcome: 'none', reason: 'no-rule' }
 
+/*
+ * The lead silo is org-scoped (AGL-3275), and the real capture door this spec
+ * drives reaches it by RELATIVE path — so these two are doubled here as well
+ * as on the barrel above, or `addHostLead` resolves a live Firebase app.
+ */
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/org-leads', () => {
+  const double = jest.requireActual('./api-v1-crm-double')
+  const leads = () => double.mockFirestore.collection('orgs').doc('org-1').collection('leads')
+  return {
+    __esModule: true,
+    orgLeadsForHost: async () => leads(),
+    readLeadForHost: async (_hostId: string, key: string) => {
+      const snapshot = await leads().doc(key).get()
+      return snapshot.exists ? snapshot : null
+    },
+    leadForWrite: async (_hostId: string, key: string) => ({
+      ref: leads().doc(key),
+      existed: (await leads().doc(key).get()).exists,
+      carried: false,
+    }),
+    leadScopeForHost: async (hostId: string) => ['org', `host:${hostId}`],
+  }
+})
+
+jest.mock('../../../libs/tenant/data/admin/src/lib/server/organizations', () => {
+  const consentGroups = jest.requireActual(
+    '../../../libs/aglyn/src/lib/app-utils/consent-groups',
+  )
+  return {
+    __esModule: true,
+    consentGroupForSite: async (hostId: string) => consentGroups.soloConsentGroup(hostId),
+    scopedToHost: (ref: any, hostId: string) =>
+      ref.where('visibleTo', 'array-contains-any', ['org', `host:${hostId}`]),
+  }
+})
+
 jest.mock('@aglyn/tenant-data-admin', () => {
   const apiHttp = jest.requireActual(
     '../../../libs/tenant/data/admin/src/lib/server/api-http',
@@ -216,7 +252,7 @@ const readSource = (...parts: string[]) =>
 
 const ORG = 'orgs/org-1'
 const HOST = 'host-1'
-const LEADS = `hosts/${HOST}/leads`
+const LEADS = `${ORG}/leads`
 const COMPANIES = `${ORG}/companies`
 const DEALS = `${ORG}/deals`
 const PIPELINES = `${ORG}/pipelines`
@@ -256,12 +292,19 @@ const tokensFor = (hostId: string) =>
   crmScopeTokens(mockOrg, consentGroupForHost(mockOrg, hostId))
 
 /** A lead as `addHostLead` leaves one: no working state at all. */
+/*
+ * `visibleTo` names the capturing site (AGL-3275). The collection is org-wide
+ * now, so the list selects by scope rather than by the collection's parent —
+ * and a lead carrying no scope is visible to nobody, which is the direction
+ * both enforcement layers fail in.
+ */
 const captured = (email: string, lastSeenAtMs: number, extra: Record<string, unknown> = {}) => ({
   email,
   sources: ['signup'],
   submissionCount: 1,
   firstSeenAtMs: lastSeenAtMs - 1_000,
   lastSeenAtMs,
+  visibleTo: [`host:${HOST}`],
   ...extra,
 })
 
@@ -395,11 +438,19 @@ describe('the site every request names', () => {
 // ── The list ────────────────────────────────────────────────────────────────
 
 describe('GET /v1/leads', () => {
-  it('lists newest lastSeen first, with no clause sent to Firestore', async () => {
+  it('lists newest lastSeen first, narrowed to the site by scope (AGL-3275)', async () => {
+    /*
+     * This asserted NO clause reached Firestore, which was right while the
+     * collection was the site's own: the path did the narrowing. On the org
+     * collection the scope clause IS the narrowing, and its absence would
+     * serve one site a sibling's leads — so the clause is the claim now.
+     */
     const page = await json(await call('GET', `leads?siteId=${HOST}`))
     expect(page.data.map((lead: any) => lead.id)).toEqual(['lead-a', 'lead-b', 'lead-c'])
     expect(page.has_more).toBe(false)
-    expect(lastFilters()).toEqual([])
+    expect(lastFilters()).toEqual([
+      { field: 'visibleTo', op: 'array-contains-any', value: ['org', `host:${HOST}`] },
+    ])
   })
 
   it('publishes the capture and the working state, reading an absent status as new', async () => {
@@ -480,8 +531,9 @@ describe('GET /v1/leads', () => {
     expect(fresh.data.map((lead: any) => lead.id)).toEqual(['lead-a', 'lead-c'])
     const working = await json(await call('GET', `leads?siteId=${HOST}&status=working`))
     expect(working.data.map((lead: any) => lead.id)).toEqual(['lead-b'])
-    // On the page, not in the query: no equality reached Firestore.
-    expect(lastFilters()).toEqual([])
+    // On the page, not in the query: no STATUS equality reached Firestore.
+    // The scope clause is there and has to be — see the list test above.
+    expect(lastFilters().filter((clause: any) => clause.field !== 'visibleTo')).toEqual([])
 
     const owned = await json(await call('GET', `leads?siteId=${HOST}&ownerUid=u-rep`))
     expect(owned.data.map((lead: any) => lead.id)).toEqual(['lead-b'])
@@ -494,7 +546,11 @@ describe('GET /v1/leads', () => {
   })
 
   it('reads one site alone — a sibling site’s leads are not in the page', async () => {
-    mockDocs.set(`hosts/host-2/leads/lead-z`, captured('zed@acme.com', 9_000))
+    // Held by the sibling site only: one collection, told apart by scope.
+    mockDocs.set(`${ORG}/leads/lead-z`, {
+      ...captured('zed@acme.com', 9_000),
+      visibleTo: ['host:host-2'],
+    })
     const page = await json(await call('GET', `leads?siteId=${HOST}`))
     expect(page.data.map((lead: any) => lead.id)).not.toContain('lead-z')
     const other = await json(await call('GET', 'leads?siteId=host-2'))
@@ -662,7 +718,10 @@ describe('POST /v1/leads', () => {
     })
     const stored = mockDocs.get(`${LEADS}/${lead.id}`)
     expect(stored?.capturedByHostIds).toEqual([HOST])
-    expect(stored?.visibleTo).toBeUndefined()
+    // Scoped like every other org row (AGL-3275). This asserted ABSENCE while
+    // the collection was the site's own and the path was the scope; a lead
+    // with no `visibleTo` would now be a row visible to nobody.
+    expect(stored?.visibleTo).toEqual(['org', `host:${HOST}`])
     expect(all(CONTACTS)).toEqual([])
     expect(all(COMPANIES)).toEqual([])
     expect(mockCapture).not.toHaveBeenCalled()
@@ -1132,9 +1191,14 @@ describe('POST /v1/leads/{id}/convert', () => {
 // ── Usage ───────────────────────────────────────────────────────────────────
 
 describe('GET /v1/usage', () => {
-  it('sizes the leads across every site the organization owns', async () => {
-    mockDocs.set('hosts/host-2/leads/lead-z', captured('zed@acme.com', 9_000))
-    mockDocs.set('hosts/host-9/leads/lead-x', captured('x@acme.com', 9_000))
+  it('sizes the organization’s leads in one count (AGL-3275)', async () => {
+    /*
+     * This summed one count per site, and seeded a lead under a second site
+     * to prove the fan-out reached it. The collection is the org's now, so
+     * the size is a single count — and a sum would report a lead two brands
+     * in a consent group both hold twice.
+     */
+    mockDocs.set(`${ORG}/leads/lead-z`, captured('zed@acme.com', 9_000))
     const usage = await json(await call('GET', 'usage'))
     expect(usage.crm.leads).toMatchObject({ used: 4, included: null, remaining: null })
   })

@@ -21,6 +21,7 @@
  * the headline CRUD surface; sites, form submissions, and contacts are read.
  */
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   checkApiRequestQuota,
   checkCrmRecordsQuota,
@@ -3658,20 +3659,13 @@ export async function handleUsage(
     orgRef.collection(CRM_COLLECTIONS.tasks).count().get(),
     orgRef.collection(CRM_COLLECTIONS.activities).count().get(),
     /*
-     * Leads live under each SITE (`hosts/{id}/leads`), not under the org,
-     * so their size is one aggregate per site the org owns — bounded by the
-     * plan's site band, and the same count `/v1/leads?siteId=` will page.
+     * ONE AGGREGATE (AGL-3275). Leads used to live under each SITE, so this
+     * was one count per site the org owns, summed. They share an org
+     * collection now, and a sum over per-site counts would report a lead that
+     * two brands in a consent group both hold twice — so the org's size is a
+     * single unscoped count, the way every other CRM collection above is.
      */
-    Promise.all(
-      Object.keys((ctx.org.hosts ?? {}) as Record<string, unknown>).map((hostId) =>
-        ctx.firestore
-          .collection('hosts')
-          .doc(hostId)
-          .collection('leads')
-          .count()
-          .get(),
-      ),
-    ),
+    orgRef.collection('leads').count().get(),
   ])
 
   const apiQuota = checkApiRequestQuota(
@@ -3788,7 +3782,7 @@ export async function handleUsage(
           null,
         ),
         leads: usageBand(
-          leadCounts.reduce((sum, snap) => sum + snap.data().count, 0),
+          Number(leadCounts.data().count ?? 0),
           UNLIMITED,
           UNLIMITED,
           null,

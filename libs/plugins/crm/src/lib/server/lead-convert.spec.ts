@@ -366,7 +366,7 @@ async function call(
   return { status, body: answer, headers }
 }
 
-const leadPath = (id: string) => `hosts/${HOST}/leads/${id}`
+const leadPath = (id: string) => `orgs/${ORG}/leads/${id}`
 
 beforeEach(() => {
   docs.clear()

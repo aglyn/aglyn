@@ -44,6 +44,9 @@ jest.mock('firebase/firestore', () => ({
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The lead collection is the org's now (AGL-3275), so the surface resolves
+  // its org through the shared scope hook.
+  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
   useHostCampaigns: () => ({

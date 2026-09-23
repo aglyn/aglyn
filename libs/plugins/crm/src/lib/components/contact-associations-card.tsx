@@ -45,6 +45,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useContactUpdate } from '../hooks/use-contact-update'
 import type { ContactRecord } from '../model/contact-record'
 import { crmRoutes } from '../model/crm-routes'
+import { useCrmScope } from '../hooks/use-crm-scope'
 
 export interface ContactAssociationsCardProps {
   /**
@@ -111,6 +112,9 @@ export interface ContactAssociationsCardProps {
  */
 export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
   const { hostId, record, row, consentGroup, seed, basePath, bookingsHref } = props
+  // The lead's collection is the org's now (AGL-3275); the site still names
+  // the surface, and the scope hook resolves the org from it.
+  const { orgId } = useCrmScope({ hostId })
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const contactUpdate = useContactUpdate(hostId)
@@ -126,7 +130,7 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
       const key = await personKeyInBrowser(email)
       if (!key || !active) return
       const snapshot = await getDoc(
-        doc(firestore, 'hosts', hostId, 'leads', key),
+        doc(firestore, 'orgs', orgId, 'leads', key),
       ).catch(() => null)
       if (active && snapshot?.exists()) setLeadKey(key)
     })().catch(() => undefined)

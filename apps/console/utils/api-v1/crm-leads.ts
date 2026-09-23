@@ -86,6 +86,7 @@ import {
   readMarketingBasis,
   soloConsentGroup,
 } from '@aglyn/aglyn/server'
+import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   addHostLead,
   apiJson,
@@ -207,8 +208,24 @@ function readLeadSite(
   return { siteId }
 }
 
-function leadsCollection(ctx: ApiV1Context, siteId: string) {
-  return ctx.firestore.collection('hosts').doc(siteId).collection('leads')
+/**
+ * The org's leads (AGL-3275). The site is still named by every caller — a
+ * lead is created and listed in a site's context — but it selects by
+ * `visibleTo` now rather than by the collection it lives in, so
+ * {@link leadsVisibleTo} is what a LIST must use. This bare ref is for
+ * `doc(id)` reads and writes, which the route authorizes for itself.
+ */
+function leadsCollection(ctx: ApiV1Context, _siteId: string) {
+  return ctx.firestore.collection('orgs').doc(ctx.orgId).collection('leads')
+}
+
+/** The same collection, narrowed to the leads one site may see. */
+function leadsVisibleTo(ctx: ApiV1Context, siteId: string) {
+  return leadsCollection(ctx, siteId).where(
+    'visibleTo',
+    'array-contains-any',
+    scopeTokensForHost(siteId),
+  )
 }
 
 // ── The owner ───────────────────────────────────────────────────────────────
@@ -489,7 +506,9 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
     const leadId = personKey(email as string) as string
     const created = !(await leadsRef.doc(leadId).get()).exists
     if (created) {
-      const used = (await leadsRef.count().get()).data().count
+      // What the SITE may see (AGL-3275), matching `addHostLead`'s own count:
+      // an unscoped count would charge one site for a sibling's leads.
+      const used = (await leadsVisibleTo(ctx, site.siteId).count().get()).data().count
       if (checkVisitorRecordCeiling(used, LEADS_MAX_PER_HOST).exceeded) {
         await claim.release()
         return ApiErrors.conflict({
@@ -812,7 +831,7 @@ async function listLeads(ctx: ApiV1Context, url: URL): Promise<Response> {
   const ownerUid = (url.searchParams.get('ownerUid') ?? '').trim().slice(0, CRM_ID_MAX)
 
   const limit = parseLimit(url.searchParams.get('limit'))
-  let query: FirebaseFirestore.Query = leadsCollection(ctx, site.siteId)
+  let query: FirebaseFirestore.Query = leadsVisibleTo(ctx, site.siteId)
     .orderBy('lastSeenAtMs', 'desc')
     .orderBy(FieldPath.documentId(), 'desc')
     .limit(limit + 1)

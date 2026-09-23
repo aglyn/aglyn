@@ -64,13 +64,15 @@ jest.mock('./contact-detail-page', () => ({
     </div>
   ),
 }))
-// A lead's page reads `hosts/{hostId}/leads` on mount; what is under test
-// is WHICH site the hub hands it, so the stub prints both.
+/*
+ * A lead's page reads `orgs/{orgId}/leads` on mount (AGL-3275), so the site is
+ * no longer part of WHICH record it opens and the stub prints the id alone.
+ * `hostId` is still passed — the page uses it for the surface's own scope —
+ * but it is the mounted site, never a segment of the address.
+ */
 jest.mock('./lead-detail-page', () => ({
   __esModule: true,
-  default: ({ id, hostId }: { id: string; hostId: string | null }) => (
-    <div>{`Lead ${id} on ${hostId ?? 'no site'}`}</div>
-  ),
+  default: ({ id }: { id: string }) => <div>{`Lead ${id}`}</div>,
 }))
 jest.mock('./leads-section', () => ({
   __esModule: true,
@@ -148,10 +150,16 @@ describe('the CRM hub routes sections and records (AGL-2595)', () => {
     expect(screen.getByText('PEOPLE LIST')).toBeTruthy()
   })
 
-  it('hands a lead page the SITE the address names at the organization level (AGL-2630)', () => {
-    // `/[orgSlug]/crm/leads/{hostId}/{leadId}`: a lead's id is a person
-    // key, the same on every site that met the person, so the org-level
-    // address carries the site and the page is mounted under it.
+  it('still opens a lead from the OLD two-segment address (AGL-3275)', () => {
+    /*
+     * `/[orgSlug]/crm/leads/{hostId}/{leadId}` was the org-level address
+     * while a lead lived under its site: the id is a person key, the same on
+     * every site that met the person, so the site had to disambiguate it.
+     * AGL-3275 made a lead one org row and the new address is the id alone —
+     * but links in the old shape were shared, bookmarked and mailed, and the
+     * id they carry is still the right one. So the site segment is accepted
+     * and dropped, rather than 404ing somebody's saved link.
+     */
     registerCrmConsole()
     const resolved = resolveConsolePluginPage('/crm/leads/host-b/lead-1', ['crm'])
     expect(resolved?.section?.id).toBe('leads')
@@ -167,7 +175,7 @@ describe('the CRM hub routes sections and records (AGL-2595)', () => {
         segments={resolved?.segments}
       />,
     )
-    expect(screen.getByText('Lead lead-1 on host-b')).toBeTruthy()
+    expect(screen.getByText('Lead lead-1')).toBeTruthy()
     expect(screen.queryByText('LEADS LIST')).toBeNull()
   })
 
@@ -176,7 +184,7 @@ describe('the CRM hub routes sections and records (AGL-2595)', () => {
     // the site is the route's.
     const resolved = mountAt('/crm/leads/lead-1')
     expect(resolved?.segments).toEqual(['leads', 'lead-1'])
-    expect(screen.getByText('Lead lead-1 on host-1')).toBeTruthy()
+    expect(screen.getByText('Lead lead-1')).toBeTruthy()
   })
 
   it('renders nothing until the shell has named a section', () => {
@@ -193,9 +201,9 @@ describe('crmRoutes', () => {
     expect(routes.section('tasks')).toBe(`${BASE_PATH}/tasks`)
     expect(routes.contact('abc')).toBe(`${BASE_PATH}/contacts/abc`)
     expect(routes.lead('l1')).toBe(`${BASE_PATH}/leads/l1`)
-    // The organization-level form names the site first (AGL-2630).
-    expect(routes.lead('l1', 'host b')).toBe(`${BASE_PATH}/leads/host%20b/l1`)
-    expect(routes.lead('l1', null)).toBe(`${BASE_PATH}/leads/l1`)
+    // One segment at both levels since AGL-3275 — the site the org-level
+    // form used to carry is gone, because the person key is unambiguous now.
+    expect(routes.lead('l1')).toBe(`${BASE_PATH}/leads/l1`)
     expect(routes.company('co 1')).toBe(`${BASE_PATH}/companies/co%201`)
     expect(routes.deal('a/b')).toBe(`${BASE_PATH}/deals/a%2Fb`)
   })

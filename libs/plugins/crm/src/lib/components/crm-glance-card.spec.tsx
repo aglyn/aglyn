@@ -34,8 +34,13 @@ type Clause = { field: string; op: string; value: unknown }
 type FakeQuery = { path: string; clauses: Clause[] }
 
 const counts = { leads: 7, closedLeads: 2 }
-/** A second site, for the org level's fan-out. */
-const siteTwo = { leads: 3, closedLeads: 1 }
+/**
+ * What the org-wide read answers (AGL-3275): the collection is shared, so the
+ * org level is ONE unscoped count and not the sum of the sites'. A lead two
+ * brands in a consent group both hold would be counted twice by a sum, which
+ * is why the fan-out went.
+ */
+const orgWide = { leads: 9, closedLeads: 3 }
 
 /*
  * One Firestore and one scope tuple for the whole run, the way the real
@@ -67,10 +72,11 @@ jest.mock('firebase/firestore', () => ({
   getCountFromServer: jest.fn(async (target: FakeQuery) => {
     let count = 0
     const status = target.clauses.find((clause) => clause.field === 'status')
-    if (target.path === 'hosts/site-1/leads') {
-      count = status ? counts.closedLeads : counts.leads
-    } else if (target.path === 'hosts/site-2/leads') {
-      count = status ? siteTwo.closedLeads : siteTwo.leads
+    // One collection, told apart by the SCOPE clause rather than the path.
+    if (target.path === 'orgs/org-1/leads') {
+      const scoped = target.clauses.some((clause) => clause.field === 'visibleTo')
+      const figures = scoped ? counts : orgWide
+      count = status ? figures.closedLeads : figures.leads
     }
     return { data: () => ({ count }) }
   }),
@@ -114,12 +120,16 @@ describe('CrmGlanceCard leads to work', () => {
     await waitFor(() => expect(screen.getByText('5')).toBeTruthy())
     const leadQueries: FakeQuery[] = getCountFromServer.mock.calls
       .map(([target]: [FakeQuery]) => target)
-      .filter((target: FakeQuery) => target.path === 'hosts/site-1/leads')
+      .filter((target: FakeQuery) => target.path === 'orgs/org-1/leads')
     expect(leadQueries).toHaveLength(2)
-    const closed = leadQueries.find((target) => target.clauses.length)
-    expect(closed?.clauses).toEqual([
-      { field: 'status', op: 'in', value: ['qualified', 'unqualified'] },
-    ])
+    // Both carry the scope clause now (AGL-3275), so the closed one is the
+    // query that also names a status rather than the one that has clauses.
+    const closed = leadQueries.find((target) =>
+      target.clauses.some((clause) => clause.field === 'status'),
+    )
+    expect(
+      closed?.clauses.filter((clause) => clause.field === 'status'),
+    ).toEqual([{ field: 'status', op: 'in', value: ['qualified', 'unqualified'] }])
   })
 
   it('totals every site of the mount at the organization level, linked into the org hub (AGL-2634)', async () => {
@@ -139,9 +149,9 @@ describe('CrmGlanceCard leads to work', () => {
         <CrmGlanceCard hostId={null} basePath="/acme/crm" />
       </CrmOrgMountProvider>,
     )
-    // (7 − 2) + (3 − 1)
-    await waitFor(() => expect(screen.getByText('7')).toBeTruthy())
-    expect(screen.getByText('7').closest('a')?.getAttribute('href')).toBe('/acme/crm/leads')
+    // 9 − 3, from ONE org-wide count rather than a sum over the sites.
+    await waitFor(() => expect(screen.getByText('6')).toBeTruthy())
+    expect(screen.getByText('6').closest('a')?.getAttribute('href')).toBe('/acme/crm/leads')
     expect(screen.getByText('open across every site')).toBeTruthy()
     // No scope clause on the org-wide reads.
     const { getCountFromServer } = jest.requireMock('firebase/firestore') as {

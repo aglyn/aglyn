@@ -28,31 +28,41 @@ import {
  * THE LEADS STILL TO WORK, a site at a time (AGL-2624, across sites since
  * AGL-2634).
  *
- * A lead lives under its site — `hosts/{hostId}/leads`, private by path —
- * so there is no org-level collection to count and no `orgId` on the
- * document to group by. The one figure is two server counts per site and
- * a subtraction: every lead, less the closed ones, because a lead nobody
+ * ONE PAIR OF COUNTS, not one pair per site (AGL-3275).
+ *
+ * This fanned out across the org's sites and summed, because a lead lived at
+ * `hosts/{hostId}/leads` and each site's collection was disjoint from every
+ * other's. On the org they share one collection, and a lead two brands both
+ * hold would be counted once for each of them — so the sum would report a
+ * multi-brand org more open leads than it has. A single scoped count cannot
+ * double-count, and costs two reads instead of two per site.
+ *
+ * The figure is still every lead less the closed ones, because a lead nobody
  * has touched carries no status and Firestore cannot select on a field's
- * absence (`openLeadsFromCounts`). Handed one site this is the glance
- * card's figure as it always was; handed the org's sites it is the org
- * level's total, and the fan-out is bounded by the org's site list rather
- * than by the data.
+ * absence (`openLeadsFromCounts`).
+ *
+ * `visibleTo` is the scope clause: a site's tokens for the glance card, and
+ * `null` at the organization level, where an org-wide member's reads carry no
+ * clause at all.
  */
-export async function openLeadsAcrossSites(
+export async function openLeadsForScope(
   firestore: Firestore,
-  hostIds: readonly string[],
+  orgId: string,
+  visibleTo: readonly string[] | null,
 ): Promise<number> {
   const countOf = (target: ReturnType<typeof query>) =>
     getCountFromServer(target).then((snapshot) => snapshot.data().count)
-  const perSite = await Promise.all(
-    hostIds.map(async (hostId) => {
-      const leads = collection(firestore, 'hosts', hostId, 'leads')
-      const [total, closed] = await Promise.all([
-        countOf(query(leads)),
-        countOf(query(leads, where('status', 'in', CRM_LEAD_CLOSED_STATUSES))),
-      ])
-      return openLeadsFromCounts(total, closed)
-    }),
-  )
-  return perSite.reduce((sum, count) => sum + count, 0)
+  const leads = collection(firestore, 'orgs', orgId, 'leads')
+  // An `array-contains-any` over nothing is a query Firestore refuses.
+  if (visibleTo && !visibleTo.length) return 0
+  const scope = visibleTo
+    ? [where('visibleTo', 'array-contains-any', [...visibleTo])]
+    : []
+  const [total, closed] = await Promise.all([
+    countOf(query(leads, ...scope)),
+    countOf(
+      query(leads, ...scope, where('status', 'in', CRM_LEAD_CLOSED_STATUSES)),
+    ),
+  ])
+  return openLeadsFromCounts(total, closed)
 }

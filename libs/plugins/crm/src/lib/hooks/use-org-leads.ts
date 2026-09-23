@@ -23,130 +23,118 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
   type DocumentData,
+  type QueryConstraint,
 } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 
-/** One site's lead, as the organization-level list carries it. */
+/** A lead, as the organization-level list carries it. */
 export interface OrgLeadRow extends DocumentData {
   /**
-   * The grid's row id: `{hostId}/{leadId}`. A lead's own id is a PERSON
-   * KEY — the same person on two sites has the same id on both — so the
-   * document id alone cannot key a list that spans sites.
+   * The grid's row id, which is the lead's own document id.
+   *
+   * It used to be `{hostId}/{leadId}`, because a lead lived under its site
+   * and the same person on two sites was two documents with the SAME id —
+   * so the id alone could not key a list spanning sites. AGL-3275 made that
+   * one document, and the compound key went with it.
    */
   $id: string
-  /** `hosts/{hostId}/leads/{leadId}` — the document id. */
+  /** `orgs/{orgId}/leads/{leadId}` — the document id, a person key. */
   leadId: string
-  /** The site the lead lives under; what every write and link names. */
-  hostId: string
 }
 
 export interface OrgLeadsResult {
-  /** Every site's window, merged and ordered newest-seen first, cut to the window. */
+  /** The window, ordered newest-seen first. */
   data: OrgLeadRow[]
-  /** `loading` until every site has answered once; `error` when any refused. */
+  /** `loading` until the listener has answered once; `error` when it refused. */
   status: 'loading' | 'success' | 'error'
-  /** Some site had more than its window — there are leads this list is not showing. */
+  /** There are leads beyond the window this list is showing. */
   truncated: boolean
 }
 
 /**
- * THE ORGANIZATION'S LEADS, read a site at a time (AGL-2630).
+ * THE ORGANIZATION'S LEADS, in one listener (AGL-3275).
  *
- * A lead lives under its site — `hosts/{hostId}/leads`, host-scoped by
- * PATH — and there is no org-level collection to listen to, no `orgId` on
- * the document to group by, and no rule admitting a collection-group read.
- * So the org hub opens one listener per site the org has, each the exact
- * query the site's own Leads section runs, and merges the answers. An
- * org-wide member is a member of every site, which is what admits each
- * listener under the rules the site section already relies on; an org has
- * a handful of sites and at most thirty in a consent group, so the fan-out
- * is bounded by the org, not by the data.
+ * This opened one listener PER SITE and merged the answers, because a lead
+ * lived at `hosts/{hostId}/leads` — host-scoped by path, with no org-level
+ * collection to listen to, no `orgId` on the document to group by, and no
+ * rule admitting a collection-group read. All three of those are now false:
+ * the collection is `orgs/{orgId}/leads` and a lead says who may see it.
  *
- * Each site's window is cut at `windowSize + 1`, the way the site section
- * cuts its own, and the merged list is cut again at `windowSize`: the list
- * is "the most recently seen across the org", and a site with a thousand
- * leads must not crowd out a site with ten. `truncated` says some site had
- * more, so the caption beneath the table can say the window is not the
- * whole collection.
+ * So the fan-out is gone, and with it the merge that had to cut each site's
+ * window at `windowSize + 1` and the whole list again, so that a site with a
+ * thousand leads could not crowd out a site with ten. One ordered query needs
+ * neither: `truncated` is simply "the window came back full".
  *
- * The listeners are torn down together when the site list changes — a site
- * added or removed re-opens the set — and nothing opens for an empty list,
- * which is also how the hook stays quiet under a site, where the section
- * hands it no sites at all.
+ * `visibleTo` is the caller's, and `null` means "ask for everything" — which
+ * is what an org-wide member's listeners do, since the rules short-circuit on
+ * `isOrgWideMember()` and a clause would only narrow what they may already
+ * read. A scoped member passes their tokens. See `crmVisibleToClause`, which
+ * builds the same clause for every other CRM listener.
  */
 export function useOrgLeads(options: {
-  /** The org's sites, by document id; empty opens nothing. */
-  hostIds: readonly string[]
+  orgId: string | null | undefined
+  /** The scope clause, or `null` for an unscoped org-wide read. */
+  visibleTo: readonly string[] | null
   windowSize: number
 }): OrgLeadsResult {
-  const { hostIds, windowSize } = options
+  const { orgId, visibleTo, windowSize } = options
   const firestore = useFirestore()
-  const key = hostIds.join('\n')
-  const [bySite, setBySite] = useState<
-    Record<string, { rows: OrgLeadRow[]; truncated: boolean } | 'error'>
-  >({})
+  const scopeKey = visibleTo ? visibleTo.join('\n') : null
+  const [answer, setAnswer] = useState<
+    { rows: OrgLeadRow[]; truncated: boolean } | 'error' | null
+  >(null)
 
   useEffect(() => {
-    setBySite({})
-    const sites = key ? key.split('\n') : []
-    if (!sites.length) return undefined
-    const stops = sites.map((hostId) =>
-      onSnapshot(
-        query(
-          collection(firestore, 'hosts', hostId, 'leads'),
-          orderBy('lastSeenAtMs', 'desc'),
-          limit(windowSize + 1),
-        ),
-        (snapshot) => {
-          const rows = snapshot.docs.map((entry) => ({
-            ...(entry.data() as DocumentData),
-            $id: `${hostId}/${entry.id}`,
-            leadId: entry.id,
-            hostId,
-          }))
-          setBySite((current) => ({
-            ...current,
-            [hostId]: {
-              rows: rows.slice(0, windowSize),
-              truncated: rows.length > windowSize,
-            },
-          }))
-        },
-        (error) => {
-          console.error(error)
-          setBySite((current) => ({ ...current, [hostId]: 'error' }))
-        },
-      ),
-    )
-    return () => {
-      for (const stop of stops) stop()
+    setAnswer(null)
+    if (!orgId) return undefined
+    // An `array-contains-any` over nothing is a query Firestore refuses, so a
+    // scoped member with no tokens lists nothing rather than asking.
+    const tokens = scopeKey === null ? null : scopeKey ? scopeKey.split('\n') : []
+    if (tokens && !tokens.length) {
+      setAnswer({ rows: [], truncated: false })
+      return undefined
     }
-  }, [firestore, key, windowSize])
+    const clauses: QueryConstraint[] = tokens
+      ? [where('visibleTo', 'array-contains-any', tokens)]
+      : []
+    return onSnapshot(
+      query(
+        collection(firestore, 'orgs', orgId, 'leads'),
+        ...clauses,
+        orderBy('lastSeenAtMs', 'desc'),
+        limit(windowSize + 1),
+      ),
+      (snapshot) => {
+        const rows = snapshot.docs.map((entry) => ({
+          ...(entry.data() as DocumentData),
+          $id: entry.id,
+          leadId: entry.id,
+        }))
+        setAnswer({
+          rows: rows.slice(0, windowSize),
+          truncated: rows.length > windowSize,
+        })
+      },
+      (error) => {
+        console.error(error)
+        setAnswer('error')
+      },
+    )
+  }, [firestore, orgId, scopeKey, windowSize])
 
   return useMemo(() => {
-    const sites = key ? key.split('\n') : []
-    const answers = sites.map((hostId) => bySite[hostId])
-    if (answers.some((answer) => answer === 'error')) {
+    if (answer === 'error') {
       return { data: [], status: 'error' as const, truncated: false }
     }
-    if (!sites.length || answers.some((answer) => !answer)) {
-      return { data: [], status: 'loading' as const, truncated: false }
-    }
-    const merged = answers
-      .flatMap((answer) => (answer === 'error' || !answer ? [] : answer.rows))
-      .sort(
-        (a, b) =>
-          Number(b['lastSeenAtMs'] ?? 0) - Number(a['lastSeenAtMs'] ?? 0),
-      )
+    if (!answer) return { data: [], status: 'loading' as const, truncated: false }
     return {
-      data: merged.slice(0, windowSize),
+      data: answer.rows,
       status: 'success' as const,
-      truncated:
-        merged.length > windowSize ||
-        answers.some((answer) => answer !== 'error' && answer?.truncated),
+      truncated: answer.truncated,
     }
-  }, [bySite, key, windowSize])
+  }, [answer])
 }
 
 export default useOrgLeads

@@ -94,8 +94,27 @@ const mockEmptyRows = new Map<string, Record<string, unknown>>()
 const mockOrgRef = () => ({
   get: async () => ({ exists: mockOrg !== null, data: () => mockOrg }),
   collection: (name: string) =>
-    mockCollectionQuery(mockCollections.get(name) ?? mockEmptyRows, null, null, null),
+    // Leads are an org collection now (AGL-3275) and the export narrows them
+    // per site with `visibleTo`; every other collection is unchanged.
+    name === 'leads'
+      ? mockCollectionQuery(orgLeadRows(), null, null, null)
+      : mockCollectionQuery(mockCollections.get(name) ?? mockEmptyRows, null, null, null),
 })
+
+/**
+ * Every seeded lead as ONE org collection, each row naming the site that
+ * holds it — the shape `mockLeads` describes now that the path no longer
+ * carries the site.
+ */
+function orgLeadRows(): Map<string, Record<string, unknown>> {
+  const rows = new Map<string, Record<string, unknown>>()
+  for (const [hostId, bySite] of mockLeads) {
+    for (const [id, data] of bySite) {
+      rows.set(id, { ...data, visibleTo: [`host:${hostId}`] })
+    }
+  }
+  return rows
+}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,

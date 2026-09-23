@@ -134,7 +134,7 @@ async function json(response: Response) {
   return (await response.json()) as Record<string, any>
 }
 
-const LEAD = `hosts/host-2/leads/${personKey('jane@gmail.com')}`
+const LEAD = `${ORG}/leads/${personKey('jane@gmail.com')}`
 
 function seed() {
   mockDocs.set(`${CONTACTS}/c-keep`, {

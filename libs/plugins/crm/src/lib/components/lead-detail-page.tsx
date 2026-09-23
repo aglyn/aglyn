@@ -65,7 +65,7 @@ export function LeadDetailPage(props: CrmDetailPageProps) {
     status,
     fromCache,
   } = useFirestoreDoc<LeadDocument>(
-    () => doc(firestore, 'hosts', hostId, 'leads', id),
+    () => doc(firestore, 'orgs', orgId, 'leads', id),
     [firestore, hostId, id],
   )
   const { orgId } = useOrgDataScope({ hostId })

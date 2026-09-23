@@ -28,7 +28,7 @@
  *
  * ## A row names its own site
  *
- * A lead lives at `hosts/{hostId}/leads/{leadId}`, and at the organization
+ * A lead lives at `orgs/{orgId}/leads/{leadId}` (AGL-3275), and at the organization
  * level the selection spans sites, so the reference for a write is built
  * from the ROW rather than from a scope the bar was handed: the row knows
  * its site, the bar need not. Under a site every row names the same one.
@@ -82,7 +82,7 @@ import { UNQUALIFY_REASON_MAX } from './lead-unqualify-dialog'
  * the grid's key, and which document under which site a write names.
  */
 export type LeadBulkRow = Record<string, unknown> &
-  CrmLeadFields & { $id: string; leadId: string; hostId: string }
+  CrmLeadFields & { $id: string; leadId: string }
 
 export interface LeadsBulkBarProps {
   rows: readonly LeadBulkRow[]
@@ -162,7 +162,12 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
     const byId = new Map(rows.map((row) => [row.$id, row]))
     return crmBulkWriters(firestore, (id) => {
       const row = byId.get(id)
-      return doc(firestore, 'hosts', row?.hostId ?? '', 'leads', row?.leadId ?? id)
+      // One org collection (AGL-3275): the row no longer names a site, and
+      // the bulk write addresses the same document at either level.
+      // `orgs//leads` is a path Firestore accepts the shape of and nothing
+      // owns, so an absent org refuses the write rather than composing one.
+      if (!orgId) throw new Error('[crm] a lead write needs an organization')
+      return doc(firestore, 'orgs', orgId, 'leads', row?.leadId ?? id)
     })
   }, [firestore, rows])
 

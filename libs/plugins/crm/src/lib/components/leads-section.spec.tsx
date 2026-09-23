@@ -301,11 +301,18 @@ describe('Convert… on the Leads row menu (AGL-2641)', () => {
     expect(labels).toEqual(['Open lead', 'Convert…', 'Assign owner', 'Unqualify'])
   })
 
-  it('feeds the dialog the ROW’S site at the organization level', async () => {
+  it('feeds the dialog the site that CAPTURED the lead, at the organization level', async () => {
+    /*
+     * The row used to carry a `hostId` — the site its document lived under —
+     * and the conversion was filed as that site's capture. AGL-3275 made a
+     * lead one org row that a whole consent group can hold, so there is no
+     * single site it "lives under" any more; the conversion is filed as the
+     * FIRST site that captured the person, off `capturedByHostIds`.
+     */
     siteRows = []
     orgRows = [
-      { ...lead('site-2/l-far', 'far@example.com'), leadId: 'l-far', hostId: 'site-2' },
-      { ...lead('site-3/l-near', 'near@example.com'), leadId: 'l-near', hostId: 'site-3' },
+      { ...lead('l-far', 'far@example.com'), leadId: 'l-far', capturedByHostIds: ['site-2'] },
+      { ...lead('l-near', 'near@example.com'), leadId: 'l-near', capturedByHostIds: ['site-3'] },
     ]
     mount = {
       orgId: 'org-1',

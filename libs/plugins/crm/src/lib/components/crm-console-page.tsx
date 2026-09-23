@@ -73,16 +73,22 @@ function sectionBody(
       )
     case 'leads':
       /*
-       * A lead lives under its site, so at the organization level the
-       * address names the site before the id — `leads/{hostId}/{leadId}`
-       * (AGL-2630) — and the record page is mounted UNDER that site: every
-       * read and write it makes is host-scoped by path, exactly as on the
-       * site's own hub. Under a site the id is the one segment it always
-       * was.
+       * ONE SEGMENT, at both levels (AGL-3275).
+       *
+       * The organization level used to name the site before the id —
+       * `leads/{hostId}/{leadId}` (AGL-2630) — because a lead lived under its
+       * site and a person key was the same id under each site that had met
+       * them, so the id alone could not say which record was meant. A lead is
+       * one org row now, and addresses like every other CRM record.
+       *
+       * The two-segment form is still ACCEPTED, and deliberately: links to a
+       * lead were shared, bookmarked and mailed while the old shape was live,
+       * and the id it carries is the same person key either way. The site
+       * segment is simply dropped.
        */
       return record ? (
         !props.hostId && detail.length >= 2 ? (
-          <LeadDetailPage {...recordProps} hostId={record} id={detail[1]} />
+          <LeadDetailPage {...recordProps} id={detail[1]} />
         ) : (
           <LeadDetailPage {...recordProps} id={record} />
         )
