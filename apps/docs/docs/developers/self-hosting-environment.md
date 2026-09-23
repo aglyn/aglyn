@@ -722,8 +722,9 @@ vendor is involved at any step:
 - the "already known?" check reads the CRM of the workspace behind
   `PLATFORM_MARKETING_HOST_ID` when you set it, and says so on the card when you
   have not;
-- your docs build includes it when `DOCS_ERROR_BEACON_ENDPOINT` points at your
-  console, because that is the console it already reports to.
+- your docs build includes it from the console it already names: the `console`
+  target in `DOCS_STATUS_TARGETS`, or else the console `DOCS_ERROR_BEACON_ENDPOINT`
+  reports to. A build that names neither loads nothing.
 
 See [Adding a first-party surface](../staff-console/first-party-surfaces.md).
 
