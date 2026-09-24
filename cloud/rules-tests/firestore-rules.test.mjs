@@ -1536,6 +1536,12 @@ describe('hosts', () => {
       // site copy; a stale tab that could still create one would mint a
       // campaign no console lists. Named here for the `registers` reason above.
       'emailCampaigns',
+      // A site member's password hash (AGL-3308). Written and read only by
+      // the commerce membership routes on the Admin SDK; a client that could
+      // write one would sign in as the member, and one that could read one
+      // would hold a hash to crack offline. Named here for the `registers`
+      // reason above.
+      'siteMemberCredentials',
     ]) {
       assert.ok(
         hostServerOnlySubcollections().includes(name),
@@ -2112,7 +2118,7 @@ describe('hosts', () => {
     // `an editor cannot create an action client-direct (AGL-2266)`.
     const AUTHORING = [
       'overlays', 'experiments', 'emailTemplates',
-      'coupons', 'discounts', 'reviews', 'siteMembers',
+      'coupons', 'discounts', 'reviews',
       'subscriptions', 'suppliers', 'events', 'bookings', 'activity',
       'settings', 'media', 'mediaFolders',
       'licenseKeys', 'reservations', 'resources', 'productCategories',
@@ -2125,6 +2131,11 @@ describe('hosts', () => {
       // is the assertion that would catch the next attempt.
       'suppressions',
     ]
+    // `siteMembers` LEFT this list in AGL-3308: no client creates one, an
+    // update may flip `suspended` and nothing else, and a delete is refused
+    // once the member has a credential document. All of it is asserted in
+    // `a site member's password hash is no client's (AGL-3308)`.
+    //
     // `emailCampaigns` LEFT this list in AGL-3273: the campaign container
     // belongs to the org now, and its site location is denied outright with
     // the send collection beside it. Both org collections are asserted in
@@ -10968,6 +10979,256 @@ describe('an unverified address cannot write org or site data (AGL-2589)', () =>
     await mustDeny(
       'an unverified outsider reading the site',
       getDoc(doc(unverified(OUTSIDER), 'hosts', HOST)),
+    )
+  })
+})
+
+
+/**
+ * A site member's password hash is no client's (AGL-3308).
+ *
+ * `hosts/{hostId}/siteMembers` carried each member's `passwordScrypt` and had
+ * no rules block of its own, so the host catch-all let every member of the
+ * site READ every hash — viewers included — and let any content writer
+ * REPLACE one and then sign in as that member. The hash moved to
+ * `siteMemberCredentials`, which no client may touch, staff included; the
+ * profile keeps what the console reads, and a client may change one field of
+ * it: `suspended`, the drawer's switch.
+ */
+describe("a site member's password hash is no client's (AGL-3308)", () => {
+  /** A real `salt:scrypt64` shape, so nothing passes on a malformed value. */
+  const HASH = `${'a'.repeat(32)}:${'b'.repeat(128)}`
+  /** The hash of a password the ATTACKER chose — the takeover write. */
+  const PLANTED = `${'c'.repeat(32)}:${'d'.repeat(128)}`
+  const ROLES = [
+    ['viewer', VIEWER],
+    ['author', AUTHOR],
+    ['editor', EDITOR],
+    ['admin', OWNER],
+  ]
+  const WRITERS = ROLES.filter(([role]) => role !== 'viewer')
+  const asRole = (role, uid) =>
+    role === 'staff' ? authed(STAFF, { staff: true }) : authed(uid)
+  const member = (db, id) => doc(db, 'hosts', HOST, 'siteMembers', id)
+  const credential = (db, id) =>
+    doc(db, 'hosts', HOST, 'siteMemberCredentials', id)
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      // A member as sign-up writes one now: the profile, and the hash beside
+      // it under the same id.
+      await setDoc(member(db, 'member-1'), {
+        email: 'ada@example.test',
+        displayName: 'Ada',
+        createdAt: new Date('2026-09-01T00:00:00Z'),
+        sessionsValidFromMs: 1_790_000_000_000,
+      })
+      await setDoc(credential(db, 'member-1'), { passwordScrypt: HASH })
+      // A member written before the move: the hash still on the profile and
+      // no credential document, until the migration runs.
+      await setDoc(member(db, 'member-legacy'), {
+        email: 'lin@example.test',
+        passwordScrypt: HASH,
+        createdAt: new Date('2026-08-01T00:00:00Z'),
+      })
+    })
+  })
+
+  it('no client reads a credential document, staff included', async () => {
+    for (const [role, uid] of [...ROLES, ['staff', STAFF]]) {
+      const db = asRole(role, uid)
+      await mustDeny(
+        `a ${role} reading a member's credential document`,
+        getDoc(credential(db, 'member-1')),
+      )
+      await mustDeny(
+        `a ${role} listing the credential documents`,
+        getDocs(query(collection(db, 'hosts', HOST, 'siteMemberCredentials'), limit(10))),
+      )
+    }
+  })
+
+  it('no client writes a credential document, staff included', async () => {
+    for (const [role, uid] of [...ROLES, ['staff', STAFF]]) {
+      const db = asRole(role, uid)
+      await mustDeny(
+        `a ${role} replacing a member's hash`,
+        setDoc(credential(db, 'member-1'), { passwordScrypt: PLANTED }),
+      )
+      await mustDeny(
+        `a ${role} updating a member's hash`,
+        updateDoc(credential(db, 'member-1'), { passwordScrypt: PLANTED }),
+      )
+      await mustDeny(
+        `a ${role} minting a credential for a member who has none yet`,
+        setDoc(credential(db, 'member-legacy'), { passwordScrypt: PLANTED }),
+      )
+      await mustDeny(
+        `a ${role} deleting a member's credential`,
+        deleteDoc(credential(db, 'member-1')),
+      )
+      await mustDeny(
+        `a ${role} writing beneath a credential document`,
+        setDoc(
+          doc(db, 'hosts', HOST, 'siteMemberCredentials', 'member-1', 'nested', 'n1'),
+          { passwordScrypt: PLANTED },
+        ),
+      )
+    }
+  })
+
+  it('a content writer changes `suspended` on a profile and nothing else', async () => {
+    for (const [role, uid] of WRITERS) {
+      const db = authed(uid)
+      // The drawer's switch, both ways — the one client write there is.
+      await mustAllow(
+        `a ${role} suspending a member from the drawer`,
+        updateDoc(member(db, 'member-1'), { suspended: true }),
+      )
+      await mustAllow(
+        `a ${role} reactivating a member from the drawer`,
+        updateDoc(member(db, 'member-1'), { suspended: false }),
+      )
+      // The takeover, in each shape it can be sent in.
+      await mustDeny(
+        `a ${role} planting a hash on a profile that has moved`,
+        updateDoc(member(db, 'member-1'), { passwordScrypt: PLANTED }),
+      )
+      await mustDeny(
+        `a ${role} replacing a legacy member's hash — the reported takeover`,
+        updateDoc(member(db, 'member-legacy'), { passwordScrypt: PLANTED }),
+      )
+      await mustDeny(
+        `a ${role} merge-writing a hash onto a legacy member`,
+        setDoc(member(db, 'member-legacy'), { passwordScrypt: PLANTED }, { merge: true }),
+      )
+      await mustDeny(
+        `a ${role} riding a hash in beside the suspend flag`,
+        updateDoc(member(db, 'member-legacy'), {
+          suspended: false,
+          passwordScrypt: PLANTED,
+        }),
+      )
+      await mustDeny(
+        `a ${role} deleting a legacy member's hash`,
+        updateDoc(member(db, 'member-legacy'), { passwordScrypt: deleteField() }),
+      )
+      // The session cut-off an admin's password set stamps: lowering it would
+      // bring the sessions it revoked back to life.
+      await mustDeny(
+        `a ${role} lowering the session cut-off`,
+        updateDoc(member(db, 'member-1'), { sessionsValidFromMs: 0 }),
+      )
+      // The address is what sign-in and recovery look a member up by.
+      await mustDeny(
+        `a ${role} re-pointing a member's email`,
+        updateDoc(member(db, 'member-1'), { email: 'attacker@example.test' }),
+      )
+    }
+    await mustDeny(
+      'a viewer suspending a member',
+      updateDoc(member(authed(VIEWER), 'member-1'), { suspended: true }),
+    )
+  })
+
+  it('no client creates a member — the sign-up route is the only door', async () => {
+    for (const [role, uid] of ROLES) {
+      await mustDeny(
+        `a ${role} minting a member with a password they know`,
+        setDoc(member(authed(uid), 'member-new'), {
+          email: 'new@example.test',
+          passwordScrypt: PLANTED,
+        }),
+      )
+      await mustDeny(
+        `a ${role} minting a member without a password`,
+        setDoc(member(authed(uid), 'member-new'), { email: 'new@example.test' }),
+      )
+    }
+  })
+
+  it('a client delete cannot strand a credential document', async () => {
+    for (const [role, uid] of ROLES) {
+      await mustDeny(
+        `a ${role} deleting a member who has a credential document`,
+        deleteDoc(member(authed(uid), 'member-1')),
+      )
+    }
+    await mustDeny(
+      'a viewer deleting a legacy member',
+      deleteDoc(member(authed(VIEWER), 'member-legacy')),
+    )
+    // A legacy member's hash is ON the profile, so deleting it strands
+    // nothing — the Inbox's client delete, which keeps working until the
+    // console that removes through /api/membership/admin-remove is live.
+    await mustAllow(
+      'an author deleting a member who has no credential document',
+      deleteDoc(member(authed(AUTHOR), 'member-legacy')),
+    )
+  })
+
+  it('every role still lists the members the console shows', async () => {
+    for (const [role, uid] of ROLES) {
+      await mustAllow(
+        `a ${role} listing site members newest first (Users page, Inbox, dashboard)`,
+        getDocs(
+          query(
+            collection(authed(uid), 'hosts', HOST, 'siteMembers'),
+            orderBy('createdAt', 'desc'),
+            limit(201),
+          ),
+        ),
+      )
+    }
+  })
+
+  /**
+   * RESIDUAL — measured, not fixed by these rules.
+   *
+   * Rules cannot hide one field of a document a principal may read, and every
+   * member of the site may read the profiles, because the console lists them.
+   * So a profile that still carries the legacy hash shows it to every one of
+   * them until `backfill-site-member-credentials.mjs` moves it, which is why
+   * the migration runs straight after the promotion rather than whenever. This
+   * case keeps that window stated; the migration, not a rule, is what closes
+   * it.
+   */
+  it('RESIDUAL: a legacy profile still shows its hash until the migration moves it', async () => {
+    const snapshot = await getDoc(member(authed(VIEWER), 'member-legacy'))
+    assert.equal(
+      snapshot.get('passwordScrypt'),
+      HASH,
+      'a viewer can no longer read a legacy profile hash. If a rule now hides ' +
+        'it, the console lists that read the whole collection were refused too ' +
+        '— check them before calling this fixed.',
+    )
+  })
+
+  it('the lists and the block are the mechanism, stated by name', () => {
+    const lists = hostSubcollectionExclusions()
+    for (const operation of ['create', 'update', 'delete']) {
+      assert.ok(
+        lists[operation].includes('siteMembers'),
+        `\`siteMembers\` fell out of the catch-all ${operation.toUpperCase()} ` +
+          'exclusion list, so the catch-all re-grants every content writer ' +
+          'that operation on the profile — the hash field included.',
+      )
+      assert.ok(
+        lists[operation].includes('siteMemberCredentials'),
+        `\`siteMemberCredentials\` fell out of the catch-all ` +
+          `${operation.toUpperCase()} exclusion list.`,
+      )
+    }
+    assert.ok(
+      lists.dedicated.includes('siteMembers'),
+      'the `match /siteMembers/{memberId}` block is gone, so the drawer can ' +
+        'no longer suspend a member.',
+    )
+    assert.ok(
+      hostServerOnlySubcollections().includes('siteMemberCredentials'),
+      '`siteMemberCredentials` is no longer denied outright — something ' +
+        're-grants it.',
     )
   })
 })

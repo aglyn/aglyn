@@ -52,6 +52,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
 }))
 
 const docs = new Map<string, Record<string, unknown>>()
+/** The owning org; its `consentGroups` declaration is what a case varies. */
+let mockOrg: Record<string, unknown> = {}
 let decodedToken: { uid: string; email?: string } = {
   uid: 'editor-uid',
   email: 'owner@lumen.co',
@@ -112,23 +114,22 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // and every one of those comparisons would silently stop matching.
   UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
   /*
-   * The real resolution's shape: an org that declared no pooling resolves
-   * every site to a group of ONE. Faked rather than imported because this
-   * file mocks the whole module — but faked to the NARROW answer, which is
-   * the direction a wrong group may fail in.
+   * The REAL resolution, over the org the route read — which declares no
+   * pooling unless a case says so, so every site is a group of ONE, the
+   * NARROW answer, by default.
    */
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
-  }),
+  consentGroupForSite: async (
+    hostId: string,
+    org?: Record<string, unknown> | null,
+  ) =>
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/consent-groups')
+      .consentGroupForHost(org ?? mockOrg, hostId),
   emailSuppressionKey: (email: string) =>
     email.includes('@') ? `key:${email.trim().toLowerCase()}` : null,
   isEmailSuppressed: (...args: unknown[]) => isEmailSuppressed(...args),
   meterHostEmail: (...args: unknown[]) => meterHostEmail(...args),
-  getOrgForHost: async () => ({ orgId: 'org1', org: {} }),
+  getOrgForHost: async () => ({ orgId: 'org1', org: mockOrg }),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: async () => decodedToken }),
@@ -178,6 +179,7 @@ const GOOD_BODY = {
 
 beforeEach(() => {
   docs.clear()
+  mockOrg = {}
   nextId = 0
   sendEmail.mockReset().mockResolvedValue({ sent: true, id: 'msg-1' })
   isEmailSuppressed.mockReset().mockResolvedValue(false)
@@ -275,6 +277,34 @@ describe('suppression', () => {
   })
 
   it('sends when neither list holds the address', async () => {
+    const out = await reply(GOOD_BODY)
+    expect(out.code).toBe(200)
+    expect(sendEmail).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * An org may declare several sites one sender (AGL-3310). Somebody who
+   * unsubscribed from a sibling asked THAT SENDER to stop, which is this
+   * site too — exactly as an unsubscribe from this site already stops a
+   * reply. Another brand in the same org is not this sender.
+   */
+  it('refuses an address suppressed on a site declared one sender with this one', async () => {
+    mockOrg = {
+      consentGroups: { acme: { name: 'Acme', hostIds: ['host1', 'host2'] } },
+    }
+    docs.set('hosts/host2/suppressions/key:priya@lumen.co', {
+      reason: 'unsubscribe',
+    })
+    const out = await reply(GOOD_BODY)
+    expect(out.code).toBe(409)
+    expect(out.body.reason).toBe('suppressed-host')
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('CONTROL: sends when that site is another brand the org never grouped with this one', async () => {
+    docs.set('hosts/host2/suppressions/key:priya@lumen.co', {
+      reason: 'unsubscribe',
+    })
     const out = await reply(GOOD_BODY)
     expect(out.code).toBe(200)
     expect(sendEmail).toHaveBeenCalledTimes(1)

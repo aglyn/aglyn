@@ -39,7 +39,7 @@
  */
 
 import { CONTACT_ERASURE_REQUESTED_FIELD } from '@aglyn/aglyn'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { CrmLeadsSection } from './leads-section'
 
@@ -253,17 +253,19 @@ jest.mock('@aglyn/shared-ui-jsx/components/empty-state.component', () => ({
  * MUI's.
  */
 jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
-  ListTable: ({
-    rows,
-    columns,
-  }: {
+  ListTable: (props: {
     rows: Array<{ $id: string; email: string }>
     columns: Array<{ field: string; renderCell?: (params: { row: unknown }) => ReactNode }>
+    noRowsLabel?: string
   }) => {
+    const { rows, columns } = props
     mockColumns = columns as typeof mockColumns
+    // The filter model the grid was handed, and its change handler (AGL-3313).
+    mockGrid = props as unknown as typeof mockGrid
     const actions = columns.find((column) => column.field === 'actions')
     return (
-      <ul>
+      <ul aria-label="Rows">
+        {rows.length === 0 && props.noRowsLabel ? <p>{props.noRowsLabel}</p> : null}
         {rows.map((row) => (
           <li key={row.$id}>
             {row.email}
@@ -274,6 +276,44 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
     )
   },
 }))
+/** The props the grid was last rendered with. */
+let mockGrid: {
+  filterMode?: string
+  quickFilter?: boolean
+  filterModel: { items: Array<Record<string, unknown>>; quickFilterValues?: unknown[] }
+  onFilterModelChange: (model: {
+    items: Array<Record<string, unknown>>
+    quickFilterValues?: unknown[]
+  }) => void
+}
+/** Types into the grid's quick search, as its toolbar box would. */
+const typeSearch = (value: string) =>
+  act(() =>
+    mockGrid.onFilterModelChange({
+      items: mockGrid.filterModel.items,
+      quickFilterValues: value.split(' ').filter(Boolean),
+    }),
+  )
+/** Picks a value for a column in the grid's Filters panel. */
+const pickFilter = (field: string, value: string) =>
+  act(() =>
+    mockGrid.onFilterModelChange({
+      items: [{ id: 'crm', field, operator: 'is', value }],
+      quickFilterValues: mockGrid.filterModel.quickFilterValues,
+    }),
+  )
+/** The choices a select column offers, by label. */
+const choices = (field: string) =>
+  (
+    (mockColumns.find((column) => column.field === field) as unknown as {
+      valueOptions?: Array<{ label: string }>
+    })?.valueOptions ?? []
+  ).map((option) => option.label)
+/** The grid's rows, by address — not the filter chips, which are list items too. */
+const gridRows = () =>
+  within(screen.getByRole('list', { name: 'Rows' }))
+    .queryAllByRole('listitem')
+    .map((item) => item.textContent)
 
 const BASE_PATH = '/acme/hosts/shop/crm'
 const ORG = { $id: 'org-1', plan: 'pro' } as any
@@ -329,24 +369,27 @@ describe('New lead on the Leads list (AGL-3231)', () => {
   })
 })
 
-describe('the Leads card layout (AGL-3311)', () => {
-  it('puts Import CSV and New lead in the header and the filters in a toolbar above the grid', () => {
+describe('the Leads card layout (AGL-3311, AGL-3313)', () => {
+  it('puts Import CSV and New lead in the header, and hands every filter to the grid', () => {
     const { container } = renderSite()
     const header = container.querySelector('[data-slot="header-action"]') as HTMLElement
     expect(within(header).getByRole('button', { name: 'New lead' })).toBeTruthy()
     expect(within(header).getByRole('button', { name: 'Import CSV' })).toBeTruthy()
-
-    const toolbar = screen.getByRole('toolbar', { name: 'Lead filters' })
+    // No bespoke dropdowns or search box: the grid's toolbar holds them.
     for (const name of ['Show', 'Email', 'Campaign', 'Lead source']) {
-      expect(within(toolbar).getByRole('combobox', { name })).toBeTruthy()
+      expect(screen.queryByRole('combobox', { name })).toBeNull()
     }
-    expect(within(toolbar).getByRole('searchbox', { name: 'Search leads' })).toBeTruthy()
-    // Above the rows it narrows, not under them.
-    const grid = screen.getByText('maya@example.com')
-    expect(
-      toolbar.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-    // Nothing is left in the card's footer, where the row once overflowed.
+    expect(screen.queryByRole('searchbox')).toBeNull()
+    expect(mockGrid.filterMode).toBe('server')
+    expect(mockGrid.quickFilter).toBe(true)
+    // Each old dropdown is a select column of the grid's Filters panel.
+    for (const field of ['status', 'emailState', 'campaignIds', 'leadSource']) {
+      const column = mockColumns.find((entry) => entry.field === field) as unknown as {
+        type?: string
+        filterable?: boolean
+      }
+      expect([field, column?.type, column?.filterable]).toEqual([field, 'singleSelect', true])
+    }
     expect(container.querySelector('[data-slot="footer"]')).toBeNull()
   })
 })
@@ -434,7 +477,7 @@ describe('Convert… on the Leads row menu (AGL-2641)', () => {
   })
 })
 
-describe('The search box narrows the whole loaded window (AGL-3246)', () => {
+describe("The grid's search and filters narrow the whole loaded window (AGL-3246, AGL-3313)", () => {
   // Twelve leads at ten a page: eleven fillers, then Morgan on page two.
   const fillers = Array.from({ length: 11 }, (_, index) =>
     lead(`l-${index}`, `person${index}@example.com`),
@@ -444,8 +487,6 @@ describe('The search box narrows the whole loaded window (AGL-3246)', () => {
     company: 'Lamphere Coffee',
     tags: ['sal-15'],
   })
-  const listed = () => screen.getAllByRole('listitem').map((item) => item.textContent)
-  const searchBox = () => screen.getByRole('searchbox', { name: 'Search leads' })
 
   beforeEach(() => {
     siteRows = [...fillers, morgan]
@@ -456,44 +497,42 @@ describe('The search box narrows the whole loaded window (AGL-3246)', () => {
     expect(screen.queryByText('morgan@example.com')).toBeNull()
     expect(screen.getByText('1–10 of 12')).toBeTruthy()
 
-    fireEvent.change(searchBox(), { target: { value: 'Lamphere' } })
-    expect(listed()).toEqual(['morgan@example.com'])
+    typeSearch('Lamphere')
+    expect(gridRows()).toEqual(['morgan@example.com'])
     expect(screen.getByText('1–1 of 1')).toBeTruthy()
 
-    fireEvent.change(searchBox(), { target: { value: '' } })
-    expect(listed()).toHaveLength(10)
+    typeSearch('')
+    expect(gridRows()).toHaveLength(10)
     expect(screen.getByText('1–10 of 12')).toBeTruthy()
   })
 
   it('starts a new term on page one', () => {
     renderSite()
     fireEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
-    expect(listed()).toEqual(['person10@example.com', 'morgan@example.com'])
+    expect(gridRows()).toEqual(['person10@example.com', 'morgan@example.com'])
     expect(screen.getByText('11–12 of 12')).toBeTruthy()
 
     // Page two of the twelve would be an empty page of the one match.
-    fireEvent.change(searchBox(), { target: { value: 'lamphere coffee' } })
-    expect(listed()).toEqual(['morgan@example.com'])
+    typeSearch('lamphere coffee')
+    expect(gridRows()).toEqual(['morgan@example.com'])
     expect(screen.getByText('1–1 of 1')).toBeTruthy()
   })
 
   it('matches a tag, whatever the case, and says so when nothing matches', () => {
     renderSite()
-    fireEvent.change(searchBox(), { target: { value: 'SAL-15' } })
-    expect(listed()).toEqual(['morgan@example.com'])
+    typeSearch('SAL-15')
+    expect(gridRows()).toEqual(['morgan@example.com'])
 
-    fireEvent.change(searchBox(), { target: { value: 'nobody' } })
-    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
-    expect(
-      screen.getByText('No all leads match “nobody” among the 12 most recently seen.'),
-    ).toBeTruthy()
+    typeSearch('nobody')
+    expect(gridRows()).toHaveLength(0)
+    expect(screen.getByText('No leads match among the 12 most recently seen')).toBeTruthy()
   })
 
   /**
-   * The `Email` control (AGL-3245): a bounced lead is found by its verdict,
-   * beside the status filter and the search, and the control opens on Any.
+   * Email (AGL-3245): a bounced lead is found by its verdict, beside the
+   * status and the search, from the grid's Filters panel.
    */
-  it('narrows to the leads whose address bounced', async () => {
+  it('narrows to the leads whose address bounced', () => {
     siteRows = [
       ...fillers,
       lead('l-bounced', 'bounced@example.com', {
@@ -501,50 +540,92 @@ describe('The search box narrows the whole loaded window (AGL-3246)', () => {
       }),
     ]
     const { rerender } = renderSite()
-    const control = screen.getByRole('combobox', { name: 'Email' })
-    expect(control.textContent).toBe('Any')
-    fireEvent.mouseDown(control)
-    fireEvent.click(await screen.findByRole('option', { name: 'Bounced' }))
-    // The clause is the saved view's; the section reads it back on render,
-    // and keeps the status clause beside it.
+    expect(choices('emailState')).toContain('Bounced')
+    pickFilter('emailState', 'bounced')
+    // The clause is the saved view's, in the shape the old dropdown stored,
+    // and the status clause stays beside it.
     expect(mockFilters).toEqual([
-      { field: 'status', op: 'equals', value: 'all' },
       { field: 'emailState', op: 'equals', value: 'bounced' },
+      { field: 'status', op: 'equals', value: 'all' },
     ])
     rerender(
       <CrmLeadsSection hostId="site-1" entitled org={ORG} basePath={BASE_PATH} releaseFlag={{} as any} />,
     )
-    expect(listed()).toEqual(['bounced@example.com'])
+    expect(gridRows()).toEqual(['bounced@example.com'])
     expect(screen.getByText('1–1 of 1')).toBeTruthy()
+    // The chip names the clause, and removes it.
+    const chip = screen.getByText('Email is Bounced').closest('[role="listitem"]') as HTMLElement
+    fireEvent.click(within(chip).getByTestId('CancelIcon'))
+    expect(mockFilters).toEqual([{ field: 'status', op: 'equals', value: 'all' }])
   })
 
   /**
-   * The `Campaign` control (AGL-3254): the site's containers by name, the
-   * id in the saved view, and only the leads filed under it listed.
+   * Campaign (AGL-3254): the site's containers by name, the id in the
+   * saved view as the old dropdown stored it, and only the leads filed
+   * under it listed.
    */
-  it('narrows to the leads filed under a campaign, by name', async () => {
+  it('narrows to the leads filed under a campaign, by name', () => {
     siteRows = [
       ...fillers,
       lead('l-icp2', 'icp2@example.com', { campaignIds: ['founder-icp2'] }),
       lead('l-both', 'both@example.com', { campaignIds: ['founder-icp1', 'founder-icp2'] }),
     ]
     const { rerender } = renderSite()
-    const control = screen.getByRole('combobox', { name: 'Campaign' })
-    expect(control.textContent).toBe('Any campaign')
-    fireEvent.mouseDown(control)
-    fireEvent.click(await screen.findByRole('option', { name: 'Founder · ICP 2' }))
+    expect(choices('campaignIds')).toContain('Founder · ICP 2')
+    pickFilter('campaignIds', 'founder-icp2')
     expect(mockFilters).toEqual([
-      { field: 'status', op: 'equals', value: 'all' },
       { field: 'campaignIds', op: 'contains', value: 'founder-icp2' },
+      { field: 'status', op: 'equals', value: 'all' },
     ])
     rerender(
       <CrmLeadsSection hostId="site-1" entitled org={ORG} basePath={BASE_PATH} releaseFlag={{} as any} />,
     )
-    expect(listed()).toEqual(['icp2@example.com', 'both@example.com'])
+    expect(gridRows()).toEqual(['icp2@example.com', 'both@example.com'])
     expect(screen.getByText('1–2 of 2')).toBeTruthy()
   })
 })
 
+/**
+ * SAVED VIEWS MADE WITH THE OLD DROPDOWNS (AGL-3313).
+ *
+ * A view stored before the dropdowns became grid columns holds clauses in
+ * their shape. It must filter exactly as it did, and show in the panel.
+ */
+describe('a view saved with the old dropdowns', () => {
+  const apollo = lead('l-apollo', 'apollo@example.com', { leadSource: 'Outbound · Apollo' })
+  const none = lead('l-none', 'none@example.com')
+  const worked = lead('l-worked', 'worked@example.com', {
+    leadSource: 'Outbound · Apollo',
+    status: 'qualified',
+  })
+
+  it('reads "no status clause" as Open, and a lead source clause as the panel\'s select', () => {
+    siteRows = [apollo, none, worked]
+    mockFilters = [{ field: 'leadSource', op: 'equals', value: 'Outbound · Apollo' }]
+    renderSite()
+    // Open, so the qualified lead is out; Apollo, so the bare one is out.
+    expect(gridRows()).toEqual(['apollo@example.com'])
+    expect(mockGrid.filterModel.items).toEqual([
+      { id: 'crm', field: 'leadSource', operator: 'is', value: 'Outbound · Apollo' },
+    ])
+    expect(screen.getByText('Status is Open (new or working)')).toBeTruthy()
+  })
+
+  it('keeps "No lead source" as the isEmpty clause it stored', () => {
+    siteRows = [apollo, none]
+    mockFilters = [
+      { field: 'status', op: 'equals', value: 'all' },
+      { field: 'leadSource', op: 'isEmpty', value: '' },
+    ]
+    renderSite()
+    expect(gridRows()).toEqual(['none@example.com'])
+    pickFilter('leadSource', 'Outbound · Apollo')
+    expect(mockFilters).toEqual([
+      { field: 'leadSource', op: 'equals', value: 'Outbound · Apollo' },
+      { field: 'status', op: 'equals', value: 'all' },
+    ])
+  })
+})
 
 /**
  * WHICH COLLECTION THE LIST READS (AGL-3275).
@@ -619,24 +700,22 @@ describe('the Campaign column and filter at the organization level', () => {
     expect(column?.valueGetter?.(undefined, filed)).toBe('Founder · ICP 1, Org launch')
   })
 
-  it('filters by any campaign in the org', async () => {
+  it('filters by any campaign in the org', () => {
     mount = orgMount()
     orgRows = [
       { ...lead('l-a', 'a@example.com', { campaignIds: ['org-launch'] }), leadId: 'l-a' },
       { ...lead('l-b', 'b@example.com'), leadId: 'l-b' },
     ]
     const { rerender } = renderOrg()
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Campaign' }))
-    fireEvent.click(await screen.findByRole('option', { name: 'Org launch' }))
+    expect(choices('campaignIds')).toContain('Org launch')
+    pickFilter('campaignIds', 'org-launch')
     expect(mockFilters).toEqual([
-      { field: 'status', op: 'equals', value: 'all' },
       { field: 'campaignIds', op: 'contains', value: 'org-launch' },
+      { field: 'status', op: 'equals', value: 'all' },
     ])
     rerender(
       <CrmLeadsSection hostId={null} entitled org={ORG} basePath="/acme/crm" releaseFlag={{} as any} />,
     )
-    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-      'a@example.com',
-    ])
+    expect(gridRows()).toEqual(['a@example.com'])
   })
 })

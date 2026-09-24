@@ -62,6 +62,7 @@ import { gateHandler } from './server/gate'
 import { memberFeedHandler } from './server/member-feed'
 import { membershipAccountHandler } from './server/membership-account'
 import { membershipAdminPasswordHandler } from './server/membership-admin-password'
+import { membershipAdminRemoveHandler } from './server/membership-admin-remove'
 import { membershipContentHandler } from './server/membership-content'
 import { membershipLoginHandler } from './server/membership-login'
 import { membershipLogoutHandler } from './server/membership-logout'
@@ -262,12 +263,6 @@ export function registerCommerceApi(): void {
   registerPluginApiRoute('commerce/subscription-portal', subscriptionPortalHandler)
   registerPluginApiRoute('commerce/reviews', reviewsHandler)
   registerPluginApiRoute('membership/account', membershipAccountHandler)
-  // Console-driven password help for a member (AGL-914). Console-auth, not
-  // the visitor cookie the neighbouring routes take.
-  registerPluginApiRoute(
-    'membership/admin-password',
-    membershipAdminPasswordHandler,
-  )
   registerPluginApiRoute('membership/content', membershipContentHandler)
   registerPluginApiRoute('membership/login', membershipLoginHandler)
   registerPluginApiRoute('membership/logout', membershipLogoutHandler)
@@ -335,6 +330,15 @@ export function registerCommerceConsoleApi(): void {
   // catch-all in the Firestore rules would otherwise let a client write
   // its own `balanceCents`, which checkout applies as amount-off.
   registerPluginApiRoute('commerce/gift-cards', giftCardsHandler)
+  // A site member's password help (AGL-914) and removal (AGL-3308), from the
+  // Users page drawer and the Inbox. Console-auth, not the visitor cookie the
+  // storefront's `membership/*` routes take, so they are served where the
+  // console posts: the console's own dispatcher loads this surface only.
+  registerPluginApiRoute(
+    'membership/admin-password',
+    membershipAdminPasswordHandler,
+  )
+  registerPluginApiRoute('membership/admin-remove', membershipAdminRemoveHandler)
   registerPluginApiRoute('commerce/member-post', memberPostHandler)
   registerPluginApiRoute('commerce/pos-order', posOrderHandler)
   registerPluginApiRoute('commerce/process-abandoned', processAbandonedHandler)

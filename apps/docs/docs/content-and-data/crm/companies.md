@@ -24,10 +24,11 @@ contacts and deals against your plan's records band — see
 The list shows every company your site may see, newest activity first, with
 its domain, how many **contacts** are linked to it, its owner, when it was
 last changed and its [**next activity**](./tasks.md#next-activity) — when the
-earliest open task against it is due, with a **No next activity** chip beside
-the view control to keep only the companies with nothing scheduled. Open the column filter on **Company** to find one by name — the
-search reaches every company, not only the page on screen — and filter
-**Owner** to see one teammate's accounts. Clicking a row opens the company's
+earliest open task against it is due. The table's **Search** box, or
+**Filters** › **Company**, finds a company by the start of its name — the
+search reaches every company, not only the page on screen — **Filters** ›
+**Owner** shows one teammate's accounts, and **Next activity** › **is
+empty** keeps only the companies with nothing scheduled. Clicking a row opens the company's
 page.
 
 The **Contacts** column is a count kept on the company and moved with every

@@ -65,6 +65,7 @@ const mockConfirm = jest.fn()
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => mockFirestore,
   useHostResourceApi: () => jest.fn(async () => ({ id: 'created-id' })),
+  useUser: () => ({ data: null }),
   useFirestoreCollection: (build: () => unknown) => ({
     data: collections[build() as string] ?? [],
     status: 'success',

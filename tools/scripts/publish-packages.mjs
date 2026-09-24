@@ -188,7 +188,7 @@ function main(argv) {
   }
 
   console.log(publish ? '  · publish' : '  · pack (dry run)')
-  for (const entry of missing) {
+  const { published, failures, abandoned } = publishAll(missing, (entry) => {
     const args = ['publish', '--access', 'public', '--tag', distTagFor(entry.version, entry.published)]
     if (!publish) args.push('--dry-run')
     // Provenance is signed by the CI run's identity; outside one there is none.
@@ -200,8 +200,81 @@ function main(argv) {
     // that — it fails with EOTP instead of asking.
     execFileSync('npm', args, { cwd: join(ROOT, 'dist', entry.root), stdio: publish ? 'inherit' : ['ignore', 'ignore', 'inherit'] })
     console.log(`    ${publish ? 'published' : 'would publish'} ${entry.name}@${entry.version}`)
+  })
+
+  if (!failures.length) return 0
+  console.error('')
+  console.error(`publish:packages: ${published} published, ${failures.length} FAILED.`)
+  for (const failure of failures) {
+    console.error(`  FAILED ${failure.name}@${failure.version}`)
+    console.error(`    ${failure.message.split('\n')[0]}`)
   }
-  return 0
+  if (abandoned.length) {
+    console.error('')
+    console.error(`  ${abandoned.length} package(s) were not attempted, because the failure above`)
+    console.error('  is the credential and every one of them would fail the same way:')
+    for (const entry of abandoned) console.error(`    ${entry.name}@${entry.version}`)
+  }
+  console.error('')
+  console.error('  A package that failed here keeps the version it already had on the')
+  console.error('  registry — this run publishes nothing twice, so re-run it once the')
+  console.error('  cause is fixed and only the missing ones go out.')
+  return 1
+}
+
+/**
+ * npm failures that are about the CREDENTIAL rather than about one package.
+ *
+ * The distinction decides whether the run carries on. A package npm refuses —
+ * a name nobody has configured trust for, a version that already exists, a
+ * 403 on that one name — says nothing about the next package, and stopping
+ * there strands every one after it. A credential npm will not accept says
+ * everything about the next package, and trying forty more of them buys a
+ * wall of identical errors that buries the one that matters.
+ */
+export function isCredentialFailure(message) {
+  return /\bE?OTP\b|ENEEDAUTH|\bE401\b|Unauthorized|one-time pass/i.test(
+    String(message ?? ''),
+  )
+}
+
+/**
+ * Publishes every entry, and does not let one failure strand the rest.
+ *
+ * ⛔ IT USED TO ABORT ON THE FIRST THROW, and that is how one new package cost
+ * four releases (2026-09-23). `publishableEntries` sorts by name, so when
+ * `@aglyn/shared-util-first-touch` — a new lib with no trust row — answered
+ * `E404` on its create, the ten packages sorting after it were never
+ * attempted and sat three releases behind on the registry while every run
+ * reported the same single error. Nothing about those ten was wrong.
+ *
+ * ⚑ The failure is still LOUD and the run still exits non-zero. What changed
+ * is that it is loud about everything, at the end, once — not loud about the
+ * first thing and silent about the consequences.
+ *
+ * ⚑ The pre-flight loop above is unaffected and must stay where it is: a
+ * version that went out cannot be taken back, so what can be checked before
+ * anything is published still is. This is the other half — what to do once a
+ * publish has already been tried and answered.
+ */
+export function publishAll(entries, publishOne) {
+  const failures = []
+  const abandoned = []
+  let published = 0
+  for (const [index, entry] of entries.entries()) {
+    try {
+      publishOne(entry)
+      published += 1
+    } catch (error) {
+      const message = error?.message ?? String(error)
+      failures.push({ name: entry.name, version: entry.version, message })
+      if (isCredentialFailure(message)) {
+        abandoned.push(...entries.slice(index + 1))
+        break
+      }
+    }
+  }
+  return { published, failures, abandoned }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

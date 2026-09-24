@@ -16,17 +16,25 @@
  */
 
 /**
- * The shared "Next activity" column and its filter toggle (AGL-2661).
+ * The shared "Next activity" column and its filter (AGL-2661, AGL-3313).
  *
  * What has to hold: the column reads the stored time and nothing else —
- * absent, null and a bad value all draw the dash; and the toggle writes
- * the one clause `withNoNextActivity` spells, on and off, leaving the
- * view's other clauses alone.
+ * absent, null and a bad value all draw the dash; and the grid panel's
+ * "is empty" on it writes the one clause the old toggle wrote, so a view
+ * saved with the toggle on reads the same.
  */
 
-import { CRM_NEXT_ACTIVITY_FIELD, CRM_NO_NEXT_ACTIVITY_CLAUSE } from '@aglyn/aglyn'
-import { fireEvent, render, screen } from '@testing-library/react'
-import { NoNextActivityToggle, nextActivityColumn } from './crm-next-activity-column'
+import {
+  CRM_NEXT_ACTIVITY_FIELD,
+  CRM_NO_NEXT_ACTIVITY_CLAUSE,
+  isNoNextActivityClause,
+} from '@aglyn/aglyn'
+import { render } from '@testing-library/react'
+import { crmFilterColumns, crmPlainCodec } from '../model/crm-grid-filter'
+import {
+  CRM_NEXT_ACTIVITY_FILTER_FIELD,
+  nextActivityColumn,
+} from './crm-next-activity-column'
 
 const NOW = Date.parse('2026-09-08T12:00:00Z')
 
@@ -56,21 +64,19 @@ describe('nextActivityColumn', () => {
   })
 })
 
-describe('NoNextActivityToggle', () => {
-  it('adds the clause when clicked off, removes it when clicked on, and keeps the rest', () => {
-    const owner = { field: 'ownerUid', op: 'equals', value: 'u1' }
-    const onChange = jest.fn()
-    const { rerender } = render(<NoNextActivityToggle filters={[owner]} onChange={onChange} />)
-    const chip = screen.getByRole('button', { name: 'No next activity' })
-    expect(chip.getAttribute('aria-pressed')).toBe('false')
-    fireEvent.click(chip)
-    expect(onChange).toHaveBeenCalledWith([owner, CRM_NO_NEXT_ACTIVITY_CLAUSE])
+describe('the "No next activity" filter', () => {
+  it('offers "is empty" alone on the column, and writes the clause the toggle wrote', () => {
+    const [column] = crmFilterColumns([nextActivityColumn(NOW)], [CRM_NEXT_ACTIVITY_FILTER_FIELD])
+    expect(column.filterable).toBe(true)
+    expect(column.filterOperators?.map((operator) => operator.value)).toEqual(['isEmpty'])
 
-    rerender(
-      <NoNextActivityToggle filters={[owner, CRM_NO_NEXT_ACTIVITY_CLAUSE]} onChange={onChange} />,
-    )
-    expect(screen.getByRole('button', { name: 'No next activity' }).getAttribute('aria-pressed')).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: 'No next activity' }))
-    expect(onChange).toHaveBeenLastCalledWith([owner])
+    const clause = crmPlainCodec.toClause({
+      id: 'crm',
+      field: CRM_NEXT_ACTIVITY_FIELD,
+      operator: 'isEmpty',
+    })
+    expect(clause && isNoNextActivityClause(clause)).toBe(true)
+    // A view saved with the toggle on shows in the panel as that operator.
+    expect(crmPlainCodec.toItem(CRM_NO_NEXT_ACTIVITY_CLAUSE)?.operator).toBe('isEmpty')
   })
 })

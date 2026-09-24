@@ -177,6 +177,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The lead silo is the org's (AGL-3275), so these cards resolve it.
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => FIRESTORE,
+  // The signed-in account a member removal is authorized as (AGL-3308).
+  useUser: () => ({ data: null }),
   useFirestoreDoc: () => ({
     data: undefined,
     status: 'success',

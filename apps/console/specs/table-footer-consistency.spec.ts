@@ -1936,3 +1936,48 @@ describe('server-filtered lists do not offer a dead filter panel', () => {
     expect(lost).toEqual([])
   })
 })
+
+/**
+ * Every CRM list filters through the grid's own toolbar, by ONE path
+ * (AGL-3313).
+ *
+ * The CRM lists live in the plugin, outside the console sweep above, and
+ * each once grew its own filter controls — a status select, a search box, a
+ * toggle, an "Add filter" builder — until Leads had five in a row that
+ * pushed its create button off the card. They now hand the grid's Filters
+ * panel and quick search to `useCrmGridFilter`, which binds them to the
+ * saved view's clauses, and answer the clauses themselves. A list that
+ * turned the panel off, or wired the model by hand, has left that path.
+ */
+describe('CRM lists filter through the grid, by the shared path', () => {
+  const CRM = join(REPO, 'libs', 'plugins', 'crm', 'src', 'lib', 'components')
+  const lists = tsxFilesUnder(CRM).filter((path) => {
+    const source = readFileSync(path, 'utf8')
+    return !path.endsWith('.spec.tsx') && source.includes('<ListTable')
+  })
+
+  it('THE CONTROL: finds the CRM lists', () => {
+    expect(lists.map((path) => path.replace(`${CRM}/`, '')).sort()).toEqual([
+      'companies-section.tsx',
+      'contacts-section.tsx',
+      'deals-section.tsx',
+      'leads-section.tsx',
+      'tasks-section.tsx',
+    ])
+  })
+
+  it('each one binds the panel with useCrmGridFilter and never turns it off', () => {
+    const off = lists
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8')
+        return (
+          source.includes('disableColumnFilter') ||
+          !source.includes('useCrmGridFilter(') ||
+          !source.includes('filterMode="server"') ||
+          !source.includes('onFilterModelChange={gridFilter.onFilterModelChange}')
+        )
+      })
+      .map((path) => path.replace(`${REPO}/`, ''))
+    expect(off).toEqual([])
+  })
+})

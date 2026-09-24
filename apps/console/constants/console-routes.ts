@@ -55,6 +55,47 @@ export function isConsoleRouteSegment(first: string): boolean {
 }
 
 /**
+ * First path segments that are never org-scoped (AGL-627). These live at the
+ * apex path on every host, so the workspace-subdomain rewrite must leave them
+ * alone or `/signin` would become `/{slug}/signin` and 404.
+ *
+ * Here rather than in `middleware.ts` so the client reads the same list when
+ * it rebuilds the path the rewrite produced (AGL-3314): a second copy is how
+ * the switcher came to read `/hosts` as a workspace named "hosts".
+ */
+export const APEX_PATH_SEGMENTS: ReadonlySet<string> = new Set([
+  'manage',
+  'admin',
+  // The cross-domain handoff legs (AGL-1902). `/auth/handoff`,
+  // `/auth/handoff/start` and `/auth/handoff/continue` are platform routes, not
+  // anything inside an org, and rewriting them to `/{slug}/auth/handoff` would
+  // 404 the one flow that exists to get a session onto a custom domain.
+  'auth',
+  'signin',
+  'signout',
+  'signup',
+  'verify-email',
+  'account-recovery',
+])
+
+/**
+ * The org-scoped pathname a host that names a workspace serves, or `null`
+ * when the path needs no rewrite — THE rule, shared by the middleware that
+ * rewrites and the client that has to read what it rewrote (AGL-3314).
+ *
+ * Routes are canonically `/[orgSlug]/…`, but on a host that already names the
+ * org the path must not repeat it (AGL-627): `acme.aglyn.com/hosts/x`, never
+ * `acme.aglyn.com/acme/hosts/x`. Account, staff and auth routes live at the
+ * apex path on every host and must not be rewritten, and an already-prefixed
+ * path passes through so canonical links keep working.
+ */
+export function orgScopedPathname(pathname: string, slug: string): string | null {
+  const first = pathname.split('/').filter(Boolean)[0]
+  if (!slug || first === slug || APEX_PATH_SEGMENTS.has(first ?? '')) return null
+  return `/${slug}${pathname === '/' ? '' : pathname}`
+}
+
+/**
  * The console's not-found page at an address of its own (AGL-3290), which the
  * middleware's refusal of an address that names no workspace forwards to.
  * `app/%5Fmissing/page.tsx` says why it cannot be the typed address itself.

@@ -38,7 +38,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { usePathname, useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useMemo, useState, type UIEvent } from 'react'
 import {
   ENTERPRISE_PLAN_LABEL,
@@ -50,7 +50,7 @@ import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgPlans } from '../hooks/use-org-plans'
 import { useOrgScope } from '../hooks/use-org-scope'
 import { resolveNavSection, urlNamesOrg } from '../hooks/use-secondary-nav'
-import { useUrlNamedOrg } from '../hooks/use-url-names-org'
+import { useConsolePath, useUrlNamedOrg } from '../hooks/use-url-names-org'
 import CreateOrgDialog from './create-org-dialog.component'
 import SwitcherSearchField from './switcher-search-field.component'
 
@@ -83,7 +83,9 @@ const titleCase = (value?: string) =>
  */
 export function OrgSwitcherNav() {
   const { orgs, currentOrg, orgSlug, hasMoreOrgs, loadMoreOrgs } = useOrgScope()
-  const pathname = usePathname()
+  // The path as the routes see it (AGL-3314): on a workspace host the address
+  // bar's `/hosts` is `/{slug}/hosts`, and only the latter names the workspace.
+  const pathname = useConsolePath()
   // The full current-org doc carries the logo (AGL-363) and plan for the badge.
   // The workspace the URL actually names, when that is the one that
   // resolved — the switcher may name THAT and nothing else (AGL-2486).

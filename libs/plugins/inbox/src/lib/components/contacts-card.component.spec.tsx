@@ -36,11 +36,14 @@ let mockLeads: Array<Record<string, unknown>> = []
 
 /** Held: a Firestore handle minted per render would re-run every read. */
 const mockFirestore = {}
+/** The signed-in account a member removal is authorized as (AGL-3308). */
+const mockUser = { getIdToken: async () => 'console-id-token' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The lead silo is the org's (AGL-3275), so these cards resolve it.
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   __esModule: true,
   useFirestore: () => mockFirestore,
+  useUser: () => ({ data: mockUser }),
   useFirestoreCollection: (factory: () => { __name: string }) => {
     const name = factory().__name
     return {
@@ -65,9 +68,25 @@ jest.mock('firebase/firestore', () => ({
   deleteDoc: jest.fn().mockResolvedValue(undefined),
 }))
 
+/*
+ * The route that owns member accounts (AGL-3308). A member's password hash is
+ * out of any client's reach, so the card asks the route to remove both
+ * documents rather than deleting the profile itself.
+ */
+const mockRouteAnswer = { ok: true, body: { ok: true } as Record<string, unknown> }
+const mockAuthorizedFetch = jest.fn(async (..._args: unknown[]) => ({
+  ok: mockRouteAnswer.ok,
+  json: async () => mockRouteAnswer.body,
+}))
+jest.mock('@aglyn/shared-util-http/authorized-token', () => ({
+  __esModule: true,
+  authorizedFetch: (...args: unknown[]) => mockAuthorizedFetch(...args),
+}))
+
+const mockEnqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   __esModule: true,
-  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
+  useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
 }))
 
 const mockConfirm = jest.fn().mockResolvedValue(undefined)
@@ -114,6 +133,8 @@ const at = (iso: string) => ({ toDate: () => new Date(iso) })
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockRouteAnswer.ok = true
+  mockRouteAnswer.body = { ok: true }
   resetPluginServicesForTests()
   publishLeadRoutes()
   mockMembers = [
@@ -162,7 +183,47 @@ describe('ContactsCard (AGL-3045)', () => {
     await screen.findByRole('grid')
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(mockConfirm).toHaveBeenCalledTimes(1)
-    expect(deleteDoc).toHaveBeenCalledWith('hosts/host-1/siteMembers/same-id')
+    // Through the route, as the signed-in account, never a client delete: the
+    // profile's credential document is out of the browser's reach.
+    expect(deleteDoc).not.toHaveBeenCalled()
+    expect(mockAuthorizedFetch).toHaveBeenCalledTimes(1)
+    const [user, url, init] = mockAuthorizedFetch.mock.calls[0] as [
+      unknown,
+      string,
+      { method: string; body: string },
+    ]
+    expect(user).toBe(mockUser)
+    expect(url).toBe('/api/membership/admin-remove')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toEqual({ hostId: 'host-1', memberId: 'same-id' })
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith('Member removed', {
+      variant: 'success',
+      persist: false,
+    })
+  })
+
+  it('says so when the route refuses the removal', async () => {
+    mockRouteAnswer.ok = false
+    mockRouteAnswer.body = { error: 'Not permitted' }
+    render(<ContactsCard hostId="host-1" />)
+
+    fireEvent.click(
+      within(rowOf('ada@example.com')).getByRole('button', {
+        name: 'More actions for ada@example.com',
+      }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove member' }))
+
+    await screen.findByRole('grid')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockEnqueueSnackbar).toHaveBeenCalledWith('Not permitted', {
+      variant: 'warning',
+      allowDuplicate: true,
+    })
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalledWith(
+      'Member removed',
+      expect.anything(),
+    )
   })
 
   it('opens a lead in the CRM, or asks where it came from, from the lead’s menu', () => {

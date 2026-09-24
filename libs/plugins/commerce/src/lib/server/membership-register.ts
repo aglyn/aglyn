@@ -37,12 +37,14 @@ import {
   mintMemberSession,
   setMemberCookie,
 } from './membership'
+import { memberCredentialRef } from './member-credentials'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /**
- * Site member sign-up (AGL-109): creates the member record (scrypt hash),
- * doubles as a lead, and signs the visitor in via the session cookie.
+ * Site member sign-up (AGL-109): creates the member record and its credential
+ * document (the scrypt hash, AGL-3308), doubles as a lead, and signs the
+ * visitor in via the session cookie.
  */
 export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
   if (req.method !== 'POST') {
@@ -125,10 +127,15 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       // Live documents only, so removing a member in the inbox frees the slot.
       const verdict = checkVisitorRecordCeiling(used, SITE_MEMBERS_MAX_PER_HOST)
       if (verdict.exceeded) return { duplicate: false, ceiling: verdict.ceiling }
+      // The hash goes to the credential document, which no client can read
+      // (AGL-3308), and in this transaction, so a member never exists without
+      // the password they chose. The profile below is what the console lists.
+      tx.set(memberCredentialRef(hostRef, memberRef.id), {
+        passwordScrypt: hashMemberPassword(password),
+      })
       tx.create(memberRef, {
         email,
         ...(displayName ? memberNameSearchFields(displayName) : {}),
-        passwordScrypt: hashMemberPassword(password),
         /*
          * The checkbox is PERSISTED on the member, not only forwarded.
          *

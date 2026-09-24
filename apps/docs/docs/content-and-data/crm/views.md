@@ -26,8 +26,8 @@ contacts** when none is — and opens the views menu:
 - **My views** are the ones you saved for yourself.
 - **Shared with the team** lists views a colleague saved and shared.
 - On the Contacts list, your saved [segments](./overview.md#segments) are
-  offered under their own heading; choosing one puts its tags and sources on
-  the filter bar.
+  offered under their own heading; choosing one puts its tags and sources
+  among the list's filters.
 
 Beneath them are the acts on the open view:
 
@@ -52,15 +52,27 @@ and a colleague who can open the section lands on the same list. On the
 Contacts list the key sits beside the ones a form's page or the Inbox link
 with, so "the people this form captured, in my usual view" is one address.
 
+## Filters
+
+Every CRM list filters through its table's own toolbar: **Filters** opens the
+filter panel, **Search** finds a record by its name and the words beside it,
+and each column's menu has **Filter** too. Pick a column, a condition and a
+value; a field with fixed choices — a status, a stage, an owner, a lead
+source, a campaign, a kind, a priority — is picked from a list, a date from a
+calendar, anything else typed.
+
+The panel edits one filter at a time. Filters on different columns add up:
+filter one column, then another, and the list keeps both. Every filter in
+force shows as a **chip** beside the views control, where its ✕ removes it,
+and all of them are part of the saved view. A view saved before the panel
+existed keeps its filters as they were.
+
 ## Filters on the Contacts list
 
-The Contacts list keeps its filters as **chips** above the table, and **Add
-filter** adds one: pick a field, a condition and a value. The fields are the
-list's columns and a few that are not — owner, stage, source, company, tags,
-form, orders, lifetime value, created and updated dates, and one field per
-[custom field](./custom-fields.md) your organization has defined. Owner,
-stage, source and company are picked from a list; a date from a calendar;
-anything else typed.
+On the Contacts list the fields are the list's columns and a few that are not
+— owner, stage, source, company, tags, form, orders, lifetime value, created
+and updated dates, email verdict, next activity, and one field per
+[custom field](./custom-fields.md) your organization has defined.
 
 One chip reaches every contact and the rest narrow what it found. The
 database answers one filter per query, so the first filter it can serve —
@@ -72,17 +84,27 @@ and custom-field filters always narrow rather than reach, because those
 facts are kept per site and no query can reach them directly. Sorting
 reorders the loaded window.
 
-On the other four lists the filter is the control the list already had — the
-companies grid's column filter, the deals table's **All / Open / Won / Lost**,
-the task view, the leads **Show** — and a view keeps it with the columns and
-the sort.
+## Filters on the other lists
 
-The contacts, companies and deals lists also have a **No next activity** chip
-beside the view control: on, the list keeps only the records with no open task
-scheduled against them (see [next activity](./tasks.md#next-activity)). It is
-a clause on the view — a view saved with it on reopens with it on — and on the
-companies and deals lists it narrows the page on screen rather than the whole
-collection, the way a contacts filter that cannot be served does.
+- **Leads** — Status, Email, Owner, Lead source and Campaign; see
+  [the leads list](./leads.md). The list reads the 200 most recently seen
+  leads, and every filter and the search narrow those.
+- **Companies** — Company (starts with or is) and Owner reach every company;
+  the search box is the same **Company starts with** filter. The list is
+  paged, so one of the two applies at a time.
+- **Deals** (the table) — Status reaches every deal. There is no search box:
+  nothing indexes a deal's title, and a search over one page would miss the
+  deal on the next.
+- **Tasks** — **Show** is the task view (My tasks, Overdue, Today, Upcoming,
+  All open, Done) and reaches every task; Kind, Priority and Assignee, and
+  the search over title and notes, narrow the rows that view loaded.
+
+On the contacts, companies and deals lists, **Next activity** › **is empty**
+keeps only the records with no open task scheduled against them (see
+[next activity](./tasks.md#next-activity)). It narrows the rows already
+loaded rather than the whole collection, the way a contacts filter that
+cannot be served does, and it stays beside the companies and deals lists'
+one served filter.
 
 ## Columns and sort
 
@@ -99,7 +121,7 @@ and sources, usable as a campaign audience. Views keep everything a segment
 kept and more, and the two meet in two places:
 
 - Every segment is offered in the Contacts views menu. Choosing one puts its
-  tags and sources on the filter bar, where you can narrow further and save
+  tags and sources among the list's filters, where you can narrow further and save
   the result as a view.
 - **Save as segment…** in the views menu keeps the tag and source filters of
   the current view as a segment. The other filters stay on the view.

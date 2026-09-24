@@ -947,6 +947,12 @@ when the address was suppressed by a bounce or a spam complaint. Those protect
 your sending reputation rather than expressing a preference, so no link can
 clear them.
 
+Where your organization has declared several sites one sender — a consent group,
+the name every one of their signup forms shows — the page speaks for that sender.
+It names the group, it shows what the person has left on any of its sites, and
+whatever they choose on it applies to every one of them: unsubscribing, leaving a
+topic, asking for less, and coming back.
+
 ### Letting someone ask for less, instead of none {#frequency-opt-down}
 
 The same page carries a **How often** choice: as they come, at most one a day,
@@ -1051,7 +1057,9 @@ actually sent comes from, and a rising **Bounced** count is the earliest sign
 a list is going stale.
 
 Each site keeps its own list: somebody who unsubscribed from one site can still
-be emailed by another. Your [organization's Emails page](#organization-emails-page)
+be emailed by another — unless your organization has declared the two sites one
+sender (a consent group, named on every signup form), in which case an address on
+either site's list is skipped by both. Your [organization's Emails page](#organization-emails-page)
 counts every site's list by reason, and opens a site's list from its row.
 
 An unsubscribe now records **which campaign** the link was in, so the campaign
@@ -1071,7 +1079,8 @@ the person who asks in words rather than by clicking has asked just as clearly.
 Two things it does not do, both on purpose:
 
 - **It does not remove anybody.** The person stays on every audience and keeps
-  every record you hold about them. Only this site's marketing email stops.
+  every record you hold about them. Only this site's marketing email stops —
+  and that of any site your organization declared one sender with it.
 - **It does not stop transactional mail.** Order confirmations, booking
   reminders and password resets still reach them, because those answer
   something the person just did.

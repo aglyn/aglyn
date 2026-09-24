@@ -106,9 +106,14 @@ import { customFieldColumns } from './contact-custom-columns'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
-import { NoNextActivityToggle } from './crm-next-activity-column'
 import { useCompanyOptions } from './company-picker'
-import CrmFilterBar, { type CrmFilterOption } from './crm-filter-bar'
+import CrmFilterBar from './crm-filter-bar'
+import {
+  type CrmFilterOption,
+  crmFilterColumns,
+  crmRowMatchesSearch,
+} from '../model/crm-grid-filter'
+import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
 import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
 import { CrmSuiteLockedButton, CrmSuiteNotice, crmSuiteIncluded } from './crm-suite-lock'
 
@@ -119,6 +124,9 @@ import { CrmSuiteLockedButton, CrmSuiteNotice, crmSuiteIncluded } from './crm-su
  * editor and this filter cannot disagree about what `order` is called.
  */
 const SOURCE_LABELS = CONTACT_SOURCE_LABELS
+
+/** What the grid's quick search reads on a contact: who they are, and their tags. */
+const CONTACT_SEARCH_FIELDS = ['name', 'email', 'phone', 'company', 'tags'] as const
 
 /**
  * What the list keeps out of sight until a view says otherwise: the
@@ -611,16 +619,22 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    */
   const uid = user?.uid ?? ''
   const windowClauses = plan.window
+  // The quick search is the grid's box, answered here over the same window.
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const searchKey = searchWords.join(' ')
   const visible = useMemo(
     () =>
-      windowClauses.length
-        ? contacts.filter((contact) =>
-            windowClauses.every((clause) =>
-              matchListFilter(contact, filterFields, clause),
-            ),
+      windowClauses.length || searchWords.length
+        ? contacts.filter(
+            (contact) =>
+              windowClauses.every((clause) =>
+                matchListFilter(contact, filterFields, clause),
+              ) && crmRowMatchesSearch(contact, CONTACT_SEARCH_FIELDS, searchWords),
           )
         : contacts,
-    [contacts, windowClauses, filterFields],
+    // `searchKey` stands for the words, which are a new array each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [contacts, windowClauses, filterFields, searchKey],
   )
   /*
    * The choices the filter bar picks from. The companies are read only once
@@ -690,7 +704,23 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * a view says, so a saved arrangement cannot unhide a strip of blank
    * cells.
    */
-  const grid = useCrmViewGrid(views, contactColumns, HIDDEN_COLUMNS)
+  /*
+   * The grid's own Filters panel and quick search edit the view's clauses
+   * (AGL-3313). The picked fields — owner, stage, source, company, email
+   * verdict, a custom select — are select columns over the same choices the
+   * chips name them by; the rest keep the operators the grammar declares.
+   */
+  const filterColumns = useMemo(
+    () => crmFilterColumns(contactColumns, filterFields, filterOptions, filterHeaders),
+    [contactColumns, filterFields, filterOptions, filterHeaders],
+  )
+  const gridFilter = useCrmGridFilter({
+    clauses: views.state.filters,
+    onChange: views.setFilters,
+    selectFields: Object.keys(filterOptions),
+    search: { words: searchWords, onChange: setSearchWords },
+  })
+  const grid = useCrmViewGrid(views, filterColumns, HIDDEN_COLUMNS)
 
   /*
    * A SEGMENT IS A VIEW'S TAG AND SOURCE CLAUSES, kept where a campaign
@@ -932,12 +962,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               onChange={views.setFilters}
               options={filterOptions}
               servedField={plan.served?.field ?? null}
-              onOpen={() => setFilterOpened(true)}
             />
-            {/* The one clause a rep reaches for most (AGL-2661), as a chip. */}
-            <Stack direction="row">
-              <NoNextActivityToggle filters={views.state.filters} onChange={views.setFilters} />
-            </Stack>
           </Stack>
           {!quota.allowed ? (
             <Alert severity="warning">
@@ -1088,13 +1113,19 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                   onOpen={(id) => router.push(routes.contact(id))}
                   /*
-                   * The grid must NOT also filter: the bar above is the one
-                   * editor of the clauses, and the grid's own filter panel
-                   * holds one item where a view holds several. Columns and
-                   * sort are the view's, controlled so a saved arrangement
-                   * is what the grid shows and a change is what it saves.
+                   * The grid's Filters panel and quick search edit the view's
+                   * clauses; the list answers them, onto the query where it
+                   * can and over the loaded window where it cannot, so the
+                   * grid must not filter again itself (AGL-3313). Opening the
+                   * panel is what reads the roster and the companies its
+                   * pickers name. Columns and sort are the view's, controlled
+                   * so a saved arrangement is what the grid shows.
                    */
-                  disableColumnFilter
+                  filterMode="server"
+                  filterModel={gridFilter.filterModel}
+                  onFilterModelChange={gridFilter.onFilterModelChange}
+                  quickFilter
+                  onPreferencePanelOpen={() => setFilterOpened(true)}
                   columnVisibilityModel={grid.columnVisibilityModel}
                   onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
                   sortModel={grid.sortModel}

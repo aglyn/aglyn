@@ -275,6 +275,11 @@
           "name": "siteMembers"
         },
         {
+          "name": "siteMemberCredentials",
+          "mediaScan": "none",
+          "mediaScanReason": "A site member's password hash, one document per member, read and written only by the membership routes (AGL-3308). A credential with no content field, and no client may read it."
+        },
+        {
           "name": "orders",
           "mediaScan": "none",
           "mediaScanReason": "Completed orders. Line items COPY a product's `imageUrl` at purchase time, so these would match — and matching would be the wrong answer: an order is an immutable record of what was sold, deleting the asset changes nothing about it, and no author can edit one. A busy store also holds more of these than the whole read budget."

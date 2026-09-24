@@ -3261,9 +3261,9 @@ service cloud.firestore {
         // content is the object AGL-1443 is open on, and the undo affordance
         // does not need one. No client read means no such surface can appear
         // by accident.
-        allow read: if isStaff() ||
-          (isHostMember(hostId) &&
-            !(subcollection in ['webhooks', 'orders', 'mediaTombstones']));
+        allow read: if subcollection != 'siteMemberCredentials' &&
+          (isStaff() || (isHostMember(hostId) &&
+            !(subcollection in ['webhooks', 'orders', 'mediaTombstones'])));
         // THE EXCLUSION LISTS ARE THE MECHANISM. Sibling match blocks are OR'd
         // and the LOOSER one wins, so a dedicated deny (or a tighter dedicated
         // block) beside this catch-all decides nothing until the name is also
@@ -3364,7 +3364,11 @@ service cloud.firestore {
         //    path. A write forges someone else's preference, a delete puts an
         //    address back into a stream it left, and the Admin-SDK preference
         //    page is the only writer.
-        allow create: if isStaff() ||
+        //  - `siteMembers`, all three (AGL-3308): its block below re-grants
+        //    the suspend flag and a delete that strands no credential.
+        //    `siteMemberCredentials` holds the password hashes; the `!=` that
+        //    opens all four statements keeps every client out, staff included.
+        allow create: if subcollection != 'siteMemberCredentials' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'variables',
               'functions', 'workflows', 'services', 'redirects',
@@ -3378,11 +3382,12 @@ service cloud.firestore {
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
-              'flowEnrollments', 'leads']) &&
+              'flowEnrollments', 'leads', 'siteMembers',
+              'siteMemberCredentials']) &&
             // The org Inbox's collection-group read (AGL-3303) lists EVERY
             // `formSubmissions` collection, at any depth, filed under the org
             // a row names, so none may be minted beneath another name here.
-            !string(document).matches('.*/formSubmissions/[^/]+'));
+            !string(document).matches('.*/formSubmissions/[^/]+')));
         // More names on all THREE lists, each server-written with no client
         // writer to break:
         //
@@ -3475,7 +3480,7 @@ service cloud.firestore {
         //    the whole live site off-platform with no publish step. That makes
         //    it a publish act (AGL-2334) rather than authoring, so the block
         //    below re-grants both on `canPublishHostContent`.
-        allow update: if isStaff() ||
+        allow update: if subcollection != 'siteMemberCredentials' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
@@ -3489,7 +3494,8 @@ service cloud.firestore {
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
-              'flowEnrollments', 'leads']));
+              'flowEnrollments', 'leads', 'siteMembers',
+              'siteMemberCredentials'])));
         // `collections` joins the delete exclusion (AGL-947): a collection
         // owns `entries`, Firestore doesn't cascade, and a client delete
         // orphaned them — /api/resources/erase recursiveDeletes instead.
@@ -3526,7 +3532,7 @@ service cloud.firestore {
         // would leave an author able to remove a publisher's redirect outright,
         // which is the same routing decision in the other direction and is
         // exactly the AGL-2334 `components` argument.
-        allow delete: if isStaff() ||
+        allow delete: if subcollection != 'siteMemberCredentials' && (isStaff() ||
           ((canWriteHostContent(hostId) && !hostWritesFrozen(hostId)) &&
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
@@ -3538,7 +3544,7 @@ service cloud.firestore {
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
-              'flowEnrollments']));
+              'flowEnrollments', 'siteMembers', 'siteMemberCredentials'])));
       }
       // Members-only posts (AGL-2372). Create and update are denied outright
       // by the exclusions above — /api/commerce/member-post is the only
@@ -3558,6 +3564,20 @@ service cloud.firestore {
       match /memberPosts/{postId} {
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+      }
+      // Site member profiles (AGL-3308). A client flips `suspended` (the
+      // drawer) and nothing else: the hash, any legacy copy of it here and
+      // `sessionsValidFromMs` are the server's. Delete only while the member
+      // has no credential document, so a client delete cannot strand one; the
+      // console removes through /api/membership/admin-remove.
+      match /siteMembers/{memberId} {
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['suspended']));
+        allow delete: if canWriteHostContent(hostId) &&
+          !hostWritesFrozen(hostId) &&
+          !exists(/databases/$(database)/documents/hosts/$(hostId)/siteMemberCredentials/$(memberId));
       }
       // Form submissions (AGL-3303): the one field the Inbox writes. A row's
       // `orgId` and `hostId` decide which organization's Inbox lists it (the

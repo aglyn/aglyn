@@ -88,6 +88,12 @@ export async function scanRestockAlerts(
   >()
   /** Each site's public origin, for the unsubscribe link on the alert. */
   const siteBaseByHost = new Map<string, string>()
+  /**
+   * Each site's consent group, off the same org read as its branding, so the
+   * gate honors an unsubscribe from any site the org declared one sender
+   * with this one.
+   */
+  const consentHostIdsByHost = new Map<string, readonly string[]>()
   let skippedLocked = 0
   for (const docSnapshot of alerts.docs) {
     const hostRef = docSnapshot.ref.parent.parent
@@ -154,11 +160,17 @@ export async function scanRestockAlerts(
         compose: composeHostComponentNodes,
       })
       templateCache.set(hostRef.id, loaded)
+      const owner = await getOrgForHost(hostRef.id).catch(() => null)
       brandingByHost.set(
         hostRef.id,
-        Aglyn.resolveBrandingProfile(
-          (await getOrgForHost(hostRef.id).catch(() => null))?.org as never,
-        ),
+        Aglyn.resolveBrandingProfile(owner?.org as never),
+      )
+      consentHostIdsByHost.set(
+        hostRef.id,
+        Aglyn.consentGroupForHost(
+          (owner?.org as Record<string, unknown> | undefined) ?? null,
+          hostRef.id,
+        ).hostIds,
       )
       // The site's own origin, for the unsubscribe link. Resolved once per
       // host beside the branding, because this sweep is a `collectionGroup`
@@ -217,6 +229,7 @@ export async function scanRestockAlerts(
         hostId: hostRef.id,
         siteBase: siteBaseByHost.get(hostRef.id) ?? '',
         topicId: Aglyn.EMAIL_TOPIC_PRODUCT_UPDATES,
+        consentHostIds: consentHostIdsByHost.get(hostRef.id) ?? [hostRef.id],
       },
     })
     /*

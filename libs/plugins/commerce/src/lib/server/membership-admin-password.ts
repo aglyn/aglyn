@@ -34,6 +34,12 @@ import {
   MEMBER_SESSIONS_VALID_FROM_FIELD,
   mintPasswordResetToken,
 } from './membership'
+import {
+  isMemberDocumentId,
+  memberCredentialRef,
+  readMemberPasswordHash,
+  retiredCredentialFields,
+} from './member-credentials'
 
 /**
  * Console-side password help for a SITE MEMBER (AGL-914) — a visitor account
@@ -48,7 +54,12 @@ import {
  *
  * Auth is the console id-token check `hosts/members` uses (site admin via
  * the `memberRoles` projection, or an org role carrying manageMembers) — NOT
- * the visitor session cookie the rest of the membership endpoints take.
+ * the visitor session cookie the rest of the membership endpoints take. A
+ * console route, so it is registered on the console's API surface.
+ *
+ * The hash is written to the member's credential document (AGL-3308), which
+ * no client can read, and the legacy copy on the profile goes in the same
+ * batch.
  */
 export const membershipAdminPasswordHandler: PluginApiHandler = async (
   req,
@@ -68,6 +79,9 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
   const action = String(req.body?.action ?? '')
   if (!hostId || !memberId) {
     return res.status(400).json({ error: 'Missing hostId or memberId' })
+  }
+  if (!isMemberDocumentId(memberId)) {
+    return res.status(400).json({ error: 'Unknown member' })
   }
   if (action !== 'sendPasswordReset' && action !== 'setPassword') {
     return res.status(400).json({ error: 'Unknown action' })
@@ -150,7 +164,7 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
       const token = mintPasswordResetToken(
         hostId,
         memberId,
-        memberSnapshot.get('passwordScrypt'),
+        await readMemberPasswordHash(hostRef, memberSnapshot),
       )
       const resetUrl = `${siteBase}/recover?token=${encodeURIComponent(token)}`
       const result = await sendEmail({
@@ -185,11 +199,22 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
     // Rewriting the hash alone would NOT sign the member out: their session
     // is an HMAC cookie that never encodes the password (unlike a reset
     // token, which binds to it on purpose). The cut-off field is what
-    // actually revokes the old sessions — see readActiveMemberSession.
-    await memberRef.update({
-      passwordScrypt: hashMemberPassword(validated.password),
+    // actually revokes the old sessions — see readActiveMemberSession. It
+    // stays on the profile, which every session check already reads.
+    //
+    // One batch: the profile `update` refuses a member removed since the
+    // read above, and that refusal takes the credential write with it.
+    const batch = firestore.batch()
+    batch.set(
+      memberCredentialRef(hostRef, memberId),
+      { passwordScrypt: hashMemberPassword(validated.password) },
+      { merge: true },
+    )
+    batch.update(memberRef, {
+      ...retiredCredentialFields(),
       [MEMBER_SESSIONS_VALID_FROM_FIELD]: Date.now(),
     })
+    await batch.commit()
     // Best-effort: the password has already changed, so a mail failure must
     // not fail the request and send the admin round again. Report it so
     // they know to reach the member another way.

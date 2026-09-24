@@ -19,6 +19,7 @@ import {
   ACTION_MAX_EVENT_DEPTH,
   ACTION_MAX_STEPS,
   checkEntitlement,
+  consentGroupForHost,
   planLabelGrantingFeature,
   checkQuota,
   type HostWebhook,
@@ -931,7 +932,18 @@ async function runServerStep(
         ...(enrollmentRef ? { priority: 'bulk' as const } : {}),
         // `topicId` is `''` for a step that belongs to no stream, which
         // every reader of it treats as absent — see `flowEmailTopicId`.
-        marketing: { hostId, siteBase, topicId },
+        // The consent group comes off the org the run already holds, so the
+        // gate honors an unsubscribe from any site of a declared group —
+        // the sender this site mails as — at no extra read.
+        marketing: {
+          hostId,
+          siteBase,
+          topicId,
+          consentHostIds: consentGroupForHost(
+            (env.org as Record<string, unknown> | null) ?? null,
+            hostId,
+          ).hostIds,
+        },
       })
       /*
        * DEFERRED IS NOT FAILED, and it is not SENT either.
@@ -1736,6 +1748,43 @@ export async function runEventActions(
 }
 
 /**
+ * Why a dispatched action ran nothing (AGL-3309).
+ *
+ * A page's dispatch has nobody to tell: a visitor's scroll is not answered
+ * with "the plan lapsed", so for it every refusal is the same empty list of
+ * alerts. The console's test run does have somebody to tell, and a test that
+ * ran nothing must not read as one that ran.
+ */
+export type SingleActionSkip =
+  // No such action, or it was deleted.
+  | 'missing'
+  // Switched off.
+  | 'disabled'
+  // The dispatch named an event other than the action's trigger.
+  | 'event'
+  // The trigger's conditions are not met by the payload.
+  | 'conditions'
+  // The site's plan does not carry the `actions` feature.
+  | 'plan'
+  // The month's action runs are spent.
+  | 'allowance'
+  // A read before the first step threw; it was logged. Steps never throw
+  // (`runServerStep` records a throw as a failed step), so nothing ran.
+  | 'failed'
+
+/** What one dispatched action did, for a caller that has to say so. */
+export interface SingleActionOutcome {
+  /** Its steps ran, and the run counted on the site's meter. */
+  ran: boolean
+  /** Why nothing ran; `null` when it ran. */
+  skipped: SingleActionSkip | null
+  /** The site alerts its steps produced. */
+  alerts: HostActionAlert[]
+  /** The month's allowance, when the allowance is what refused. */
+  limit?: number
+}
+
+/**
  * Runs ONE action's server steps (AGL-256): the tenant page runtime
  * evaluates site-event trigger conditions (scroll thresholds, selectors)
  * client-side and dispatches the specific action here — re-matching by
@@ -1748,23 +1797,50 @@ export async function runSingleAction(
   event: string,
   payload: HostEventPayload = {},
 ): Promise<HostActionAlert[]> {
+  return (await runSingleActionOutcome(hostId, actionId, event, payload)).alerts
+}
+
+/**
+ * {@link runSingleAction}, answering what it did as well as the alerts: whether
+ * the steps ran and, when they did not, which gate stopped them.
+ *
+ * One body for both, so the console's test run meets exactly the gates a
+ * page's dispatch meets — the switch, the event, the conditions, the plan and
+ * the month's allowance — and is metered and recorded the same way.
+ */
+export async function runSingleActionOutcome(
+  hostId: string,
+  actionId: string,
+  event: string,
+  payload: HostEventPayload = {},
+): Promise<SingleActionOutcome> {
   const alerts: HostActionAlert[] = []
+  const skipped = (
+    reason: SingleActionSkip,
+    limit?: number,
+  ): SingleActionOutcome => ({
+    ran: false,
+    skipped: reason,
+    alerts,
+    ...(limit === undefined ? {} : { limit }),
+  })
   try {
     const firestore = firebaseAdmin.app().firestore()
     const hostRef = firestore.collection('hosts').doc(hostId)
     const doc = await hostRef.collection('actions').doc(actionId).get()
-    if (!doc.exists || doc.get('deletedAt') || doc.get('enabled') === false) {
-      return alerts
-    }
+    if (!doc.exists || doc.get('deletedAt')) return skipped('missing')
+    if (doc.get('enabled') === false) return skipped('disabled')
     const action = doc.data() as HostAction
     // Only site-event actions may be dispatched externally — server
     // events flow through their own emitters.
-    if (String(action.trigger?.event ?? '') !== String(event)) return alerts
+    if (String(action.trigger?.event ?? '') !== String(event)) {
+      return skipped('event')
+    }
     // Structured payload conditions (AGL-557; AND/OR chaining AGL-565):
     // the single-action dispatch path honors them too, so
     // client-evaluated triggers can't bypass them.
     if (!evaluateTriggerConditions(action.trigger, { event, ...payload })) {
-      return alerts
+      return skipped('conditions')
     }
 
     const monthKey = new Date().toISOString().slice(0, 7)
@@ -1775,7 +1851,7 @@ export async function runSingleAction(
     const owner = await getOrgForHost(hostId)
     {
       const org = owner?.org
-      if (!checkEntitlement(org as any, 'actions')) return alerts
+      if (!checkEntitlement(org as any, 'actions')) return skipped('plan')
       webhooksAllowed = checkEntitlement(org as any, 'webhooks')
       crmAllowed = checkEntitlement(org as any, 'crm')
       const limit = resolveOrgEntitlements(
@@ -1783,7 +1859,7 @@ export async function runSingleAction(
       ).actionRunsPerMonth
       const counterSnapshot = await runCounterRef.get()
       const used = Number(counterSnapshot.get(monthKey) ?? 0)
-      if (used + 1 > limit) return alerts
+      if (used + 1 > limit) return skipped('allowance', limit)
     }
 
     const env: ActionRunEnv = {
@@ -1803,10 +1879,11 @@ export async function runSingleAction(
     await runCounterRef
       .set({ [monthKey]: FieldValue.increment(1) }, { merge: true })
       .catch(() => undefined)
+    return { ran: true, skipped: null, alerts }
   } catch (error) {
     console.error('runSingleAction failed', hostId, actionId, error)
+    return skipped('failed')
   }
-  return alerts
 }
 
 /**

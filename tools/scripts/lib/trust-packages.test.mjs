@@ -126,23 +126,30 @@ describe('telling "not signed in" from "configured nothing" (AGL-3201)', () => {
     error: { code: 'EOTP', summary: 'This operation requires a one-time password.' },
   })
 
-  it('reports a signed-out read as unauthenticated, not as empty', () => {
+  it('reports a challenged read as needing the second factor, not as empty', () => {
     const answer = readTrust('@aglyn/aglyn', () => eotp)
-    assert.equal(answer.unauthenticated, true)
+    assert.equal(answer.auth, 'second-factor')
     assert.equal(trustsThisWorkflow(answer.listing), false)
   })
 
+  /*
+   * ⛔ AND NOT THE SAME WAY (2026-09-23). These two used to share one verdict,
+   * so a lapsed `_authToken` — which answers E401 "You must be logged in to
+   * publish packages" — was reported as a second factor nobody approved. The
+   * advice was to approve a browser prompt that never opens, for an account
+   * that is not signed in; `npm login` is the fix and no approval reaches it.
+   */
   for (const code of ['ENEEDAUTH', 'E401']) {
-    it(`treats ${code} the same way`, () => {
+    it(`reads ${code} as SIGNED OUT, which npm login fixes`, () => {
       const body = JSON.stringify({ error: { code, summary: code } })
-      assert.equal(readTrust('@aglyn/aglyn', () => body).unauthenticated, true)
+      assert.equal(readTrust('@aglyn/aglyn', () => body).auth, 'signed-out')
     })
   }
 
-  it('a real error is NOT unauthenticated — it is a package that failed', () => {
+  it('a real error is neither — it is a package that failed', () => {
     const body = JSON.stringify({ error: { code: 'E404', summary: 'Not found' } })
     const answer = readTrust('@aglyn/nope', () => body)
-    assert.notEqual(answer.unauthenticated, true)
+    assert.equal(answer.auth, undefined)
     assert.equal(answer.error, 'Not found')
     assert.equal(trustsThisWorkflow(answer.listing), false)
   })

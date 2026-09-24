@@ -60,7 +60,7 @@
 // (or a `--set` failed), which is also what makes this usable as a check.
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readPackageMap } from './lib/lib-boundaries.mjs'
@@ -154,8 +154,18 @@ function npmVersion() {
 }
 
 /**
- * What `name` trusts today, as text — or `{ unauthenticated: true }` when the
- * registry asked for the account's second factor.
+ * What `name` trusts today, as text — or an `auth` verdict when the registry
+ * would not answer.
+ *
+ * ⛔ SIGNED OUT AND SECOND-FACTOR-NEEDED ARE DIFFERENT PROBLEMS WITH
+ * DIFFERENT FIXES, and this told them apart only after conflating them cost
+ * a session (2026-09-23). A lapsed `_authToken` in `~/.npmrc` answers `E401
+ * "You must be logged in to publish packages"`, and the run reported that as
+ * "npm wanted this account's second factor and did not get it" — so the
+ * advice was to approve a browser prompt that never appears, for an account
+ * that is not signed in. `npm login` is the fix there and no amount of
+ * approving reaches it. Same shape as AGL-1094: a diagnosis that names the
+ * wrong subsystem sends the person at the wrong subsystem.
  *
  * `--json`, so a match is made against npm's own field values rather than
  * against a table it renders for a person and may reformat. The error shape
@@ -175,8 +185,12 @@ export function readTrust(name, run = npmTrustList) {
     return { listing: raw }
   }
   const code = parsed?.error?.code
-  if (code === 'EOTP' || code === 'ENEEDAUTH' || code === 'E401') {
-    return { unauthenticated: true, listing: '' }
+  // EOTP is npm saying "I know who you are, prove it again". ENEEDAUTH and
+  // E401 are npm saying "I do not know who you are" — a credential that has
+  // lapsed, been revoked, or was never there.
+  if (code === 'EOTP') return { auth: 'second-factor', listing: '' }
+  if (code === 'ENEEDAUTH' || code === 'E401') {
+    return { auth: 'signed-out', listing: '' }
   }
   if (parsed?.error) return { listing: '', error: parsed.error.summary ?? code ?? 'unknown' }
   return { listing: JSON.stringify(parsed) }
@@ -232,6 +246,51 @@ function warmUpTrustAuth(name) {
   }
 }
 
+/**
+ * The record `check:package-trust` reads, stamped from THIS run's answers.
+ *
+ * Written because the guard cannot ask npm itself: `npm trust list` is not
+ * public, so a check that called it would be red on every machine but the
+ * owner's. The file is the evidence that a real sweep saw a real answer, and
+ * the guard compares it against the packages the repo publishes — which is
+ * how a new lib with no trust row reds its own PR instead of a release
+ * (AGL-3201, after the 2026-09-23 break).
+ *
+ * ⛔ MERGED, NEVER REPLACED. A run that stopped part way through — a lapsed
+ * token, a person closing the browser — has confirmed a prefix of the list
+ * and knows nothing about the rest. Writing only what it saw would drop every
+ * package after the stop and red the guard on packages that are perfectly
+ * configured. Rows leave by `check:package-trust --prune`, which is driven by
+ * the repo's own package list and not by how far a sweep got.
+ */
+function writeRecord(confirmed) {
+  if (!confirmed.length) return
+  const path = join(ROOT, 'tools/scripts/trusted-packages.json')
+  let held = { packages: {} }
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8'))
+    if (parsed?.packages) held = parsed
+  } catch {
+    // No record yet, or one nobody can read: this run rebuilds what it saw.
+  }
+  const confirmedAt = new Date().toISOString().slice(0, 10)
+  for (const name of confirmed) held.packages[name] = { confirmedAt }
+  held.note =
+    'Packages npm has confirmed trust a release from this repo\'s ' +
+    'publish-packages.yml. Written by `npm run trust:packages` (either mode) ' +
+    'from npm\'s own answers, and read by `check:package-trust`, which cannot ' +
+    'ask npm itself because `npm trust list` is not public. A row records ' +
+    'that a sweep saw a configuration, not that one exists this minute.'
+  held.packages = Object.fromEntries(
+    Object.entries(held.packages).sort(([a], [b]) => a.localeCompare(b)),
+  )
+  writeFileSync(path, `${JSON.stringify(held, null, 2)}\n`)
+  console.log(
+    `trust:packages: recorded ${confirmed.length} confirmed package(s) in ` +
+      'tools/scripts/trusted-packages.json — commit it.',
+  )
+}
+
 function main(argv) {
   const set = argv.includes('--set')
   const version = npmVersion()
@@ -270,16 +329,38 @@ function main(argv) {
    * path npm is moving everyone to, and permitting it costs nothing today.
    */
   const missing = []
+  const confirmed = []
   let configured = 0
   let failed = 0
   for (const name of names) {
     let answer = readTrust(name)
-    if (answer.unauthenticated && !warmedUp) {
+    // The warm-up is only for a second factor. A signed-out account has
+    // nothing to approve, so offering it a browser handshake wastes a round
+    // trip and then reports the wrong problem.
+    if (answer.auth === 'second-factor' && !warmedUp) {
       warmedUp = true
       warmUpTrustAuth(name)
       answer = readTrust(name)
     }
-    if (answer.unauthenticated) {
+    if (answer.auth === 'signed-out') {
+      console.error('')
+      console.error('trust:packages: npm does not know who you are.')
+      console.error(`\`npm trust list ${name}\` came back 401 — a credential that has`)
+      console.error('lapsed or been revoked, not a second factor waiting to be approved.')
+      console.error('')
+      console.error('Sign in first, then run this again:')
+      console.error('')
+      console.error('  npm login')
+      console.error(`  npm run trust:packages${set ? ' -- --set' : ''}`)
+      console.error('')
+      console.error('⚑ A stale `//registry.npmjs.org/:_authToken=` in ~/.npmrc answers 401')
+      console.error('  exactly like having none at all, so "I am logged in" is worth')
+      console.error('  checking with `npm whoami` rather than believing.')
+      console.error('')
+      console.error(`${configured} package(s) were configured before this; re-running skips them.`)
+      return 1
+    }
+    if (answer.auth === 'second-factor') {
       console.error('')
       console.error("trust:packages: npm wanted this account's second factor for")
       console.error(`\`npm trust list ${name}\` and did not get it.`)
@@ -297,6 +378,7 @@ function main(argv) {
     }
     if (trustsThisWorkflow(answer.listing)) {
       console.log(`  ok      ${name}`)
+      confirmed.push(name)
       continue
     }
     missing.push(name)
@@ -314,11 +396,14 @@ function main(argv) {
         { cwd: ROOT, stdio: 'inherit' },
       )
       configured += 1
+      confirmed.push(name)
     } catch (error) {
       failed += 1
       console.error(`    FAILED ${name} — ${error.message}`)
     }
   }
+
+  writeRecord(confirmed)
 
   if (!missing.length) {
     console.log('trust:packages: every package trusts this workflow.')

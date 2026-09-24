@@ -67,6 +67,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         create: (_ref: unknown, data: Record<string, unknown>) => {
           mockState.members.push(data)
         },
+        // The credential document beside the member (AGL-3308); its own
+        // spec is membership-register-ceiling.spec.ts.
+        set: () => undefined,
       }),
   }
   const hostRef: any = {
@@ -75,7 +78,9 @@ jest.mock('@aglyn/tenant-data-admin', () => {
     collection: (name: string) =>
       name === 'siteMembers'
         ? membersCollection
-        : {
+        : name === 'siteMemberCredentials'
+          ? { doc: (id: string) => ({ id }) }
+          : {
             add: async (data: Record<string, unknown>) => {
               if (name === 'leads') mockState.leads.push(data)
               return { id: `${name}-1` }

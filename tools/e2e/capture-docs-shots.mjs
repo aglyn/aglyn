@@ -471,15 +471,18 @@ async function seedGuideFixtures() {
 
   // A site member (AGL-546) with real orders + a subscription, so the
   // Users page and the member drawer have content. The scrypt hash is a
-  // REAL hash — the member can sign in with the password below.
+  // REAL hash — the member can sign in with the password below — and lives
+  // on the credential document beside the profile (AGL-3308).
   const memberEmail = 'maya@example.com'
   const salt = randomBytes(16).toString('hex')
   const memberPassword = 'Maya-Demo-Pass-1'
   await put(hostRef.collection('siteMembers').doc('seed-guide-member'), {
     email: memberEmail,
     displayName: 'Maya Member',
-    passwordScrypt: `${salt}:${scryptSync(memberPassword, salt, 64).toString('hex')}`,
     createdAt: Timestamp.now(),
+  })
+  await put(hostRef.collection('siteMemberCredentials').doc('seed-guide-member'), {
+    passwordScrypt: `${salt}:${scryptSync(memberPassword, salt, 64).toString('hex')}`,
   })
 
   const dayMs = 86_400_000

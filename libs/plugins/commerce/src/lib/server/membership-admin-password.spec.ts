@@ -40,14 +40,18 @@ import {
   type PluginApiRequest,
   type PluginApiResponse,
   resolvePluginApiRoute,
+  unregisterPluginApiRoute,
 } from '@aglyn/aglyn/server'
 import {
+  hashMemberPassword,
   memberCookieName,
   mintMemberSession,
   readActiveMemberSession,
   verifyMemberPassword,
+  verifyPasswordResetToken,
 } from './membership'
 import { membershipAdminPasswordHandler } from './membership-admin-password'
+import { membershipAdminRemoveHandler } from './membership-admin-remove'
 
 const HOST_ID = 'host-1'
 const MEMBER_ID = 'member-1'
@@ -56,7 +60,17 @@ const ADMIN_UID = 'admin-uid'
 const mockHostFields: Record<string, unknown> = {}
 const mockMemberFields: Record<string, unknown> = {}
 let mockMemberExists = true
+/** The member is removed the moment the handler has read them — the race. */
+let mockMemberVanishesAfterRead = false
+/** Profile updates, as committed. */
 const mockMemberUpdates: Array<Record<string, unknown>> = []
+/**
+ * The member's credential document (AGL-3308): `null` when there is none,
+ * which is every member until the migration moves the legacy hash.
+ */
+let mockCredentialFields: Record<string, unknown> | null = null
+/** Credential-document writes, as committed. */
+const mockCredentialSets: Array<Record<string, unknown>> = []
 let mockDecodedToken: Record<string, unknown> = {}
 
 let mockThrottleAllows = true
@@ -128,22 +142,73 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
               get: (field: string) => mockHostFields[field],
               data: () => mockHostFields,
             }),
-            collection: () => ({
-              doc: () => ({
-                get: async () => ({
-                  exists: mockMemberExists,
-                  get: (field: string) => mockMemberFields[field],
-                }),
-                update: async (data: Record<string, unknown>) => {
-                  mockMemberUpdates.push(data)
-                  Object.assign(mockMemberFields, data)
-                },
-              }),
+            collection: (name: string) => ({
+              doc: (id: string) =>
+                name === 'siteMemberCredentials'
+                  ? {
+                      kind: 'credential',
+                      id,
+                      get: async () => ({
+                        id,
+                        exists: mockCredentialFields !== null,
+                        get: (field: string) => mockCredentialFields?.[field],
+                      }),
+                    }
+                  : {
+                      kind: 'member',
+                      id,
+                      get: async () => {
+                        const snapshot = {
+                          id,
+                          exists: mockMemberExists,
+                          get: (field: string) => mockMemberFields[field],
+                        }
+                        if (mockMemberVanishesAfterRead) mockMemberExists = false
+                        return snapshot
+                      },
+                    },
             }),
           }),
         }),
+        /*
+         * A batch applies its writes only on commit, and a profile update of
+         * a member who is gone rejects the whole batch — the Firestore
+         * behaviour the password set relies on to write no orphan credential.
+         */
+        batch: () => {
+          const writes: Array<() => void> = []
+          let refused = false
+          return {
+            set: (ref: { kind: string }, data: Record<string, unknown>) => {
+              if (ref.kind !== 'credential') throw new Error('unexpected set')
+              writes.push(() => {
+                mockCredentialSets.push(data)
+                mockCredentialFields = { ...(mockCredentialFields ?? {}), ...data }
+              })
+            },
+            update: (ref: { kind: string }, data: Record<string, unknown>) => {
+              if (ref.kind !== 'member') throw new Error('unexpected update')
+              if (!mockMemberExists) refused = true
+              writes.push(() => {
+                mockMemberUpdates.push(data)
+                for (const [field, value] of Object.entries(data)) {
+                  if (value === 'field-deleted') delete mockMemberFields[field]
+                  else mockMemberFields[field] = value
+                }
+              })
+            },
+            delete: () => {
+              throw new Error('unexpected delete')
+            },
+            commit: async () => {
+              if (refused) throw Object.assign(new Error('NOT_FOUND'), { code: 5 })
+              for (const write of writes) write()
+            },
+          }
+        },
       }),
     }),
+    firestore: { FieldValue: { delete: () => 'field-deleted' } },
   },
 }))
 
@@ -201,7 +266,10 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockMetered.length = 0
   mockMemberUpdates.length = 0
+  mockCredentialSets.length = 0
+  mockCredentialFields = null
   mockMemberExists = true
+  mockMemberVanishesAfterRead = false
   mockDecodedToken = { uid: ADMIN_UID, email_verified: true }
   mockManageMembers = false
   mockThrottleAllows = true
@@ -233,6 +301,7 @@ describe('membershipAdminPasswordHandler', () => {
     )
     expect(result.status).toBe(403)
     expect(mockMemberUpdates).toHaveLength(0)
+    expect(mockCredentialSets).toHaveLength(0)
   })
 
   it('accepts an org manager who is not on the site roster', async () => {
@@ -263,6 +332,7 @@ describe('membershipAdminPasswordHandler', () => {
     )
     expect(result.status).toBe(400)
     expect(mockMemberUpdates).toHaveLength(0)
+    expect(mockCredentialSets).toHaveLength(0)
   })
 
   it('stores a verifiable hash and never the plaintext', async () => {
@@ -278,12 +348,57 @@ describe('membershipAdminPasswordHandler', () => {
       res,
     )
     expect(result.status).toBe(200)
-    expect(mockMemberUpdates).toHaveLength(1)
-    const written = mockMemberUpdates[0]
+    // On the credential document (AGL-3308), never the profile the console
+    // lists — and the legacy copy leaves the profile in the same batch.
+    expect(mockCredentialSets).toHaveLength(1)
+    const written = mockCredentialSets[0]
     expect(verifyMemberPassword(password, written['passwordScrypt'] as string)).toBe(
       true,
     )
-    expect(JSON.stringify(written)).not.toContain(password)
+    expect(mockMemberUpdates).toHaveLength(1)
+    expect(mockMemberUpdates[0]).toMatchObject({
+      passwordScrypt: 'field-deleted',
+      passwordResetAt: 'field-deleted',
+    })
+    expect(mockMemberFields).not.toHaveProperty('passwordScrypt')
+    expect(JSON.stringify([written, mockMemberUpdates[0]])).not.toContain(password)
+  })
+
+  it('writes no credential for a member removed since the read', async () => {
+    // The profile update rejects on a missing member and takes the credential
+    // write in its batch with it, so a removal racing a password set cannot
+    // leave a hash behind for an account that is gone.
+    mockMemberVanishesAfterRead = true
+    // The handler logs the refused commit; keep the run quiet.
+    const quiet = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { res, result } = makeResponse()
+    await membershipAdminPasswordHandler(
+      makeRequest({
+        hostId: HOST_ID,
+        memberId: MEMBER_ID,
+        action: 'setPassword',
+        password: 'correct-horse-battery',
+      }),
+      res,
+    )
+    expect(result.status).toBe(500)
+    expect(mockCredentialSets).toHaveLength(0)
+    quiet.mockRestore()
+  })
+
+  it('refuses a member id that names a nested path', async () => {
+    const { res, result } = makeResponse()
+    await membershipAdminPasswordHandler(
+      makeRequest({
+        hostId: HOST_ID,
+        memberId: 'member-1/nested/doc',
+        action: 'setPassword',
+        password: 'correct-horse-battery',
+      }),
+      res,
+    )
+    expect(result.status).toBe(400)
+    expect(mockCredentialSets).toHaveLength(0)
   })
 
   it('stamps a session cut-off so existing cookies stop working', async () => {
@@ -332,6 +447,7 @@ describe('membershipAdminPasswordHandler', () => {
     )
     expect(result.status).toBe(200)
     expect(mockMemberUpdates).toHaveLength(0)
+    expect(mockCredentialSets).toHaveLength(0)
     const sent = (sendEmailMock.mock.calls[0] as any[])[0]
     expect(sent.text).toContain('https://demo.aglyn.app/recover?token=')
     // Cost meter (AGL-1438). Counted once, as TRANSACTIONAL — so it lands on
@@ -390,10 +506,12 @@ describe('membershipAdminPasswordHandler', () => {
 })
 
 describe('route registration', () => {
-  it('is reachable at membership/admin-password', async () => {
-    // The console posts to a literal '/api/membership/admin-password', which
-    // only resolves if registerCommerceApi wired this exact path — a typo
-    // there is a 404 the UI reports as a generic failure.
+  it('is served by the console, where the drawer and the Inbox post', async () => {
+    // The console posts to a literal '/api/membership/admin-password' (and
+    // '/api/membership/admin-remove'), and the console's dispatcher loads
+    // ONLY the `consoleApi` surface. Registered on the tenant surface, these
+    // were a 404 on every console that asked — which the drawer reported as
+    // a generic failure.
     // `resolvePluginApiRoute` is imported statically at the top of the file
     // ON PURPOSE (AGL-949): a dynamic import here made plugins-commerce ->
     // aglyn a DYNAMIC edge in the nx graph, and enforce-module-boundaries
@@ -401,11 +519,63 @@ describe('route registration', () => {
     // aglyn meant every static `@aglyn/aglyn` import in the console app was
     // reported as "a static import of a lazy-loaded library". One await in
     // one spec file cost the console 100 lint errors.
-    const { registerCommerceApi } = await import('../server')
+    const { registerCommerceApi, registerCommerceConsoleApi } = await import(
+      '../server'
+    )
+    unregisterPluginApiRoute('membership/admin-password')
+    unregisterPluginApiRoute('membership/admin-remove')
+    // The published site's surface serves neither: they are console routes.
     registerCommerceApi()
+    expect(resolvePluginApiRoute('membership/admin-password')).toBeUndefined()
+    expect(resolvePluginApiRoute('membership/admin-remove')).toBeUndefined()
+    registerCommerceConsoleApi()
     expect(resolvePluginApiRoute('membership/admin-password')).toBe(
       membershipAdminPasswordHandler,
     )
+    expect(resolvePluginApiRoute('membership/admin-remove')).toBe(
+      membershipAdminRemoveHandler,
+    )
+  })
+})
+
+describe('the credential document is the hash a mailed reset binds to (AGL-3308)', () => {
+  it('binds the link to the credential document once the hash has moved', async () => {
+    const moved = hashMemberPassword('the moved password')
+    mockCredentialFields = { passwordScrypt: moved }
+    const { res, result } = makeResponse()
+    await membershipAdminPasswordHandler(
+      makeRequest({
+        hostId: HOST_ID,
+        memberId: MEMBER_ID,
+        action: 'sendPasswordReset',
+      }),
+      res,
+    )
+    expect(result.status).toBe(200)
+    const sent = (sendEmailMock.mock.calls[0] as any[])[0]
+    const token = decodeURIComponent(String(sent.text).match(/token=([^\s]+)/)![1])
+    expect(verifyPasswordResetToken(HOST_ID, token, moved)).toBe(true)
+    // Not to the stale copy still on the profile.
+    expect(
+      verifyPasswordResetToken(HOST_ID, token, mockMemberFields['passwordScrypt'] as string),
+    ).toBe(false)
+  })
+
+  it('binds it to the legacy copy for a member the migration has not reached', async () => {
+    const legacy = hashMemberPassword('the legacy password')
+    mockMemberFields['passwordScrypt'] = legacy
+    const { res } = makeResponse()
+    await membershipAdminPasswordHandler(
+      makeRequest({
+        hostId: HOST_ID,
+        memberId: MEMBER_ID,
+        action: 'sendPasswordReset',
+      }),
+      res,
+    )
+    const sent = (sendEmailMock.mock.calls[0] as any[])[0]
+    const token = decodeURIComponent(String(sent.text).match(/token=([^\s]+)/)![1])
+    expect(verifyPasswordResetToken(HOST_ID, token, legacy)).toBe(true)
   })
 })
 

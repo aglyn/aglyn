@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-ui-email-campaigns",
-  "version": "1.0.0-beta.183",
+  "version": "1.0.0-beta.184",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -29,8 +29,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.183",
-    "@aglyn/shared-util-email": "1.0.0-beta.183",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.184",
+    "@aglyn/shared-util-email": "1.0.0-beta.184",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {

@@ -27,6 +27,7 @@ import {
   isConsoleRouteSegment,
   NOT_FOUND_FROM_PARAM,
   NOT_FOUND_ROUTE,
+  orgScopedPathname,
 } from './constants/console-routes'
 import {
   notFoundRefusal,
@@ -78,25 +79,6 @@ import {
  */
 
 /**
- * First path segments that are never org-scoped (AGL-627). These live at the
- * apex path on every host, so the workspace-subdomain rewrite must leave them
- * alone or `/signin` would become `/{slug}/signin` and 404.
- */
-const APEX_PATH_SEGMENTS = new Set([
-  'manage',
-  'admin',
-  // The cross-domain handoff legs (AGL-1902). `/auth/handoff`,
-  // `/auth/handoff/start` and `/auth/handoff/continue` are platform routes, not
-  // anything inside an org, and rewriting them to `/{slug}/auth/handoff` would
-  // 404 the one flow that exists to get a session onto a custom domain.
-  'auth',
-  'signin',
-  'signout',
-  'signup',
-  'verify-email',
-  'account-recovery',
-])
-/**
  * The auth family, which a **custom console domain may never render**
  * (AGL-1099, AGL-1353 D6).
  *
@@ -108,8 +90,9 @@ const APEX_PATH_SEGMENTS = new Set([
  * sealing `setPersistence` shut (AGL-1379); this is the route half, and the
  * memo names it as owed a test here rather than assumed.
  *
- * A subset of `APEX_PATH_SEGMENTS` — the rest (`manage`, `admin`, `signout`)
- * are legitimate on a white-label console and stay served. `signout` in
+ * A subset of `APEX_PATH_SEGMENTS` (`constants/console-routes.ts`) — the
+ * rest (`manage`, `admin`, `signout`) are legitimate on a white-label console
+ * and stay served. `signout` in
  * particular must work locally: ending a session on the host that holds it can
  * never be the wrong answer.
  */
@@ -380,13 +363,12 @@ async function resolveConsoleDomainHost(
  * Returns `null` when the path needs no rewrite.
  */
 function orgScopedPath(request: NextRequest, slug: string): URL | null {
-  const segments = request.nextUrl.pathname.split('/').filter(Boolean)
-  const first = segments[0]
-  if (first === slug || APEX_PATH_SEGMENTS.has(first ?? '')) return null
+  // The rule itself is `orgScopedPathname`, which the client reads too
+  // (AGL-3314): what the switcher parses has to be what this produced.
+  const pathname = orgScopedPathname(request.nextUrl.pathname, slug)
+  if (pathname === null) return null
   const rewritten = request.nextUrl.clone()
-  rewritten.pathname = `/${slug}${
-    request.nextUrl.pathname === '/' ? '' : request.nextUrl.pathname
-  }`
+  rewritten.pathname = pathname
   return rewritten
 }
 

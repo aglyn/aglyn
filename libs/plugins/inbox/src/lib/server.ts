@@ -121,6 +121,9 @@ import {
 // The leaf, not the barrel: this plugin's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+// The leaf for the same reason: which sites a group's opt-outs live on is the
+// rule, and a spec's barrel double must not be able to stand in for it.
+import { consentGroupOptOutHosts } from '@aglyn/aglyn/app-utils/consent-groups'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -160,12 +163,20 @@ const REFUSAL_MESSAGES: Record<ReplyRefusal, string> = {
  * reply must not go to a dead or complaining mailbox, and a list enrollment
  * must not put one on a standing audience. A second copy for the second act
  * would be two answers to "may this address be mailed".
+ *
+ * "This site" is its consent group: the site list is read on every site of
+ * `group`, because somebody who unsubscribed from one site of a declared
+ * group unsubscribed from the sender this site is. A group of one is the one
+ * read it always was.
  */
 export async function addressSuppression(
   hostId: string,
   email: string,
   firestore?: unknown,
+  group?: Pick<ConsentGroup, 'hostId' | 'hostIds'> | null,
 ): Promise<ReplyRefusal | null> {
+  const hostIds =
+    group && group.hostId === hostId ? consentGroupOptOutHosts(group) : [hostId]
   const key = emailSuppressionKey(email)
   // `emailSuppressionKey` returns null for an address it cannot key, and
   // `isEmailSuppressed` already answers `true` for that case. Treating it as
@@ -174,13 +185,12 @@ export async function addressSuppression(
   if (!key) return 'suppressed-platform'
   if (await isEmailSuppressed(email, firestore)) return 'suppressed-platform'
   const db = (firestore ?? firebaseAdmin.app().firestore()) as any
-  const doc = await db
-    .collection('hosts')
-    .doc(hostId)
-    .collection('suppressions')
-    .doc(key)
-    .get()
-  return doc.exists ? 'suppressed-host' : null
+  const docs = await Promise.all(
+    hostIds.map((id) =>
+      db.collection('hosts').doc(id).collection('suppressions').doc(key).get(),
+    ),
+  )
+  return docs.some((doc) => doc.exists) ? 'suppressed-host' : null
 }
 
 /**
@@ -257,7 +267,17 @@ export const inboxReplyHandler: PluginApiHandler = async (req, res) => {
         .json({ error: REFUSAL_MESSAGES[recipient.refusal], reason: recipient.refusal })
     }
 
-    const suppressed = await addressSuppression(hostId, recipient.email)
+    // The org once, for the sender's consent group here and its brand below.
+    const owner = await getOrgForHost(hostId).catch(() => null)
+    const suppressed = await addressSuppression(
+      hostId,
+      recipient.email,
+      undefined,
+      await consentGroupForSite(
+        hostId,
+        (owner?.org as Record<string, unknown> | undefined) ?? null,
+      ),
+    )
     if (suppressed) {
       return res
         .status(409)
@@ -267,9 +287,7 @@ export const inboxReplyHandler: PluginApiHandler = async (req, res) => {
     const siteName = String(
       hostSnapshot.get('displayName') ?? hostSnapshot.get('subdomain') ?? '',
     )
-    const branding = resolveBrandingProfile(
-      (await getOrgForHost(hostId).catch(() => null))?.org as never,
-    )
+    const branding = resolveBrandingProfile(owner?.org as never)
 
     // No `html` is passed on purpose. `sendEmail` synthesizes the HTML part
     // from `text`, which is the single place that guarantee is enforced; a
@@ -564,10 +582,16 @@ export const inboxListOptionsHandler: PluginApiHandler = async (req, res) => {
     }
     const hostId = String(req.body?.hostId ?? '')
 
-    const suppression = await addressSuppression(hostId, context.email)
     // The controller this enrollment is made for — the declared group of
-    // sites that are one sender, or this site alone.
+    // sites that are one sender, or this site alone — and the suppression
+    // lists read across it, as the send will read them.
     const group = await consentGroupForSite(hostId)
+    const suppression = await addressSuppression(
+      hostId,
+      context.email,
+      undefined,
+      group,
+    )
     const stored = await storedConsentForAddress(hostId, group, context.email)
     const readout = assignmentReadout({ stored, suppression })
 
@@ -648,7 +672,16 @@ export const inboxAssignListHandler: PluginApiHandler = async (req, res) => {
         .status(status)
         .json({ error: ASSIGNMENT_REFUSAL_MESSAGES[reason], reason })
 
-    const suppressed = await addressSuppression(hostId, context.email)
+    // The controller this enrollment is made for — the declared group of
+    // sites that are one sender, or this site alone — and the suppression
+    // lists read across it, as the send will read them.
+    const group = await consentGroupForSite(hostId)
+    const suppressed = await addressSuppression(
+      hostId,
+      context.email,
+      undefined,
+      group,
+    )
     if (suppressed) return refuse(409, suppressed)
 
     const listRef = context.firestore
@@ -663,9 +696,6 @@ export const inboxAssignListHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown list' })
     }
 
-    // The controller this enrollment is made for — the declared group of
-    // sites that are one sender, or this site alone.
-    const group = await consentGroupForSite(hostId)
     const stored = await storedConsentForAddress(hostId, group, context.email)
     const nowMs = Date.now()
     const decision = assignmentBasis({

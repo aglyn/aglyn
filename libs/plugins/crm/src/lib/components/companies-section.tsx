@@ -30,16 +30,22 @@ import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
-  gridFilterRequest,
   listFilterColumn,
   type ListFilterRequest,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
-import { NoNextActivityToggle, nextActivityColumn } from './crm-next-activity-column'
+import {
+  CRM_NEXT_ACTIVITY_FILTER_FIELD,
+  CRM_NEXT_ACTIVITY_FILTER_HEADER,
+  nextActivityColumn,
+} from './crm-next-activity-column'
+import CrmFilterBar from './crm-filter-bar'
+import { crmFilterColumns } from '../model/crm-grid-filter'
+import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
 import CrmViewsControl from './crm-views-control'
-import { CrmListActions } from './crm-list-toolbar'
+import { CrmListActions, CrmListToolbar } from './crm-list-toolbar'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   listFilterConstraints,
@@ -75,6 +81,17 @@ export interface CompaniesSectionProps {
 }
 
 type CompanyRow = Partial<CrmCompany> & { $id: string; updatedAt?: any }
+
+/** What the companies grid's panel offers: the served fields, and "No next activity". */
+const COMPANY_GRID_FILTER_FIELDS = [
+  ...COMPANY_LIST_FILTER_FIELDS,
+  CRM_NEXT_ACTIVITY_FILTER_FIELD,
+]
+const COMPANY_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Company',
+  ownerUid: 'Owner',
+  [CRM_NEXT_ACTIVITY_FILTER_FIELD.column]: CRM_NEXT_ACTIVITY_FILTER_HEADER,
+}
 
 /**
  * `/crm/companies` — the organizations behind the people (AGL-2597).
@@ -373,28 +390,53 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   )
 
   /*
+   * The grid's own Filters panel and quick search edit the view's clauses
+   * (AGL-3313). The query serves ONE clause — a paged list has no window to
+   * narrow beyond the page — so the panel's clause replaces the last, and
+   * "No next activity", which narrows the loaded page, stands beside it.
+   * The search box is the name's prefix: the one text search the indexes
+   * serve here, so typing in it is the same clause as "Company starts with".
+   */
+  const ownerOptions = useMemo(
+    () =>
+      members.options.map((option) => ({
+        value: option.uid,
+        label: crmMemberPickerLabel(option),
+      })),
+    [members.options],
+  )
+  const filterColumns = useMemo(
+    () =>
+      crmFilterColumns(columns, COMPANY_GRID_FILTER_FIELDS, { ownerUid: ownerOptions }, COMPANY_GRID_FILTER_HEADERS),
+    [columns, ownerOptions],
+  )
+  const searchWords = useMemo(
+    () => (filter?.field === 'name' && filter.op === 'startsWith' ? [filter.value] : []),
+    [filter],
+  )
+  const setSearchWords = useCallback(
+    (words: string[]) => {
+      const term = words.join(' ').trim()
+      if (term) setFilter({ field: 'name', op: 'startsWith', value: term })
+      else if (filter?.field === 'name' && filter.op === 'startsWith') setFilter(null)
+    },
+    [filter, setFilter],
+  )
+  const gridFilter = useCrmGridFilter({
+    clauses: viewFilters,
+    onChange: views.setFilters,
+    selectFields: ['ownerUid'],
+    single: true,
+    keepAlongside: isNoNextActivityClause,
+    search: { words: searchWords, onChange: setSearchWords },
+  })
+  /*
    * The grid's models are the view's (AGL-2617). The filter model shows the
    * view's clause in the panel as a typed one would appear — the owner's
    * stored `equals` back as the single-select `is` the panel offers — so a
    * view opened from its address reads as filtered, not as a mystery.
    */
-  const grid = useCrmViewGrid(views, columns)
-  const filterModel = useMemo(
-    () => ({
-      items: filter
-        ? [
-            {
-              id: 'view',
-              field: filter.field,
-              operator:
-                filter.field === 'ownerUid' && filter.op === 'equals' ? 'is' : filter.op,
-              value: filter.value,
-            },
-          ]
-        : [],
-    }),
-    [filter],
-  )
+  const grid = useCrmViewGrid(views, filterColumns)
 
   const newCompanyButton = (
     <Button
@@ -417,31 +459,36 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       contentGutterY
       contentBordered="all"
       HeaderProps={{
+        // The record actions, top right and never clipped (AGL-3311).
         action: (
           <CrmListActions>
-            <CrmViewsControl controller={views} allLabel="All companies" />
-            <NoNextActivityToggle filters={viewFilters} onChange={views.setFilters} />
+            <CompanyImportButton hostId={hostId} org={org} />
+            <Button size="small" onClick={handleExport} disabled={!companies.length}>
+              {'Export CSV'}
+            </Button>
             {newCompanyButton}
           </CrmListActions>
         ),
       }}
     >
       <Stack spacing={1.5}>
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-        >
-          <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-            {'The organizations your contacts belong to. Open one to see its ' +
-              'people, its deals and its open tasks, or to link a contact ' +
-              'to it.'}
-          </Typography>
-          <CompanyImportButton hostId={hostId} org={org} />
-          <Button size="small" onClick={handleExport} disabled={!companies.length}>
-            {'Export CSV'}
-          </Button>
-        </Stack>
+        <Typography variant="body2" color="text.secondary">
+          {'The organizations your contacts belong to. Open one to see its ' +
+            'people, its deals and its open tasks, or to link a contact ' +
+            'to it.'}
+        </Typography>
+        {/* The saved view, and the clauses narrowing it as chips (AGL-3313). */}
+        <CrmListToolbar label="Company filters">
+          <CrmViewsControl controller={views} allLabel="All companies" />
+          <CrmFilterBar
+            fields={COMPANY_GRID_FILTER_FIELDS}
+            headers={COMPANY_GRID_FILTER_HEADERS}
+            clauses={viewFilters}
+            onChange={views.setFilters}
+            options={{ ownerUid: ownerOptions }}
+            servedField={filter?.field ?? null}
+          />
+        </CrmListToolbar>
         <CompaniesBulkBar
           hostId={hostId}
           scope={scope}
@@ -470,15 +517,9 @@ export function CompaniesSection(props: CompaniesSectionProps) {
              * pass could only drop rows the query already matched.
              */
             filterMode="server"
-            filterModel={filterModel}
-            onFilterModelChange={(model) => {
-              const request = gridFilterRequest(model)
-              setFilter(
-                request && request.field === 'ownerUid' && request.op === 'is'
-                  ? { ...request, op: 'equals' }
-                  : request,
-              )
-            }}
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            quickFilter
             // Columns and sort are the view's, controlled (AGL-2617).
             columnVisibilityModel={grid.columnVisibilityModel}
             onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}

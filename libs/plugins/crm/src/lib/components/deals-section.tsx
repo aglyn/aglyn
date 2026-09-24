@@ -35,11 +35,19 @@ import {
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
-import { CrmListActions } from './crm-list-toolbar'
+import { CrmListActions, CrmListToolbar } from './crm-list-toolbar'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
-import { NoNextActivityToggle, nextActivityColumn } from './crm-next-activity-column'
+import {
+  CRM_NEXT_ACTIVITY_FILTER_FIELD,
+  CRM_NEXT_ACTIVITY_FILTER_HEADER,
+  nextActivityColumn,
+} from './crm-next-activity-column'
+import CrmFilterBar from './crm-filter-bar'
+import { crmFilterColumns } from '../model/crm-grid-filter'
+import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
 import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -90,6 +98,22 @@ import { PipelinesDialog } from './pipelines-dialog'
 
 type View = 'board' | 'table'
 type StatusFilter = CrmDealStatus | 'all'
+
+/** What the deals table's panel offers: the served status, and "No next activity". */
+const DEAL_GRID_FILTER_FIELDS: readonly ListFilterField[] = [
+  { column: 'status', kind: 'exact', path: 'status', operators: ['equals'] },
+  CRM_NEXT_ACTIVITY_FILTER_FIELD,
+]
+const DEAL_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  status: 'Status',
+  [CRM_NEXT_ACTIVITY_FILTER_FIELD.column]: CRM_NEXT_ACTIVITY_FILTER_HEADER,
+}
+const DEAL_FILTER_OPTIONS = {
+  status: (['open', 'won', 'lost'] as const).map((value) => ({
+    value,
+    label: DEAL_STATUS_LABELS[value],
+  })),
+}
 
 
 /** What a pipeline made at the organization level is stamped with — the org's own token. */
@@ -183,14 +207,6 @@ export function DealsSection(props: ConsolePluginPageProps) {
   // The status is the query's clause; the "No next activity" clause beside
   // it (AGL-2661) narrows the loaded page and survives a status change.
   const viewFilters = views.state.filters
-  const setStatusFilter = useCallback(
-    (next: StatusFilter) =>
-      views.setFilters([
-        ...(next === 'all' ? [] : [{ field: 'status', op: 'equals', value: next }]),
-        ...viewFilters.filter(isNoNextActivityClause),
-      ]),
-    [views.setFilters, viewFilters],
-  )
   useEffect(() => {
     if (views.currentId) setView('table')
   }, [views.currentId])
@@ -403,8 +419,24 @@ export function DealsSection(props: ConsolePluginPageProps) {
     () => filterByNextActivity(paged.rows, viewFilters),
     [paged.rows, viewFilters],
   )
-  /* The table's column and sort models are the view's (AGL-2617). */
-  const grid = useCrmViewGrid(views, columns)
+  /*
+   * The table's column and sort models are the view's (AGL-2617); its
+   * filters are the grid's own panel over the view's clauses (AGL-3313).
+   * The query serves the status, so the panel's clause replaces it, and
+   * "No next activity" stands beside it over the loaded page.
+   */
+  const filterColumns = useMemo(
+    () => crmFilterColumns(columns, DEAL_GRID_FILTER_FIELDS, DEAL_FILTER_OPTIONS, DEAL_GRID_FILTER_HEADERS),
+    [columns],
+  )
+  const grid = useCrmViewGrid(views, filterColumns)
+  const gridFilter = useCrmGridFilter({
+    clauses: viewFilters,
+    onChange: views.setFilters,
+    selectFields: ['status'],
+    single: true,
+    keepAlongside: isNoNextActivityClause,
+  })
 
   const noOrg = scope.ready && !scope.orgId
   const pipelineLoading =
@@ -548,34 +580,27 @@ export function DealsSection(props: ConsolePluginPageProps) {
             </>
           ) : (
             <Stack spacing={1.5}>
-              {/* The view this table is showing, beside the status it narrows by (AGL-2617). */}
-              <Stack
-                direction="row"
-                spacing={2}
-                sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-              >
+              {/*
+                The view this table is showing, and the clauses narrowing it
+                as chips (AGL-2617, AGL-3313). Status and "No next activity"
+                are set in the grid's own Filters panel.
+              */}
+              <CrmListToolbar label="Deal filters">
                 <CrmViewsControl controller={views} allLabel="All deals" />
-                <ToggleButtonGroup
-                  exclusive
-                  size="small"
-                  value={statusFilter}
-                  onChange={(_event, next) => {
-                    if (next) setStatusFilter(next as StatusFilter)
-                  }}
-                  aria-label="Status"
-                >
-                  <ToggleButton value="all">{'All'}</ToggleButton>
-                  <ToggleButton value="open">{'Open'}</ToggleButton>
-                  <ToggleButton value="won">{'Won'}</ToggleButton>
-                  <ToggleButton value="lost">{'Lost'}</ToggleButton>
-                </ToggleButtonGroup>
-                <NoNextActivityToggle filters={viewFilters} onChange={views.setFilters} />
+                <CrmFilterBar
+                  fields={DEAL_GRID_FILTER_FIELDS}
+                  headers={DEAL_GRID_FILTER_HEADERS}
+                  clauses={viewFilters}
+                  onChange={views.setFilters}
+                  options={DEAL_FILTER_OPTIONS}
+                  servedField="status"
+                />
                 <Stack sx={{ flex: 1 }} />
                 <DealImportButton hostId={hostId} />
                 <Button size="small" onClick={handleExport} disabled={!paged.rows.length}>
                   {'Export CSV'}
                 </Button>
-              </Stack>
+              </CrmListToolbar>
               {paged.status === 'success' && paged.rows.length === 0 && paged.page === 0 ? (
                 <EmptyStateComponent
                   label={statusFilter === 'all' ? 'No deals yet' : `No ${statusFilter} deals`}
@@ -618,6 +643,14 @@ export function DealsSection(props: ConsolePluginPageProps) {
                       slots={CRM_LIST_SLOTS}
                       selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                       onOpen={(_id, row) => openDeal(row as DealDoc)}
+                      // The panel's status is the query's; "No next activity"
+                      // narrows the loaded page (AGL-3313). No quick search:
+                      // nothing indexes a deal's name, and a search over one
+                      // page answers "no match" for a deal on the next.
+                      filterMode="server"
+                      filterModel={gridFilter.filterModel}
+                      onFilterModelChange={gridFilter.onFilterModelChange}
+                      quickFilter={false}
                       // Columns and sort are the view's, controlled (AGL-2617).
                       columnVisibilityModel={grid.columnVisibilityModel}
                       onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}

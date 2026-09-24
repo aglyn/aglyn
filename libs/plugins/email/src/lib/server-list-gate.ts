@@ -315,7 +315,7 @@ export async function resolveAddresses(input: {
    */
   const group = await consentGroupForSite(input.hostId)
   const [suppression, stored] = await Promise.all([
-    suppressionFor(input.hostId, addresses),
+    suppressionFor(input.hostId, group, addresses),
     storedConsentFor(input.hostId, group, addresses),
   ])
 
@@ -380,18 +380,25 @@ export async function resolveAddresses(input: {
  * for the enrollment check and the send-time check to disagree about — which
  * is exactly the disagreement `an-enrollment-is-not-a-license-to-send.spec.ts`
  * exists to stop.
+ *
+ * Read across the site's consent group, as the send reads it: somebody who
+ * unsubscribed from a sibling of a declared group is refused here too, rather
+ * than enrolled onto a list whose campaigns will never reach them.
  */
 async function suppressionFor(
   hostId: string,
+  group: ConsentGroup,
   addresses: readonly string[],
 ): Promise<Map<string, AddressRefusal>> {
   const refusals = new Map<string, AddressRefusal>()
   if (!addresses.length) return refusals
-  const sendable = new Set(await filterSendableForHost(hostId, addresses))
+  const sendable = new Set(
+    await filterSendableForHost(hostId, addresses, undefined, group),
+  )
   const blocked = addresses.filter((email) => !sendable.has(email))
   if (!blocked.length) return refusals
   // Only the blocked ones, and only to say WHICH list. Survivors of the
-  // platform half are held by this site's own list.
+  // platform half are held by this site's own list, or a group sibling's.
   const platformSendable = new Set(await filterSuppressedEmails(blocked))
   for (const email of blocked) {
     refusals.set(

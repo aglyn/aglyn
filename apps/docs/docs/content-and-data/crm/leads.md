@@ -148,23 +148,30 @@ Each row carries:
 | **Campaign** | The campaigns the lead is filed under, by name. Under a site only — a campaign belongs to one site. |
 | **Last seen** | When the person last did something on your site. |
 
-The **Show** control at the top of the card picks the view. **Open** — the
-default — is every lead that still needs working (New and Working). The other
-views are one status each, and **All** shows everything. A lead nobody has
-touched yet has no status of its own and reads as **New**, so the leads your
-site collected before the CRM existed are already in the Open view. The
-**Email** control beside it narrows by the address's verdict — **Cannot be
-emailed** for every lead a sender has refused, one verdict on its own, or
-**Nothing known** — and keeps the status you chose. The **Campaign** control
-narrows to the leads filed under one of the site's campaigns, by name, and
-the **Lead source** control to one of your lead source values — inactive ones
-included, marked — or to the leads with none. Each keeps the others, and all
-four are part of the saved view.
+The table's own toolbar filters the list: **Filters** opens the filter
+panel, and **Search** finds a lead by name, email, company, title or tag.
+**Status**, **Email**, **Owner**, **Lead source** and **Campaign** are
+picked from a list in the panel, and from each column's menu. **Status**
+starts on **Open (new or working)**, every lead that still needs working;
+pick one status instead, or remove the filter to see every lead. A lead
+nobody has touched yet has no status of its own and reads as **New**, so the
+leads your site collected before the CRM existed are already in the Open
+view. **Email** narrows by the address's verdict — **Cannot be emailed** for
+every lead a sender has refused, one verdict on its own, or **Nothing
+known**. **Campaign** narrows to the leads filed under one of the campaigns,
+by name, and **Lead source** to one of your lead source values — inactive
+ones included, marked — or to **No lead source**.
+
+The panel edits one filter at a time, and filters on different columns add
+up: filter **Lead source**, then **Status**, and the list keeps both. Every
+filter in force shows as a chip beside the views control; the chip's ✕
+removes it. The filters are part of the saved view, and a view saved before
+the panel existed filters exactly as it did.
 
 The list reads the 200 most recently seen leads and shows them a page at a
 time, with the usual footer to turn the page and pick how many rows it holds.
-When a site holds more than 200, a notice says so; the status filter narrows
-those 200, and older leads are still listed in the Inbox and still reached by
+When a site holds more than 200, a notice says so; the filters and the
+search narrow those 200, and older leads are still listed in the Inbox and still reached by
 campaign audiences.
 
 ### Working a lead from the row
@@ -187,12 +194,12 @@ the page — and a bar appears over the list with **Set owner**, **Set
 status**, **Unqualify** (one reason for all of them), **Add to campaign**
 (under a site) and **Export CSV** for the selection. What each does, and which leads it skips by name, is in
 [Bulk actions → Leads](./bulk-actions.md#leads). The selection clears when
-the **Show** view changes.
+the filters or the search change.
 
 ### Export CSV
 
 **Export CSV** at the top of the card downloads the listed leads — every row
-the **Show** view admits, not only the page on screen — as `leads.csv`:
+the filters and the search admit, not only the page on screen — as `leads.csv`:
 email, name, company, job title, phone, website, status, the owner by email
 address, the lead source, the sources by name, first and last seen, the
 number of captures, the address in six columns, tags, the unqualified reason,

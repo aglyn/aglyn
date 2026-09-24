@@ -84,14 +84,15 @@ value** (each amount multiplied by its stage's probability).
 
 Switch to the **table** for a paged list with the title, stage, amount, owner,
 expected close date, status and [**next activity**](./tasks.md#next-activity)
-of every deal in the pipeline, including the closed ones. The **No next
-activity** chip beside the status filter keeps only the deals on the page with
-no open task scheduled against them — the ones the reports page counts as
+of every deal in the pipeline, including the closed ones. The table's
+**Filters** panel narrows it by **Status** (open, won or lost), and **Next
+activity** › **is empty** keeps only the deals on the page with no open task
+scheduled against them — the ones the reports page counts as
 [stuck](./reports.md#pipeline).
 
 The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
 appears above it to set their stage, set their owner, mark them lost with one
-reason, export them or delete them. **Export CSV** beside the status filter
+reason, export them or delete them. **Export CSV** above the table
 downloads the deals on screen as `deals.csv` — title, pipeline and stage by
 name, the amount in major units beside its currency, the owner by email
 address, the expected close date, status, the contact and the company, when
