@@ -1997,6 +1997,12 @@ const GRID_FILTER_LISTS: readonly string[] = [
   'libs/plugins/outreach/src/lib/components/sequences-section.tsx',
   'libs/plugins/outreach/src/lib/components/enrollments-table.tsx',
   'libs/plugins/outreach/src/lib/components/do-not-contact-domains.tsx',
+  // Marketing
+  'libs/plugins/marketing/src/lib/components/campaigns-card.tsx',
+  'libs/plugins/marketing/src/lib/components/emails-list-card.tsx',
+  'libs/plugins/marketing/src/lib/components/campaign-detail-card.tsx',
+  'libs/plugins/marketing/src/lib/components/email-recipients-card.tsx',
+  'libs/plugins/marketing/src/lib/components/host-experiments-card.component.tsx',
 ]
 
 describe('converted lists filter through the grid, by the shared path (AGL-3317)', () => {
@@ -2005,15 +2011,23 @@ describe('converted lists filter through the grid, by the shared path (AGL-3317)
     expect(missing).toEqual([])
   })
 
-  it('each one binds the panel with useListGridFilter and never turns it off', () => {
+  it('each one binds the panel through the shared hook and never turns it off', () => {
     const off = GRID_FILTER_LISTS.filter((path) => {
       const source = read(path)
+      // The bare hook, wired by hand…
+      const bound =
+        source.includes('useListGridFilter(') &&
+        source.includes('filterMode="server"') &&
+        source.includes('onFilterModelChange={gridFilter.onFilterModelChange}')
+      // …or the recipe for a list that holds its rows (or pages a live
+      // window of them), spread whole.
+      const spread =
+        /use(List|Paged)RowsFilter(<[^>]*>)?\(/.test(source) &&
+        /\{\.\.\.\w+\.gridProps\}/.test(source)
       return (
         source.includes('disableColumnFilter') ||
         source.includes('quickFilter={false}') ||
-        !source.includes('useListGridFilter(') ||
-        !source.includes('filterMode="server"') ||
-        !source.includes('onFilterModelChange={gridFilter.onFilterModelChange}')
+        !(bound || spread)
       )
     })
     expect(off).toEqual([])

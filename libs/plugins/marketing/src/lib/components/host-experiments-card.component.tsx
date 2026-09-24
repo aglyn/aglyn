@@ -33,12 +33,15 @@ import {
   mdiPlay,
 } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -108,6 +111,34 @@ export const EXPERIMENT_STATUS_COLORS: Record<
   done: 'info',
 }
 
+/*
+ * What the experiments grid's Filters panel offers (AGL-3317). The list is a
+ * paged listener, so a filter matches over what its window has read, which
+ * the first filter widens (`usePagedRowsFilter`).
+ */
+const EXPERIMENT_FILTER_FIELDS = [
+  inMemoryListField('name', 'text'),
+  inMemoryListField('target', 'select'),
+  inMemoryListField('status', 'select'),
+]
+const EXPERIMENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Experiment',
+  target: 'Tests',
+  status: 'Status',
+}
+const EXPERIMENT_FILTER_OPTIONS = {
+  target: [
+    { value: 'screen', label: 'Screen' },
+    { value: 'section', label: 'Section' },
+    { value: 'email', label: 'Email' },
+  ],
+  status: Object.keys(EXPERIMENT_STATUS_COLORS).map((status) => ({
+    value: status,
+    label: status.charAt(0).toUpperCase() + status.slice(1),
+  })),
+}
+const EXPERIMENT_SEARCH_FIELDS = ['name'] as const
+
 /**
  * Experiments manager (AGL-252): create screen/section/email A/B tests
  * with weighted variants and a conversion goal; start/pause/finish them
@@ -124,6 +155,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
   const entitled = checkEntitlement(org, 'abTesting')
 
   const {
+    data: experimentData,
     rows: experimentRows,
     hasMore: hasMoreExperiments,
     page: experimentPage,
@@ -175,9 +207,27 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
    * all. The rows are not re-sorted — the server already ordered them, and
    * re-sorting a page of a name-ordered walk is the lie the old code told.
    */
-  const experiments: ExperimentDraft[] = experimentRows.filter(
+  const experimentsLive: ExperimentDraft[] = experimentRows.filter(
     (experiment: any) => !experiment.deletedAt,
   )
+  const experimentFilter = usePagedRowsFilter<ExperimentDraft>(
+    {
+      data: (experimentData ?? []).filter((experiment: any) => !experiment.deletedAt),
+      rows: experimentsLive,
+      hasMore: hasMoreExperiments,
+      page: experimentPage,
+      setPage: setExperimentPage,
+      pageSize: experimentPageSize,
+      setPageSize: setExperimentPageSize,
+    },
+    {
+      fields: EXPERIMENT_FILTER_FIELDS,
+      options: EXPERIMENT_FILTER_OPTIONS,
+      headers: EXPERIMENT_FILTER_HEADERS,
+      search: EXPERIMENT_SEARCH_FIELDS,
+    },
+  )
+  const experiments = experimentFilter.rows
   const [editor, setEditor] = useState<ExperimentDraft | null>(null)
   /*
    * The screens and their versions fill the EDITOR's pickers and nothing
@@ -373,7 +423,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
     // One running experiment per screen (AGL-265): the page runner only
     // serves the first, so a second would silently never split traffic.
     if (status === 'running' && experiment.screenId) {
-      const clash = experiments.find(
+      const clash = experimentsLive.find(
         (candidate) =>
           candidate.$id !== experiment.$id &&
           candidate.status === 'running' &&
@@ -546,26 +596,32 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
           >
             {'New experiment'}
           </Button>
-          {experiments.length === 0 && !hasMoreExperiments ? null : (
+          {experimentsLive.length === 0 && !hasMoreExperiments && !experimentFilter.filtering ? null : (
             <>
+            <ListFilterChips {...experimentFilter.chipsProps} />
+            {experimentFilter.filtering && hasMoreExperiments ? (
+              <Typography variant="caption" color="text.secondary">
+                {`Filtering the ${experimentFilter.read} experiments read so far — the next page reads more.`}
+              </Typography>
+            ) : null}
             <ListTable
               aria-label="Experiments"
               rows={experiments}
-              columns={experimentColumns}
+              columns={experimentFilter.filterColumns(experimentColumns as GridColDef[])}
               rowHeight={TABLE_ROW_HEIGHT}
               onOpen={(_id, experiment) => void openResults(experiment)}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
+              // The panel and the search are the grid's; the card answers
+              // them over what its window read (AGL-3317).
+              {...experimentFilter.gridProps}
+              noRowsLabel="No experiments match these filters"
             />
             <ListPagination
-              page={experimentPage}
-              pageSize={experimentPageSize}
-              // The rows LEFT after the soft-delete filter, not the page the
-              // server returned: the footer must describe what is on screen.
-              rowCount={experiments.length}
-              hasMore={hasMoreExperiments}
-              onPageChange={setExperimentPage}
-              onPageSizeChange={setExperimentPageSize}
+              // The rows LEFT after the soft-delete filter (and any grid
+              // filter), not the page the server returned: the footer must
+              // describe what is on screen.
+              {...experimentFilter.pagination}
             />
             </>
           )}
