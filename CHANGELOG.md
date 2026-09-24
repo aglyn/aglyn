@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.186 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.185...v1.0.0-beta.186)
+
+### Fixed
+
+- **crm:** an empty CRM list keeps the grid toolbar that can change its filter ([AGL-3313](https://linear.app/aglyn/issue/AGL-3313))
+- **commerce:** sign-in reads a site member's password only from its credential document ([AGL-3308](https://linear.app/aglyn/issue/AGL-3308))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** delete the submission-scope backfill, which has run ([AGL-3303](https://linear.app/aglyn/issue/AGL-3303))
+
+</details>
+
 ## v1.0.0-beta.185 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/56230db8e...v1.0.0-beta.185)
