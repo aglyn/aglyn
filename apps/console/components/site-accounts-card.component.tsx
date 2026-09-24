@@ -22,13 +22,13 @@ import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
-  gridFilterRequest,
   hiddenFilterColumns,
   hiddenFilterVisibility,
   listFilterColumn,
-  type ListFilterRequest,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { Box, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
@@ -70,7 +70,13 @@ const MEMBER_FILTER_COLUMNS = ['email', 'displayName', 'createdAt']
 export function SiteAccountsCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
-  const [filter, setFilter] = useState<ListFilterRequest | null>(null)
+  /*
+   * The panel's clause IS the query's (AGL-3317): one at a time, because the
+   * query serves one predicate and there is no loaded window for a second to
+   * narrow. No quick search, since no word index covers these documents.
+   */
+  const gridFilter = useListGridFilter({ single: true })
+  const filter = gridFilter.clauses[0] ?? null
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
    * The console's shared paging (AGL-2501). "Load more" decided there was more
@@ -263,9 +269,16 @@ export function SiteAccountsCard(props: { hostId: string }) {
       contentGutterX
       contentGutterY
     >
-      {visible.length ? (
+      <ListFilterChips
+        fields={SITE_MEMBER_LIST_FILTER_FIELDS}
+        headers={SITE_MEMBER_LIST_FILTER_HEADERS}
+        clauses={gridFilter.clauses}
+        onChange={gridFilter.setClauses}
+      />
+      {visible.length || filter ? (
         <Stack spacing={1}>
           <ListTable
+            aria-label="Site users"
             rows={visible}
             columns={memberColumns}
             onOpen={(id) => setSelectedId(id)}
@@ -276,7 +289,9 @@ export function SiteAccountsCard(props: { hostId: string }) {
              * compares what the document stores.
              */
             filterMode="server"
-            onFilterModelChange={(model) => setFilter(gridFilterRequest(model))}
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            noRowsLabel="No site users match these filters"
             // Paged by the footer below, so the grid must not also slice.
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
@@ -300,10 +315,8 @@ export function SiteAccountsCard(props: { hostId: string }) {
         </Stack>
       ) : (
         <Typography variant="body2" color="text.secondary">
-          {filter
-            ? 'No site users match the filter.'
-            : 'No site accounts yet — they appear when visitors sign up ' +
-              'on your site.'}
+          {'No site accounts yet — they appear when visitors sign up ' +
+            'on your site.'}
         </Typography>
       )}
       <SiteMemberDrawer

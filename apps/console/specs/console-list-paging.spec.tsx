@@ -395,6 +395,19 @@ describe('the components list says where each one is used (AGL-3287)', () => {
   })
 })
 
+describe('the components list searches past the page on screen (AGL-3317)', () => {
+  it('finds a component three pages in, from the grid’s own search box', async () => {
+    render(<HostComponentsCard hostId="host-1" />)
+    await waitFor(() => expect(visibleNames().length).toBeGreaterThan(0))
+    // Positive control: the target is not on the first page.
+    expect(visibleNames()).not.toContain(nameOf(35))
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'cmp-035' } })
+    // The first word widens the window, and the match is found in it.
+    await waitFor(() => expect(visibleNames()).toEqual([nameOf(35)]))
+    expect(Math.max(...mockLimitsAsked)).toBeGreaterThan(TABLE_PAGE_SIZE_DEFAULT + 1)
+  })
+})
+
 describe('THE CONTROL: the Firestore model bites (AGL-2501)', () => {
   /*
    * Without these, every assertion above could pass against a model that

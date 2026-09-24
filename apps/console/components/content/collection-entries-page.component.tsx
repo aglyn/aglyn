@@ -89,7 +89,10 @@ import {
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { gridFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -127,6 +130,10 @@ import {
   ENTRY_STATUS_OPTIONS,
   entryListSortFromModel,
 } from './entry-list-query'
+import {
+  ENTRY_LIST_FILTER_FIELDS,
+  ENTRY_LIST_FILTER_HEADERS,
+} from '../../utils/list-filters'
 
 /**
  * Entries tab id (AGL-2486); `?tab=entries` deep links land here. The value
@@ -156,6 +163,28 @@ const TOOLBAR_CONTROL_HEIGHT = 40
 const SINGLE_CHOICE_OPERATORS = getGridSingleSelectOperators().filter(
   (operator) => operator.value === 'is',
 )
+
+/*
+ * What the Authors grid's Filters panel and quick search offer (AGL-3317).
+ * A site holds at most `AUTHORS_MAX_PER_HOST` authors and the tab reads all
+ * of them, so both are answered over the whole set. Type is matched on the
+ * schema type the row is READ as (`typeKey`), which is what the column shows.
+ */
+const AUTHOR_FILTER_FIELDS = [
+  inMemoryListField('name', 'text'),
+  inMemoryListField('type', 'select', 'typeKey'),
+]
+const AUTHOR_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Author',
+  type: 'Type',
+}
+const AUTHOR_FILTER_OPTIONS = {
+  type: (['Person', 'Organization'] as const).map((type) => ({
+    value: type,
+    label: type,
+  })),
+}
+const AUTHOR_SEARCH_FIELDS = ['name', 'jobTitle', 'slug'] as const
 
 /**
  * The collections list and one collection's entries (AGL-2498).
@@ -1343,6 +1372,41 @@ export function CollectionEntriesPage() {
     [hostId, entries, openAuthor, handleDeleteAuthor],
   )
 
+  const authorRows = useMemo(
+    () =>
+      authors.map((author) => ({
+        ...author,
+        typeKey: Aglyn.contentAuthorSchemaType(author.type),
+      })),
+    [authors],
+  )
+  const authorFilter = useListRowsFilter({
+    rows: authorRows,
+    fields: AUTHOR_FILTER_FIELDS,
+    options: AUTHOR_FILTER_OPTIONS,
+    headers: AUTHOR_FILTER_HEADERS,
+    search: AUTHOR_SEARCH_FIELDS,
+  })
+
+  /*
+    The entry filter as the chips read it: one clause, which the provider
+    holds and the query serves, with the choices each field's select offers.
+  */
+  const entryFilterClauses = useMemo(
+    () => (entryFilter ? [entryFilter] : []),
+    [entryFilter],
+  )
+  const entryFilterOptions = useMemo(
+    () => ({
+      status: ENTRY_STATUS_OPTIONS,
+      categoryId: categories.map((category) => ({
+        value: category.id,
+        label: category.name,
+      })),
+    }),
+    [categories],
+  )
+
   const entrySortModel = useMemo<GridSortModel>(
     () => [{ field: entrySort.field, sort: entrySort.direction }],
     [entrySort],
@@ -2047,6 +2111,18 @@ export function CollectionEntriesPage() {
                           </Stack>
                         ) : (
                           <Stack spacing={1}>
+                            <ListFilterChips
+                              fields={ENTRY_LIST_FILTER_FIELDS}
+                              headers={{
+                                status: 'Status',
+                                ...ENTRY_LIST_FILTER_HEADERS,
+                              }}
+                              clauses={entryFilterClauses}
+                              onChange={(clauses) =>
+                                setEntryFilter(clauses[0] ?? null)
+                              }
+                              options={entryFilterOptions}
+                            />
                             {entriesStatus === 'error' ? (
                               <Alert severity="error">
                                 {'These entries could not be loaded. Try ' +
@@ -2210,13 +2286,20 @@ export function CollectionEntriesPage() {
                             'Setup → SEO.'}
                         </Typography>
                       ) : (
-                        <ListTable
-                          aria-label="Authors"
-                          rows={authors}
-                          columns={authorColumns}
-                          rowHeight={TABLE_ROW_HEIGHT}
-                          onOpen={(_id, row) => openAuthor(row)}
-                        />
+                        <>
+                          <ListFilterChips {...authorFilter.chipsProps} />
+                          <ListTable
+                            aria-label="Authors"
+                            rows={authorFilter.rows}
+                            columns={authorFilter.filterColumns(authorColumns)}
+                            rowHeight={TABLE_ROW_HEIGHT}
+                            onOpen={(_id, row) => openAuthor(row)}
+                            // The panel and the search are the grid's; the tab
+                            // answers them over every author (AGL-3317).
+                            {...authorFilter.gridProps}
+                            noRowsLabel="No authors match these filters"
+                          />
+                        </>
                       )}
                     </Stack>
                   </CardDisplay>
