@@ -27,6 +27,9 @@
  * and "<sequence> stopped" when a reply or an opt-out ends it. A bounce
  * files nothing here — the send's own entry already reads Bounced with
  * the server's words (AGL-3245), and a second line would say it twice.
+ * A third entry (AGL-3324) says a member curated one step for the person,
+ * and who wrote the words, so the send that follows can be read for what
+ * it was.
  *
  * Pure, so the route and the runtime compose the same words and the
  * backfill (`tools/scripts/lib/enrollment-activity-backfill.mjs`) can
@@ -65,6 +68,43 @@ export function outreachEnrolledEntry(input: {
     body: campaigns.length
       ? `Enrolled in ${sequence}\nFiled under ${campaigns.join(', ')}`
       : `Enrolled in ${sequence}`,
+  }
+}
+
+/**
+ * The key one curated step's entry is filed under (AGL-3324): once per
+ * confirmation, so a step curated again after a reply files again — each is
+ * a fact about what went out, and a second line is a second fact.
+ */
+export function outreachCuratedEntryKey(enrollmentId: string, stepIndex: number, atMs: number): string {
+  return `curated:${enrollmentId}:${stepIndex}:${atMs}`
+}
+
+/**
+ * "Curated step 2 — AI draft, edited by Casey" (AGL-3324): who wrote this
+ * person's copy of the step. An AI draft the member kept as it came reads
+ * "AI draft, confirmed by"; words the member wrote themselves read "written
+ * by". A member with no name is named by their address, and one with
+ * neither is "a member".
+ */
+export function outreachCuratedEntry(input: {
+  enrollmentId: string
+  stepIndex: number
+  source: 'ai' | 'member'
+  edited: boolean
+  memberName: string | null | undefined
+  atMs: number
+}): OutreachTimelineEntry {
+  const member = String(input.memberName ?? '').trim() || 'a member'
+  const how =
+    input.source === 'ai'
+      ? input.edited
+        ? `AI draft, edited by ${member}`
+        : `AI draft, confirmed by ${member}`
+      : `written by ${member}`
+  return {
+    dedupeKey: outreachCuratedEntryKey(input.enrollmentId, input.stepIndex, input.atMs),
+    body: `Curated step ${input.stepIndex + 1} — ${how}`,
   }
 }
 

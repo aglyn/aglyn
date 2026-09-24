@@ -29,6 +29,7 @@ import { readOutreachSequenceDraft } from './sequence-draft'
 import {
   OUTREACH_ENROLLMENT_STATUSES,
   OUTREACH_SEQUENCE_STATUSES,
+  OUTREACH_STEP_OVERRIDE_SOURCES,
   OUTREACH_STOP_REASONS,
   type OutreachEnrollment,
   type OutreachEnrollmentStatus,
@@ -37,6 +38,8 @@ import {
   type OutreachSequence,
   type OutreachSequenceStats,
   type OutreachSequenceStatus,
+  type OutreachStepOverride,
+  type OutreachStepOverrides,
   type OutreachStopReason,
 } from './outreach.types'
 
@@ -100,6 +103,42 @@ export function readOutreachSequenceStats(
   return Object.keys(stats).length ? stats : null
 }
 
+/**
+ * A stored enrollment's curated steps (AGL-3324), or `undefined` when it
+ * carries none worth reading. Read a field at a time, because what is read
+ * here is what gets SENT in place of the step: an entry with neither a
+ * subject nor a body, or one keyed by something that is not a step index,
+ * is dropped rather than sent as an empty email.
+ */
+export function readOutreachStepOverrides(raw: unknown): OutreachStepOverrides | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const overrides: OutreachStepOverrides = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^(0|[1-9]\d*)$/.test(key) || !value || typeof value !== 'object') continue
+    const entry = value as Record<string, unknown>
+    const subject = typeof entry['subject'] === 'string' ? entry['subject'] : undefined
+    const body = typeof entry['body'] === 'string' ? entry['body'] : undefined
+    if (subject === undefined && body === undefined) continue
+    const source = entry['source']
+    const override: OutreachStepOverride = {
+      ...(subject !== undefined ? { subject } : {}),
+      ...(body !== undefined ? { body } : {}),
+      // Words nobody can say the source of are read as the member's: the
+      // audit line then claims no AI wrote them.
+      source: (OUTREACH_STEP_OVERRIDE_SOURCES as readonly unknown[]).includes(source)
+        ? (source as OutreachStepOverride['source'])
+        : 'member',
+      draftedAtMs: ms(entry['draftedAtMs']) ?? 0,
+      ...(typeof entry['draftedByUid'] === 'string' ? { draftedByUid: entry['draftedByUid'] } : {}),
+      ...(entry['edited'] === true ? { edited: true } : {}),
+      ...(typeof entry['prompt'] === 'string' ? { prompt: entry['prompt'] } : {}),
+      ...(typeof entry['model'] === 'string' ? { model: entry['model'] } : {}),
+    }
+    overrides[key] = override
+  }
+  return Object.keys(overrides).length ? overrides : undefined
+}
+
 /** A stored enrollment in its model shape, or `null` for no document. */
 export function readStoredOutreachEnrollment(
   id: string,
@@ -117,7 +156,7 @@ export function readStoredOutreachEnrollment(
     data['target'] === 'lead' || (data['target'] === undefined && leadId && !text(data['contactId']))
       ? 'lead'
       : 'contact'
-  return {
+  const enrollment: OutreachEnrollment = {
     ...(data as unknown as OutreachEnrollment),
     id,
     sequenceId: text(data['sequenceId']),
@@ -164,6 +203,12 @@ export function readStoredOutreachEnrollment(
     createdAtMs: ms(data['createdAtMs']) ?? 0,
     updatedAtMs: ms(data['updatedAtMs']) ?? 0,
   }
+  // Absent rather than an empty map for an enrollment nobody curated
+  // (AGL-3324): the spread above would otherwise carry whatever was stored.
+  const stepOverrides = readOutreachStepOverrides(data['stepOverrides'])
+  if (stepOverrides) enrollment.stepOverrides = stepOverrides
+  else delete enrollment.stepOverrides
+  return enrollment
 }
 
 /** A stored mailbox with its id, or `null` for no document. */

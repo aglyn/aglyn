@@ -51,9 +51,24 @@ export const AI_USAGE_BY_USER_RETENTION_MONTHS = 13
  *
  * `assist` is a console chat turn; `element`, `blog` and `section` are the
  * besigner's three assist modes; the rest are generation job kinds, named
- * exactly as the job document names them so a reader can join the two.
+ * exactly as the job document names them so a reader can join the two — or
+ * a purpose another plugin named on the text-generation seam.
  */
-export type AiUsageKind = 'assist' | 'element' | 'blog' | 'section' | AiJobKind
+export type AiUsageKind =
+  | 'assist'
+  | 'element'
+  | 'blog'
+  | 'section'
+  | AiJobKind
+  | PluginAiUsageKind
+
+/**
+ * A purpose another plugin named on the core's text-generation seam
+ * (AGL-3324): the plugin's id and a word, hyphenated — `outreach-curate` —
+ * so its spend sits in the same `byKind` map as a job kind and a reader can
+ * tell whose it was.
+ */
+export type PluginAiUsageKind = `${string}-${string}`
 
 /** One person's month, zero-filled — the shape every reader hands on. */
 export interface AiUsageByUserMonth {

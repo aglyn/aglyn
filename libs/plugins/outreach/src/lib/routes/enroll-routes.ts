@@ -31,10 +31,11 @@ import {
 } from '@aglyn/aglyn/app-utils/crm'
 import { dynamicListDimensionsForCrmView } from '@aglyn/aglyn/app-utils/dynamic-list-rule'
 import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import type { PluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { FieldValue } from 'firebase-admin/firestore'
-import { outreachEnrolledEntry } from '../engine/enrollment-activity'
+import { outreachCuratedEntry, outreachEnrolledEntry } from '../engine/enrollment-activity'
 import { buildOutreachEnrollment, planOutreachFirstDue } from '../engine/enrollment-state'
 import type { OutreachGateLookups } from '../engine/gates'
 import {
@@ -45,6 +46,11 @@ import {
   type OutreachGateQuestion,
 } from '../enrollment/enroll-people'
 import { readOutreachGateLookups } from '../enrollment/gate-lookups'
+import {
+  outreachStepOverridesRefused,
+  readOutreachStepOverrideRequests,
+  type OutreachStepOverrideRead,
+} from '../enrollment/step-overrides'
 import { effectiveOutreachAllowedCountries } from '../model/compliance-settings'
 import {
   OUTREACH_ENROLL_BATCH_MAX,
@@ -53,7 +59,7 @@ import {
   type OutreachEnrollResponse,
   type OutreachPersonRef,
 } from '../model/outreach-api'
-import type { OutreachSequence } from '../model/outreach.types'
+import type { OutreachSequence, OutreachStepOverrides } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
 import { fileOutreachNote } from '../runtime/timeline'
 import {
@@ -115,6 +121,12 @@ export interface OutreachEnrollRouteDeps extends OutreachRouteDeps {
    * — the runtime's `timeline`, reached the same way.
    */
   timeline(): PluginRecordTimelineWriter | null
+  /**
+   * The workspace's text generator on the core's text-generation seam
+   * (AGL-3324), which drafts one person's copies of the steps; `null` when
+   * no plugin generates text, and the curate route says so.
+   */
+  textGenerator(): PluginTextGenerator | null
 }
 
 export interface OutreachEnrollRoutes {
@@ -497,11 +509,12 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     const sequence = await loadActiveSequence(firestore, caller.orgId, body['sequenceId'])
     if (sequence instanceof Response) return sequence
 
+    const nowMs = deps.now()
     // Each person once, by whichever record they are: a contact by id, or a
     // lead by its key (AGL-3234). A person named both ways is a contact.
     const requested = new Map<
       string,
-      { ref: OutreachPersonRef; personalLine: string; attestations: unknown[] }
+      { ref: OutreachPersonRef; personalLine: string; attestations: unknown[]; overrides: OutreachStepOverrideRead }
     >()
     for (const entry of Array.isArray(body['people']) ? body['people'] : []) {
       const person = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>
@@ -513,10 +526,26 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
           ? { kind: 'lead', id: leadId }
           : null
       if (!ref || requested.has(ref.id)) continue
+      // The steps the member curated for this person (AGL-3324), validated
+      // here rather than trusted: a copy that breaks a rule refuses the
+      // whole request, so nobody is enrolled with a copy the route dropped.
+      const overrides = readOutreachStepOverrideRequests(person['stepOverrides'], sequence.steps, {
+        uid: caller.uid,
+        nowMs,
+      })
+      if (outreachStepOverridesRefused(overrides)) {
+        return outreachRefusal(
+          400,
+          'invalid-override',
+          overrides.refusal ?? 'A curated step breaks a rule every sequence email keeps.',
+          { issues: overrides.issues },
+        )
+      }
       requested.set(ref.id, {
         ref,
         personalLine: typeof person['personalLine'] === 'string' ? person['personalLine'] : '',
         attestations: Array.isArray(person['attestations']) ? person['attestations'] : [],
+        overrides,
       })
     }
     if (!requested.size) return outreachRefusal(400, 'invalid-request', 'Pick the people to enroll.')
@@ -542,7 +571,6 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         "This sequence's mailbox is no longer connected. Choose another mailbox for it before enrolling people.",
       )
     }
-    const nowMs = deps.now()
     if (planOutreachFirstDue({ sequence, mailbox, enrolledAtMs: nowMs, random: deps.random }) === null) {
       return outreachRefusal(
         409,
@@ -561,6 +589,25 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
     )
     const enrollments = outreachOrgCollection(firestore, caller.orgId, 'enrollments')
     const campaignNames = await sequenceCampaignNames(firestore, caller.orgId, sequence)
+    // The member's name for the curated entries (AGL-3324), read once per
+    // request and only when a person carries a curated step.
+    let memberNameRead: Promise<string | null> | null = null
+    const memberName = () => {
+      memberNameRead ??= firestore
+        .collection('orgs')
+        .doc(caller.orgId)
+        .collection('members')
+        .doc(caller.uid)
+        .get()
+        .then(
+          (member) =>
+            (member.exists
+              ? String(member.get('displayName') ?? '').trim() || String(member.get('email') ?? '').trim()
+              : '') || caller.email,
+        )
+        .catch(() => caller.email)
+      return memberNameRead
+    }
     const results: OutreachEnrollOutcome[] = await Promise.all(
       candidates.map(async (candidate): Promise<OutreachEnrollOutcome> => {
         const named = {
@@ -569,7 +616,12 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
           contactId: candidate.contactId,
           leadId: candidate.leadId,
         }
-        const supplied = requested.get(candidate.personId) ?? { personalLine: '', attestations: [] }
+        const supplied = requested.get(candidate.personId) ?? {
+          personalLine: '',
+          attestations: [],
+          overrides: { overrides: {}, issues: [], refusal: null } satisfies OutreachStepOverrideRead,
+        }
+        const stepOverrides: OutreachStepOverrides = supplied.overrides.overrides
         const decision = decideOutreachEnrollment(
           {
             candidate,
@@ -600,6 +652,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
           nowMs,
           random: deps.random,
         })
+        // The person's own copies of steps (AGL-3324) ride with the
+        // enrollment from its first write: nothing sends between.
+        if (Object.keys(stepOverrides).length) enrollment.stepOverrides = stepOverrides
         try {
           await enrollments.doc(id).create(enrollment)
         } catch (error) {
@@ -628,6 +683,26 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
           body: entry.body,
           atMs: nowMs,
         })
+        // And one line per step the member curated for them (AGL-3324),
+        // after the enrollment's own, so the record reads in order.
+        for (const [key, override] of Object.entries(stepOverrides)) {
+          const curated = outreachCuratedEntry({
+            enrollmentId: id,
+            stepIndex: Number(key),
+            source: override.source,
+            edited: override.edited === true,
+            memberName: await memberName(),
+            atMs: nowMs,
+          })
+          await fileOutreachNote(deps, {
+            orgId: caller.orgId,
+            hostId: sequence.hostId,
+            link: outreachEnrollmentLink(enrollment),
+            dedupeKey: curated.dedupeKey,
+            body: curated.body,
+            atMs: nowMs,
+          })
+        }
         return { ...named, email: decision.email, outcome: 'enrolled', enrollmentId: id }
       }),
     )
