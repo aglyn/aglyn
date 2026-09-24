@@ -16,11 +16,12 @@
  */
 
 /**
- * The Site users card hands its query the Status filter it serves, beside
- * a field clause, and offers Status in the Filters panel (AGL-3321).
+ * The Site users card hands its query every clause the Filters panel holds
+ * and the search's word, on one query beneath its newest-first order, and
+ * says what it could not put there (AGL-3321).
  */
 
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 /** A built query, as the doubles below spell it: its path and constraints. */
@@ -63,6 +64,13 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   ...jest.requireActual('@aglyn/tenant-feature-instance'),
   useFirestore: () => ({}),
+}))
+/*
+ * The pager `useListQuery` pages the plan's query with, doubled where it
+ * lives: the list-query hook reaches it by its own module, not the barrel.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-paged-collection', () => ({
+  __esModule: true,
   usePagedCollection: (build: (pageLimit: number) => unknown) => {
     mockBuilt.push(build(11) as MockQuery)
     return {
@@ -101,8 +109,8 @@ beforeEach(() => {
   mockClauses = undefined
 })
 
-describe('the Site users card serves Status (AGL-3321)', () => {
-  it('reads newest first, unfiltered, with Status in the Filters panel', async () => {
+describe('the Site users card serves every clause and the search (AGL-3321)', () => {
+  it('reads newest first, unfiltered, with the Filters panel and the search box', async () => {
     render(<SiteAccountsCard hostId="host-1" />)
     expect(lastQuery()).toEqual({
       path: 'hosts/host-1/siteMembers',
@@ -110,26 +118,51 @@ describe('the Site users card serves Status (AGL-3321)', () => {
     })
     expect(screen.getByRole('grid', { name: 'Site users' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
+    expect(screen.getByRole('searchbox')).toBeTruthy()
     // The Status column draws its chip from the stored boolean.
     expect(screen.getAllByText('Suspended').length).toBeGreaterThan(0)
     await act(async () => undefined)
   })
 
-  it('hands the query the equality on `suspended`, beside a field clause', async () => {
+  it('hands the query Status and an address together, beneath the same order', async () => {
     mockClauses = [
-      { field: 'email', op: 'startsWith', value: 'ann' },
+      { field: 'email', op: 'equals', value: 'Ann@Example.test' },
       { field: 'suspended', op: 'equals', value: 'true' },
     ]
     render(<SiteAccountsCard hostId="host-1" />)
     expect(lastQuery()?.constraints).toEqual([
+      ['where', 'email', '==', 'ann@example.test'],
       ['where', 'suspended', '==', true],
-      ['orderBy', 'email', 'asc'],
-      ['startAt', 'ann'],
-      ['endAt', 'ann'],
+      ['orderBy', 'createdAt', 'desc'],
       ['limit', 11],
     ])
     // Both clauses show, Status by its label.
     expect(screen.getByText('Status is Suspended')).toBeTruthy()
+    await act(async () => undefined)
+  })
+
+  it('serves the search as a word of the name, beside Status', async () => {
+    mockClauses = [{ field: 'suspended', op: 'equals', value: 'false' }]
+    render(<SiteAccountsCard hostId="host-1" />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Rae' } })
+    await waitFor(() =>
+      expect(lastQuery()?.constraints).toEqual([
+        ['where', 'displayNameTokens', 'array-contains', 'rae'],
+        ['where', 'suspended', '==', false],
+        ['orderBy', 'createdAt', 'desc'],
+        ['limit', 11],
+      ]),
+    )
+  })
+
+  it('says, above the grid, what the query could not take', async () => {
+    mockClauses = [{ field: 'email', op: 'startsWith', value: 'ann' }]
+    render(<SiteAccountsCard hostId="host-1" />)
+    // Not applied to the rows on screen: refused, by name.
+    expect(lastQuery()?.constraints).toEqual([['orderBy', 'createdAt', 'desc'], ['limit', 11]])
+    expect(screen.getByRole('status', { name: 'Filter notices' }).textContent).toContain(
+      'Email starts with ann is not applied',
+    )
     await act(async () => undefined)
   })
 })

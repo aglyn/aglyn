@@ -15,46 +15,27 @@
  * limitations under the License.
  */
 
-import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { listFilterConstraints } from '@aglyn/tenant-feature-instance'
-import { where, type QueryConstraint } from 'firebase/firestore'
+import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { SITE_MEMBER_LIST_FILTER_FIELDS } from './list-filters'
 
-/** Whether a clause is the Status filter, which stands beside another. */
-export const isSiteAccountStatusClause = (clause: ListFilterClause): boolean =>
-  clause.field === 'suspended'
-
 /**
- * The site accounts query's constraints for the clauses in force (AGL-3321),
- * without its `limit`.
+ * The Site users list's one query (AGL-3321): every clause the Filters panel
+ * holds and the quick search's word, planned together by `planListQuery`
+ * beneath the list's only order, newest first.
  *
- * ONE field clause is served the way the shared translator serves it, each
- * with the ordering it needs (`listFilterConstraints`), because Firestore
- * composes predicates only through indexes built for the pair. Status is the
- * exception: an EQUALITY on `suspended`, which every such ordering takes
- * beside it, so it is prefixed onto whichever query the other clause builds.
- * Each pairing has its composite in `cloud/firebase-firestore.indexes.json`
- * (`siteMembers: suspended, …`); an equality beneath a document-name order
- * needs none, since Firestore merges the single-field indexes.
+ * The search reads `displayNameTokens`, the word-prefix array both writers of
+ * a display name stamp (`memberNameSearchFields`); a `contains` on Name reads
+ * the same array, so the two cannot stand together and the plan says so. A
+ * member with no display name is found by the Email filter instead — the
+ * search matches names.
  *
- * Unfiltered, and under Status alone, the list keeps its own order, which
- * the caller names (newest first, `createdAt` DESC, is what the Status
- * composite serves).
+ * Every equality is served beneath `createdAt DESC` by one
+ * `(field, createdAt DESC)` composite each, which Firestore merges for any
+ * combination of them, and a Joined range is a range on the sort field
+ * itself. `site-account-query.spec.ts` holds the index file to it.
  */
-export function siteAccountQueryConstraints(
-  clauses: readonly ListFilterClause[],
-  unfilteredOrder: readonly QueryConstraint[],
-): QueryConstraint[] {
-  const status = clauses.find(
-    (clause) =>
-      isSiteAccountStatusClause(clause) &&
-      clause.op === 'equals' &&
-      (clause.value === 'true' || clause.value === 'false'),
-  )
-  const other = clauses.find((clause) => !isSiteAccountStatusClause(clause)) ?? null
-  const served = listFilterConstraints(SITE_MEMBER_LIST_FILTER_FIELDS, other)
-  return [
-    ...(status ? [where('suspended', '==', status.value === 'true')] : []),
-    ...(served ?? unfilteredOrder),
-  ]
+export const SITE_ACCOUNT_LIST_QUERY: ListQueryDeclaration = {
+  fields: SITE_MEMBER_LIST_FILTER_FIELDS,
+  sorts: [{ path: 'createdAt', direction: 'desc' }],
+  search: { tokensPath: 'displayNameTokens' },
 }

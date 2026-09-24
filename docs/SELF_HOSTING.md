@@ -355,6 +355,7 @@ idempotent, so running it twice changes nothing the second time.
 | AGL-3321 | a dataset's Records table serves its filters and search from a `filterKeys` token array older records lack (no index needed: Firestore's automatic single-field index answers it) | `node tools/scripts/backfill-dataset-filter-keys.mjs --apply` |
 | AGL-3321 | the Site users list's Status filter reads a `suspended` boolean that site members created before it, and never suspended, lack | `node tools/scripts/backfill-site-account-suspended.mjs --apply` |
 | AGL-3321 | the staff Platform suppressions list's Status filter and address search read `released` and `emailTokens` fields older suppressions lack | `node tools/scripts/backfill-email-suppression-filters.mjs --apply` |
+| AGL-3321 | the Site users list's name search and Name filter read `displayNameLower` and `displayNameTokens` fields that site members named before them lack | `node tools/scripts/backfill-site-member-name-search.mjs --apply` |
 
 Each uses Application Default Credentials against the project in
 `GOOGLE_CLOUD_PROJECT`.

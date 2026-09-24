@@ -23,6 +23,7 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListTable,
   listActionsColumn,
@@ -49,17 +50,13 @@ import {
   doc,
   documentId,
   getCountFromServer,
-  limit,
-  orderBy,
   query,
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  usePagedCollection,
-  useUser,
-} from '@aglyn/tenant-feature-instance'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
@@ -68,9 +65,10 @@ import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
   HOST_MEMBER_FILTER_FIELDS,
   HOST_MEMBER_FILTER_HEADERS,
-  hostMemberEmailRange,
-  hostMemberFilterWheres,
+  HOST_MEMBER_LIST_QUERY,
+  hostMemberListRequest,
 } from '../utils/host-member-filters'
+import { listQueryRefusalNotices } from '../utils/list-query-refusals'
 import MemberAvatar from './member-avatar.component'
 import {
   pluginGridColumns,
@@ -194,22 +192,21 @@ export function HostMembersCard(props: HostMembersCardProps) {
    *
    * ## Filtered beneath that order, by the query (AGL-3321)
    *
-   * Site access (`role` equality or `in`) and the quick search (a prefix of
-   * the stored, lower-cased address, as a range on `email`) are the query's
-   * own, so a filtered page is a page of the filtered roster rather than the
-   * rows on screen narrowed. See `utils/host-member-filters.ts` for the index
-   * each shape reads. A new filter is a new walk, and the pager starts over.
+   * Every clause is the query's own, planned together (`planListQuery`
+   * through `useListQuery`): Site access (`role` equality or `in`) and the
+   * quick search, which is a prefix of the stored, lower-cased address — a
+   * range on `email`, the field the roster is already ordered by. A filtered
+   * page is therefore a page of the filtered roster, never the rows on screen
+   * narrowed, and whatever the plan cannot put on the query is refused by
+   * name above the grid rather than applied to some rows. See
+   * `utils/host-member-filters.ts` for the index each shape reads. A new
+   * filter is a new walk, and the pager starts over.
    */
   const gridFilter = useListGridFilter({ selectFields: ['role'] })
-  const wheres = useMemo(
-    () => hostMemberFilterWheres(gridFilter.clauses),
-    [gridFilter.clauses],
+  const listRequest = useMemo(
+    () => hostMemberListRequest(gridFilter.clauses, gridFilter.searchWords),
+    [gridFilter.clauses, gridFilter.searchWords],
   )
-  const emailRange = useMemo(
-    () => hostMemberEmailRange(gridFilter.searchWords),
-    [gridFilter.searchWords],
-  )
-  const filterKey = JSON.stringify([wheres, emailRange])
   const {
     rows: members,
     hasMore,
@@ -217,23 +214,14 @@ export function HostMembersCard(props: HostMembersCardProps) {
     setPage,
     pageSize,
     setPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
-      query(
-        collection(firestore, 'hosts', hostId, 'members'),
-        ...wheres.map(([path, op, value]) => where(path, op, value)),
-        ...(emailRange
-          ? [
-              where('email', '>=', emailRange.start),
-              where('email', '<=', emailRange.end),
-            ]
-          : []),
-        orderBy('email'),
-        limit(pageLimit),
-      ),
-    [firestore, hostId, filterKey],
-    { idField: '$id' },
-  )
+    plan,
+  } = useListQuery<any>({
+    collection: collection(firestore, 'hosts', hostId, 'members'),
+    declaration: HOST_MEMBER_LIST_QUERY,
+    request: listRequest,
+    deps: [firestore, hostId],
+    idField: '$id',
+  })
   /**
    * SEATS USED is a server aggregate, not the length of the page window
    * (AGL-1716, the AGL-1706 shape).
@@ -461,15 +449,26 @@ export function HostMembersCard(props: HostMembersCardProps) {
   /*
    * The owner leads every page, as a row of its own: it is the ORG's owner,
    * not a roster document, so no query reaches it. Under a filter it stays
-   * only while it answers one — the row reads Admin, and its address is
-   * matched the way the query matches the roster's.
+   * only while it answers every clause the query SERVED — the row reads
+   * Admin, and its address is keyed the way the plan keys the prefix it asks
+   * the roster for.
    */
-  const ownerEmail = String(ownerMember?.email ?? '').toLowerCase()
-  const ownerShown =
-    wheres.every(([, op, value]) =>
-      op === 'in' ? (value as string[]).includes('admin') : value === 'admin',
-    ) &&
-    (!emailRange || (ownerEmail !== '' && ownerEmail.startsWith(emailRange.start)))
+  const ownerEmail = nameSearchNormalizers.key(String(ownerMember?.email ?? ''))
+  const ownerShown = plan.served.every((clause) => {
+    if (clause.field === 'role') {
+      return clause.value
+        .split(',')
+        .map((entry) => entry.trim())
+        .includes('admin')
+    }
+    if (clause.field === 'email') {
+      return (
+        ownerEmail !== '' &&
+        ownerEmail.startsWith(nameSearchNormalizers.key(clause.value))
+      )
+    }
+    return false
+  })
   const rows = useMemo(
     () => [
       ...(ownerShown ? [{ $id: OWNER_ROW_ID, owner: true }] : []),
@@ -785,6 +784,14 @@ export function HostMembersCard(props: HostMembersCardProps) {
           onChange={gridFilter.setClauses}
           options={ROLE_FILTER_OPTIONS}
         />
+        <ListQueryNotices
+          refused={listQueryRefusalNotices(
+            plan.refused,
+            HOST_MEMBER_FILTER_HEADERS,
+            ROLE_FILTER_OPTIONS,
+          )}
+          notices={plan.notices}
+        />
         <ListTable
           aria-label="Site collaborators"
           rows={rows}
@@ -798,6 +805,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
           filterMode="server"
           filterModel={gridFilter.filterModel}
           onFilterModelChange={gridFilter.onFilterModelChange}
+          // The search box is served: its words become the address prefix
+          // the plan puts on the query (`hostMemberListRequest`).
           quickFilter
           noRowsLabel="No collaborators match these filters"
           // Paged by the footer below, so the grid must not also slice.

@@ -16,110 +16,109 @@
  */
 
 /**
- * The site accounts list serves Status beside its one field clause, as an
- * equality on the boolean every member now carries (AGL-3321).
+ * The Site users list puts every clause and the search on one query beneath
+ * its newest-first order, and every shape that query takes has its
+ * composite (AGL-3321).
  */
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
+import {
+  listQueryIndexes,
+  missingListQueryIndexes,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { SITE_ACCOUNT_LIST_QUERY } from './site-account-query'
 
-jest.mock('firebase/firestore', () => ({
-  ...jest.requireActual('firebase/firestore'),
-  where: (path: unknown, op: string, value: unknown) => ['where', path, op, value],
-  orderBy: (path: unknown, direction?: string) => ['orderBy', path, direction ?? 'asc'],
-  startAt: (value: unknown) => ['startAt', value],
-  endAt: (value: unknown) => ['endAt', value],
-  documentId: () => '__name__',
-}))
+const plan = (
+  clauses: Array<{ field: string; op: string; value: string }>,
+  search: string[] = [],
+) => planListQuery(SITE_ACCOUNT_LIST_QUERY, { clauses, search }, nameSearchNormalizers)
 
-import { orderBy } from 'firebase/firestore'
-import { siteAccountQueryConstraints } from './site-account-query'
+const NEWEST = { path: 'createdAt', direction: 'desc' }
 
-/** The list's own order, as the card names it. */
-const NEWEST = [orderBy('createdAt', 'desc')]
-
-const active = { field: 'suspended', op: 'equals', value: 'false' }
-const suspended = { field: 'suspended', op: 'equals', value: 'true' }
-
-describe('siteAccountQueryConstraints', () => {
+describe('the Site users query (AGL-3321)', () => {
   it('reads newest first, unfiltered', () => {
-    expect(siteAccountQueryConstraints([], NEWEST)).toEqual([['orderBy', 'createdAt', 'desc']])
+    expect(plan([])).toMatchObject({ filters: [], orderBy: NEWEST, refused: [] })
   })
 
-  it('serves Status alone as an equality on the stored boolean, newest first', () => {
-    expect(siteAccountQueryConstraints([active], NEWEST)).toEqual([
-      ['where', 'suspended', '==', false],
-      ['orderBy', 'createdAt', 'desc'],
+  it('serves Status, an address and a name together, with the search', () => {
+    const all = plan(
+      [
+        { field: 'suspended', op: 'equals', value: 'false' },
+        { field: 'email', op: 'equals', value: 'Ann@Example.test' },
+        { field: 'displayName', op: 'equals', value: '  Ann  Lee ' },
+      ],
+      ['Rae'],
+    )
+    expect(all.filters).toEqual([
+      { path: 'displayNameTokens', op: 'array-contains', value: 'rae' },
+      { path: 'suspended', op: '==', value: false },
+      { path: 'email', op: '==', value: 'ann@example.test' },
+      { path: 'displayNameLower', op: '==', value: 'ann lee' },
     ])
-    expect(siteAccountQueryConstraints([suspended], NEWEST)).toEqual([
-      ['where', 'suspended', '==', true],
-      ['orderBy', 'createdAt', 'desc'],
+    expect(all.orderBy).toEqual(NEWEST)
+    expect(all.refused).toEqual([])
+  })
+
+  it('serves a Joined range on the sort field itself, beside Status', () => {
+    const range = plan([
+      { field: 'createdAt', op: 'onOrAfter', value: '2026-09-01' },
+      { field: 'suspended', op: 'equals', value: 'true' },
+    ])
+    expect(range.filters.map((filter) => [filter.path, filter.op])).toEqual([
+      ['createdAt', '>='],
+      ['suspended', '=='],
+    ])
+    expect(range.orderBy).toEqual(NEWEST)
+  })
+
+  it('gives the search the one array clause and refuses a Name word beside it by name', () => {
+    const both = plan([{ field: 'displayName', op: 'contains', value: 'lee' }], ['rae'])
+    expect(both.searched).toBe('rae')
+    expect(both.refused).toEqual([
+      {
+        clause: { field: 'displayName', op: 'contains', value: 'lee' },
+        reason: expect.stringMatching(/search/),
+      },
     ])
   })
 
-  it('serves a field clause as before, with Status prefixed beside it', () => {
-    const prefix = { field: 'email', op: 'startsWith', value: 'Ann' }
-    expect(siteAccountQueryConstraints([prefix], NEWEST)).toEqual([
-      ['orderBy', 'email', 'asc'],
-      ['startAt', 'ann'],
-      ['endAt', 'ann'],
+  it('offers no prefix or ends-with on a list that never sorts by them', () => {
+    const refused = plan([
+      { field: 'email', op: 'startsWith', value: 'ann' },
+      { field: 'displayName', op: 'startsWith', value: 'ann' },
+      { field: 'displayName', op: 'isNotEmpty', value: '' },
     ])
-    expect(siteAccountQueryConstraints([prefix, suspended], NEWEST)).toEqual([
-      ['where', 'suspended', '==', true],
-      ['orderBy', 'email', 'asc'],
-      ['startAt', 'ann'],
-      ['endAt', 'ann'],
-    ])
+    expect(refused.filters).toEqual([])
+    expect(refused.refused).toHaveLength(3)
+  })
+
+  it('ignores a Status it cannot read rather than guessing', () => {
+    const status = plan([{ field: 'suspended', op: 'equals', value: 'maybe' }])
+    expect(status.filters).toEqual([])
+    expect(status.refused[0].reason).toMatch(/true or false/)
+  })
+})
+
+describe('the Site users query has its indexes', () => {
+  it('every shape it takes is in the index file', () => {
+    const file = JSON.parse(
+      readFileSync(join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'), 'utf8'),
+    )
+    const needed = listQueryIndexes(SITE_ACCOUNT_LIST_QUERY)
+    // Name words, the address, the name, Status — each beneath newest first.
     expect(
-      siteAccountQueryConstraints(
-        [active, { field: 'displayName', op: 'contains', value: 'rae' }],
-        NEWEST,
+      needed.map((index) =>
+        index.fields.map((field) => `${field.fieldPath}:${field.order ?? field.arrayConfig}`).join(','),
       ),
     ).toEqual([
-      ['where', 'suspended', '==', false],
-      ['where', 'displayNameTokens', 'array-contains', 'rae'],
-      ['orderBy', 'displayNameLower', 'asc'],
+      'displayNameTokens:CONTAINS,createdAt:DESCENDING',
+      'email:ASCENDING,createdAt:DESCENDING',
+      'displayNameLower:ASCENDING,createdAt:DESCENDING',
+      'suspended:ASCENDING,createdAt:DESCENDING',
     ])
-  })
-
-  it('ignores a Status it cannot serve rather than guessing', () => {
-    expect(
-      siteAccountQueryConstraints(
-        [{ field: 'suspended', op: 'equals', value: 'maybe' }],
-        NEWEST,
-      ),
-    ).toEqual([['orderBy', 'createdAt', 'desc']])
-  })
-
-  it('every pairing it builds has its composite index', () => {
-    const indexes = JSON.parse(
-      readFileSync(
-        join(__dirname, '..', '..', '..', 'cloud', 'firebase-firestore.indexes.json'),
-        'utf8',
-      ),
-    ).indexes as Array<{
-      collectionGroup: string
-      fields: Array<{ fieldPath: string; order?: string; arrayConfig?: string }>
-    }>
-    const shapes = indexes
-      .filter((index) => index.collectionGroup === 'siteMembers')
-      .map((index) =>
-        index.fields
-          .map((field) => `${field.fieldPath}:${field.order ?? field.arrayConfig}`)
-          .join(','),
-      )
-    expect(shapes).toEqual(
-      expect.arrayContaining([
-        // Status alone, beneath the newest-first order.
-        'suspended:ASCENDING,createdAt:DESCENDING',
-        // Beside a Joined range, a prefix of Email or Name, a Name word, and
-        // Name "is not empty" — each clause's own ordering.
-        'suspended:ASCENDING,createdAt:ASCENDING',
-        'suspended:ASCENDING,email:ASCENDING',
-        'suspended:ASCENDING,displayNameLower:ASCENDING',
-        'displayNameTokens:CONTAINS,suspended:ASCENDING,displayNameLower:ASCENDING',
-        'suspended:ASCENDING,displayName:ASCENDING',
-      ]),
-    )
+    expect(missingListQueryIndexes(file, 'siteMembers', needed, 'COLLECTION')).toEqual([])
   })
 })

@@ -276,12 +276,33 @@ export const ACTIVITY_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
  * cookie, which is why this list is a plain collection query while the staff
  * account list has to walk Auth pools.
  *
- * `suspended` is a boolean every member carries (AGL-3321): sign-up stores
- * `false`, the drawer's Suspend and Reactivate store `true` and `false`, and
- * `tools/scripts/backfill-site-account-suspended.mjs` stamps `false` on the
- * members that predate it — a query cannot find a document that LACKS a
- * field, so `is Active` needs every active member to say so. It is the one
- * clause that stands BESIDE another: see `siteAccountQueryConstraints`.
+ * EVERY clause, and the quick search, is on the list's one query, newest
+ * first (AGL-3321: `SITE_ACCOUNT_LIST_QUERY`). What each field offers is
+ * what that query can serve beneath `createdAt DESC`, the list's only order:
+ *
+ *   email        `equals`, on the stored address (sign-up lower-cases it, so
+ *                the value is its own key). No `starts with`: a prefix is a
+ *                range on `email`, which would order the list by address — a
+ *                second order, and a second set of composites for every
+ *                field, for a list that never sorts by it.
+ *   displayName  `contains` a word (`displayNameTokens`, the array the search
+ *                reads too) and `equals` (`displayNameLower`). No `starts
+ *                with` for the reason above, and no `is set`: `!= null` is a
+ *                range too.
+ *   createdAt    every day operator: a range on the field the list is
+ *                already sorted by, which no extra index is needed for.
+ *   suspended    `is`, an equality on the boolean every member carries
+ *                (AGL-3321): sign-up stores `false`, the drawer's Suspend and
+ *                Reactivate store `true` and `false`, and
+ *                `tools/scripts/backfill-site-account-suspended.mjs` stamps
+ *                `false` on the members that predate it — a query cannot find
+ *                a document that LACKS a field, so `is Active` needs every
+ *                active member to say so.
+ *
+ * The name fields are stamped by `memberNameSearchFields` at both writers of
+ * a display name (sign-up and the member's own account form), and
+ * `tools/scripts/backfill-site-member-name-search.mjs` stamps the members
+ * named before those fields existed.
  */
 export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   {
@@ -292,6 +313,7 @@ export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     path: 'email',
     lowerPath: 'email',
     presence: 'always',
+    operators: ['equals'],
   },
   {
     column: 'displayName',
@@ -299,6 +321,7 @@ export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     path: 'displayName',
     lowerPath: 'displayNameLower',
     tokensPath: 'displayNameTokens',
+    operators: ['contains', 'equals'],
   },
   {
     column: 'createdAt',
@@ -312,6 +335,7 @@ export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
 /** Headers for member fields that are filterable without being columns. */
 export const SITE_MEMBER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> =
   {
+    email: 'Email',
     displayName: 'Name',
     createdAt: 'Joined',
     suspended: 'Status',

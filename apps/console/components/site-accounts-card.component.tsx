@@ -23,17 +23,16 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { Box, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { collection, limit, orderBy, query } from 'firebase/firestore'
+import { collection } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
-import {
-  useFirestore,
-  usePagedCollection,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { docsHelp } from '../constants/docs-links'
 import { useOrgPermissions } from '../hooks/use-org-permissions'
 import { useOrgSlug } from '../hooks/use-org-scope'
@@ -44,10 +43,8 @@ import {
   SITE_MEMBER_LIST_FILTER_HEADERS,
   SITE_MEMBER_LIST_FILTER_OPTIONS,
 } from '../utils/list-filters'
-import {
-  isSiteAccountStatusClause,
-  siteAccountQueryConstraints,
-} from '../utils/site-account-query'
+import { listQueryRefusalNotices } from '../utils/list-query-refusals'
+import { SITE_ACCOUNT_LIST_QUERY } from '../utils/site-account-query'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 
 import SiteMemberDrawer from './site-member-drawer.component'
@@ -72,31 +69,32 @@ export function SiteAccountsCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
   /*
-   * The panel's clauses ARE the query's (AGL-3317): one field clause at a
-   * time, because the query serves one predicate and there is no loaded
-   * window for a second to narrow, with Status beside it (AGL-3321), an
-   * equality every one of those queries takes. No quick search, since no word
-   * index covers these documents.
+   * EVERY CLAUSE AND THE SEARCH ARE THE QUERY'S (AGL-3321).
+   *
+   * The panel held one field clause at a time, with Status beside it, and
+   * offered no search: the query served one predicate and there was no
+   * loaded window for a second to narrow. Now the clauses the panel holds
+   * and the search's word are planned together (`planListQuery` through
+   * `useListQuery`) into one query beneath the list's newest-first order, and
+   * a combination one query cannot hold is refused by name above the grid —
+   * never applied to the rows that happen to be loaded. See
+   * `SITE_ACCOUNT_LIST_QUERY` for the shapes and the indexes they read.
    */
-  const gridFilter = useListGridFilter({
-    single: true,
-    selectFields: ['suspended'],
-    keepAlongside: isSiteAccountStatusClause,
-  })
-  const filtering = gridFilter.clauses.length > 0
-  const constraints = useMemo(
-    () =>
-      siteAccountQueryConstraints(gridFilter.clauses, [
-        orderBy('createdAt', 'desc'),
-      ]),
-    [gridFilter.clauses],
+  const gridFilter = useListGridFilter({ selectFields: ['suspended'] })
+  const filtering =
+    gridFilter.clauses.length > 0 ||
+    gridFilter.searchWords.some((word) => word.trim() !== '')
+  const listRequest = useMemo(
+    () => ({ clauses: gridFilter.clauses, search: gridFilter.searchWords }),
+    [gridFilter.clauses, gridFilter.searchWords],
   )
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
-   * The console's shared paging (AGL-2501). "Load more" decided there was more
-   * from `length >= limit`, which is wrong exactly when the count is an even
-   * multiple of the page size: a site with precisely fifty accounts offered a
-   * button that fetched nothing, and one with fifty-one looked the same.
+   * The console's shared paging (AGL-2501), over the plan's query. "Load
+   * more" decided there was more from `length >= limit`, which is wrong
+   * exactly when the count is an even multiple of the page size: a site with
+   * precisely fifty accounts offered a button that fetched nothing, and one
+   * with fifty-one looked the same.
    */
   const {
     rows: memberDocs,
@@ -105,32 +103,14 @@ export function SiteAccountsCard(props: { hostId: string }) {
     setPage,
     pageSize,
     setPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) => {
-      /*
-       * THE FILTER IS THE QUERY (AGL-2501).
-       *
-       * This card narrowed the rows it had fetched — ten by default — so a
-       * name that sat on page four answered "no site users match", which
-       * reads as the member not existing rather than as the search not
-       * reaching them. The predicate goes into the query instead, so it
-       * covers the whole collection.
-       *
-       * No `fixedOrderBy`: the window here is a growing `limit`, not a
-       * document cursor, so a filter that needs its own ordering can have
-       * one — nothing is holding a position in the old sort. Unfiltered, the
-       * card keeps its newest-first order. See `siteAccountQueryConstraints`
-       * for every shape, and the index each reads.
-       */
-      return query(
-        collection(firestore, 'hosts', hostId, 'siteMembers'),
-        ...constraints,
-        limit(pageLimit),
-      )
-    },
-    [firestore, hostId, constraints],
-    { idField: '$id' },
-  )
+    plan,
+  } = useListQuery<any>({
+    collection: collection(firestore, 'hosts', hostId, 'siteMembers'),
+    declaration: SITE_ACCOUNT_LIST_QUERY,
+    request: listRequest,
+    deps: [firestore, hostId],
+    idField: '$id',
+  })
 
   const visible = memberDocs
 
@@ -278,6 +258,14 @@ export function SiteAccountsCard(props: { hostId: string }) {
         onChange={gridFilter.setClauses}
         options={SITE_MEMBER_LIST_FILTER_OPTIONS}
       />
+      <ListQueryNotices
+        refused={listQueryRefusalNotices(
+          plan.refused,
+          SITE_MEMBER_LIST_FILTER_HEADERS,
+          SITE_MEMBER_LIST_FILTER_OPTIONS,
+        )}
+        notices={plan.notices}
+      />
       {visible.length || filtering ? (
         <Stack spacing={1}>
           <ListTable
@@ -294,6 +282,8 @@ export function SiteAccountsCard(props: { hostId: string }) {
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
+            // Served: the word is an `array-contains` on the name tokens.
+            quickFilter
             noRowsLabel="No site users match these filters"
             // Paged by the footer below, so the grid must not also slice.
             hideFooter

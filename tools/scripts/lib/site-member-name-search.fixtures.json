@@ -1,0 +1,127 @@
+{
+  "note": "Worked examples for the site member name-search fields (AGL-3321). Asserted by libs/plugins/commerce/src/lib/server/member-name-search.spec.ts against memberNameSearchFields, and by tools/scripts/backfill-site-member-name-search.mjs --self-test against its own copy. Regenerate only from the library, never by hand.",
+  "cases": [
+    {
+      "displayName": "Ada Lovelace",
+      "expected": {
+        "displayName": "Ada Lovelace",
+        "displayNameLower": "ada lovelace",
+        "displayNameTokens": [
+          "a",
+          "ad",
+          "ada",
+          "l",
+          "lo",
+          "lov",
+          "love",
+          "lovel",
+          "lovela",
+          "lovelac",
+          "lovelace"
+        ]
+      }
+    },
+    {
+      "displayName": "  Rae   Visitor ",
+      "expected": {
+        "displayName": "  Rae   Visitor ",
+        "displayNameLower": "rae visitor",
+        "displayNameTokens": [
+          "r",
+          "ra",
+          "rae",
+          "v",
+          "vi",
+          "vis",
+          "visi",
+          "visit",
+          "visito",
+          "visitor"
+        ]
+      }
+    },
+    {
+      "displayName": "Zoë O’Brien-Smith",
+      "expected": {
+        "displayName": "Zoë O’Brien-Smith",
+        "displayNameLower": "zoë o’brien-smith",
+        "displayNameTokens": [
+          "z",
+          "zo",
+          "zoë",
+          "o",
+          "o’",
+          "o’b",
+          "o’br",
+          "o’bri",
+          "o’brie",
+          "o’brien",
+          "o’brien-",
+          "o’brien-s",
+          "o’brien-sm",
+          "o’brien-smi",
+          "o’brien-smit"
+        ]
+      }
+    },
+    {
+      "displayName": "Maximilianus Constantinopolis",
+      "expected": {
+        "displayName": "Maximilianus Constantinopolis",
+        "displayNameLower": "maximilianus constantinopolis",
+        "displayNameTokens": [
+          "m",
+          "ma",
+          "max",
+          "maxi",
+          "maxim",
+          "maximi",
+          "maximil",
+          "maximili",
+          "maximilia",
+          "maximilian",
+          "maximilianu",
+          "maximilianus",
+          "c",
+          "co",
+          "con",
+          "cons",
+          "const",
+          "consta",
+          "constan",
+          "constant",
+          "constanti",
+          "constantin",
+          "constantino",
+          "constantinop"
+        ]
+      }
+    },
+    {
+      "displayName": "Émile",
+      "expected": {
+        "displayName": "Émile",
+        "displayNameLower": "émile",
+        "displayNameTokens": [
+          "é",
+          "ém",
+          "émi",
+          "émil",
+          "émile"
+        ]
+      }
+    },
+    {
+      "displayName": "A B C",
+      "expected": {
+        "displayName": "A B C",
+        "displayNameLower": "a b c",
+        "displayNameTokens": [
+          "a",
+          "b",
+          "c"
+        ]
+      }
+    }
+  ]
+}
