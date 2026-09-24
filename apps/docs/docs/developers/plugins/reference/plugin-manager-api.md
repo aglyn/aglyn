@@ -530,6 +530,37 @@ previous call, or a copy through another door, already filed — or a refusal
 activity ceiling), and never throw for a refusal. The registry authenticates
 nobody: the caller has already decided the entry is the workspace's to write.
 
+## Text generation — `plugin-text-generation` (`/server`)
+
+A plugin that wants a paragraph drafted — a sequence's email for one person,
+a summary, a subject line — asks the workspace's generation service without
+importing the plugin that sells generation, which the package map forbids.
+That plugin registers one generator (a slot), and a caller asks for it by
+nothing more than "the generator":
+
+```ts
+const generation = pluginTextGenerator()
+const answer = await generation?.generator.generate({
+  orgId, hostId, uid, staff, org,
+  purpose: 'outreach-curate',            // the usage ledger's kind: plugin id, a hyphen, a word
+  system: STANDING_INSTRUCTIONS,         // byte-identical across calls, so a provider can cache it
+  prompt: factsAndSkeleton,              // everything about this record
+  maxTokens: 2_400,
+})
+if (answer?.ok === true) keep(answer.text, answer.model)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginTextGenerator(generator, { pluginId? })` | The workspace's generator. A single-implementation contract: a second plugin's generator throws naming both, and the incumbent keeps serving. The AI plugin registers it from its console API surface. |
+| `pluginTextGenerator()` | The generator with its owner, or `null` when no plugin generates text — a caller then says so in its own words. |
+| `generator.generate(request)` | The text, its model and its tokens, or a refusal (`{ ok: false, status, reason, error }`: `unavailable`, `permission`, `entitlement`, `off`, `quota`, `refused`, `failed`), never thrown. The generator applies every rule its own doors apply to the member named — the generation permission on `hostId`, the plan, the switches, the reservation against the org's and the member's allotments — and meters the answer under `purpose`. |
+
+The registry authenticates nobody: the caller has already verified who is
+asking and that the org is theirs. Nothing about the prompt is kept by the
+generator beyond its usage ledger, which holds the purpose and the tokens
+and never the words.
+
 ## Media delivery — `media-delivery-provider` (`/server`)
 
 A slot one plugin holds (`core.media-delivery`, built on the service contracts

@@ -51,6 +51,7 @@ import {
   Chip,
 } from '@mui/material'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { OutreachCurateStepDialog, outreachNextEmailStepIndex } from './curate-step-dialog'
 import { readOutreachEngagement } from '../model/enrollment-engagement'
 import type { OutreachEnrollmentAction } from '../model/outreach-api'
 import {
@@ -122,22 +123,36 @@ function lastActivityMs(enrollment: OutreachEnrollment): number {
   )
 }
 
+/** The row's actions: the four the action route takes, and curating the next step (AGL-3324). */
+type RowAction = OutreachEnrollmentAction | 'curate'
+
 /** What a member may do to an enrollment in the status it is in. */
 function actionsFor(
   enrollment: OutreachEnrollment,
-): OutreachEnrollmentAction[] {
-  const actions: OutreachEnrollmentAction[] = []
+  steps: readonly OutreachSequenceStep[],
+): RowAction[] {
+  const actions: RowAction[] = []
+  // Rewrite the next email for this one person, while one is still to go.
+  if (outreachNextEmailStepIndex(enrollment, steps) !== null) actions.push('curate')
   if (enrollment.status === 'active') actions.push('pause', 'stop')
   if (enrollment.status === 'paused') actions.push('resume', 'stop')
   if (enrollment.status !== 'opted_out') actions.push('do_not_contact')
   return actions
 }
 
-const ACTION_LABELS: Record<OutreachEnrollmentAction, string> = {
+const ACTION_LABELS: Record<RowAction, string> = {
+  curate: 'Curate next step',
   pause: 'Pause',
   resume: 'Resume',
   stop: 'Stop',
   do_not_contact: 'Mark do-not-contact',
+}
+
+/** Whether the step the enrollment is on goes out as this person's own copy (AGL-3324). */
+export function outreachStepIsCurated(
+  enrollment: Pick<OutreachEnrollment, 'stepIndex' | 'stepOverrides'>,
+): boolean {
+  return Boolean(enrollment.stepOverrides?.[String(enrollment.stepIndex)])
 }
 
 /** What the snackbar says once an action lands. */
@@ -250,7 +265,22 @@ function columns(
         <OutreachEnrollmentStatusChip status={row.status} />
       ),
     },
-    { field: 'step', headerName: 'Current step', flex: 1, minWidth: 170 },
+    {
+      field: 'step',
+      headerName: 'Current step',
+      flex: 1,
+      minWidth: 170,
+      renderCell: ({ row }) => (
+        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center', height: '100%', minWidth: 0 }}>
+          <Typography variant="body2" noWrap>
+            {row.step}
+          </Typography>
+          {outreachStepIsCurated(row.enrollment) ? (
+            <Chip size="small" variant="outlined" color="success" label="Curated" />
+          ) : null}
+        </Stack>
+      ),
+    },
     { field: 'nextSend', headerName: 'Next send', width: 190, sortable: false },
     {
       field: 'lastActivity',
@@ -313,6 +343,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
   } | null>(null)
   const [detail, setDetail] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
+  const [curating, setCurating] = useState<OutreachEnrollment | null>(null)
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const gridFilter = useListGridFilter({ selectFields: ['status', 'target'] })
@@ -376,9 +407,11 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
 
   const choose = (
     enrollment: OutreachEnrollment,
-    action: OutreachEnrollmentAction,
+    action: RowAction,
   ) => {
-    if (CONFIRM[action]) {
+    if (action === 'curate') {
+      setCurating(enrollment)
+    } else if (CONFIRM[action]) {
       setDetail('')
       setConfirming({ enrollment, action })
     } else {
@@ -408,7 +441,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
   const rowActions = (enrollment: OutreachEnrollment) => (
     <ListRowActions
       label={enrollment.contactName || enrollment.email}
-      items={actionsFor(enrollment).map((action) => ({
+      items={actionsFor(enrollment, steps).map((action) => ({
         key: action,
         label: ACTION_LABELS[action],
         onClick: () => choose(enrollment, action),
@@ -485,9 +518,14 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
                     <OutreachEnrollmentStatusChip status={enrollment.status} />
                     {rowActions(enrollment)}
                   </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    {outreachCurrentStepLabel(enrollment, steps)}
-                  </Typography>
+                  <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      {outreachCurrentStepLabel(enrollment, steps)}
+                    </Typography>
+                    {outreachStepIsCurated(enrollment) ? (
+                      <Chip size="small" variant="outlined" color="success" label="Curated" />
+                    ) : null}
+                  </Stack>
                   <Typography variant="body2" color="text.secondary">
                     {`Next send: ${nextSend(enrollment)} · Last activity: ${formatOutreachTime(lastActivityMs(enrollment), timeZone)}`}
                   </Typography>
@@ -553,6 +591,13 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
         hasMore={enrollments.hasMore || page < lastLoadedPage}
         onPageChange={turnTo}
         onPageSizeChange={setPageSize}
+      />
+
+      <OutreachCurateStepDialog
+        enrollment={curating}
+        steps={steps}
+        api={api}
+        onClose={() => setCurating(null)}
       />
 
       <Dialog

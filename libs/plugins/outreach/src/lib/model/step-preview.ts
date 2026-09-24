@@ -34,7 +34,7 @@ import type { CrmMergeContext } from '@aglyn/aglyn/app-utils/crm-email-templates
 import { resolveCrmMergeFields } from '@aglyn/aglyn/app-utils/crm-email-templates'
 import { composeOutreachEmail, type OutreachComposeResult } from '../engine/compose'
 import { isInThreadEmailStep } from '../engine/sequence-validation'
-import type { OutreachOrgSettings, OutreachSequenceStep } from './outreach.types'
+import type { OutreachOrgSettings, OutreachSequenceStep, OutreachStepOverrides } from './outreach.types'
 
 /** The holder id the sample person's facet is filed under. */
 const SAMPLE_GROUP = 'outreach-preview'
@@ -83,6 +83,8 @@ export interface OutreachStepPreviewInput {
   personalLine: string
   /** The CRM template's body, when the step names a template. */
   templateBody?: string | null
+  /** The person's own copies of steps (AGL-3324), as the enrollment would carry them. */
+  stepOverrides?: OutreachStepOverrides | null
 }
 
 /** The step's email, or why it can't be written — see the module note. */
@@ -109,6 +111,7 @@ export function previewOutreachStep(input: OutreachStepPreviewInput): OutreachCo
       threadSubject,
       messageIds: threadSubject ? [PREVIEW_MESSAGE_ID] : [],
       gmailThreadId: threadSubject ? 'preview' : null,
+      ...(input.stepOverrides ? { stepOverrides: input.stepOverrides } : {}),
     },
     orgSettings: input.orgSettings,
     merge: input.merge,
