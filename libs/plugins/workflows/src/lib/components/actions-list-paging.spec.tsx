@@ -146,6 +146,7 @@ const FIRESTORE = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useHostResourceApi: () => jest.fn().mockResolvedValue({ id: 'new' }),
+  useUser: () => ({ data: null }),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'] }),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,

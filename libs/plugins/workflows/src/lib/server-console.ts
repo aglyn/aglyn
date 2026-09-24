@@ -19,6 +19,10 @@ import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { registerWorkflowsServerDeclarations } from './declarations.server'
 import { registerAutomationDraftWriter } from './server-automation-drafts'
 import {
+  ACTION_TEST_RUN_API_ROUTE,
+  actionTestRunHandler,
+} from './server/action-test-run-route'
+import {
   ORG_AUTOMATION_API_ROUTES,
   orgAutomationPauseHandler,
   orgAutomationsManageHandler,
@@ -33,8 +37,8 @@ import {
  * does: the automation draft writer another plugin reaches through the core's
  * resource-drafts seam, which the AI jobs that write through it — inline at a
  * door and on the beat — find registered in the console process alone
- * (AGL-3026); and the doors that write the organization's automations
- * (AGL-3302).
+ * (AGL-3026); the doors that write the organization's automations
+ * (AGL-3302); and the Actions card's test run (AGL-3309).
  */
 export function registerWorkflowsConsoleApi(): void {
   // The console raises host events too — a CRM stage moved, a deal won, a
@@ -51,4 +55,6 @@ export function registerWorkflowsConsoleApi(): void {
   )
   // A site's own pause names the site, and is gated by that site's switch.
   registerPluginApiRoute(ORG_AUTOMATION_API_ROUTES.pause, orgAutomationPauseHandler)
+  // So does a test run: a site with Automation switched off has no such door.
+  registerPluginApiRoute(ACTION_TEST_RUN_API_ROUTE, actionTestRunHandler)
 }

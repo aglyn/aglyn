@@ -49,6 +49,7 @@ import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Alert,
@@ -78,8 +79,10 @@ import {
   useFirestore,
   useFirestoreCollection,
   useHostResourceApi,
+  useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import { ACTION_TEST_RUN_API_ROUTE } from '../model/action-test-run'
 import {
   AutomationStepFields,
   type AutomationStepKind,
@@ -205,6 +208,8 @@ export function HostActionsCard(props: {
   // Action creation is server-owned since AGL-2266 (the cap); every other
   // action write on this surface stays client-direct.
   const createResource = useHostResourceApi()
+  // The caller's token, for the test run's console door.
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   /**
@@ -453,16 +458,21 @@ export function HostActionsCard(props: {
   const handleTestRun = useCallback(
     async (action: any) => {
       try {
-        const response = await fetch('/api/events/dispatch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            hostId,
-            actionId: action.$id,
-            event: action.trigger?.event,
-            payload: { path: '/console-test', test: 'true' },
-          }),
-        })
+        /*
+         * The console's own door, signed: a page's `events/dispatch` is a
+         * tenant route this origin does not serve. The route reads the
+         * trigger off the stored action and marks the run as a test, so the
+         * body names only which action on which site.
+         */
+        const response = await authorizedFetch(
+          user,
+          `/api/${ACTION_TEST_RUN_API_ROUTE}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hostId, actionId: action.$id }),
+          },
+        )
         const payload = await response.json().catch(() => ({}))
         if (!response.ok) {
           return void enqueueSnackbar(payload?.error ?? 'Test run failed', {
@@ -482,7 +492,7 @@ export function HostActionsCard(props: {
         enqueueSnackbar('Test run failed', { variant: 'error' })
       }
     },
-    [hostId, enqueueSnackbar],
+    [hostId, user, enqueueSnackbar],
   )
 
   const handleSave = useCallback(async () => {
@@ -740,7 +750,8 @@ export function HostActionsCard(props: {
               {'Edit'}
             </Button>
             {isSiteEventType(String(action.trigger?.event ?? '')) ? (
-              // Test run (AGL-266): server steps only, via the dispatch API.
+              // Test run (AGL-266): the server steps only, run now as a real
+              // run through the console's test-run door.
               <Button size="small" onClick={() => void handleTestRun(action)}>
                 {'Test'}
               </Button>
