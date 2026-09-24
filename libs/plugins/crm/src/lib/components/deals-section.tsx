@@ -46,7 +46,8 @@ import {
   nextActivityColumn,
 } from './crm-next-activity-column'
 import CrmFilterBar from './crm-filter-bar'
-import { crmFilterColumns } from '../model/crm-grid-filter'
+import { crmFilterColumns, crmRowMatchesSearch } from '../model/crm-grid-filter'
+import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
 import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -72,6 +73,8 @@ import { useDealStageApi } from '../hooks/use-deal-stage-api'
 import {
   BOARD_CLOSED_LIMIT,
   BOARD_OPEN_LIMIT,
+  DEAL_SEARCH_WINDOW,
+  useDealSearchWindow,
   useDealsByStatus,
   usePagedDeals,
 } from '../hooks/use-deals'
@@ -108,6 +111,8 @@ const DEAL_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
   status: 'Status',
   [CRM_NEXT_ACTIVITY_FILTER_FIELD.column]: CRM_NEXT_ACTIVITY_FILTER_HEADER,
 }
+/** What the table's search reads on a deal. */
+const DEAL_SEARCH_FIELDS = ['title'] as const
 const DEAL_FILTER_OPTIONS = {
   status: (['open', 'won', 'lost'] as const).map((value) => ({
     value,
@@ -231,6 +236,35 @@ export function DealsSection(props: ConsolePluginPageProps) {
     pipeline?.$id ?? null,
   )
 
+  /*
+   * THE SEARCH (AGL-3315): the grid's quick-filter box, answered over a
+   * window of every deal the table's query would page through — read only
+   * while the box holds a word — so a deal on page four is found by any
+   * word of its title. See `useDealSearchWindow`.
+   */
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const searching = searchWords.some((word) => word.trim())
+  const searchWindow = useDealSearchWindow(
+    view === 'table' && searching ? scope.orgId : null,
+    scope.visibleTo,
+    statusFilter,
+    pipeline?.$id ?? null,
+  )
+  const searchKey = searchWords.join(' ')
+  const found = useMemo(
+    () =>
+      searchWindow.data
+        .slice(0, DEAL_SEARCH_WINDOW)
+        .filter((deal) => crmRowMatchesSearch(deal, DEAL_SEARCH_FIELDS, searchWords)),
+    // `searchKey` stands for the words, which are a new array each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchWindow.data, searchKey],
+  )
+  const searchTruncated = searchWindow.data.length > DEAL_SEARCH_WINDOW
+  const [searchPage, setSearchPage] = useState(0)
+  const [searchPageSize, setSearchPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  useEffect(() => setSearchPage(0), [searchKey, statusFilter])
+
   const summary = useMemo(() => boardSummary(open.data, pipeline), [open.data, pipeline])
 
   /*
@@ -312,9 +346,10 @@ export function DealsSection(props: ConsolePluginPageProps) {
     }),
     [pipelineState, roster.members],
   )
+  // The page on screen — or, while searching, every deal the search found.
   const handleExport = useCallback(() => {
-    downloadTextFile('deals.csv', 'text/csv', dealsCsv(paged.rows, csvOptions))
-  }, [paged.rows, csvOptions])
+    downloadTextFile('deals.csv', 'text/csv', dealsCsv(searching ? found : paged.rows, csvOptions))
+  }, [searching, found, paged.rows, csvOptions])
 
   const columns: GridColDef[] = useMemo(
     () => [
@@ -415,9 +450,17 @@ export function DealsSection(props: ConsolePluginPageProps) {
     ],
     [pipelineState, roster, dealFields.active, nowMs],
   )
+  /** The table's rows: the query's page, or the search's matches a page at a time. */
+  const searchRows = useMemo(
+    () => filterByNextActivity(found, viewFilters),
+    [found, viewFilters],
+  )
   const tableRows = useMemo(
-    () => filterByNextActivity(paged.rows, viewFilters),
-    [paged.rows, viewFilters],
+    () =>
+      searching
+        ? searchRows.slice(searchPage * searchPageSize, (searchPage + 1) * searchPageSize)
+        : filterByNextActivity(paged.rows, viewFilters),
+    [searching, searchRows, searchPage, searchPageSize, paged.rows, viewFilters],
   )
   /*
    * The table's column and sort models are the view's (AGL-2617); its
@@ -436,6 +479,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
     selectFields: ['status'],
     single: true,
     keepAlongside: isNoNextActivityClause,
+    search: { words: searchWords, onChange: setSearchWords },
   })
 
   const noOrg = scope.ready && !scope.orgId
@@ -597,7 +641,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
                 />
                 <Stack sx={{ flex: 1 }} />
                 <DealImportButton hostId={hostId} />
-                <Button size="small" onClick={handleExport} disabled={!paged.rows.length}>
+                <Button size="small" onClick={handleExport} disabled={!(searching ? found : paged.rows).length}>
                   {'Export CSV'}
                 </Button>
               </CrmListToolbar>
@@ -621,23 +665,29 @@ export function DealsSection(props: ConsolePluginPageProps) {
                       selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                       onOpen={(_id, row) => openDeal(row as DealDoc)}
                       // The panel's status is the query's; "No next activity"
-                      // narrows the loaded page (AGL-3313). No quick search:
-                      // nothing indexes a deal's name, and a search over one
-                      // page answers "no match" for a deal on the next.
+                      // narrows the loaded rows (AGL-3313); the search runs
+                      // over every deal in the window (AGL-3315).
                       filterMode="server"
                       filterModel={gridFilter.filterModel}
                       onFilterModelChange={gridFilter.onFilterModelChange}
-                      quickFilter={false}
+                      quickFilter
+                      loading={searching && searchWindow.status === 'loading'}
                       // An empty table is said inside the grid, so its toolbar
                       // stays to change the status that emptied it.
-                      noRowsLabel={statusFilter === 'all' ? 'No deals yet' : `No ${statusFilter} deals`}
+                      noRowsLabel={
+                        searching
+                          ? `No deals match “${searchKey.trim()}”`
+                          : statusFilter === 'all'
+                            ? 'No deals yet'
+                            : `No ${statusFilter} deals`
+                      }
                       noRowsDescription={
-                        statusFilter === 'all'
+                        statusFilter === 'all' && !searching
                           ? 'A deal is a sale in progress, moved across the pipeline as it advances.'
                           : undefined
                       }
                       noRowsAction={
-                        statusFilter === 'all' ? (
+                        statusFilter === 'all' && !searching ? (
                           <Button
                             size="small"
                             variant="contained"
@@ -657,14 +707,31 @@ export function DealsSection(props: ConsolePluginPageProps) {
                       hideFooter
                     />
                   </CrmColumnOrderProvider>
-                  <ListPagination
-                    page={paged.page}
-                    pageSize={paged.pageSize}
-                    rowCount={paged.rows.length}
-                    hasMore={paged.hasMore}
-                    onPageChange={paged.setPage}
-                    onPageSizeChange={paged.setPageSize}
-                  />
+                  {searching ? (
+                    <ListPagination
+                      page={searchPage}
+                      pageSize={searchPageSize}
+                      rowCount={tableRows.length}
+                      count={searchRows.length}
+                      onPageChange={setSearchPage}
+                      onPageSizeChange={setSearchPageSize}
+                    />
+                  ) : (
+                    <ListPagination
+                      page={paged.page}
+                      pageSize={paged.pageSize}
+                      rowCount={paged.rows.length}
+                      hasMore={paged.hasMore}
+                      onPageChange={paged.setPage}
+                      onPageSizeChange={paged.setPageSize}
+                    />
+                  )}
+                  {searching && searchTruncated ? (
+                    <Alert severity="info">
+                      {`The search reads the ${DEAL_SEARCH_WINDOW.toLocaleString()} most recently ` +
+                        'changed deals; narrow by status to reach older ones.'}
+                    </Alert>
+                  ) : null}
                 </>
             </Stack>
           )}

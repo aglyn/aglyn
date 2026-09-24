@@ -119,6 +119,51 @@ export function usePagedDeals(
 }
 
 /**
+ * How many deals a table search reads (AGL-3315): the newest by last
+ * change, in the table's own scope, status and pipeline, plus one probe row
+ * so "there are more" is a fact rather than a guess at the boundary.
+ */
+export const DEAL_SEARCH_WINDOW = 1000
+
+/**
+ * The deals a table SEARCH runs over (AGL-3315) — a window, read only while
+ * the search box holds something.
+ *
+ * A search has to find a deal on any page, and it has to find it by a word
+ * from the middle of its title: "Acme renewal" is looked for as "renewal".
+ * An indexed prefix, the way the companies list searches names, answers
+ * only the first word, and word tokens would need every writer and a
+ * backfill to agree on them. An organization's deals are counted in the
+ * tens or hundreds — the board already reads every open one — so the
+ * window is the whole collection for all but the largest, and the table
+ * says so when it is not. The query is the table's own, one of the four
+ * shapes `usePagedDeals` states, so it rides indexes that already exist.
+ */
+export function useDealSearchWindow(
+  orgId: string | null,
+  readTokens: readonly string[] | null,
+  status: CrmDealStatus | 'all',
+  pipelineId: string | null = null,
+) {
+  const firestore = useFirestore()
+  return useFirestoreCollection<DealDoc>(
+    () =>
+      orgId && crmScopeListable(readTokens)
+        ? query(
+            collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
+            ...crmVisibleToClause(readTokens),
+            ...(pipelineId ? [where('pipelineId', '==', pipelineId)] : []),
+            ...(status === 'all' ? [] : [where('status', '==', status)]),
+            orderBy('updatedAt', 'desc'),
+            limit(DEAL_SEARCH_WINDOW + 1),
+          )
+        : null,
+    [firestore, orgId, readTokens, status, pipelineId],
+    { idField: '$id' },
+  )
+}
+
+/**
  * The deals that name one contact or one company, for the card on that
  * record's page. `(visibleTo, contactId|companyId, updatedAt DESC)`.
  */
