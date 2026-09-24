@@ -9,6 +9,22 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.187 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.186...v1.0.0-beta.187)
+
+### Added
+
+- **crm:** the deals table searches every deal by any word of its title ([AGL-3315](https://linear.app/aglyn/issue/AGL-3315))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3316 ([AGL-3316](https://linear.app/aglyn/issue/AGL-3316))
+- **tools:** the trusted-publisher record re-confirms the 51 published packages ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+</details>
+
 ## v1.0.0-beta.186 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.185...v1.0.0-beta.186)
