@@ -148,9 +148,9 @@ test('does not read a remote URL or a nested path as a static image', () => {
 })
 
 test('an image nothing names is an orphan; a named one is not', () => {
-  const images = ['img/a.png', 'img/plugins/community-page.png', 'img/b.png']
+  const images = ['img/a.png', 'img/plugins/unused-page.png', 'img/b.png']
   assert.deepEqual(findOrphanImages(images, ['img/a.png', 'img/b.png']), [
-    'img/plugins/community-page.png',
+    'img/plugins/unused-page.png',
   ])
   assert.deepEqual(findOrphanImages(images, images), [])
 })
