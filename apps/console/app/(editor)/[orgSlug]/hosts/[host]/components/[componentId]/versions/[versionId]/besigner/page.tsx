@@ -117,6 +117,7 @@ import useCoEditing from '../../../../../../../../../../hooks/use-coediting'
 import PresenceAvatars from '../../../../../../../../../../components/presence-avatars.component'
 import CollaboratorOverlays from '../../../../../../../../../../components/collaborator-overlays.component'
 import useHostRole from '../../../../../../../../../../hooks/use-host-role'
+import useComponentEditorSurface from '../../../../../../../../../../hooks/use-component-editor-surface'
 import useFormsPublishBlock from '../../../../../../../../../../hooks/use-forms-publish-block'
 import { useEditorSession } from '../../../../../../../../../../hooks/use-editor-session'
 import { useDeclareDocumentSubject } from '../../../../../../../../../../components/document-subject'
@@ -169,6 +170,14 @@ function ComponentBesignerPage(props) {
   const listUrl = buildRoute(Route.HOST_COMPONENTS, { orgSlug, host })
   const { doc: hostResult } = useHost({ hostId })
   const { doc: componentResult } = useComponent({ hostId, componentId })
+  // Where this component is placed decides how its editor opens (AGL-3287):
+  // an email block edits in the email view, with the email plugin's blocks
+  // registered, and the canvas waits until both are known.
+  const surface = useComponentEditorSurface(
+    componentResult?.data,
+    componentResult?.status !== 'loading',
+  )
+  const isEmailBlock = surface.kind === 'email'
   // The browser tab names THIS document, not just its site (AGL-2486).
   // The server put the id in the title; this swaps in the loaded name.
   useDeclareDocumentSubject(componentId, componentResult?.data?.displayName)
@@ -278,10 +287,10 @@ function ComponentBesignerPage(props) {
   const { data, status, error, hasPendingWrites } = result
   const nodes = data?.nodes
 
-  // Deliberately NO viewType override: a component edits like screen
-  // content. The LAYOUT view is what exposes the LayoutSlot outlet in the
-  // element drawer, and a slot inside a reusable component would have
-  // nowhere to graft (AGL-680).
+  // A page component sets NO view: it edits like screen content. The LAYOUT
+  // view is what exposes the LayoutSlot outlet in the element drawer, and a
+  // slot inside a reusable component would have nowhere to graft (AGL-680).
+  // An email block edits in the EMAIL view (AGL-3287) — see `surface` above.
 
   // The canvas is a singleton shared by every editing session; without a
   // reset on leave, client-side navigation to a screen or another layout
@@ -370,6 +379,9 @@ function ComponentBesignerPage(props) {
     error,
     save: saveComponentVersion,
     noun: 'component',
+    // Undefined for a page component; EMAIL for an email block, so the
+    // drawer offers what an email's does (AGL-3287).
+    viewType: surface.viewType,
     documentKey: `${hostId}:${componentId}:${versionId}`,
     draft: {
       scope: hostId,
@@ -400,11 +412,14 @@ function ComponentBesignerPage(props) {
     // or a draft one.
     // Suppressed on the live version: `handleSaveToSites` owns the message
     // there, and it can only be written once the promote has resolved —
-    // "saved" followed by "published" is two toasts for one action.
+    // "saved" followed by "published" is two toasts for one action. An email
+    // block's names the emails it updates, never pages (AGL-3287).
     savedMessage:
       publishedVersionId === versionId
         ? undefined
-        : 'Component saved to this version. Publish it to update the live pages.',
+        : isEmailBlock
+          ? 'Block saved to this version. Publish it to update the emails that use it.'
+          : 'Component saved to this version. Publish it to update the live pages.',
     queueLoading,
     // The refusal half of `onSaved`: together they let `handleSaveAndPublish`
     // tell a document that needs no save from one that could not be saved.
@@ -559,8 +574,13 @@ function ComponentBesignerPage(props) {
       )
       setSavedSincePublish(false)
       enqueueSnackbar(
-        'Published. Every screen using this component is refreshing now — ' +
-          'you do not need to republish them.',
+        isEmailBlock
+          ? // No page places an email block; the emails that do use the
+            // published version from their next send (AGL-3287).
+            'Published. Every email using this block sends the new version ' +
+              'from now on — you do not need to change them.'
+          : 'Published. Every screen using this component is refreshing now — ' +
+              'you do not need to republish them.',
         { variant: 'success', persist: false },
       )
       // THIS is the write that changes what a visitor sees, so this is where
@@ -607,6 +627,7 @@ function ComponentBesignerPage(props) {
     componentResult?.data?.rootId,
     data,
     enqueueSnackbar,
+    isEmailBlock,
     refuseFormsOff,
     // The revalidate route authenticates with the caller's ID token, so the
     // signed-in user is a real input to publishing now (AGL-2486).
@@ -846,7 +867,9 @@ function ComponentBesignerPage(props) {
         <EntityPickerProvider hostId={hostId}>
           <ReusableComponentsProvider hostId={hostId}>
             <BindingPickerProvider hostId={hostId}>
-              <InteractionsProvider hostId={hostId}>
+              {/* An email runs no script (AGL-587), so an email block has no
+                  interactions to offer — as in an email's own editor. */}
+              <InteractionsProvider hostId={hostId} disabled={isEmailBlock}>
                 <BesignerMediaPickerProvider hostId={hostId}>
                   {hostFontsHref ? (
                     <>
@@ -1029,7 +1052,10 @@ function ComponentBesignerPage(props) {
                       >
                         <Typography>{'Not found'}</Typography>
                       </Stack>
-                    ) : status === 'loading' ? (
+                    ) : status === 'loading' || !surface.ready ? (
+                      // The canvas waits for the component's kind too
+                      // (AGL-3287): an email block drawn before the email
+                      // blocks registered would be a tree of unknown elements.
                       LOADING_OVERLAY_ELEMENT
                     ) : (
                       <>

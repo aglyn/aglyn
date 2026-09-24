@@ -16,7 +16,11 @@
  */
 'use client'
 
-import type { ReusableComponentProp, TemplateKind } from '@aglyn/aglyn'
+import type {
+  ReusableComponentKind,
+  ReusableComponentProp,
+  TemplateKind,
+} from '@aglyn/aglyn'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import {
@@ -51,6 +55,11 @@ export interface SaveAsTemplateSource {
      * tree binds to with `{{prop.*}}` and the template has to carry.
      */
     props?: ReusableComponentProp[] | null
+    /**
+     * A component's kind (AGL-3287): the template carries an email block's,
+     * so what is made from it is offered in emails again.
+     */
+    componentKind?: ReusableComponentKind
   } | null>
 }
 
@@ -118,6 +127,11 @@ export function SaveAsTemplateDialog({
           ...(captured.rootId ? { rootId: captured.rootId } : {}),
           ...(Array.isArray(captured.props) && captured.props.length
             ? { props: captured.props }
+            : {}),
+          // Only an email block's, so a page component's template is the
+          // document it always was (AGL-3287).
+          ...(source.kind === 'component' && captured.componentKind === 'email'
+            ? { componentKind: captured.componentKind }
             : {}),
           ...(captured.slug ? { slug: captured.slug } : {}),
           ...(captured.seo ? { seo: captured.seo } : {}),

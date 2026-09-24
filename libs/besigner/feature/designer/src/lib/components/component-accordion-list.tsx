@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { REUSABLE_COMPONENT_CATEGORY } from '@aglyn/aglyn'
+import {
+  REUSABLE_COMPONENT_CATEGORY,
+  REUSABLE_EMAIL_BLOCK_CATEGORY,
+} from '@aglyn/aglyn'
 import { DragType } from '@aglyn/besigner'
 import { mergeRefs } from '@aglyn/shared-ui-jsx'
 import { DragOverlay, useDndMonitor } from '@dnd-kit/core'
@@ -135,7 +138,19 @@ export const ComponentAccordionList = observer(
                         '#insert-instances',
                       ),
                     }
-                  : undefined
+                  : // The same group in an email's drawer (AGL-3287), which
+                    // is just as empty until the site saves a block for it.
+                    item?.$id === REUSABLE_EMAIL_BLOCK_CATEGORY
+                    ? {
+                        title: REUSABLE_EMAIL_BLOCK_CATEGORY,
+                        excerpt:
+                          'Headers, footers and other blocks you saved for emails. Drop one into this email — change the block once and every email using it follows.',
+                        href: besignerDocsUrl(
+                          'reusableComponents',
+                          '#reusable-email-blocks',
+                        ),
+                      }
+                    : undefined
               }
               onRenderSummary={({ item }) => (
                 <Observer>{() => <>{item?.label}</>}</Observer>

@@ -174,6 +174,8 @@ export * from './layout-style-overrides'
 export * from './document-landmark'
 export * from './functions'
 export * from './compose-reusable-components'
+// Where a reusable component is placed — pages or emails (AGL-3287).
+export * from './reusable-component-kind'
 export * from './compress'
 export * from './merge-node-sx'
 export * from './palette-sx'

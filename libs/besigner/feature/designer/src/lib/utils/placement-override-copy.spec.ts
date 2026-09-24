@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
+import { HostViewType } from '@aglyn/aglyn'
 import {
   allPlacementCopyStrings,
   describePart,
+  EMAIL_PLACEMENT_STYLE_NOTE,
   describeParts,
   type PartEntry,
   type PartNode,
   placementCopy,
+  placementKindFor,
   propDefaultsOf,
   styleChangeLabel,
   truncatePreview,
@@ -38,7 +41,7 @@ describe('placement override copy (AGL-3288)', () => {
    */
   const BANNED = /\b(attributes?|overrides?|overridden|instances?|targets?|root)\b/i
 
-  it.each(['component', 'form', 'layout'] as const)(
+  it.each(['component', 'form', 'layout', 'email'] as const)(
     'never shows a %s author the storage vocabulary',
     (kind) => {
       for (const text of allPlacementCopyStrings(kind)) {
@@ -46,6 +49,46 @@ describe('placement override copy (AGL-3288)', () => {
       }
     },
   )
+
+  /**
+   * A reusable block placed in an email (AGL-3287): the author has an email
+   * open, not a page, and every element there is a block — so the section
+   * says so, and never mentions a page.
+   */
+  it('words a block placed in an email for the email it is in', () => {
+    const email = placementCopy('email')
+    expect(email.sectionTitle).toBe('Change it in this email only')
+    expect(email.intro).toBe(
+      'Changes here affect this email only. The block itself, and every ' +
+        'other email using it, stay the same.',
+    )
+    expect(email.wholePart).toBe('Whole block')
+    expect(email.summary(0)).toBe('No changes in this email yet')
+    expect(email.summary(2)).toBe('2 changes in this email')
+    expect(email.resetField('Color')).toBe("Reset Color to the block's value")
+    for (const text of allPlacementCopyStrings('email')) {
+      expect(text).not.toMatch(/\bpages?\b|\bcomponent\b/i)
+    }
+  })
+
+  it('reads a placement on an email canvas as a block in that email', () => {
+    expect(placementKindFor(false, HostViewType.EMAIL)).toBe('email')
+    expect(placementKindFor(false, HostViewType.SCREEN)).toBe('component')
+    expect(placementKindFor(false, undefined)).toBe('component')
+    // A placed form stays a form wherever it is.
+    expect(placementKindFor(true, HostViewType.EMAIL)).toBe('form')
+  })
+
+  it('tells an email author where a block changes its look, since the Styles tab cannot', () => {
+    // The one string that names a tab: it is not in the sweep above because
+    // "Attributes" is the tab's on-screen label, not storage vocabulary.
+    expect(EMAIL_PLACEMENT_STYLE_NOTE).toBe(
+      "In emails, change a block's look with its settings in the Attributes tab.",
+    )
+    expect(allPlacementCopyStrings('email')).not.toContain(
+      EMAIL_PLACEMENT_STYLE_NOTE,
+    )
+  })
 
   it('names the section, the picker and the whole placement plainly', () => {
     const component = placementCopy('component')
@@ -144,6 +187,32 @@ describe('describePart (AGL-3288)', () => {
     expect(describePart(entry('root', true), nodes)).toBe('Whole component')
     expect(describePart(entry('root', true), nodes, { kind: 'form' })).toBe(
       'Whole form',
+    )
+  })
+
+  it("names an email block's parts by what they are, not by the drawer's label (AGL-3287)", () => {
+    const header: Record<string, PartNode> = {
+      band: { componentId: 'emailSection', nodes: ['logo', 'name'] },
+      logo: { componentId: 'emailImage', parentId: 'band', props: { alt: 'Logo' } },
+      name: {
+        componentId: 'emailText',
+        parentId: 'band',
+        props: { children: 'Your company' },
+      },
+    }
+    const part = (id: string, isRoot = false): PartEntry => ({
+      componentInternalId: id,
+      componentId: header[id]?.componentId,
+      isRoot,
+    })
+    expect(describePart(part('band', true), header, { kind: 'email' })).toBe(
+      'Whole block',
+    )
+    expect(describePart(part('logo'), header, { kind: 'email' })).toBe(
+      'Image: Logo',
+    )
+    expect(describePart(part('name'), header, { kind: 'email' })).toBe(
+      'Text: "Your company"',
     )
   })
 

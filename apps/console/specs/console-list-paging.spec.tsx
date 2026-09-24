@@ -60,6 +60,8 @@ interface SeededDoc {
   $id: string
   displayName?: string
   deletedAt?: unknown
+  /** Where it is used (AGL-3287); absent is a page component. */
+  kind?: string
 }
 
 /**
@@ -362,6 +364,34 @@ describe('the components list pages an ORDERED walk (AGL-2501)', () => {
     // row.
     expect(visibleNames()).not.toContain(nameOf(7))
     expect(visibleNames().length).toBe(TABLE_PAGE_SIZE_DEFAULT - 1)
+  })
+})
+
+/**
+ * Each row says where the component is used (AGL-3287): the one list holds
+ * page components and email blocks, and each is offered in only one place.
+ * In its own column, so the name cell still reads as the name.
+ */
+describe('the components list says where each one is used (AGL-3287)', () => {
+  /** The "Used in" cell of every row on screen, in row order. */
+  const usedIn = () =>
+    screen
+      .getAllByRole('row')
+      .filter((row) => within(row).queryAllByRole('gridcell').length > 0)
+      .map((row) => within(row).getAllByRole('gridcell')[1].textContent ?? '')
+
+  it('marks an email block Email and every other component Page', async () => {
+    mockDocs = seedComponents().map((doc) =>
+      doc.$id === 'cmp-001' ? { ...doc, kind: 'email' } : doc,
+    )
+    render(<HostComponentsCard hostId="host-1" />)
+    await waitFor(() => expect(visibleNames().length).toBeGreaterThan(0))
+    expect(screen.getByRole('columnheader', { name: 'Used in' })).toBeTruthy()
+    const rows = visibleNames()
+    const kinds = usedIn()
+    expect(kinds[rows.indexOf(nameOf(1))]).toBe('Email')
+    expect(kinds[rows.indexOf(nameOf(0))]).toBe('Page')
+    expect(kinds.filter((kind) => kind === 'Email')).toHaveLength(1)
   })
 })
 

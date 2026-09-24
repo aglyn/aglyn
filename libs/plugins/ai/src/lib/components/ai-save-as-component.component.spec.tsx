@@ -272,5 +272,27 @@ describe('what Apply does', () => {
       versionId: 'v-2',
       opCounts: { component: 1 },
     })
+    // A section of a page is a page component, as every component was.
+    expect(data).not.toHaveProperty('kind')
+  })
+
+  /**
+   * A block saved out of an email is an email block (AGL-3287): offered in
+   * emails, never on a page. Before this it became a page component, which
+   * the email's own drawer then hid.
+   */
+  it('saves a section of an email as an email block', async () => {
+    canvas.reset()
+    canvas.setNodes({
+      ...PAGE,
+      feature: { ...PAGE.feature, pluginId: 'email' },
+    } as never)
+    render(<AiSaveAsComponent {...props()} />)
+    fireEvent.click(button() as HTMLElement)
+    fireEvent.click(screen.getByRole('button', { name: 'Suggest properties' }))
+    await waitFor(() => expect(screen.getByText('Proposed change')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Apply as draft' }))
+    await waitFor(() => expect(creates).toHaveLength(1))
+    expect((creates[0]['data'] as Record<string, unknown>)['kind']).toBe('email')
   })
 })

@@ -277,6 +277,30 @@ const CALLERS: Array<{
     },
   },
   {
+    resource: 'reusableComponent',
+    caller: 'hosts/[host]/components/page.tsx — an email block (AGL-3287)',
+    data: {
+      displayName: 'Email header',
+      description: 'Logo and company name',
+      rootId: 'section',
+      nodes: {
+        section: { $id: 'section', componentId: 'emailSection', nodes: [] },
+      },
+      kind: 'email',
+    },
+  },
+  {
+    resource: 'template',
+    caller: 'save-as-template-dialog.component.tsx — an email block (AGL-3287)',
+    data: {
+      kind: 'component',
+      displayName: 'Email footer',
+      nodes: { section: { $id: 'section', componentId: 'emailSection', nodes: [] } },
+      rootId: 'section',
+      componentKind: 'email',
+    },
+  },
+  {
     resource: 'variable',
     caller: 'plugins/logic/.../host-variables-card.component.tsx',
     data: {
@@ -500,6 +524,60 @@ describe('/api/hosts/resources stores an allow-list (AGL-1377)', () => {
     // The create still works — that is the half that would break if the
     // ordering had been reversed.
     expect(stored['displayName']).toBe('Site nav')
+  })
+
+  /**
+   * Where a component is placed — pages or emails (AGL-3287). An unknown key
+   * is dropped, but an unknown KIND is refused: dropping it would quietly
+   * turn an email block into a page component, and storing it would file the
+   * component under neither drawer.
+   */
+  describe('a component kind (AGL-3287)', () => {
+    it('refuses a kind no drawer knows, and stores nothing', async () => {
+      const response = await postResource('reusableComponent', {
+        displayName: 'Mystery',
+        rootId: 'root',
+        nodes: {},
+        kind: 'newsletter',
+      })
+      expect(response.status).toBe(400)
+      expect(mockWrite).not.toHaveBeenCalled()
+    })
+
+    it('refuses the same on a component template', async () => {
+      const response = await postResource('template', {
+        kind: 'component',
+        displayName: 'Mystery',
+        nodes: {},
+        componentKind: 'newsletter',
+      })
+      expect(response.status).toBe(400)
+      expect(mockWrite).not.toHaveBeenCalled()
+    })
+
+    it('keeps a page component exactly as it was: no kind sent, none stored', async () => {
+      const response = await postResource('reusableComponent', {
+        displayName: 'Site nav',
+        rootId: 'root',
+        nodes: {},
+      })
+      expect(response.status).toBe(200)
+      const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+      expect(stored).not.toHaveProperty('kind')
+    })
+
+    it('stores a component kind only on a template that makes a component', async () => {
+      const response = await postResource('template', {
+        kind: 'page',
+        displayName: 'Landing',
+        nodes: {},
+        componentKind: 'email',
+      })
+      expect(response.status).toBe(200)
+      const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
+      expect(stored).not.toHaveProperty('componentKind')
+      expect(stored['kind']).toBe('page')
+    })
   })
 
   it('no longer stores the vestigial versions array on a layout', async () => {

@@ -18,6 +18,7 @@
 
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import EntityPickerProvider from '../../../../../../../../../../components/entity-picker-provider.component'
+import ReusableComponentsProvider from '../../../../../../../../../../components/reusable-components-provider.component'
 import type * as Aglyn from '@aglyn/aglyn'
 import { canvas, CANVAS_ROOT_ELEMENT_ID, HostViewType } from '@aglyn/aglyn'
 import * as Besigner from '@aglyn/besigner'
@@ -496,6 +497,12 @@ function HostEmailBesignerPage() {
 
   return (
     <EntityPickerProvider hostId={hostId}>
+    {/* The site's reusable email blocks (AGL-3287), as the campaign email
+        editor has them: offered under Your email blocks, drawn on the canvas
+        where they are placed, and made from a selection with Save as reusable
+        component. Without it this drawer offered no block, and the canvas
+        had no definition to draw one from. */}
+    <ReusableComponentsProvider hostId={hostId}>
     <BindingPickerProvider hostId={hostId}>
       {/* Host variables in the email designer (AGL-1023). This surface had no
           binding picker at all, which is the one where it matters most: a
@@ -701,6 +708,7 @@ function HostEmailBesignerPage() {
         />
       )}
     </BindingPickerProvider>
+    </ReusableComponentsProvider>
     </EntityPickerProvider>
   )
 }

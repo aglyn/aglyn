@@ -37,6 +37,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -91,6 +92,28 @@ import { hostArtifactQuery } from '../utils/host-artifact-queries'
 import SaveAsTemplateDialog, {
   type SaveAsTemplateSource,
 } from './templates/save-as-template-dialog.component'
+
+/**
+ * Where a component is used, as a small label beside its name (AGL-3287):
+ * "Email" for a block placed in emails, "Page" for one placed on pages. The
+ * two are offered in different places, so a row has to say which it is.
+ */
+export function ComponentKindChip({
+  kind,
+}: {
+  kind: Aglyn.ReusableComponentKind
+}) {
+  const email = kind === Aglyn.REUSABLE_COMPONENT_KIND_EMAIL
+  return (
+    <Chip
+      size="small"
+      variant="outlined"
+      color={email ? 'secondary' : 'default'}
+      label={email ? 'Email' : 'Page'}
+      sx={{ height: 20, fontSize: '0.6875rem' }}
+    />
+  )
+}
 
 /** The count and cap a components readout renders (AGL-2501). */
 export interface ComponentQuotaReadout {
@@ -515,6 +538,16 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         </Stack>
       ),
     },
+    {
+      // Where it is used (AGL-3287): the one list holds both kinds, and each
+      // is offered in only one place — pages, or emails.
+      field: 'kind',
+      headerName: 'Used in',
+      width: 110,
+      sortable: false,
+      valueGetter: (_value: any, row: any) => Aglyn.reusableComponentKindOf(row),
+      renderCell: ({ value }: any) => <ComponentKindChip kind={value} />,
+    },
     { field: '$id', headerName: 'ID', type: 'string', minWidth: 150 },
     {
       field: 'description',
@@ -655,12 +688,16 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
                   loadNodes: async () => {
                     const nodes = Aglyn.decodeStoredNodes(definition.nodes)
                     // The published properties travel with the published
-                    // tree that binds to them (AGL-2932).
+                    // tree that binds to them (AGL-2932), and an email
+                    // block's kind with both (AGL-3287), so the component
+                    // made from the template is offered where this one is.
                     return nodes
                       ? {
                           nodes,
                           rootId: definition.rootId,
                           props: definition.props,
+                          componentKind:
+                            Aglyn.reusableComponentKindOf(definition),
                         }
                       : null
                   },

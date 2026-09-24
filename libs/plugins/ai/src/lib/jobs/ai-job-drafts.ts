@@ -132,6 +132,8 @@ export const AI_DRAFT_FIELDS: Readonly<Record<AiDraftKind, readonly string[]>> =
     'props',
     'slug',
     'seo',
+    // A component template's own kind (AGL-3287); a job never sends one.
+    'componentKind',
   ],
   form: [
     'displayName',
@@ -143,7 +145,9 @@ export const AI_DRAFT_FIELDS: Readonly<Record<AiDraftKind, readonly string[]>> =
     'rootId',
     'nodes',
   ],
-  component: ['displayName', 'description', 'rootId', 'nodes', 'props'],
+  // `kind` marks a reusable email block (AGL-3287); a job makes page
+  // components and never sends one.
+  component: ['displayName', 'description', 'rootId', 'nodes', 'props', 'kind'],
   // `kind` is on the route's list for the email composer; a page has none, and
   // the writer never sends one.
   screen: ['displayName', 'description', 'slug', 'seo', 'kind', 'versionId'],

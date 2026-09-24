@@ -18,6 +18,7 @@
 import type * as Aglyn from '@aglyn/aglyn'
 import {
   components,
+  EMAIL_VIEW_BUNDLE_ID,
   HostViewType,
   isCategoryCapabilityEnabled,
   isFromEnabledPlugin,
@@ -26,15 +27,12 @@ import {
 } from '@aglyn/aglyn'
 import useAglynBesignerFlag from './use-aglyn-besigner-flag'
 
-/** Bundle id of the email designer's blocks (AGL-395). */
-const EMAIL_PLUGIN_ID = 'email'
-
 function isLayoutOnlyPreset(preset: Aglyn.PresetSchema | undefined) {
   return preset?.data?.componentId === LAYOUT_SLOT_COMPONENT_ID
 }
 
 function isEmailComponent(item: { pluginId?: string } | undefined) {
-  return item?.pluginId === EMAIL_PLUGIN_ID
+  return item?.pluginId === EMAIL_VIEW_BUNDLE_ID
 }
 
 /**
@@ -45,9 +43,12 @@ function isEmailComponent(item: { pluginId?: string } | undefined) {
  *    either drawer — the palette and the picker read this one hook.
  *  - Editing an EMAIL document → only the email plugin's email-safe blocks;
  *    web/layout components would render inconsistently across mail clients.
+ *    The host's reusable email blocks are filed under the same bundle
+ *    (`reusableComponentPaletteSlot`, AGL-3287), so they are offered here too
+ *    and its page components are not.
  *  - Editing a screen or layout → email blocks are hidden (they belong to
- *    emails only); layout-only components (the LayoutSlot outlet) are also
- *    hidden while editing screens.
+ *    emails only), reusable ones included; layout-only components (the
+ *    LayoutSlot outlet) are also hidden while editing screens.
  *
  * Call inside an observer component — the category list is a MobX computed.
  */
