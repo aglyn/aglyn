@@ -288,6 +288,14 @@ describe('forms console read cost', () => {
     expect(paths().some((path) => path.includes('/versions'))).toBe(false)
   })
 
+  it('the catalog reads no campaign while no loaded form is filed under one', async () => {
+    await renderConsole([])
+    // The Campaign filter's names are the org's campaign documents. A catalog
+    // with no filed form has nothing for that filter to find, so it must not
+    // pay for them on every visit (AGL-3330).
+    expect(paths().some((path) => path.includes('emailCampaigns'))).toBe(false)
+  })
+
   it('the catalog’s paged query is BOUNDED, and the whole load has a ceiling', async () => {
     await renderConsole([])
     const listen = mockListens.find(
