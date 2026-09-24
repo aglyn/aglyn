@@ -16,8 +16,10 @@ import { describe, it } from 'node:test'
 import {
   distTagFor,
   hasStableRelease,
+  isCredentialFailure,
   missingFrom,
   prereleaseLabelOf,
+  publishAll,
   publishedVersions,
 } from './publish-packages.mjs'
 
@@ -121,5 +123,74 @@ describe('a run publishes what the registry is missing', () => {
   it('lets a registry that did not answer stop the run, not read as "missing"', () => {
     // Guessing "not published" on an outage would try to overwrite a version.
     assert.throws(() => missingFrom(packages, () => { throw new Error('ETIMEDOUT') }), /ETIMEDOUT/)
+  })
+})
+
+describe('one package that will not publish does not strand the rest', () => {
+  const entries = [
+    { name: '@aglyn/a', version: '1.0.0' },
+    { name: '@aglyn/b', version: '1.0.0' },
+    { name: '@aglyn/c', version: '1.0.0' },
+  ]
+
+  it('publishes past a package the registry refuses', () => {
+    /*
+     * ⛔ THE CASE THAT COST FOUR RELEASES (2026-09-23). Entries are sorted by
+     * name, so a new package with no trust row answered E404 and the two
+     * sorting after it were never attempted — three releases behind on the
+     * registry, with nothing wrong with either of them.
+     */
+    const tried = []
+    const result = publishAll(entries, (entry) => {
+      tried.push(entry.name)
+      if (entry.name === '@aglyn/a') {
+        throw new Error('E404 Not Found - PUT https://registry.npmjs.org/@aglyn%2fa')
+      }
+    })
+    assert.deepEqual(tried, ['@aglyn/a', '@aglyn/b', '@aglyn/c'])
+    assert.equal(result.published, 2)
+    assert.equal(result.abandoned.length, 0)
+    assert.deepEqual(
+      result.failures.map((failure) => failure.name),
+      ['@aglyn/a'],
+    )
+  })
+
+  it('still REPORTS the failure — carrying on is not forgiving it', () => {
+    // The run exits non-zero on this; `main` reads `failures.length`. A
+    // resilient publisher that went green would be worse than the abort it
+    // replaced.
+    const result = publishAll(entries, () => {
+      throw new Error('E404 Not Found')
+    })
+    assert.equal(result.published, 0)
+    assert.equal(result.failures.length, 3)
+  })
+
+  it('STOPS on a credential, because every one after it fails the same way', () => {
+    // The other direction, and the reason this is not just a try/catch: forty
+    // identical EOTP errors bury the one line that says what to fix.
+    const tried = []
+    const result = publishAll(entries, (entry) => {
+      tried.push(entry.name)
+      throw new Error('npm error code EOTP\nnpm error This operation requires a one-time password')
+    })
+    assert.deepEqual(tried, ['@aglyn/a'])
+    assert.deepEqual(
+      result.abandoned.map((entry) => entry.name),
+      ['@aglyn/b', '@aglyn/c'],
+    )
+    assert.equal(result.failures.length, 1)
+  })
+
+  it('tells a credential failure from a package failure', () => {
+    // The E404 is the one that must NOT abort: it is what a package with no
+    // trusted-publisher row answers, and it is about that name alone.
+    assert.equal(isCredentialFailure('npm error code EOTP'), true)
+    assert.equal(isCredentialFailure('npm error code ENEEDAUTH'), true)
+    assert.equal(isCredentialFailure('npm error 401 Unauthorized'), true)
+    assert.equal(isCredentialFailure('E404 Not Found - PUT https://…'), false)
+    assert.equal(isCredentialFailure('npm error 403 Forbidden'), false)
+    assert.equal(isCredentialFailure(undefined), false)
   })
 })
