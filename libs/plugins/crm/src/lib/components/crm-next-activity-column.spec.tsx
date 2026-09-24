@@ -30,7 +30,7 @@ import {
   isNoNextActivityClause,
 } from '@aglyn/aglyn'
 import { render } from '@testing-library/react'
-import { crmFilterColumns, crmPlainCodec } from '../model/crm-grid-filter'
+import { listFilterGridColumns, listPlainCodec } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import {
   CRM_NEXT_ACTIVITY_FILTER_FIELD,
   nextActivityColumn,
@@ -66,17 +66,17 @@ describe('nextActivityColumn', () => {
 
 describe('the "No next activity" filter', () => {
   it('offers "is empty" alone on the column, and writes the clause the toggle wrote', () => {
-    const [column] = crmFilterColumns([nextActivityColumn(NOW)], [CRM_NEXT_ACTIVITY_FILTER_FIELD])
+    const [column] = listFilterGridColumns([nextActivityColumn(NOW)], [CRM_NEXT_ACTIVITY_FILTER_FIELD])
     expect(column.filterable).toBe(true)
     expect(column.filterOperators?.map((operator) => operator.value)).toEqual(['isEmpty'])
 
-    const clause = crmPlainCodec.toClause({
+    const clause = listPlainCodec.toClause({
       id: 'crm',
       field: CRM_NEXT_ACTIVITY_FIELD,
       operator: 'isEmpty',
     })
     expect(clause && isNoNextActivityClause(clause)).toBe(true)
     // A view saved with the toggle on shows in the panel as that operator.
-    expect(crmPlainCodec.toItem(CRM_NO_NEXT_ACTIVITY_CLAUSE)?.operator).toBe('isEmpty')
+    expect(listPlainCodec.toItem(CRM_NO_NEXT_ACTIVITY_CLAUSE)?.operator).toBe('isEmpty')
   })
 })

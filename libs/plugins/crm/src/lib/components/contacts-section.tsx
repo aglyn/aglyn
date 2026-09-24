@@ -107,13 +107,13 @@ import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import { useCompanyOptions } from './company-picker'
-import CrmFilterBar from './crm-filter-bar'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
-  type CrmFilterOption,
-  crmFilterColumns,
-  crmRowMatchesSearch,
-} from '../model/crm-grid-filter'
-import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
+  type ListFilterOption,
+  listFilterGridColumns,
+  listRowMatchesSearch,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
 import { CrmSuiteLockedButton, CrmSuiteNotice, crmSuiteIncluded } from './crm-suite-lock'
 
@@ -629,7 +629,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             (contact) =>
               windowClauses.every((clause) =>
                 matchListFilter(contact, filterFields, clause),
-              ) && crmRowMatchesSearch(contact, CONTACT_SEARCH_FIELDS, searchWords),
+              ) && listRowMatchesSearch(contact, CONTACT_SEARCH_FIELDS, searchWords),
           )
         : contacts,
     // `searchKey` stands for the words, which are a new array each render.
@@ -648,7 +648,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     org,
     enabled: filterOpened || namesFilter,
   })
-  const filterOptions = useMemo<Record<string, readonly CrmFilterOption[]>>(
+  const filterOptions = useMemo<Record<string, readonly ListFilterOption[]>>(
     () => ({
       [CRM_CONTACT_VIEW_FIELDS.owner]: [
         ...(uid ? [{ value: uid, label: 'Me' }] : []),
@@ -711,10 +711,10 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * chips name them by; the rest keep the operators the grammar declares.
    */
   const filterColumns = useMemo(
-    () => crmFilterColumns(contactColumns, filterFields, filterOptions, filterHeaders),
+    () => listFilterGridColumns(contactColumns, filterFields, filterOptions, filterHeaders),
     [contactColumns, filterFields, filterOptions, filterHeaders],
   )
-  const gridFilter = useCrmGridFilter({
+  const gridFilter = useListGridFilter({
     clauses: views.state.filters,
     onChange: views.setFilters,
     selectFields: Object.keys(filterOptions),
@@ -955,7 +955,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 segmentFilters && dataScope ? () => setSegmentName('') : null
               }
             />
-            <CrmFilterBar
+            <ListFilterChips
               fields={filterFields}
               headers={filterHeaders}
               clauses={views.state.filters}

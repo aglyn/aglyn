@@ -45,10 +45,10 @@ import {
   CRM_NEXT_ACTIVITY_FILTER_HEADER,
   nextActivityColumn,
 } from './crm-next-activity-column'
-import CrmFilterBar from './crm-filter-bar'
-import { crmFilterColumns, crmRowMatchesSearch } from '../model/crm-grid-filter'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { listFilterGridColumns, listRowMatchesSearch } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import CrmViewsControl from './crm-views-control'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -255,7 +255,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
     () =>
       searchWindow.data
         .slice(0, DEAL_SEARCH_WINDOW)
-        .filter((deal) => crmRowMatchesSearch(deal, DEAL_SEARCH_FIELDS, searchWords)),
+        .filter((deal) => listRowMatchesSearch(deal, DEAL_SEARCH_FIELDS, searchWords)),
     // `searchKey` stands for the words, which are a new array each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [searchWindow.data, searchKey],
@@ -469,11 +469,11 @@ export function DealsSection(props: ConsolePluginPageProps) {
    * "No next activity" stands beside it over the loaded page.
    */
   const filterColumns = useMemo(
-    () => crmFilterColumns(columns, DEAL_GRID_FILTER_FIELDS, DEAL_FILTER_OPTIONS, DEAL_GRID_FILTER_HEADERS),
+    () => listFilterGridColumns(columns, DEAL_GRID_FILTER_FIELDS, DEAL_FILTER_OPTIONS, DEAL_GRID_FILTER_HEADERS),
     [columns],
   )
   const grid = useCrmViewGrid(views, filterColumns)
-  const gridFilter = useCrmGridFilter({
+  const gridFilter = useListGridFilter({
     clauses: viewFilters,
     onChange: views.setFilters,
     selectFields: ['status'],
@@ -631,7 +631,7 @@ export function DealsSection(props: ConsolePluginPageProps) {
               */}
               <CrmListToolbar label="Deal filters">
                 <CrmViewsControl controller={views} allLabel="All deals" />
-                <CrmFilterBar
+                <ListFilterChips
                   fields={DEAL_GRID_FILTER_FIELDS}
                   headers={DEAL_GRID_FILTER_HEADERS}
                   clauses={viewFilters}

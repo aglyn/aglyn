@@ -1945,7 +1945,7 @@ describe('server-filtered lists do not offer a dead filter panel', () => {
  * each once grew its own filter controls — a status select, a search box, a
  * toggle, an "Add filter" builder — until Leads had five in a row that
  * pushed its create button off the card. They now hand the grid's Filters
- * panel and quick search to `useCrmGridFilter`, which binds them to the
+ * panel and quick search to `useListGridFilter`, which binds them to the
  * saved view's clauses, and answer the clauses themselves. A list that
  * turned the panel off, or wired the model by hand, has left that path.
  */
@@ -1966,13 +1966,13 @@ describe('CRM lists filter through the grid, by the shared path', () => {
     ])
   })
 
-  it('each one binds the panel with useCrmGridFilter and never turns it off', () => {
+  it('each one binds the panel with useListGridFilter and never turns it off', () => {
     const off = lists
       .filter((path) => {
         const source = readFileSync(path, 'utf8')
         return (
           source.includes('disableColumnFilter') ||
-          !source.includes('useCrmGridFilter(') ||
+          !source.includes('useListGridFilter(') ||
           !source.includes('filterMode="server"') ||
           !source.includes('onFilterModelChange={gridFilter.onFilterModelChange}')
         )
