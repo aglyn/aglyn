@@ -2127,6 +2127,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "action",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "adminAudit",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "actorUid",
           "order": "ASCENDING"
         },

@@ -25,10 +25,25 @@ import {
 } from '@aglyn/tenant-data-admin'
 import {
   ACTOR_ACTIVITY_MAX_PAGE,
+  orgActivityFacets,
   orgActivityScopePaths,
   readActorActivity,
   readOrgWideActivity,
 } from '../../../../utils/server/actor-activity'
+import {
+  applyAuditLogFilters,
+  auditLogFilterRefusal,
+  auditLogSearchMatcher,
+  auditLogSearchWords,
+  readAuditLogFilters,
+} from '../../../../utils/server/audit-log-filter'
+import {
+  ORG_ACTIVITY_FILTER_FIELDS,
+  ORG_ACTIVITY_SEARCH_PATHS,
+  ORG_ACTIVITY_SEARCH_SCAN,
+  ORG_FEED_FILTER_FIELDS,
+  ORG_TARGET_FEED_FILTER_FIELDS,
+} from '../../../../utils/audit-log-filters'
 import { readListFilter } from '../../../../utils/server/list-filter'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -87,7 +102,7 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  */
 const DEFAULT_PAGE_SIZE = 25
 
-/** The org-wide fan-out still serves a window; see `readOrgWideActivity`. */
+/** The org-wide page when a caller names no size; see `readOrgWideActivity`. */
 const WINDOW = 200
 
 async function handler(request: Request): Promise<Response> {
@@ -158,14 +173,65 @@ async function handler(request: Request): Promise<Response> {
      * because everything a team does happens on a SITE.
      */
     if (String(query['scope'] ?? '') === 'org-wide') {
-      const page = await readOrgWideActivity({
-        orgId,
-        limit: Number(query['pageSize'] ?? query['limit'] ?? WINDOW),
-        cursor: String(query['cursor'] ?? '') || null,
-        // The column filter, answered by the query rather than by the page.
-        filter: readListFilter(query),
-      })
-      return Response.json(page, { status: 200 })
+      /*
+       * The log's filters, every one served (see `ORG_ACTIVITY_FILTER_FIELDS`):
+       * Where picks which subjects are read, Who turns the fan-out into the
+       * person's own collection-group feed kept to those subjects, and Action
+       * and When go onto every query. The search is matched as the log is
+       * read, a bounded number of entries per page.
+       */
+      const clauses = readAuditLogFilters(query, ORG_ACTIVITY_FILTER_FIELDS)
+      const refusal = clauses
+        ? auditLogFilterRefusal(ORG_ACTIVITY_FILTER_FIELDS, clauses)
+        : 'Unreadable filters'
+      if (!clauses || refusal) return Response.json({ error: refusal }, { status: 400 })
+      const valueOf = (field: string) =>
+        clauses.find((clause) => clause.field === field)?.value ?? null
+      const served = clauses.filter(
+        (clause) => clause.field === 'action' || clause.field === 'createdAt',
+      )
+      const site = valueOf('scopeId')
+      const actorFilter = valueOf('actorId')
+      const allPaths = await orgActivityScopePaths(orgId)
+      // A subject is `hosts/{id}` or `orgs/{id}`; Where names the id.
+      const paths = site
+        ? new Set([...allPaths].filter((path) => path.split('/')[1] === site))
+        : allPaths
+      const matches = auditLogSearchMatcher(
+        auditLogSearchWords(query['search']),
+        ORG_ACTIVITY_SEARCH_PATHS,
+      )
+      const pageSize = Number(query['pageSize'] ?? query['limit'] ?? WINDOW)
+      const cursor = String(query['cursor'] ?? '') || null
+      const page = actorFilter
+        ? await readActorActivity({
+            actorId: actorFilter,
+            pageSize,
+            cursor,
+            filters: served,
+            matches,
+            scopePaths: paths,
+          })
+        : await readOrgWideActivity({
+            orgId,
+            limit: pageSize,
+            cursor,
+            filters: served,
+            matches,
+            scanCap: ORG_ACTIVITY_SEARCH_SCAN,
+            paths,
+          })
+      const facets =
+        String(query['facets'] ?? '') === '1' ? await orgActivityFacets(orgId) : null
+      return Response.json(
+        {
+          entries: page.entries,
+          nextCursor: page.nextCursor,
+          scanned: page.scanned,
+          ...(facets ? { facets } : {}),
+        },
+        { status: 200 },
+      )
     }
     /**
      * Changes made TO one member, host or screen (AGL-389).
@@ -204,9 +270,24 @@ async function handler(request: Request): Promise<Response> {
           .get()
           .catch(() => null)
       : null
-    let pageQuery: FirebaseFirestore.Query = (
-      targetId ? activityRef.where('target.id', '==', targetId) : activityRef
-    ).orderBy('createdAt', 'desc')
+    /*
+     * The organization's own feed filters by Action and When; narrowed to
+     * one target it filters by When alone, because an Action beside the
+     * target equality would need a composite nobody built.
+     */
+    const feedFields = targetId ? ORG_TARGET_FEED_FILTER_FIELDS : ORG_FEED_FILTER_FIELDS
+    const clauses = readAuditLogFilters(query, feedFields)
+    const refusal = clauses ? auditLogFilterRefusal(feedFields, clauses) : 'Unreadable filters'
+    if (!clauses || refusal) return Response.json({ error: refusal }, { status: 400 })
+    const narrowed = applyAuditLogFilters(
+      targetId ? activityRef.where('target.id', '==', targetId) : activityRef,
+      feedFields,
+      clauses,
+    )
+    if (!narrowed) {
+      return Response.json({ error: 'This log cannot be filtered that way' }, { status: 400 })
+    }
+    let pageQuery: FirebaseFirestore.Query = narrowed.orderBy('createdAt', 'desc')
     if (after?.exists) pageQuery = pageQuery.startAfter(after)
     // One extra row answers "is there another page" without a second query.
     const snapshot = await pageQuery.limit(pageSize + 1).get()

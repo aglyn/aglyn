@@ -16,45 +16,32 @@
  */
 
 /**
- * THE AUDIT WINDOW MOVES, AND THE ARCHIVE HAS A DOOR (AGL-2324).
+ * THE AUDIT LOG PAGES A CURSOR, FILTERS ITS QUERY, AND THE ARCHIVE HAS A
+ * DOOR (AGL-2324, AGL-2501, AGL-3321).
  *
- * The page read `orderBy('at','desc').limit(200)` with no cursor, no date
- * range and no way to ask for row 201, while ~70 distinct action strings
- * write to `adminAudit` and several are system-actored and high-frequency.
- * Those flood the window within hours and evict `org.override` — the
- * lowest-frequency, highest-consequence row, and the one this page has
- * bespoke handling for. Separately, the 90-to-365-day archive that
- * `docs/DATA_RETENTION.md` promises had no product reader at all.
+ * The page once read `orderBy('at','desc').limit(200)` with no cursor, no
+ * date range and no way to ask for row 201, while system-actored,
+ * high-frequency actions flooded that window and evicted `org.override` — the
+ * lowest-frequency, highest-consequence row.
  *
  * WHAT THIS FILE HAS TO CATCH, and the false greens it is written against:
  *
  *  - **A control that exists but changes no query.** Every assertion about
- *    paging and date range is made against the CONSTRAINTS HANDED TO
- *    FIRESTORE, recorded by the `firebase/firestore` double. A "Load older"
- *    button that re-renders and re-requests the same 200 rows satisfies any
- *    check written against the screen alone, and dies here.
- *  - **A constant where a measured value belongs.** The page size is
- *    asserted against the SHARED default and against the limit the query
- *    carried. A page that passed a fixed `limit(200)` — the original defect —
- *    survives every "is there a footer" assertion and fails this one.
+ *    paging and filtering is made against the CONSTRAINTS HANDED TO
+ *    FIRESTORE, recorded by the `firebase/firestore` double.
  *  - **A pager that shows the same rows on every page.** Page two is checked
- *    for what it DOES NOT contain. The control it replaced could only grow:
- *    "Load older" re-rendered rows 0–399 under a bigger limit, so a check
- *    that page two "has rows" passed on a page that had never moved.
+ *    for what it DOES NOT contain, and for the entry it resumed after.
  *  - **A window that ends silently.** `hasMore` is asserted in BOTH
- *    directions. A list that always offers a next page is as useless as one
- *    that never does.
- *  - **A slice with no ordering.** The Firestore double answers an unordered
- *    query in DOCUMENT-ID order, exactly as Firestore does, and the fixture's
- *    id order is deliberately not its date order. A page that dropped
- *    `orderBy('at','desc')` therefore renders a plausible-looking page of the
- *    WRONG rows and fails here — the seven-times-repeated bug in this repo,
- *    caught by the data rather than by a string match on the source.
- *  - **An import that outlives its JSX.** Nothing here asserts on a symbol
- *    name; every claim is a rendered string or a recorded call argument.
+ *    directions.
+ *  - **A slice with no ordering.** The double answers an unordered query in
+ *    DOCUMENT-ID order, as Firestore does, and the fixture's id order is not
+ *    its date order.
+ *  - **A search over the page on screen.** The search reads the log in
+ *    batches until it fills a page, and the next page resumes after the last
+ *    entry it READ — so a match on the tenth batch is still found.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 jest.mock('@aglyn/aglyn', () => {
   // The action facet groups entries through the plugin activity-action
@@ -66,6 +53,7 @@ jest.mock('@aglyn/aglyn', () => {
   return {
     __esModule: true,
     orgOverrideReasonSummary: () => null,
+    listPluginActivityFilters: actions.listPluginActivityFilters,
     pluginStaffAuditActionGroup: actions.pluginStaffAuditActionGroup,
     pluginStaffAuditActionGroupLabel: actions.pluginStaffAuditActionGroupLabel,
   }
@@ -124,65 +112,39 @@ jest.mock('../constants/route-links', () => ({
   Route: { ADMIN_OVERVIEW: 'ADMIN_OVERVIEW', ADMIN_AUDIT: 'ADMIN_AUDIT' },
 }))
 
-/*
- * A STABLE Firestore identity, not a fresh object per call.
- *
- * `useFirestore` returns a singleton in the product. A double returning
- * `() => ({})` hands back a new identity on every render, which makes the
- * page's `deps` array differ every time and re-runs the read unconditionally
- * — and that silently repairs the very bug the deps array can have. Caught
- * here by mutation: dropping `pageSize` from the page's `deps` left this
- * file GREEN until the identity was made stable.
- */
+/** Held: a Firestore handle minted per render would re-run every read. */
 const mockFirestore = {}
 
-/*==========================================
- * THE QUERY RECORDER.
- *
- * The constraint builders return TAGGED objects and `query` keeps every set
- * it is handed, so an assertion can read what Firestore was actually asked
- * for. This is the difference between testing that a date field exists on
- * the screen and testing that picking a date narrows the read.
- *=========================================*/
+/** Every query's constraints, in the order the page built them. */
 const queries: any[][] = []
 let mockRows: any[] = []
 
 /*==========================================
- * FIRESTORE'S ANSWER, INCLUDING THE PART NOBODY ASKS FOR.
- *
- * `mockRows` is a POOL held in DOCUMENT-ID order, because that is the order
- * Firestore answers a query that named none — and that is the whole of the
- * bug this repo has now hit seven times. An unordered `limit(n)` is not "the
- * first n by anything a reader would guess"; it is n arbitrary documents.
- *
- * So the double honours what the query actually carried:
- *
- *  - `orderBy` sorts the pool. Absent, the pool stays in id order.
- *  - `where` on the ordered field bounds it.
- *  - `limit` truncates last, exactly as a real read does.
- *
- * A double that always sorted by date would hand a page with NO `orderBy`
- * the rows it meant to ask for, and every assertion below would pass on the
- * defect.
+ * A Firestore double that ANSWERS the constraints: equalities and `in`,
+ * ranges on `at`, the order, the cursor and the limit. An unordered query is
+ * answered in document-id order, as Firestore answers it.
  *=========================================*/
 const mockServe = (constraints: any[]) => {
+  const seconds = (row: any) => Number(row?.at?.seconds ?? 0)
+  let served = [...mockRows].sort((a, b) => String(a.$id).localeCompare(String(b.$id)))
+  for (const bound of constraints.filter((entry: any) => entry?.kind === 'where')) {
+    served = served.filter((row) => {
+      if (bound.field === 'at') {
+        const edge = Date.parse(bound.value?.iso ?? '') / 1000
+        return bound.op === '>=' ? seconds(row) >= edge : seconds(row) < edge
+      }
+      if (bound.op === 'in') return bound.value.includes(row[bound.field])
+      return row[bound.field] === bound.value
+    })
+  }
   const order = constraints.find((entry: any) => entry?.kind === 'orderBy')
-  const seconds = (row: any, field: string) => Number(row?.[field]?.seconds ?? 0)
-  let served = [...mockRows]
   if (order) {
     const direction = order.direction === 'desc' ? -1 : 1
-    served.sort(
-      (a, b) =>
-        direction * (seconds(a, order.field) - seconds(b, order.field)),
-    )
+    served.sort((a, b) => direction * (seconds(a) - seconds(b)))
   }
-  for (const bound of constraints.filter((entry: any) => entry?.kind === 'where')) {
-    const edge = Date.parse(bound.value?.iso ?? '') / 1000
-    served = served.filter((row) =>
-      bound.op === '>='
-        ? seconds(row, bound.field) >= edge
-        : seconds(row, bound.field) < edge,
-    )
+  const after = constraints.find((entry: any) => entry?.kind === 'startAfter')
+  if (after) {
+    served = served.slice(served.findIndex((row) => row.$id === after.cursor.id) + 1)
   }
   const capped = constraints.find((entry: any) => entry?.kind === 'limit')
   return capped ? served.slice(0, capped.count) : served
@@ -191,25 +153,17 @@ const mockServe = (constraints: any[]) => {
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
   collection: () => ({ kind: 'collection' }),
-  query: (...args: any[]) => {
-    queries.push(args.slice(1))
-    return { constraints: args.slice(1) }
+  query: (_ref: unknown, ...constraints: any[]) => {
+    queries.push(constraints)
+    return { constraints }
   },
-  orderBy: (field: string, direction: string) => ({
-    kind: 'orderBy',
-    field,
-    direction,
-  }),
+  orderBy: (field: string, direction: string) => ({ kind: 'orderBy', field, direction }),
   limit: (count: number) => ({ kind: 'limit', count }),
-  where: (field: string, op: string, value: unknown) => ({
-    kind: 'where',
-    field,
-    op,
-    value,
-  }),
-  // The compliance export reads for ITSELF now, so the double has to answer
-  // a one-shot get as well as a listener. An incomplete module mock is how a
-  // page that gained one import renders as "Element type is invalid".
+  startAfter: (cursor: unknown) => ({ kind: 'startAfter', cursor }),
+  where: (field: string, op: string, value: unknown) => ({ kind: 'where', field, op, value }),
+  documentId: () => '__name__',
+  startAt: (value: unknown) => ({ kind: 'startAt', value }),
+  endAt: (value: unknown) => ({ kind: 'endAt', value }),
   getDocs: async (built: any) => {
     const served = mockServe(built?.constraints ?? [])
     return {
@@ -222,88 +176,21 @@ jest.mock('firebase/firestore', () => ({
   },
 }))
 
-/*==========================================
- * THE PAGED-COLLECTION DOUBLE, MODELLED ON THE REAL ONE.
- *
- * Faithful to the contract in `use-paged-collection.ts`, because every
- * behaviour it models is one the page can get wrong:
- *
- *  1. The window is `pageSize × (page + 1)`, requested PLUS ONE. The extra
- *     document is what makes `hasMore` a fact instead of a `length === limit`
- *     guess, which is wrong in both directions on an exact multiple.
- *  2. `rows` is the current page's slice of that window, never the whole
- *     window. A double that returned everything would let a "pager" that
- *     never moved satisfy every assertion below.
- *  3. `buildQuery` is re-invoked from an effect keyed on `deps` + the window
- *     size, so the DEPENDENCY ARRAY stays testable: a page that changes the
- *     range but omits it from `deps` never re-reads.
- *  4. Changing the page size returns to page one, and so does a change of
- *     subject — an out-of-range page renders as an empty list with no
- *     explanation, which reads as the data having gone.
- *
- * The rows come back through `mockServe`, so what this hands the page is
- * whatever the page's own constraints earned.
- *=========================================*/
-jest.mock('@aglyn/tenant-feature-instance', () => {
-  const { useCallback, useEffect, useState } = require('react')
-  return {
-    __esModule: true,
-    useFirestore: () => mockFirestore,
-    useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
-    /* eslint-disable react-hooks/rules-of-hooks, react-hooks/exhaustive-deps
-       -- this IS the hook; the linter cannot see that from inside a mock
-       factory, and the dep list is forwarded from the caller by design. */
-    usePagedCollection: (
-      buildQuery: (pageLimit: number) => unknown,
-      deps: unknown[],
-    ) => {
-      // `useState` here comes off an untyped `require`, so the type rides on
-      // the initial value rather than a type argument (TS2347).
-      const [pageSize, setPageSizeState] = useState(10)
-      const [page, setPage] = useState(0)
-      const [data, setData] = useState([] as any[])
-      const windowSize = pageSize * (page + 1)
-      useEffect(() => {
-        setPage(0)
-      }, deps)
-      useEffect(() => {
-        buildQuery(windowSize + 1)
-        setData(mockServe((queries[queries.length - 1] ?? []) as any[]))
-      }, [...deps, windowSize])
-      const setPageSize = useCallback((next: number) => {
-        setPageSizeState(next)
-        setPage(0)
-      }, [])
-      return {
-        data,
-        rows: data.slice(page * pageSize, windowSize),
-        hasMore: data.length > windowSize,
-        page,
-        setPage,
-        pageSize,
-        setPageSize,
-      }
-    },
-    /* eslint-enable react-hooks/rules-of-hooks, react-hooks/exhaustive-deps */
-  }
-})
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  __esModule: true,
+  useFirestore: () => mockFirestore,
+  useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
+}))
 
 import AdminAudit from '../app/(app)/admin/audit/page'
 
+/** Seconds, as Firestore hands a `Timestamp` to the browser. */
 const AT = { seconds: 1_760_000_000 }
 
 /**
- * N rows in DOCUMENT-ID order, each distinguishable, and each carrying a
- * timestamp that is deliberately NOT in id order.
- *
- * That mismatch is the point. Firestore answers an unordered `limit()` in
- * document-id order, so a page missing its `orderBy` gets `row-000` first
- * here — a page that looks entirely reasonable and is the wrong rows. With
- * the ordering in place the newest row leads, and the two are different
- * enough to tell apart on sight.
- *
- * 37 is coprime with every count used below, so the offsets are a
- * permutation: no two rows share a timestamp and no row is dropped.
+ * `count` rows whose DOCUMENT-ID order is not their date order, so a page
+ * that dropped the `orderBy` renders the wrong rows rather than the right
+ * ones by accident.
  */
 const rows = (count: number) =>
   Array.from({ length: count }, (_, index) => ({
@@ -321,13 +208,18 @@ const targetsOnScreen = () =>
     .queryAllByText(/^plugins\/p-\d{3}$/)
     .map((node) => node.textContent ?? '')
 
-/** The newest row in a pool, which is the one an ordered page one must lead with. */
-const newestTarget = (pool: any[]) =>
-  [...pool].sort((a, b) => b.at.seconds - a.at.seconds)[0].target
+const byDate = (pool: any[]) => [...pool].sort((a, b) => b.at.seconds - a.at.seconds)
 
 const lastQuery = () => queries[queries.length - 1] ?? []
 const constraint = (kind: string) =>
   lastQuery().filter((entry: any) => entry?.kind === kind)
+
+/** Sets the Filters panel's value on its first column, Action. */
+async function filterAction(value: string) {
+  fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+  const input = await screen.findByRole('textbox', { name: 'Value' })
+  fireEvent.change(input, { target: { value } })
+}
 
 beforeEach(() => {
   queries.length = 0
@@ -335,140 +227,131 @@ beforeEach(() => {
   jest.clearAllMocks()
 })
 
-describe('the audit log pages on the shared footer (AGL-2501, AGL-2324)', () => {
+describe('the audit log pages a cursor on the shared footer (AGL-2501, AGL-3321)', () => {
   it('THE CONTROL: the fixture can tell an ordered page from an id-ordered one', () => {
-    // Both halves of this file's premise. If id order and date order agreed,
-    // every ordering assertion below would pass on a page that named no
-    // order at all — the exact false green that let this bug recur seven
-    // times.
     const pool = rows(60)
-    expect(newestTarget(pool)).not.toBe(pool[0].target)
+    expect(byDate(pool)[0].target).not.toBe(pool[0].target)
     expect(new Set(pool.map((row) => row.at.seconds)).size).toBe(pool.length)
   })
 
-  it('opens on the console-wide page size, not a bespoke one', () => {
+  it('opens on the console-wide page size, in the shared grid', async () => {
     mockRows = rows(60)
     render(<AdminAudit />)
-
-    // Ten rows, plus the probe row that makes "is there more" a fact rather
-    // than a guess. A page that still passed a fixed `limit(200)` — the
-    // original defect — renders a perfectly good list and fails here.
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
     expect(constraint('limit')[0].count).toBe(11)
-    expect(targetsOnScreen()).toHaveLength(10)
+    expect(screen.getByRole('grid')).toBeTruthy()
     expect(screen.getByText('Rows per page:')).toBeTruthy()
   })
 
-  it('fills page one with the NEWEST rows, not an id-ordered sample', () => {
+  it('fills page one with the NEWEST rows, not an id-ordered sample', async () => {
     mockRows = rows(60)
     render(<AdminAudit />)
-
-    // The whole trap, measured against the data rather than a source string:
-    // the double answers an unordered query in document-id order, so a page
-    // that dropped `orderBy('at','desc')` leads with `plugins/p-000` and
-    // fails both of these.
-    expect(targetsOnScreen()[0]).toBe(newestTarget(mockRows))
-    expect(targetsOnScreen()).not.toContain('plugins/p-000')
-    expect(constraint('orderBy')[0]).toMatchObject({
-      field: 'at',
-      direction: 'desc',
-    })
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
+    expect(targetsOnScreen()).toEqual(byDate(mockRows).slice(0, 10).map((row) => row.target))
+    expect(constraint('orderBy')[0]).toMatchObject({ field: 'at', direction: 'desc' })
   })
 
-  it('moves to DIFFERENT rows on page two, and back again', async () => {
+  it('page two resumes after the last entry page one read, and Back returns', async () => {
     mockRows = rows(60)
     render(<AdminAudit />)
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
     const first = targetsOnScreen()
 
     fireEvent.click(screen.getByLabelText('Go to next page'))
-    await waitFor(() => expect(constraint('limit')[0].count).toBe(21))
-
-    // What page two must NOT contain. The control this replaced could only
-    // grow: "Load older" re-rendered rows 0–399 under a bigger limit, so an
-    // assertion that page two "has rows" passed on a list that never moved.
-    const second = targetsOnScreen()
-    expect(second).toHaveLength(10)
-    for (const target of first) expect(second).not.toContain(target)
+    await waitFor(() => expect(constraint('startAfter')).toHaveLength(1))
+    expect(constraint('startAfter')[0].cursor.id).toBe(byDate(mockRows)[9].$id)
+    await waitFor(() =>
+      expect(targetsOnScreen()).toEqual(byDate(mockRows).slice(10, 20).map((row) => row.target)),
+    )
+    for (const target of first) expect(targetsOnScreen()).not.toContain(target)
 
     fireEvent.click(screen.getByLabelText('Go to previous page'))
     await waitFor(() => expect(targetsOnScreen()).toEqual(first))
+    expect(constraint('startAfter')).toHaveLength(0)
   })
 
   it('carries the chosen page size into the READ', async () => {
     mockRows = rows(60)
     render(<AdminAudit />)
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
 
     fireEvent.mouseDown(screen.getByLabelText('Rows per page:'))
     fireEvent.click(screen.getByRole('option', { name: '25' }))
 
-    // The size menu was one of the two things the old control could not do
-    // at all. A menu that re-renders without re-reading is furniture.
     await waitFor(() => expect(constraint('limit')[0].count).toBe(26))
-    expect(targetsOnScreen()).toHaveLength(25)
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(25))
   })
 
   it('offers a next page only when there is one', async () => {
     mockRows = rows(60)
     const deep = render(<AdminAudit />)
-    expect(
-      (screen.getByLabelText('Go to next page') as HTMLButtonElement).disabled,
-    ).toBe(false)
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
+    expect((screen.getByLabelText('Go to next page') as HTMLButtonElement).disabled).toBe(false)
     deep.unmount()
 
-    // A pool SHORTER than one page. Claiming more would send an auditor
-    // paging through nothing; the probe row is what settles it, and it
-    // settles the exact-multiple case a `length === pageSize` guess cannot.
     mockRows = rows(4)
     render(<AdminAudit />)
-    expect(targetsOnScreen()).toHaveLength(4)
-    expect(
-      (screen.getByLabelText('Go to next page') as HTMLButtonElement).disabled,
-    ).toBe(true)
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(4))
+    expect((screen.getByLabelText('Go to next page') as HTMLButtonElement).disabled).toBe(true)
   })
+})
 
-  it('filters THIS PAGE, and says that is what it did', () => {
-    mockRows = rows(60)
+describe('the audit log filters its QUERY (AGL-3321)', () => {
+  it('puts an Action filter onto the query, beneath the date sort', async () => {
+    mockRows = [
+      ...rows(30),
+      { ...rows(1)[0], $id: 'override', action: 'org.override', target: 'orgs/acme' },
+    ]
     render(<AdminAudit />)
-
-    fireEvent.change(
-      screen.getByLabelText('Filter this page (actor, email, action, target)'),
-      { target: { value: 'no-such-actor' } },
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
+    await filterAction('org.override')
+    await waitFor(() =>
+      expect(constraint('where')).toEqual([
+        { kind: 'where', field: 'action', op: '==', value: 'org.override' },
+      ]),
     )
-    // Not "no audit entries" — the log is full, the page is not. A
-    // client-side filter can only narrow rows the client already holds, and
-    // saying otherwise would report an empty log off a full one.
-    expect(screen.getByText('Nothing on this page matches the filter.')).toBeTruthy()
+    expect(constraint('orderBy')[0]).toMatchObject({ field: 'at', direction: 'desc' })
+    expect(await screen.findByText('orgs/acme')).toBeTruthy()
+    // A filter change is a new query: page one, no cursor.
+    expect(constraint('startAfter')).toHaveLength(0)
   })
 
-  it('narrows the READ by date, not the rows already fetched', async () => {
-    mockRows = rows(200)
+  it('searches the whole log, reading batches until a page is full', async () => {
+    // One match per twenty entries, so a page of three spans several batches
+    // and page one on screen holds none of the later ones.
+    mockRows = rows(200).map((row, index) => ({
+      ...row,
+      actorEmail: index % 20 === 0 ? `auditor${index}@aglyn.com` : row.actorEmail,
+    }))
     render(<AdminAudit />)
-    // No range asked for, none sent. A page that always sent a bound would
-    // be filtering by a default nobody chose.
-    expect(constraint('where')).toHaveLength(0)
-
-    fireEvent.change(screen.getByLabelText('From'), {
-      target: { value: '2026-03-01' },
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
+    act(() => {
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'auditor' } })
     })
-    fireEvent.change(screen.getByLabelText('To'), {
-      target: { value: '2026-03-31' },
+    const matches = byDate(mockRows.filter((row) => row.actorEmail.startsWith('auditor')))
+    await waitFor(
+      () => expect(targetsOnScreen()).toEqual(matches.slice(0, 10).map((row) => row.target)),
+      { timeout: 3000 },
+    )
+    // Batches larger than a page, and never a filter the query cannot serve.
+    expect(constraint('limit')[0].count).toBe(100)
+    expect(constraint('where')).toEqual([])
+    expect(screen.getByText(/each page looks through up to 500 entries/)).toBeTruthy()
+  })
+
+  it('a search the page cannot fill says there is more rather than ending', async () => {
+    mockRows = rows(600)
+    render(<AdminAudit />)
+    await waitFor(() => expect(targetsOnScreen()).toHaveLength(10))
+    act(() => {
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'no-such-actor' } })
     })
-
-    await waitFor(() => expect(constraint('where')).toHaveLength(2))
-    const [lower, upper] = constraint('where')
-    expect(lower).toMatchObject({ field: 'at', op: '>=' })
-    expect(upper).toMatchObject({ field: 'at', op: '<' })
-    // The upper bound is EXCLUSIVE OF THE FOLLOWING DAY. An inclusive
-    // midnight bound silently drops every row written on the 31st — a range
-    // filter that loses the last day of the range looks entirely correct.
-    expect(upper.value.iso.slice(0, 10)).toBe('2026-04-01')
-    expect(lower.value.iso.slice(0, 10)).toBe('2026-03-01')
-
-    // The range rides the SAME field the query orders by, which is what
-    // keeps it on the single-field index. A range on any other field would
-    // need a composite index that does not exist and would throw in
-    // production for every staff member.
-    expect(constraint('orderBy')[0].field).toBe('at')
-    expect(lower.field).toBe(constraint('orderBy')[0].field)
+    await waitFor(
+      () => expect(screen.getByText('No audit entries match these filters')).toBeTruthy(),
+      { timeout: 3000 },
+    )
+    // 500 read, 100 left: the walk stopped at its budget, not at the end.
+    expect((screen.getByLabelText('Go to next page') as HTMLButtonElement).disabled).toBe(false)
   })
 })
 
@@ -497,7 +380,7 @@ describe('a staff grant in a customer pool is visible (AGL-2324)', () => {
 
     // The tenant-pool grant is marked and the project-pool one is NOT. Both
     // halves matter: a chip on every row names nothing.
-    expect(screen.getByText('tenant pool: tenant-northwind')).toBeTruthy()
+    expect(await screen.findByText('tenant pool: tenant-northwind')).toBeTruthy()
     expect(screen.queryAllByText(/^tenant pool:/)).toHaveLength(1)
 
     const written: string[] = []

@@ -47,7 +47,9 @@ const TeamActivity: NextPageWithLayout<Record<string, never>> = () => {
       </Typography>
     )
   }
-  return <OrgActivityCard orgId={currentOrg.$id} />
+  // The organization's SITES too: nearly everything a team does happens on a
+  // site, so a log of org-level events alone reads as a team doing nothing.
+  return <OrgActivityCard orgId={currentOrg.$id} orgWide />
 }
 TeamActivity.displayName = 'Page:TeamActivity'
 

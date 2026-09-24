@@ -17,19 +17,18 @@
 'use client'
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
-  Alert,
-  Button,
-  Chip,
-  List,
-  ListItem,
-  ListItemText,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
+  type ListFilterClause,
+  type ListFilterOption,
+  listFilterGridColumns,
+  upsertListFilterClause,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import type { GridColDef } from '@mui/x-data-grid'
+import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -38,12 +37,19 @@ import {
   activityActorLabel,
   activityHref,
   activityPrimaryText,
-  activityEntryGroupId,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
-import { listPluginActivityFilters } from '@aglyn/aglyn'
+import { listPluginActivityActions, listPluginActivityFilters } from '@aglyn/aglyn'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
-import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
+import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
+import {
+  ORG_ACTIVITY_FILTER_FIELDS,
+  ORG_ACTIVITY_FILTER_HEADERS,
+  ORG_ACTIVITY_SEARCH_SCAN,
+  ORG_ACTIVITY_SELECT_FIELDS,
+  ORG_FEED_FILTER_FIELDS,
+  ORG_TARGET_FEED_FILTER_FIELDS,
+} from '../utils/audit-log-filters'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
 
 export interface OrgActivityCardProps {
@@ -55,10 +61,9 @@ export interface OrgActivityCardProps {
   /**
    * Include the org's SITES, not just its org-level events.
    *
-   * Off by default because the two existing callers depend on the narrower
-   * feed: "Changes to this member" filters org entries by target, and folding
-   * site activity in would file a member's own page edits under a heading
-   * about changes made TO them.
+   * Off by default because "Changes to this member" filters org entries by
+   * target, and folding site activity in would file a member's own page
+   * edits under a heading about changes made TO them.
    *
    * The scope is a fan-out merged by date rather than one collection, so its
    * cursor is a timestamp plus the ids already shown at that instant — see
@@ -67,42 +72,33 @@ export interface OrgActivityCardProps {
   orgWide?: boolean
 }
 
+/** The choices the route lists for Who and Where, with the first page. */
+interface OrgActivityFacets {
+  actors: ListFilterOption[]
+  sites: ListFilterOption[]
+}
+
 /**
- * Org-level counterpart to `HostActivityCard` (AGL-118): newest-first feed
- * from `orgs/{orgId}/activity`, populated by the org settings/members/
- * invites API routes.
+ * Org-level counterpart to `HostActivityTable` (AGL-118): the newest-first
+ * activity of one organization, read through `/api/orgs/activity`.
  *
- * ## The window has to be ORDERED, not merely capped (AGL-2292)
+ * ## An ordered PAGE, not a window
  *
- * This docblock said "newest-first" while the query was `limit(200)` with no
- * `orderBy`. Firestore then returns documents in DOCUMENT-ID order, and
- * `logOrgActivity` creates entries with `.add()`, so the ids are effectively
- * random — meaning the 200 rows fetched were a pseudo-random SAMPLE of the
- * collection, not its newest page. The client sort then dutifully ordered
- * that sample by `createdAt` and sliced 20 off the top, which made the result
- * look right and be wrong: past 200 entries, a change made a minute ago could
- * simply never appear.
+ * The feed was once `limit(200)` with no `orderBy` — Firestore then answers
+ * in document-id order, and `logOrgActivity` writes with `.add()`, so the 200
+ * rows were a pseudo-random sample sorted to look like the newest page
+ * (AGL-2292). The route orders the query and serves a cursor page, so the
+ * reader walks back through the whole history and each step costs
+ * `pageSize + 1` reads.
  *
- * ## And it has to be a PAGE, not a window
+ * ## The toolbar filters the whole log
  *
- * Ordering the query fixed which 200 were fetched; it did not make more than
- * twenty of them reachable. The card read 200 documents and rendered the
- * newest 20, so rows 21 through 200 were paid for and never shown, and entry
- * 201 could not be reached at all. An audit log whose history stops at an
- * arbitrary depth answers "who changed this, and when" only for changes
- * recent enough not to need asking about.
- *
- * The route serves a cursor page now, so the reader walks back through the
- * whole history and each step costs `pageSize + 1` reads instead of 200.
- *
- * ## The filters below are page-scoped, and say so
- *
- * Free text and type filter the rows ON SCREEN. They are a way to pick a row
- * out of the page in front of you, not a search across the feed — which is
- * why an empty result says so in those words rather than claiming there is
- * nothing to find. `targetId` is the opposite kind of filter and belongs to
- * the query: filtering it here would let a page of 25 entries contribute two
- * rows and still call itself the page.
+ * Every clause in the grid's Filters panel goes to the route, which puts it
+ * on the query (see `ORG_ACTIVITY_FILTER_FIELDS`): Action, and on the
+ * org-wide log Who and Where, from pickers, and When as a date range. The
+ * search box (org-wide only) matches the actor's address and the target's
+ * name as the route reads the log. A change to any of them is a different
+ * query, so the walk starts again at page one with no cursor.
  */
 export function OrgActivityCard(props: OrgActivityCardProps) {
   const { orgId, header = 'Recent Activity', targetId, orgWide } = props
@@ -116,6 +112,25 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   userRef.current = user
   const uid = (user as { uid?: string } | undefined)?.uid ?? null
 
+  const fields = orgWide
+    ? ORG_ACTIVITY_FILTER_FIELDS
+    : targetId
+      ? ORG_TARGET_FEED_FILTER_FIELDS
+      : ORG_FEED_FILTER_FIELDS
+  const [clauses, setClauses] = useState<ListFilterClause[]>([])
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const gridFilter = useListGridFilter({
+    selectFields: ORG_ACTIVITY_SELECT_FIELDS,
+    clauses,
+    onChange: setClauses,
+    search: { words: searchWords, onChange: setSearchWords },
+  })
+  // Only the org-wide log's route answers a search.
+  const search = orgWide ? searchWords.join(' ').trim() : ''
+  const [facets, setFacets] = useState<OrgActivityFacets | null>(null)
+  const facetsRef = useRef(facets)
+  facetsRef.current = facets
+
   const [entries, setEntries] = useState<any[] | null>(null)
   const [cursors, setCursors] = useState<Array<string | null>>([null])
   const [page, setPage] = useState(0)
@@ -123,17 +138,17 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
    * The console's shared default, not a number this card picked. Every list
    * starts at the smallest option — it is what a reader learns once, and on a
    * feed whose query is bounded by it, the smallest page is also the smallest
-   * bill (AGL-2501/AGL-703). The staff org page asked for fifty at a time,
-   * which is fifty documents read to fill a card nobody had scrolled yet.
+   * bill (AGL-2501/AGL-703).
    */
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   /*
    * Only the newest request may write. Two page clicks in quick succession,
-   * or a page change racing the reload a size change triggers, otherwise land
-   * in whatever order the network returns them — and the loser overwrites the
-   * winner, leaving the footer on one page and the rows on another.
+   * or a page change racing the reload a filter change triggers, otherwise
+   * land in whatever order the network returns them — and the loser
+   * overwrites the winner, leaving the footer on one page and the rows on
+   * another.
    */
   const requestRef = useRef(0)
   /*
@@ -147,17 +162,9 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   /*==========================================
    * READ THROUGH THE ROUTE, not the client SDK (AGL-2444).
    *
-   * This was a live `orgs/{orgId}/activity` listener, and the security rule
-   * behind it gated on `isOrgWideMember()` — the ROSTER question. The
-   * `org.auditLog` permission was consulted only by the team page deciding
-   * whether to mount this card, so revoking it hid the card and changed
-   * nothing about who could read the feed. `/api/orgs/activity` checks the
-   * permission with the Admin SDK and the rule now denies members outright,
-   * which is what turns that check into enforcement.
-   *
-   * The live listener is what is lost, and knowingly: an audit feed is read
-   * deliberately rather than watched, and a permission that only holds while
-   * nobody opens a console is not one.
+   * `/api/orgs/activity` checks `org.auditLog` with the Admin SDK and the
+   * security rule denies members outright, which is what turns the
+   * permission into enforcement rather than a hidden card.
    *=========================================*/
   const loadPage = useCallback(
     async (targetPage: number, cursor: string | null) => {
@@ -168,11 +175,17 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         const url = new URL('/api/orgs/activity', window.location.origin)
         url.searchParams.set('orgId', orgId)
         url.searchParams.set('pageSize', String(pageSize))
-        // The org-wide scope is a fan-out merged by date, and its cursor is a
-        // time rather than a document — but it is a cursor, so this side does
-        // not have to know the difference.
         if (orgWide) url.searchParams.set('scope', 'org-wide')
         else if (targetId) url.searchParams.set('targetId', targetId)
+        if (clauses.length) {
+          url.searchParams.set(
+            'filters',
+            JSON.stringify(clauses.map(({ field, op, value }) => ({ field, op, value }))),
+          )
+        }
+        if (search) url.searchParams.set('search', search)
+        // The Who and Where choices, once.
+        if (orgWide && !facetsRef.current) url.searchParams.set('facets', '1')
         if (cursor) url.searchParams.set('cursor', cursor)
         const response = await authorizedFetch(userRef.current, url.toString())
         if (!response.ok) {
@@ -187,8 +200,10 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         const payload = (await response.json()) as {
           entries?: any[]
           nextCursor?: string | null
+          facets?: OrgActivityFacets
         }
         if (!current()) return
+        if (payload?.facets) setFacets(payload.facets)
         setUnreadable(false)
         setEntries(payload?.entries ?? [])
         setNextCursor(payload?.nextCursor ?? null)
@@ -202,78 +217,117 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         if (current()) setLoading(false)
       }
     },
-    [orgId, orgWide, pageSize, targetId],
+    [orgId, orgWide, pageSize, targetId, clauses, search],
   )
 
+  // A new filter, search or page size is a different query: page one, no
+  // cursor.
   useEffect(() => {
     setCursors([null])
     void loadPage(0, null)
   }, [uid, loadPage])
 
-  // Filters (wave v5): free-text over action/actor plus a type select
-  // when the entries carry one. Both are page-scoped; see the docblock.
-  const [filter, setFilter] = useState('')
-  const [typeFilter, setTypeFilter] = useState('')
   /*
-   * The "AI" chip (AGL-2929): every generation, applied edit and control
-   * change is stored as a catalog code, so "what did AI do here" is one
-   * toggle rather than a search term a reader has to guess. Page-scoped
-   * like the other two, and offered only when the page holds an AI row —
-   * a chip that can never match is furniture.
+   * The pickers' choices. Action is the plugin-declared catalog of coded
+   * actions this log records (AGL-2940); most core actions are the sentence
+   * their writer stored and have no code to pick, so they are reached by
+   * the date range, Who and Where. Who and Where are the organization's
+   * members and subjects, as the route lists them.
    */
-  const [groupOnly, setGroupOnly] = useState<string | null>(null)
-  // One chip per plugin-declared group the page holds a row of (AGL-2940):
-  // the registry says which groups exist, the page says which ones matter.
-  const groups = useMemo(() => {
-    const present = new Set(
-      (entries ?? [])
-        .map((entry: any) => activityEntryGroupId(entry))
-        .filter(Boolean),
-    )
-    return listPluginActivityFilters()
-      .map((filter) => filter.group)
-      .filter((group) => present.has(group.id))
-  }, [entries])
-  const types = useMemo(
-    () =>
-      [
-        ...new Set(
-          (entries ?? [])
-            .map((entry: any) => String(entry.type ?? ''))
-            .filter(Boolean),
-        ),
-      ].sort(),
-    [entries],
+  const options = useMemo(
+    (): Record<string, readonly ListFilterOption[]> => ({
+      action: listPluginActivityActions()
+        .filter((action) =>
+          [action.scope].flat().some((scope) => scope === 'org' || scope === 'host'),
+        )
+        .map((action) => ({ value: action.key, label: activityActionLabel(action.key) }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      ...(facets ? { actorId: facets.actors, scopeId: facets.sites } : {}),
+    }),
+    [facets],
   )
-  const items = useMemo(() => {
-    const term = filter.trim().toLowerCase()
-    return [...(entries ?? [])]
-      .filter(
-        (entry: any) =>
-          (!groupOnly || activityEntryGroupId(entry) === groupOnly) &&
-          (!typeFilter || entry.type === typeFilter) &&
-          (!term ||
-            // The label as well as the stored code, so "generated" finds an
-            // AI row the same way the words on screen suggest it would.
-            [entry.action, activityActionLabel(entry.action), entry.actorEmail]
-              .filter(Boolean)
-              .join(' ')
-              .toLowerCase()
-              .includes(term)),
-      )
-      /*
-       * The route orders the query, so this no longer decides the order. It
-       * is kept for the entry whose `serverTimestamp()` has not resolved yet:
-       * a row written moments ago arrives with no `createdAt` and would
-       * otherwise sit wherever the server left it.
-       */
-      .sort(
-        (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-      )
-  }, [entries, filter, typeFilter, groupOnly])
+  /*
+   * One chip per plugin-declared action group (AGL-2929, AGL-2940): a
+   * plugin's rows are stored as catalog codes, so a chip is an Action
+   * `is any of` those codes — served like any other clause, across the log.
+   */
+  const groups = useMemo(
+    () => (fields.some((field) => field.column === 'action') ? listPluginActivityFilters() : []),
+    [fields],
+  )
+  const actionClause = clauses.find((clause) => clause.field === 'action')
+  const groupValue = (actions: readonly string[]) => actions.join(',')
 
+  const siteLabel = useCallback(
+    (row: any): string =>
+      facets?.sites.find((site) => site.value === row.scopeId)?.label ??
+      (row.scopeType === 'org' ? 'Organization' : String(row.scopeId ?? '—')),
+    [facets],
+  )
+  const columns = useMemo((): GridColDef[] => {
+    const shown: GridColDef[] = [
+      {
+        field: 'action',
+        headerName: 'Action',
+        flex: 1.6,
+        minWidth: 220,
+        // The STORED action stays the cell's value — it is what the route's
+        // equality compares — and the sentence is only what is drawn.
+        valueGetter: (_value, row: any) => row.action ?? '',
+        renderCell: ({ row }: any) => {
+          const href = activityHref(row, { orgSlug })
+          const label = activityPrimaryText(row)
+          return href ? (
+            <AppLink href={href} color="inherit" underline="hover">
+              {label}
+            </AppLink>
+          ) : (
+            label
+          )
+        },
+      },
+      {
+        field: 'actorId',
+        /*
+         * "Who (then)": the address is a snapshot taken when the entry was
+         * written, and is never rewritten to match a later one.
+         */
+        headerName: 'Who (then)',
+        flex: 1,
+        minWidth: 160,
+        valueGetter: (_value, row: any) => activityActorLabel(row),
+      },
+      ...(orgWide
+        ? [
+            {
+              field: 'scopeId',
+              headerName: 'Where',
+              flex: 0.8,
+              minWidth: 140,
+              valueGetter: (_value: unknown, row: any) => siteLabel(row),
+            } satisfies GridColDef,
+          ]
+        : []),
+      {
+        field: 'createdAt',
+        headerName: 'When',
+        flex: 1,
+        minWidth: 180,
+        // `type: 'date'` gives the panel a date picker for a value the
+        // route reads as a day.
+        type: 'date',
+        valueGetter: (_value, row: any) =>
+          row.createdAt?.seconds ? new Date(row.createdAt.seconds * 1000) : null,
+        renderCell: ({ row }: any) => formatWireTimestamp(row.createdAt),
+      },
+    ]
+    return listFilterGridColumns(shown, fields, options, ORG_ACTIVITY_FILTER_HEADERS)
+  }, [orgSlug, orgWide, siteLabel, fields, options])
+
+  const rows = entries ?? []
+  const filtering = clauses.length > 0 || Boolean(search)
   // A pager on a single-page feed is furniture. It appears once there is
-  // somewhere to go, which the org-wide fan-out can now say as well.
+  // somewhere to go.
   const paged = page > 0 || Boolean(nextCursor)
 
   return (
@@ -290,47 +344,50 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
       contentBordered="all"
     >
       <Stack spacing={1.5}>
-        {(entries ?? []).length > 5 || groups.length ? (
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <TextField
-              size="small"
-              label="Filter this page"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              sx={{ maxWidth: 240, flexGrow: 1 }}
-            />
-            {groups.map((group) => (
-              <Chip
-                key={group.id}
-                size="small"
-                label={group.label}
-                clickable
-                color={groupOnly === group.id ? 'primary' : 'default'}
-                variant={groupOnly === group.id ? 'filled' : 'outlined'}
-                aria-pressed={groupOnly === group.id}
-                onClick={() =>
-                  setGroupOnly((current) => (current === group.id ? null : group.id))
-                }
-              />
-            ))}
-            {types.length > 1 ? (
-              <TextField
-                select
-                size="small"
-                label="Type"
-                value={typeFilter}
-                onChange={(event) => setTypeFilter(event.target.value)}
-                sx={{ minWidth: 130 }}
-              >
-                <MenuItem value="">{'All'}</MenuItem>
-                {types.map((type) => (
-                  <MenuItem key={type} value={type}>
-                    {type}
-                  </MenuItem>
-                ))}
-              </TextField>
-            ) : null}
+        {groups.length ? (
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+            {groups.map(({ group, actions }) => {
+              const pressed =
+                actionClause?.op === 'isAnyOf' && actionClause.value === groupValue(actions)
+              return (
+                <Chip
+                  key={group.id}
+                  size="small"
+                  label={group.label}
+                  clickable
+                  color={pressed ? 'primary' : 'default'}
+                  variant={pressed ? 'filled' : 'outlined'}
+                  aria-pressed={pressed}
+                  onClick={() =>
+                    setClauses((current) =>
+                      upsertListFilterClause(
+                        current,
+                        'action',
+                        pressed
+                          ? null
+                          : { field: 'action', op: 'isAnyOf', value: groupValue(actions) },
+                      ),
+                    )
+                  }
+                />
+              )
+            })}
           </Stack>
+        ) : null}
+        <ListFilterChips
+          fields={fields}
+          headers={ORG_ACTIVITY_FILTER_HEADERS}
+          options={options}
+          clauses={clauses}
+          onChange={setClauses}
+        />
+        {search ? (
+          <Typography variant="caption" color="text.secondary">
+            {`The search matches the actor’s address and the name of what ` +
+              `changed. Each page looks through up to ${ORG_ACTIVITY_SEARCH_SCAN} ` +
+              'entries for matches, so a page can come back short — Next ' +
+              'carries on from where it stopped.'}
+          </Typography>
         ) : null}
         {unreadable ? (
           <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
@@ -343,43 +400,38 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
               {'Try again'}
             </Button>
           </Stack>
-        ) : items.length === 0 ? (
+        ) : rows.length === 0 && !filtering ? (
           <Typography variant="body2" color="text.secondary">
-            {(entries ?? []).length
-              ? 'Nothing on this page matches the filter.'
-              : loading
-                ? 'Loading…'
-                : 'No activity yet — changes made in the console appear here.'}
+            {loading
+              ? 'Loading…'
+              : 'No activity yet — changes made in the console appear here.'}
           </Typography>
         ) : (
-          <List dense disablePadding>
-            {items.map((entry) => {
-              const href = activityHref(entry, { orgSlug })
-              const label = activityPrimaryText(entry)
-              return (
-                <ListItem key={entry.$id} disableGutters dense>
-                  <ListItemText
-                    primary={
-                      href ? (
-                        <AppLink href={href} color="inherit" underline="hover">
-                          {label}
-                        </AppLink>
-                      ) : (
-                        label
-                      )
-                    }
-                    secondary={`${activityActorLabel(entry)} · ${formatWireTimestamp(entry.createdAt)}`}
-                  />
-                </ListItem>
-              )
-            })}
-          </List>
+          <ListTable
+            aria-label={header}
+            rows={rows}
+            columns={columns}
+            getRowId={(row: any) => `${row.scopePath ?? ''}:${row.$id}`}
+            hideFooter
+            rowHeight={TABLE_ROW_HEIGHT}
+            /*
+             * The grid holds ONE page of a cursor feed, so it must not filter
+             * that page and call it the answer: the panel's clauses and the
+             * search words go to the route, which puts them on its query.
+             */
+            filterMode="server"
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            {...(orgWide ? { quickFilter: true } : {})}
+            loading={loading}
+            noRowsLabel="No activity matches these filters"
+          />
         )}
         {paged ? (
           <ListPagination
             page={page}
             pageSize={pageSize}
-            rowCount={items.length}
+            rowCount={rows.length}
             hasMore={Boolean(nextCursor)}
             disabled={loading}
             onPageChange={(next) => {
@@ -399,8 +451,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
               void loadPage(next, previous)
             }}
             // The reload runs from the effect, which keys on `loadPage` and
-            // so on the size — setting it here and loading there keeps one
-            // path into the query rather than two that can disagree.
+            // so on the size — one path into the query rather than two.
             onPageSizeChange={setPageSize}
           />
         ) : null}
