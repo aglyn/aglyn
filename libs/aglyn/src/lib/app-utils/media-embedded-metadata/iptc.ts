@@ -105,7 +105,7 @@ const ISO_DATE =
 const utf8Lenient = new TextDecoder('utf-8')
 const encoder = new TextEncoder()
 
-interface Dataset {
+interface IimEntry {
   record: number
   dataset: number
   data: Uint8Array
@@ -139,8 +139,8 @@ function isAscii(text: string): boolean {
  * Datasets up to the first byte that does not start one. Whatever follows
  * (padding, a truncated dataset, junk) is `rest`.
  */
-function parseIim(iim: Uint8Array): { datasets: Dataset[]; rest: Uint8Array } {
-  const datasets: Dataset[] = []
+function parseIim(iim: Uint8Array): { datasets: IimEntry[]; rest: Uint8Array } {
+  const datasets: IimEntry[] = []
   let at = 0
   while (at + 5 <= iim.length && iim[at] === 0x1c) {
     let size = ((iim[at + 3] ?? 0) << 8) | (iim[at + 4] ?? 0)
@@ -181,7 +181,7 @@ function encodeDataset(record: number, dataset: number, data: Uint8Array) {
 }
 
 /** Whether 1:90 declares UTF-8: `ESC % G`, or ISO 2022's `ESC % / G|H|I`. */
-function declaresUtf8(datasets: readonly Dataset[]): boolean {
+function declaresUtf8(datasets: readonly IimEntry[]): boolean {
   const charset = datasets.find((d) => d.record === 1 && d.dataset === 90)
   const d = charset?.data
   if (!d || d[0] !== 0x1b || d[1] !== 0x25) return false
@@ -190,7 +190,7 @@ function declaresUtf8(datasets: readonly Dataset[]): boolean {
   )
 }
 
-function datasetText(data: Uint8Array, utf8: boolean): string {
+function iimEntryText(data: Uint8Array, utf8: boolean): string {
   const text = utf8 ? utf8Lenient.decode(data) : decodeLegacyText(data)
   const nul = text.indexOf('\0')
   return (nul >= 0 ? text.slice(0, nul) : text).trim()
@@ -239,7 +239,7 @@ export function readIim(iim: Uint8Array): EmbeddedCandidate[] {
     const texts = (dataset: number) =>
       datasets
         .filter((d) => d.record === 2 && d.dataset === dataset)
-        .map((d) => datasetText(d.data, utf8))
+        .map((d) => iimEntryText(d.data, utf8))
         .filter(Boolean)
     const out: EmbeddedCandidate[] = []
     for (const field of FIELDS) {
@@ -263,7 +263,7 @@ export function readIim(iim: Uint8Array): EmbeddedCandidate[] {
 }
 
 /** A patch value as the list of dataset values it becomes. */
-function datasetValues(
+function iimEntryValues(
   value: string | string[] | null,
   repeatable: boolean,
 ): string[] {
@@ -277,7 +277,7 @@ function datasetValues(
 
 /** The index of the first dataset that sorts after record:dataset. */
 function sortedIndex(
-  list: readonly Dataset[],
+  list: readonly IimEntry[],
   record: number,
   dataset: number,
 ) {
@@ -309,7 +309,7 @@ export function writeIim(iim: Uint8Array, patch: EmbeddedPatch): Uint8Array {
   for (const field of FIELDS) {
     const value = patch[field.key]
     if (patched(field.key) && value !== undefined) {
-      edits.set(field.dataset, datasetValues(value, Boolean(field.repeatable)))
+      edits.set(field.dataset, iimEntryValues(value, Boolean(field.repeatable)))
     }
   }
   if (patched('createdAt')) {
@@ -342,7 +342,7 @@ export function writeIim(iim: Uint8Array, patch: EmbeddedPatch): Uint8Array {
         ? { ...d, data: encoder.encode(decodeLegacyText(d.data)), raw: null }
         : d,
     )
-    const charset: Dataset = {
+    const charset: IimEntry = {
       record: 1,
       dataset: 90,
       data: UTF8_CHARSET,
@@ -368,7 +368,7 @@ export function writeIim(iim: Uint8Array, patch: EmbeddedPatch): Uint8Array {
   for (const [dataset, texts] of [...edits].sort((a, b) => a[0] - b[0])) {
     const first = list.findIndex((d) => d.record === 2 && d.dataset === dataset)
     const kept = list.filter((d) => !(d.record === 2 && d.dataset === dataset))
-    const fresh = texts.map((text): Dataset => ({
+    const fresh = texts.map((text): IimEntry => ({
       record: 2,
       dataset,
       data: encoder.encode(text),
