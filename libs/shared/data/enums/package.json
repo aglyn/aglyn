@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-data-enums",
-  "version": "1.0.0-beta.193",
+  "version": "1.0.0-beta.194",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,8 +25,8 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-mdi": "1.0.0-beta.193",
-    "@aglyn/shared-util-tools": "1.0.0-beta.193",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.194",
+    "@aglyn/shared-util-tools": "1.0.0-beta.194",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
