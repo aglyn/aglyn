@@ -13,7 +13,7 @@ Aglyn has two kinds of people: your **team** (who build and manage the site) and
 **Paid**. Seats are metered per tier; see [Billing & plans](../billing-and-plans/overview.md).
 :::
 
-![The organization team page: roster, roles, and invites](/img/teams-and-roles/org-team-page.png)
+![The organization Team page: the invite row above the members roster, with each member's role, access and AI credits, under the table's Columns, Filters, Export and Search controls](/img/teams-and-roles/org-team-page.png)
 
 The **Team** page's roster filters through its table's toolbar: **Filters** narrows it
 by **Role** or by **Access** (team manager or site collaborator), and **Search** matches
