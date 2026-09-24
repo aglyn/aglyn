@@ -158,7 +158,7 @@ filter, because an active member carries no status to match. For members who may
 **Open in CRM** — the member's contact, found by the address they signed up
 with.
 
-![The console Users page with the Site users card listing members and their Active status chips](/img/guides/members-users-tab.png)
+![The console Users page with the Site users card listing members, their join dates and Active status chips, under the table's Columns, Filters and Export controls](/img/guides/members-users-tab.png)
 
 Click a member to open the **member drawer**:
 

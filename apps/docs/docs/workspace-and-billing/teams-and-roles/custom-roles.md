@@ -13,7 +13,7 @@ Control what each teammate can do with **roles** — named permission sets — p
 **Paid**.
 :::
 
-![Roles on the organization team page](/img/teams-and-roles/org-team-page.png)
+![The organization Team page, with each member's role picker and Permissions in the roster and Custom roles in the navigation](/img/teams-and-roles/org-team-page.png)
 
 ## Create a custom role
 

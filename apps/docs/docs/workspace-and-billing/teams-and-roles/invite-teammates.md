@@ -13,7 +13,7 @@ Bring collaborators into a site so they can build and manage alongside you.
 [Billing & plans](../billing-and-plans/overview.md).
 :::
 
-![Inviting a teammate from the team page](/img/teams-and-roles/org-team-page.png)
+![The Team page's invite row, with the Email field, the Role picker and All sites, above the members roster](/img/teams-and-roles/org-team-page.png)
 
 ## Invite someone
 

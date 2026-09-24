@@ -11,7 +11,7 @@ are **first-class designed pages**: the list at `/{collection}` and each entry a
 `/{collection}/{entry}` render through your site's theme and shared layout, and can be
 fully designed in the besigner via **template screens**.
 
-![The Content page in the Aglyn console, showing a Blog collection with its published entries](/img/content/content-page.png)
+![The Content page's Collections & Entries section, with the Blog collection picked, Categories and New entry beside it, and its published entries in a table with the grid's own toolbar](/img/content/content-page.png)
 
 :::info Plan availability
 **Free** to start; content features scale with your tier.

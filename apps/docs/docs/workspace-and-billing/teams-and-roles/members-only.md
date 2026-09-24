@@ -15,7 +15,7 @@ paywall need the content-gating feature; on lower plans (or if a
 subscription lapses) gated content is not served.
 :::
 
-![A site's users page](/img/teams-and-roles/host-users-page.png)
+![A site's Users page: the Site users table of members with their email, name, join date and status, above the Users card that grants site access](/img/teams-and-roles/host-users-page.png)
 
 ## Let visitors sign up
 

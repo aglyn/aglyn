@@ -9,6 +9,21 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.194 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.193...v1.0.0-beta.194)
+
+### Documentation
+
+- **docs:** re-shoot the site and team list screenshots on the grid toolbar ([AGL-3319](https://linear.app/aglyn/issue/AGL-3319), [AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3320 ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+
+</details>
+
 ## v1.0.0-beta.193 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.192...v1.0.0-beta.193)

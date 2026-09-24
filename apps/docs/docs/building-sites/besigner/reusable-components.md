@@ -24,7 +24,7 @@ require a Starter plan — see Billing to upgrade."* There is no cap on how many
 components a site can have.
 :::
 
-![The site's reusable components page](/img/besigner/components-page.png)
+![The site's Reusable Components page: the components table with Display name, Used in, ID, Description, Updated and Created columns, under the table's Columns, Filters, Export and Search controls](/img/besigner/components-page.png)
 
 ## Promote
 

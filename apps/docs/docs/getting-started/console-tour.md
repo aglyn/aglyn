@@ -217,7 +217,7 @@ lives under **Notifications**, which has two sections in the rail on the left:
 **All notifications** and **Settings**. The first shows what arrived, newest
 first, with **Mark all read** above it:
 
-![The Notifications page: a Navigation rail listing All notifications and Settings, beside a Mark all read action and the paginated feed of notifications](/img/getting-started/notifications-page.png)
+![The Notifications page: a Navigation rail listing All notifications and Settings, beside Mark all read and the feed as a table of notification, type, workspace, time and status, with the table's Columns and Export controls](/img/getting-started/notifications-page.png)
 
 ### Notification settings
 
