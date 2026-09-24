@@ -11025,8 +11025,8 @@ describe("a site member's password hash is no client's (AGL-3308)", () => {
         sessionsValidFromMs: 1_790_000_000_000,
       })
       await setDoc(credential(db, 'member-1'), { passwordScrypt: HASH })
-      // A member written before the move: the hash still on the profile and
-      // no credential document, until the migration runs.
+      // A profile carrying a hash field and no credential document: the
+      // shape before AGL-3308, and what a hash written onto a profile leaves.
       await setDoc(member(db, 'member-legacy'), {
         email: 'lin@example.test',
         passwordScrypt: HASH,
@@ -11188,13 +11188,13 @@ describe("a site member's password hash is no client's (AGL-3308)", () => {
    *
    * Rules cannot hide one field of a document a principal may read, and every
    * member of the site may read the profiles, because the console lists them.
-   * So a profile that still carries the legacy hash shows it to every one of
-   * them until `backfill-site-member-credentials.mjs` moves it, which is why
-   * the migration runs straight after the promotion rather than whenever. This
-   * case keeps that window stated; the migration, not a rule, is what closes
-   * it.
+   * So a hash written onto a profile shows to every one of them. None carries
+   * one: a migration moved every copy to the credential document (2026-09-24),
+   * and no route writes one onto a profile or reads one back, so a copy put
+   * there would expose a hash that opens nothing. This case keeps that stated;
+   * a rule that hid the field would refuse the console's lists with it.
    */
-  it('RESIDUAL: a legacy profile still shows its hash until the migration moves it', async () => {
+  it('RESIDUAL: a hash written onto a profile is readable by every member of the site', async () => {
     const snapshot = await getDoc(member(authed(VIEWER), 'member-legacy'))
     assert.equal(
       snapshot.get('passwordScrypt'),

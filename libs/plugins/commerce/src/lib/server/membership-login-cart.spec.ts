@@ -228,7 +228,10 @@ let consoleErrorSpy: jest.SpyInstance
 beforeEach(() => {
   docs.clear()
   ipCounter = 0
-  memberFields['passwordScrypt'] = hashMemberPassword(PASSWORD)
+  // The member's password lives on their credential document (AGL-3308).
+  docs.set('hosts/host-1/siteMemberCredentials/member-1', {
+    passwordScrypt: hashMemberPassword(PASSWORD),
+  })
   delete memberFields['suspended']
   consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {
     // The handler logs the swallowed linkage failure; keep the run quiet.

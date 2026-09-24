@@ -82,7 +82,7 @@ export const membershipResetHandler: PluginApiHandler = async (req, res) => {
         !verifyPasswordResetToken(
           hostId,
           token,
-          storedPasswordHash(credentialDoc, memberDoc),
+          storedPasswordHash(credentialDoc),
         )
       ) {
         return 'invalid'

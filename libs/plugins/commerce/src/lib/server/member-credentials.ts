@@ -32,11 +32,12 @@ import { firebaseAdmin } from '@aglyn/tenant-data-admin'
  * collection to every client, staff included, and only these server routes
  * read or write it.
  *
- * `passwordScrypt` on the PROFILE is the legacy copy. Sign-in still reads it
- * for a member with no credential document, which is every member until
- * `tools/scripts/backfill-site-member-credentials.mjs` moves the hashes; each
- * writer here deletes it as it writes the credential document, and the rules
- * refuse a client that tries to set it.
+ * A `passwordScrypt` on the PROFILE answers for nothing. That was where the
+ * hash lived before AGL-3308, and a one-shot migration moved every copy
+ * across (2026-09-24). No route reads one there now, so a copy written onto a
+ * profile, by staff or by a stale script, cannot open an account; each writer
+ * here still deletes the field as it writes the credential document, and the
+ * rules refuse a client that tries to set it.
  */
 
 /**
@@ -66,19 +67,17 @@ function hashOn(
 }
 
 /**
- * The hash a password is checked against: the credential document's, else the
- * legacy copy on the profile.
+ * The hash a password is checked against: the credential document's, or none.
  *
- * Once a credential document carries a hash the profile's copy is never read,
- * so a stale or planted legacy value cannot open an account that has moved.
  * Every flow that checks a password or binds a reset token to one asks this,
- * so the two can never disagree about which hash is current.
+ * so the two can never disagree about which hash is current. A member with no
+ * credential document has no password — sign-in refuses them, and a reset
+ * link lets them set one.
  */
 export function storedPasswordHash(
   credential: FirebaseFirestore.DocumentSnapshot | null | undefined,
-  member: FirebaseFirestore.DocumentSnapshot | null | undefined,
 ): string | undefined {
-  return hashOn(credential) ?? hashOn(member)
+  return hashOn(credential)
 }
 
 /** {@link storedPasswordHash} for a member document already in hand. */
@@ -87,13 +86,13 @@ export async function readMemberPasswordHash(
   member: FirebaseFirestore.DocumentSnapshot,
 ): Promise<string | undefined> {
   const credential = await memberCredentialRef(hostRef, member.id).get()
-  return storedPasswordHash(credential, member)
+  return storedPasswordHash(credential)
 }
 
 /**
- * The profile patch that retires its legacy credential fields — spread into
- * the same write that sets the credential document, so no moment exists where
- * the profile still answers for a password the credential document replaced.
+ * The profile patch that deletes any credential field from it — spread into
+ * the same write that sets the credential document, so a hash never sits on
+ * the document every member of the site can read.
  */
 export function retiredCredentialFields(): Record<
   (typeof MEMBER_CREDENTIAL_FIELDS)[number],

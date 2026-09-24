@@ -74,8 +74,7 @@ export const membershipLoginHandler: PluginApiHandler = async (req, res) => {
       .limit(1)
       .get()
     const memberDoc = membersQuery.docs[0]
-    // The credential document's hash, else the legacy copy on the profile
-    // (AGL-3308) — see member-credentials.ts.
+    // The credential document's hash (AGL-3308) — see member-credentials.ts.
     const passwordScrypt = memberDoc
       ? await readMemberPasswordHash(hostRef, memberDoc)
       : undefined
