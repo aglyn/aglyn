@@ -316,25 +316,6 @@ function datasetFilterToken(model, clause) {
 }
 
 /**
- * Every token a record must hold to answer a clause, or null when the clause
- * is not token-served. The same as {@link datasetFilterToken} except for a
- * plain text `contains` of several words, which needs each word's prefix —
- * the query can serve only one of them, and the rest are matched over the
- * rows it returns, by these same tokens, so both answers agree.
- */
-function datasetFilterTokens(model, clause) {
-  const first = datasetFilterToken(model, clause)
-  if (!first) return null
-  const field = model.fields?.[clause.field]
-  if (field?.type === 'text' && !isEnum(field) && clause.op === 'contains') {
-    return datasetFilterWords(clause.value).map(
-      (word) => `f:${clause.field}^${clipWord(word)}`,
-    )
-  }
-  return [first]
-}
-
-/**
  * The quick-search token for one typed word, or null for a word with no
  * letters or digits. A word with punctuation inside it is asked by its first
  * run — split the search text with {@link datasetFilterWords} to ask for
