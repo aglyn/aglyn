@@ -312,3 +312,96 @@ describe('the prompt dismissal and the read-back', () => {
     })
   })
 })
+
+describe('a Yes reopens the list it stands for (AGL-3305)', () => {
+  const rejoin = jest.fn(async () => ({
+    status: 'rejoined' as const,
+    releasedSuppression: true,
+    keptLeft: 3,
+  }))
+  beforeEach(() => rejoin.mockClear())
+  const base = {
+    uid: UID,
+    email: EMAIL,
+    textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
+    now: NOW,
+    hostId: HOST,
+    upsert,
+    rejoin: rejoin as never,
+  }
+
+  it('asks for the product-updates list on the marketing site, for a verified mailbox', async () => {
+    const result = await recordPlatformMarketingConsent({
+      ...base,
+      firestore: fakeFirestore(),
+      decision: 'granted',
+      source: 'console-preferences',
+      mailboxVerified: true,
+    })
+    expect(rejoin).toHaveBeenCalledWith({
+      hostId: HOST,
+      email: EMAIL,
+      topicId: 'product-updates',
+    })
+    expect(result.stream).toEqual({ status: 'rejoined', releasedSuppression: true, keptLeft: 3 })
+  })
+
+  it('records an unverified Yes and reopens nothing — the address might be somebody else’s', async () => {
+    const db = fakeFirestore()
+    const result = await recordPlatformMarketingConsent({
+      ...base,
+      firestore: db,
+      decision: 'granted',
+      source: 'console-signup',
+    })
+    expect(result.stream).toEqual({ status: 'unverified' })
+    expect(rejoin).not.toHaveBeenCalled()
+    expect(db.docs[`users/${UID}`]).toMatchObject({ marketingConsent: true })
+  })
+
+  it('reopens nothing for a No, and nothing where there is no marketing site', async () => {
+    const declined = await recordPlatformMarketingConsent({
+      ...base,
+      firestore: fakeFirestore(),
+      decision: 'declined',
+      source: 'console-preferences',
+      mailboxVerified: true,
+    })
+    expect(declined.stream).toBeUndefined()
+    const unconfigured = await recordPlatformMarketingConsent({
+      ...base,
+      hostId: null,
+      firestore: fakeFirestore(),
+      decision: 'granted',
+      source: 'console-preferences',
+      mailboxVerified: true,
+    })
+    expect(unconfigured.stream).toBeUndefined()
+    expect(rejoin).not.toHaveBeenCalled()
+  })
+
+  it('keeps the answer when the list could not reopen, and says so', async () => {
+    const db = fakeFirestore()
+    const result = await recordPlatformMarketingConsent({
+      ...base,
+      rejoin: (async () => ({ status: 'failed' })) as never,
+      firestore: db,
+      decision: 'granted',
+      source: 'console-preferences',
+      mailboxVerified: true,
+    })
+    expect(result.stream).toEqual({ status: 'failed' })
+    expect(db.docs[`users/${UID}`]).toMatchObject({ marketingConsent: true })
+  })
+
+  it('refuses an email door — those are the marketing site’s to record', async () => {
+    await expect(
+      recordPlatformMarketingConsent({
+        ...base,
+        firestore: fakeFirestore(),
+        decision: 'declined',
+        source: 'email-unsubscribe' as never,
+      }),
+    ).rejects.toThrow('console source')
+  })
+})

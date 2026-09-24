@@ -258,6 +258,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    */
   resolveOrgIdForHost: async () => 'org-1',
   ...jest.requireActual('@aglyn/tenant-data-admin/server/campaign-conversion-attribution'),
+  // The account mirror (AGL-3305) is `platform-marketing-mirror.spec.ts`'s
+  // subject; here it is a site that is not the platform's.
+  mirrorPlatformUnsubscribe: async () => ({ status: 'not-platform' }),
+  mirrorPlatformResubscribe: async () => ({ status: 'not-platform' }),
 }))
 
 import { resolvePluginApiRoute } from '@aglyn/aglyn/server'

@@ -685,6 +685,36 @@ keyed that way, is kept — the promise outlives the data — with anything that
 could identify the person removed from it. A dry run counts and writes
 nothing. Reports land under `plugins` on the erasure's counts and audit row.
 
+## Email streams — `plugin-email-streams` (`/server`)
+
+A slot one plugin holds (`core.email-streams`, built on the service contracts
+above): the plugin that keeps a site's email preferences — its topic catalog,
+the per-topic opt-outs and the site's unsubscribe list — reopens one stream
+for a signed-in person who asks for it back. Core calls it when an account's
+answer about product updates turns back to yes in the console, so it is
+registered from `consoleServerDeclarations`:
+
+```ts
+registerPluginEmailStreams(
+  { rejoin: async (request) => (await import('./server/streams')).rejoin(request) },
+  { pluginId: 'acme-mail' },
+)
+```
+
+| API | Semantics |
+| --- | --- |
+| `registerPluginEmailStreams(impl, { pluginId? })` | Fills the slot. The same plugin registering again replaces its entry; a second plugin throws naming both. |
+| `rejoinEmailStream({ hostId, email, topicId })` | Reopens one stream. Answers `rejoined` (with `releasedSuppression` and `keptLeft`), `held` with the reason, `unavailable` when no plugin holds the slot, or `failed` for one that threw — logged, never thrown, because the caller has already recorded the person's answer. |
+
+`rejoin` lifts the stream's opt-out. For an address that left everything, it
+first records an opt-out for every *other* active stream in the catalog and
+only then lifts the site's unsubscribe, so the rest stay left and there is no
+moment in which the whole catalog is mailable; a catalog it cannot read lifts
+nothing. A bounce, a complaint, an erasure or a staff hold is `held` and
+nothing is written, and a pending double opt-in stays pending. The slot
+authenticates nobody: core asks only with the verified address of a signed-in
+account, because reopening a stream undoes something done from the mailbox.
+
 ## Lead conversion — `plugin-lead-conversion` (`/server`)
 
 When a lead becomes a contact — from the console, over the REST API, or on its

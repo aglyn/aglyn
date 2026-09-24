@@ -251,6 +251,14 @@ let cadenceWriteFails = false
 let confirmOutcome = 'confirmed'
 let confirmCalls: Array<{ hostId: string; email: string; topicId: string }> = []
 
+/**
+ * What the pages asked of the account mirror (AGL-3305). A recorder: whether
+ * the mirror changes an account is `platform-marketing-mirror.spec.ts`'s
+ * question; this file certifies that each page tells it what the person did,
+ * after the write that did it.
+ */
+const mockMirrorCalls: Array<[string, Record<string, unknown>]> = []
+
 /*
  * The cadence write is a DOUBLE that writes into the same fake store.
  *
@@ -314,12 +322,20 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     confirmCalls.push({ hostId, email, topicId })
     return confirmOutcome
   },
+  mirrorPlatformUnsubscribe: async (input: Record<string, unknown>) => {
+    mockMirrorCalls.push(['unsubscribe', input])
+    return { status: 'not-platform' }
+  },
+  mirrorPlatformResubscribe: async (input: Record<string, unknown>) => {
+    mockMirrorCalls.push(['resubscribe', input])
+    return { status: 'not-platform' }
+  },
 }))
 
 import { resolvePluginApiRoute } from '@aglyn/aglyn/server'
 import { DEFAULT_EMAIL_TOPICS } from '@aglyn/aglyn'
 import { createHash, createHmac } from 'crypto'
-import { registerEmailApi } from './server'
+import { registerEmailApi, rejoinStreamForAccount } from './server'
 
 registerEmailApi()
 
@@ -432,6 +448,7 @@ beforeEach(() => {
   cadenceWriteFails = false
   confirmOutcome = 'confirmed'
   confirmCalls = []
+  mockMirrorCalls.length = 0
   orgIdForHost = 'org-1'
   process.env.EMAIL_UNSUBSCRIBE_SECRET = SECRET
 })
@@ -1351,5 +1368,151 @@ describe('when Firestore is down', () => {
     expect(reply.status).toBe(500)
     expect(docs.size).toBe(0)
     consoleError.mockRestore()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// AGL-3305: the account's answer follows what the pages did
+// ---------------------------------------------------------------------------
+
+describe('the account mirror is told what the person did', () => {
+  const keepAllBut = (...dropped: string[]) =>
+    Object.fromEntries(
+      DEFAULT_EMAIL_TOPICS.filter((topic) => !dropped.includes(topic.id)).map(
+        (topic) => [`topic:${topic.id}`, 'on'],
+      ),
+    )
+
+  it('hears nothing from a GET', async () => {
+    await call({ method: 'GET', query: topicQuery() })
+    await call({ method: 'GET', route: 'email/unsubscribe', query: topicQuery() })
+    expect(mockMirrorCalls).toEqual([])
+  })
+
+  it('hears "everything" from the one-click route and from "unsubscribe from all"', async () => {
+    await call({
+      method: 'POST',
+      route: 'email/unsubscribe',
+      query: topicQuery(),
+      body: { 'List-Unsubscribe': 'One-Click' },
+    })
+    await call({ method: 'POST', query: topicQuery(), body: { action: 'all' } })
+    expect(mockMirrorCalls).toEqual([
+      ['unsubscribe', { hostId: HOST, email: RECIPIENT, left: 'everything' }],
+      ['unsubscribe', { hostId: HOST, email: RECIPIENT, left: 'everything' }],
+    ])
+  })
+
+  it('hears exactly the lists left, and a way back for what was kept', async () => {
+    await call({ method: 'POST', query: topicQuery(), body: keepAllBut('product-updates') })
+    expect(mockMirrorCalls).toEqual([
+      ['unsubscribe', { hostId: HOST, email: RECIPIENT, left: ['product-updates'] }],
+      ['resubscribe', { hostId: HOST, email: RECIPIENT, via: 'email-preferences' }],
+    ])
+    // Told after the write it reports, so its own read sees the outcome.
+    expect((docs.get(OPT_OUT_PATH) as any).topics['product-updates'].resubscribedAt).toBeNull()
+  })
+
+  it('hears no way back when nothing was kept', async () => {
+    await call({ method: 'POST', query: topicQuery(), body: {} })
+    expect(mockMirrorCalls.map(([kind]) => kind)).toEqual(['unsubscribe'])
+  })
+
+  it('hears a resubscribe only when the site’s list was actually lifted', async () => {
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'unsubscribe' })
+    await call({ method: 'POST', route: 'email/resubscribe', query: topicQuery() })
+    expect(mockMirrorCalls).toEqual([
+      ['resubscribe', { hostId: HOST, email: RECIPIENT, via: 'email-resubscribe' }],
+    ])
+    mockMirrorCalls.length = 0
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'bounce' })
+    await call({ method: 'POST', route: 'email/resubscribe', query: topicQuery() })
+    expect(mockMirrorCalls).toEqual([])
+  })
+})
+
+describe('rejoinStreamForAccount — one stream back, the rest stay left (AGL-3305)', () => {
+  const REQUEST = { hostId: HOST, email: RECIPIENT, topicId: 'product-updates' }
+
+  it('lifts the one opt-out and leaves the site list alone', async () => {
+    docs.set(OPT_OUT_PATH, {
+      email: RECIPIENT,
+      topics: {
+        'product-updates': { optedOutAt: 't0', resubscribedAt: null },
+        newsletter: { optedOutAt: 't0', resubscribedAt: null },
+      },
+    })
+    await expect(rejoinStreamForAccount(REQUEST, fakeFirestore)).resolves.toEqual({
+      status: 'rejoined',
+      releasedSuppression: false,
+      keptLeft: 0,
+    })
+    const record = docs.get(OPT_OUT_PATH) as any
+    // Evidence kept: the opt-out stands beside the moment it was lifted.
+    expect(record.topics['product-updates']).toMatchObject({ optedOutAt: 't0' })
+    expect(record.topics['product-updates'].resubscribedAt).toMatch(/^t\d+$/)
+    expect(record.topics['newsletter'].resubscribedAt).toBeNull()
+    expect(docs.has(SUPPRESSION_PATH)).toBe(false)
+  })
+
+  it('turns "everything" into every OTHER stream left, then lifts the site list', async () => {
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'unsubscribe' })
+    // An org's own stream is left too, not just the built-ins.
+    docs.set('orgs/org-1/emailTopics/webinars', { name: 'Webinars' })
+    await expect(rejoinStreamForAccount(REQUEST, fakeFirestore)).resolves.toEqual({
+      status: 'rejoined',
+      releasedSuppression: true,
+      keptLeft: 4,
+    })
+    expect(docs.has(SUPPRESSION_PATH)).toBe(false)
+    const record = docs.get(OPT_OUT_PATH) as any
+    expect(Object.keys(record.topics).sort()).toEqual(
+      ['marketing', 'newsletter', 'sales', 'webinars'].sort(),
+    )
+    for (const id of ['marketing', 'newsletter', 'sales', 'webinars']) {
+      expect(record.topics[id].resubscribedAt).toBeNull()
+    }
+  })
+
+  it('changes nothing against a bounce or a complaint — not a preference', async () => {
+    for (const reason of ['bounce', 'complaint']) {
+      docs.clear()
+      docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason })
+      await expect(rejoinStreamForAccount(REQUEST, fakeFirestore)).resolves.toEqual({
+        status: 'held',
+        reason,
+      })
+      expect(docs.get(SUPPRESSION_PATH)).toEqual({ email: RECIPIENT, reason })
+      expect(docs.has(OPT_OUT_PATH)).toBe(false)
+    }
+  })
+
+  it('leaves a pending confirmation pending — the console is not the mailbox', async () => {
+    docs.set(OPT_OUT_PATH, {
+      email: RECIPIENT,
+      topics: { 'product-updates': { pendingAt: 5, confirmedAt: null } },
+    })
+    await rejoinStreamForAccount(REQUEST, fakeFirestore)
+    expect((docs.get(OPT_OUT_PATH) as any).topics['product-updates']).toEqual({
+      pendingAt: 5,
+      confirmedAt: null,
+    })
+  })
+
+  it('lifts nothing when the catalog cannot be read — the built-ins alone would reopen the rest', async () => {
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'unsubscribe' })
+    const collection = jest
+      .spyOn(fakeFirestore, 'collection')
+      .mockImplementation((name: string) =>
+        name === 'orgs'
+          ? ({ doc: () => { throw new Error('catalog unavailable') } } as any)
+          : makeCollectionRef(name),
+      )
+    await expect(rejoinStreamForAccount(REQUEST, fakeFirestore)).rejects.toThrow(
+      'catalog unavailable',
+    )
+    collection.mockRestore()
+    expect(docs.get(SUPPRESSION_PATH)).toEqual({ email: RECIPIENT, reason: 'unsubscribe' })
+    expect(docs.has(OPT_OUT_PATH)).toBe(false)
   })
 })

@@ -34,10 +34,11 @@
 import {
   PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
   type PlatformMarketingConsentDecision,
-  type PlatformMarketingConsentSourceKind,
+  type PlatformMarketingConsoleSourceKind,
   type PlatformMarketingConsentState,
 } from '@aglyn/aglyn/app-utils/platform-marketing-consent'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import type { PlatformMarketingHold } from '@aglyn/tenant-data-admin/server/platform-marketing-consent'
 
 /** The one route both halves of the record are read and written through. */
 export const MARKETING_CONSENT_ROUTE = '/api/auth/marketing-consent'
@@ -83,6 +84,13 @@ export interface MarketingConsentStatus extends PlatformMarketingConsentState {
   promptDue: boolean
   /** The wording version this deploy shows. */
   currentTextVersion: string
+  /**
+   * What keeps a Yes from arriving (AGL-3305), or `null` for nothing. Only
+   * on a read that asked for it (`{ detail: 'hold' }`), and only for a Yes.
+   */
+  hold?: PlatformMarketingHold | null
+  /** Whether the account's address is verified — what reopening a list needs. */
+  mailboxVerified?: boolean
 }
 
 /** A signed-in account, as the console's hooks hand it over. */
@@ -98,9 +106,15 @@ type TokenUser = { getIdToken: () => Promise<string> } | null | undefined
  */
 export async function fetchMarketingConsentStatus(
   user: TokenUser,
+  options: { detail?: 'hold' } = {},
 ): Promise<MarketingConsentStatus | null> {
   try {
-    const response = await authorizedFetch(user, MARKETING_CONSENT_ROUTE)
+    const response = await authorizedFetch(
+      user,
+      options.detail
+        ? `${MARKETING_CONSENT_ROUTE}?detail=${options.detail}`
+        : MARKETING_CONSENT_ROUTE,
+    )
     if (!response.ok) return null
     return (await response.json()) as MarketingConsentStatus
   } catch {
@@ -124,7 +138,7 @@ export type MarketingConsentAnswer = PlatformMarketingConsentDecision | 'dismiss
 export async function postMarketingConsent(
   user: TokenUser,
   answer: MarketingConsentAnswer,
-  source: PlatformMarketingConsentSourceKind,
+  source: PlatformMarketingConsoleSourceKind,
 ): Promise<boolean> {
   try {
     const response = await authorizedFetch(user, MARKETING_CONSENT_ROUTE, {

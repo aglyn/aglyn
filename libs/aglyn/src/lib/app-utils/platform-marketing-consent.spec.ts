@@ -36,15 +36,22 @@ import {
   OPERATOR_BACKFILL_CONSENT_KIND,
   readMarketingBasis,
 } from './marketing-consent'
+import { EMAIL_TOPIC_PRODUCT_UPDATES } from './email-topics'
 import {
+  isPlatformMarketingConsentSourceKind,
+  isPlatformMarketingConsoleSourceKind,
+  isPlatformMarketingEmailSourceKind,
   PLATFORM_MARKETING_CONSENT_DECISIONS,
-  PLATFORM_MARKETING_CONSENT_SOURCE_KINDS,
+  PLATFORM_MARKETING_CONSOLE_SOURCE_KINDS,
+  PLATFORM_MARKETING_EMAIL_SOURCE_KINDS,
+  PLATFORM_MARKETING_TOPIC_ID,
   PLATFORM_MARKETING_CONSENT_TEXT,
   PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
   PLATFORM_MARKETING_PROMPT_SNOOZE_MS,
   type PlatformMarketingConsentState,
   platformMarketingConsentSource,
   platformMarketingConsentText,
+  platformMarketingEmailSource,
   platformMarketingPromptDue,
   platformMarketingUserFields,
   readPlatformMarketingConsent,
@@ -249,8 +256,8 @@ describe('the wording and its provenance', () => {
     expect(PLATFORM_MARKETING_CONSENT_TEXT_VERSION).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
-  it('gives every door a sentence for both decisions', () => {
-    for (const kind of PLATFORM_MARKETING_CONSENT_SOURCE_KINDS) {
+  it('gives every console door a sentence for both decisions', () => {
+    for (const kind of PLATFORM_MARKETING_CONSOLE_SOURCE_KINDS) {
       for (const decision of PLATFORM_MARKETING_CONSENT_DECISIONS) {
         const source = platformMarketingConsentSource({
           kind,
@@ -265,5 +272,69 @@ describe('the wording and its provenance', () => {
         expect(source.reason.length).toBeGreaterThan(20)
       }
     }
+  })
+})
+
+describe('the email doors (AGL-3305)', () => {
+  it('stands for the built-in Product updates list', () => {
+    expect(PLATFORM_MARKETING_TOPIC_ID).toBe(EMAIL_TOPIC_PRODUCT_UPDATES)
+    expect(PLATFORM_MARKETING_TOPIC_ID).toBe('product-updates')
+  })
+
+  it('keeps the email doors out of what a console request may name', () => {
+    for (const kind of PLATFORM_MARKETING_EMAIL_SOURCE_KINDS) {
+      expect(isPlatformMarketingEmailSourceKind(kind)).toBe(true)
+      expect(isPlatformMarketingConsoleSourceKind(kind)).toBe(false)
+      // …while a stored record naming one still reads.
+      expect(isPlatformMarketingConsentSourceKind(kind)).toBe(true)
+    }
+    for (const kind of PLATFORM_MARKETING_CONSOLE_SOURCE_KINDS) {
+      expect(isPlatformMarketingConsoleSourceKind(kind)).toBe(true)
+      expect(isPlatformMarketingEmailSourceKind(kind)).toBe(false)
+    }
+  })
+
+  it.each([
+    ['email-unsubscribe', 'declined'],
+    ['email-preferences', 'declined'],
+    ['email-preferences', 'granted'],
+    ['email-resubscribe', 'granted'],
+  ] as const)('%s / %s is the person’s own act, with no console wording', (kind, decision) => {
+    const source = platformMarketingEmailSource({
+      kind,
+      decision,
+      uid: UID,
+      atMs: NOW,
+    } as Parameters<typeof platformMarketingEmailSource>[0])
+    expect(source).toEqual({
+      kind,
+      by: UID,
+      atMs: NOW,
+      reason: expect.any(String),
+      actor: 'person',
+    })
+    // A page that versions nothing claims no version.
+    expect('textVersion' in source).toBe(false)
+    expect(source.reason.length).toBeGreaterThan(20)
+  })
+
+  it('reads a decision an email door recorded, door and all', () => {
+    const fields = platformMarketingUserFields({
+      decision: 'declined',
+      atMs: NOW,
+      source: platformMarketingEmailSource({
+        kind: 'email-unsubscribe',
+        decision: 'declined',
+        uid: UID,
+        atMs: NOW,
+      }),
+    })
+    expect(readPlatformMarketingConsent(fields)).toEqual({
+      decision: 'declined',
+      atMs: NOW,
+      textVersion: null,
+      sourceKind: 'email-unsubscribe',
+      promptDismissedAtMs: null,
+    })
   })
 })

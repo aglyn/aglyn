@@ -30,6 +30,10 @@
  * different one is refused rather than recorded under the new words; a
  * support session acting as the customer cannot decide for them; and the
  * prompt's "not now" is a dismissal, never a decision.
+ *
+ * AGL-3305 adds two: an email door is never a console request's to name, and
+ * only a VERIFIED address may reopen the list a Yes stands for — the answer
+ * is recorded either way.
  */
 
 import { PLATFORM_MARKETING_CONSENT_TEXT_VERSION } from '@aglyn/aglyn/app-utils/platform-marketing-consent'
@@ -40,6 +44,17 @@ let mockReadArgs: string[] = []
 let mockState: Record<string, unknown> = {}
 let mockRecordThrows = false
 let mockReadThrows = false
+let mockReachArgs: Array<Record<string, unknown>> = []
+let mockHold: Record<string, unknown> | null = null
+let mockDeclared = 0
+
+// The app's generated manifest names every plugin; what matters here is that
+// a verified Yes has the declarations run before the list is reopened.
+jest.mock('../constants/plugins.declarations.server.generated', () => ({
+  registerPluginServerDeclarations: async () => {
+    mockDeclared += 1
+  },
+}))
 const mockDecodedToken: Record<string, unknown> = {}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -62,6 +77,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   isImpersonationSession: (decoded: Record<string, unknown>) =>
     typeof decoded['impersonatedBy'] === 'string',
+  // The real rule, one line: a token's own claim.
+  isEmailVerified: (decoded: Record<string, unknown>) => decoded['email_verified'] === true,
+  readPlatformMarketingReach: async (input: Record<string, unknown>) => {
+    mockReachArgs.push(input)
+    return { status: 'read', marker: 'reach' }
+  },
+  platformMarketingHold: (reach: Record<string, unknown>) =>
+    reach['marker'] === 'reach' ? mockHold : 'not-the-reach',
   readPlatformMarketingConsentForUser: async (uid: string) => {
     mockReadArgs.push(uid)
     if (mockReadThrows) throw new Error('firestore unavailable')
@@ -70,7 +93,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   recordPlatformMarketingConsent: async (input: Record<string, unknown>) => {
     mockRecorded.push(input)
     if (mockRecordThrows) throw new Error('firestore unavailable')
-    return { atMs: 1_700_000_000_000, contact: { status: 'recorded' } }
+    return input['decision'] === 'granted'
+      ? {
+          atMs: 1_700_000_000_000,
+          contact: { status: 'recorded' },
+          stream: { status: input['mailboxVerified'] ? 'rejoined' : 'unverified' },
+        }
+      : { atMs: 1_700_000_000_000, contact: { status: 'recorded' } }
   },
   snoozePlatformMarketingPrompt: async (uid: string) => {
     mockSnoozed.push(uid)
@@ -119,6 +148,9 @@ beforeEach(() => {
   mockState = { ...NOTHING }
   mockRecordThrows = false
   mockReadThrows = false
+  mockReachArgs = []
+  mockHold = null
+  mockDeclared = 0
   for (const key of Object.keys(mockDecodedToken)) delete mockDecodedToken[key]
   Object.assign(mockDecodedToken, {
     uid: 'caller-uid',
@@ -142,6 +174,7 @@ describe('AGL-3185 · POST records the caller’s own decision', () => {
       atMs: 1_700_000_000_000,
       textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
       contact: 'recorded',
+      stream: 'unverified',
     })
     expect(mockRecorded).toEqual([
       {
@@ -151,6 +184,7 @@ describe('AGL-3185 · POST records the caller’s own decision', () => {
         decision: 'granted',
         source: 'console-signup',
         textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
+        mailboxVerified: false,
       },
     ])
   })
@@ -209,6 +243,10 @@ describe('AGL-3185 · POST records the caller’s own decision', () => {
 
   it.each([
     ['an unknown source', { decision: 'granted', source: 'website', textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION }],
+    // AGL-3305: the email doors are recorded by the marketing site's own
+    // pages, from a signed link. A console click is not a click in a mailbox.
+    ['an email door', { decision: 'declined', source: 'email-unsubscribe', textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION }],
+    ['a resubscribe claimed from the console', { decision: 'granted', source: 'email-resubscribe', textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION }],
     ['an unknown decision', { decision: 'maybe', source: 'console-prompt', textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION }],
     ['a dismissal from a door that is not the prompt', { decision: 'dismissed', source: 'console-preferences' }],
     ['a refusal claiming the sign-up form', { decision: 'declined', source: 'console-signup', textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION }],
@@ -308,5 +346,78 @@ describe('AGL-3185 · GET answers for the caller, and decides the prompt', () =>
     const response = await get()
     expect(response.status).toBe(500)
     expect((await response.json()).error).toBeTruthy()
+  })
+})
+
+describe('AGL-3305 · a Yes reopens the list only for a verified address', () => {
+  it('hands the token’s verification to the writer, and reports what the list did', async () => {
+    mockDecodedToken.email_verified = true
+    const response = await post({
+      decision: 'granted',
+      source: 'console-preferences',
+      textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
+    })
+    expect(response.status).toBe(200)
+    expect((await response.json()).stream).toBe('rejoined')
+    expect(mockRecorded[0]).toMatchObject({ mailboxVerified: true })
+    // The slot the reopen goes through is filled by the plugins' declarations,
+    // run here for a process whose boot did not.
+    expect(mockDeclared).toBe(1)
+  })
+
+  it('records an unverified Yes but reopens nothing', async () => {
+    const response = await post({
+      decision: 'granted',
+      source: 'console-preferences',
+      textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
+    })
+    expect(response.status).toBe(200)
+    expect((await response.json()).stream).toBe('unverified')
+    expect(mockRecorded[0]).toMatchObject({ decision: 'granted', mailboxVerified: false })
+    expect(mockDeclared).toBe(0)
+  })
+
+  it('says nothing about a list on a No', async () => {
+    const response = await post({
+      decision: 'declined',
+      source: 'console-preferences',
+      textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
+    })
+    expect((await response.json()).stream).toBeNull()
+  })
+})
+
+describe('AGL-3305 · GET ?detail=hold says what keeps a Yes from arriving', () => {
+  const GRANTED = {
+    ...NOTHING,
+    decision: 'granted',
+    atMs: 1_600_000_000_000,
+    textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
+    sourceKind: 'console-signup',
+  }
+
+  it('reads nothing of the operator’s for the prompt’s plain read', async () => {
+    mockState = GRANTED
+    const payload = await (await get()).json()
+    expect(payload).not.toHaveProperty('hold')
+    expect(mockReachArgs).toHaveLength(0)
+  })
+
+  it('reads the reach for the token’s own address and answers its hold', async () => {
+    mockState = GRANTED
+    mockHold = { kind: 'unsubscribed' }
+    mockDecodedToken.email_verified = true
+    const payload = await (await get(`${URL_UNDER_TEST}?detail=hold&email=other@example.com`)).json()
+    expect(payload.hold).toEqual({ kind: 'unsubscribed' })
+    expect(payload.mailboxVerified).toBe(true)
+    expect(mockReachArgs).toEqual([{ email: 'caller@example.com' }])
+  })
+
+  it('reads no reach for a No — the No is the reason', async () => {
+    mockState = { ...GRANTED, decision: 'declined' }
+    const payload = await (await get(`${URL_UNDER_TEST}?detail=hold`)).json()
+    expect(payload.hold).toBeNull()
+    expect(payload.mailboxVerified).toBe(false)
+    expect(mockReachArgs).toHaveLength(0)
   })
 })

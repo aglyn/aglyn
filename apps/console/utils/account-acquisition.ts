@@ -21,6 +21,18 @@ import { readFirstTouch } from '@aglyn/shared-util-first-touch'
 import { pageFirstTouchRuntime } from '@aglyn/shared-util-first-touch/first-touch-page'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
+/** The first touch this page's capture holds, for a door that sends it itself. */
+export function currentFirstTouch(): unknown {
+  try {
+    return pageFirstTouchRuntime()?.read() ?? readFirstTouch()
+  } catch {
+    return null
+  }
+}
+
+/** How long a sign-up door waits for its attribution before moving on. */
+export const ACCOUNT_ACQUISITION_TIMEOUT_MS = 5_000
+
 /**
  * Hand the platform where this new account came from (AGL-3289).
  *
@@ -36,32 +48,36 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
  * the server writes nothing.
  *
  * Best-effort by contract, like every write beside the sign-up: a record that
- * could not be written must never read as a sign-up that failed.
+ * could not be written must never read as a sign-up that failed. And never a
+ * sign-up that STALLS: the door awaits this, so an answer that does not come
+ * within {@link ACCOUNT_ACQUISITION_TIMEOUT_MS} is abandoned and the door
+ * moves on without it.
  */
-/** The first touch this page's capture holds, for a door that sends it itself. */
-export function currentFirstTouch(): unknown {
-  try {
-    return pageFirstTouchRuntime()?.read() ?? readFirstTouch()
-  } catch {
-    return null
-  }
-}
-
 export async function rememberAccountAcquisition(
   user: { getIdToken: () => Promise<string> } | null | undefined,
 ): Promise<void> {
   if (!user) return
+  const deadline = new AbortController()
+  const timer = setTimeout(() => deadline.abort(), ACCOUNT_ACQUISITION_TIMEOUT_MS)
   try {
     const touch = currentFirstTouch()
-    const response = await authorizedFetch(user, '/api/auth/acquisition', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ touch }),
-    })
+    const response = await authorizedFetch(
+      user,
+      '/api/auth/acquisition',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ touch }),
+        signal: deadline.signal,
+      },
+      { timeoutMs: ACCOUNT_ACQUISITION_TIMEOUT_MS },
+    )
     if (!response.ok) {
       console.error('sign-up acquisition not recorded', response.status)
     }
   } catch (error) {
     console.error('sign-up acquisition not recorded', error)
+  } finally {
+    clearTimeout(timer)
   }
 }

@@ -9,6 +9,25 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.181 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/ad9afe019...v1.0.0-beta.181)
+
+### Added
+
+- **consent:** an unsubscribe reaches the account's product-updates answer, one list wide ([AGL-3305](https://linear.app/aglyn/issue/AGL-3305))
+
+### Fixed
+
+- **console:** a sign-up never waits more than five seconds on its attribution ([AGL-3289](https://linear.app/aglyn/issue/AGL-3289))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3306 ([AGL-3306](https://linear.app/aglyn/issue/AGL-3306), [AGL-3305](https://linear.app/aglyn/issue/AGL-3305))
+
+</details>
+
 ## v1.0.0-beta.180 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.179...v1.0.0-beta.180)

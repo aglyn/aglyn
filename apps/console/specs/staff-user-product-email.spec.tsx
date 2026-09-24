@@ -65,6 +65,7 @@ const read = (
   verdict: 'consented',
   reason: 'granted',
   suppression: null,
+  topic: { id: 'product-updates', state: 'subscribed', leftAtMs: null },
   ...overrides,
 })
 
@@ -164,5 +165,70 @@ describe('product email on the staff user page (AGL-3292)', () => {
   it('renders nothing for a response that predates the field', () => {
     const { container } = render(<StaffUserProductEmail marketing={undefined} />)
     expect(container.textContent).toBe('')
+  })
+})
+
+describe('the email doors and the product-updates list (AGL-3305)', () => {
+  it.each([
+    ['email-unsubscribe', 'declined', 'No — by unsubscribing from a marketing email'],
+    ['email-preferences', 'declined', 'No — on the email preference page'],
+    ['email-resubscribe', 'granted', 'Yes — by resubscribing from a marketing email'],
+  ] as const)('names the %s door', (kind, decision, words) => {
+    render(
+      <StaffUserProductEmail
+        marketing={{
+          answer: answered(decision, kind),
+          reach: read({
+            topic: {
+              id: 'product-updates',
+              state: decision === 'declined' ? 'opted-out' : 'subscribed',
+              leftAtMs: decision === 'declined' ? AT : null,
+            },
+          }),
+        }}
+      />,
+    )
+    expect(screen.getByText(`Product updates, their answer: ${words}, ${at}`)).toBeTruthy()
+  })
+
+  it('reads a left product-updates list as a send that will not go, and agrees with a mirrored No', () => {
+    render(
+      <StaffUserProductEmail
+        marketing={{
+          answer: answered('declined', 'email-preferences'),
+          reach: read({ topic: { id: 'product-updates', state: 'opted-out', leftAtMs: AT } }),
+        }}
+      />,
+    )
+    expect(screen.getByText(`Won’t send product updates — left that list ${at}`)).toBeTruthy()
+    // The contact still consents — to the site's other lists — and that is
+    // no disagreement with a No about product updates.
+    expect(screen.queryByText(/They said/)).toBeNull()
+  })
+
+  it('flags a Yes that a left list still blocks, from before the mirror', () => {
+    render(
+      <StaffUserProductEmail
+        marketing={{
+          answer: answered('granted'),
+          reach: read({ topic: { id: 'product-updates', state: 'opted-out', leftAtMs: AT } }),
+        }}
+      />,
+    )
+    expect(screen.getByText(/They said yes in the console, but/)).toBeTruthy()
+  })
+
+  it('reads an unconfirmed list as not sending, without calling it a refusal', () => {
+    render(
+      <StaffUserProductEmail
+        marketing={{
+          answer: answered(null),
+          reach: read({ topic: { id: 'product-updates', state: 'pending', leftAtMs: null } }),
+        }}
+      />,
+    )
+    expect(
+      screen.getByText('Won’t send product updates — the list is not confirmed yet'),
+    ).toBeTruthy()
   })
 })

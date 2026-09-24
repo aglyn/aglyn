@@ -38,12 +38,18 @@ import {
   confirmTopicSubscription,
   EMAIL_FREQUENCY_SUBCOLLECTION,
   firebaseAdmin,
+  mirrorPlatformResubscribe,
+  mirrorPlatformUnsubscribe,
   resolveCampaignSendRef,
   resolveOrgIdForHost,
   setMarketingCadence,
   UNSUBSCRIBE_SUPPRESSION_REASON,
   type ConfirmTopicResult,
 } from '@aglyn/tenant-data-admin'
+import type {
+  PluginEmailStreamRejoinRequest,
+  PluginEmailStreamRejoinResult,
+} from '@aglyn/aglyn/plugin-manager/plugin-email-streams'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 /*
  * The pure cadence rule from the shared email library, where the SEND path
@@ -308,6 +314,10 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
      * why the write never creates it, is {@link countSendUnsubscribe}'s.
      */
     if (created) await countSendUnsubscribe(firestore, hostId, campaignId)
+    // The account's answer about product updates, when this is the
+    // platform's own marketing site (AGL-3305). After the suppression, and it
+    // never throws: the list is what stops the mail.
+    await mirrorPlatformUnsubscribe({ hostId, email, left: 'everything' })
     return void sendPage(
       res,
       page(
@@ -526,6 +536,9 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
     if (!released) {
       return void sendPage(res, page(protectedAddressBody(), 420, brand))
     }
+    // Restores the account's Yes only when an email door took it away and
+    // product updates now reach them (AGL-3305).
+    await mirrorPlatformResubscribe({ hostId, email, via: 'email-resubscribe' })
     return void sendPage(
       res,
       page(
@@ -673,6 +686,7 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
         topicId,
       })
       if (created) await countSendUnsubscribe(firestore, hostId, campaignId)
+      await mirrorPlatformUnsubscribe({ hostId, email, left: 'everything' })
       return void sendPage(
         res,
         page(
@@ -750,6 +764,25 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
       stillBlocked = !(await releaseSiteSuppression(firestore, hostId, key))
     }
 
+    /*
+     * The account's answer about product updates follows what this page just
+     * wrote (AGL-3305), and only on the platform's own marketing site: a No
+     * when product updates is among what they left, and a Yes back only when
+     * an email door took it and the list is open again. Leaving the
+     * newsletter says nothing about product updates, so neither call does
+     * anything for it. After every write above, so both read the outcome.
+     */
+    if (drop.length) {
+      await mirrorPlatformUnsubscribe({
+        hostId,
+        email,
+        left: drop.map((topic) => topic.id),
+      })
+    }
+    if (keep.size) {
+      await mirrorPlatformResubscribe({ hostId, email, via: 'email-preferences' })
+    }
+
     return void sendPage(
       res,
       page(
@@ -818,6 +851,12 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
 async function loadTopicCatalog(
   firestore: any,
   hostId: string,
+  /**
+   * Throw instead of falling back. For a caller about to lift a whole-site
+   * unsubscribe on the strength of the list, where the built-ins alone would
+   * leave every custom stream mailable (`rejoinStreamForAccount`).
+   */
+  strict = false,
 ): Promise<EmailTopic[]> {
   try {
     const orgId = await resolveOrgIdForHost(hostId)
@@ -832,6 +871,7 @@ async function loadTopicCatalog(
       .filter((topic: EmailTopic | null): topic is EmailTopic => !!topic)
     return mergeEmailTopics(stored)
   } catch (error) {
+    if (strict) throw error
     console.error('[email/preferences] topic catalog read failed', error)
     return mergeEmailTopics(null)
   }
@@ -967,7 +1007,17 @@ async function writeTopicOptOuts(
   firestore: any,
   hostId: string,
   key: string,
-  fields: { email: string; optOut: string[]; resume: string[] },
+  fields: {
+    email: string
+    optOut: string[]
+    resume: string[]
+    /**
+     * Whether resuming a pending topic confirms it. True for this page, whose
+     * tick is the confirmation; false for a reopening that did not come
+     * through a link delivered to the mailbox (`rejoinStreamForAccount`).
+     */
+    confirmPending?: boolean
+  },
 ): Promise<void> {
   const ref = firestore
     .collection('hosts')
@@ -1007,7 +1057,9 @@ async function writeTopicOptOuts(
       if (!previous) continue
       const state = readTopicSubscriptionState(previous)
       if (state === 'pending') {
-        topics[id] = { ...previous, confirmedAt: Date.now() }
+        if (fields.confirmPending !== false) {
+          topics[id] = { ...previous, confirmedAt: Date.now() }
+        }
         continue
       }
       topics[id] = previous['resubscribedAt']
@@ -1030,6 +1082,73 @@ async function writeTopicOptOuts(
       { merge: true },
     )
   })
+}
+
+/**
+ * Reopens ONE stream for a signed-in account (AGL-3305) — this plugin's side
+ * of `plugin-email-streams`, which the console asks when an account's answer
+ * about a stream turns back to yes. The caller has already proven the
+ * mailbox; see the seam for why that is the caller's job.
+ *
+ * Two cases, and the second is the reason this lives here:
+ *
+ *  - The address left just this stream: its opt-out is lifted, exactly as
+ *    re-ticking the box on the preference page lifts it.
+ *  - The address left EVERYTHING: every other active stream becomes an
+ *    opt-out first, and only then is the whole-site unsubscribe lifted —
+ *    through the same guard the resubscribe link uses. They asked for one
+ *    stream back, not for the newsletter and the promotions they also left,
+ *    and writing the opt-outs before the lift means there is no moment in
+ *    which the whole catalog is mailable.
+ *
+ * A pending confirmation is left pending. The preference page confirms by a
+ * tick because the tick came through a link delivered to the mailbox; this
+ * request came from the console, which is proof of an account, not of a
+ * click in the mailbox the confirmation was sent to.
+ *
+ * A bounce, a complaint, an erasure or a staff hold is `held`, and nothing is
+ * written: none of them is a preference, so no switch lifts them.
+ */
+export async function rejoinStreamForAccount(
+  request: PluginEmailStreamRejoinRequest,
+  firestore: any = firebaseAdmin.app().firestore(),
+): Promise<PluginEmailStreamRejoinResult> {
+  const key = suppressionKeyFor(request.email)
+  if (!key) return { status: 'held', reason: 'unusable-address' }
+  const state = await readSubscriptionState(firestore, request.hostId, key)
+  if (state.protectedRecord) {
+    const suppression = await firestore
+      .collection('hosts')
+      .doc(request.hostId)
+      .collection('suppressions')
+      .doc(key)
+      .get()
+    return { status: 'held', reason: String(suppression.get('reason') ?? 'held') }
+  }
+  const email = String(request.email).trim().toLowerCase()
+  if (!state.suppressed) {
+    await writeTopicOptOuts(firestore, request.hostId, key, {
+      email,
+      optOut: [],
+      resume: [request.topicId],
+      confirmPending: false,
+    })
+    return { status: 'rejoined', releasedSuppression: false, keptLeft: 0 }
+  }
+  const others = activeEmailTopics(await loadTopicCatalog(firestore, request.hostId, true))
+    .map((topic) => topic.id)
+    .filter((id) => id !== request.topicId)
+  await writeTopicOptOuts(firestore, request.hostId, key, {
+    email,
+    optOut: others,
+    resume: [request.topicId],
+    confirmPending: false,
+  })
+  if (!(await releaseSiteSuppression(firestore, request.hostId, key))) {
+    // Turned into a bounce or a complaint between the read and the lift.
+    return { status: 'held', reason: 'protected' }
+  }
+  return { status: 'rejoined', releasedSuppression: true, keptLeft: others.length }
 }
 
 /** One topic row: a checkbox, its name and its description. */
