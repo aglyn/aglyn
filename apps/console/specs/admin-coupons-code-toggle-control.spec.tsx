@@ -142,6 +142,17 @@ beforeEach(() => {
 })
 
 describe('/admin/coupons promotion code activate/deactivate', () => {
+  it('searches the coupons by promotion code from the grid toolbar', async () => {
+    render(<AdminCoupons />)
+    await screen.findByText('AGLYNSMOKELIVE')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nosuchcode' } })
+    await waitFor(() =>
+      expect(screen.getByText('No coupons match these filters')).toBeTruthy(),
+    )
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'smokelive' } })
+    await waitFor(() => expect(screen.getByText('AGLYNSMOKELIVE')).toBeTruthy())
+  })
+
   it('offers Activate on an inactive code', async () => {
     render(<AdminCoupons />)
     expect(await screen.findByText('AGLYNSMOKELIVE')).toBeTruthy()

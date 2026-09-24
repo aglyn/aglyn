@@ -1514,12 +1514,6 @@ const OWES_A_FOOTER: Array<[string, string]> = [
     'Mined signal rows, which grow with usage. Another agent owns this file.',
   ],
   [
-    'apps/console/app/(app)/admin/health/page.tsx',
-    'The CSP report table renders `csp.rows.slice(0, 100)` — a silent ' +
-      'truncation, not a bound. The CHECK tables beside it are a fixed set ' +
-      'and would not want a pager.',
-  ],
-  [
     'apps/console/app/(app)/admin/orgs/[orgId]/page.tsx',
     'An organization’s invoices, one per month forever.',
   ],
@@ -1701,7 +1695,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // order rather than on document-id order. The other four are unblocked by
     // the same change and remain listed, because being able to do the work is
     // not doing it.
-    expect(OWES_A_FOOTER).toHaveLength(14)
+    //
+    // 13 since the staff CSP report became a paged grid (AGL-3317): it drew
+    // the first 100 violations and dropped the rest, and now pages them all
+    // under the grid's own footer.
+    expect(OWES_A_FOOTER).toHaveLength(13)
     // 37 since a site's senders became a list the composer picks from: the
     // drawer that edits one carries a picker of teammates, and a picker's
     // option list is a lookup rather than a window a reader pages through.
@@ -1878,6 +1876,10 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
  * requires one — which is how an operator ends up in the menu and never in a
  * request.
  */
+/** The panel's items reach the list through the shared hook (AGL-3317). */
+const READS_THROUGH_HOOK =
+  /onFilterModelChange=\{gridFilter\.onFilterModelChange\}|\{\.\.\.\w+\.gridProps\}/
+
 describe('server-filtered lists do not offer a dead filter panel', () => {
   const serverFiltered = tsxFilesUnder(join(REPO, 'apps', 'console'))
     .filter((path) => readFileSync(path, 'utf8').includes('filterMode="server"'))
@@ -1893,7 +1895,9 @@ describe('server-filtered lists do not offer a dead filter panel', () => {
         const source = readFileSync(path, 'utf8')
         return (
           !source.includes('disableColumnFilter') &&
-          !source.includes('gridFilterRequest')
+          !source.includes('gridFilterRequest') &&
+          // The shared hook reads the items for it (AGL-3317).
+          !READS_THROUGH_HOOK.test(source)
         )
       })
       .map((path) => path.replace(`${REPO}/`, ''))
@@ -1908,6 +1912,10 @@ describe('server-filtered lists do not offer a dead filter panel', () => {
     route answers.
   */
   const PASSES_QUICK_FILTER = /^\s*quickFilter(=\{true\})?\s*$/m
+  /** The shared recipe's spread carries `quickFilter: true` itself. */
+  const SPREADS_GRID_PROPS = /\{\.\.\.\w+\.gridProps\}/
+  /** Reads the box: the raw model, or the shared hook's words (AGL-3317). */
+  const READS_SEARCH = /quickFilterValues|\.searchWords\b/
 
   it('THE CONTROL: some server-filtered list reads the search box', () => {
     expect(PASSES_QUICK_FILTER.test('  filterMode="server"\n  quickFilter\n')).toBe(
@@ -1917,9 +1925,7 @@ describe('server-filtered lists do not offer a dead filter panel', () => {
       false,
     )
     expect(
-      serverFiltered.some((path) =>
-        readFileSync(path, 'utf8').includes('quickFilterValues'),
-      ),
+      serverFiltered.some((path) => READS_SEARCH.test(readFileSync(path, 'utf8'))),
     ).toBe(true)
   })
 
@@ -1928,8 +1934,9 @@ describe('server-filtered lists do not offer a dead filter panel', () => {
       .filter((path) => {
         const source = readFileSync(path, 'utf8')
         return (
-          source.includes('quickFilterValues') &&
-          !PASSES_QUICK_FILTER.test(source)
+          READS_SEARCH.test(source) &&
+          !PASSES_QUICK_FILTER.test(source) &&
+          !SPREADS_GRID_PROPS.test(source)
         )
       })
       .map((path) => path.replace(`${REPO}/`, ''))
@@ -2003,6 +2010,32 @@ const GRID_FILTER_LISTS: readonly string[] = [
   'libs/plugins/marketing/src/lib/components/campaign-detail-card.tsx',
   'libs/plugins/marketing/src/lib/components/email-recipients-card.tsx',
   'libs/plugins/marketing/src/lib/components/host-experiments-card.component.tsx',
+  // Email, forms, inbox
+  'libs/plugins/email/src/lib/components/email-screens-card.tsx',
+  'libs/plugins/email/src/lib/components/list-members-panel.tsx',
+  'libs/plugins/email/src/lib/components/lists-card.tsx',
+  'libs/plugins/email/src/lib/components/org-email-templates-card.tsx',
+  'libs/plugins/email/src/lib/components/suppressions-card.tsx',
+  'libs/plugins/forms/src/lib/components/host-forms-card.component.tsx',
+  'libs/plugins/inbox/src/lib/components/contacts-card.component.tsx',
+  'libs/plugins/inbox/src/lib/components/submissions-card.component.tsx',
+  // Commerce, workflows, marketplace
+  'libs/plugins/commerce/src/lib/components/console/host-orders-card.component.tsx',
+  'libs/plugins/commerce/src/lib/components/console/products-hub-card.component.tsx',
+  'libs/plugins/commerce/src/lib/components/console/stock-movements-card.component.tsx',
+  'libs/plugins/workflows/src/lib/components/host-run-history-card.component.tsx',
+  'libs/plugins/marketplace/src/lib/components/org-licences-panel.component.tsx',
+  // Staff
+  'apps/console/app/(app)/admin/coupons/page.tsx',
+  'apps/console/app/(app)/admin/health/page.tsx',
+  'apps/console/app/(app)/admin/margin-utilization/page.tsx',
+  'apps/console/app/(app)/admin/media-quarantine/page.tsx',
+  'apps/console/app/(app)/admin/orgs/page.tsx',
+  'apps/console/app/(app)/admin/users/page.tsx',
+  'apps/console/components/idempotency-claims-card.component.tsx',
+  'apps/console/components/pending-erasures-card.component.tsx',
+  'apps/console/components/staff-tax-findings-card.component.tsx',
+  'apps/console/components/staff-user-email-history-card.component.tsx',
 ]
 
 describe('converted lists filter through the grid, by the shared path (AGL-3317)', () => {

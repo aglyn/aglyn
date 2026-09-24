@@ -42,13 +42,43 @@
  *    with an extra file in it.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { addDoc } from 'firebase/firestore'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ReactNode } from 'react'
 import ProductsHubCard from './products-hub-card.component'
 import StockMovementsCard from './stock-movements-card.component'
+
+/*
+ * The real grid, with its props kept so a case can set a filter the way the
+ * grid's Filters panel does: through `onFilterModelChange`.
+ */
+let mockGrid: {
+  filterModel: { quickFilterValues?: unknown[] }
+  onFilterModelChange: (model: {
+    items: Array<Record<string, unknown>>
+    quickFilterValues?: unknown[]
+  }) => void
+}
+jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => {
+  const actual = jest.requireActual('@aglyn/shared-ui-jsx/components/list-table.component')
+  return {
+    ...actual,
+    ListTable: (props: typeof mockGrid) => {
+      mockGrid = props
+      return <actual.ListTable {...props} />
+    },
+  }
+})
+/** Picks a value for a column in the grid's Filters panel. */
+const pickFilter = (field: string, value: string) =>
+  act(() =>
+    mockGrid.onFilterModelChange({
+      items: [{ id: 'panel', field, operator: 'is', value }],
+      quickFilterValues: mockGrid.filterModel.quickFilterValues,
+    }),
+  )
 
 const productDocs = [
   {
@@ -264,10 +294,16 @@ describe('EACH ROW carries its own number', () => {
     expect(rows[2].textContent).toContain('-1')
   })
 
+  it('finds a movement through the grid’s own search (AGL-3317)', async () => {
+    render(<StockMovementsCard hostId="host-1" />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'ord-77' } })
+    await waitFor(() => expect(screen.queryByText('+25')).toBeNull())
+    expect(screen.getByText('-3')).toBeTruthy()
+  })
+
   it('filters to one product without losing that product’s own numbers', () => {
     render(<StockMovementsCard hostId="host-1" />)
-    fireEvent.mouseDown(screen.getByLabelText('Product'))
-    fireEvent.click(screen.getByRole('option', { name: 'Bookend' }))
+    pickFilter('productId', 'prod-2')
     expect(screen.getByText('+25')).toBeTruthy()
     expect(screen.queryByText('-3')).toBeNull()
   })

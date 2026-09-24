@@ -21,6 +21,9 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 // DataGrid, and the barrel is imported by the tenant runtime — exporting it
 // there put ~257 KB of virtualizer into every published customer page.
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
 import { type GridColDef } from '@mui/x-data-grid'
 import { useMemo, useState } from 'react'
@@ -101,6 +104,33 @@ const STATUS_PRESENTATION: Record<
   failed: { label: 'Failed', color: 'error' },
 }
 
+/*
+ * What the delivery grid filters and searches by. The card holds every
+ * message the detail route read (its own bounded window), so both answer
+ * over all of them rather than the page the grid is showing.
+ */
+const EMAIL_FILTER_FIELDS = [
+  inMemoryListField('subject', 'text'),
+  inMemoryListField('context', 'text'),
+  inMemoryListField('status', 'select'),
+  inMemoryListField('openCount', 'number'),
+  inMemoryListField('clickCount', 'number'),
+]
+const EMAIL_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  subject: 'Message',
+  context: 'Sender',
+  status: 'Status',
+  openCount: 'Opens',
+  clickCount: 'Clicks',
+}
+const EMAIL_FILTER_OPTIONS = {
+  status: Object.entries(STATUS_PRESENTATION).map(([value, { label }]) => ({
+    value,
+    label,
+  })),
+}
+const EMAIL_SEARCH_PATHS = ['subject', 'context', 'to']
+
 /** Date AND time: two sends on one day is the interesting case. */
 function formatWhen(ms: number | null | undefined): string {
   if (!ms) return 'Unknown'
@@ -168,12 +198,21 @@ export function StaffUserEmailHistoryCard({
         subject: row.subject || 'No subject recorded',
         context: row.context,
         sentAtMs: row.timestamps?.sent ?? row.firstSeenAtMs,
+        to: row.to,
         status: row.status,
         openCount: row.openCount,
         clickCount: row.clickCount,
       })),
     [rows],
   )
+  const emailFilter = useListRowsFilter({
+    rows: gridRows,
+    fields: EMAIL_FILTER_FIELDS,
+    options: EMAIL_FILTER_OPTIONS,
+    headers: EMAIL_FILTER_HEADERS,
+    search: EMAIL_SEARCH_PATHS,
+  })
+  const { filterColumns } = emailFilter
 
   /*
    * Every cell is ONE LINE, and the numeric columns are right-aligned.
@@ -185,7 +224,7 @@ export function StaffUserEmailHistoryCard({
    * filters — which it could not do buried in a render function.
    */
   const columns: GridColDef[] = useMemo(
-    () => [
+    () => filterColumns([
       {
         field: 'subject',
         headerName: 'Message',
@@ -274,8 +313,8 @@ export function StaffUserEmailHistoryCard({
         align: 'right',
         headerAlign: 'right',
       },
-    ],
-    [],
+    ]),
+    [filterColumns],
   )
 
   const help = docsHelp('staffConsole', {
@@ -402,9 +441,13 @@ export function StaffUserEmailHistoryCard({
               'images never reports one, so a missing open is not evidence ' +
               'the mail was unread. A click is a real action and is reliable.'}
           </Typography>
+          <ListFilterChips {...emailFilter.chipsProps} />
           <ListTable
-            rows={gridRows}
+            aria-label="Email delivery"
+            rows={emailFilter.rows}
             columns={columns}
+            {...emailFilter.gridProps}
+            noRowsLabel="No messages match these filters"
             /*
              * One line per row. The grid's default 52px is sized for stacked
              * cells; every cell here is a single line, and at the default the

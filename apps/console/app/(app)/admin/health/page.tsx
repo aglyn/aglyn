@@ -48,7 +48,14 @@
 
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import {
+  inMemoryListField,
+  type ListFilterOption,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import type { GridColDef } from '@mui/x-data-grid'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -60,10 +67,6 @@ import {
   LinearProgress,
   MenuItem,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -106,6 +109,83 @@ const VERDICT_LABEL: Record<HealthVerdict, string> = {
 
 const CSP_WINDOWS = [7, 14, 30, 60]
 
+/*
+ * What the violations grid filters and searches by. The list holds every
+ * counter row the window read (capped by the route, which says so when it
+ * is), so both answer over all of them. App and Directive are picked from
+ * the values the window actually holds — the collector records whatever a
+ * browser reports, so there is no fixed catalog to offer instead.
+ */
+const CSP_FILTER_FIELDS = [
+  inMemoryListField('day', 'text'),
+  inMemoryListField('app', 'select'),
+  inMemoryListField('directive', 'select'),
+  inMemoryListField('disposition', 'select'),
+  inMemoryListField('blockedOrigin', 'text'),
+  inMemoryListField('count', 'number'),
+]
+const CSP_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  day: 'Day',
+  app: 'App',
+  directive: 'Directive',
+  disposition: 'Blocked or measured',
+  blockedOrigin: 'Blocked origin',
+  count: 'Count',
+}
+const CSP_DISPOSITION_OPTIONS: readonly ListFilterOption[] = [
+  { value: 'enforce', label: 'Blocked' },
+  { value: 'report', label: 'Measured' },
+]
+const CSP_SEARCH_PATHS = ['day', 'app', 'directive', 'blockedOrigin', 'lastSite', 'lastPath']
+
+/** The distinct values of one field across the rows, as select choices. */
+const distinctOptions = (values: Array<string | undefined>): ListFilterOption[] =>
+  [...new Set(values.filter((value): value is string => Boolean(value)))]
+    .sort()
+    .map((value) => ({ value, label: value }))
+
+const CSP_COLUMNS: GridColDef[] = [
+  { field: 'day', headerName: 'Day', width: 120 },
+  { field: 'app', headerName: 'App', width: 120 },
+  {
+    field: 'directive',
+    headerName: 'Directive',
+    flex: 1,
+    minWidth: 160,
+    renderCell: ({ value }) => (
+      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+        {value ?? '—'}
+      </Typography>
+    ),
+  },
+  {
+    field: 'disposition',
+    headerName: 'Blocked or measured',
+    width: 170,
+  },
+  {
+    field: 'blockedOrigin',
+    headerName: 'Blocked origin',
+    flex: 1.4,
+    minWidth: 200,
+    renderCell: ({ value }) => (
+      <Typography
+        variant="body2"
+        sx={{ fontFamily: 'monospace', overflowWrap: 'anywhere' }}
+      >
+        {value ?? '—'}
+      </Typography>
+    ),
+  },
+  {
+    field: 'count',
+    headerName: 'Count',
+    type: 'number',
+    width: 100,
+    valueGetter: (value) => value ?? 0,
+  },
+]
+
 const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const isStaff = useIsStaff()
@@ -118,6 +198,34 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
   const [cspDays, setCspDays] = useState(14)
   const [csp, setCsp] = useState<CspReportView | null>(null)
   const [cspError, setCspError] = useState<string | null>(null)
+  const cspRows = useMemo(
+    () =>
+      (csp?.rows ?? []).map((row, index) => ({
+        ...row,
+        $id: `${row.day}-${row.app}-${row.directive}-${row.blockedOrigin}-${row.disposition}-${index}`,
+      })),
+    [csp],
+  )
+  const cspOptions = useMemo(
+    () => ({
+      app: distinctOptions(cspRows.map((row) => row.app)),
+      directive: distinctOptions(cspRows.map((row) => row.directive)),
+      disposition: CSP_DISPOSITION_OPTIONS,
+    }),
+    [cspRows],
+  )
+  const cspFilter = useListRowsFilter({
+    rows: cspRows,
+    fields: CSP_FILTER_FIELDS,
+    options: cspOptions,
+    headers: CSP_FILTER_HEADERS,
+    search: CSP_SEARCH_PATHS,
+  })
+  const { filterColumns: cspFilterColumns } = cspFilter
+  const cspColumns = useMemo(
+    () => cspFilterColumns(CSP_COLUMNS),
+    [cspFilterColumns],
+  )
 
   useEffect(() => {
     if (!isStaff || !user) return
@@ -413,6 +521,8 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                   spacing={2}
                   sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                 >
+                  {/* A SCOPE, not a filter: it picks which days the route
+                      reads, and the grid's panel narrows what came back. */}
                   <TextField
                     select
                     size="small"
@@ -531,47 +641,14 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                         {`${csp.totalViolations} violations across ` +
                           `${csp.rowCount} rows since ${csp.since}.`}
                       </Typography>
-                      <ScrollTable size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>{'Day'}</TableCell>
-                            <TableCell>{'App'}</TableCell>
-                            <TableCell>{'Directive'}</TableCell>
-                            <TableCell>{'Blocked origin'}</TableCell>
-                            <TableCell align="right">{'Count'}</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {csp.rows.slice(0, 100).map((row, index) => (
-                            <TableRow
-                              key={`${row.day}-${row.directive}-${row.blockedOrigin}-${index}`}
-                            >
-                              <TableCell>{row.day ?? '—'}</TableCell>
-                              <TableCell>{row.app ?? '—'}</TableCell>
-                              <TableCell sx={{ fontFamily: 'monospace' }}>
-                                {row.directive ?? '—'}
-                              </TableCell>
-                              <TableCell
-                                sx={{
-                                  fontFamily: 'monospace',
-                                  maxWidth: 320,
-                                  overflowWrap: 'anywhere',
-                                }}
-                              >
-                                {row.blockedOrigin ?? '—'}
-                              </TableCell>
-                              <TableCell align="right">
-                                {row.count ?? 0}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </ScrollTable>
-                      {csp.rows.length > 100 ? (
-                        <Typography variant="caption" color="text.secondary">
-                          {`Showing the 100 highest-count rows of ${csp.rows.length}.`}
-                        </Typography>
-                      ) : null}
+                      <ListFilterChips {...cspFilter.chipsProps} />
+                      <ListTable
+                        aria-label="Content-Security-Policy violations"
+                        rows={cspFilter.rows}
+                        columns={cspColumns}
+                        {...cspFilter.gridProps}
+                        noRowsLabel="No violations match these filters"
+                      />
                     </>
                   )
                 ) : cspError ? null : (

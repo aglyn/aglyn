@@ -182,12 +182,10 @@ import ProductsHubCard from './products-hub-card.component'
 
 /** The Stock cell for one product row, as the merchant reads it. */
 const stockCellFor = async (name: string): Promise<string> => {
-  const row = (await screen.findByText(name)).closest('tr') as HTMLElement
-  // The Stock column, counting from the row's own cells rather than a global
-  // index, so an added column elsewhere does not silently move this assertion
-  // onto a different number.
-  const cells = [...row.querySelectorAll('td')]
-  return cells[4]?.textContent ?? ''
+  const row = (await screen.findByText(name)).closest('[role="row"]') as HTMLElement
+  // The Stock column, by its field rather than a position, so an added column
+  // elsewhere does not silently move this assertion onto a different number.
+  return row.querySelector('[data-field="stock"]')?.textContent ?? ''
 }
 
 describe('reserved stock is visible where inventory is managed (AGL-2356)', () => {

@@ -193,3 +193,16 @@ describe('the plural reader keeps every usable item', () => {
     expect(listFilterOperatorLabel('between')).toBe('between')
   })
 })
+
+describe('a date clause names a calendar day, wherever the reader is (AGL-3317)', () => {
+  const field = { column: 'at', kind: 'date' as const, path: 'at' }
+  // Late on Sep 16 and early on Sep 17, local time.
+  const late16 = new Date(2026, 8, 16, 23, 30).getTime()
+  const early17 = new Date(2026, 8, 17, 0, 30).getTime()
+
+  it.each(['2026-09-17', '2026-09-17T00:00:00.000Z'])('reads %s as Sep 17, not the evening before', (value) => {
+    expect(matchListFilter({ at: late16 }, [field], { field: 'at', op: 'onOrAfter', value })).toBe(false)
+    expect(matchListFilter({ at: early17 }, [field], { field: 'at', op: 'onOrAfter', value })).toBe(true)
+    expect(matchListFilter({ at: early17 }, [field], { field: 'at', op: 'is', value })).toBe(true)
+  })
+})

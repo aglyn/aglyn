@@ -27,7 +27,7 @@
  * from.
  */
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 /** The documents each collection holds, newest first. */
@@ -251,5 +251,32 @@ describe('ContactsCard (AGL-3045)', () => {
     )
     expect(screen.queryByRole('menuitem', { name: 'Open in CRM' })).toBeNull()
     expect(screen.getByRole('menuitem', { name: 'Where this came from' })).toBeTruthy()
+  })
+})
+
+describe('the contacts list filters through the grid toolbar (AGL-3317)', () => {
+  const addresses = () =>
+    Array.from(document.querySelectorAll('[role="row"][data-id]')).map(
+      (row) => row.querySelector('[data-field="email"] p')?.textContent,
+    )
+
+  it('searches names and addresses over every contact read', async () => {
+    render(<ContactsCard hostId="host-1" />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'lin' } })
+    await waitFor(() => expect(addresses()).toEqual(['lin@example.com']))
+  })
+
+  it('narrows by Type, member or lead by its source', async () => {
+    render(<ContactsCard hostId="host-1" />)
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Column' }))
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('option', { name: 'Type' }))
+    })
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Value' }))
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('option', { name: 'Member' }))
+    })
+    await waitFor(() => expect(addresses()).toEqual(['ada@example.com']))
   })
 })

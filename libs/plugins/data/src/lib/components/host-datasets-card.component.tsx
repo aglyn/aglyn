@@ -487,6 +487,15 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     serverRecordCount && serverRecordCount.datasetId === countedDatasetId
       ? serverRecordCount.count
       : records.length
+  /*
+   * NO FILTERS PANEL AND NO SEARCH over the records (AGL-3317). The walk is
+   * cursor-paged by document name, and a record's fields live under
+   * `values`, which the index configuration exempts from single-field
+   * indexing — so no `where` on any field can be served, and a filter or a
+   * search over the loaded page would present one page as the dataset. The
+   * Filter and Sort boxes stay because they say they apply to this page, and
+   * the Dataset select is a scope: it picks which collection is walked.
+   */
   // Query layer (AGL-181): the same evaluator the renderer uses, applied in
   // memory over the rows in front of the reader. That window is now one PAGE
   // rather than a 500-row sample (AGL-2501), which is a smaller claim and a

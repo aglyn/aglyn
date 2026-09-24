@@ -24,7 +24,10 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { Alert, Chip, Stack } from '@mui/material'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
@@ -40,6 +43,39 @@ import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { listingPath } from '../model/marketplace-paths'
 import EmptyState from '@aglyn/shared-ui-jsx/components/read-gated-empty-state.component'
 import type { ReadOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
+
+/*
+ * What each license grid's Filters panel offers. Both lists hold every row
+ * they describe, so the panel and the search answer over all of them. The
+ * Listing column filters by the listing's name; who bought a license and
+ * which workspace one landed in are picked.
+ */
+const HELD_FILTER_FIELDS = [
+  inMemoryListField('listingId', 'text', 'listingName'),
+  inMemoryListField('buyerUid', 'select', 'boughtBy'),
+]
+const HELD_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  listingId: 'Listing',
+  buyerUid: 'Bought by',
+}
+const HELD_FILTER_OPTIONS = {
+  buyerUid: [
+    { value: 'you', label: 'You' },
+    { value: 'colleague', label: 'A colleague' },
+  ],
+}
+const MINE_FILTER_FIELDS = [
+  inMemoryListField('listingId', 'text', 'listingName'),
+  inMemoryListField('buyerOrgId', 'select', 'licensedTo'),
+]
+const MINE_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  listingId: 'Listing',
+  buyerOrgId: 'Licensed to',
+}
+/** A purchase that names no organization, which entitles its buyer everywhere. */
+const EVERY_WORKSPACE = 'every'
+/** What the quick search reads on a license row. */
+const LICENSE_SEARCH_FIELDS = ['listingName'] as const
 
 /**
  * WHICH WORKSPACE HOLDS A LICENCE (AGL-2331).
@@ -197,11 +233,56 @@ export function OrgLicencesPanel({
    * that says "you own this" when the install route answers 402 is worse than
    * no row.
    */
-  const live = (rows: any[] | undefined) =>
+  const live = (rows: any[] | undefined): any[] =>
     (rows ?? []).filter((row) => !row?.refundedAt)
 
-  const held = live(orgLicencesRead.data)
-  const mine = live(myPurchasesRead.data)
+  const held = useMemo(
+    () =>
+      live(orgLicencesRead.data).map((row) => ({
+        ...row,
+        listingName:
+          listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
+        boughtBy: row.buyerUid === uid ? 'you' : 'colleague',
+      })),
+    [orgLicencesRead.data, listingNames, uid],
+  )
+  const mine = useMemo(
+    () =>
+      live(myPurchasesRead.data).map((row) => ({
+        ...row,
+        listingName:
+          listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
+        licensedTo: String(row.buyerOrgId ?? '') || EVERY_WORKSPACE,
+      })),
+    [myPurchasesRead.data, listingNames],
+  )
+
+  const mineOptions = useMemo(
+    () => ({
+      buyerOrgId: [
+        ...(orgId ? [{ value: orgId, label: 'This workspace' }] : []),
+        ...(viewerOrgs ?? [])
+          .filter((workspace) => workspace.id !== orgId)
+          .map((workspace) => ({ value: workspace.id, label: workspace.name })),
+        { value: EVERY_WORKSPACE, label: 'Every workspace you belong to' },
+      ],
+    }),
+    [orgId, viewerOrgs],
+  )
+  const heldFilter = useListRowsFilter({
+    rows: held,
+    fields: HELD_FILTER_FIELDS,
+    options: HELD_FILTER_OPTIONS,
+    headers: HELD_FILTER_HEADERS,
+    search: LICENSE_SEARCH_FIELDS,
+  })
+  const mineFilter = useListRowsFilter({
+    rows: mine,
+    fields: MINE_FILTER_FIELDS,
+    options: mineOptions,
+    headers: MINE_FILTER_HEADERS,
+    search: LICENSE_SEARCH_FIELDS,
+  })
 
   /*==========================================
    * BOTH LISTS ARE WHOLE, so the grid pages them and its counts are TOTALS.
@@ -237,7 +318,8 @@ export function OrgLicencesPanel({
         field: 'buyerUid',
         headerName: 'Bought by',
         width: 150,
-        valueGetter: (_value, row) => (row.buyerUid === uid ? 'You' : 'A colleague'),
+        // The select's value; the grid shows its label, You or A colleague.
+        valueGetter: (_value, row) => row.boughtBy,
       },
       {
         field: 'amountCents',
@@ -252,7 +334,7 @@ export function OrgLicencesPanel({
         valueFormatter: (value: number) => `$${value.toFixed(2)}`,
       },
     ],
-    [listingNames, basePath, uid],
+    [listingNames, basePath],
   )
   const mineColumns = useMemo<GridColDef[]>(
     () => [
@@ -349,12 +431,17 @@ export function OrgLicencesPanel({
           contentGutterX
           contentGutterY
         >
-          <ListTable
-            aria-label="Licenses this workspace holds"
-            rows={held}
-            columns={heldColumns}
-            rowHeight={TABLE_ROW_HEIGHT}
-          />
+          <Stack spacing={1}>
+            <ListFilterChips {...heldFilter.chipsProps} />
+            <ListTable
+              aria-label="Licenses this workspace holds"
+              rows={heldFilter.rows}
+              columns={heldFilter.filterColumns(heldColumns)}
+              {...heldFilter.gridProps}
+              rowHeight={TABLE_ROW_HEIGHT}
+              noRowsLabel="No licenses match these filters"
+            />
+          </Stack>
         </CardDisplay>
       )}
 
@@ -384,12 +471,17 @@ export function OrgLicencesPanel({
           contentGutterX
           contentGutterY
         >
-          <ListTable
-            aria-label="Licenses you bought"
-            rows={mine}
-            columns={mineColumns}
-            rowHeight={TABLE_ROW_HEIGHT}
-          />
+          <Stack spacing={1}>
+            <ListFilterChips {...mineFilter.chipsProps} />
+            <ListTable
+              aria-label="Licenses you bought"
+              rows={mineFilter.rows}
+              columns={mineFilter.filterColumns(mineColumns)}
+              {...mineFilter.gridProps}
+              rowHeight={TABLE_ROW_HEIGHT}
+              noRowsLabel="No licenses match these filters"
+            />
+          </Stack>
         </CardDisplay>
       )}
     </Stack>

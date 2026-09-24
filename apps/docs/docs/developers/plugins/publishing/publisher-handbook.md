@@ -601,6 +601,14 @@ counts the organizations and sites that currently hold a pin — it goes
 down when someone uninstalls. A big gap between the two is churn worth
 investigating.
 
+A purchase licenses the buyer's organization, and **Marketplace → Licenses** lists
+what the workspace holds and what the buyer bought across every workspace, one table
+each. Each table filters through its own toolbar: **Search** finds a listing by name,
+and **Filters** offers the listing, who bought it (**You** or **A colleague**) on the
+workspace's table, and which workspace a purchase landed in on the buyer's own. Both
+answer over every license the table holds, and each filter in force shows as a chip
+above it.
+
 Every listing shows its **artifact type** as a chip — Plugin, Component,
 Site template, Layout, Dataset schema, Email template or Email starter — so
 buyers know what they're getting before they open it. Dataset schemas and email

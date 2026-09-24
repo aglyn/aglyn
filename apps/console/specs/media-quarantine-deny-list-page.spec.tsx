@@ -189,13 +189,23 @@ describe('AGL-1700 · the list enumerates itself', () => {
 
   it('sorts oldest first, with an undated entry ahead of every dated one', async () => {
     await open()
-    const order = Array.from(document.querySelectorAll('tbody tr')).map((row) =>
-      String(row.textContent),
-    )
+    const order = Array.from(
+      document.querySelectorAll('[role="grid"] .MuiDataGrid-row'),
+    ).map((row) => String(row.textContent))
     expect(order).toHaveLength(3)
     expect(order[0]).toContain(ASSET_KEY)
     expect(order[1]).toContain(LEGACY_KEY)
     expect(order[2]).toContain(SHA_KEY)
+  })
+
+  it('searches every entry from the grid toolbar, not just the page on screen', async () => {
+    await open()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: LEGACY_KEY } })
+    await waitFor(() => {
+      const grid = screen.getByRole('grid', { name: 'The whole deny list' })
+      expect(grid.textContent).toContain(LEGACY_KEY)
+      expect(grid.textContent).not.toContain(SHA_KEY)
+    })
   })
 
   it('says so plainly when nothing is taken down', async () => {

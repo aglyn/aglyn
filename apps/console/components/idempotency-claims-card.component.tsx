@@ -17,7 +17,10 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -26,11 +29,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -56,6 +54,34 @@ interface ClaimReport {
 }
 
 /** Minutes and hours, because "8100000 ms" is not an operator's unit. */
+/*
+ * What the claims grid filters and searches by. The card holds the whole
+ * window the route read (a ceiling it says it hit), so both answer over all
+ * of it. The operation is whatever its writer named, so it is typed rather
+ * than picked; the state is the one enumeration a claim has.
+ */
+const CLAIM_FILTER_FIELDS = [
+  inMemoryListField('kind', 'text'),
+  inMemoryListField('scopeId', 'text'),
+  inMemoryListField('orgId', 'text'),
+  inMemoryListField('ageMs', 'number'),
+  inMemoryListField('stranded', 'select', 'state'),
+]
+const CLAIM_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  kind: 'Operation',
+  scopeId: 'Scope',
+  orgId: 'Org',
+  ageMs: 'Age (ms)',
+  stranded: 'State',
+}
+const CLAIM_FILTER_OPTIONS = {
+  stranded: [
+    { value: 'stranded', label: 'stranded' },
+    { value: 'inFlight', label: 'in flight' },
+  ],
+}
+const CLAIM_SEARCH_PATHS = ['kind', 'scopeId', 'orgId', 'id']
+
 export function formatAge(ageMs: number | null): string {
   if (ageMs == null || !Number.isFinite(ageMs)) return 'unknown'
   const minutes = Math.floor(ageMs / 60000)
@@ -121,9 +147,26 @@ export default function IdempotencyClaimsCard() {
     }
   }, [user, reloadKey])
 
+  const claimRows = useMemo(
+    () =>
+      (report?.claims ?? []).map((claim) => ({
+        ...claim,
+        state: claim.stranded ? 'stranded' : 'inFlight',
+      })),
+    [report],
+  )
+  const claimFilter = useListRowsFilter({
+    rows: claimRows,
+    fields: CLAIM_FILTER_FIELDS,
+    options: CLAIM_FILTER_OPTIONS,
+    headers: CLAIM_FILTER_HEADERS,
+    search: CLAIM_SEARCH_PATHS,
+  })
+  const { filterColumns } = claimFilter
+
   /* One row grammar, the console's (AGL-2501). */
   const claimColumns: GridColDef[] = useMemo(
-    () => [
+    () => filterColumns([
       {
         field: 'kind',
         headerName: 'Operation',
@@ -177,8 +220,9 @@ export default function IdempotencyClaimsCard() {
         minWidth: 120,
         align: 'right',
         headerAlign: 'right',
+        // The select's value, so a sort and an export read its choices.
         valueGetter: (_value, row: any) =>
-          row.stranded ? 'stranded' : 'in flight',
+          row.stranded ? 'stranded' : 'inFlight',
         renderCell: ({ row }: any) => (
           <Chip
             size="small"
@@ -188,8 +232,8 @@ export default function IdempotencyClaimsCard() {
           />
         ),
       },
-    ],
-    [],
+    ]),
+    [filterColumns],
   )
 
   const countPrefix = report?.truncated ? 'at least ' : ''
@@ -267,9 +311,14 @@ export default function IdempotencyClaimsCard() {
                 {'Nothing pending. Every claim taken has settled or been released.'}
               </Typography>
             ) : (
+              <>
+              <ListFilterChips {...claimFilter.chipsProps} />
               <ListTable
-                rows={report.claims}
+                aria-label="Idempotency claims"
+                rows={claimFilter.rows}
                 columns={claimColumns}
+                {...claimFilter.gridProps}
+                noRowsLabel="No claims match these filters"
                 getRowId={(row: any) => row.id}
                 /*
                  * The grid's own footer, which is the console's one footer
@@ -284,6 +333,7 @@ export default function IdempotencyClaimsCard() {
                  */
                 rowHeight={TABLE_ROW_HEIGHT}
               />
+              </>
             )}
           </>
         ) : error ? null : (

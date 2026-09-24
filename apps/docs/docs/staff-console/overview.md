@@ -78,6 +78,15 @@ and GDPR-erasure flags, per organization. The directory is listed server-side wi
 the Admin SDK (so it shows *every* org, not the subset client rules would return),
 ordered by organization id, 25 per page with Previous/Next.
 
+The grid's toolbar filters the whole directory, not the page on screen. **Filters**
+offers the organization name, slug, id, owner, created and updated dates, and two
+pickers: **Stored plan** (the plan written on the org, which is not always the plan it
+reads as — the Plan column shows both when they differ) and **Billing status** (the
+Stripe subscription status mirrored onto the org). The query answers one filter at a
+time, so a new filter replaces the last; the chip above the grid shows the one in
+force. **Search** matches the start of any word in the name. A filter and a search are
+not combined: while a filter is set, the search waits until it is removed.
+
 #### Free workspace limit {#free-workspace-limit}
 
 How many **free** workspaces one account may hold, on a card at the top of the
@@ -237,6 +246,19 @@ Aglyn once and then search their email again.
 Each account opens a **detail page** showing identity/auth state, staff role, every
 organization membership with roles and per-site access, and its recent audit trail.
 
+The list's **Filters** reach every account in every pool, not the loaded page: email,
+display name, uid, SSO pool, sign-in providers, created and last sign-in dates, the
+disabled flag, the staff claim, and **Staff role** picked from *support*, *billing* and
+*super*. A role picks the claim as stored, so a staff account granted no role (which
+acts as *support*) is not matched by *support*. One filter applies at a time, and a
+search and a filter are not combined: while a search is typed, the filter waits.
+
+On the detail page, **Recent audit trail** and **Data access by staff** each filter and
+search their whole trail — action, target, reason, actor and date — before they page it,
+so a match on a later page is never missed. **Activity by this account** filters by
+action or date through its Filters panel; the action group chips above it are shortcuts
+for the actions a plugin names.
+
 A **Legal acceptances** card on the same page answers the two questions a terms
 dispute asks: which version of the Terms and Privacy Policy this person accepted and
 when, and whether the **30-day arbitration opt-out window** (ToS §18.5) is still open.
@@ -317,7 +339,9 @@ devices": do not tell anyone their account is clean from that screen until it lo
 An **Email delivery** card on the same detail page answers *"they say they never got
 it."* It lists every message we sent the account's address, newest first: the subject,
 which of our senders produced it, when it was sent and delivered, and whether it was
-opened or clicked.
+opened or clicked. The grid's toolbar filters and searches every message the card read:
+**Status** is a picker (*Sent*, *Delivered*, *Bounced*, *Spam complaint* and the rest),
+and the subject, sender and open and click counts filter as typed values.
 
 Read it before you resend anything. The four states that change what you do next:
 
@@ -405,6 +429,11 @@ tier), respecting each recipient's mute preferences; audited.
 
 Every organization's Stripe **invoice history** and default
 **payment method** (with delinquency state) render on its detail page.
+
+**Staff → Margin** scans organizations on request and ranks them worst margin first. Its
+per-organization table filters and searches every organization the scan read, before
+the rendering is capped: **Plan** is a picker, and the name, rollup month, net revenue
+and margin filter as typed values.
 
 ### [Refunds](refunds.md) {#refunds}
 
@@ -545,7 +574,11 @@ per-site floor for almost every organization — measured usage only replaces it
 costs more than the floor, which no organization's usage does yet.
 
 **Existing coupons** lists every Stripe coupon with its promotion codes, redemption
-count, and a **valid** or **expired** state.
+count, and a **valid** or **expired** state. Its toolbar filters and searches every
+coupon, not only the page shown: **Duration** (*Once*, *Repeating*, *Forever*) and
+**Status** (*Valid*, *Expired*) are pickers, and the search matches a coupon's name, its
+Stripe id or any of its promotion codes. The fields above the list are the create form,
+not filters.
 
 Each promotion code carries **Activate** / **Deactivate**. Checkout only resolves a code
 that is active, so a deactivated code is reported to the customer as one we do not

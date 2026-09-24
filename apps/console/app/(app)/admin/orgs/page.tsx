@@ -29,6 +29,7 @@ import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Alert,
   Button,
   Chip,
   Dialog,
@@ -38,15 +39,16 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { type GridColDef, type GridSortModel } from '@mui/x-data-grid'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
-  gridFilterRequest,
-  hiddenFilterColumns,
-  hiddenFilterVisibility,
-  listFilterColumn,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
+  type ListFilterOption,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
   ORG_LIST_FILTER_FIELDS,
   ORG_LIST_FILTER_HEADERS,
@@ -98,6 +100,31 @@ import { useStaffListPagination } from '../../../../hooks/use-staff-list-paginat
  */
 const ORG_FILTER_COLUMNS = ['name', 'plan', 'subscription', 'createdAt']
 
+/** Every status a Stripe subscription can be in, as the billing mirror stores it. */
+const SUBSCRIPTION_STATUSES = [
+  'incomplete',
+  'incomplete_expired',
+  'trialing',
+  'active',
+  'past_due',
+  'canceled',
+  'unpaid',
+  'paused',
+] as const
+
+/**
+ * The org fields picked rather than typed, shown in the panel as selects:
+ * the stored plan by its label, and the billing status by its Stripe word.
+ */
+const ORG_LIST_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption[]>> = {
+  plan: (Object.keys(PLAN_LABELS) as Array<keyof typeof PLAN_LABELS>).map((plan) => ({
+    value: plan,
+    label: PLAN_LABELS[plan],
+  })),
+  subscription: SUBSCRIPTION_STATUSES.map((status) => ({ value: status, label: status })),
+}
+const ORG_SELECT_FIELDS = Object.keys(ORG_LIST_FILTER_OPTIONS)
+
 /** The grid's sort model with nothing sorted: one array, so a reset is a no-op. */
 const NO_GRID_SORT: GridSortModel = []
 
@@ -118,37 +145,33 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // (AGL-2486) — it was written here and the Users list had none, and the
   // cheap fix for that was a second copy of this block. The page size is the
   // route's (`PAGE_SIZE`, 25), not the screen's; nothing here decides it.
-  /** The debounced term the toolbar's quick filter last settled on. */
-  const [search, setSearch] = useState('')
   /**
-   * The one column filter the query is currently answering.
+   * The grid's Filters panel and quick search, bound to the ONE clause the
+   * query is currently answering (`single`).
    *
    * One, not a list: Firestore composes a second predicate only with an
    * index built for that exact pair, so offering two filters would mean
    * either a combinatorial index set or a panel where some combinations
-   * quietly return nothing.
+   * quietly return nothing. A clause set in the panel replaces the last.
    */
-  const [filter, setFilter] = useState<{
-    field: string
-    op: string
-    value: string
-  } | null>(null)
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const gridFilter = useListGridFilter({
+    selectFields: ORG_SELECT_FIELDS,
+    single: true,
+  })
+  const filter = gridFilter.clauses[0] ?? null
+  const searchKey = gridFilter.searchWords.join(' ').trim()
+  /** The debounced term the toolbar's quick filter last settled on. */
+  const [search, setSearch] = useState('')
   /*
    * Debounced, because each settled term is a Firestore query and a fast
-   * typist would otherwise spend one per keystroke. Cleared on unmount so a
-   * pending keystroke cannot set state on a page that has gone.
+   * typist would otherwise spend one per keystroke. The cleanup clears a
+   * pending term on unmount, so it cannot set state on a page that has gone.
    */
-  const onQuickFilter = useCallback((value: string) => {
-    if (searchTimer.current) clearTimeout(searchTimer.current)
-    searchTimer.current = setTimeout(() => setSearch(value.trim()), 300)
-  }, [])
-  useEffect(
-    () => () => {
-      if (searchTimer.current) clearTimeout(searchTimer.current)
-    },
-    [],
-  )
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchKey), 300)
+    return () => clearTimeout(timer)
+  }, [searchKey])
+  const filtering = Boolean(filter) || Boolean(searchKey)
 
   const fetchOrgsPage = useCallback(
     async (cursor: string | null, _pageIndex: number, pageSize: number) => {
@@ -294,13 +317,11 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
    * `ORG_LIST_FILTER_FIELDS`, the same declaration `/api/admin/orgs` builds
    * its predicate from. One list, so the menu cannot offer an operator the
    * route will not answer, and the funnel cannot go back to setting filters
-   * nobody honours.
+   * nobody honours. `listFilterGridColumns` applies it to the columns below:
+   * the plan and billing status as selects over their choices, the typed
+   * fields with the grammar's operators, and the fields with no column of
+   * their own as hidden ones.
    */
-  const filterColumn = useCallback(
-    (column: string) => listFilterColumn(ORG_LIST_FILTER_FIELDS, column),
-    [],
-  )
-
   /*
    * One row grammar, the console's (AGL-2501).
    *
@@ -310,13 +331,12 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
    * hands it the seconds instead.
    */
   const orgColumns: GridColDef[] = useMemo(
-    () => [
+    () => listFilterGridColumns([
       {
         field: 'name',
         headerName: 'Organization',
         flex: 1.4,
         minWidth: 200,
-        ...filterColumn('name'),
         valueGetter: (_value, row: any) => String(row.name ?? row.$id),
         renderCell: ({ row }: any) => (
           /*
@@ -363,7 +383,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Plan',
         flex: 1,
         minWidth: 180,
-        ...filterColumn('plan'),
         valueGetter: (_value, row: any) =>
           isEnterpriseOrg(row as never)
             ? PLAN_LABELS.enterprise
@@ -439,7 +458,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Subscription',
         flex: 0.8,
         minWidth: 130,
-        ...filterColumn('subscription'),
         valueGetter: (_value, row: any) => row.subscription?.status ?? '--',
       },
       {
@@ -491,7 +509,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         // `type: 'date'` is what gives the panel a date PICKER rather than a
         // free-text box for a value the route parses as a day.
         type: 'date',
-        ...filterColumn('createdAt'),
         valueGetter: (_value, row: any) =>
           row.createdAt?.seconds ? new Date(row.createdAt.seconds * 1000) : null,
         renderCell: ({ row }: any) => (
@@ -502,19 +519,6 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
           </Typography>
         ),
       },
-      /*
-       * Filterable fields that are not worth a column of their own.
-       *
-       * MUI's panel lists COLUMNS, so a field with no column is a field a
-       * reader cannot filter by however well the route answers it. These are
-       * declared hidden rather than dropped, which keeps one source of truth —
-       * `ORG_LIST_FILTER_FIELDS` — instead of a second list that drifts.
-       */
-      ...hiddenFilterColumns(
-        ORG_LIST_FILTER_FIELDS,
-        ORG_FILTER_COLUMNS,
-        ORG_LIST_FILTER_HEADERS,
-      ),
       listActionsColumn(
         (row: any) => (
           <StaffOrgActions
@@ -548,8 +552,8 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
         ),
         { width: 120 },
       ),
-    ],
-    [refresh, handleShowUsage, usageLoading, filterColumn, pluginGridCols],
+    ], ORG_LIST_FILTER_FIELDS, ORG_LIST_FILTER_OPTIONS, ORG_LIST_FILTER_HEADERS),
+    [refresh, handleShowUsage, usageLoading, pluginGridCols],
   )
 
   return (
@@ -589,7 +593,25 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                     'as; where that differs from what is stored, the stored ' +
                     'value is shown beside it.'}
                 </Typography>
-              {orgs.length === 0 ? (
+              <ListFilterChips
+                fields={ORG_LIST_FILTER_FIELDS}
+                headers={ORG_LIST_FILTER_HEADERS}
+                options={ORG_LIST_FILTER_OPTIONS}
+                clauses={gridFilter.clauses}
+                onChange={gridFilter.setClauses}
+                servedField={filter?.field ?? null}
+              />
+              {/* The route answers a filter OR a search, never both at once:
+                  with a filter set it runs the filter's query and the words
+                  wait. Said, so the search box does not read as applied. */}
+              {filter && search ? (
+                <Alert severity="info">
+                  {'The search is set aside while a filter is in force — ' +
+                    'this list answers one of the two. Remove the filter to ' +
+                    'search by name.'}
+                </Alert>
+              ) : null}
+              {orgs.length === 0 && !filtering ? (
                 <Typography variant="body2" color="text.secondary">
                   {loading
                     ? 'Loading…'
@@ -616,10 +638,9 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   // The route answers the search box as well as the column
                   // filter, so the box stays.
                   quickFilter
-                  onFilterModelChange={(model) => {
-                    onQuickFilter((model.quickFilterValues ?? []).join(' '))
-                    setFilter(gridFilterRequest(model))
-                  }}
+                  filterModel={gridFilter.filterModel}
+                  onFilterModelChange={gridFilter.onFilterModelChange}
+                  noRowsLabel="No organizations match these filters"
                   // The row IS the way in, on every list in the console.
                   onOpen={(id) =>
                     router.push(

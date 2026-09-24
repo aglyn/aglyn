@@ -48,7 +48,7 @@
  * different pages.
  */
 
-import { act, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { InboxConsolePage } from './inbox-console-page'
@@ -214,6 +214,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       built?.constraints ?? [],
     )
     return {
+      data: answered,
       rows: answered.slice(page * pageSize, windowSize),
       hasMore: answered.length > windowSize,
       page,
@@ -458,6 +459,35 @@ describe('the contacts table cannot be paged by the query (AGL-2501)', () => {
 })
 
 /**
+ * Choose `option` in the grid Filters panel's select named `label`. The
+ * panel opens from the toolbar's Filters button; a MUI select opens on
+ * mousedown, not click.
+ */
+const openFormFilter = async () => {
+  fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+  const column = await screen.findByRole('combobox', { name: 'Column' })
+  fireEvent.mouseDown(column)
+  const formColumn = await screen.findByRole('option', { name: 'Form' })
+  await act(async () => {
+    fireEvent.click(formColumn)
+  })
+  const value = await screen.findByRole('combobox', { name: 'Value' })
+  fireEvent.mouseDown(value)
+  await waitFor(() =>
+    expect(document.querySelectorAll('[role="option"]').length).toBeGreaterThan(0),
+  )
+}
+
+/**
+ * The Form filter's choices, read from the open value select, without the
+ * grid's own empty choice (its first option, which carries no value).
+ */
+const formFilterOptions = () =>
+  Array.from(document.querySelectorAll('[role="option"]'))
+    .filter((node) => node.getAttribute('data-value'))
+    .map((node) => node.textContent?.trim() ?? '')
+
+/**
  * The Inbox stays the site-wide list and gains one control.
  *
  * `?form=` filtered on `formName` — the caption — so a rename split the
@@ -488,16 +518,10 @@ describe('the submissions section can narrow to one form', () => {
     // read the clause the page then issued. A filter that renders but never
     // reaches the query would pass a rows-only assertion on page one, where
     // the unfiltered and filtered lists can happen to agree.
+    // The picker is the grid's own Filters panel (AGL-3317), whose Form
+    // clause the query serves.
     await mountPage('submissions')
-    const combobox = document.querySelector(
-      '[role="combobox"]',
-    ) as HTMLElement | null
-    expect(combobox).toBeTruthy()
-    // A MUI select opens on mousedown, not click.
-    fireEvent.mouseDown(combobox as HTMLElement)
-    await waitFor(() =>
-      expect(document.body.textContent).toContain('All forms'),
-    )
+    await openFormFilter()
     const option = Array.from(
       document.querySelectorAll('[role="option"]'),
     ).find((node) => node.textContent?.trim() === 'Contact')
@@ -563,17 +587,8 @@ describe('the form filter never presents a cut list as the whole list', () => {
   })
 
   const optionLabels = async () => {
-    const combobox = document.querySelector(
-      '[role="combobox"]',
-    ) as HTMLElement | null
-    expect(combobox).toBeTruthy()
-    fireEvent.mouseDown(combobox as HTMLElement)
-    await waitFor(() =>
-      expect(document.body.textContent).toContain('All forms'),
-    )
-    return Array.from(document.querySelectorAll('[role="option"]'))
-      .map((node) => node.textContent?.trim() ?? '')
-      .filter((label) => label !== 'All forms')
+    await openFormFilter()
+    return formFilterOptions()
   }
 
   it('says so when the catalog is larger than the window', async () => {
@@ -581,7 +596,9 @@ describe('the form filter never presents a cut list as the whole list', () => {
     await mountPage('submissions')
     expect(await optionLabels()).toHaveLength(WINDOW)
     // The disclosure, in the reader's own words rather than a class name.
-    expect(document.body.textContent).toContain(`Showing the first ${WINDOW}`)
+    expect(document.body.textContent).toContain(
+      `The Form filter offers the first ${WINDOW}`,
+    )
   })
 
   it('THE CONTROL: says nothing when the whole catalog fits', async () => {
@@ -590,7 +607,7 @@ describe('the form filter never presents a cut list as the whole list', () => {
     byCollection.forms = formsFixture(WINDOW)
     await mountPage('submissions')
     expect(await optionLabels()).toHaveLength(WINDOW)
-    expect(document.body.textContent).not.toContain('Showing the first')
+    expect(document.body.textContent).not.toContain('The Form filter offers the first')
   })
 
   it('reads one PAST the window, which is how truncation is knowable', async () => {
@@ -600,5 +617,17 @@ describe('the form filter never presents a cut list as the whole list', () => {
     byCollection.forms = formsFixture(WINDOW + 12)
     await mountPage('submissions')
     expect(mockCeilingsAsked).toContain(WINDOW + 1)
+  })
+})
+
+describe('the submissions list searches what its window read (AGL-3317)', () => {
+  it('finds a sender past the first page', async () => {
+    await mountPage('submissions')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'sender14' } })
+    await waitFor(() => {
+      const rows = rowsOf(tables()[0])
+      expect(rows).toHaveLength(1)
+      expect(rows[0].join(' ')).toContain('sender14@example.test')
+    })
   })
 })

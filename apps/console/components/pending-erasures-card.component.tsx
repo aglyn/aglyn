@@ -17,7 +17,10 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -26,11 +29,6 @@ import {
   Button,
   Chip,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -92,6 +90,27 @@ interface RunResponse {
   skipped: Array<{ orgId: string; reason?: string }>
   scanned: number
 }
+
+/*
+ * What the queue's grid filters and searches by. The card holds the whole
+ * window the route read (it says when that window is short), so both answer
+ * over every row of it.
+ */
+const ERASURE_FILTER_FIELDS = [
+  inMemoryListField('name', 'text'),
+  inMemoryListField('due', 'select', 'state'),
+]
+const ERASURE_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Organization',
+  due: 'State',
+}
+const ERASURE_FILTER_OPTIONS = {
+  due: [
+    { value: 'due', label: 'Due' },
+    { value: 'holding', label: 'Holding' },
+  ],
+}
+const ERASURE_SEARCH_PATHS = ['name', 'slug', 'orgId']
 
 const formatWhen = (ms: number | null): string =>
   ms ? new Date(ms).toLocaleString() : '—'
@@ -174,8 +193,24 @@ export function PendingErasuresCard() {
   const countPrefix = pending?.truncated ? 'at least ' : ''
 
   /* One row grammar, the console's (AGL-2501). */
+  const erasureRows = useMemo(
+    () =>
+      (pending?.pending ?? []).map((row) => ({
+        ...row,
+        state: row.due ? 'due' : 'holding',
+      })),
+    [pending],
+  )
+  const erasureFilter = useListRowsFilter({
+    rows: erasureRows,
+    fields: ERASURE_FILTER_FIELDS,
+    options: ERASURE_FILTER_OPTIONS,
+    headers: ERASURE_FILTER_HEADERS,
+    search: ERASURE_SEARCH_PATHS,
+  })
+  const { filterColumns } = erasureFilter
   const erasureColumns: GridColDef[] = useMemo(
-    () => [
+    () => filterColumns([
       {
         field: 'name',
         headerName: 'Organization',
@@ -208,7 +243,8 @@ export function PendingErasuresCard() {
         minWidth: 120,
         // The only question a staff member has: is this waiting on the hold,
         // or waiting on us?
-        valueGetter: (_value, row: any) => (row.due ? 'Due' : 'Holding'),
+        // The select's value, so a sort and an export read its choices.
+        valueGetter: (_value, row: any) => (row.due ? 'due' : 'holding'),
         renderCell: ({ row }: any) => (
           <Chip
             size="small"
@@ -217,8 +253,8 @@ export function PendingErasuresCard() {
           />
         ),
       },
-    ],
-    [],
+    ]),
+    [filterColumns],
   )
 
 
@@ -285,9 +321,14 @@ export function PendingErasuresCard() {
         ) : null}
 
         {pending && pending.pending.length > 0 ? (
+          <>
+          <ListFilterChips {...erasureFilter.chipsProps} />
           <ListTable
-            rows={pending.pending}
+            aria-label="Pending erasures"
+            rows={erasureFilter.rows}
             columns={erasureColumns}
+            {...erasureFilter.gridProps}
+            noRowsLabel="No requests match these filters"
             getRowId={(row: any) => row.orgId}
             /*
              * The grid's own footer, which is the console's one footer
@@ -304,6 +345,7 @@ export function PendingErasuresCard() {
              */
             rowHeight={TABLE_ROW_HEIGHT}
           />
+          </>
         ) : (
           <Typography variant="body2" color="text.secondary">
             {pending ? 'Nothing queued.' : 'Loading…'}

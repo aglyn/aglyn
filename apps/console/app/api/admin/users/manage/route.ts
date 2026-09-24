@@ -38,6 +38,7 @@ import {
   isValidDeviceId,
   revokeDeviceSession,
 } from '../../../_lib/device-registry'
+import { STAFF_ROLES } from '../../../../../utils/list-filters'
 import {
   originFromHeaders,
   sendAuthPasswordResetEmail,
@@ -61,7 +62,6 @@ const ACTIONS = [
   // action (AGL-1140). Everything else on this list is reversible.
   'erase',
 ] as const
-const STAFF_ROLES = ['support', 'billing', 'super'] as const
 type ManageAction = (typeof ACTIONS)[number]
 
 /**

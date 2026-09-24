@@ -17,8 +17,17 @@
 
 'use client'
 
+import { PLAN_LABELS } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import type { GridColDef } from '@mui/x-data-grid'
 import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { ceilingedWindow, useUser } from '@aglyn/tenant-feature-instance'
@@ -89,6 +98,33 @@ import {
 
 /** Rows rendered in the per-org table. Beyond it the fold is still complete. */
 const TABLE_CEILING = 200
+
+/*
+ * What the per-org grid filters and searches by. The page holds every row
+ * the scan read, so both answer over all of them, worst margin first, and
+ * only then is the rendering capped at `TABLE_CEILING`.
+ */
+const MARGIN_FILTER_FIELDS = [
+  inMemoryListField('name', 'text'),
+  inMemoryListField('plan', 'select'),
+  inMemoryListField('month', 'text'),
+  inMemoryListField('netRevenueUsd', 'number'),
+  inMemoryListField('marginPct', 'number'),
+]
+const MARGIN_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Organization',
+  plan: 'Plan',
+  month: 'Month',
+  netRevenueUsd: 'Net revenue',
+  marginPct: 'Margin (fraction)',
+}
+const MARGIN_FILTER_OPTIONS = {
+  plan: (Object.keys(PLAN_LABELS) as Array<keyof typeof PLAN_LABELS>).map((plan) => ({
+    value: plan,
+    label: PLAN_LABELS[plan],
+  })),
+}
+const MARGIN_SEARCH_PATHS = ['name', 'orgId', 'plan', 'month']
 
 const pct = (fraction: number | null): string =>
   fraction === null ? '—' : `${(fraction * 100).toFixed(fraction < 0.1 ? 1 : 0)}%`
@@ -247,12 +283,124 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
   )
 
   const fleet = useMemo(() => fleetUtilization(rows), [rows])
-  const ordered = useMemo(() => [...rows].sort(byWorstMargin), [rows])
-  // Bounded, and it says when it bit. The FOLD above is over every row read;
-  // only the rendering is capped, so no aggregate changes with this number.
-  const table = useMemo(() => ceilingedWindow(ordered, TABLE_CEILING), [ordered])
+  const ordered = useMemo(
+    () => [...rows].sort(byWorstMargin).map((row) => ({ ...row, $id: row.orgId })),
+    [rows],
+  )
+  const marginFilter = useListRowsFilter({
+    rows: ordered,
+    fields: MARGIN_FILTER_FIELDS,
+    options: MARGIN_FILTER_OPTIONS,
+    headers: MARGIN_FILTER_HEADERS,
+    search: MARGIN_SEARCH_PATHS,
+  })
+  // Bounded, and it says when it bit. The FOLD above is over every row read,
+  // and the filter over every row too; only the rendering is capped, so no
+  // aggregate and no match changes with this number.
+  const table = useMemo(
+    () => ceilingedWindow(marginFilter.rows, TABLE_CEILING),
+    [marginFilter.rows],
+  )
 
   const bands = fleet.distributions
+  const { filterColumns: marginFilterColumns } = marginFilter
+  const orgColumns = useMemo(
+    () =>
+      marginFilterColumns([
+        {
+          field: 'name',
+          headerName: 'Organization',
+          flex: 1,
+          minWidth: 160,
+          valueGetter: (_value, row: OrgMarginRow) => row.name ?? row.orgId,
+        },
+        { field: 'plan', headerName: 'Plan', width: 110 },
+        {
+          field: 'month',
+          headerName: 'Month',
+          width: 110,
+          renderCell: ({ row }: { row: OrgMarginRow }) =>
+            row.month ?? <Chip size="small" variant="outlined" label="No rollup" />,
+        },
+        {
+          field: 'netRevenueUsd',
+          headerName: 'Net revenue',
+          type: 'number',
+          width: 120,
+          renderCell: ({ row }: { row: OrgMarginRow }) => usd(row.netRevenueUsd),
+        },
+        {
+          // Part of the net revenue beside it, not an addition to it
+          // (AGL-2930). A dash for an org without the add-on: "$0.00" would
+          // read as an add-on that earns nothing.
+          field: 'aiAddonRevenueUsd',
+          headerName: 'AI add-on',
+          type: 'number',
+          width: 110,
+          renderCell: ({ row }: { row: OrgMarginRow }) =>
+            row.aiAddonRevenueUsd > 0 ? usd(row.aiAddonRevenueUsd) : '—',
+        },
+        {
+          field: 'cogs',
+          headerName: 'COGS',
+          type: 'number',
+          width: 120,
+          valueGetter: (_value, row: OrgMarginRow) => row.cogs.cogsUsd,
+          renderCell: ({ row }: { row: OrgMarginRow }) => (
+            <Stack sx={{ alignItems: 'flex-end', py: 1 }}>
+              {usd(row.cogs.cogsUsd)}
+              {/*
+                WHICH ARM PRODUCED THE FIGURE. `floor` means the meters came
+                in under the flat per-site estimate, so the number says
+                nothing about what this organization actually consumed.
+              */}
+              <Typography variant="caption" color="text.secondary">
+                {row.cogs.basis}
+              </Typography>
+            </Stack>
+          ),
+        },
+        {
+          field: 'marginPct',
+          headerName: 'Margin',
+          type: 'number',
+          width: 120,
+          renderCell: ({ row }: { row: OrgMarginRow }) =>
+            row.marginPct === null ? (
+              <Chip size="small" variant="outlined" label="Not billing" />
+            ) : (
+              <Chip
+                size="small"
+                label={pct(row.marginPct)}
+                color={
+                  row.rating === 'ok'
+                    ? 'success'
+                    : row.rating === 'warn'
+                      ? 'warning'
+                      : 'error'
+                }
+              />
+            ),
+        },
+        ...bands.map(
+          (band): GridColDef<OrgMarginRow> => ({
+            field: `band:${band.band}`,
+            headerName: UTILIZATION_BAND_LABELS[band.band],
+            minWidth: 130,
+            sortable: false,
+            renderCell: ({ row }) => (
+              <Box sx={{ py: 1, width: '100%' }}>
+                <BandCell reading={row.bands[band.band]} />
+              </Box>
+            ),
+          }),
+        ),
+        listActionsColumn((row: OrgMarginRow) => <RowActions orgId={row.orgId} />, {
+          width: 72,
+        }),
+      ] as GridColDef<OrgMarginRow>[] as GridColDef[]),
+    [marginFilterColumns, bands],
+  )
 
   return (
     <DashboardLayout
@@ -368,6 +516,9 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                       include at all, has no percentage and is excluded from the
                       sample rather than folded in as zero.
                     </Typography>
+                    {/* A fixed report — one row per band, a bounded
+                        breakdown of the fleet — so it stays a plain table
+                        with nothing to filter. */}
                     <ScrollTable size="small">
                       <TableHead>
                         <TableRow>
@@ -518,114 +669,28 @@ const AdminMarginUtilization: NextPageWithLayout<Record<string, never>> = () => 
                     {table.truncated ? (
                       <Alert severity="info">
                         Showing the {TABLE_CEILING} worst of{' '}
-                        {ordered.length.toLocaleString()} organizations read.
+                        {marginFilter.rows.length.toLocaleString()}{' '}
+                        {marginFilter.filtering
+                          ? 'organizations that match'
+                          : 'organizations read'}
+                        .
                         Every figure above still covers all of them.
                       </Alert>
                     ) : null}
-                    <ScrollTable size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Organization</TableCell>
-                          <TableCell>Plan</TableCell>
-                          <TableCell>Month</TableCell>
-                          <TableCell align="right">Net revenue</TableCell>
-                          <TableCell align="right">AI add-on</TableCell>
-                          <TableCell align="right">COGS</TableCell>
-                          <TableCell align="right">Margin</TableCell>
-                          {bands.map((band) => (
-                            <TableCell key={band.band}>
-                              {UTILIZATION_BAND_LABELS[band.band]}
-                            </TableCell>
-                          ))}
-                          <TableCell align="right" />
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {table.rows.map((row) => (
-                          <TableRow
-                            key={row.orgId}
-                            hover
-                            sx={{ cursor: 'pointer' }}
-                            onClick={() =>
-                              router.push(
-                                buildRoute(Route.ADMIN_ORG_DETAIL, {
-                                  orgId: row.orgId,
-                                }),
-                              )
-                            }
-                          >
-                            <TableCell>{row.name ?? row.orgId}</TableCell>
-                            <TableCell>{row.plan}</TableCell>
-                            <TableCell>
-                              {row.month ?? (
-                                <Chip
-                                  size="small"
-                                  variant="outlined"
-                                  label="No rollup"
-                                />
-                              )}
-                            </TableCell>
-                            <TableCell align="right">
-                              {usd(row.netRevenueUsd)}
-                            </TableCell>
-                            {/* Part of the net revenue beside it, not an
-                                addition to it (AGL-2930). A dash for an
-                                org without the add-on: "$0.00" would read
-                                as an add-on that earns nothing. */}
-                            <TableCell align="right">
-                              {row.aiAddonRevenueUsd > 0
-                                ? usd(row.aiAddonRevenueUsd)
-                                : '—'}
-                            </TableCell>
-                            <TableCell align="right">
-                              {usd(row.cogs.cogsUsd)}
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ display: 'block' }}
-                              >
-                                {/*
-                                  WHICH ARM PRODUCED THE FIGURE. `floor` means
-                                  the meters came in under the flat per-site
-                                  estimate, so the number says nothing about
-                                  what this organization actually consumed.
-                                */}
-                                {row.cogs.basis}
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right">
-                              {row.marginPct === null ? (
-                                <Chip
-                                  size="small"
-                                  variant="outlined"
-                                  label="Not billing"
-                                />
-                              ) : (
-                                <Chip
-                                  size="small"
-                                  label={pct(row.marginPct)}
-                                  color={
-                                    row.rating === 'ok'
-                                      ? 'success'
-                                      : row.rating === 'warn'
-                                        ? 'warning'
-                                        : 'error'
-                                  }
-                                />
-                              )}
-                            </TableCell>
-                            {bands.map((band) => (
-                              <TableCell key={band.band} sx={{ minWidth: 120 }}>
-                                <BandCell reading={row.bands[band.band]} />
-                              </TableCell>
-                            ))}
-                            <TableCell align="right">
-                              <RowActions orgId={row.orgId} />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </ScrollTable>
+                    <ListFilterChips {...marginFilter.chipsProps} />
+                    <ListTable
+                      aria-label="By organization, worst margin first"
+                      rows={table.rows}
+                      columns={orgColumns}
+                      {...marginFilter.gridProps}
+                      // A band reading stacks a figure over a bar, so a row
+                      // is as tall as its tallest reading.
+                      getRowHeight={() => 'auto'}
+                      onOpen={(orgId) =>
+                        router.push(buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }))
+                      }
+                      noRowsLabel="No organizations match these filters"
+                    />
                   </Stack>
                 </CardDisplay>
               </>

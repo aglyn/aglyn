@@ -856,6 +856,11 @@ table. Reading it is open to every staff role; releasing from it needs
   still consume the cap. They are the safest thing to clear first, and nothing
   else on the platform would ever have told you they were there.
 
+The table's toolbar filters and searches the whole list before it is paged:
+**Reason**, **State** (*enforcing*, *expired*, *unreadable*) and **Key kind** are
+pickers, and the key and note filter as typed values. The Library picker and the id
+fields above belong to the per-file lookup, not to this table.
+
 ### From a terminal {#quarantine-curl}
 
 The page cannot do anything this cannot; it just makes the two mistakes above

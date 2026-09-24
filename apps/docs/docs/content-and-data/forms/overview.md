@@ -266,6 +266,18 @@ row actions.
   read; **Mark unread** puts it back.
 - **Delete** removes a submission permanently (it asks first).
 
+The submissions table filters through its toolbar. **Filters** narrows it by
+**Form**, **Read** (read or unread), sender and message, and on your organization's
+Inbox by **Site**; **Search** matches a sender, a form name or anything in the
+message. **Form** reaches every submission sent to that form. The other filters and
+the search look through the first 100 submissions the table read and say when there
+are more; paging forward reads the next page.
+
+The **Members & leads** table filters the same way, by address, **Type** (member, or
+lead by where it came from) and, on your organization's Inbox, **Site**. **Search**
+matches an address, a name or a lead's source. It looks at every contact the table
+read, and the note under the table says when a site holds more than that.
+
 #### Who a submission is "from" {#who-a-submission-is-from}
 
 A form is yours to define, so there is no guaranteed name field. The sender is resolved
@@ -424,6 +436,15 @@ The sender's name and email are recognized from the field name (see
 
 Submissions collected before a form became a form entity are filed under the name they
 were sent with rather than this form's id, so they stay in the Inbox under **All forms**.
+
+## Find a form in the list {#find-a-form}
+
+The **Forms** table filters through its toolbar by display name, slug and **Status**
+(active or retired), and **Search** matches a name or slug. Retired forms stay out of
+the list until you ask for them: choose **Status** in the **Filters** panel and pick
+**Retired** to find one and restore it. The list is paged, so the first filter reads
+the first 100 forms and matches over them; the table says when there are more, and
+paging forward reads the next page.
 
 ## Duplicate a form
 

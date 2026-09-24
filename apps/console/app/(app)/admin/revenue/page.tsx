@@ -905,6 +905,13 @@ const AdminRevenue: NextPageWithLayout<Record<string, never>> = () => {
                   showing if a query had failed.
                 </Typography>
               ) : (
+                /*
+                  A reconciliation, not a record list: these rows plus the
+                  omitted line below sum to the totals above, so a filtered
+                  subset would read as a partial accounting. It stays a plain
+                  table; narrowing orgs by plan or billing state is the
+                  Organizations list's panel.
+                */
                 <ScrollTable size="small">
                   <TableHead>
                     <TableRow>

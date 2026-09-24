@@ -110,8 +110,8 @@ describe('?email= narrows the list to one buyer', () => {
       order('o-2', { number: 2, customerEmail: 'bob@example.test' }),
     ]
     render(<HostOrdersCard hostId="host-1" />)
-    expect((screen.getByLabelText('Customer') as HTMLInputElement).value).toBe(
-      'ada@example.test',
+    expect(screen.getByRole('list', { name: 'Filters' }).textContent).toContain(
+      'Customer contains ada@example.test',
     )
     expect(screen.getByText('ada@example.test')).toBeTruthy()
     expect(screen.queryByText('bob@example.test')).toBeNull()
