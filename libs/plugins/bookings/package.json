@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-bookings",
-  "version": "1.0.0-beta.187",
+  "version": "1.0.0-beta.188",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,16 +25,16 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.187",
-    "@aglyn/shared-data-mdi": "1.0.0-beta.187",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.187",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.187",
-    "@aglyn/shared-util-email": "1.0.0-beta.187",
-    "@aglyn/shared-util-http": "1.0.0-beta.187",
-    "@aglyn/shared-util-timestamp": "1.0.0-beta.187",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.187",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.187",
-    "@aglyn/tenant-runtime": "1.0.0-beta.187",
+    "@aglyn/aglyn": "1.0.0-beta.188",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.188",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.188",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.188",
+    "@aglyn/shared-util-email": "1.0.0-beta.188",
+    "@aglyn/shared-util-http": "1.0.0-beta.188",
+    "@aglyn/shared-util-timestamp": "1.0.0-beta.188",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.188",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.188",
+    "@aglyn/tenant-runtime": "1.0.0-beta.188",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
