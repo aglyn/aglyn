@@ -92,6 +92,14 @@ introduce a price or an entitlement the account owner has not chosen.
 
 ---
 
+## 2026-09-23 — A tracked sequence link is on the sending domain's own `links.` host, by the sending-domain process
+
+- **Decided by:** the account owner, 2026-09-23, in AGL-3306: the host follows the `links.` convention campaign mail's provider tracking already uses, and the feature is generic — any organization, and any self-hosted install, sets one up through the product.
+- **Scope:** policy
+- **Evidence:** `libs/shared/util/email/src/lib/tracking-host.ts` (policy), `libs/tenant/data/admin/src/lib/server/tracking-hosts.ts` (record, domain-driver attach, HTTPS probe), `libs/plugins/outreach/src/lib/routes/link-domain-routes.ts` and `components/link-domains-card.tsx` (Sequences → Mailboxes → Link domains), the tracking-host branch of `apps/console/middleware.ts`, and the `Click-tracking link bypass` rule in `tools/scripts/lib/firewall-posture.mjs`; AGL-3306.
+
+**A link reads `https://links.<the mailbox's domain>/<id>` once that host verifies, and `<console>/api/outreach/l/<id>` until then.** The host is attached by the deployment's domain driver (`AGLYN_DOMAIN_PROVIDER`, scope `console`) and served by the console app by `Host`, so it works on any deployment; verification fetches `/_aglyn/link-host` over HTTPS on the host itself. Every link ever sent keeps answering on the console address. A domain whose campaign mail already tracks clicks on `links.` through the provider cannot also be a sequence link domain.
+
 ## 2026-09-23 — A tracked sequence link is a short stored id, not a signed token
 
 - **Decided by:** the account owner, 2026-09-23, in AGL-3297, after a recipient opted out of a founder sequence that read as bulk mail.

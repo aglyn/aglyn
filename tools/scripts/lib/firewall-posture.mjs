@@ -863,6 +863,38 @@ export const EXPECTED_POSTURE = Object.freeze([
           Object.freeze({ type: 'path', op: 'eq', value: '/robots.txt' }),
         ]),
       }),
+      Object.freeze({
+        name: 'Click-tracking link bypass',
+        why: 'a mail client, a link preview or a corporate link scanner opening a tracked sequence link was answered with a 429 challenge instead of the redirect, and a link host could never pass its own HTTPS probe',
+        // ADDED 2026-09-23 (AGL-3306). Recipient links: the redirect is the
+        // whole of the answer, it takes no session, and the scanner case is
+        // handled by the route itself — a scanner is redirected exactly as a
+        // person is and counted apart (`click-tracking.ts`). A challenge in
+        // front of it protects nothing and turns the link into a page that
+        // reads, to a security gateway, as a broken link in a suspicious
+        // email.
+        //
+        // The main group is a `links.` HOST and a path shaped like a link id
+        // or the verification probe — BOTH load-bearing. Host-only would lift
+        // the challenge from every console route reached through a link
+        // domain; the middleware already 404s those, but a bypass should not
+        // rely on the layer behind it. `links.` hosts reach this project only
+        // when a link domain is attached to it (Sequences → Link domains),
+        // and `links.<workspace domain>` is CNAMEd to the mail provider, so
+        // it never arrives here at all.
+        conditions: Object.freeze([
+          Object.freeze({ type: 'host', op: 'pre', value: 'links.' }),
+          Object.freeze({ type: 'path', op: 're', value: '^/([A-Za-z0-9]{6,32}|_aglyn/link-host)$' }),
+        ]),
+        // The same links on the console's own address: every short link sent
+        // before a link domain was verified, and the signed links sent before
+        // AGL-3297. Prefix on the short route because the id is a path
+        // segment; `eq` on the signed route, whose token is a query string.
+        alsoRequiresGroups: Object.freeze([
+          Object.freeze({ type: 'path', op: 'pre', value: '/api/outreach/l/' }),
+          Object.freeze({ type: 'path', op: 'eq', value: '/api/outreach/click' }),
+        ]),
+      }),
     ]),
   }),
   Object.freeze({

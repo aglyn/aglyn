@@ -302,17 +302,35 @@ export function readOutreachStoredLink(data: unknown): OutreachClickTarget | nul
 }
 
 /**
- * The short link for an id on the console at `origin`, or `null` when the
- * origin is not HTTPS or the id is not one — no link rather than one that
- * points at nothing. A `null` leaves the destination the step wrote.
+ * The short link for an id, or `null` when there is no HTTPS origin to put it
+ * on or the id is not one — no link rather than one that points at nothing. A
+ * `null` leaves the destination the step wrote.
+ *
+ * On the sending domain's own click-tracking host (AGL-3306) when the org has
+ * verified one — `https://links.<domain>/<id>`, which that host answers
+ * exactly as the console route — and on the console's
+ * `/api/outreach/l/<id>` otherwise, which every link keeps answering on.
  */
-export function outreachShortLinkUrl(input: { origin: string | null | undefined; linkId: string }): string | null {
-  let origin: URL
+export function outreachShortLinkUrl(input: {
+  origin: string | null | undefined
+  linkId: string
+  /** `https://links.<domain>`, from `resolveTrackingLinkOrigin`, or nothing. */
+  trackingOrigin?: string | null
+}): string | null {
+  if (!isOutreachLinkId(input.linkId)) return null
+  const tracking = httpsOrigin(input.trackingOrigin)
+  if (tracking) return `${tracking}/${input.linkId}`
+  const origin = httpsOrigin(input.origin)
+  return origin ? `${origin}${OUTREACH_SHORT_LINK_PATH}/${input.linkId}` : null
+}
+
+/** An HTTPS origin, or `null` for anything else. */
+function httpsOrigin(value: string | null | undefined): string | null {
+  if (!value) return null
   try {
-    origin = new URL(String(input.origin ?? ''))
+    const url = new URL(String(value))
+    return url.protocol === 'https:' ? url.origin : null
   } catch {
     return null
   }
-  if (origin.protocol !== 'https:' || !isOutreachLinkId(input.linkId)) return null
-  return `${origin.origin}${OUTREACH_SHORT_LINK_PATH}/${input.linkId}`
 }

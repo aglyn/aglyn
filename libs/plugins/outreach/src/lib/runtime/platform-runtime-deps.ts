@@ -132,7 +132,14 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
       if (!result.sent) console.warn(`[outreach] the mailbox owner was not emailed: ${result.reason}`)
     },
     unsubscribeUrl: (target) => outreachUnsubscribeUrl({ origin: canonicalConsoleOrigin(), target }),
-    clickLinkUrl: (linkId) => outreachShortLinkUrl({ origin: canonicalConsoleOrigin(), linkId }),
+    clickLinkUrl: (linkId, trackingOrigin) =>
+      outreachShortLinkUrl({ origin: canonicalConsoleOrigin(), linkId, trackingOrigin }),
+    // The sending domain's own `links.` host once the organization has
+    // verified it (AGL-3306); loaded on the first tracked send of a run.
+    async clickLinkOrigin({ orgId, senderAddress }) {
+      const { resolveTrackingLinkOrigin } = await import('@aglyn/tenant-data-admin/server/tracking-hosts')
+      return resolveTrackingLinkOrigin(firestore(), orgId, senderAddress)
+    },
   }
 }
 

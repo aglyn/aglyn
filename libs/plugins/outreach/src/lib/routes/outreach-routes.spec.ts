@@ -28,6 +28,12 @@ import type { OutreachEmailStep, OutreachTaskStep } from '../model/outreach.type
 import type { OutreachRecordEmailStamp } from '../runtime/runtime-deps'
 import { createOutreachDoNotContactDomainsRoute, OUTREACH_DO_NOT_CONTACT_DOMAIN_ACTIVITY } from './do-not-contact-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
+import type { TrackingHostRecord } from '@aglyn/shared-util-email'
+import {
+  createOutreachLinkDomainsRoute,
+  OUTREACH_LINK_DOMAIN_ACTIVITY,
+  type OutreachTrackingHosts,
+} from './link-domain-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
 import { OUTREACH_SEQUENCE_ACTIVITY_TARGET } from './route-deps'
@@ -1315,5 +1321,106 @@ describe('outreach/do-not-contact/domains (AGL-3244)', () => {
     expect(body.results[0].blocks.map((block: { code: string }) => block.code)).toEqual(['do_not_contact_domain'])
     expect(body.enrolled).toBe(0)
     expect(docs.has(org(`outreachEnrollments/${sequenceId}_c-1`))).toBe(false)
+  })
+})
+
+// ── Link domains (AGL-3306) ─────────────────────────────────────────────────
+
+describe('outreach/link-domains (AGL-3306)', () => {
+  let hosts: Map<string, TrackingHostRecord>
+  let calls: string[]
+  const store: OutreachTrackingHosts = {
+    list: async () => [...hosts.values()],
+    setUp: async ({ domain }) => {
+      calls.push(`set-up ${domain}`)
+      const record: TrackingHostRecord = {
+        domain,
+        host: `links.${domain}`,
+        status: 'records-issued',
+        target: 'cname.vercel-dns.com',
+      }
+      hosts.set(domain, record)
+      return { record, error: null, status: 200 }
+    },
+    verify: async ({ domain }) => {
+      calls.push(`check ${domain}`)
+      const record = { ...(hosts.get(domain) as TrackingHostRecord), status: 'verified' as const }
+      hosts.set(domain, record)
+      return { record, error: null, status: 200 }
+    },
+    remove: async ({ domain }) => {
+      calls.push(`remove ${domain}`)
+      hosts.delete(domain)
+      return { record: null, error: null, status: 200 }
+    },
+  }
+  const route = () =>
+    createOutreachLinkDomainsRoute(deps(), { hosts: async () => store, consoleOrigin: () => 'https://console.example.com' })
+  const list = async (uid: string) => {
+    const response = await route()(
+      new Request(`https://console.example.com/api/outreach?orgId=${ORG}`, {
+        headers: { authorization: `Bearer ${uid}` },
+      }),
+      { params: {} },
+    )
+    return { status: response.status, body: (await response.json()) as Record<string, any> }
+  }
+
+  beforeEach(() => {
+    hosts = new Map()
+    calls = []
+  })
+
+  it('lists each mailbox domain once, on the app address until a host is verified', async () => {
+    const listed = await list(REP)
+    expect(listed.status).toBe(200)
+    expect(listed.body.canManage).toBe(false)
+    expect(listed.body.domains).toEqual([
+      expect.objectContaining({
+        domain: 'example.com',
+        host: 'links.example.com',
+        status: 'not-set-up',
+        records: [],
+        linkPrefix: 'https://console.example.com/api/outreach/l/',
+      }),
+    ])
+  })
+
+  it('lets an owner set a host up, check it, and see links move onto it', async () => {
+    const set = await post(route(), OWNER, { action: 'set-up', domain: 'example.com' })
+    expect(set.status).toBe(200)
+    expect(set.body.domains[0]).toMatchObject({ status: 'records-issued' })
+    expect(set.body.domains[0].records[0]).toMatchObject({ type: 'CNAME', name: 'links.example.com', value: 'cname.vercel-dns.com' })
+    const checked = await post(route(), REP, { action: 'check', domain: 'example.com' })
+    expect(checked.body.domains[0]).toMatchObject({ status: 'verified', linkPrefix: 'https://links.example.com/' })
+    expect(calls).toEqual(['set-up example.com', 'check example.com'])
+    expect(activity).toEqual([
+      { action: OUTREACH_LINK_DOMAIN_ACTIVITY['set-up']('links.example.com'), target: { type: 'org', id: ORG } },
+    ])
+    await post(route(), OWNER, { action: 'remove', domain: 'example.com' })
+    expect(activity.at(-1)?.action).toBe(OUTREACH_LINK_DOMAIN_ACTIVITY.remove('links.example.com'))
+    expect((await list(REP)).body.domains[0].status).toBe('not-set-up')
+  })
+
+  it('keeps setting up and removing to owners and admins, and to the domains its mailboxes send as', async () => {
+    expect((await post(route(), REP, { action: 'set-up', domain: 'example.com' })).body.reason).toBe('permission')
+    expect((await post(route(), REP, { action: 'remove', domain: 'example.com' })).body.reason).toBe('permission')
+    const elsewhere = await post(route(), OWNER, { action: 'set-up', domain: 'someone-else.com' })
+    expect(elsewhere.status).toBe(400)
+    expect(elsewhere.body.reason).toBe('invalid-domain')
+    expect((await post(route(), OWNER, { action: 'forget', domain: 'example.com' })).body.reason).toBe('invalid-request')
+    expect((await post(route(), 'uid-nobody', { action: 'check', domain: 'example.com' })).status).toBe(403)
+    expect(calls).toEqual([])
+  })
+
+  it('answers a store refusal in its own words', async () => {
+    const refusing: OutreachTrackingHosts = {
+      ...store,
+      setUp: async () => ({ record: null, error: 'Campaign mail owns it.', status: 409 }),
+    }
+    const handler = createOutreachLinkDomainsRoute(deps(), { hosts: async () => refusing, consoleOrigin: () => null })
+    const refused = await post(handler, OWNER, { action: 'set-up', domain: 'example.com' })
+    expect(refused.status).toBe(409)
+    expect(refused.body).toMatchObject({ reason: 'link-domain-refused', error: 'Campaign mail owns it.' })
   })
 })

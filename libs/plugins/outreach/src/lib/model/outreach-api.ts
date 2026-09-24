@@ -61,6 +61,7 @@ export type OutreachRouteRefusalReason =
   | 'view-not-found'
   | 'view-unsupported'
   | 'contact-not-found'
+  | 'link-domain-refused'
 
 /** A refusal, in the one shape every route answers with. */
 export interface OutreachRouteRefusal {
@@ -300,6 +301,63 @@ export interface OutreachDoNotContactDomainRequest {
 export interface OutreachDoNotContactDomainResponse extends OutreachDoNotContactDomainsResponse {
   changed: boolean
   /** The domain as the list spells it. */
+  domain: string
+}
+
+/*==========================================
+ * LINK DOMAINS (AGL-3306)
+ *==========================================*/
+
+/** Where a mailbox domain's click-tracking host stands. */
+export type OutreachLinkDomainStatus = 'not-set-up' | 'requested' | 'records-issued' | 'verified' | 'failed'
+
+/** One DNS record the member publishes, as the sending-domain cards print them. */
+export interface OutreachLinkDomainRecord {
+  type: string
+  name: string
+  value: string
+  required: boolean
+  note: string
+}
+
+/**
+ * One sending domain of the organization's connected mailboxes, and its
+ * `links.` host: what tracked links in mail from it read now, and what is
+ * left to do for them to read `https://links.<domain>/<id>`.
+ */
+export interface OutreachLinkDomain {
+  /** The mailboxes' sending domain. */
+  domain: string
+  /** `links.<domain>`. */
+  host: string
+  status: OutreachLinkDomainStatus
+  /** The records to publish; empty until the host is set up. */
+  records: OutreachLinkDomainRecord[]
+  /** Why it is not verified, in a sentence; `null` when nothing is wrong. */
+  detail: string | null
+  /** How a tracked link in mail from this domain starts today. */
+  linkPrefix: string | null
+  checkedAtMs: number | null
+  verifiedAtMs: number | null
+}
+
+/** `GET outreach/link-domains?orgId` */
+export interface OutreachLinkDomainsResponse {
+  ok: true
+  domains: OutreachLinkDomain[]
+  /** Whether the member may set a host up, check it, or remove it. */
+  canManage: boolean
+}
+
+/** `POST outreach/link-domains` */
+export interface OutreachLinkDomainRequest {
+  orgId: string
+  domain: string
+  action: 'set-up' | 'check' | 'remove'
+}
+
+export interface OutreachLinkDomainResponse extends OutreachLinkDomainsResponse {
+  /** The domain the action was for. */
   domain: string
 }
 

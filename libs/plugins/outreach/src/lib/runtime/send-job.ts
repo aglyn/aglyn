@@ -144,6 +144,12 @@ interface MailboxRun {
   /** Set once the mailbox itself cannot send this run. */
   stopped: boolean
   templates: Map<string, string | null>
+  /**
+   * The click-tracking origin for this mailbox's sending domain (AGL-3306):
+   * `undefined` until a tracked send first asks, then the verified
+   * `https://links.<domain>` or `null` for the console's own address.
+   */
+  linkOrigin?: string | null
 }
 
 const blankReport = (): OutreachSendReport => ({
@@ -367,6 +373,25 @@ function gateEvent(blocks: readonly OutreachGateBlock[], atMs: number): Outreach
   const optedOut = blocks.find((block) => block.code === 'do_not_contact' || block.code === 'sales_opted_out')
   if (optedOut) return { type: 'opt_out', atMs, reason: 'do_not_contact', detail: optedOut.reason }
   return { type: 'stop', atMs, byUid: null, reason: 'gate', detail: blocks.map((block) => block.reason).join(' ') }
+}
+
+/**
+ * The click-tracking origin for mail sent as `senderAddress`, or `null` for
+ * the console's own address — which is also what a failed lookup reads as: a
+ * link on the app address still counts the click, so no send waits on it.
+ */
+async function trackingLinkOrigin(
+  deps: OutreachRuntimeDeps,
+  orgId: string,
+  senderAddress: string,
+): Promise<string | null> {
+  if (!deps.clickLinkOrigin) return null
+  try {
+    return await deps.clickLinkOrigin({ orgId, senderAddress })
+  } catch (error) {
+    console.warn('[outreach] the click-tracking host could not be read; links use the app address', error)
+    return null
+  }
 }
 
 /** The sender line a mailbox's mail goes out with. */
@@ -749,6 +774,9 @@ async function runEmailStep(
    * short link (AGL-3297) whose document is written below, before the email
    * leaves; a link that cannot be made is left exactly as the step wrote it.
    */
+  if (sequence.settings.trackClicks && run.linkOrigin === undefined) {
+    run.linkOrigin = await trackingLinkOrigin(deps, run.orgId, sender.address)
+  }
   const shortLinks: Array<{ id: string; doc: OutreachStoredLink }> = []
   const rewriteLink = sequence.settings.trackClicks
     ? (link: { url: string; index: number }) => {
@@ -763,7 +791,7 @@ async function runEmailStep(
           nowMs,
         )
         const id = newOutreachLinkId()
-        const url = doc ? deps.clickLinkUrl(id) : null
+        const url = doc ? deps.clickLinkUrl(id, run.linkOrigin ?? null) : null
         if (!doc || !url) return null
         shortLinks.push({ id, doc })
         return url

@@ -71,6 +71,12 @@ export const OUTREACH_API_ROUTES = {
    * (AGL-3244); `POST` — add one, or take one off.
    */
   doNotContactDomains: 'outreach/do-not-contact/domains',
+  /**
+   * `GET ?orgId` — each connected mailbox domain's click-tracking host
+   * (AGL-3306), `links.<domain>`; `POST` — set one up, check it, or remove
+   * it. Setting up and removing are an owner's or admin's.
+   */
+  linkDomains: 'outreach/link-domains',
   /** `POST` — one email of a saved sequence, for a contact or a sample person. */
   preview: 'outreach/preview',
   // The one route a RECIPIENT reaches (AGL-2981): no session, a signed

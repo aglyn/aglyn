@@ -19,6 +19,7 @@
 
 import type { PluginRecordActivityRequest } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { FieldValue } from 'firebase-admin/firestore'
+import { TRACKING_HOST_LINK_ROUTE, trackingHostPath } from '@aglyn/shared-util-email'
 import { OUTREACH_CLICK_HUMAN_DELAY_MS } from '../engine/click-tracking'
 import {
   isOutreachLinkId,
@@ -457,6 +458,26 @@ describe('the short link id and document', () => {
     expect(String(url).length).toBeLessThan(60)
     expect(outreachShortLinkUrl({ origin: 'http://console.example.com', linkId: LINK_ID })).toBeNull()
     expect(outreachShortLinkUrl({ origin: ORIGIN, linkId: '../x' })).toBeNull()
+  })
+
+  it('is on the sending domain’s verified links host when one is given (AGL-3306)', () => {
+    expect(outreachShortLinkUrl({ origin: ORIGIN, linkId: LINK_ID, trackingOrigin: 'https://links.acme.io' })).toBe(
+      'https://links.acme.io/Ab3dE9xK2q',
+    )
+    // Anything but an https origin falls back to the console, never to nothing.
+    for (const trackingOrigin of [null, '', 'http://links.acme.io', 'not a url']) {
+      expect(outreachShortLinkUrl({ origin: ORIGIN, linkId: LINK_ID, trackingOrigin })).toBe(
+        'https://console.example.com/api/outreach/l/Ab3dE9xK2q',
+      )
+    }
+    expect(outreachShortLinkUrl({ origin: ORIGIN, linkId: '../x', trackingOrigin: 'https://links.acme.io' })).toBeNull()
+  })
+
+  it('resolves on the very route the links host rewrites to', () => {
+    // The console middleware rewrites `links.<domain>/<id>` to this path; a
+    // rename on either side would leave every link on the host answering 404.
+    expect(TRACKING_HOST_LINK_ROUTE).toBe(OUTREACH_SHORT_LINK_PATH)
+    expect(trackingHostPath(`/${LINK_ID}`)).toEqual({ kind: 'link', rewrite: `${OUTREACH_SHORT_LINK_PATH}/${LINK_ID}` })
   })
 
   it('stores only a destination we would follow, and reads back what it stored', () => {

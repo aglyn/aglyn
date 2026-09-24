@@ -77,8 +77,8 @@ import {
   resolveSendingIdentity,
   safeProviderDetail,
   SENDING_SUBDOMAIN,
-  SENDING_TRACKING_SUBDOMAIN,
   sendingDnsRecords,
+  sendingTrackingHost,
   sendingDomainRequiredRecords,
   sendingRecordKey,
   sharedTenantSendingFrom,
@@ -478,7 +478,7 @@ export async function readTrackingCaaNeed(
    * closer name overrides a broader one — a customer who already scoped a
    * policy to `links.` must not be told to widen their root.
    */
-  const labels = `${SENDING_TRACKING_SUBDOMAIN}.${domain}`.split('.')
+  const labels = sendingTrackingHost(domain).split('.')
   for (let index = 0; index < labels.length - 1; index += 1) {
     const name = labels.slice(index).join('.')
     const lookup = await lookupCaa(name)

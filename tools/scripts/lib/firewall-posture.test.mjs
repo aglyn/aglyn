@@ -360,6 +360,23 @@ function healthyConsoleConfig() {
         action: bypass(),
         conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/robots.txt' }] }],
       },
+      {
+        name: 'Click-tracking link bypass',
+        id: 'rule_click_tracking_links_console',
+        active: true,
+        valid: true,
+        action: bypass(),
+        conditionGroup: [
+          {
+            conditions: [
+              { type: 'host', op: 'pre', value: 'links.' },
+              { type: 'path', op: 're', value: '^/([A-Za-z0-9]{6,32}|_aglyn/link-host)$' },
+            ],
+          },
+          { conditions: [{ type: 'path', op: 'pre', value: '/api/outreach/l/' }] },
+          { conditions: [{ type: 'path', op: 'eq', value: '/api/outreach/click' }] },
+        ],
+      },
     ],
   }
 }
@@ -1061,4 +1078,21 @@ test('no shared-secret value is hard-coded in the checker or its library', () =>
       `${file} contains something shaped like a 64-hex secret`,
     )
   }
+})
+
+test('the click-tracking bypass decayed to HOST-ONLY fails — every console route on a link domain would skip the challenge', () => {
+  const config = healthyConsoleConfig()
+  const rule = ruleNamed(config, 'Click-tracking link bypass')
+  rule.conditionGroup[0].conditions = [{ type: 'host', op: 'pre', value: 'links.' }]
+  const { ok, findings } = evalConsole(config)
+  assert.equal(ok, false)
+  assert.match(findings.join('\n'), /Click-tracking link bypass/)
+})
+
+test('losing the click-tracking bypass fails — a mail scanner would get a challenge instead of the redirect', () => {
+  const config = healthyConsoleConfig()
+  config.rules = config.rules.filter((rule) => rule.name !== 'Click-tracking link bypass')
+  const { ok, findings } = evalConsole(config)
+  assert.equal(ok, false)
+  assert.match(findings.join('\n'), /Click-tracking link bypass.*MISSING/)
 })

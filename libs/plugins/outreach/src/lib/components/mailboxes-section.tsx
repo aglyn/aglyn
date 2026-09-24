@@ -28,6 +28,7 @@ import {
   type OutreachConnectReturnError,
   type OutreachMailboxAvailability,
 } from '../mailboxes/mailbox-api'
+import { OutreachLinkDomainsCard } from './link-domains-card'
 import { MailboxCard } from './mailbox-card'
 import { useOutreachMailboxApi } from './use-outreach-mailbox-api'
 import { useOutreachMailboxes } from './use-outreach-mailboxes'
@@ -240,6 +241,7 @@ export function OutreachMailboxesSection(props: OutreachMailboxesSectionProps) {
           />
         )
       })}
+      {listed.status === 'ready' && listed.mailboxes.length ? <OutreachLinkDomainsCard orgId={orgId} /> : null}
     </Stack>
   )
 }

@@ -644,6 +644,52 @@ power to send mail as every rep who connected a mailbox.
 | `GOOGLE_OUTREACH_CLIENT_SECRET` | Feature | Runtime, **console only** | That client's secret. Used to redeem the authorization code at connect, to refresh each mailbox's access token before a Gmail call, and to revoke a grant when a mailbox is disconnected or its organization is erased. A secret Google refuses surfaces as `client_misconfigured` on every send rather than as a disconnected mailbox. |
 | `OUTREACH_TOKEN_KEY` | Feature | Runtime, **console only** | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored refresh token with AES-256-GCM; nothing else is encrypted with it. A value that is not exactly 32 bytes counts as unset. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a token opened under an old key is sealed again under the new one the next time its mailbox is used. Each credential records the id of the key that sealed it in `tokenKeyId`, so drop the old key once no credential names its id. **Losing the key loses every connected mailbox**: a token that no listed key opens cannot be recovered, and its mailbox moves to *Reconnect required* until the rep connects it again. |
 
+#### Link domains {#sequences-link-domains}
+
+With **Count link clicks** on, every link in a sequence email is a short link,
+`{NEXT_PUBLIC_CONSOLE_URL}/api/outreach/l/<id>`. An organization can move those
+links onto its own domain in **Sequences → Mailboxes → Link domains**: mail sent
+as `rep@example.com` then carries `https://links.example.com/<id>`, the same
+`links.` host a sending domain's campaign click tracking uses. Nothing needs
+configuring for the default to work, and an install that never sets one up keeps
+the console address.
+
+How the host reaches your console is the [domain driver's](./domain-providers.md)
+job, scope `console`, like a workspace subdomain:
+
+- **`vercel`** attaches `links.<domain>` to `VERCEL_CONSOLE_PROJECT_ID` when a
+  member selects **Set up**, and Vercel issues its certificate.
+- **`webhook`** sends your endpoint an `attach` for it, scope `console`.
+- **`wildcard`** and **`none`** register nothing: point `links.<domain>` at the
+  console yourself — a DNS record, and a proxy route that terminates TLS with a
+  certificate for the name and passes the `Host` header through. A wildcard
+  certificate on your own workspace domain does not cover a customer's domain.
+
+The console answers the host by its `Host` header, on any deployment: the
+middleware rewrites `/<id>` to the short-link route, answers
+`/_aglyn/link-host` with `{"service":"aglyn-link-host","host":…}`, and 404s
+every other path. **Check** fetches that probe over HTTPS from the console
+itself, so the host verifies only once DNS, the certificate and the routing all
+work — and links move onto it only then.
+
+**Bot protection.** Mail clients, link previews and corporate link scanners open
+these links without running JavaScript. A proxy or WAF that challenges
+non-browser clients must let `links.*` hosts through on `/<id>` and
+`/_aglyn/link-host` (and `/api/outreach/l/*` on the console), or scanners are
+answered with a challenge instead of the redirect and the probe cannot verify.
+Aglyn's own Vercel firewall carries this as the `Click-tracking link bypass`
+rule (`tools/scripts/lib/firewall-posture.mjs`).
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `AGLYN_LINK_HOST_TARGET` | Optional | Runtime, console | The CNAME target the Link domains card tells a member to point `links.<domain>` at — your proxy's hostname. Unset, the `vercel` driver's `cname.vercel-dns.com`, and no target at all under any other driver, where the card says to point the name at the console instead. |
+| `AGLYN_LINK_HOST_CA` | Optional | Runtime, console | The certificate authority named in the card's optional CAA row, which only matters to a domain that already publishes CAA records. Default `letsencrypt.org`. |
+
+A `links.` host under your own `NEXT_PUBLIC_WORKSPACE_DOMAIN` is never answered
+as a link domain — the workspace router owns every name there — and a domain
+whose campaign email already has a provider tracking host on `links.` cannot be
+set up, because both would need the same name.
+
 ---
 
 ## Analytics and advertising {#analytics}

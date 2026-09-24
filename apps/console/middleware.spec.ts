@@ -19,7 +19,8 @@
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { NextRequest } from 'next/server'
-import { middleware } from './middleware'
+import { SENDING_TRACKING_SUBDOMAIN, TRACKING_HOST_PROBE_PATH } from '@aglyn/shared-util-email'
+import { config, middleware } from './middleware'
 
 /**
  * The host gate had no test at all, which is most of why it shipped disabled
@@ -1332,5 +1333,54 @@ describe('the org-agnostic support entry point (AGL-3265)', () => {
     )
     const rewritten = response.headers.get('x-middleware-rewrite')
     expect(new URL(rewritten ?? '').pathname).toBe('/acme/support')
+  })
+})
+
+describe('click-tracking host (AGL-3306)', () => {
+  it('rewrites a link id to the short-link redirector, asking nothing', async () => {
+    const response = await middleware(request('links.acme.io', '/AbCdE12345'))
+    expect(response.headers.get('x-middleware-rewrite')).toBe('https://links.acme.io/api/outreach/l/AbCdE12345')
+    expect(fetchCalls).toEqual([])
+  })
+
+  it('answers its verification probe as this app, for its own name', async () => {
+    const response = await middleware(request('links.acme.io', TRACKING_HOST_PROBE_PATH))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ service: 'aglyn-link-host', host: 'links.acme.io' })
+    expect(response.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it.each(['/', '/acme/outreach', '/.well-known/openid-configuration', '/api/outreach/l/AbCdE12345', '/api/admin/run-erasures', '/__/auth/handler', '/AbCdE12345/x'])(
+    'serves no console and no API on %s',
+    async (path) => {
+      const response = await middleware(request('links.acme.io', path))
+      expect(response.status).toBe(404)
+      expect(response.headers.get('x-middleware-rewrite')).toBeNull()
+    },
+  )
+
+  it('sends a one-segment word to the redirector, never to a console page', async () => {
+    // The redirector answers anything that names no stored link with its own
+    // "This link doesn't work" page — a word shaped like an id is just an
+    // unknown id there.
+    const response = await middleware(request('links.acme.io', '/signin'))
+    expect(response.headers.get('x-middleware-rewrite')).toBe('https://links.acme.io/api/outreach/l/signin')
+  })
+
+  it('leaves the workspace domain’s own links host to the workspace gate', async () => {
+    // `links.<workspace domain>` is campaign mail's, CNAMEd to the mail provider.
+    const response = await middleware(request('links.aglyn.com', '/AbCdE12345'))
+    expect(response.headers.get('x-middleware-rewrite')).not.toBe('https://links.aglyn.com/api/outreach/l/AbCdE12345')
+  })
+
+  it('admits /api and /__ to the middleware only on a links host, spelled as the label', () => {
+    const hosted = config.matcher.filter((entry) => typeof entry !== 'string') as Array<{
+      source: string
+      has: Array<{ type: string; value: string }>
+    }>
+    expect(hosted.map((entry) => entry.source)).toEqual(['/api/:path*', '/__/:path*'])
+    for (const entry of hosted) {
+      expect(entry.has).toEqual([{ type: 'host', value: `${SENDING_TRACKING_SUBDOMAIN}\\..+` }])
+    }
   })
 })

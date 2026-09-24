@@ -25,6 +25,12 @@ import {
   resolveOrgMembership,
 } from '@aglyn/tenant-data-admin/server/organizations'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
+import {
+  listTrackingHosts,
+  removeTrackingHost,
+  setUpTrackingHost,
+  verifyTrackingHost,
+} from '@aglyn/tenant-data-admin/server/tracking-hosts'
 
 /**
  * The platform's heavier server modules the Outreach routes reach
@@ -42,10 +48,14 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 
 export {
   creditCampaignSequenceOutcome,
+  listTrackingHosts,
   lockdownRefusal,
   logOrgActivity,
+  removeTrackingHost,
   resolveOrgPermissions,
+  setUpTrackingHost,
   stampRecordEmailState,
+  verifyTrackingHost,
 }
 
 /**
