@@ -9,6 +9,21 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.191 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/b994d6d1f...v1.0.0-beta.191)
+
+### Added
+
+- **email:** consent groups may wait for each other's confirmation click, off by default ([AGL-3316](https://linear.app/aglyn/issue/AGL-3316))
+
+### Fixed
+
+- **console:** the staff org list's status filter names the vocabulary, not the live set ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **rules:** the rules suite holds the consent policy's denial, not a core declaration ([AGL-3316](https://linear.app/aglyn/issue/AGL-3316))
+- **rules:** the marketing consent policy is server-owned like the consent groups ([AGL-3316](https://linear.app/aglyn/issue/AGL-3316), [AGL-3237](https://linear.app/aglyn/issue/AGL-3237))
+- **email:** a signup after an expired confirmation asks again with a link that works ([AGL-3316](https://linear.app/aglyn/issue/AGL-3316))
+
 ## v1.0.0-beta.190 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.189...v1.0.0-beta.190)

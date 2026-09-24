@@ -5644,6 +5644,114 @@ describe('acquisition is the platform\'s to write, never a client\'s (AGL-3289)'
 })
 
 /**
+ * The consent-group declaration and its confirmation switch (AGL-3316).
+ * `consentGroupForHost` reads both off the org document to decide who a
+ * marketing basis covers, whose opt-outs hold a send and — with the switch on
+ * — whose pending confirmations do, so both are server-owned: the switch is
+ * written through /api/orgs/settings and the declaration by no client at all.
+ * The manager's ordinary writes still land, asserted beside the refusals, so
+ * the guard cannot be satisfied by closing the document.
+ */
+describe('consent groups, their confirmation switch and the consent policy are server-owned (AGL-3316)', () => {
+  const DECLARATION = { acme: { name: 'Acme', hostIds: [HOST, 'host-b'] } }
+
+  it('refuses a manager setting either field from the client', async () => {
+    await mustDeny(
+      'the owner declaring a consent group',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { consentGroups: DECLARATION }),
+    )
+    await mustDeny(
+      'the owner turning the confirmation switch on',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { consentGroupsAwaitConfirmation: true }),
+    )
+    await mustDeny(
+      'the switch merged in beside a field the owner may write',
+      setDoc(
+        doc(authed(OWNER), 'orgs', ORG),
+        { name: 'Acme Goods', consentGroupsAwaitConfirmation: true },
+        { merge: true },
+      ),
+    )
+  })
+
+  it('refuses a manager changing, clearing or widening what the server stored', async () => {
+    // Seeded SET: a delete of a field that is not there affects no keys, and
+    // would pass for reasons that have nothing to do with the rule.
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'orgs', ORG), {
+        consentGroups: DECLARATION,
+        consentGroupsAwaitConfirmation: true,
+      })
+    })
+    await mustDeny(
+      'the owner turning the switch off',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { consentGroupsAwaitConfirmation: false }),
+    )
+    await mustDeny(
+      'the owner deleting the switch',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), {
+        consentGroupsAwaitConfirmation: deleteField(),
+      }),
+    )
+    await mustDeny(
+      'the owner adding a site to the declared group',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), {
+        'consentGroups.acme.hostIds': [HOST, 'host-b', 'host-c'],
+      }),
+    )
+    await mustDeny(
+      'the owner deleting the declaration',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { consentGroups: deleteField() }),
+    )
+  })
+
+  it('refuses both staff roles too — the route is the one writer', async () => {
+    for (const staffRole of ['super', 'billing']) {
+      const staffDb = authed(STAFF, { staff: true, staffRole })
+      await mustDeny(
+        `${staffRole} staff declaring a consent group`,
+        updateDoc(doc(staffDb, 'orgs', ORG), { consentGroups: DECLARATION }),
+      )
+      await mustDeny(
+        `${staffRole} staff turning the confirmation switch on`,
+        updateDoc(doc(staffDb, 'orgs', ORG), { consentGroupsAwaitConfirmation: true }),
+      )
+    }
+  })
+
+  it('refuses anybody setting the marketing consent policy from the client', async () => {
+    // `forward` with a late cutoff grandfathers everyone captured before it,
+    // so a client able to write this could widen who a campaign reaches.
+    const LAX = { mode: 'forward', enforceFromMs: Date.UTC(2099, 0, 1) }
+    await mustDeny(
+      'the owner loosening the consent policy',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { marketingConsentPolicy: LAX }),
+    )
+    for (const staffRole of ['super', 'billing']) {
+      await mustDeny(
+        `${staffRole} staff loosening the consent policy`,
+        updateDoc(doc(authed(STAFF, { staff: true, staffRole }), 'orgs', ORG), {
+          marketingConsentPolicy: LAX,
+        }),
+      )
+    }
+  })
+
+  it('still lets a manager, and staff, make an ordinary write', async () => {
+    await mustAllow(
+      'the owner renaming the org',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { name: 'Acme Goods' }),
+    )
+    await mustAllow(
+      'super staff renaming it',
+      updateDoc(doc(authed(STAFF, { staff: true, staffRole: 'super' }), 'orgs', ORG), {
+        name: 'Acme Staffed',
+      }),
+    )
+  })
+})
+
+/**
  * The AGL-1501 lockdown surface (AGL-1507), live in ruleset 0370ace4.
  *
  * `lockdowns/{id}` holds the platform and per-user panic records. Reads are

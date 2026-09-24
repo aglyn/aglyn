@@ -878,10 +878,13 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
      * A ticked box is a stream the person wants back FROM THE SENDER, and the
      * send paths read an opt-out on any site of the consent group — so an
      * opt-out a sibling holds is lifted too, or the box would be a choice the
-     * send path goes on refusing. The unticked ones are written here alone:
-     * this site's record is read across the group already.
+     * send path goes on refusing — and so is a sibling's pending confirmation,
+     * where the org said the group waits for it. The unticked ones are written
+     * here alone: this site's record is read across the group already.
      */
-    await resumeTopicsAcrossGroup(firestore, group, key, [...keep])
+    await resumeTopicsAcrossGroup(firestore, group, key, [...keep], {
+      confirmPending: true,
+    })
 
     /*
      * HOW OFTEN, recorded from the same submit as WHAT.
@@ -1077,8 +1080,9 @@ function cadenceSentence(cadence: MarketingCadence): string {
  * group: a suppression standing on any of its sites, and a stream left on any
  * of them, holds this site's mail too, so both show here. The pace is the one
  * chosen most recently on any site's page. A pending confirmation is the link
- * site's own, as it is on the send path. A group of one is the three reads
- * this page always made.
+ * site's own, as it is on the send path — or any site's in the group, where
+ * the org said the group waits for the click, because then that is what holds
+ * this site's mail. A group of one is the three reads this page always made.
  */
 async function readSubscriptionState(
   firestore: any,
@@ -1131,7 +1135,9 @@ async function readSubscriptionState(
        */
       const state = readTopicSubscriptionState(record)
       if (state === 'opted-out') optedOut.add(id)
-      if (own && state === 'pending') pending.add(id)
+      if ((own || group.awaitsConfirmation === true) && state === 'pending') {
+        pending.add(id)
+      }
     }
     // The most recent choice on any site, the link site keeping a tie — the
     // rule `filterCadenceSendable` decides by.
@@ -1280,18 +1286,27 @@ async function writeTopicOptOuts(
  *
  * Only a live opt-out is touched, and it is lifted the way
  * `writeTopicOptOuts` lifts one: `resubscribedAt` stamped onto the entry,
- * which stays as the evidence that the opt-out was honored while it stood. A
- * sibling's pending confirmation is left alone — it is that site's question,
- * not a refusal of the sender. Nothing is read or written for a site alone.
+ * which stays as the evidence that the opt-out was honored while it stood.
+ *
+ * A sibling's pending confirmation is that site's question, and is left alone
+ * — unless the org said the group waits for the click AND the caller's tick
+ * is itself a confirmation (`confirmPending`, the preference page's). The
+ * sibling's question is then what holds this site's mail, and the page showed
+ * it as waiting on exactly this tick, so it is answered the way
+ * `writeTopicOptOuts` answers the link site's own: `confirmedAt` beside the
+ * `pendingAt` it answers. Nothing is read or written for a site alone.
  */
 async function resumeTopicsAcrossGroup(
   firestore: any,
   group: ConsentGroup,
   key: string,
   topicIds: readonly string[],
+  options?: { confirmPending?: boolean },
 ): Promise<void> {
   const siblings = consentGroupOptOutHosts(group).slice(1)
   if (!siblings.length || !topicIds.length) return
+  const confirmsSiblings =
+    options?.confirmPending === true && group.awaitsConfirmation === true
   await Promise.all(
     siblings.map(async (id) => {
       const ref = firestore
@@ -1309,7 +1324,12 @@ async function resumeTopicsAcrossGroup(
         const lifted: Record<string, unknown> = {}
         for (const topicId of topicIds) {
           const previous = stored[topicId]
-          if (readTopicSubscriptionState(previous) !== 'opted-out') continue
+          const state = readTopicSubscriptionState(previous)
+          if (state === 'pending' && confirmsSiblings) {
+            lifted[topicId] = { ...previous, confirmedAt: Date.now() }
+            continue
+          }
+          if (state !== 'opted-out') continue
           lifted[topicId] = {
             ...previous,
             resubscribedAt: FieldValue.serverTimestamp(),

@@ -505,3 +505,115 @@ describe('set-enabled-plugins refuses a set that strands a dependent', () => {
     expect(response.status).toBe(200)
   })
 })
+
+/**
+ * Whether a declared consent group's sites wait for each other's confirmation
+ * click (AGL-3316). The rules deny the field to every client, so this action
+ * is its only writer, and it asks for the Emails console's own permission on
+ * top of the route's gate: the switch changes what every site of a group
+ * mails, and it is set from that console.
+ */
+describe('set-consent-group-confirmation', () => {
+  const asMember = (uid: string, member: Record<string, unknown>) => {
+    mockDocs.set(`orgs/${ORG}/members/${uid}`, member)
+    mockVerifyIdToken.mockResolvedValue({ uid, email: `${uid}@example.com`, email_verified: true })
+  }
+  const set = (awaitConfirmation: unknown) =>
+    POST(
+      post({
+        orgId: ORG,
+        action: 'set-consent-group-confirmation',
+        awaitConfirmation,
+      }),
+    )
+
+  it('turns it on for an owner, and records who did', async () => {
+    seedOrg()
+    asMember('owner-1', { role: 'owner', allHosts: true })
+
+    const response = await set(true)
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({ ok: true, awaitConfirmation: true })
+    const org = mockDocs.get(`orgs/${ORG}`) as Record<string, unknown>
+    expect(org['consentGroupsAwaitConfirmation']).toBe(true)
+    expect(org['updatedAt']).toBe('__now__')
+    // The merge patches: nothing it never mentions moved.
+    expect(org['plan']).toBe('pro')
+    expect(org['slug']).toBe('seven')
+    expect(mockActivity).toEqual([
+      [
+        ORG,
+        { uid: 'owner-1', email: 'owner-1@example.com' },
+        'Turned on "Wait for confirmation across a consent group"',
+        { type: 'org', id: ORG },
+      ],
+    ])
+  })
+
+  it('stores OFF as `false`, a deliberate answer rather than an absence', async () => {
+    seedOrg()
+    mockDocs.set(`orgs/${ORG}`, {
+      ...mockDocs.get(`orgs/${ORG}`),
+      consentGroupsAwaitConfirmation: true,
+    })
+    asMember('owner-1', { role: 'owner', allHosts: true })
+
+    const response = await set(false)
+
+    expect(response.status).toBe(200)
+    expect(mockDocs.get(`orgs/${ORG}`)?.['consentGroupsAwaitConfirmation']).toBe(false)
+    expect(mockActivity[0]?.[2]).toBe(
+      'Turned off "Wait for confirmation across a consent group"',
+    )
+  })
+
+  it('refuses anything but a boolean, and writes nothing', async () => {
+    seedOrg()
+    asMember('owner-1', { role: 'owner', allHosts: true })
+
+    for (const value of ['true', 1, null, undefined]) {
+      const response = await set(value)
+      expect(response.status).toBe(400)
+    }
+    expect(mockDocs.get(`orgs/${ORG}`)?.['consentGroupsAwaitConfirmation']).toBe(undefined)
+    expect(mockActivity).toHaveLength(0)
+  })
+
+  it('refuses an admin whose override revokes data.manage, though org.settings stands', async () => {
+    seedOrg()
+    asMember('narrowed', {
+      role: 'admin',
+      allHosts: true,
+      permissions: { 'data.manage': false },
+    })
+
+    const response = await set(true)
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toEqual({ error: 'data.manage required' })
+    expect(mockDocs.get(`orgs/${ORG}`)?.['consentGroupsAwaitConfirmation']).toBe(undefined)
+    expect(mockActivity).toHaveLength(0)
+  })
+
+  it('refuses an editor at the route’s own gate — the Emails console alone is not enough', async () => {
+    seedOrg()
+    asMember('editor-1', { role: 'editor', allHosts: true })
+
+    const response = await set(true)
+
+    expect(response.status).toBe(403)
+    expect(mockDocs.get(`orgs/${ORG}`)?.['consentGroupsAwaitConfirmation']).toBe(undefined)
+  })
+
+  it('404s a mistyped orgId like every other action, minting nothing', async () => {
+    seedOrg()
+
+    const response = await POST(
+      post({ orgId: TYPO, action: 'set-consent-group-confirmation', awaitConfirmation: true }),
+    )
+
+    expect(response.status).toBe(404)
+    expect(mockDocs.has(`orgs/${TYPO}`)).toBe(false)
+  })
+})

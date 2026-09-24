@@ -695,13 +695,25 @@ describe('the organization’s Emails page read cost', () => {
     expect(paths.some((path) => path.endsWith('/members'))).toBe(false)
   })
 
-  it('reads the org’s topic catalog once, bounded', async () => {
+  it('reads the org’s topic catalog once, bounded, and the reader’s own membership', async () => {
     await renderOrgConsole('topics')
     summarize('org topics section', mockListens)
     expect(mockListens.map((listen) => listen.path)).toEqual([
       'orgs/org1/emailTopics',
+      // The consent-group confirmation switch (AGL-3316) asks one document —
+      // the reader's own membership — whether it may move for them. A member
+      // holding a custom role adds that role's document; this one holds none.
+      'orgs/org1/members/u1',
     ])
     expect(mockListens[0].limit).toBeGreaterThan(0)
+    expect(mockListens[1].limit).toBe(1)
+  })
+
+  it('opens no membership read on a topic’s own page', async () => {
+    await renderOrgConsole('topics', ['newsletter'])
+    expect(mockListens.map((listen) => listen.path)).toEqual([
+      'orgs/org1/emailTopics',
+    ])
   })
 
   it('reads templates for one page of sites, each filtered and ceilinged', async () => {

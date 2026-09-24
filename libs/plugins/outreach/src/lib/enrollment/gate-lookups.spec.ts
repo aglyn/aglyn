@@ -87,11 +87,16 @@ function fakeFirestore(
 
 const person = { personId: 'contact-1', contactId: 'contact-1', leadId: null, email: EMAIL }
 
-const lookup = (firestore: any, consentHostIds?: string[]) =>
+const lookup = (
+  firestore: any,
+  consentHostIds?: string[],
+  consentAwaitsConfirmation?: boolean,
+) =>
   readOutreachGateLookups(firestore, {
     orgId: ORG,
     hostId: SITE_A,
     ...(consentHostIds ? { consentHostIds } : {}),
+    ...(consentAwaitsConfirmation === undefined ? {} : { consentAwaitsConfirmation }),
     people: [person],
   }).then((answers) => answers.get(person.personId))
 
@@ -159,5 +164,59 @@ describe('the site lists a sequence reads', () => {
       salesTopicState: null,
     })
     consoleError.mockRestore()
+  })
+})
+
+/**
+ * THE ORG'S CONFIRMATION SWITCH (AGL-3316), folded the way the topic filter
+ * folds it: on, a sibling's pending sales confirmation is the group's
+ * standing; off, only a sibling's refusal is. Whether a pending standing
+ * holds a sales email is the gates' question, and they answer that it does
+ * not (`gates.spec.ts`) — for the sequence site's own question and a
+ * sibling's alike.
+ */
+describe('a sibling’s pending sales confirmation', () => {
+  const pendingOnSibling = () =>
+    fakeFirestore({
+      [`hosts/${SITE_B}/topicOptOuts/${KEY}`]: {
+        topics: { sales: { pendingAt: 1, confirmedAt: null } },
+      },
+    })
+
+  it('is the group’s standing when the org said the group waits', async () => {
+    await expect(lookup(pendingOnSibling(), [SITE_A, SITE_B], true)).resolves.toMatchObject({
+      salesTopicState: 'pending',
+    })
+  })
+
+  it('is not, with the switch off or unstated — only a refusal crosses', async () => {
+    await expect(lookup(pendingOnSibling(), [SITE_A, SITE_B], false)).resolves.toMatchObject({
+      salesTopicState: 'subscribed',
+    })
+    await expect(lookup(pendingOnSibling(), [SITE_A, SITE_B])).resolves.toMatchObject({
+      salesTopicState: 'subscribed',
+    })
+  })
+
+  it('still yields to a refusal anywhere in the group', async () => {
+    const firestore = fakeFirestore({
+      [`hosts/${SITE_A}/topicOptOuts/${KEY}`]: {
+        topics: { sales: { optedOutAt: 1, resubscribedAt: null } },
+      },
+      [`hosts/${SITE_B}/topicOptOuts/${KEY}`]: {
+        topics: { sales: { pendingAt: 1, confirmedAt: null } },
+      },
+    })
+    await expect(lookup(firestore, [SITE_A, SITE_B], true)).resolves.toMatchObject({
+      salesTopicState: 'opted-out',
+    })
+  })
+
+  it('reads the same documents on as off', async () => {
+    const off = pendingOnSibling()
+    const on = pendingOnSibling()
+    await lookup(off, [SITE_A, SITE_B], false)
+    await lookup(on, [SITE_A, SITE_B], true)
+    expect(on.reads).toEqual(off.reads)
   })
 })

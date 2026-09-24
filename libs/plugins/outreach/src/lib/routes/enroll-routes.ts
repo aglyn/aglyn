@@ -171,6 +171,8 @@ interface EnrollContext {
   contactGroupId: string
   /** The sequence site's consent group, whose opt-outs all apply. */
   consentHostIds: readonly string[]
+  /** Whether that group's sites wait for each other's confirmation click. */
+  consentAwaitsConfirmation: boolean
   siteName: string
 }
 
@@ -195,6 +197,7 @@ async function enrollContext(
     },
     contactGroupId: consentGroup.groupId,
     consentHostIds: consentGroup.hostIds,
+    consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
     siteName: host.exists ? String(host.get('name') ?? '') : '',
   }
 }
@@ -241,6 +244,7 @@ async function readPeople(
         orgId: caller.orgId,
         hostId: sequence.hostId,
         consentHostIds: context.consentHostIds,
+        consentAwaitsConfirmation: context.consentAwaitsConfirmation,
         people: askable.map((candidate) => ({
           personId: candidate.personId,
           contactId: candidate.contactId || null,

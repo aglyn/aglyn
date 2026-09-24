@@ -25,6 +25,7 @@ import {
   nameSearchTokens,
 } from '@aglyn/aglyn/app-utils/name-search'
 import { isSupportedTimeZone } from '@aglyn/aglyn/app-utils/collection-entry-date'
+import { CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD } from '@aglyn/aglyn/app-utils/consent-groups'
 import type { AglynOrgBilling } from '@aglyn/aglyn/server'
 import {
   checkEntitlement,
@@ -196,6 +197,53 @@ async function handler(request: Request): Promise<Response> {
         .doc(orgId)
         .set({ defaultResourceScope: value }, { merge: true })
       return Response.json({ ok: true }, { status: 200 })
+    }
+
+    /*
+     * Whether a declared consent group's sites wait for each other's
+     * confirmation click (AGL-3316). One boolean beside `consentGroups`, and
+     * this is its only writer: the rules deny both to every client, because
+     * `consentGroupForHost` reads them in `app-utils`.
+     *
+     * The Emails console's own permission on top of this route's gate. The
+     * switch changes what every site of a group mails, and it is set from that
+     * console, so a member the console would not admit cannot set it here
+     * either. Off is written as `false` rather than deleted, so the stored
+     * value and the activity entry record the same deliberate choice.
+     */
+    if (body?.action === 'set-consent-group-confirmation') {
+      const awaitConfirmation = body?.awaitConfirmation
+      if (typeof awaitConfirmation !== 'boolean') {
+        return Response.json(
+          { error: 'awaitConfirmation must be true or false' },
+          { status: 400 },
+        )
+      }
+      if (
+        decoded['staff'] !== true &&
+        !(await memberHasOrgPermission(orgId, membership?.member, 'data.manage'))
+      ) {
+        return Response.json({ error: 'data.manage required' }, { status: 403 })
+      }
+      await firebaseAdmin
+        .app()
+        .firestore()
+        .collection('orgs')
+        .doc(orgId)
+        .set(
+          {
+            [CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD]: awaitConfirmation,
+            updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+      void logOrgActivity(
+        orgId,
+        { uid: decoded.uid, email: decoded.email },
+        `Turned ${awaitConfirmation ? 'on' : 'off'} "Wait for confirmation across a consent group"`,
+        { type: 'org', id: orgId },
+      )
+      return Response.json({ ok: true, awaitConfirmation }, { status: 200 })
     }
 
     // Plugin switchboard (AGL-416): which plugins the workspace loads.

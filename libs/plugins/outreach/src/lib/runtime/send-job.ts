@@ -331,6 +331,7 @@ async function runMailbox(
         orgId,
         hostId,
         consentHostIds: consentGroup.hostIds,
+        consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
         people: enrollments.map((enrollment) => {
           const person = outreachEnrollmentPerson(enrollment)
           return {

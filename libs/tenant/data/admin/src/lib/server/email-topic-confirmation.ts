@@ -87,13 +87,21 @@ export type PendingConfirmationResult =
  * Puts an address in the quarantine for one topic and returns the moment it
  * entered, which is what the confirmation link is signed and dated from.
  *
- * ## Re-asking does not restamp
+ * ## Re-asking does not restamp — inside the window
  *
  * A second signup from the same address inside the window keeps the original
  * `pendingAt`, so the 72-hour expiry measures from when we first asked. The
  * alternative lets somebody — or a script — hold an address in a permanently
  * fresh pending state by resubmitting a form, which is a way to keep a
  * confirmation link alive indefinitely.
+ *
+ * Once the window has passed, a signup is a new question and is stamped now.
+ * An expired request admits nobody and its link no longer acts, so keeping
+ * its moment would date the new link from the old one — expired before it is
+ * sent — and "sign up again", which the expired-link page and the docs tell
+ * the person to do, could never succeed. With a consent group waiting on its
+ * sites' confirmations, that stranded request would hold the stream from
+ * every site of the group.
  */
 export async function recordPendingTopicConfirmation(
   hostId: string,
@@ -123,10 +131,15 @@ export async function recordPendingTopicConfirmation(
         return
       }
       if (state === 'pending') {
-        // Already in the quarantine. Keep the original moment — see above.
-        result = 'pending'
-        pendingAtMs = Number(existing?.pendingAt) || nowMs
-        return
+        // Already in the quarantine. Keep the original moment while that
+        // request can still be confirmed — see above; past it, fall through
+        // and ask again.
+        const askedAtMs = Number(existing?.pendingAt) || nowMs
+        if (!doubleOptInExpired(askedAtMs, nowMs)) {
+          result = 'pending'
+          pendingAtMs = askedAtMs
+          return
+        }
       }
       if (existing?.confirmedAt) {
         result = 'already-subscribed'

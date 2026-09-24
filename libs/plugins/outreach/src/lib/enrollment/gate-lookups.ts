@@ -40,6 +40,7 @@
  * timed out. One failed list does not blank the others.
  */
 
+import { consentGroupTopicState } from '@aglyn/aglyn/app-utils/consent-groups'
 import { CRM_COLLECTIONS } from '@aglyn/aglyn/app-utils/crm'
 import {
   EMAIL_TOPIC_SALES,
@@ -89,6 +90,12 @@ export interface ReadOutreachGateLookupsInput {
    * each. Omitted, the site alone.
    */
   consentHostIds?: readonly string[]
+  /**
+   * The same group's `awaitsConfirmation`: whether a sibling's pending
+   * confirmation counts in the sales stream's standing as the sequence
+   * site's own does. Omitted, it does not.
+   */
+  consentAwaitsConfirmation?: boolean
   people: readonly OutreachGateLookupPerson[]
 }
 
@@ -217,9 +224,16 @@ export async function readOutreachGateLookups(
         readTopicSubscriptionState(
           ((snapshot.exists ? snapshot.get('topics') : null) ?? {})[EMAIL_TOPIC_SALES],
         ),
-      // The sequence site's own standing, unless a sibling holds a refusal:
-      // leaving the sales stream anywhere in the group is leaving the sender.
-      ([own, ...siblings]) => (siblings.includes('opted-out') ? 'opted-out' : own),
+      // The group's standing, the way the topic filter folds it: leaving the
+      // sales stream anywhere in the group is leaving the sender, and a
+      // sibling's pending confirmation counts only where the org said the
+      // group waits. What a pending standing means for a sales email is the
+      // gates' question, not this one.
+      (states) =>
+        consentGroupTopicState(
+          { awaitsConfirmation: input.consentAwaitsConfirmation === true },
+          states,
+        ),
       'sales topic',
     ),
     lookupOutreachDoNotContact(

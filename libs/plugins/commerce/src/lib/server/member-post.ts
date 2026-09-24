@@ -121,10 +121,10 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
       const branding = resolveBrandingProfile(owner?.org as never)
       // The site's consent group, off the same org read: a member who left
       // any site the org declared one sender with this one is not mailed.
-      const consentHostIds = consentGroupForHost(
+      const consentGroup = consentGroupForHost(
         (owner?.org as Record<string, unknown> | undefined) ?? null,
         hostId,
-      ).hostIds
+      )
       // The site's own origin, for the unsubscribe link the gate mints. Read
       // from the host document already in hand rather than assembled from an
       // apex: a post is mailed and read later, and a wrong origin sends a
@@ -172,7 +172,8 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
             hostId,
             siteBase,
             topicId: EMAIL_TOPIC_NEWSLETTER,
-            consentHostIds,
+            consentHostIds: consentGroup.hostIds,
+            consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
           },
         })
         // The cost meter counts messages that LEFT. A suppressed or capped

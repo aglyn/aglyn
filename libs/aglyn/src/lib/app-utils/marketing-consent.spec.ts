@@ -902,6 +902,7 @@ describe('a declared group is ONE sender', () => {
     name: 'Northwind Group',
     hostIds: [HOST, OTHER],
     declared: true,
+    awaitsConfirmation: false,
   }
   const POOLED_FROM_OTHER = { ...POOLED, hostId: OTHER }
   const now = 1_000

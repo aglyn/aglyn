@@ -711,6 +711,7 @@ export async function sendEmail(
             ? { topicId: options.marketing.topicId }
             : {}),
           consentHostIds: options.marketing.consentHostIds,
+          consentAwaitsConfirmation: options.marketing.consentAwaitsConfirmation,
         })
       } catch (error) {
         /*

@@ -94,6 +94,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 // mocked in nearly every spec that touches them.
 import {
   consentGroupOptOutHosts,
+  consentGroupTopicState,
   type ConsentGroup,
 } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
@@ -564,9 +565,11 @@ export async function filterSuppressedEmails(
  * All three per-site facts are read this way: the site suppression list (an
  * unsubscribe, a hand-added opt-out, an erasure, and the bounces and
  * complaints the platform list already carries), the topic opt-outs, and the
- * recipient's cadence. The group of one — every site of an org that declared
- * nothing — reads exactly the documents these filters always read, in the
- * same round trips.
+ * recipient's cadence. A sibling's pending confirmation joins them only when
+ * the org turned its group's confirmation switch on — see
+ * {@link filterTopicSendable}. The group of one — every site of an org that
+ * declared nothing — reads exactly the documents these filters always read,
+ * in the same round trips.
  *=========================================*/
 
 /**
@@ -761,15 +764,17 @@ export async function filterSendableForHost(
  * has left it from the sender. `group` extends the read to every site in it,
  * exactly as {@link filterSendableForHost} does for the suppression list.
  *
- * Only a sibling's REFUSAL is read there. A pending confirmation stays the
- * concern of the site whose form asked for it, as it always was.
+ * A sibling's REFUSAL always holds. A sibling's pending confirmation holds
+ * only when the group `awaitsConfirmation` — the org's switch, resolved into
+ * the group, so asking it reads nothing the refusal read did not already
+ * read. Off, the question stays the concern of the site whose form asked it.
  */
 export async function filterTopicSendable(
   hostId: string,
   topicId: string | null | undefined,
   emails: readonly string[],
   injectedFirestore?: any,
-  group?: Pick<ConsentGroup, 'hostId' | 'hostIds'> | null,
+  group?: Pick<ConsentGroup, 'hostId' | 'hostIds' | 'awaitsConfirmation'> | null,
 ): Promise<string[]> {
   const hostIds = optOutHostIds(hostId, group)
   const topic = String(topicId ?? '').trim()
@@ -786,7 +791,7 @@ export async function filterTopicSendable(
   if (!lookups.length) return [...emails]
   try {
     const db = injectedFirestore ?? defaultFirestore()
-    const [own, ...siblings] = await getAllAcrossSites(
+    const bySite = await getAllAcrossSites(
       db,
       hostIds,
       TOPIC_OPT_OUTS_SUBCOLLECTION,
@@ -805,12 +810,13 @@ export async function filterTopicSendable(
       snapshot?.exists
         ? readTopicSubscriptionState((snapshot.get('topics') ?? {})[topic])
         : 'subscribed'
+    // The sending site first, as `optOutHostIds` ordered the reads — which
+    // is how the fold tells its own pending question from a sibling's.
+    const awaits = { awaitsConfirmation: group?.awaitsConfirmation === true }
     const gone = new Set<string>()
     lookups.forEach((entry, index) => {
-      if (
-        stateIn(own[index]) !== 'subscribed' ||
-        siblings.some((snapshots) => stateIn(snapshots[index]) === 'opted-out')
-      ) {
+      const states = bySite.map((snapshots) => stateIn(snapshots[index]))
+      if (consentGroupTopicState(awaits, states) !== 'subscribed') {
         gone.add(entry.email)
       }
     })

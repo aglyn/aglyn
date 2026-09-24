@@ -1175,6 +1175,27 @@ export interface AglynOrgBilling extends AglynDocument {
    * than throwing inside a page render.
    */
   timeZone?: string
+  /**
+   * The sites this organization declared ONE SENDER, `{ [groupId]: { name,
+   * hostIds } }` (`consent-groups.ts`). Absent, every site is alone.
+   *
+   * SERVER-OWNED: denied to the client SDK, because `consentGroupForHost`
+   * reads it in `app-utils` and decides who a marketing basis covers and whose
+   * opt-outs hold a send. No console screen writes it; a declaration is made
+   * by an Admin-SDK writer that must carry a leaving site's refusals onto the
+   * sites that stay (see that module).
+   */
+  consentGroups?: Record<string, { name: string; hostIds: string[] }>
+  /**
+   * Whether a declared group's sites wait for each other's confirmation click
+   * (AGL-3316). Absent or `false` is off: a pending confirmation holds only
+   * the asking site's mail.
+   *
+   * SERVER-OWNED: written through /api/orgs/settings and denied to the client
+   * SDK, for the reason `consentGroups` is — `consentGroupForHost` resolves it
+   * into every group a send path reads.
+   */
+  consentGroupsAwaitConfirmation?: boolean
   /** The workspace URL segment, reserved through `orgSlugs/{slug}`. */
   slug?: string
   /**

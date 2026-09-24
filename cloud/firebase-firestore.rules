@@ -618,7 +618,9 @@ service cloud.firestore {
              'billingStatus', 'brandingProfile', 'discount', 'enterprise',
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
-             'suspendedEnforcement', 'crmInbound', 'acquisition'])) ||
+             'suspendedEnforcement', 'crmInbound', 'acquisition',
+             'consentGroups', 'consentGroupsAwaitConfirmation',
+             'marketingConsentPolicy'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
             ['slug', 'ownerUid', 'createdByUid', 'hosts', 'enabledPlugins',
@@ -631,7 +633,9 @@ service cloud.firestore {
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
-             'erasureRequestedAt', 'crmInbound', 'acquisition'])) ||
+             'erasureRequestedAt', 'crmInbound', 'acquisition',
+             'consentGroups', 'consentGroupsAwaitConfirmation',
+             'marketingConsentPolicy'])) ||
         // `isVerified()` here rather than inside `canManageOrg()` (AGL-2589):
         // that helper is a READ gate too — `billing/stripe` and the member
         // roster ask it — and folding verification in would refuse those.
@@ -679,7 +683,19 @@ service cloud.firestore {
              // AGL-3289. Where the workspace came from: its creator's record,
              // copied by `createOrganization` at birth and never written
              // again. On all three lists, because nobody may restate it.
-             'acquisition']));
+             'acquisition',
+             // AGL-3316. The consent-group declaration and its confirmation
+             // switch, and the marketing consent policy. `consentGroupForHost`
+             // and `resolveMarketingConsentPolicy` read them in
+             // `libs/aglyn/src/lib/app-utils`, so they are resolver inputs
+             // and server-owned by the AGL-3237 argument: a manager able to
+             // write the policy could set `forward` with a late cutoff and
+             // grandfather an audience that never gave a basis. Nothing
+             // writes any of the three from a client (the switch goes through
+             // /api/orgs/settings), so denying them costs the product
+             // nothing. On all three lists.
+             'consentGroups', 'consentGroupsAwaitConfirmation',
+             'marketingConsentPolicy']));
 
       /**
        * The commercial keys, moved off the org doc so a scoped site

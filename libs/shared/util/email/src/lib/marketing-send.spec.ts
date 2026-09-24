@@ -348,6 +348,7 @@ describe('sendEmail with a marketing context', () => {
     hostId: 'host-1',
     siteBase: 'https://shop.example.com',
     consentHostIds: ['host-1'],
+    consentAwaitsConfirmation: false,
   }
 
   beforeEach(() => {
@@ -425,6 +426,7 @@ describe('sendEmail with a marketing context', () => {
           context: 'campaign',
           capped: false,
           consentHostIds: ['host-1'],
+          consentAwaitsConfirmation: false,
         },
       ])
     })
@@ -451,6 +453,33 @@ describe('sendEmail with a marketing context', () => {
       expect(asked[0]).toMatchObject({
         hostId: 'host-1',
         consentHostIds: ['host-1', 'host-2'],
+      })
+    })
+  })
+
+  it('tells the gate whether the group waits for a confirmation click (AGL-3316)', () => {
+    /*
+     * The org's switch, resolved into the group by the sender. The gate asks
+     * nothing to learn it, so a value dropped here is a sibling's pending
+     * confirmation that silently stops holding the message.
+     */
+    installGate({ allowed: true, unsubscribeUrl: URL })
+    mockFetch()
+    return sendEmail({
+      to: 'a@b.co',
+      subject: 'News',
+      text: 'Hello',
+      context: 'restock alert',
+      marketing: {
+        ...marketing,
+        consentHostIds: ['host-1', 'host-2'],
+        consentAwaitsConfirmation: true,
+      },
+    }).then(() => {
+      expect(asked).toHaveLength(1)
+      expect(asked[0]).toMatchObject({
+        consentHostIds: ['host-1', 'host-2'],
+        consentAwaitsConfirmation: true,
       })
     })
   })
@@ -660,7 +689,12 @@ describe('sendEmail with a marketing context', () => {
       subject: 'News',
       text: 'Hello',
       context: 'member post',
-      marketing: { hostId: 'host-1', siteBase: '', consentHostIds: ['host-1'] },
+      marketing: {
+        hostId: 'host-1',
+        siteBase: '',
+        consentHostIds: ['host-1'],
+        consentAwaitsConfirmation: false,
+      },
     })
 
     expect(result.sent).toBe(true)
@@ -817,6 +851,7 @@ describe('a sunset refusal is terminal, not deferrable', () => {
         hostId: 'host-1',
         siteBase: 'https://shop.example.com',
         consentHostIds: ['host-1'],
+        consentAwaitsConfirmation: false,
       },
     })
 

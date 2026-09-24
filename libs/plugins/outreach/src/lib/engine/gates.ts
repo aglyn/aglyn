@@ -112,9 +112,10 @@ export interface OutreachGateLookups {
   /**
    * The address's standing on the site's `sales` topic —
    * `readTopicSubscriptionState` of the `sales` entry in
-   * `hosts/{hostId}/topicOptOuts/{key}`. Only `opted-out` refuses: a pending
-   * confirmation is about a subscription, and a sales email does not rest on
-   * one.
+   * `hosts/{hostId}/topicOptOuts/{key}`, folded across the site's consent
+   * group. Only `opted-out` refuses: a pending confirmation — the site's own,
+   * or a sibling's where the org said its group waits — is about a
+   * subscription, and a sales email does not rest on one.
    */
   salesTopicState: TopicSubscriptionState | null
   /** The address is on the organization's Outreach do-not-contact list. */

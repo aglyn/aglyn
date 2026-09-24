@@ -82,7 +82,9 @@ six sections a site's has, each answering for every site at once:
 - **Audiences** and **Topics** — your organization's own, the same lists and topics every
   site sees. On a list's page, **Enroll as** picks the site people are added as, and the
   **Consent** column reads what they agreed to with that site. On its edit page, **Site**
-  picks whose people its filters read.
+  picks whose people its filters read. **Topics** also holds the switch that decides
+  whether a consent group's sites [wait for each other's confirmation
+  click](#consent-group-confirmation).
 - **Sending** — what each site sends as right now and its default sender, and the domains
   your organization has proved, with the sites sending as each. Sending a site's email as
   a domain asks which site.
@@ -1034,6 +1036,32 @@ it says the same thing.
 Somebody who unsubscribed from a topic is never sent a confirmation for it. A
 signup form must not become a way to email somebody who told you to stop by
 asking them again.
+
+#### When the site asking is part of a consent group {#consent-group-confirmation}
+
+Where your organization has declared several sites one sender — a consent group,
+named on every signup form — a confirmation belongs to the site whose form asked
+for it. Until the person clicks, that site sends them nothing on the topic, and
+by default the group's other sites carry on as before.
+
+**Wait for confirmation across a consent group**, on your
+[organization's Emails page](#organization-emails-page) under **Topics**, changes
+that. With it on, when one site in a group asks someone to confirm, every other
+site in the group waits for the click too: nothing on that topic reaches them from
+any of the group's sites until they confirm. That includes somebody the other sites
+were already mailing, so expect those messages to pause until the click.
+
+- It is **off unless you turn it on**, and it applies only to declared consent
+  groups. A site in no group has no other site to wait for, so turning it on
+  changes nothing for it.
+- A confirmation that has run past its three days still holds, on every site of
+  the group, until the person confirms.
+- On the [preference page](#preference-page), a topic that is waiting on another
+  site of the group shows as waiting, and ticking it there confirms it for the
+  whole group.
+- Changing it needs both the **Organization settings** and **Manage data**
+  permissions — by default, owners and admins — and each change is recorded in
+  your organization's activity.
 
 :::note
 No law requires a confirmation click. What the law requires is consent you can

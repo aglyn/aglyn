@@ -636,4 +636,48 @@ describe('a declared consent group, at the automation gate', () => {
       }),
     ).toBeNull()
   })
+
+  /*
+   * THE ORG'S CONFIRMATION SWITCH (AGL-3316). The gate resolves the group
+   * from the org the run already holds, so the switch comes with it: on, a
+   * sibling waiting for a confirmation click holds this site's step as the
+   * sibling's own mail is held; off, only a refusal crosses between sites.
+   */
+  const pendingOnSibling = () => {
+    topicsLeftBySite = {
+      [SIBLING]: { topics: { promotions: { pendingAt: 1, confirmedAt: null } } },
+    }
+  }
+
+  it('HOLDS a scheduled step while the sibling waits for a confirmation click, once the org turns the switch on', async () => {
+    contact = { email: EMAIL, ...grantedTo(HOST) }
+    pendingOnSibling()
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        topicId: 'promotions',
+        org: { ...DECLARED, consentGroupsAwaitConfirmation: true },
+        firestore,
+      }),
+    ).toBe('topic-unsubscribed')
+  })
+
+  it('CONTROL: sends it with the switch off, as before', async () => {
+    contact = { email: EMAIL, ...grantedTo(HOST) }
+    pendingOnSibling()
+
+    for (const org of [DECLARED, { ...DECLARED, consentGroupsAwaitConfirmation: false }]) {
+      expect(
+        await flowEmailRefusal({
+          hostId: HOST,
+          email: EMAIL,
+          topicId: 'promotions',
+          org,
+          firestore,
+        }),
+      ).toBeNull()
+    }
+  })
 })

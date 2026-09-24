@@ -34,6 +34,11 @@
  *    changes nothing;
  *  - a site in NO group reads exactly the documents it always read, and no
  *    more of them.
+ *
+ * The org's confirmation switch (AGL-3316) adds one fact to the topic reads:
+ * turned on, a sibling's PENDING confirmation holds the send as a sibling's
+ * refusal does. Off — every org that never set it — nothing changes, and on
+ * or off the same documents are read.
  */
 
 import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
@@ -64,6 +69,14 @@ const ORG = {
 const GROUP = consentGroupForHost(ORG, SITE_A)
 /** The same site in an org that declared nothing. */
 const ALONE = consentGroupForHost({}, SITE_A)
+/** The same declaration, with the org's confirmation switch turned on. */
+const WAITING_ORG = { ...ORG, consentGroupsAwaitConfirmation: true }
+const WAITING = consentGroupForHost(WAITING_ORG, SITE_A)
+/** The declaration with the switch stored OFF, as the route writes it. */
+const NOT_WAITING = consentGroupForHost(
+  { ...ORG, consentGroupsAwaitConfirmation: false },
+  SITE_A,
+)
 
 const ADDRESS = 'dana@example.com'
 const OTHER = 'sam@example.com'
@@ -118,6 +131,12 @@ function recordingFirestore(seed: Record<string, Record<string, any>> = {}) {
 const leftTopic = (topic: string) => ({
   email: ADDRESS,
   topics: { [topic]: { optedOutAt: { seconds: 1 }, resubscribedAt: null } },
+})
+
+/** An entry that says the person was asked to confirm `topic` at `atMs`. */
+const askedToConfirm = (topic: string, atMs = NOW, email = ADDRESS) => ({
+  email,
+  topics: { [topic]: { pendingAt: atMs, confirmedAt: null } },
 })
 
 describe('the group is resolved from the declaration, and nothing else', () => {
@@ -317,6 +336,112 @@ describe('the topic opt-outs, across the group', () => {
   })
 })
 
+describe('a sibling’s pending confirmation, under the org’s switch (AGL-3316)', () => {
+  it('holds site A’s newsletter while site B waits for the click, once the org turns it on', async () => {
+    const firestore = recordingFirestore({
+      [list(SITE_B, 'topicOptOuts')]: { [KEY]: askedToConfirm('newsletter') },
+    })
+    await expect(
+      filterTopicSendable(SITE_A, 'newsletter', [ADDRESS, OTHER], firestore, WAITING),
+    ).resolves.toEqual([OTHER])
+    // Waiting on ONE stream, not on the sender: the others still go.
+    await expect(
+      filterTopicSendable(SITE_A, 'marketing', [ADDRESS], firestore, WAITING),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('holds on a sibling’s EXPIRED confirmation too — expiry stops the link, not the hold', async () => {
+    const firestore = recordingFirestore({
+      [list(SITE_B, 'topicOptOuts')]: {
+        [KEY]: askedToConfirm('newsletter', NOW - 30 * DAY),
+      },
+    })
+    await expect(
+      filterTopicSendable(SITE_A, 'newsletter', [ADDRESS], firestore, WAITING),
+    ).resolves.toEqual([])
+  })
+
+  it('mails them once they confirm on site B', async () => {
+    const firestore = recordingFirestore({
+      [list(SITE_B, 'topicOptOuts')]: {
+        [KEY]: {
+          email: ADDRESS,
+          topics: { newsletter: { pendingAt: NOW, confirmedAt: NOW + 1 } },
+        },
+      },
+    })
+    await expect(
+      filterTopicSendable(SITE_A, 'newsletter', [ADDRESS], firestore, WAITING),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('OFF, stored or absent: a sibling’s pending question holds nothing, as before', async () => {
+    const seed = {
+      [list(SITE_B, 'topicOptOuts')]: { [KEY]: askedToConfirm('newsletter') },
+    }
+    for (const group of [GROUP, NOT_WAITING]) {
+      await expect(
+        filterTopicSendable(
+          SITE_A,
+          'newsletter',
+          [ADDRESS],
+          recordingFirestore(seed),
+          group,
+        ),
+      ).resolves.toEqual([ADDRESS])
+    }
+  })
+
+  it('keeps the sending site’s own pending entry holding, on or off', async () => {
+    const firestore = recordingFirestore({
+      [list(SITE_A, 'topicOptOuts')]: { [KEY]: askedToConfirm('newsletter') },
+    })
+    for (const group of [GROUP, WAITING]) {
+      await expect(
+        filterTopicSendable(SITE_A, 'newsletter', [ADDRESS], firestore, group),
+      ).resolves.toEqual([])
+    }
+  })
+
+  it('leaves the agency’s other client alone', async () => {
+    const firestore = recordingFirestore({
+      [list(SITE_C, 'topicOptOuts')]: { [KEY]: askedToConfirm('newsletter') },
+    })
+    await expect(
+      filterTopicSendable(SITE_A, 'newsletter', [ADDRESS], firestore, WAITING),
+    ).resolves.toEqual([ADDRESS])
+  })
+
+  it('reads exactly the documents a declared group read with the switch off', async () => {
+    const off = recordingFirestore()
+    const on = recordingFirestore()
+    await filterTopicSendable(SITE_A, 'newsletter', [ADDRESS, OTHER], off, NOT_WAITING)
+    await filterTopicSendable(SITE_A, 'newsletter', [ADDRESS, OTHER], on, WAITING)
+    expect(off.reads).toEqual([
+      `${list(SITE_A, 'topicOptOuts')}/${KEY}`,
+      `${list(SITE_A, 'topicOptOuts')}/${OTHER_KEY}`,
+      `${list(SITE_B, 'topicOptOuts')}/${KEY}`,
+      `${list(SITE_B, 'topicOptOuts')}/${OTHER_KEY}`,
+    ])
+    expect(on.reads).toEqual(off.reads)
+  })
+
+  it('reads a site in no group exactly as it always did, even in an org that turned it on', async () => {
+    const lone = consentGroupForHost({ consentGroupsAwaitConfirmation: true }, SITE_A)
+    expect(lone.awaitsConfirmation).toBe(false)
+    const firestore = recordingFirestore({
+      [list(SITE_B, 'topicOptOuts')]: { [KEY]: askedToConfirm('newsletter') },
+    })
+    await expect(
+      filterTopicSendable(SITE_A, 'newsletter', [ADDRESS, OTHER], firestore, lone),
+    ).resolves.toEqual([ADDRESS, OTHER])
+    expect(firestore.reads).toEqual([
+      `${list(SITE_A, 'topicOptOuts')}/${KEY}`,
+      `${list(SITE_A, 'topicOptOuts')}/${OTHER_KEY}`,
+    ])
+  })
+})
+
 describe('the pace the person asked for, across the group', () => {
   const counter = (fields: Record<string, unknown>) => ({
     email: ADDRESS,
@@ -510,6 +635,42 @@ describe('the marketing gate, across the group', () => {
       [list(SITE_C, 'topicOptOuts')]: { [KEY]: leftTopic('newsletter') },
     })
     await expect(ask(firestore)).resolves.toMatchObject({ allowed: true })
+  })
+
+  it('refuses it while site B waits for a confirmation click, when the sender says the group waits (AGL-3316)', async () => {
+    const firestore = recordingFirestore({
+      [list(SITE_B, 'topicOptOuts')]: { [KEY]: askedToConfirm('newsletter') },
+    })
+    await expect(
+      ask(firestore, { consentAwaitsConfirmation: true }),
+    ).resolves.toMatchObject({ allowed: false, refusal: 'topic-unsubscribed' })
+    // The same store, with the switch off or unstated: as before, it goes.
+    await expect(
+      ask(firestore, { consentAwaitsConfirmation: false }),
+    ).resolves.toMatchObject({ allowed: true })
+    await expect(ask(firestore)).resolves.toMatchObject({ allowed: true })
+  })
+
+  it('reads the same documents with the switch on as with it off', async () => {
+    const off = recordingFirestore()
+    const on = recordingFirestore()
+    await ask(off, { consentAwaitsConfirmation: false })
+    await ask(on, { consentAwaitsConfirmation: true })
+    expect(on.reads).toEqual(off.reads)
+  })
+
+  it('never lets the switch reach past a group of one', async () => {
+    // A request that names the site alone has no sibling to wait on, even
+    // with the flag set by a sender that resolved it wrongly.
+    const firestore = recordingFirestore({
+      [list(SITE_B, 'topicOptOuts')]: { [KEY]: askedToConfirm('newsletter') },
+    })
+    await expect(
+      ask(firestore, {
+        consentHostIds: ALONE.hostIds,
+        consentAwaitsConfirmation: true,
+      }),
+    ).resolves.toMatchObject({ allowed: true })
   })
 
   it('keeps the frequency ceiling the sending site’s own', async () => {
