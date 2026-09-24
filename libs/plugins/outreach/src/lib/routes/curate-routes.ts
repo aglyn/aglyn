@@ -275,7 +275,6 @@ async function curationFacts(
   )
   return {
     name: candidate.name || text(contact['name']),
-    email: candidate.email ?? '',
     company: text(facet['companyName']) || text(lead['company']) || text(company['name']),
     title: text(facet['jobTitle']) || text(lead['jobTitle']),
     website: text(company['website']) || text(company['domain']) || text(lead['website']) || text(lead['domain']),

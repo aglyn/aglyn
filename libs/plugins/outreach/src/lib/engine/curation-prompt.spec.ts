@@ -19,6 +19,7 @@ import {
   OUTREACH_CURATION_SYSTEM,
   outreachCurationPrompt,
   parseOutreachCurationAnswer,
+  redactOutreachCurationText,
   type OutreachCurationFacts,
   type OutreachCurationStep,
 } from './curation-prompt'
@@ -31,7 +32,6 @@ import {
 
 const facts: OutreachCurationFacts = {
   name: 'Casey Morgan',
-  email: 'casey@example.com',
   company: 'Example Agency',
   title: 'Head of Operations',
   website: 'https://example-agency.com',
@@ -92,6 +92,25 @@ describe('outreachCurationPrompt', () => {
     expect(prompt).toContain("Subject: {{contact.company}}'s client sites")
     expect(prompt).toContain('--- Email 2 of 2 · stepIndex 2 · a reply in the thread (no subject) ---')
     expect(prompt).toContain('Following up, {{contact.firstName}}.')
+  })
+
+  it('sends no email address or phone number: none of the person’s, and none typed into a note or the line', () => {
+    const prompt = outreachCurationPrompt(
+      {
+        ...facts,
+        notes: 'Reach Casey at casey@example.com or +1 (512) 555-0143 after 3pm; twelve sites.',
+        personalLine: 'Saw your note to ops@example-agency.com about the launch.',
+      },
+      steps,
+    )
+    expect(prompt).not.toContain('casey@example.com')
+    expect(prompt).not.toContain('ops@example-agency.com')
+    expect(prompt).not.toContain('555-0143')
+    expect(prompt).toContain('Notes: Reach Casey at [email address] or [phone number] after 3pm; twelve sites.')
+    expect(prompt).toContain('Why the sender is writing now: Saw your note to [email address] about the launch.')
+    expect(prompt).not.toMatch(/^Email:/m)
+    // A short number — a year, a count, a time — is not a phone number.
+    expect(redactOutreachCurationText('Founded in 2019, 12 sites, 3pm')).toBe('Founded in 2019, 12 sites, 3pm')
   })
 
   it('leaves out a fact the record does not hold rather than print an empty label', () => {

@@ -38,6 +38,15 @@
  * provider that caches a prefix can; everything about the person rides in
  * the prompt. Pure and client-safe: the route builds the prompt, the stored
  * override keeps it for the audit log, and a spec pins the words.
+ *
+ * ## What the prompt does not carry
+ *
+ * No email address and no phone number: the person's address is what the
+ * email is SENT to, never something the draft needs to say, and an address
+ * or a number typed into a lead's notes or the personal line is replaced
+ * by a placeholder before the text leaves — the same line the CRM's own
+ * record facts hold (AGL-2917), so the published Anthropic row's words
+ * about CRM records stay true of this door.
  *==========================================*/
 
 /** The standing instructions. Kept as one string so it caches as a prefix. */
@@ -60,10 +69,24 @@ export const OUTREACH_CURATION_SYSTEM = [
 /** The most of a lead's notes the prompt carries. */
 export const OUTREACH_CURATION_NOTES_MAX = 600
 
+/** What an email address or a phone number in free text becomes before it leaves. */
+export const OUTREACH_CURATION_EMAIL_PLACEHOLDER = '[email address]'
+export const OUTREACH_CURATION_PHONE_PLACEHOLDER = '[phone number]'
+
+const EMAIL_ADDRESS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
+/** Seven or more digits with the separators a typed number carries, an optional leading `+`. */
+const PHONE_NUMBER = /(?:\+?\d[\d\s().-]{6,}\d)/g
+
+/** Free text a person typed, with every address and number replaced. */
+export function redactOutreachCurationText(text: unknown): string {
+  return String(text ?? '')
+    .replace(EMAIL_ADDRESS, OUTREACH_CURATION_EMAIL_PLACEHOLDER)
+    .replace(PHONE_NUMBER, (match) => (match.replace(/\D/g, '').length >= 7 ? OUTREACH_CURATION_PHONE_PLACEHOLDER : match))
+}
+
 /** What the CRM holds about the person, as the prompt states it. */
 export interface OutreachCurationFacts {
   name: string
-  email: string
   company: string
   title: string
   website: string
@@ -103,14 +126,13 @@ function factLines(facts: OutreachCurationFacts): string[] {
     if (text) lines.push(`${label}: ${text}`)
   }
   fact('Name', facts.name)
-  fact('Email', facts.email)
   fact('Company', facts.company)
   fact('Title', facts.title)
   fact('Website', facts.website)
   if (facts.tags.length) lines.push(`Tags: ${facts.tags.map(clean).filter(Boolean).join(', ')}`)
   if (facts.sources.length) lines.push(`How they came to us: ${facts.sources.map(clean).filter(Boolean).join(', ')}`)
   if (facts.campaigns.length) lines.push(`Campaigns: ${facts.campaigns.map(clean).filter(Boolean).join(', ')}`)
-  const notes = String(facts.notes ?? '').trim()
+  const notes = redactOutreachCurationText(facts.notes).trim()
   if (notes) lines.push(`Notes: ${notes.slice(0, OUTREACH_CURATION_NOTES_MAX)}`)
   lines.push(`Record: ${facts.record === 'lead' ? 'a lead' : 'a contact'}`)
   return lines
@@ -127,7 +149,7 @@ export function outreachCurationPrompt(
   parts.push('Recipient:')
   parts.push(...factLines(facts))
   parts.push('')
-  const line = clean(facts.personalLine)
+  const line = clean(redactOutreachCurationText(facts.personalLine))
   parts.push(`Why the sender is writing now: ${line || '(the sender wrote no personal line)'}`)
   parts.push('')
   parts.push(`Emails to rewrite (${steps.length} of the sequence’s ${steps[0]?.count ?? steps.length}):`)
