@@ -18,6 +18,7 @@
 import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { resolveMx } from 'node:dns/promises'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
 import { outreachOrgSubject } from '../mailboxes/register-mailbox-routes'
 import { createOutreachDoNotContactDomainsRoute } from './do-not-contact-routes'
@@ -83,6 +84,8 @@ export function defaultOutreachRouteDeps(): OutreachEnrollRouteDeps {
     // runtime resolves it: the CRM registers at boot, and a request that
     // arrives before it did files nothing rather than caching a `null`.
     timeline: () => pluginRecordTimelineWriter()?.writer ?? null,
+    // The domain's MX (AGL-3326), from the console's own resolver.
+    resolveMx: (domain) => resolveMx(domain),
   }
 }
 

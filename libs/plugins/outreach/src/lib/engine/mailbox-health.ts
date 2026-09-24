@@ -26,14 +26,21 @@
  *
  * - it collects {@link OUTREACH_PAUSE_BOUNCES_PER_DAY} hard bounces in one
  *   of its own days; or
- * - more than {@link OUTREACH_PAUSE_BOUNCE_RATE} of its last
+ * - {@link OUTREACH_PAUSE_BOUNCES_PER_WINDOW} of its last
  *   {@link OUTREACH_BOUNCE_RATE_WINDOW_SENDS} sends hard-bounced, once the
  *   window holds at least {@link OUTREACH_BOUNCE_RATE_MIN_SENDS} of them
- *   (AGL-3244). Under that floor one bounce IS the rate — 1 of 21 is 4.8% —
- *   and a single gateway block on a cold day closed a whole sending window
- *   on the strength of one address. A mailbox with fewer sends is still
- *   judged on the sends it has by the first rule: a second bounce in one
- *   day pauses it whatever the window holds; or
+ *   (AGL-3244). Under that floor one bounce IS the window — 1 of 21 — and a
+ *   single gateway block on a cold day closed a whole sending window on the
+ *   strength of one address. A mailbox with fewer sends is still judged on
+ *   the sends it has by the first rule: a second bounce in one day pauses
+ *   it whatever the window holds.
+ *
+ *   A COUNT, not a rate (AGL-3326). The rule was "more than 3% of the last
+ *   50", and 3% of fifty is one and a half: a bounce from two days ago plus
+ *   one today made 4%, and paused a mailbox on the strength of history the
+ *   daily rule had already judged and let pass. Two bounces in one day are
+ *   the first rule's; the window rule is for a slow drip the days hide, and
+ *   three of fifty is where a drip stops being one address; or
  * - a reply called its email spam in the last week — a complaint is worth a
  *   week of review, and the pause lasts until the week is out.
  *
@@ -47,8 +54,8 @@ export const OUTREACH_PAUSE_BOUNCES_PER_DAY = 2
 /** How many of the most recent sends the bounce rate is taken over. */
 export const OUTREACH_BOUNCE_RATE_WINDOW_SENDS = 50
 
-/** The bounce rate a mailbox may not exceed over that window. */
-export const OUTREACH_PAUSE_BOUNCE_RATE = 0.03
+/** Hard bounces in that window that pause the mailbox. */
+export const OUTREACH_PAUSE_BOUNCES_PER_WINDOW = 3
 
 /**
  * The fewest sends the window must hold before its bounce rate is judged
@@ -59,7 +66,7 @@ export const OUTREACH_BOUNCE_RATE_MIN_SENDS = 25
 /** How long a spam complaint keeps a mailbox paused. */
 export const OUTREACH_COMPLAINT_PAUSE_MS = 7 * 24 * 60 * 60 * 1000
 
-export type OutreachHealthPauseReason = 'bounces_today' | 'bounce_rate' | 'complaint'
+export type OutreachHealthPauseReason = 'bounces_today' | 'bounces_in_window' | 'complaint'
 
 export interface OutreachMailboxHealthInput {
   /** Hard bounces on this mailbox's mail received during its current local day. */
@@ -105,12 +112,11 @@ export function decideOutreachMailboxHealth(
   }
   const sends = Math.min(count(input.recentSends), OUTREACH_BOUNCE_RATE_WINDOW_SENDS)
   const bounces = Math.min(count(input.recentHardBounces), sends)
-  if (sends >= OUTREACH_BOUNCE_RATE_MIN_SENDS && bounces / sends > OUTREACH_PAUSE_BOUNCE_RATE) {
-    const percent = ((bounces / sends) * 100).toFixed(1)
+  if (sends >= OUTREACH_BOUNCE_RATE_MIN_SENDS && bounces >= OUTREACH_PAUSE_BOUNCES_PER_WINDOW) {
     return {
       pause: true,
-      reason: 'bounce_rate',
-      message: `Paused: ${bounces} of the last ${sends} emails hard-bounced (${percent}%). Re-check the addresses in your sequences before resuming.`,
+      reason: 'bounces_in_window',
+      message: `Paused: ${bounces} of the last ${sends} emails hard-bounced. Re-check the addresses in your sequences before resuming.`,
       pausedUntilMs: null,
     }
   }

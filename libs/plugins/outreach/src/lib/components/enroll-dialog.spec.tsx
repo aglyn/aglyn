@@ -76,6 +76,7 @@ const person = (
   status: 'eligible',
   blocks: [],
   requires: { personalLine: false, attestations: [] },
+  gateway: null,
   ...overrides,
 })
 
@@ -378,6 +379,67 @@ describe('enrolling: the gate preview and Confirm (AGL-2980)', () => {
         'avery.quinn@example.org unsubscribed from this site’s email, or mail to it bounced.',
       ),
     ).toBeTruthy()
+  })
+
+  /*
+   * The mail gateway chip (AGL-3326): red for a gateway that refused the
+   * sender this week — and that person starts un-ticked, with the reason —
+   * green for one that delivered, neutral for a hosted provider, and the
+   * summary counts the people behind a security gateway.
+   */
+  it('shows each person’s mail gateway, leaves a refused one un-ticked, and counts the gateway-fronted', async () => {
+    api.previewEnrollment.mockResolvedValue({
+      ok: true,
+      total: 4,
+      truncated: false,
+      people: [
+        person({
+          contactId: 'c-barracuda',
+          name: 'Kristan Cole',
+          email: 'kristan@lifespire.example',
+          gateway: { gateway: 'barracuda', blocked7: 2, delivered7: 0, blocked30: 2, delivered30: 0, hold: true },
+        }),
+        person({
+          contactId: 'c-proofpoint',
+          name: 'Dana Belfran',
+          email: 'dana@belfran.example',
+          gateway: { gateway: 'proofpoint', blocked7: 0, delivered7: 1, blocked30: 0, delivered30: 1, hold: false },
+        }),
+        person({
+          contactId: 'c-google',
+          name: 'Casey Morgan',
+          email: 'casey@workspace.example',
+          gateway: { gateway: 'google', blocked7: 0, delivered7: 0, blocked30: 0, delivered30: 0, hold: false },
+        }),
+        person({
+          contactId: 'c-nomx',
+          name: 'Nobody Home',
+          email: 'nobody@parked.example',
+          status: 'blocked',
+          blocks: [{ code: 'no_mx', reason: 'parked.example has no MX record, so nobody@parked.example cannot receive mail.' }],
+          gateway: { gateway: 'none', blocked7: 0, delivered7: 0, blocked30: 0, delivered30: 0, hold: false },
+        }),
+      ],
+    })
+    renderDialog()
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Saved Contacts view' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Warm leads' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check people' }))
+    await screen.findByText('3 eligible · 0 need you · 1 blocked · 2 gateway-fronted — LinkedIn-first?')
+
+    expect(within(row('Kristan Cole')).getByText('Barracuda · 2 of 2 sends refused this week')).toBeTruthy()
+    expect(within(row('Dana Belfran')).getByText('Proofpoint · 1 of 1 delivered this week')).toBeTruthy()
+    expect(within(row('Casey Morgan')).getByText('Google Workspace')).toBeTruthy()
+    expect(within(row('Nobody Home')).getByText('No MX record — cannot receive mail')).toBeTruthy()
+    // The refused person is shown, not blocked, and starts un-ticked with the reason.
+    const refused = within(row('Kristan Cole')).getByLabelText('Enroll this person') as HTMLInputElement
+    expect(refused.checked).toBe(false)
+    expect(within(row('Kristan Cole')).getByText(/Left un-ticked: their mail gateway refused 2 emails/)).toBeTruthy()
+    expect((within(row('Dana Belfran')).getByLabelText('Enroll this person') as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByRole('button', { name: 'Enroll 2 people' })).toBeTruthy()
+    // Ticking her is the member's decision.
+    fireEvent.click(refused)
+    expect(screen.getByRole('button', { name: 'Enroll 3 people' })).toBeTruthy()
   })
 
   it('leaves a person out when the rep unticks them', async () => {

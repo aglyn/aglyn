@@ -54,6 +54,10 @@ import {
  * has in the organization — this one wherever it stood, and any other that
  * is still active or paused — so no sequence emails it again, whichever one
  * would have been next.
+ *
+ * RESUME on an enrollment the engine held for its gateway (AGL-3326) is the
+ * member saying "send it anyway": the hold is stamped released with who and
+ * when, and the gates do not hold that enrollment on the gateway again.
  */
 
 const ACTIONS: readonly OutreachEnrollmentAction[] = ['pause', 'resume', 'stop', 'do_not_contact']
@@ -104,8 +108,20 @@ export function createOutreachEnrollmentActionRoute(deps: OutreachRouteDeps): Pl
       if (!patch) return { enrollment, error, changed: false }
       // The opt-out event names no member; the person who marked it is
       // recorded here, beside the reason, and on the list entry.
+      const released =
+        action === 'resume' && enrollment.stopReason === 'gateway_blocked_here'
+          ? {
+              gatewayHold: {
+                gateway: enrollment.gatewayHold?.gateway ?? 'other',
+                heldAtMs: enrollment.gatewayHold?.heldAtMs ?? enrollment.stoppedAtMs,
+                releasedByUid: caller.uid,
+                releasedAtMs: nowMs,
+              },
+            }
+          : {}
       const written = {
         ...patch,
+        ...released,
         stoppedByUid: action === 'do_not_contact' ? caller.uid : patch.stoppedByUid,
         updatedAtMs: nowMs,
       }

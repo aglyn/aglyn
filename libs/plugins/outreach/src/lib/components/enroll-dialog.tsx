@@ -46,8 +46,10 @@ import {
   useTheme,
 } from '@mui/material'
 import { useMemo, useState } from 'react'
+import { isOutreachGatewayFronted, outreachGatewayChip } from '../engine/mail-gateway'
 import {
   OUTREACH_ENROLL_BATCH_MAX,
+  type OutreachEnrollGateway,
   type OutreachEnrollOutcome,
   type OutreachEnrollPreviewPerson,
   type OutreachEnrollPreviewResponse,
@@ -91,6 +93,23 @@ const STATUS_COLORS: Record<OutreachEnrollPreviewStatus, ChipProps['color']> = {
   eligible: 'success',
   needs_confirmation: 'warning',
   blocked: 'default',
+}
+
+/** The gateway chip's color by its tone (AGL-3326). */
+const GATEWAY_TONE_COLORS: Record<NonNullable<ReturnType<typeof outreachGatewayChip>>['tone'], ChipProps['color']> = {
+  refused: 'error',
+  delivered: 'success',
+  neutral: 'default',
+  blocked: 'default',
+}
+
+/**
+ * Whether the gateway in front of this person refused the sender this week
+ * (AGL-3326): the person is shown, and left un-ticked, rather than blocked
+ * — the founder decides, and ticking them is the decision.
+ */
+export function outreachGatewayRefusedThisWeek(gateway: OutreachEnrollGateway | null | undefined): boolean {
+  return (gateway?.blocked7 ?? 0) > 0
 }
 
 /** What the rep has supplied for one person. */
@@ -201,7 +220,9 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
           answer.people.map((person) => [
             person.personId,
             {
-              include: person.status !== 'blocked',
+              // A person whose gateway refused the sender this week starts
+              // un-ticked (AGL-3326); the chip beside them says why.
+              include: person.status !== 'blocked' && !outreachGatewayRefusedThisWeek(person.gateway),
               personalLine: '',
               attestations: [],
             },
@@ -642,7 +663,31 @@ OutreachEnrollDialog.displayName = 'OutreachEnrollDialog'
 function summary(answer: OutreachEnrollPreviewResponse): string {
   const count = (status: OutreachEnrollPreviewStatus) =>
     answer.people.filter((person) => person.status === status).length
-  return `${count('eligible')} eligible · ${count('needs_confirmation')} need you · ${count('blocked')} blocked`
+  // The people behind a security gateway (AGL-3326): a Barracuda, a
+  // Proofpoint or a Mimecast refuses a sender for a whole company, and a
+  // LinkedIn note first is the cheaper first touch there.
+  const fronted = answer.people.filter(
+    (person) => person.status !== 'blocked' && isOutreachGatewayFronted(person.gateway?.gateway),
+  ).length
+  return (
+    `${count('eligible')} eligible · ${count('needs_confirmation')} need you · ${count('blocked')} blocked` +
+    (fronted ? ` · ${fronted} gateway-fronted — LinkedIn-first?` : '')
+  )
+}
+
+/** The Check-people chip for one person's mail gateway (AGL-3326), or nothing. */
+function GatewayChip(props: { gateway: OutreachEnrollGateway | null; name: string }) {
+  const chip = outreachGatewayChip(props.gateway)
+  if (!chip) return null
+  return (
+    <Chip
+      size="small"
+      variant={chip.tone === 'neutral' ? 'outlined' : 'filled'}
+      color={GATEWAY_TONE_COLORS[chip.tone]}
+      label={chip.label}
+      aria-label={`Mail gateway for ${props.name}: ${chip.label}`}
+    />
+  )
 }
 
 function PersonRow(props: {
@@ -684,6 +729,7 @@ function PersonRow(props: {
             {person.cold ? (
               <Chip size="small" variant="outlined" label="Cold" />
             ) : null}
+            <GatewayChip gateway={person.gateway} name={name} />
             <Chip
               size="small"
               label={STATUS_LABELS[person.status]}
@@ -718,6 +764,11 @@ function PersonRow(props: {
               }
               label="Enroll this person"
             />
+            {supplied?.include === false && outreachGatewayRefusedThisWeek(person.gateway) ? (
+              <Typography variant="caption" color="text.secondary">
+                {`Left un-ticked: their mail gateway refused ${person.gateway?.blocked7 === 1 ? 'an email' : `${person.gateway?.blocked7} emails`} from this organization this week. Tick them to enroll anyway${person.gateway?.hold ? ' — the email will go, and it is your call' : ''}.`}
+              </Typography>
+            ) : null}
             {supplied?.include === false ? null : (
               <>
                 <TextField

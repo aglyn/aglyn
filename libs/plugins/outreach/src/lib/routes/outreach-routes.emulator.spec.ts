@@ -83,6 +83,7 @@ const deps = (): OutreachEnrollRouteDeps => ({
   random: () => 0.5,
   logOrgActivity: async () => undefined,
   crmViewEmails: async () => ({ emails: [], complete: true }),
+  resolveMx: async () => [{ exchange: 'mx.example.com', priority: 10 }],
   stampRecordEmailState: async () => undefined,
   creditCampaign: async (input) => {
     credits.push(input)

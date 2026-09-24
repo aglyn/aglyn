@@ -114,12 +114,18 @@ mailbox that has never sent shows zeros and **No sends yet**.
 Bounces are the first sign that a list has bad addresses in it, and mailbox
 providers judge a sender by them. So a mailbox pauses itself when:
 
-- **two** of its emails hard-bounce in one of its days;
-- more than **3%** of its last **50** emails hard-bounced, once at least
-  **25** of them are in that window — under that, one bounce would be the
-  whole rate, and a single blocked address is not a list problem; or
+- **two** of its emails hard-bounce in the same sending day;
+- **three** of its last **50** emails hard-bounced, once at least **25** of
+  them are in that window — a count, not a rate, so a bounce from two days
+  ago plus one today no longer pauses a mailbox the daily rule already let
+  through, and under the floor a young mailbox is judged by its days alone;
+  or
 - a reply called one of its emails spam. That pause is meant to last a week,
   and the card says when the week is out.
+
+A bounce that is the recipient's mail gateway refusing you counts here like
+any other, which is why the [gateway check](#mail-gateways) in **Check
+people** tries to keep it from happening at all.
 
 The card says why, with the date, and a line is written to your
 organization's activity. The member who connected the mailbox, and the
@@ -380,6 +386,41 @@ Before anything is enrolled, each person is marked:
   customer, unless the sequence includes customers; already in a sequence; or
   a lead that converted, is already a contact, or was closed as unqualified.
 
+### Before you enroll: mail gateways {#mail-gateways}
+
+Some companies put a security gateway — Barracuda, Proofpoint, Mimecast —
+in front of their mail, and a gateway refuses a **sender** for everyone
+behind it: the bounce says `blocked`, not "no such user", and the next
+person at that company bounces the same way. The domain's public MX record
+names the gateway before anything is sent, so **Check people** looks it up
+for every address (once a week per domain, cached on your organization) and
+shows a chip beside each person:
+
+- **Barracuda · 2 of 2 sends refused this week** (red) — that gateway has
+  refused this organization's mail this week. The person is shown, not
+  blocked, and starts **un-ticked** with the reason under them; ticking them
+  is your call, and the email then goes.
+- **Proofpoint · 1 of 1 delivered this week** (green) — the gateway let the
+  sender through lately.
+- **Google Workspace**, **Microsoft 365**, or a security gateway with no
+  verdict yet — nothing to act on.
+- **No MX record — cannot receive mail** — the domain takes no mail at all,
+  and the person is blocked with the reason.
+
+The summary line above the people counts how many are behind a security
+gateway — *2 gateway-fronted — LinkedIn-first?* — because a LinkedIn note is
+the cheaper first touch where email is likely to be refused.
+
+What a gateway did with your mail is learned from outcomes, per
+organization: every send is counted against the gateway in front of it, a
+hard bounce that reads as the gateway refusing you counts as a block, and a
+send with no bounce a day later counts as delivered. A gateway that refused
+you **twice in the last thirty days and delivered nothing** holds the next
+email into it: the enrollment pauses as **Held — gateway refused this sender
+twice**, on the Enrollments tab, and **Resume** on that row sends it anyway.
+A person you ticked past the red chip is not held again — you already
+decided.
+
 ### Cold contacts {#cold-contacts}
 
 A contact is **cold** when nothing on your site shows they came to you: no
@@ -418,7 +459,10 @@ they're on, when the next one is due in the mailbox's timezone, when the last
 one went, and why they stopped when they have. A person enrolled as a lead is
 marked **Lead** until the lead converts. For each one you can:
 
-- **Pause** and **Resume** — nothing is sent while they're paused.
+- **Pause** and **Resume** — nothing is sent while they're paused. An
+  enrollment the engine held because its [mail gateway](#mail-gateways)
+  refused you twice is paused the same way, and **Resume** on it sends the
+  email anyway.
 - **Stop** — they get nothing more from this sequence.
 - **Mark do-not-contact** — puts the address on your organization's
   do-not-contact list, which every sequence checks before every send, and
@@ -468,6 +512,7 @@ Each connected mailbox is read every 15 minutes for what came back:
 | **They ask not to be emailed** — a reply such as "no" or "unsubscribe", or, when the sequence adds the [mail-client unsubscribe button](#unsubscribe), that button's link or a message to the unsubscribe address | Stops the sequence (**Opted out**), puts the address on your do-not-contact list, unsubscribes it from the site's **Sales outreach** email, and stops it in every other sequence. |
 | **The email hard-bounces** | Stops the sequence (**Bounced**) and puts the address on your do-not-contact list and on the platform's suppression list. When the bounce says the recipient's mail gateway refused it rather than that the address is unknown, the whole [domain](#do-not-contact-domains) goes on the list too, and the enrollment says so. |
 | **A check refuses them before the next email** — a customer now, a member of your workspace, on a suppression list | Stops the sequence, saying which check. |
+| **Their mail gateway refused you twice this month and delivered nothing** | Holds the next email (**Held — gateway refused this sender twice**) until a member selects **Resume** on the row — see [mail gateways](#mail-gateways). |
 | **The mailbox is disconnected or removed, or the member who connected it leaves the organization** | Stops the sequences that send from it. |
 | **The next email needs something the contact doesn't have** — a first name for `{{contact.firstName}}` | Pauses the enrollment, naming what is missing. Fill it in and select **Resume**. |
 

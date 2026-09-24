@@ -118,6 +118,23 @@ describe('applyOutreachEnrollmentEvent', () => {
     })
   })
 
+  it('pauses as the engine’s gateway hold, with no member (AGL-3326)', () => {
+    expect(
+      applyOutreachEnrollmentEvent(active, {
+        type: 'pause',
+        atMs,
+        byUid: null,
+        reason: 'gateway_blocked_here',
+        detail: 'Barracuda refused this sender twice.',
+      }).patch,
+    ).toMatchObject({ status: 'paused', stopReason: 'gateway_blocked_here', stoppedByUid: null })
+    // A hold is a pause, and only a pause.
+    expect(
+      applyOutreachEnrollmentEvent(active, { type: 'stop', atMs, byUid: null, reason: 'gateway_blocked_here' as never })
+        .error,
+    ).toMatch(/isn't a reason/)
+  })
+
   it('resumes by clearing the stop record', () => {
     const paused = { status: 'paused' as const, nextDueAtMs: active.nextDueAtMs }
     expect(applyOutreachEnrollmentEvent(paused, { type: 'resume', atMs, byUid: 'u-avery' }).patch).toEqual({

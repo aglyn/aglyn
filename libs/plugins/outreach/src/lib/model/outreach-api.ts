@@ -26,6 +26,7 @@
  */
 
 import type { OutreachComposeError } from '../engine/compose'
+import type { OutreachGatewayStanding } from '../engine/mail-gateway'
 import type { OutreachComplianceIssue } from './compliance-settings'
 import type {
   OutreachAttestationKind,
@@ -183,6 +184,18 @@ export interface OutreachEnrollBlock {
   reason: string
 }
 
+/**
+ * The mail gateway in front of one person's domain (AGL-3326), and what it
+ * did with this organization's mail this week — what the Check-people chip
+ * shows — with `hold` set when the engine would hold the send into it: the
+ * gateway refused the sender twice in the last thirty days and delivered
+ * nothing. A held person is not blocked; they default to un-ticked, and
+ * ticking them is the member's say-so.
+ */
+export interface OutreachEnrollGateway extends OutreachGatewayStanding {
+  hold: boolean
+}
+
 export interface OutreachEnrollPreviewPerson {
   /** The key the dialog and the confirm name this person by: the record's own id. */
   personId: string
@@ -207,6 +220,8 @@ export interface OutreachEnrollPreviewPerson {
     personalLine: boolean
     attestations: OutreachAttestationKind[]
   }
+  /** The mail gateway in front of their domain (AGL-3326); `null` when it could not be read. */
+  gateway: OutreachEnrollGateway | null
 }
 
 export interface OutreachEnrollPreviewResponse {

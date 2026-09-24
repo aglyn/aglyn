@@ -21,6 +21,7 @@ import { normalizeCrmEmailTemplate } from '@aglyn/aglyn/app-utils/crm-email-temp
 import { FieldValue } from 'firebase-admin/firestore'
 import { randomUUID } from 'node:crypto'
 import { composeOutreachEmail } from '../engine/compose'
+import { outreachEmailDomain } from '../engine/do-not-contact-domain'
 import { planOutreachStepCompletion, type OutreachEnrollmentEvent } from '../engine/enrollment-state'
 import { evaluateOutreachGates, type OutreachGateBlock, type OutreachGateLookups } from '../engine/gates'
 import {
@@ -45,6 +46,7 @@ import {
   type OutreachTaskStep,
 } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
+import { recordOutreachGatewayOutcome } from '../storage/domain-intel-store'
 import {
   outreachEnrollmentLink,
   outreachEnrollmentPerson,
@@ -332,6 +334,7 @@ async function runMailbox(
         hostId,
         consentHostIds: consentGroup.hostIds,
         consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
+        gateway: { resolveMx: deps.resolveMx, nowMs },
         people: enrollments.map((enrollment) => {
           const person = outreachEnrollmentPerson(enrollment)
           return {
@@ -745,9 +748,27 @@ async function runEmailStep(
     personalLine: enrollment.personalLine,
     attestations: enrollment.attestations,
     enrollmentId: enrollment.id,
+    gatewayHoldReleased: typeof enrollment.gatewayHold?.releasedAtMs === 'number',
     lookups: input.lookups as OutreachGateLookups,
   })
   if (!gate.allowed) return stop(gateEvent(gate.blocks, nowMs), 'stopped')
+  if (gate.hold) {
+    // The gateway refused this organization twice lately and delivered
+    // nothing (AGL-3326): the send is held, as a pause a member resumes
+    // from the enrollment row, and nothing goes into it until they do.
+    const hold = gate.hold
+    const outcome = await applyOutreachEvent(firestore, {
+      orgId: run.orgId,
+      enrollmentId: enrollment.id,
+      event: { type: 'pause', atMs: nowMs, byUid: null, reason: 'gateway_blocked_here', detail: hold.reason },
+      extra: () => ({
+        gatewayHold: { gateway: hold.gateway, heldAtMs: nowMs, releasedByUid: null, releasedAtMs: null },
+      }),
+      nowMs,
+    })
+    if (outcome.changed) report.held += 1
+    return
+  }
 
   /*
    * The email, with its way out. The footer's "reply 'no'" line and the
@@ -937,6 +958,18 @@ async function runEmailStep(
     claimMessageId: messageId,
   })
   report.sent += 1
+  // The gateway ledger (AGL-3326): one more send into the domain's gateway,
+  // which the sync credits as delivered a day from now if nothing bounces.
+  const standing = (input.lookups as OutreachGateLookups).gateway
+  const recipientDomain = outreachEmailDomain(enrollment.email)
+  if (standing && recipientDomain) {
+    await recordOutreachGatewayOutcome(firestore, run.orgId, {
+      domain: recipientDomain,
+      gateway: standing.gateway,
+      outcome: 'sent',
+      atMs: record.atMs,
+    })
+  }
   await fileOutreachEmail(deps, {
     orgId: run.orgId,
     hostId: enrollment.hostId,
