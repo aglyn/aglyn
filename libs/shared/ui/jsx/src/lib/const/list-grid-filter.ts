@@ -185,11 +185,35 @@ export function listFilterGridColumns(
       filterOperators: operators,
     }
   }
+  /*
+   * A column made a select keeps what it DREW. The grid formats a
+   * `singleSelect` cell as the label of the option its value matches, and as
+   * nothing when none does — so a column whose `valueGetter` hands back a
+   * label (an address for an actor id, a site name for a scope id) went
+   * blank the moment it gained a filter (AGL-3321). A column with its own
+   * `renderCell` is left alone; any other draws the matching option's label
+   * when there is one, and its own value when there is not.
+   */
+  const keepsItsCell = (column: GridColDef, field: ListFilterField) => {
+    if (column.renderCell) return {}
+    const labels = new Map(
+      (options[field.column] ?? []).map((choice) => [choice.value, choice.label]),
+    )
+    return {
+      renderCell: (params: { value?: unknown }) => {
+        const value = params.value
+        if (value === undefined || value === null) return ''
+        return labels.get(String(value)) ?? String(value)
+      },
+    }
+  }
   const shown = columns.map((column): GridColDef => {
     if (column.filterable === false && column.hideable === false) return column
     const field = fields.find((entry) => entry.column === column.field)
     if (!field) return { ...column, filterable: false }
-    if (options[field.column]) return { ...column, ...selectProps(field) } as GridColDef
+    if (options[field.column]) {
+      return { ...column, ...selectProps(field), ...keepsItsCell(column, field) } as GridColDef
+    }
     return { ...column, ...listFilterColumn(fields, field.column) }
   })
   const present = columns.map((column) => column.field)
