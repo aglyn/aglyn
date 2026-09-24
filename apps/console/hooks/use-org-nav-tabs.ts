@@ -39,7 +39,8 @@ const TAB_PERMISSIONS: Record<string, OrgPermission> = {
  *
  * Plugin-declared org surfaces (AGL-2974) join from the registry, scoped to
  * this workspace's enabled plugins and narrowed by `orgPluginNavTabItems`,
- * which holds each one back until its own verdicts settle.
+ * which holds each one back until its plan answers and keeps its place,
+ * disabled, while the member read settles.
  */
 export function useOrgNavTabItems() {
   const { can, permissions, loaded } = useOrgPermissions()

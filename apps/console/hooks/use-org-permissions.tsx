@@ -180,7 +180,11 @@ export interface OrgPermissionsValue {
   /** Org the permissions were resolved in (undefined pre-first-org). */
   orgId: string | undefined
   role: OrgRole | undefined
-  /** True ONLY when the read answered. False while loading AND on failure. */
+  /**
+   * True ONLY when the read for THIS reader in THIS org answered. False
+   * while loading, while the only answer held is another org's or another
+   * reader's, AND on failure.
+   */
   loaded: boolean
   /** The member read failed. `granted`/`permissions` are all false. */
   errored: boolean
@@ -205,6 +209,70 @@ export const OrgPermissionsContext = createContext<OrgPermissionsValue | null>(
 )
 
 /**
+ * One resolution, before the maps are drawn from it: which of the three
+ * states the reader is in and, when `ready`, the member it was resolved for.
+ */
+interface Resolution {
+  member: Partial<AglynOrgMember> | null
+  customRole: AglynOrgCustomRole | null
+  isOwner: boolean
+  orgId: string | undefined
+  role: OrgRole | undefined
+  /**
+   * The member doc's raw override map (AGL-2474). Kept because the dotted
+   * `granted` map cannot represent a plugin-declared key, so the only way
+   * the console can honor a revoked `managePos` is to read the overrides the
+   * server reads.
+   */
+  overrides: Record<string, boolean> | undefined
+  status: OrgPermissionsStatus
+}
+
+/** Nothing is known about this reader in this org yet. */
+const UNANSWERED: Resolution = {
+  member: null,
+  customRole: null,
+  isOwner: true,
+  orgId: undefined,
+  role: undefined,
+  overrides: undefined,
+  status: 'loading',
+}
+
+/**
+ * A signed-in reader the SERVER says belongs to no organization: a fresh
+ * account, which acts as the owner of the org it is about to create.
+ */
+const OWNER_OF_A_FUTURE_ORG: Resolution = {
+  member: OWNER_OF_NOTHING,
+  customRole: null,
+  isOwner: true,
+  orgId: undefined,
+  role: undefined,
+  overrides: undefined,
+  status: 'ready',
+}
+
+/**
+ * The membership listen gave up, so which org the reader is in is unknown,
+ * and so is what they may do in it. Fails closed like a failed member read.
+ */
+const MEMBERSHIPS_UNREADABLE: Resolution = {
+  member: null,
+  customRole: null,
+  isOwner: false,
+  orgId: undefined,
+  role: undefined,
+  overrides: undefined,
+  status: 'error',
+}
+
+/** The question a member read answers: this reader, in this org. */
+function memberReadKey(uid: string, orgId: string): string {
+  return `${uid}\u0000${orgId}`
+}
+
+/**
  * The member read itself — TWO `getDoc`s, and the reason the provider exists.
  *
  * `enabled: false` makes it completely inert: the effect returns before it
@@ -215,11 +283,41 @@ export const OrgPermissionsContext = createContext<OrgPermissionsValue | null>(
  *
  * NOT exported. A second caller is a second pair of reads, which is the whole
  * defect; the only legitimate one is `OrgPermissionsProvider`.
+ *
+ * ## An answer belongs to the question it was read for (AGL-3337)
+ *
+ * A landed read is stored with the (reader, org) pair it answered, and the
+ * render publishes it only while that is still the pair being asked about.
+ * Everything else is chosen at render time from the inputs as they stand,
+ * never written into state by an effect, because an effect's write outlives
+ * the inputs it was computed from. The render where auth restores is the
+ * sharp case: the org scope still reports the signed-out "not loading, no
+ * orgs", and this provider's effects run before the scope's (a child's run
+ * before its parent's), so an effect deciding "no org, so act as an owner"
+ * there would publish `loaded: true` for a question nobody had asked, and
+ * keep publishing it until the member read for the org that then arrives
+ * lands — seconds, on a slow session.
+ *
+ * So:
+ *
+ * - An org in scope is answered by ITS member read and nothing else. Moving
+ *   to another org, or another reader, reads `loading` until that read
+ *   lands; a re-read of the same pair keeps the last answer meanwhile.
+ * - No org in scope is "a fresh account" only once the server has confirmed
+ *   the membership list is empty. An empty first snapshot from the cache,
+ *   or a list not yet asked for, is `loading`; a listen that gave up is
+ *   `error`.
  */
 function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const { currentOrg, loading: orgsLoading } = useOrgScope()
+  const {
+    currentOrg,
+    loading: orgsLoading,
+    confirmed: orgsConfirmed,
+    error: orgsError,
+  } = useOrgScope()
+  const uid = (user as any)?.uid as string | undefined
   const orgId = currentOrg?.$id
   /*
    * Re-render when a plugin registers a permission or an org-catalog key
@@ -230,49 +328,18 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
    * a refusal. A cold load of a plugin deep link is exactly that order.
    */
   useSyncExternalStore(subscribeRegistries, registriesVersion, registriesVersion)
-  const [state, setState] = useState<{
-    member: Partial<AglynOrgMember> | null
-    customRole: AglynOrgCustomRole | null
-    isOwner: boolean
-    orgId: string | undefined
-    role: OrgRole | undefined
-    /**
-     * The member doc's raw override map (AGL-2474). Kept because the dotted
-     * `granted` map above cannot represent a plugin-declared key, so the only
-     * way the console can honour a revoked `managePos` is to read the
-     * overrides the server reads.
-     */
-    overrides: Record<string, boolean> | undefined
-    status: OrgPermissionsStatus
-  }>({
-    member: null,
-    customRole: null,
-    isOwner: true,
-    orgId: undefined,
-    role: undefined,
-    overrides: undefined,
-    status: 'loading',
-  })
+  /** The last member read to land, with the (reader, org) pair it answered. */
+  const [memberRead, setMemberRead] = useState<
+    (Resolution & { key: string }) | null
+  >(null)
 
   useEffect(() => {
     // FIRST, before any state is touched. A disabled instance must not read,
     // must not publish, and must not race the provider's own resolution.
     if (!enabled) return
-    const uid = (user as any)?.uid as string | undefined
-    if (orgsLoading || !uid) return
-    if (!orgId) {
-      // No org yet — fresh account, full access (owner of its future org).
-      setState({
-        member: OWNER_OF_NOTHING,
-        customRole: null,
-        isOwner: true,
-        orgId: undefined,
-        role: undefined,
-        overrides: undefined,
-        status: 'ready',
-      })
-      return
-    }
+    // No org in scope reads nothing; the render answers that case.
+    if (!uid || !orgId) return
+    const key = memberReadKey(uid, orgId)
     let active = true
     void (async () => {
       try {
@@ -303,7 +370,8 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
           }
         }
         if (!active) return
-        setState({
+        setMemberRead({
+          key,
           member,
           customRole,
           isOwner: role === 'owner' || role === 'admin',
@@ -313,19 +381,14 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
           status: 'ready',
         })
       } catch {
-        // FAIL CLOSED, AND SAY SO (AGL-243 residual). This was
-        // `{ ...prev, orgId, loaded: true }` — `prev.granted` is still
-        // `ALL_GRANTED` at this point, so the spread published an OWNER map
-        // under a flag that claims the read answered. A transient denial
-        // therefore rendered every gated page in full, in production, with
-        // nobody doing anything unusual.
-        //
-        // `status: 'error'` keeps `loaded` false so the gates HOLD, and drops
-        // `granted` to all-false so the callers that never look at `loaded`
-        // hide rather than grant. `isOwner` goes with it — it is read as an
-        // authorization answer, and it was seeded `true`.
+        // FAIL CLOSED, AND SAY SO (AGL-243 residual). `status: 'error'` keeps
+        // `loaded` false so the gates HOLD rather than accuse a legitimate
+        // admin, and drops `granted` to all-false so the callers that never
+        // look at `loaded` hide rather than grant. `isOwner` goes with it:
+        // it is read as an authorization answer.
         if (active)
-          setState({
+          setMemberRead({
+            key,
             member: null,
             customRole: null,
             isOwner: false,
@@ -339,45 +402,67 @@ function useOrgPermissionsResolution(enabled: boolean): OrgPermissionsValue {
     return () => {
       active = false
     }
-  }, [enabled, user, firestore, orgId, orgsLoading])
+  }, [enabled, uid, firestore, orgId])
+
+  const resolution: Resolution = !uid
+    ? UNANSWERED
+    : orgId
+      ? memberRead?.key === memberReadKey(uid, orgId)
+        ? memberRead
+        : UNANSWERED
+      : orgsLoading
+        ? UNANSWERED
+        : orgsConfirmed === true
+          ? OWNER_OF_A_FUTURE_ORG
+          : orgsError === true
+            ? MEMBERSHIPS_UNREADABLE
+            : UNANSWERED
 
   // Resolved per render, against the registries as they stand now.
   const granted =
-    state.status === 'ready'
-      ? resolveOrgPermissions(state.member ?? OWNER_OF_NOTHING, state.customRole)
-      : state.status === 'error'
+    resolution.status === 'ready'
+      ? resolveOrgPermissions(
+          resolution.member ?? OWNER_OF_NOTHING,
+          resolution.customRole,
+        )
+      : resolution.status === 'error'
         ? ALL_DENIED()
         : ALL_GRANTED()
   return {
     // PLUGIN KEYS RIDE ALONG (AGL-2474), in the server resolver's own order:
     // tier defaults first, then the dotted catalog's projection over them.
     // `toLegacyPermissions` returns a fixed SIX-KEY literal, so returning it
-    // alone is what severed the client half of the plugin permission registry
-    // — `ConsolePluginPageProps.permissions` could never carry `managePos`
-    // however the org was configured, while the API resolved it correctly.
+    // alone would sever the client half of the plugin permission registry.
     //
-    // THREE BRANCHES, NOT A TERNARY ON `loaded`. Branching on `loaded` alone
-    // is what made the failure path permissive: `error` is not `ready`, so it
-    // fell into the loading branch and handed back the ADMIN map — a deny in
-    // `granted` with a grant in `permissions` would have left the plugin
-    // shell, and therefore the POS register, wide open.
+    // The tier is the MEMBER's role, the record `granted` resolved, so the
+    // two halves cannot disagree about who is reading. A reader with no org
+    // acts as an owner in both; the exported `role` is unset for that
+    // reader, and a tier taken from it is the viewer's, which refuses every
+    // plugin key the catalog half grants.
+    //
+    // THREE BRANCHES, NOT A TERNARY ON `loaded`. `error` is not `ready`, so
+    // branching on `loaded` alone would fall into the loading branch and hand
+    // back the ADMIN map — a deny in `granted` with a grant in `permissions`.
     permissions:
-      state.status === 'ready'
+      resolution.status === 'ready'
         ? {
-            ...resolveRolePermissions(orgRoleTier(state.role), state.overrides),
-            ...toLegacyPermissions(granted, state.role),
+            ...resolveRolePermissions(
+              orgRoleTier(resolution.member?.role),
+              resolution.overrides,
+            ),
+            ...toLegacyPermissions(granted, resolution.role),
           }
-        : state.status === 'error'
+        : resolution.status === 'error'
           ? deniedOnReadFailure()
           : allTrueWhileLoading(),
     can: (permission) => granted[permission],
     granted,
-    isOwner: state.isOwner,
-    orgId: state.orgId,
-    role: state.role,
-    loaded: state.status === 'ready',
-    errored: state.status === 'error',
-    status: state.status,
+    isOwner: resolution.isOwner,
+    orgId: resolution.orgId,
+    role: resolution.role,
+    loaded: resolution.status === 'ready',
+    errored: resolution.status === 'error',
+    status: resolution.status,
   }
 }
 

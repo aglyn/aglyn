@@ -147,12 +147,46 @@ describe('orgPluginNavTabItems', () => {
     expect(tabs.map((tab) => tab.href)).toEqual(['/acme/sold'])
   })
 
-  it('holds the tab back until the member read and the org read have both settled', () => {
-    expect(
-      orgPluginNavTabItems('acme', [outreach], answers({ permissionsLoaded: false })),
-    ).toEqual([])
+  it('holds the tab back until the org read has settled', () => {
     expect(
       orgPluginNavTabItems('acme', [outreach], answers({ orgReady: false })),
+    ).toEqual([])
+    expect(
+      orgPluginNavTabItems(
+        'acme',
+        [outreach],
+        answers({ orgReady: false, permissionsLoaded: false }),
+      ),
+    ).toEqual([])
+  })
+
+  it('keeps the tab in its place, disabled, while only the member read is unsettled (AGL-3337)', () => {
+    expect(
+      orgPluginNavTabItems('acme', [outreach], answers({ permissionsLoaded: false })),
+    ).toEqual([
+      {
+        id: 'nav-tab-org-outreach',
+        label: 'Sequences',
+        href: '/acme/outreach/sequences',
+        disabled: true,
+      },
+    ])
+  })
+
+  it('CONTROL: the placeholder never outlives a settled refusal or a plan that sells nothing', () => {
+    expect(
+      orgPluginNavTabItems(
+        'acme',
+        [outreach],
+        answers({ permissions: { 'outreach.use': false } }),
+      ),
+    ).toEqual([])
+    expect(
+      orgPluginNavTabItems(
+        'acme',
+        [outreach],
+        answers({ permissionsLoaded: false, org: { plan: 'enterprise' } }),
+      ),
     ).toEqual([])
   })
 })

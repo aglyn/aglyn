@@ -64,6 +64,8 @@ export interface NavTabItem {
   id?: string
   label?: string
   href?: string
+  /** Drawn in its place but not yet openable (see `orgPluginNavTabItems`). */
+  disabled?: boolean
 }
 
 /**
