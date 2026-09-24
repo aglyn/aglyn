@@ -303,6 +303,49 @@ describe('what is NOT credited', () => {
   })
 })
 
+/*==========================================
+ * THE LEADS TOTAL — the org's leads THIS site captured.
+ *
+ * A lead is one document per person on the organization (AGL-3275),
+ * stamped with every site that met them. The site's lead attributions are
+ * written by its own captures, so those are the population the total
+ * counts: not the retired per-site path, which no capture writes any more,
+ * and not `visibleTo`, which would count a sibling brand's captures that
+ * could never have been credited here.
+ *=========================================*/
+describe('the leads total', () => {
+  const LEADS_CAPTURED_HERE = describeQuery([
+    'orgs/org1/leads',
+    'capturedByHostIdsarray-containssite1',
+  ])
+
+  it('counts the organization’s leads that this site captured', async () => {
+    counts.set(describeQuery([ATTRIBUTIONS, 'kind==lead']), 4)
+    counts.set(LEADS_CAPTURED_HERE, 10)
+    await renderCard()
+    fireEvent.click(screen.getByRole('button', { name: 'Leads' }))
+    await settled()
+
+    expect(countCalls).toContain(LEADS_CAPTURED_HERE)
+    expect(countCalls.some((key) => key.startsWith('hosts/site1/leads'))).toBe(false)
+    // Ten captured here, four credited: six not credited.
+    expect(screen.getByText('6')).toBeTruthy()
+    // The total does not cross sites, so it carries no cross-site caveat.
+    expect(screen.queryByText(/shared across every site/i)).toBeNull()
+  })
+
+  it('CONTROL: contacts still count the whole org, and say so', async () => {
+    counts.set(describeQuery([ATTRIBUTIONS, 'kind==contact']), 4)
+    counts.set('orgs/org1/contacts', 10)
+    await renderCard()
+    fireEvent.click(screen.getByRole('button', { name: 'Contacts' }))
+    await settled()
+
+    expect(countCalls).toContain('orgs/org1/contacts')
+    expect(screen.getByText(/shared across every site/i)).toBeTruthy()
+  })
+})
+
 describe('the web channel', () => {
   /*==========================================
    * TWO LISTS, NEVER ONE, AND NEVER A ROLLUP.

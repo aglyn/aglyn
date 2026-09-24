@@ -700,6 +700,15 @@ Two ways to finish a test without watching it:
   one variant (re-sends reach the same variant), sends count as exposures, and once a
   winner is picked every later send uses the winning copy.
 
+### Across your organization's sites {#experiments-across-sites}
+
+Your organization's own **Marketing → A/B testing** lists every site's tests, grouped by
+site, with what each one tests, how many variants it has and its status. **Results** reads
+a test's figures when you ask for them. A test splits one site's traffic, so it is
+created, started, paused and decided on that site: **New experiment** asks which site, and
+**Open** goes to the site's own A/B testing section. Ten sites show at a time, with up to
+ten tests each; a site with more says so and links to its own list.
+
 ## Opens & clicks
 
 With the Resend webhook configured, campaign history shows **opens and clicks** per
@@ -798,6 +807,20 @@ with no recorded delivery count shows amounts but no per-message figure.
 
 If a campaign earned in more than one currency, each is reported on its own.
 Nothing converts between currencies, so there is deliberately no combined total.
+
+### Everything the campaigns caused {#conversions}
+
+**Marketing → Conversions** lists what a site's campaigns caused, from the conversions'
+end: form submissions, leads, contacts and bookings, **one kind at a time**. One person
+filling in one form is a submission, a contact and a lead, so the kinds are never shown
+together or added. Beside the ones credited to a campaign it counts the ones credited to
+**none**, so a list of successes is never read as everything that happened. Leads are
+counted over the people that site captured.
+
+A conversion belongs to the site the visitor converted on, so your organization's
+**Marketing → Conversions** shows one site at a time: pick it under **Conversions on**.
+The first site is shown until you pick another, and your pick is remembered until you
+close the tab.
 
 ## Compliance
 

@@ -76,10 +76,10 @@ describe('marketing plugin', () => {
   })
 
   /*
-   * THE ORGANIZATION'S HUB. Campaigns and their emails belong to the org, so
-   * the same page is declared at `/[orgSlug]/marketing` too, with the two
-   * sections that make sense over every site — and it carries the SITE tab's
-   * id, so `release_marketing` holds both halves behind one flag.
+   * THE ORGANIZATION'S HUB. The same page is declared at
+   * `/[orgSlug]/marketing` with the site rail's sections, in the site rail's
+   * order, so a bare org URL lands where a site's does — and it carries the
+   * SITE tab's id, so `release_marketing` holds both halves behind one flag.
    */
   it('declares an org-level Marketing hub behind the same release flag', () => {
     registerMarketingConsole()
@@ -89,15 +89,54 @@ describe('marketing plugin', () => {
     const orgItem = extension?.orgNavItems?.[0]
     expect(orgItem?.href).toBe('/marketing')
     expect(orgItem?.Component).toBe(extension?.navItems?.[0]?.Component)
-    expect((orgItem?.sections ?? []).map((section) => section.id)).toEqual([
-      'campaigns',
-      'emails',
-    ])
+    expect((orgItem?.sections ?? []).map((section) => section.id)).toEqual(
+      (extension?.navItems?.[0]?.sections ?? []).map((section) => section.id),
+    )
     expect(orgItem?.navTabId).toBe(extension?.navItems?.[0]?.navTabId)
     expect(
       Aglyn.RELEASE_FLAGS.find((flag) => flag.navTabId === orgItem?.navTabId)
         ?.key,
     ).toBe('release_marketing')
+  })
+
+  /*
+   * ANTI-VACUITY for the equality above, which two empty rails satisfy: the
+   * org rail is the whole rail, and the organization's messages are not in
+   * it — they are the org Emails page's, as a site's are its own.
+   */
+  it('CONTROL: the org rail is the five sections, and no emails', () => {
+    registerMarketingConsole()
+    const orgItem = Aglyn.listConsoleExtensions().find(
+      (entry) => entry.pluginId === BUNDLE_ID,
+    )?.orgNavItems?.[0]
+    expect((orgItem?.sections ?? []).map((section) => section.id)).toEqual([
+      'overview',
+      'campaigns',
+      'conversions',
+      'overlays',
+      'experiments',
+    ])
+  })
+
+  /*
+   * An org section is a fan-out over sites, so the two paid ones are gated by
+   * the SHELL, before the page mounts a read per site. The site rail leaves
+   * the same checks to its cards, which read one site.
+   */
+  it('gates the org hub’s overlays and A/B testing on their plan flags', () => {
+    registerMarketingConsole()
+    const extension = Aglyn.listConsoleExtensions().find(
+      (entry) => entry.pluginId === BUNDLE_ID,
+    )
+    const gate = (id: string) =>
+      extension?.orgNavItems?.[0]?.sections?.find((section) => section.id === id)
+        ?.featureFlag
+    expect(gate('overlays')).toBe('marketingOverlays')
+    expect(gate('experiments')).toBe('abTesting')
+    // The landing and the campaign sections are on every plan the hub is.
+    expect(gate('overview')).toBeUndefined()
+    expect(gate('campaigns')).toBeUndefined()
+    expect(gate('conversions')).toBeUndefined()
   })
 
   it('publishes a campaign’s address at both levels', () => {
