@@ -151,8 +151,17 @@ PROJECTS=(
 # spec's first tick read `due: 2, held: 1` on one run and `due: 1` on the
 # next, with no code change between them. A test's own cleanup cannot see a
 # writer that has not finished; a single worker can (AGL-2981).
+#
+# The console's suites run one at a time for the same reason, through a
+# PLATFORM lock. The lockdown drill presses the platform panic button against
+# the shared emulator and measures how long other readers take to see it, so
+# for as long as the drill holds the lock every other console route answers
+# 423 — the consent-group spec's site delete read 423 where it asserts 409,
+# on one run and not the next, with nothing changed but which worker started
+# first.
 IN_BAND_PROJECTS=(
   libs/plugins/outreach
+  apps/console
 )
 
 REPORT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/emulator-guard-reports.XXXXXX")"
