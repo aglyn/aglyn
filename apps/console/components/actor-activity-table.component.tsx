@@ -137,9 +137,11 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
           url.searchParams.set('filterOp', filter.op)
           url.searchParams.set('filterValue', filter.value)
         }
-        // A narrowed feed is a different query, not a page of the old one, so
-        // it carries no cursor — resuming one would page the UNFILTERED feed.
-        if (cursor && !filter) url.searchParams.set('cursor', cursor)
+        // The cursor is the last document the route READ under this same
+        // filter, so it resumes the narrowed walk. Every filter change resets
+        // the cursors and asks for page 0 with none, so a cursor never
+        // crosses from one filter's walk into another's.
+        if (cursor) url.searchParams.set('cursor', cursor)
         const response = await authorizedFetch(userRef.current, url.toString())
         if (!response.ok) {
           setUnreadable(true)

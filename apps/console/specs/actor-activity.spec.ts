@@ -39,24 +39,42 @@ const snapshotFor = (docs: FakeDoc[]) => ({
   })),
 })
 
+/** One fake query's shape so far. */
+interface MockQueryState {
+  after?: string | null
+  limit: number
+  /** `field == value` predicates on the stored data (`actorId` aside). */
+  equals?: Array<[string, unknown]>
+}
+
 jest.mock('@aglyn/tenant-data-admin', () => {
-  const build = (state: { after?: string | null; limit: number }) => ({
-    where: () => build(state),
+  const build = (state: MockQueryState) => ({
+    where: (field: string, op: string, value: unknown) =>
+      build(
+        op === '==' && field !== 'actorId'
+          ? { ...state, equals: [...(state.equals ?? []), [field, value]] }
+          : state,
+      ),
     orderBy: () => build(state),
     startAfter: (doc: { ref: { path: string } }) =>
       build({ ...state, after: doc.ref.path }),
     limit: (value: number) => build({ ...state, limit: value }),
     get: async () => {
+      const matching = mockCorpus.filter((entry) =>
+        (state.equals ?? []).every(([field, value]) => entry.data[field] === value),
+      )
       const index = state.after
-        ? mockCorpus.findIndex(
+        ? matching.findIndex(
             (entry) => `${entry.parent}/activity/${entry.id}` === state.after,
           ) + 1
         : 0
-      return snapshotFor(mockCorpus.slice(index, index + state.limit))
+      return snapshotFor(matching.slice(index, index + state.limit))
     },
   })
   return {
     firebaseAdmin: {
+      // The filter translator names the document id as a sort tie-break.
+      firestore: { FieldPath: { documentId: () => '__name__' } },
       app: () => ({
         firestore: () => ({
           collectionGroup: () => build({ limit: 25 }),
@@ -156,6 +174,28 @@ describe('readActorActivity', () => {
     }
     expect(seen).toEqual(mockCorpus.map((entry) => entry.id))
     expect(new Set(seen).size).toBe(seen.length)
+  })
+
+  it('pages a FILTERED feed from its cursor, not from the top (AGL-3321)', async () => {
+    mockCorpus = Array.from({ length: 10 }, (_, i) => ({
+      ...doc(`d${i}`, 'hosts/h1', 1000 - i),
+      data: {
+        ...doc(`d${i}`, 'hosts/h1', 1000 - i).data,
+        action: i % 2 === 0 ? 'Published the screen' : 'Saved the screen',
+      },
+    }))
+    const filter = { field: 'action', op: 'equals', value: 'Published the screen' }
+    const first = await readActorActivity({ actorId: 'u1', pageSize: 2, filter })
+    expect(first.entries.map((e) => e.$id)).toEqual(['d0', 'd2'])
+    expect(first.nextCursor).toBe('hosts/h1/activity/d2')
+
+    const second = await readActorActivity({
+      actorId: 'u1',
+      pageSize: 2,
+      filter,
+      cursor: first.nextCursor,
+    })
+    expect(second.entries.map((e) => e.$id)).toEqual(['d4', 'd6'])
   })
 
   it('stops offering a next page when the query runs out', async () => {
