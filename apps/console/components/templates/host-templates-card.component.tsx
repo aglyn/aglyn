@@ -28,8 +28,9 @@ import {
   useConfirmationContext,
   useLoading,
 } from '@aglyn/shared-ui-jsx'
-import {
-} from '@aglyn/shared-ui-jsx/components/data-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { type GridColDef } from '@mui/x-data-grid'
 import {
@@ -138,6 +139,48 @@ function sourceChip(
   }
   return { label: 'Saved here', color: 'default' as const }
 }
+
+/** Where a template came from, as the Source filter matches it. */
+type TemplateSourceKey = 'marketplace' | 'starter' | 'saved'
+const templateSourceKey = (source: { type?: string } | undefined): TemplateSourceKey =>
+  source?.type === 'marketplace' || source?.type === 'starter' ? source.type : 'saved'
+
+/*
+ * What the library grid's Filters panel and quick search offer (AGL-3317).
+ * The card holds its rows — the capped window of `TEMPLATE_WINDOW` documents,
+ * grouped — so both are answered over every row it read, and the ceiling
+ * notice above the grid says when that window is short of the library.
+ * Kind and source are matched on the values the row is READ as (`kindKey`,
+ * `sourceKey`): a template stored with no kind is a page template, and one
+ * with no source was saved here.
+ */
+const TEMPLATE_FILTER_FIELDS = [
+  inMemoryListField('displayName', 'text'),
+  inMemoryListField('kind', 'select', 'kindKey'),
+  inMemoryListField('source', 'select', 'sourceKey'),
+  inMemoryListField('description', 'text'),
+  inMemoryListField('updatedAt', 'date', 'template.updatedAt'),
+  inMemoryListField('createdAt', 'date', 'template.createdAt'),
+]
+const TEMPLATE_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  displayName: 'Display name',
+  kind: 'Kind',
+  source: 'Source',
+  description: 'Description',
+  updatedAt: 'Updated',
+  createdAt: 'Created',
+}
+const TEMPLATE_FILTER_OPTIONS = {
+  kind: KIND_ORDER.map((kind) => ({
+    value: kind,
+    label: kind.charAt(0).toUpperCase() + kind.slice(1),
+  })),
+  source: (['marketplace', 'starter', 'saved'] as const).map((key) => ({
+    value: key,
+    label: sourceChip(key === 'saved' ? undefined : { type: key }).label,
+  })),
+}
+const TEMPLATE_SEARCH_FIELDS = ['displayName', 'description', 'template.$id'] as const
 
 /**
  * Templates library (AGL-667).
@@ -269,6 +312,8 @@ export function HostTemplatesCard({
       pages: any[]
       displayName: string
       description?: string
+      kindKey: string
+      sourceKey: TemplateSourceKey
     }> = []
     const live = (templateDocs ?? []).filter((entry: any) => !entry.deletedAt)
     // Kind order first, then name.
@@ -299,6 +344,8 @@ export function HostTemplatesCard({
           displayName:
             template.source?.starterName ?? template.displayName ?? starterId,
           description: template.source?.starterDescription,
+          kindKey: (pages[0] ?? template).kind ?? 'page',
+          sourceKey: templateSourceKey((pages[0] ?? template).source),
         })
         continue
       }
@@ -308,6 +355,8 @@ export function HostTemplatesCard({
         pages: [template],
         displayName: template.displayName ?? template.$id,
         description: template.description,
+        kindKey: template.kind ?? 'page',
+        sourceKey: templateSourceKey(template.source),
       })
     }
     return out
@@ -652,6 +701,14 @@ export function HostTemplatesCard({
    * version. The chip's own copy carries that caveat so the count cannot be
    * read as "already in the one you are about to open".
    */
+  const templateFilter = useListRowsFilter({
+    rows,
+    fields: TEMPLATE_FILTER_FIELDS,
+    options: TEMPLATE_FILTER_OPTIONS,
+    headers: TEMPLATE_FILTER_HEADERS,
+    search: TEMPLATE_SEARCH_FIELDS,
+  })
+
   const { peopleIn } = usePresenceSummary(hostId)
 
   const columns: GridColDef[] = [
@@ -904,22 +961,32 @@ export function HostTemplatesCard({
           through `onQuota` so the page can render it without counting the
           documents a second time — two counts of the same thing is how a
           readout and the gate it belongs to come to disagree. */}
+      <ListFilterChips {...templateFilter.chipsProps} />
       <ListTable
+        aria-label="Templates"
         rowHeight={TABLE_ROW_HEIGHT}
         // A template ROW is a page GROUP, not a document — a five-page bundle
         // is one row keyed by its group, so this list keeps its own row id.
         getRowId={(row) => row.key}
-        columns={columns}
-        noRowsLabel="No templates yet"
-        noRowsDescription="A template is a saved starting point for a screen or layout. Create one, save one from a screen you have already built, or install one from the marketplace."
-        noRowsAction={
-          onCreate ? (
-            <Button variant="contained" onClick={onCreate}>
-              {'Create your first template'}
-            </Button>
-          ) : null
-        }
-        rows={rows}
+        columns={templateFilter.filterColumns(columns)}
+        // A filtered-to-nothing library says so; the empty state and its way
+        // out are for a site that has no templates at all.
+        {...(templateFilter.filtering
+          ? { noRowsLabel: 'No templates match these filters' }
+          : {
+              noRowsLabel: 'No templates yet',
+              noRowsDescription:
+                'A template is a saved starting point for a screen or layout. Create one, save one from a screen you have already built, or install one from the marketplace.',
+              noRowsAction: onCreate ? (
+                <Button variant="contained" onClick={onCreate}>
+                  {'Create your first template'}
+                </Button>
+              ) : null,
+            })}
+        rows={templateFilter.rows}
+        // The panel and the search are the grid's; the card answers them
+        // over every row it read (AGL-3317).
+        {...templateFilter.gridProps}
         onOpen={(_id, row) =>
           router.push(
             buildRoute(Route.TEMPLATE_DETAILS, {

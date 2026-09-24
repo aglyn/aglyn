@@ -23,6 +23,9 @@ import {
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
 import { type GridColDef } from '@mui/x-data-grid'
 import {
   mdiBookmarkOutline,
@@ -72,7 +75,7 @@ import ArtifactDeleteConfirmDescription, {
 import { buildRoute, Route } from '../constants/route-links'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import { useHostSubdomain } from './host-id-provider'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DUPLICATE_MENU_LABEL,
   useDuplicateResource,
@@ -109,11 +112,58 @@ export function ComponentKindChip({
       size="small"
       variant="outlined"
       color={email ? 'secondary' : 'default'}
-      label={email ? 'Email' : 'Page'}
+      label={COMPONENT_KIND_LABELS[Aglyn.reusableComponentKindOf({ kind })]}
       sx={{ height: 20, fontSize: '0.6875rem' }}
     />
   )
 }
+
+/** How each kind reads, on its chip and in the Filters panel. */
+const COMPONENT_KIND_LABELS: Readonly<Record<Aglyn.ReusableComponentKind, string>> = {
+  site: 'Page',
+  email: 'Email',
+}
+
+/*
+ * What the components grid's Filters panel and quick search offer
+ * (AGL-3317). The list is a paged listener, so a filter matches over what
+ * its window has read, which the first filter widens (`usePagedRowsFilter`).
+ * "Used in" is matched on the kind the row is READ as (`kindKey`), because a
+ * component stored before the field existed carries none and is a page
+ * component all the same.
+ */
+const COMPONENT_FILTER_FIELDS = [
+  inMemoryListField('displayName', 'text'),
+  inMemoryListField('kind', 'select', 'kindKey'),
+  inMemoryListField('$id', 'text'),
+  inMemoryListField('description', 'text'),
+  inMemoryListField('updatedAt', 'date'),
+  inMemoryListField('createdAt', 'date'),
+]
+const COMPONENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  displayName: 'Display name',
+  kind: 'Used in',
+  $id: 'ID',
+  description: 'Description',
+  updatedAt: 'Updated',
+  createdAt: 'Created',
+}
+const COMPONENT_FILTER_OPTIONS = {
+  kind: Aglyn.REUSABLE_COMPONENT_KINDS.map((kind) => ({
+    value: kind,
+    label: COMPONENT_KIND_LABELS[kind],
+  })),
+}
+const COMPONENT_SEARCH_FIELDS = ['displayName', '$id', 'description'] as const
+
+/** A live component row, with the kind it is read as. */
+const componentRows = (window: readonly any[]) =>
+  window
+    .filter((definition: any) => !definition.deletedAt)
+    .map((definition: any) => ({
+      ...definition,
+      kindKey: Aglyn.reusableComponentKindOf(definition),
+    }))
 
 /** The count and cap a components readout renders (AGL-2501). */
 export interface ComponentQuotaReadout {
@@ -204,6 +254,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
      * drawer and in its marketplace listing.
      */
     fromCache: componentsFromCache,
+    data: componentData,
     rows: componentWindow,
     hasMore,
     page,
@@ -230,6 +281,25 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
    */
   const components = componentWindow.filter(
     (definition: any) => !definition.deletedAt,
+  )
+  const componentLive = useMemo(() => componentRows(componentData ?? []), [componentData])
+  const componentPage = useMemo(() => componentRows(componentWindow), [componentWindow])
+  const componentFilter = usePagedRowsFilter<any>(
+    {
+      data: componentLive,
+      rows: componentPage,
+      hasMore,
+      page,
+      setPage,
+      pageSize,
+      setPageSize,
+    },
+    {
+      fields: COMPONENT_FILTER_FIELDS,
+      options: COMPONENT_FILTER_OPTIONS,
+      headers: COMPONENT_FILTER_HEADERS,
+      search: COMPONENT_SEARCH_FIELDS,
+    },
   )
 
   /**
@@ -734,28 +804,41 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
   return (
     <CardDisplay>
       {duplicate.dialog}
+      <ListFilterChips {...componentFilter.chipsProps} />
+      {componentFilter.filtering && hasMore ? (
+        <Typography variant="caption" color="text.secondary">
+          {`Filtering the ${componentFilter.read} components read so far — the next page reads more.`}
+        </Typography>
+      ) : null}
       <ListTable
+        aria-label="Reusable components"
         rowHeight={TABLE_ROW_HEIGHT}
-        columns={columns}
-        noRowsLabel="No reusable components yet"
-        noRowsDescription="A reusable component is a block you build once and drop onto any screen — a hero, a pricing table, a footer. Create one, or save one from the besigner."
-        noRowsAction={
-          onCreate || onBrowseTemplates ? (
-            <Stack direction="row" spacing={1}>
-              {onCreate ? (
-                <Button variant="contained" onClick={onCreate}>
-                  {'Create your first component'}
-                </Button>
-              ) : null}
-              {onBrowseTemplates ? (
-                <Button variant="outlined" onClick={onBrowseTemplates}>
-                  {'Browse templates'}
-                </Button>
-              ) : null}
-            </Stack>
-          ) : null
-        }
-        rows={components}
+        columns={componentFilter.filterColumns(columns)}
+        // A filtered-to-nothing list says so; the empty state and its way
+        // out are for a site that has no components at all.
+        {...(componentFilter.filtering
+          ? { noRowsLabel: 'No components match these filters' }
+          : {
+              noRowsLabel: 'No reusable components yet',
+              noRowsDescription:
+                'A reusable component is a block you build once and drop onto any screen — a hero, a pricing table, a footer. Create one, or save one from the besigner.',
+              noRowsAction:
+                onCreate || onBrowseTemplates ? (
+                  <Stack direction="row" spacing={1}>
+                    {onCreate ? (
+                      <Button variant="contained" onClick={onCreate}>
+                        {'Create your first component'}
+                      </Button>
+                    ) : null}
+                    {onBrowseTemplates ? (
+                      <Button variant="outlined" onClick={onBrowseTemplates}>
+                        {'Browse templates'}
+                      </Button>
+                    ) : null}
+                  </Stack>
+                ) : null,
+            })}
+        rows={componentFilter.rows}
         // The whole row opens the detail page (AGL-2501); the action cluster
         // stops propagation so a menu click never navigates underneath it.
         onOpen={(id) =>
@@ -775,15 +858,11 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
         loading={componentsStatus === 'loading'}
         // Paged by the footer below, so the grid must not also slice.
         hideFooter
+        // The panel and the search are the grid's; the card answers them
+        // over what its window read (AGL-3317).
+        {...componentFilter.gridProps}
       />
-      <ListPagination
-        page={page}
-        pageSize={pageSize}
-        rowCount={components.length}
-        hasMore={hasMore}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
-      />
+      <ListPagination {...componentFilter.pagination} />
       <Dialog
         open={Boolean(editor)}
         onClose={() => setEditor(null)}

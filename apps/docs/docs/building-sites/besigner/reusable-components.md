@@ -408,6 +408,12 @@ canvas badge, and in the element drawer under **Your components**. A page assemb
 promoted sections becomes readable at a glance. Components without an icon keep the
 generic package glyph.
 
+**Filters** in the Components table's toolbar narrows the list by name, **Used in**
+(page or email), ID, description, or date, and **Search** matches any word of the name,
+ID, or description. Each filter in force shows as a chip above the table. The list pages
+as you go, so a filter looks through the components read so far and reads further as you
+page on.
+
 ## Duplicate
 
 To start a new component from an existing one, choose **Duplicate…** in its

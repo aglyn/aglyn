@@ -49,7 +49,7 @@
  * and it would leave the staff surface exactly as wrong as it was.
  */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ReactNode } from 'react'
@@ -345,6 +345,13 @@ describe('the customer billing card (AGL-2486)', () => {
     })
     expect(screen.queryByText(NEVER_BILLED)).toBeNull()
     expect(screen.queryByText(NOTICE)).toBeNull()
+    // The history is the shared grid, filtered through its own toolbar
+    // (AGL-3317).
+    expect(screen.getByRole('grid', { name: 'Invoices' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'AGL-0002' } })
+    await waitFor(() => expect(screen.queryByText('AGL-0001')).toBeNull())
+    expect(screen.getByText('No invoices match these filters')).toBeTruthy()
   })
 })
 

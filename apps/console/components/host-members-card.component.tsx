@@ -528,6 +528,13 @@ export function HostMembersCard(props: HostMembersCardProps) {
             </Typography>
           </>
         ) : null}
+        {/*
+          No Filters panel or search here. The window is ordered by email and
+          grows a page at a time, so a role or status filter is an equality
+          beneath that order, which needs a `role, email` index this
+          collection does not have; matching the rows read so far would
+          answer for one page and call it the site's collaborators.
+        */}
         <ScrollTable size="small">
           <TableHead>
             <TableRow>

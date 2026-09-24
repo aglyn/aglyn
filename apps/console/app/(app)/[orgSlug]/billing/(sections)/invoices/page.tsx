@@ -17,7 +17,10 @@
 'use client'
 
 import { CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListTable from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Alert,
@@ -26,13 +29,10 @@ import {
   Chip,
   Link,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import BillingOpenInvoicesCardComponent from '../../../../../../components/billing/billing-open-invoices-card.component'
@@ -40,6 +40,125 @@ import { docsHelp } from '../../../../../../constants/docs-links'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
 import { stripeOtherModeInvoiceNotice } from '../../../../../../utils/stripe-mode-notice'
+
+/** One invoice as `/api/billing/invoices` serializes it. */
+interface InvoiceRow {
+  id: string
+  number: string | null
+  status: string | null
+  amountDueCents: number
+  totalCents: number
+  currency: string
+  created: string | null
+  paidAt: string | null
+  periodEnd: string | null
+  hostedInvoiceUrl: string | null
+  invoicePdf: string | null
+  receiptUrl: string | null
+}
+
+/*
+ * What the history grid's Filters panel and quick search offer (AGL-3317).
+ * The list holds every invoice it has loaded, so both are answered over
+ * those, and the caption under the chips says so while older ones remain.
+ * Status is picked from the statuses the loaded invoices carry: the route
+ * passes Stripe's word through, and a status no loaded invoice has would
+ * match nothing here.
+ */
+const INVOICE_FILTER_FIELDS = [
+  inMemoryListField('number', 'text'),
+  inMemoryListField('created', 'date'),
+  inMemoryListField('status', 'select'),
+]
+const INVOICE_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  number: 'Invoice',
+  created: 'Date',
+  status: 'Status',
+}
+const INVOICE_SEARCH_FIELDS = ['number', 'id'] as const
+
+const INVOICE_COLUMNS: GridColDef<InvoiceRow>[] = [
+  {
+    field: 'number',
+    headerName: 'Invoice',
+    flex: 1,
+    minWidth: 150,
+    valueGetter: (_value, invoice) => invoice.number ?? invoice.id,
+  },
+  {
+    field: 'created',
+    headerName: 'Date',
+    type: 'date',
+    width: 130,
+    valueGetter: (_value, invoice) =>
+      invoice.created ? new Date(invoice.created) : null,
+    valueFormatter: (value: Date | null) => value?.toLocaleDateString() ?? '—',
+  },
+  {
+    field: 'status',
+    headerName: 'Status',
+    width: 140,
+    renderCell: ({ row: invoice }) => (
+      <Chip
+        label={invoice.status ?? '—'}
+        size="small"
+        variant="outlined"
+        color={
+          invoice.status === 'paid'
+            ? 'success'
+            : invoice.status === 'open'
+              ? 'warning'
+              : 'default'
+        }
+      />
+    ),
+  },
+  {
+    field: 'totalCents',
+    headerName: 'Amount',
+    width: 150,
+    valueFormatter: (_value, invoice) =>
+      `$${(invoice.totalCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`,
+  },
+  {
+    field: 'documents',
+    headerName: 'Documents',
+    flex: 1,
+    minWidth: 180,
+    align: 'right',
+    headerAlign: 'right',
+    sortable: false,
+    renderCell: ({ row: invoice }) => (
+      <Stack direction="row" spacing={1.5} sx={{ justifyContent: 'flex-end' }}>
+        {invoice.hostedInvoiceUrl ? (
+          <Link
+            href={invoice.hostedInvoiceUrl}
+            target="_blank"
+            rel="noreferrer"
+            variant="body2"
+          >
+            {'View'}
+          </Link>
+        ) : null}
+        {invoice.invoicePdf ? (
+          <Link href={invoice.invoicePdf} variant="body2">
+            {'PDF'}
+          </Link>
+        ) : null}
+        {invoice.receiptUrl ? (
+          <Link
+            href={invoice.receiptUrl}
+            target="_blank"
+            rel="noreferrer"
+            variant="body2"
+          >
+            {'Receipt'}
+          </Link>
+        ) : null}
+      </Stack>
+    ),
+  },
+]
 
 /**
  * What is owed, and what has already been paid.
@@ -57,6 +176,8 @@ import { stripeOtherModeInvoiceNotice } from '../../../../../../utils/stripe-mod
  * Stripe and answers `alreadyPaid` if it has been settled, whichever copy the
  * button was pressed on.
  */
+const NO_INVOICES: InvoiceRow[] = []
+
 const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { orgId } = useCurrentOrg()
@@ -83,20 +204,7 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
 
   // Invoice history (AGL-248, AGL-534), billing.view-gated server-side.
   // Cursor-paginated; "Load more" appends older invoices.
-  const [invoices, setInvoices] = useState<Array<{
-    id: string
-    number: string | null
-    status: string | null
-    amountDueCents: number
-    totalCents: number
-    currency: string
-    created: string | null
-    paidAt: string | null
-    periodEnd: string | null
-    hostedInvoiceUrl: string | null
-    invoicePdf: string | null
-    receiptUrl: string | null
-  }> | null>(null)
+  const [invoices, setInvoices] = useState<InvoiceRow[] | null>(null)
   const [invoicesHasMore, setInvoicesHasMore] = useState(false)
   const [invoiceCursor, setInvoiceCursor] = useState<string | null>(null)
   const [invoicesLoading, setInvoicesLoading] = useState(false)
@@ -158,6 +266,26 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
     void fetchInvoices()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgId, user, permissionsLoaded])
+
+  const invoiceStatusOptions = useMemo(
+    () => ({
+      status: [
+        ...new Set(
+          (invoices ?? [])
+            .map((invoice) => invoice.status)
+            .filter((status): status is string => Boolean(status)),
+        ),
+      ].map((status) => ({ value: status, label: status })),
+    }),
+    [invoices],
+  )
+  const invoiceFilter = useListRowsFilter({
+    rows: invoices ?? NO_INVOICES,
+    fields: INVOICE_FILTER_FIELDS,
+    options: invoiceStatusOptions,
+    headers: INVOICE_FILTER_HEADERS,
+    search: INVOICE_SEARCH_FIELDS,
+  })
 
   /*
    * Masonry, and the two sizes are the point: `Outstanding` is usually one
@@ -228,86 +356,27 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
                             )
                           ) : (
                             <>
-                              <ScrollTable size="small">
-                                <TableHead>
-                                  <TableRow>
-                                    <TableCell>{'Invoice'}</TableCell>
-                                    <TableCell>{'Date'}</TableCell>
-                                    <TableCell>{'Status'}</TableCell>
-                                    <TableCell>{'Amount'}</TableCell>
-                                    <TableCell align="right">{'Documents'}</TableCell>
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {invoices.map((invoice) => (
-                                    <TableRow key={invoice.id}>
-                                      <TableCell>
-                                        {invoice.number ?? invoice.id}
-                                      </TableCell>
-                                      <TableCell>
-                                        {invoice.created
-                                          ? new Date(
-                                              invoice.created,
-                                            ).toLocaleDateString()
-                                          : '—'}
-                                      </TableCell>
-                                      <TableCell>
-                                        <Chip
-                                          label={invoice.status ?? '—'}
-                                          size="small"
-                                          variant="outlined"
-                                          color={
-                                            invoice.status === 'paid'
-                                              ? 'success'
-                                              : invoice.status === 'open'
-                                                ? 'warning'
-                                                : 'default'
-                                          }
-                                        />
-                                      </TableCell>
-                                      <TableCell>
-                                        {`$${(invoice.totalCents / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`}
-                                      </TableCell>
-                                      <TableCell align="right">
-                                        <Stack
-                                          direction="row"
-                                          spacing={1.5}
-                                          sx={{ justifyContent: 'flex-end' }}
-                                        >
-                                          {invoice.hostedInvoiceUrl ? (
-                                            <Link
-                                              href={invoice.hostedInvoiceUrl}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              variant="body2"
-                                            >
-                                              {'View'}
-                                            </Link>
-                                          ) : null}
-                                          {invoice.invoicePdf ? (
-                                            <Link
-                                              href={invoice.invoicePdf}
-                                              variant="body2"
-                                            >
-                                              {'PDF'}
-                                            </Link>
-                                          ) : null}
-                                          {invoice.receiptUrl ? (
-                                            <Link
-                                              href={invoice.receiptUrl}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              variant="body2"
-                                            >
-                                              {'Receipt'}
-                                            </Link>
-                                          ) : null}
-                                        </Stack>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </ScrollTable>
+                              <ListFilterChips {...invoiceFilter.chipsProps} />
+                              {invoiceFilter.filtering && invoicesHasMore ? (
+                                <Typography variant="caption" color="text.secondary">
+                                  {`Filtering the ${invoices.length} invoices loaded so far — loading older invoices reaches more.`}
+                                </Typography>
+                              ) : null}
+                              <ListTable
+                                aria-label="Invoices"
+                                rows={invoiceFilter.rows}
+                                columns={invoiceFilter.filterColumns(INVOICE_COLUMNS as GridColDef[])}
+                                getRowId={(invoice: InvoiceRow) => invoice.id}
+                                // Every loaded invoice is on screen, and the
+                                // button below loads older ones: the history
+                                // grows rather than pages.
+                                hideFooter
+                                // The panel and the search are the grid's; the
+                                // card answers them over what it loaded
+                                // (AGL-3317).
+                                {...invoiceFilter.gridProps}
+                                noRowsLabel="No invoices match these filters"
+                              />
                               {invoicesHasMore ? (
                                 <Box sx={{ textAlign: 'center', mt: 1 }}>
                                   <Button

@@ -55,7 +55,8 @@ const FOOTERS: Array<[string, string]> = [
   ],
   // The bespoke family.
   ['screens tree', 'apps/console/components/screens-hierarchy-table.component.tsx'],
-  ['team list', 'apps/console/components/org-members-card.component.tsx'],
+  // The team list joined the grid family (AGL-3317): the shared list table
+  // above draws its footer.
   // The shared footer itself — every cursor and window feed renders through
   // it, so it is the one that must not re-decide the options or the label.
   [
@@ -268,12 +269,12 @@ describe('the console has one table footer (AGL-2501)', () => {
   })
 
   it('every list starts on the same page size', () => {
-    // The three lists that own their own page-size state, and the one that
-    // sets it through `initialState`. A default that differs per list is the
+    // The lists that own their own page-size state, and the one that sets it
+    // through `initialState`. The team list left for the shared grid
+    // (AGL-3317), whose default is asserted with the grid family. A default that differs per list is the
     // most visible half of the inconsistency — it is the number on screen.
     for (const path of [
       'apps/console/components/screens-hierarchy-table.component.tsx',
-      'apps/console/components/org-members-card.component.tsx',
       // The content entries window, which the provider above the three content
       // routes owns rather than the page that draws its footer. Asserted where
       // the state lives, for the same reason the layouts page is not named
@@ -2036,6 +2037,15 @@ const GRID_FILTER_LISTS: readonly string[] = [
   'apps/console/components/pending-erasures-card.component.tsx',
   'apps/console/components/staff-tax-findings-card.component.tsx',
   'apps/console/components/staff-user-email-history-card.component.tsx',
+  // Site and team lists
+  'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
+  'apps/console/components/host-components-card.component.tsx',
+  'apps/console/components/templates/host-templates-card.component.tsx',
+  'apps/console/components/host-activity-table.component.tsx',
+  'apps/console/components/site-accounts-card.component.tsx',
+  'apps/console/components/content/collection-entries-page.component.tsx',
+  'apps/console/components/org-members-card.component.tsx',
+  'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
 ]
 
 describe('converted lists filter through the grid, by the shared path (AGL-3317)', () => {

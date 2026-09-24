@@ -20,6 +20,11 @@ update every place a thing appears, you want a
 [reusable component](../besigner/reusable-components.md). If you want one frame around
 many pages, you want a [layout](../screens-and-layouts/layouts.md).
 
+**Filters** in the library's toolbar narrows it by **Kind** (page, component, or
+layout), **Source** (marketplace, starter, or saved here), name, description, or date,
+and **Search** matches any word of the name or description. Filters look at every
+template the library read, and each one in force shows as a chip above the table.
+
 ## The three kinds
 
 | Kind | What it holds | What you get from it |

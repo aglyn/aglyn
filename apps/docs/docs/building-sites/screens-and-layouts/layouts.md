@@ -24,6 +24,15 @@ Because the chrome lives in one document, changing it changes every screen bound
 once. That is the point, and it is also the thing to keep in mind before you publish: see
 [Versions & scheduled publishing](versions-and-publishing.md).
 
+## Find a layout {#find-a-layout}
+
+The site's **Layouts** page lists every layout. **Filters** in the table's toolbar
+narrows it by display name, ID, description, or the date it was created or last
+updated, and **Search** matches any word of the name, ID, or description. Each filter in
+force shows as a chip above the table; remove a chip to drop it. The list pages as you
+go, so a filter looks through the layouts read so far and reads further as you page on;
+the table says so while more remain.
+
 ## Nested layouts
 
 A layout can render inside **another layout**. Set **Renders inside** on a layout's detail

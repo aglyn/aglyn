@@ -22,8 +22,9 @@
  * card cannot. What the grid has to keep from the table it replaced: a
  * target is a link into the console, the actor is the address the entry
  * recorded, and the pager under the grid still turns a cursor feed — the
- * grid holds one page, so it offers no search or filter that would narrow
- * that page and call it the whole log.
+ * grid holds one page, so its Filters panel reaches the feed's query
+ * (AGL-3317) and it offers no search that would narrow that page and call it
+ * the whole log.
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -62,18 +63,27 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 /** The rows the log holds, newest first, and the document each read resumed after. */
 let mockEntries: Array<Record<string, unknown>> = []
 const mockCursors: unknown[] = []
+/** The `where` clauses each read carried. */
+const mockWheres: unknown[][] = []
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
   collection: (...path: unknown[]) => ({ path }),
   orderBy: (field: string, direction: string) => ({ kind: 'orderBy', field, direction }),
   limit: (count: number) => ({ kind: 'limit', count }),
   startAfter: (cursor: unknown) => ({ kind: 'startAfter', cursor }),
+  // What the served-filter translator builds on; unused unless a clause is set.
+  where: (field: string, op: string, value: unknown) => ({ kind: 'where', field, op, value }),
+  documentId: () => '__name__',
+  startAt: (value: unknown) => ({ kind: 'startAt', value }),
+  endAt: (value: unknown) => ({ kind: 'endAt', value }),
+  Timestamp: { fromDate: (date: Date) => ({ toDate: () => date }) },
   query: (_ref: unknown, ...constraints: Array<Record<string, unknown>>) => constraints,
   getDocs: async (constraints: Array<Record<string, unknown>>) => {
     const after = (constraints.find((entry) => entry.kind === 'startAfter')?.cursor ?? null) as {
       id: string
     } | null
     mockCursors.push(after?.id)
+    mockWheres.push(constraints.filter((entry) => entry.kind === 'where'))
     const count = Number(constraints.find((entry) => entry.kind === 'limit')?.count)
     const start = after ? mockEntries.findIndex((entry) => entry['$id'] === after.id) + 1 : 0
     return {
@@ -104,6 +114,7 @@ const entry = (index: number): Record<string, unknown> => ({
 
 beforeEach(() => {
   mockCursors.length = 0
+  mockWheres.length = 0
   mockEntries = Array.from({ length: 12 }, (_, index) => entry(index + 1))
 })
 
@@ -124,13 +135,26 @@ describe('HostActivityTable (AGL-3045)', () => {
     expect(within(row).getByText('editor1@example.com')).toBeTruthy()
   })
 
-  it('offers no search or filter over the one page it holds', async () => {
+  it('filters through the grid’s own panel, and offers no search over the one page it holds (AGL-3317)', async () => {
     render(<HostActivityTable hostId="host-1" />)
     await screen.findByText('Saved the screen 1')
     // Positive control: the grid's toolbar is there, with what it keeps.
     expect(screen.getByRole('button', { name: 'Columns' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
     expect(screen.queryByRole('searchbox')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Filters' })).toBeNull()
+  })
+
+  it('puts an action filter onto the feed’s query, not onto the page on screen (AGL-3317)', async () => {
+    render(<HostActivityTable hostId="host-1" />)
+    await screen.findByText('Saved the screen 1')
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+    const value = await screen.findByRole('textbox', { name: 'Value' })
+    fireEvent.change(value, { target: { value: 'Saved the screen 7' } })
+    await waitFor(() =>
+      expect(mockWheres.at(-1)).toEqual([
+        { kind: 'where', field: 'action', op: '==', value: 'Saved the screen 7' },
+      ]),
+    )
   })
 
   it('turns the cursor feed with the pager under the grid', async () => {

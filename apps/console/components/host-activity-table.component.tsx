@@ -19,6 +19,11 @@
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { listFilterConstraints } from '@aglyn/tenant-feature-instance/hooks/list-filter-constraints'
 import type { GridColDef } from '@mui/x-data-grid'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import {
@@ -41,7 +46,34 @@ import {
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
+import { ACTIVITY_LIST_FILTER_FIELDS } from '../utils/list-filters'
 import { formatStaffTimestamp } from '../utils/staff-timestamps'
+
+/*
+ * What the log's Filters panel offers (AGL-3317): only what the feed's own
+ * query can serve, over the whole log. The feed is ordered `createdAt` DESC
+ * and its cursor is a document in that order, so a clause is added beneath
+ * the pinned sort and never reorders it — an action equality (or `in`),
+ * which the `action ASC, createdAt DESC` index serves, and a range over the
+ * sort field itself.
+ *
+ * `is` (a whole day) is left off the date: it is served as a
+ * `startAt`/`endAt` pair, and this feed already spends its start point on
+ * the page cursor. `after` and `before` reach the same rows.
+ *
+ * No quick search: a word search would need a token field no entry carries,
+ * and matching the page on screen would call one page the whole log.
+ */
+const HOST_ACTIVITY_FILTER_FIELDS: readonly ListFilterField[] =
+  ACTIVITY_LIST_FILTER_FIELDS.map((field) =>
+    field.column === 'createdAt'
+      ? { ...field, operators: ['after', 'onOrAfter', 'before', 'onOrBefore'] }
+      : field,
+  )
+const HOST_ACTIVITY_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  action: 'Action',
+  createdAt: 'When',
+}
 
 export interface HostActivityTableProps {
   hostId: string
@@ -78,6 +110,17 @@ export function HostActivityTable(props: HostActivityTableProps) {
    * "Found nothing" and "could not look" are now separate states.
    */
   const [unreadable, setUnreadable] = useState(false)
+  const gridFilter = useListGridFilter()
+  const filterConstraints = useMemo(
+    () =>
+      gridFilter.clauses.flatMap(
+        (clause) =>
+          listFilterConstraints(HOST_ACTIVITY_FILTER_FIELDS, clause, {
+            fixedOrderBy: 'createdAt',
+          }) ?? [],
+      ),
+    [gridFilter.clauses],
+  )
 
   const loadPage = useCallback(
     async (targetPage: number, cursor?: QueryDocumentSnapshot) => {
@@ -88,6 +131,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
         const snapshot = await getDocs(
           query(
             base,
+            ...filterConstraints,
             orderBy('createdAt', 'desc'),
             ...(cursor ? [startAfter(cursor)] : []),
             limit(pageSize + 1),
@@ -113,7 +157,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
         setLoading(false)
       }
     },
-    [firestore, hostId, pageSize],
+    [firestore, hostId, pageSize, filterConstraints],
   )
 
   useEffect(() => {
@@ -198,6 +242,17 @@ export function HostActivityTable(props: HostActivityTableProps) {
     ],
     [orgSlug, host],
   )
+  const filterColumns = useMemo(
+    () =>
+      listFilterGridColumns(
+        activityColumns,
+        HOST_ACTIVITY_FILTER_FIELDS,
+        {},
+        HOST_ACTIVITY_FILTER_HEADERS,
+      ),
+    [activityColumns],
+  )
+  const filtered = gridFilter.clauses.length > 0
 
   return (
     <CardDisplay
@@ -213,6 +268,12 @@ export function HostActivityTable(props: HostActivityTableProps) {
       contentBordered="all"
     >
       <Stack spacing={1.5}>
+        <ListFilterChips
+          fields={HOST_ACTIVITY_FILTER_FIELDS}
+          headers={HOST_ACTIVITY_FILTER_HEADERS}
+          clauses={gridFilter.clauses}
+          onChange={gridFilter.setClauses}
+        />
         {unreadable && !loading ? (
           <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
             <Alert severity="warning" sx={{ width: '100%' }}>
@@ -224,14 +285,15 @@ export function HostActivityTable(props: HostActivityTableProps) {
               {'Try again'}
             </Button>
           </Stack>
-        ) : rows.length === 0 && !loading ? (
+        ) : rows.length === 0 && !loading && !filtered ? (
           <Typography variant="body2" color="text.secondary">
             {'No activity yet — changes made in the console appear here.'}
           </Typography>
         ) : (
           <ListTable
+            aria-label="Activity"
             rows={rows}
-            columns={activityColumns}
+            columns={filterColumns}
             /*
              * NO `onOpen`. An audit row is not a record you open: what is worth
              * reaching is its target, which is already a link in the row.
@@ -239,13 +301,16 @@ export function HostActivityTable(props: HostActivityTableProps) {
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
             /*
-             * The grid holds ONE page of a cursor feed, so its own filter panel
-             * and search box would narrow that page and call it the answer —
-             * "nothing happened" about every page but this one. They are off
-             * rather than left to say that.
+             * The grid holds ONE page of a cursor feed, so it must not filter
+             * that page and call it the answer. The panel's clauses go onto
+             * the feed's query instead (see the fields above), and the search
+             * box stays hidden because nothing can serve it.
              */
-            disableColumnFilter
-            quickFilter={false}
+            filterMode="server"
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            loading={loading}
+            noRowsLabel="No activity matches these filters"
           />
         )}
         <ListPagination

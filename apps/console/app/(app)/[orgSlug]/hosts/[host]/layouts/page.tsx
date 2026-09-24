@@ -48,6 +48,9 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
 import { checkOrgQuota } from '../../../../../../constants/entitlements'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import ListTable, {
@@ -59,7 +62,7 @@ import ArtifactDeleteConfirmDescription, {
 } from '../../../../../../components/artifacts/artifact-delete-confirm.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button, Stack } from '@mui/material'
+import { Button, Stack, Typography } from '@mui/material'
 import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
 import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
@@ -103,6 +106,27 @@ const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   },
 )
 CellItemLinkComponent.displayName = 'CellItemLinkComponent'
+
+/*
+ * What the layouts grid's Filters panel and quick search offer (AGL-3317).
+ * The list is a paged listener, so a filter matches over what its window has
+ * read, which the first filter widens (`usePagedRowsFilter`).
+ */
+const LAYOUT_FILTER_FIELDS = [
+  inMemoryListField('displayName', 'text'),
+  inMemoryListField('$id', 'text'),
+  inMemoryListField('description', 'text'),
+  inMemoryListField('updatedAt', 'date'),
+  inMemoryListField('createdAt', 'date'),
+]
+const LAYOUT_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  displayName: 'Display name',
+  $id: 'ID',
+  description: 'Description',
+  updatedAt: 'Updated',
+  createdAt: 'Created',
+}
+const LAYOUT_SEARCH_FIELDS = ['displayName', '$id', 'description'] as const
 
 function Layouts(props) {
   const params = useParams<{ hostId: string }>()
@@ -195,6 +219,7 @@ function Layouts(props) {
    */
   const {
     status,
+    data: layoutData,
     rows: layoutWindow,
     hasMore,
     page,
@@ -223,6 +248,22 @@ function Layouts(props) {
    * than its size; `hasMore` and the walk are unaffected.
    */
   const layouts = layoutWindow.filter((layout: any) => !layout.deletedAt)
+  const layoutFilter = usePagedRowsFilter<any>(
+    {
+      data: (layoutData ?? []).filter((layout: any) => !layout.deletedAt),
+      rows: layouts,
+      hasMore,
+      page,
+      setPage,
+      pageSize,
+      setPageSize,
+    },
+    {
+      fields: LAYOUT_FILTER_FIELDS,
+      headers: LAYOUT_FILTER_HEADERS,
+      search: LAYOUT_SEARCH_FIELDS,
+    },
+  )
   /**
    * `sharedLayoutsPerHost` is enforced by `/api/hosts/resources` and had no
    * standing surface here — an author learned the cap by being refused a
@@ -663,31 +704,44 @@ function Layouts(props) {
             blurb="Layout templates add a ready-made layout you can restyle in the besigner. Existing layouts are never touched."
           />
           <CardDisplay>
+            <ListFilterChips {...layoutFilter.chipsProps} />
+            {layoutFilter.filtering && hasMore ? (
+              <Typography variant="caption" color="text.secondary">
+                {`Filtering the ${layoutFilter.read} layouts read so far — the next page reads more.`}
+              </Typography>
+            ) : null}
             <ListTable
+              aria-label="Layouts"
               rowHeight={TABLE_ROW_HEIGHT}
-              columns={columns}
-              noRowsLabel="No layouts yet"
+              columns={layoutFilter.filterColumns(columns)}
               /*
                 THE WAY OUT, not just the picture (AGL-1152). This list drew
                 the illustration and offered nothing to do about it, while the
                 screens list offered buttons and drew no illustration. Same
-                omission from two sides.
+                omission from two sides. A filtered-to-nothing list says so
+                instead: the layouts exist, the filter found none of them.
               */
-              noRowsDescription="Layouts are the chrome your screens render inside — headers, footers, sidebars. Create one, or start from a template."
-              noRowsAction={
-                <Stack direction="row" spacing={1}>
-                  <Button variant="contained" onClick={handleFormOpen}>
-                    {'Create your first layout'}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => setTemplatesOpen(true)}
-                  >
-                    {'Browse templates'}
-                  </Button>
-                </Stack>
-              }
-              rows={layouts}
+              {...(layoutFilter.filtering
+                ? { noRowsLabel: 'No layouts match these filters' }
+                : {
+                    noRowsLabel: 'No layouts yet',
+                    noRowsDescription:
+                      'Layouts are the chrome your screens render inside — headers, footers, sidebars. Create one, or start from a template.',
+                    noRowsAction: (
+                      <Stack direction="row" spacing={1}>
+                        <Button variant="contained" onClick={handleFormOpen}>
+                          {'Create your first layout'}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          onClick={() => setTemplatesOpen(true)}
+                        >
+                          {'Browse templates'}
+                        </Button>
+                      </Stack>
+                    ),
+                  })}
+              rows={layoutFilter.rows}
               onOpen={(id) =>
                 router.push(
                   buildRoute(Route.LAYOUT_DETAILS, {
@@ -700,15 +754,11 @@ function Layouts(props) {
               loading={status === 'loading'}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
+              // The panel and the search are the grid's; the page answers
+              // them over what its window read (AGL-3317).
+              {...layoutFilter.gridProps}
             />
-            <ListPagination
-              page={page}
-              pageSize={pageSize}
-              rowCount={layouts.length}
-              hasMore={hasMore}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-            />
+            <ListPagination {...layoutFilter.pagination} />
           </CardDisplay>
         </Container>
       </DashboardLayout>
