@@ -308,6 +308,19 @@ describe('the timeline: everything that happened to them', () => {
   })
 })
 
+describe('the timeline without its history rows', () => {
+  it('still shows everything the enrollment holds, and says only the click list is missing', () => {
+    mockHistory = { status: 'refused', data: [] }
+    renderDetail()
+    expect(screen.getByText(/Their clicks can’t be listed one by one here/)).toBeTruthy()
+    expect(activity().getAllByRole('listitem').map((row) => row.getAttribute('data-kind'))).toEqual([
+      'earlier-clicks',
+      'sent',
+      'enrolled',
+    ])
+  })
+})
+
 describe('Details: everything else, closed until asked for', () => {
   it('opens on the personal line, the campaigns, the curated copy and the id', () => {
     mockEnrollment = {

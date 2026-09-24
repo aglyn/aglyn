@@ -763,7 +763,17 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
         <Stack spacing={1}>
           {history.status === 'loading' ? <OutreachLoading label="Loading their clicks…" /> : null}
           {history.status === 'error' || history.status === 'refused' ? (
-            <OutreachLoadProblem status={history.status} what="list of their clicks" />
+            <OutreachLoadProblem
+              status={history.status}
+              what="list of their clicks"
+              // Only the one-by-one list is missing: the totals, the sends and
+              // every stop above come from the enrollment, which was read.
+              message={
+                history.status === 'refused'
+                  ? 'Their clicks can’t be listed one by one here; the numbers above still count them.'
+                  : 'Their clicks couldn’t be listed one by one. Reload the page to try again.'
+              }
+            />
           ) : null}
           <List disablePadding aria-label="Activity">
             {timeline.map((entry, index) => (
