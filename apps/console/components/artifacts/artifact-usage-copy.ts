@@ -58,6 +58,12 @@ export interface ArtifactDependent {
     | 'workflow'
     | 'variable'
     | 'collection'
+    /**
+     * One of the site's transactional emails (AGL-3287). A deleted component
+     * leaves its placement sending nothing, which is the component sentence
+     * below exactly: an empty space where it was.
+     */
+    | 'emailTemplate'
   id: string
   name: string
   versionId?: string

@@ -38,6 +38,10 @@ import {
   decodeStoredNodes,
   type ReusableComponentProp,
 } from '@aglyn/aglyn/server'
+import {
+  getTenantEmail,
+  TENANT_EMAIL_COLLECTION,
+} from '@aglyn/shared-util-email/tenant-email-catalog'
 
 /** A screen/layout/component reduced to what a usage scan needs. */
 export interface UsageCandidate {
@@ -68,7 +72,13 @@ export interface UsageCandidate {
 
 /** One document that depends on the artifact a scan was asked about. */
 export interface UsageDependent {
-  type: 'screen' | 'layout' | 'component' | 'collection'
+  /**
+   * `emailTemplate` is one of the site's own transactional emails
+   * (`hosts/{h}/emailTemplates/{key}`), `id` its catalog key (AGL-3287). An
+   * email designed for a campaign is a `kind: 'email'` SCREEN and reports as
+   * `screen`.
+   */
+  type: 'screen' | 'layout' | 'component' | 'collection' | 'emailTemplate'
   id: string
   name: string
   via: Array<'id' | 'name'>
@@ -87,11 +97,19 @@ export interface UsageDependent {
   relation?: 'link' | 'child' | 'template'
 }
 
-/** The three corpora every closure below walks. */
+/** The three corpora every closure below walks, and a fourth for components. */
 export interface UsageSources {
   screens: UsageCandidate[]
   layouts: UsageCandidate[]
   components: UsageCandidate[]
+  /**
+   * The site's transactional email designs, each on its published version
+   * (AGL-3287). Read only where a scan asks "what places this component" —
+   * {@link scanComponentUsage} lists them — because an email is not a page:
+   * nothing is cached for it, so no closure that decides which pages to drop
+   * has any use for them, and none reads them.
+   */
+  emailTemplates?: UsageCandidate[]
 }
 
 /** `displayName`, falling back to a legacy `name`, then the raw id. */
@@ -106,12 +124,14 @@ export const isLiveUsageCandidate = (candidate: UsageCandidate): boolean =>
 /**
  * Everything that references a reusable component (AGL-703).
  *
- * Three places, because the renderer expands instances in three places:
- * published screen versions, published layout versions, and OTHER component
- * definitions — `composeReusableComponentNodes` grafts nested instances, so
- * a component used only inside another component is genuinely used. Omitting
- * that third scan would report "used nowhere" for it and invite a confident
- * deletion, which is worse than showing nothing at all.
+ * Every place the renderer expands an instance: published screen versions
+ * (email designs among them — a campaign email is a screen), published layout
+ * versions, OTHER component definitions — `composeReusableComponentNodes`
+ * grafts nested instances, so a component used only inside another component
+ * is genuinely used — and, when the caller read them, the site's transactional
+ * emails, which graft a placed header or footer at send time (AGL-3287).
+ * Omitting any of them would report "used nowhere" for something that renders
+ * and invite a confident deletion, which is worse than showing nothing at all.
  */
 export function scanComponentUsage(
   componentId: string,
@@ -141,6 +161,7 @@ export function scanComponentUsage(
   collect(sources.screens, 'screen')
   collect(sources.layouts, 'layout')
   collect(sources.components, 'component')
+  collect(sources.emailTemplates ?? [], 'emailTemplate')
   return dependents
 }
 
@@ -292,10 +313,17 @@ export function screenIdsUsingComponentDeep(
           )) {
             screenIds.add(screenId)
           }
-        } else if (!seenComponents.has(dependent.id)) {
+        } else if (
+          dependent.type === 'component' &&
+          !seenComponents.has(dependent.id)
+        ) {
           seenComponents.add(dependent.id)
           next.push(dependent.id)
         }
+        // A transactional email is not a page and nothing caches it, so it
+        // contributes no screen and is not followed (AGL-3287). Its id is a
+        // catalog key, and walking it as a component would read a key as a
+        // definition that does not exist.
       }
     }
     frontier = next
@@ -325,10 +353,21 @@ export interface UsageCandidateRead {
  * `limit` is a real bound, not a guess: it is fetched with one extra document
  * so exceeding it is DETECTED rather than assumed away. A caller that ignores
  * `truncated` is choosing to be wrong quietly.
+ *
+ * `emailTemplates` — the site's transactional email designs (AGL-3287) — has
+ * the screens' shape: a parent holding the published `versionId`, the tree on
+ * that version. The catalog is code and fixed, and a template document only
+ * exists once somebody pressed Design, so most sites have none and the read
+ * costs one empty query. Its documents carry no name, so each is labelled with
+ * the catalog's.
  */
 export async function readUsageCandidates(
   hostRef: FirebaseFirestore.DocumentReference,
-  collectionName: 'screens' | 'layouts' | 'components',
+  collectionName:
+    | 'screens'
+    | 'layouts'
+    | 'components'
+    | typeof TENANT_EMAIL_COLLECTION,
   options: { withNodes: boolean; limit: number },
 ): Promise<UsageCandidateRead> {
   const { withNodes, limit } = options
@@ -369,7 +408,10 @@ export async function readUsageCandidates(
             : null
       return {
         id: docSnapshot.id,
-        displayName: docSnapshot.get('displayName'),
+        displayName:
+          collectionName === TENANT_EMAIL_COLLECTION
+            ? (getTenantEmail(docSnapshot.id)?.name ?? docSnapshot.id)
+            : docSnapshot.get('displayName'),
         name: docSnapshot.get('name'),
         deletedAt: docSnapshot.get('deletedAt'),
         nodes,

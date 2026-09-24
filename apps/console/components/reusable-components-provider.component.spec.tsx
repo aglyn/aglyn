@@ -32,7 +32,15 @@ jest.mock('@aglyn/besigner-ui', () => ({
   ComponentPromotionContext: jest.requireActual(
     '../../../libs/besigner/feature/designer/src/lib/contexts/component-promotion-context',
   ).ComponentPromotionContext,
+  // The canvas's view (AGL-3287): what a promotion makes depends on it, and
+  // it lives on the besigner app this suite does not mount.
+  useAglynBesignerFlag: (flag: string) => [
+    flag === 'viewType' ? mockViewType : undefined,
+    () => undefined,
+  ],
 }))
+/** The view the canvas is showing; each suite sets it. */
+let mockViewType: unknown = undefined
 // `requireMock` is typed `unknown`, so the context comes back untyped and
 // `useContext(...)` on it yields `unknown` — reading `.onPromote` off that is
 // a compile error even though the real context is properly typed. The shape
@@ -394,5 +402,101 @@ describe('ReusableComponentsProvider — Edit component (AGL-1303)', () => {
     const { edit } = setupEdit()
     act(() => edit(instanceNode()))
     expect(open).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Reusable email blocks (AGL-3287). An email offers email blocks alone and a
+ * page never offers one, so a component has to be filed where it can render
+ * — and a block promoted OUT of an email has to come back as one. Before
+ * this, promoting a header in an email made a page component, which the
+ * email's own drawer then hid.
+ */
+describe('ReusableComponentsProvider — email blocks (AGL-3287)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockEntitled = true
+    mockOrgReady = true
+    mockViewType = undefined
+    mockComponentDocs = []
+    mockCreateHostResource.mockResolvedValue({ id: 'cmp-new' })
+    mockCanvas.toJSON.mockImplementation(() => ({ nodes: layoutNodes() }))
+  })
+  afterEach(() => {
+    mockViewType = undefined
+    mockComponentDocs = []
+  })
+
+  it('files an email block under the email bundle and a page component under none', () => {
+    mockComponentDocs = [
+      { $id: 'hdr', displayName: 'Header', kind: 'email' },
+      { $id: 'nav', displayName: 'Site nav' },
+    ]
+    const { unmount } = render(<ReusableComponentsProvider hostId="h1" />)
+
+    const email = Aglyn.components.getPreset('hostcmp:hdr')
+    // The drawer's view filter reads the ENTRY's own pluginId: this is what
+    // puts the block in an email's drawer and keeps it out of a page's.
+    expect(email).toMatchObject({
+      pluginId: 'email',
+      category: Aglyn.REUSABLE_EMAIL_BLOCK_CATEGORY,
+      ...Aglyn.reusableComponentPaletteSlot('email'),
+    })
+    // The node it inserts is an ordinary instance, the same one a page gets,
+    // so the canvas draws it through the one graft.
+    expect(email?.data).toMatchObject({
+      componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+      pluginId: 'mui',
+      props: { refId: 'hdr', name: 'Header' },
+    })
+
+    const page = Aglyn.components.getPreset('hostcmp:nav')
+    expect(page?.category).toBe(Aglyn.REUSABLE_COMPONENT_CATEGORY)
+    expect(page?.pluginId).toBeUndefined()
+
+    unmount()
+    // Unmounting takes both entries back out of the shared registry.
+    expect(Aglyn.components.getPreset('hostcmp:hdr')).toBeUndefined()
+    expect(Aglyn.components.getPreset('hostcmp:nav')).toBeUndefined()
+  })
+
+  it('saves a block promoted in an email as an email block', async () => {
+    mockViewType = Aglyn.HostViewType.EMAIL
+    const { promote } = setup()
+    act(() => promote(navNode()))
+    // The dialog says where the block will be offered.
+    expect(
+      await screen.findByText('You can add it to any email from Your email blocks.'),
+    ).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Header' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save component' }))
+
+    await waitFor(() => expect(mockCreateHostResource).toHaveBeenCalled())
+    expect(mockCreateHostResource.mock.calls[0][0].data).toMatchObject({
+      displayName: 'Header',
+      kind: 'email',
+    })
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringContaining('add it to any email from Your email blocks'),
+        expect.objectContaining({ variant: 'success' }),
+      ),
+    )
+  })
+
+  it.each([
+    ['a page', Aglyn.HostViewType.SCREEN],
+    ['a layout', Aglyn.HostViewType.LAYOUT],
+    ['a component editor, which sets no view', undefined],
+  ])('saves a block promoted in %s as a page component, sending no kind', async (_where, view) => {
+    mockViewType = view
+    await promoteNav()
+    await waitFor(() => expect(mockCreateHostResource).toHaveBeenCalled())
+    expect(mockCreateHostResource.mock.calls[0][0].data).not.toHaveProperty('kind')
+    expect(
+      screen.queryByText('You can add it to any email from Your email blocks.'),
+    ).toBeNull()
   })
 })

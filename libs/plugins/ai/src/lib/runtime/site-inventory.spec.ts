@@ -210,6 +210,12 @@ describe('readSiteInventory — what is listed', () => {
     })
     docs.set(`hosts/${HOST}/components/cmp-deleted`, { displayName: 'Old', rootId: 'r', deletedAt: 1 })
     docs.set(`hosts/${HOST}/components/cmp-draft`, { displayName: 'Never published' })
+    // An email block (AGL-3287): published, and still nothing a page can place.
+    docs.set(`hosts/${HOST}/components/cmp-email`, {
+      displayName: 'Email header',
+      rootId: 'r',
+      kind: 'email',
+    })
     docs.set(`hosts/${HOST}/layouts/lay-site`, { displayName: 'Site', layoutId: 'lay-base' })
     docs.set(`hosts/${HOST}/templates/tpl-1`, { displayName: 'Service page' })
     docs.set(`hosts/${HOST}/forms/frm-live`, {

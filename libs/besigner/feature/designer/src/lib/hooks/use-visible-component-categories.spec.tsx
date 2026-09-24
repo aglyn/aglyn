@@ -20,12 +20,13 @@ import { renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { useVisibleComponentCategories } from './use-visible-component-categories'
 
-// The drawer's view-type flag needs a live besigner app; the filter under
-// test is orthogonal to it, so the flag is stubbed at its hook.
+// The drawer's view-type flag needs a live besigner app, so it is stubbed at
+// its hook. Unset (a page) unless a suite below says which view it is.
+let mockViewType: unknown = undefined
 jest.mock('./use-aglyn-besigner-flag', () => ({
   __esModule: true,
-  default: () => [undefined, () => undefined],
-  useAglynBesignerFlag: () => [undefined, () => undefined],
+  default: () => [mockViewType, () => undefined],
+  useAglynBesignerFlag: () => [mockViewType, () => undefined],
 }))
 
 /**
@@ -102,5 +103,97 @@ describe('useVisibleComponentCategories — per-site plugin enablement (AGL-1014
 
   it('filters nothing when no set is supplied (no host in scope)', () => {
     expect(visibleIds(undefined).sort()).toEqual(['spec-commerce', 'spec-mui'])
+  })
+})
+
+/**
+ * Reusable email blocks (AGL-3287). The console files each of the host's
+ * components with `reusableComponentPaletteSlot`, and this drawer decides
+ * where that filing lands: an email's drawer offers the host's email blocks
+ * and none of its page components, and a page's the reverse. Neither renders
+ * the other's elements.
+ */
+describe('useVisibleComponentCategories — reusable email blocks (AGL-3287)', () => {
+  const REUSABLE_IDS = ['hostcmp:spec-header', 'hostcmp:spec-nav'] as const
+
+  /** An entry exactly as the console registers one for a host component. */
+  function hostComponentPreset(
+    id: string,
+    kind: Aglyn.ReusableComponentKind,
+  ): Aglyn.PresetSchema {
+    return {
+      $id: id,
+      type: Aglyn.NodeType.PRESET,
+      displayName: id,
+      icon: { path: '' },
+      ...Aglyn.reusableComponentPaletteSlot(kind),
+      data: {
+        $id: null,
+        componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+        pluginId: 'mui',
+        props: { refId: id },
+      },
+    } as unknown as Aglyn.PresetSchema
+  }
+
+  function offered(enabled: readonly string[] | undefined): {
+    ids: string[]
+    groups: string[]
+  } {
+    const { result } = renderHook(() => useVisibleComponentCategories(), {
+      wrapper: wrapperFor(enabled),
+    })
+    const categories = result.current ?? []
+    return {
+      ids: categories.flatMap((category) =>
+        (category.items ?? [])
+          .map((item) => item.$id as string)
+          .filter((id) => (REUSABLE_IDS as readonly string[]).includes(id)),
+      ),
+      groups: categories.map((category) => String(category.label)),
+    }
+  }
+
+  beforeEach(() => {
+    Aglyn.components.registerPreset([
+      hostComponentPreset('hostcmp:spec-header', 'email'),
+      hostComponentPreset('hostcmp:spec-nav', 'site'),
+    ])
+  })
+
+  afterEach(() => {
+    Aglyn.components.unregisterPreset([...REUSABLE_IDS])
+    mockViewType = undefined
+  })
+
+  it('offers an email its email blocks and none of the page components', () => {
+    mockViewType = Aglyn.HostViewType.EMAIL
+    const { ids, groups } = offered(undefined)
+    expect(ids).toEqual(['hostcmp:spec-header'])
+    // Under their own heading, not the page drawer's.
+    expect(groups).toContain(Aglyn.REUSABLE_EMAIL_BLOCK_CATEGORY)
+    expect(groups).not.toContain(Aglyn.REUSABLE_COMPONENT_CATEGORY)
+  })
+
+  it.each([
+    ['a page', Aglyn.HostViewType.SCREEN],
+    ['a layout', Aglyn.HostViewType.LAYOUT],
+    ['a component editor', undefined],
+  ])('offers %s the page components and none of the email blocks', (_where, view) => {
+    mockViewType = view
+    const { ids, groups } = offered(undefined)
+    expect(ids).toEqual(['hostcmp:spec-nav'])
+    expect(groups).not.toContain(Aglyn.REUSABLE_EMAIL_BLOCK_CATEGORY)
+  })
+
+  it('follows the site switching its email plugin off, as the email blocks themselves do', () => {
+    mockViewType = Aglyn.HostViewType.EMAIL
+    expect(offered(['mui']).ids).toEqual([])
+    expect(offered(['mui', Aglyn.EMAIL_VIEW_BUNDLE_ID]).ids).toEqual([
+      'hostcmp:spec-header',
+    ])
+    // A page component belongs to no plugin, so no switch hides it.
+    mockViewType = Aglyn.HostViewType.SCREEN
+    expect(offered(['mui']).ids).toEqual(['hostcmp:spec-nav'])
   })
 })

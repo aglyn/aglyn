@@ -26,10 +26,17 @@ import {
   NodeType,
   replaceSubtreeWithInstance,
   reusableComponentDefinitionFrom,
-  REUSABLE_COMPONENT_CATEGORY,
+  reusableComponentKindForView,
+  reusableComponentKindOf,
+  reusableComponentPaletteSlot,
+  REUSABLE_COMPONENT_KIND_EMAIL,
+  REUSABLE_EMAIL_BLOCK_CATEGORY,
   REUSABLE_INSTANCE_COMPONENT_ID,
 } from '@aglyn/aglyn'
-import { ComponentPromotionContext } from '@aglyn/besigner-ui'
+import {
+  ComponentPromotionContext,
+  useAglynBesignerFlag,
+} from '@aglyn/besigner-ui'
 import { mdiPackageVariant } from '@aglyn/shared-data-mdi'
 import { useLoading } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -38,6 +45,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   TextField,
 } from '@mui/material'
@@ -78,7 +86,8 @@ export interface ReusableComponentsProviderProps {
  * Console-side reusable-component flows (AGL-35): provides promote/demote
  * callbacks to the designer's Attributes panel, hosts the promote dialog,
  * and registers each host component definition as an element-drawer preset
- * under "Your components".
+ * under "Your components" — or, for a reusable email block, under "Your email
+ * blocks", which only an email's drawer offers (AGL-3287).
  */
 export function ReusableComponentsProvider(
   props: ReusableComponentsProviderProps,
@@ -96,6 +105,17 @@ export function ReusableComponentsProvider(
   )
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  /**
+   * What a promotion here makes (AGL-3287): an email block in an email's
+   * editor, a page component anywhere else. Read off the canvas's own view —
+   * the flag that also decides what the drawer offers — so a block saved out
+   * of an email is offered in emails and never on a page it cannot render on.
+   * Before this, a header promoted out of an email became a PAGE component,
+   * which the drawer then hid from every email, the one it came from included.
+   */
+  const [viewType] = useAglynBesignerFlag('viewType')
+  const promoteKind = reusableComponentKindForView(viewType)
+  const promotesEmailBlock = promoteKind === REUSABLE_COMPONENT_KIND_EMAIL
 
   // Shared with the canvas's reusable-instance graft (AGL-1217): one query,
   // one listener, one set of skip rules for both readers.
@@ -119,7 +139,8 @@ export function ReusableComponentsProvider(
     return next
   }, [hostFormDesigns, editingFormId])
 
-  // Element drawer: one preset per definition, category "Your components".
+  // Element drawer: one preset per definition — under "Your components" on a
+  // page, and under "Your email blocks" in an email (AGL-3287).
   useEffect(() => {
     const definitions = (componentDocs ?? []).filter(
       (definition: any) => !definition.deletedAt,
@@ -135,7 +156,13 @@ export function ReusableComponentsProvider(
         icon: definition.icon?.iconPath
           ? { path: definition.icon.iconPath }
           : { path: mdiPackageVariant.path, sx: { color: '#9c27b0' } },
-        category: REUSABLE_COMPONENT_CATEGORY,
+        // The group, and for an email block the email bundle it is filed
+        // under (AGL-3287). The drawer's view filter reads the ENTRY's own
+        // `pluginId`, so an email block is offered in emails alone, and a page
+        // component — which names no bundle — never in one. The node inserted
+        // below is an ordinary instance either way, so the canvas draws both
+        // through the same graft.
+        ...reusableComponentPaletteSlot(reusableComponentKindOf(definition)),
         data: {
           $id: null,
           componentId: REUSABLE_INSTANCE_COMPONENT_ID,
@@ -203,6 +230,8 @@ export function ReusableComponentsProvider(
           ...(description && { description }),
           rootId: node.$id,
           nodes: definitionNodes,
+          // A page component sends no kind, exactly as before (AGL-3287).
+          ...(promotesEmailBlock && { kind: promoteKind }),
         },
       })
       // Swap the promoted subtree for an instance of what we just created
@@ -223,8 +252,12 @@ export function ReusableComponentsProvider(
       )
       setPromoteNode(null)
       enqueueSnackbar(
-        `Saved "${name}" — this element now follows the component, and you ` +
-          'can insert it anywhere from Your components',
+        promotesEmailBlock
+          ? `Saved "${name}" — add it to any email from ` +
+              `${REUSABLE_EMAIL_BLOCK_CATEGORY}. Change it once and every ` +
+              'email using it follows.'
+          : `Saved "${name}" — this element now follows the component, and ` +
+              'you can insert it anywhere from Your components',
         { variant: 'success', persist: false },
       )
     } catch (error: any) {
@@ -240,6 +273,8 @@ export function ReusableComponentsProvider(
     promoteNode,
     name,
     description,
+    promoteKind,
+    promotesEmailBlock,
     createHostResource,
     firestore,
     hostId,
@@ -392,6 +427,13 @@ export function ReusableComponentsProvider(
         <DialogContent
           sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
         >
+          {promotesEmailBlock ? (
+            // Where the saved block will be offered (AGL-3287), since it is
+            // not where a page component is.
+            <DialogContentText variant="body2">
+              {`You can add it to any email from ${REUSABLE_EMAIL_BLOCK_CATEGORY}.`}
+            </DialogContentText>
+          ) : null}
           <TextField
             label="Name"
             value={name}

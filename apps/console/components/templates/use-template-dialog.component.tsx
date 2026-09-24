@@ -161,6 +161,12 @@ export function UseTemplateDialog({
             // The properties the tree binds to (AGL-2932), on the component
             // document the tenant renders from.
             ...(carriedProps ? { props: carriedProps } : {}),
+            // An email block's template makes an email block (AGL-3287), so
+            // it is offered in emails like the one it was saved from.
+            ...(Aglyn.reusableComponentKindOf({ kind: template.componentKind }) ===
+            Aglyn.REUSABLE_COMPONENT_KIND_EMAIL
+              ? { kind: Aglyn.REUSABLE_COMPONENT_KIND_EMAIL }
+              : {}),
           },
         })
         enqueueSnackbar(`Created the component “${name.trim()}”`, {

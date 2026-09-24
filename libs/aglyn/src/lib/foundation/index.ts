@@ -118,6 +118,7 @@ export type {
   PublishSchedule,
   RedirectUid,
   ReusableComponentIcon,
+  ReusableComponentKind,
   ReusableComponentProp,
   ReusableComponentPropCondition,
   ReusableComponentPropOption,

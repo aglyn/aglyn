@@ -126,6 +126,7 @@ import {
   NO_CLIENT_ADDRESS_BUCKET,
   readClientIp,
 } from '@aglyn/aglyn/app-utils/request-ip'
+import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 
 const BOOKING_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -922,7 +923,11 @@ export async function scanBookingReminders(
     let loaded = templateCache.get(hostId)
     if (loaded === undefined) {
       loaded = hostId
-        ? await loadHostEmail(firestore, hostId, 'booking-reminder')
+        ? await loadHostEmail(firestore, hostId, 'booking-reminder', {
+            // The site's header and footer blocks, grafted once per site
+            // for the whole batch (AGL-3287).
+            compose: composeHostComponentNodes,
+          })
         : null
       templateCache.set(hostId, loaded)
       brandingByHost.set(

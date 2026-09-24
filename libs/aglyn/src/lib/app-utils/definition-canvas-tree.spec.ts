@@ -18,6 +18,7 @@ import { CANVAS_ROOT_ELEMENT_ID } from '../foundation/constants/canvas'
 import {
   canvasTreeToDefinition,
   definitionToCanvasTree,
+  nestedToDefinition,
 } from './definition-canvas-tree'
 
 /** What `promoteToComponent` actually stores: root is the selected node. */
@@ -146,5 +147,65 @@ describe('canvasTreeToDefinition (AGL-680)', () => {
 
   it('tolerates an absent tree', () => {
     expect(canvasTreeToDefinition(undefined).nodes).toEqual({})
+  })
+})
+
+/**
+ * A component seeded from an element preset (AGL-3287): the Components page
+ * starts a Header or Footer email block from the same preset an author drops
+ * into an email, so the nested tree has to come out as the definition shape
+ * the editor and the graft read.
+ */
+describe('nestedToDefinition (AGL-3287)', () => {
+  /** A preset's `data`: every id is `null` until the tree is placed. */
+  const unplaced = null as string | null
+  const preset = {
+    $id: unplaced,
+    componentId: 'section',
+    pluginId: 'spec',
+    props: { align: 'center' },
+    nodes: [
+      { $id: unplaced, componentId: 'image', pluginId: 'spec', props: { alt: 'Logo' } },
+      { $id: unplaced, componentId: 'text', pluginId: 'spec', props: { children: 'Hi' } },
+    ],
+  }
+
+  const ids = () => {
+    let next = 0
+    return () => `n${++next}`
+  }
+
+  it('keys every element by a fresh id and names the outermost one the root', () => {
+    const { rootId, nodes } = nestedToDefinition(preset, ids())
+    expect(rootId).toBe('n1')
+    expect(nodes['n1']).toEqual({
+      $id: 'n1',
+      componentId: 'section',
+      pluginId: 'spec',
+      props: { align: 'center' },
+      parentId: null,
+      nodes: ['n2', 'n3'],
+    })
+    expect(nodes['n2']).toEqual({
+      $id: 'n2',
+      componentId: 'image',
+      pluginId: 'spec',
+      props: { alt: 'Logo' },
+      parentId: 'n1',
+    })
+    expect(nodes['n3'].parentId).toBe('n1')
+  })
+
+  it('opens in the editor as the same tree, under the canvas root', () => {
+    const tree = definitionToCanvasTree(nestedToDefinition(preset, ids()))
+    expect(tree[CANVAS_ROOT_ELEMENT_ID].nodes).toEqual(['n1'])
+    // And publishing unwraps it back to the preset's own outer element.
+    expect(canvasTreeToDefinition(tree).rootId).toBe('n1')
+  })
+
+  it('copies the preset rather than sharing its values', () => {
+    const { nodes } = nestedToDefinition(preset, ids())
+    nodes['n1'].props.align = 'left'
+    expect(preset.props.align).toBe('center')
   })
 })

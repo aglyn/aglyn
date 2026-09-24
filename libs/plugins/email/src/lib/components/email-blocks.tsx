@@ -23,6 +23,8 @@ import {
   mdiImageOutline,
   mdiMinus,
   mdiPackageVariantClosed,
+  mdiPageLayoutFooter,
+  mdiPageLayoutHeader,
   mdiArrowExpandVertical,
   mdiGestureTapButton,
   mdiCodeTags,
@@ -722,6 +724,119 @@ export const emailHtmlSchema: Aglyn.ComponentSchema<EmailHtmlProps> = {
   ],
 }
 
+/**
+ * The two bands most emails a site sends begin and end with (AGL-3287).
+ *
+ * Each drops into any email like the blocks above, and the Components page
+ * starts a reusable Header or Footer email block from these same trees, by
+ * the ids core names in `REUSABLE_EMAIL_BLOCK_STARTER_PRESET_IDS` — one tree
+ * each, wherever it is started from.
+ *
+ * The words are placeholders to replace. No merge token names the company in
+ * both kinds of email — a campaign supplies `{{org.name}}`, and no token is
+ * supplied by every one of a site's own emails — while a token an email does
+ * not supply is blanked before sending, which would leave the header with no
+ * name at all.
+ *
+ * The footer carries no unsubscribe link: a campaign send appends its own,
+ * and a second one would do the same thing twice.
+ */
+export const EMAIL_HEADER_PRESET: Aglyn.PresetSchema = {
+  $id: Aglyn.REUSABLE_EMAIL_BLOCK_STARTER_PRESET_IDS.header,
+  type: Aglyn.NodeType.PRESET,
+  displayName: 'Header',
+  description:
+    'Your logo above your company name, for the top of an email. Pick the ' +
+    'logo from your media library — until you do, the picture shows nothing ' +
+    'in a sent email.',
+  pluginId: BUNDLE_ID,
+  category: Aglyn.ComponentCategory.BLOCKS,
+  tags: ['logo', 'masthead', 'top', 'brand'],
+  icon: { path: mdiPageLayoutHeader.path, sx: { color: '#f57c00' } },
+  data: {
+    $id: null,
+    componentId: SECTION_ID,
+    pluginId: BUNDLE_ID,
+    props: { align: 'center', padding: 24 },
+    nodes: [
+      {
+        $id: null,
+        componentId: IMAGE_ID,
+        pluginId: BUNDLE_ID,
+        props: { alt: 'Your company logo', width: 160, align: 'center' },
+      },
+      {
+        $id: null,
+        componentId: TEXT_ID,
+        pluginId: BUNDLE_ID,
+        props: {
+          children: 'Your company',
+          variant: 'subheading',
+          align: 'center',
+        },
+      },
+    ],
+  },
+}
+
+/**
+ * The Footer's small print, a muted gray that still reads at 5:1 on white.
+ * A literal on purpose: it is written into the sent mail's own HTML, where no
+ * theme token resolves.
+ */
+const FOOTER_TEXT_COLOR = '#6b6b6b'
+
+/** See {@link EMAIL_HEADER_PRESET}. */
+export const EMAIL_FOOTER_PRESET: Aglyn.PresetSchema = {
+  $id: Aglyn.REUSABLE_EMAIL_BLOCK_STARTER_PRESET_IDS.footer,
+  type: Aglyn.NodeType.PRESET,
+  displayName: 'Footer',
+  description:
+    'Your company name and address, and why the reader gets your emails, for ' +
+    'the bottom of an email. Campaign emails add the unsubscribe link for you.',
+  pluginId: BUNDLE_ID,
+  category: Aglyn.ComponentCategory.BLOCKS,
+  tags: ['address', 'bottom', 'contact', 'legal'],
+  icon: { path: mdiPageLayoutFooter.path, sx: { color: '#f57c00' } },
+  data: {
+    $id: null,
+    componentId: SECTION_ID,
+    pluginId: BUNDLE_ID,
+    props: { align: 'center', padding: 24 },
+    nodes: [
+      {
+        $id: null,
+        componentId: DIVIDER_ID,
+        pluginId: BUNDLE_ID,
+        props: {},
+      },
+      {
+        $id: null,
+        componentId: TEXT_ID,
+        pluginId: BUNDLE_ID,
+        props: {
+          children: 'Your company · 123 Main St, City',
+          variant: 'caption',
+          align: 'center',
+          color: FOOTER_TEXT_COLOR,
+        },
+      },
+      {
+        $id: null,
+        componentId: TEXT_ID,
+        pluginId: BUNDLE_ID,
+        props: {
+          children:
+            "You're receiving this because you're a customer of Your company.",
+          variant: 'caption',
+          align: 'center',
+          color: FOOTER_TEXT_COLOR,
+        },
+      },
+    ],
+  },
+}
+
 export const emailPresets: Aglyn.PresetSchema[] = [
   {
     $id: generatePresetId(SECTION_ID),
@@ -849,4 +964,6 @@ export const emailPresets: Aglyn.PresetSchema[] = [
       props: {},
     },
   },
+  EMAIL_HEADER_PRESET,
+  EMAIL_FOOTER_PRESET,
 ]

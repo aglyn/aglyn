@@ -40,6 +40,7 @@ import PluginWidgetSlot from '../../../../../../components/plugin-widget-slot.co
 import { buildRoute, Route } from '../../../../../../constants/route-links'
 import useOrgScope, { useOrgSlug } from '../../../../../../hooks/use-org-scope'
 import { CONTENT_MAX_WIDTH } from '../../../../../../constants/shared'
+import componentCreateSeed from '../../../../../../utils/component-create-seed'
 
 /**
  * Components page (AGL-250): reusable components moved off the dashboard —
@@ -76,6 +77,10 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
     setCreateError(null)
     try {
       const componentId = Aglyn.createResourceUid()
+      // Where it will be used, and what it starts as (AGL-3287): a page
+      // component starts blank as it always has; an email block is marked as
+      // one and starts as the email plugin's Header or Footer, or blank.
+      const seed = await componentCreateSeed(values)
       // Component DOC creation is API-only by rule (`allow create: if
       // isStaff()`), same as screens/layouts/templates — the resources route
       // enforces the reusableComponents entitlement server-side (AGL-473).
@@ -93,16 +98,10 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
           // already inconsistent about carrying it.
           displayName: values.displayName,
           description: values.description ?? '',
-          // A canvas needs a ROOT node to render — an empty `{}` renders as
-          // "Invalid node" in the besigner (AGL-693).
-          rootId: Aglyn.CANVAS_ROOT_ELEMENT_ID,
-          nodes: {
-            [Aglyn.CANVAS_ROOT_ELEMENT_ID]: {
-              $id: Aglyn.CANVAS_ROOT_ELEMENT_ID,
-              componentId: 'div',
-              nodes: [],
-            },
-          },
+          // `rootId` and `nodes`, and `kind` for an email block. A canvas
+          // needs a ROOT node to render — an empty `{}` renders as "Invalid
+          // node" in the besigner (AGL-693) — which every seed has.
+          ...seed,
         },
       })
       setCreateOpen(false)
@@ -185,6 +184,7 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
           title="Create new component"
           onSubmit={handleCreate}
           error={createError}
+          extraFields={COMPONENT_CREATE_FIELDS}
         />
       }
     >
@@ -211,6 +211,47 @@ const HostComponents: NextPageWithLayout<Record<string, never>> = () => {
     </DashboardLayout>
   )
 }
+/**
+ * Where the new component will be used, and — for an email — what it starts
+ * as (AGL-3287). Asked in the words of someone who has never built a site:
+ * pages and emails, a header and a footer. The page component is the default
+ * because it is what this button has always made.
+ */
+const COMPONENT_CREATE_FIELDS = [
+  {
+    component: 'select',
+    name: 'kind',
+    label: 'Where will you use it?',
+    helperText:
+      'Pages are your website. Emails are the messages your site sends.',
+    initialValue: 'site',
+    isRequired: true,
+    disableDefaultOption: true,
+    options: [
+      { value: 'site', label: 'On pages' },
+      { value: 'email', label: 'In emails' },
+    ],
+    validate: [{ type: 'required', message: 'Pick where you will use it' }],
+  },
+  {
+    component: 'select',
+    name: 'starter',
+    label: 'Start with',
+    helperText: 'Change anything you like after.',
+    initialValue: 'header',
+    disableDefaultOption: true,
+    condition: { when: 'kind', is: 'email' },
+    options: [
+      { value: 'header', label: 'Header — your logo and company name' },
+      {
+        value: 'footer',
+        label: 'Footer — your address, and why people get your emails',
+      },
+      { value: 'blank', label: 'Blank — start with nothing' },
+    ],
+  },
+]
+
 HostComponents.displayName = 'Page:HostComponents'
 
 export default HostComponents

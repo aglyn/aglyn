@@ -147,8 +147,10 @@ import {
   styleFieldEntry,
 } from '../utils/style-field-search'
 import {
+  EMAIL_PLACEMENT_STYLE_NOTE,
   type PartNode,
   placementCopy,
+  placementKindFor,
   propDefaultsOf,
   styleChangeLabel,
 } from '../utils/placement-override-copy'
@@ -1245,7 +1247,10 @@ const ElementStylesForm = observer(
       canvas.transact(() => target.clearAll())
     }, [target])
 
-    const placementKind = isPlacedForm ? 'form' : 'component'
+    // A reusable block placed in an email is the same kind of placement,
+    // worded for the email it is in (AGL-3287).
+    const [viewType] = useAglynBesignerFlag('viewType')
+    const placementKind = placementKindFor(isPlacedForm, viewType)
     const placementText = placementCopy(placementKind)
     const styleChangeCount = target.isInstanceOverride
       ? countStyleChanges(node)
@@ -1362,6 +1367,25 @@ const ElementStylesForm = observer(
     const formSeedKey =
       `${styleNodeId ?? ''}:${overrideKey}:${activeBreakpoint ?? 'base'}` +
       `:${activeScheme ?? 'light'}:${activeState ?? 'base'}`
+
+    // A reusable block placed in an email takes no style changes (AGL-3287).
+    // The email is built from each block's own settings and never reads a
+    // style, so a restyle made here would show on the canvas and reach no
+    // inbox — which is worse than not offering one. One note says where the
+    // block's look IS changed; its settings stay open in the Attributes tab.
+    if (
+      placementKind === 'email' &&
+      target.isInstanceOverride &&
+      !target.isLayoutOverride
+    ) {
+      return (
+        <Container gutterY={[1]} dense>
+          <Alert severity="info" sx={{ fontSize: '0.8125rem' }}>
+            {EMAIL_PLACEMENT_STYLE_NOTE}
+          </Alert>
+        </Container>
+      )
+    }
 
     return (
       <>
