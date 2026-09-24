@@ -22,6 +22,11 @@ import {
   nameSearchToken,
 } from '@aglyn/aglyn/app-utils/name-search'
 import { type ListFilterField, listFilterDay } from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  LIST_QUERY_ID_PATH,
+  type ListQueryFilter,
+  type ListQueryPlan,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 /**
  * The query half of the list-filter contract (AGL-2501).
@@ -259,3 +264,34 @@ export function applyListFilter(
 
   return null
 }
+
+const planValue = (value: ListQueryFilter['value']): unknown =>
+  value instanceof Date
+    ? firebaseAdmin.firestore.Timestamp.fromDate(value)
+    : Array.isArray(value)
+      ? [...value]
+      : value
+
+/**
+ * The list query plan on an Admin query (AGL-3321): every predicate the plan
+ * holds, then its one order. The web twin is `listQueryConstraints` in the
+ * instance library; both read the same SDK-free plan, so a clause means the
+ * same thing wherever the list is read.
+ *
+ * The caller pages it with its own cursor (`startAfter` a document in the
+ * plan's order) and matches nothing afterwards: what the plan refused is not
+ * applied, and the route says so in its response (`plan.refused`).
+ */
+export function applyListQuery(
+  ref: FirebaseFirestore.Query,
+  plan: ListQueryPlan,
+): FirebaseFirestore.Query {
+  const byId = firebaseAdmin.firestore.FieldPath.documentId()
+  const path = (value: string) => (value === LIST_QUERY_ID_PATH ? byId : value)
+  let query = ref
+  for (const filter of plan.filters) {
+    query = query.where(path(filter.path), filter.op, planValue(filter.value))
+  }
+  return query.orderBy(path(plan.orderBy.path), plan.orderBy.direction)
+}
+

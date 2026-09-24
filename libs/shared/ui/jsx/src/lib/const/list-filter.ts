@@ -169,6 +169,12 @@ export interface ListFilterField {
    */
   windowOnly?: boolean
   /**
+   * A `date` field stored as epoch MILLISECONDS (`…AtMs`) rather than as a
+   * Timestamp. The query twins compare numbers for it, and the matcher reads
+   * both already (AGL-3321).
+   */
+  storedAs?: 'timestamp' | 'millis'
+  /**
    * The stored value is a PRESENCE MAP — `{ form: true, order: true }` —
    * and the filter asks about its keys.
    *

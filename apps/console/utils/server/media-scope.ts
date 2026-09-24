@@ -289,6 +289,37 @@ export function sanitizeCustomMetadata(
   return clean
 }
 
+/**
+ * The Storage object's custom map for a custom-metadata save (AGL-3331):
+ * the new pairs, the download token, and an explicit `null` for every key
+ * the previous save wrote and this one dropped.
+ *
+ * The nulls are the fix. GCS PATCHes object metadata — a key absent from
+ * the request is left alone, only `null` deletes — so a map written without
+ * them could add and change a field and never remove one. The drawer's
+ * delete button therefore did nothing to the object, and a renamed field
+ * lived on there under both names.
+ *
+ * Only keys the previous `customMetadata` held are nulled, never "whatever
+ * else is on the object": this route is the one writer of those keys, and a
+ * key it did not write is not its to delete.
+ */
+export function customMetadataStorageMap(options: {
+  previous: Record<string, unknown> | undefined
+  next: Record<string, string>
+  token?: string
+}): Record<string, string | null> {
+  const { previous, next, token } = options
+  const removed = Object.keys(previous ?? {}).filter(
+    (key) => !RESERVED_METADATA_KEYS.has(key) && !(key in next),
+  )
+  return {
+    ...Object.fromEntries(removed.map((key) => [key, null])),
+    ...(token ? { firebaseStorageDownloadTokens: token } : {}),
+    ...next,
+  }
+}
+
 /** Folder names become real Storage path segments — keep them tame. */
 export function sanitizeFolderSegment(name: unknown): string {
   return (

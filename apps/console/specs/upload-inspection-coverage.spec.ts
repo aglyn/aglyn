@@ -50,6 +50,10 @@ const COVERED_INGRESSES = [
   // 5. Marketplace listing preview image — a publisher-supplied image served
   //    to unauthenticated browsers, and NOT through `serveMediaCdn`.
   'libs/plugins/marketplace/src/lib/server/preview-image.ts',
+  // 6. Console DAM, embedded-metadata edit (AGL-3331) — the platform writes
+  //    the bytes, but the text it writes into them is the caller's, behind a
+  //    `cdnPath` pages already embed.
+  'apps/console/app/api/media/metadata/route.ts',
 ]
 
 /**
@@ -160,7 +164,7 @@ describe('structural upload inspection covers every ingress (AGL-1475)', () => {
     }
   })
 
-  it('leaves NO bucket write unaccounted for — a sixth ingress fails here', () => {
+  it('leaves NO bucket write unaccounted for — a seventh ingress fails here', () => {
     const writers = sourceFiles
       .filter((file) => BUCKET_WRITE.test(file.source))
       .map((file) => file.path)

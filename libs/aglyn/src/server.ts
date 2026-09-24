@@ -54,3 +54,10 @@ export * from './lib/app-utils/person-key'
 // it was putting a JavaScript parser into every published customer page.
 export * from './lib/app-utils/plugin-bundle-checks'
 export * from './lib/plugin-manager/realm-server'
+// The embedded-metadata readers and writers (AGL-3331) import `zlib` and
+// `crypto` and parse PDFs, Office packages and image containers — code no
+// browser ever runs, since the bytes they read live in Storage. Exposed ONLY
+// through this `/server` entry, for the same reason as the verifier above.
+// The client half (catalog, value formats, edit rules) is the subpath
+// `app-utils/media-embedded-fields`.
+export * from './lib/app-utils/media-embedded-metadata'

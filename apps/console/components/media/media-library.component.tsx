@@ -131,6 +131,7 @@ import useOrgHosts from '../../hooks/use-org-hosts'
 import firestoreOneShotRetry from '../../utils/firestore-one-shot-retry'
 import { mediaSrc, mediaThumbnailSrc } from '@aglyn/aglyn/app-utils/media-src'
 import { probeVideoFile } from '../../utils/video-probe'
+import { MediaFileInfo } from './media-file-info.component'
 import {
   readAnalyticsDays,
   recentDayIds,
@@ -4667,6 +4668,33 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
               </Button>
             </Stack>
           </Box>
+          {/* FILE INFO (AGL-3331): what was measured about the stored file,
+              and what the file carries inside itself — read on first open
+              for any asset uploaded before the reader existed, and edited
+              INTO the file on its own Save, because that edit changes the
+              bytes every page serves rather than a field on this document.
+              Keyed on the asset so switching files never shows one file's
+              details under another's name. */}
+          {editor?.media ? (
+            <MediaFileInfo
+              key={editor.id}
+              mediaId={editor.id}
+              media={editor.media}
+              scopeBody={scopeBody}
+              user={user}
+              onFileChanged={(update) => {
+                setEditor((prev) =>
+                  prev ? { ...prev, media: { ...prev.media, ...update } } : prev,
+                )
+                logActivity('Edited details inside a media file', {
+                  type: 'media',
+                  id: editor.id,
+                  name: editor.media?.fileName ?? editor.id,
+                })
+                refresh()
+              }}
+            />
+          ) : null}
           {/* "Used on" audit (AGL-845): on-demand — the scan is expensive, so
               it runs only when the user asks, and lists each place the asset is
               referenced with a deep link to open it. */}

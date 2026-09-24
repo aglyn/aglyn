@@ -82,7 +82,10 @@ export interface PagedRowsFilter<Row> extends Omit<ListRowsFilter<Row>, 'rows'> 
  * {@link PAGED_FILTER_WINDOW}) — one listener that much wider, for as long as
  * the list is narrowed — and clearing the last one puts the reader back on
  * the page they left.
- */
+  * @deprecated AGL-3321: matches over rows a list has loaded. Serve every clause and search
+ * word on the query instead — `planListQuery` (`@aglyn/shared-ui-jsx/const/list-query-plan`, with `nameSearchNormalizers`)
+ * through `useListQuery` or `applyListQuery`. Removed once no list calls it.
+*/
 export function usePagedRowsFilter<Row extends object>(
   paged: PagedRowsWindow<Row>,
   options: Omit<ListRowsFilterOptions<Row>, 'rows'> & { filterWindow?: number },

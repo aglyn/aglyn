@@ -69,7 +69,10 @@ export interface ListFilterOption {
  * the field names them (`operators`), and `matchListFilter` answers them.
  * `select` is a field picked from choices — the list passes them as the
  * field's options, and the panel shows a select over them.
- */
+  * @deprecated AGL-3321: matches over rows a list has loaded. Serve every clause and search
+ * word on the query instead — `planListQuery` (`@aglyn/shared-ui-jsx/const/list-query-plan`, with `nameSearchNormalizers`)
+ * through `useListQuery` or `applyListQuery`. Removed once no list calls it.
+*/
 export function inMemoryListField(
   column: string,
   kind: 'text' | 'select' | 'number' | 'date' | 'boolean',
@@ -262,7 +265,10 @@ export function listRowMatchesSearch(
  * holds its whole data set (or the window its query already narrowed) and
  * so answers the panel itself. A clause `skip` names is one the query
  * already served, and is not matched again.
- */
+  * @deprecated AGL-3321: matches over rows a list has loaded. Serve every clause and search
+ * word on the query instead — `planListQuery` (`@aglyn/shared-ui-jsx/const/list-query-plan`, with `nameSearchNormalizers`)
+ * through `useListQuery` or `applyListQuery`. Removed once no list calls it.
+*/
 export function filterListRows<Row extends object>(
   rows: readonly Row[],
   fields: readonly ListFilterField[],

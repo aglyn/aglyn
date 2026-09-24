@@ -85,7 +85,10 @@ const NO_HEADERS: Readonly<Record<string, string>> = {}
  * through `listFilterGridColumns`, and the props the grid and the chips
  * take. A list whose query can serve a clause names it in `served`, puts it
  * on the query, and the rows here are not matched against it again.
- */
+  * @deprecated AGL-3321: matches over rows a list has loaded. Serve every clause and search
+ * word on the query instead — `planListQuery` (`@aglyn/shared-ui-jsx/const/list-query-plan`, with `nameSearchNormalizers`)
+ * through `useListQuery` or `applyListQuery`. Removed once no list calls it.
+*/
 export function useListRowsFilter<Row extends object>(
   options: ListRowsFilterOptions<Row>,
 ): ListRowsFilter<Row> {
