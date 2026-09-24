@@ -341,6 +341,21 @@ The console footer prints the same version, and `COMMIT_REF` may equally be set
 in `.env.selfhost` if a fixed value suits you better than one per build — the
 build argument wins where both are present.
 
+### Upgrading: new indexes and one-time backfills
+
+A release can add composite indexes and fields that existing documents do not
+have yet. After you upgrade, run the index step from **3b** again. It only
+adds, so it is safe on a project you have tuned. Then run any backfill the
+release names; each is a dry run unless given `--apply`, and each is
+idempotent, so running it twice changes nothing the second time.
+
+| since | what | command |
+| -- | -- | -- |
+| AGL-3321 | the notifications feed's Type and Status filters, and the app bar's unread count, read a `read` field older notifications lack | `node tools/scripts/backfill-notification-read.mjs --apply` |
+
+Each uses Application Default Credentials against the project in
+`GOOGLE_CLOUD_PROJECT`.
+
 ### Optional: require SSO for your company's email domain
 
 If you run SAML SSO and want to guarantee that nobody on your company domain can

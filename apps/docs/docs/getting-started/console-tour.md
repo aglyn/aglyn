@@ -215,7 +215,12 @@ for finding and installing new ones, not for administering what you already run:
 Your in-app notification feed — billing, publishing, workflow failures —
 lives under **Notifications**, which has two sections in the rail on the left:
 **All notifications** and **Settings**. The first shows what arrived, newest
-first, with **Mark all read** above it:
+first, with **Mark all read** above it. The feed's **Filters** narrows it by
+**Type** (one type, or several) and by **Status** (**New** or **Read**), and
+both can stand together. Each filter in force shows as a chip above the feed;
+remove the chip to drop it. The filters apply to the whole feed, not just the
+page on screen, and the pager then turns through the matches. There is no
+search box, because a notification's words are not indexed:
 
 ![The Notifications page: a Navigation rail listing All notifications and Settings, beside Mark all read and the feed as a table of notification, type, workspace, time and status, with the table's Columns and Export controls](/img/getting-started/notifications-page.png)
 

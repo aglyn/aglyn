@@ -17,12 +17,20 @@
 'use client'
 
 import { NOTIFICATION_TYPE_LABELS } from '@aglyn/aglyn/app-utils/notifications'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useMemo } from 'react'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
+import {
+  NOTIFICATION_FILTER_FIELDS,
+  NOTIFICATION_FILTER_HEADERS,
+  NOTIFICATION_FILTER_OPTIONS,
+} from '../utils/notification-filters'
 import type { NotificationWorkspace } from '../utils/notification-links'
 
 /** The label a notification's type reads as, or the stored type itself. */
@@ -176,6 +184,12 @@ export interface NotificationsTableProps {
   loading?: boolean
   onPageChange: (page: number) => void
   onPageSizeChange: (pageSize: number) => void
+  /**
+   * The Filters panel, bound by the page to the clauses its query serves
+   * (AGL-3321). Absent, the panel is off, as it was before the feed's
+   * query could answer it.
+   */
+  gridFilter?: ListGridFilter
 }
 
 /**
@@ -186,16 +200,14 @@ export interface NotificationsTableProps {
  * notification, as the table's row did.
  *
  * The rows are ONE page of a cursor feed, turned by the pager under the
- * grid, so the grid's own footer is off, and so are its search box and
- * filter panel, which could only narrow the page on screen and would call
- * that the whole feed.
+ * grid, so the grid's own footer is off.
  *
- * Nor can the feed's query serve them in their place. It is ordered
- * `createdAt` DESC and its cursor is a document in that order, so a type
- * filter is an equality beneath that sort, which needs a `type ASC,
- * createdAt DESC` index the notifications collection does not have. New
- * versus read cannot be asked at all: `readAt` is written only when a row is
- * read, and a query cannot find documents that LACK a field.
+ * The Filters panel is the FEED'S, not the page's (AGL-3321): Type and
+ * Status are equalities the feed's query applies beneath its `createdAt`
+ * cursor (`utils/notification-filters.ts`), so every page the pager turns is
+ * a page of the filtered feed. The search box stays off: a notification's
+ * words are held by no index, so a search could only narrow the page on
+ * screen and would call that the whole feed.
  */
 export function NotificationsTable(props: NotificationsTableProps) {
   const {
@@ -208,14 +220,31 @@ export function NotificationsTable(props: NotificationsTableProps) {
     loading,
     onPageChange,
     onPageSizeChange,
+    gridFilter,
   } = props
   const columns = useMemo(
-    () => notificationColumns(workspaceOf ?? (() => ({ kind: 'unknown' }))),
+    () =>
+      listFilterGridColumns(
+        notificationColumns(workspaceOf ?? (() => ({ kind: 'unknown' }))),
+        NOTIFICATION_FILTER_FIELDS,
+        NOTIFICATION_FILTER_OPTIONS,
+        NOTIFICATION_FILTER_HEADERS,
+      ),
     [workspaceOf],
   )
+  const filtering = Boolean(gridFilter?.clauses.length)
   return (
     <>
-      {rows.length === 0 && !loading ? (
+      {gridFilter ? (
+        <ListFilterChips
+          fields={NOTIFICATION_FILTER_FIELDS}
+          headers={NOTIFICATION_FILTER_HEADERS}
+          clauses={gridFilter.clauses}
+          onChange={gridFilter.setClauses}
+          options={NOTIFICATION_FILTER_OPTIONS}
+        />
+      ) : null}
+      {rows.length === 0 && !loading && !filtering ? (
         <Typography variant="body2" color="text.secondary">
           {"You're all caught up."}
         </Typography>
@@ -226,9 +255,17 @@ export function NotificationsTable(props: NotificationsTableProps) {
           columns={columns}
           rowHeight={TABLE_ROW_HEIGHT}
           hideFooter
-          disableColumnFilter
+          // No index holds a notification's words; see above.
           quickFilter={false}
           onOpen={(_id, row) => onOpen(row)}
+          noRowsLabel="No notifications match these filters"
+          {...(gridFilter
+            ? {
+                filterMode: 'server' as const,
+                filterModel: gridFilter.filterModel,
+                onFilterModelChange: gridFilter.onFilterModelChange,
+              }
+            : { disableColumnFilter: true })}
         />
       )}
       <ListPagination

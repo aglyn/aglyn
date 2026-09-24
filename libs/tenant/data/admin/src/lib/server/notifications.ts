@@ -181,7 +181,9 @@ export async function notifyUsers(
             .doc(userDoc.id)
             .collection('notifications')
             .doc(),
-          { ...payload, createdAt: FieldValue.serverTimestamp() },
+          // `read: false` on create, so the feed can ask for unread and read
+          // alike by equality (AGL-3321; see `AglynNotification.read`).
+          { ...payload, read: false, createdAt: FieldValue.serverTimestamp() },
         )
         count += 1
       }

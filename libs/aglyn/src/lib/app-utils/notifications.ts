@@ -242,8 +242,23 @@ export interface AglynNotification {
   orgId?: string
   hostId?: string
   createdAt?: ITimestamp
-  /** Set by the owner when read; unread while absent. */
+  /** When the owner read it; absent or null while unread. */
   readAt?: ITimestamp | null
+  /**
+   * Whether the owner has read it — `false` on create, `true` beside
+   * `readAt` when read (AGL-3321).
+   *
+   * A boolean rather than `readAt: null`, because the feed filters by it
+   * under its newest-first cursor. Equality on a boolean answers BOTH
+   * states (`read == false`, `read == true`) beneath `orderBy('createdAt')`
+   * with one composite index. A nullable timestamp answers "unread" by
+   * equality but "read" only as `readAt != null`, and Firestore requires an
+   * inequality's field to be the FIRST sort, which would order the feed by
+   * when things were read instead of when they arrived. Absent only on
+   * notifications written before the field existed, which
+   * `tools/scripts/backfill-notification-read.mjs` stamps.
+   */
+  read?: boolean
 }
 
 export const NOTIFICATION_TYPE_LABELS: Record<AglynNotificationType, string> = {

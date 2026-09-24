@@ -131,16 +131,17 @@ export function NotificationsMenu() {
       uid
         ? query(
             collection(firestore, 'users', uid, 'notifications'),
-            where('readAt', '==', null),
+            where('read', '==', false),
             limit(100),
           )
         : null,
     [firestore, uid],
     { idField: '$id' },
   )
-  // Emitters omit readAt entirely, and Firestore can't query for a
-  // missing field — count unread from the recent window instead when the
-  // null-query comes back empty.
+  // Every emitter stamps `read: false` (AGL-3321) and the backlog is
+  // backfilled, so the query answers exactly. The recent window still stands
+  // beside it: a notification written by an emitter this build does not
+  // know of would lack the field, and must not read as read.
   const unreadCount = useMemo(() => {
     const explicit = unreadDocs?.length ?? 0
     const implicit = (recent ?? []).filter((item) => !item.readAt).length
@@ -268,7 +269,7 @@ export function NotificationsMenu() {
   const markRead = (notification: AglynNotification & { $id: string }) => {
     void updateDoc(
       doc(firestore, 'users', uid, 'notifications', notification.$id),
-      { readAt: serverTimestamp() },
+      { read: true, readAt: serverTimestamp() },
     ).catch(console.error)
   }
 
