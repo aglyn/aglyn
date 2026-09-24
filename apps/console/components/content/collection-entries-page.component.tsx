@@ -1238,7 +1238,9 @@ export function CollectionEntriesPage() {
           `type: 'date'` so the grid compares the instants rather than their
           string forms, and a `valueGetter` so what it compares is the stamp
           the cell below actually shows — see {@link entryPublishStamp}
-          (AGL-3206).
+          (AGL-3206). The column keeps the field name `publishedAt` for the
+          grid's sort model; the server walk reads the stored copy of the same
+          rule, `publishSortAt` (AGL-3323).
         */
         type: 'date',
         valueGetter: (_value: any, row: any) =>
@@ -1251,7 +1253,7 @@ export function CollectionEntriesPage() {
             <Box component="span" title={formatStampFull(stamp)}>
               {!stamp ? (
                 '—'
-              ) : row.publishedAt ? (
+              ) : row.status !== 'scheduled' ? (
                 formatStampShort(stamp)
               ) : (
                 <Typography variant="body2" color="info.main" component="span">

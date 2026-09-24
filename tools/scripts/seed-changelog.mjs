@@ -303,6 +303,8 @@ for (const entry of entries) {
     tags: entry.tags,
     status: 'published',
     publishedAt: at(entry.date),
+    // The console's Published sort key (AGL-3323).
+    publishSortAt: at(entry.date),
     createdAt: at(entry.date),
   })
 }

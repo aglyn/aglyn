@@ -201,7 +201,11 @@ describe('with no grant, nothing about the public answer changes', () => {
     entryDocs = [entry({ status: 'scheduled', publishAt: AN_HOUR_AGO() })]
     expect((await publicPage()).entry?.$id).toBe('entry-1')
     expect(flips['entry-1']).toEqual([
-      { status: 'published', publishedAt: AN_HOUR_AGO() },
+      {
+        status: 'published',
+        publishedAt: AN_HOUR_AGO(),
+        publishSortAt: AN_HOUR_AGO(),
+      },
     ])
   })
 })

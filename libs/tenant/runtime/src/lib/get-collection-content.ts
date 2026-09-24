@@ -30,6 +30,7 @@ import {
   resolveCollectionCategoryBySlug,
   resolveEntryAuthor,
 } from '@aglyn/aglyn/server'
+import { ENTRY_PUBLISH_SORT_FIELD } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import {
   PUBLISHED_SITE_DATA_TTL_SECONDS,
@@ -491,8 +492,15 @@ function flipDueEntry(
       .catch((error) => console.error(error))
     return
   }
+  // The console's sort key follows the flip (AGL-3323). It already held
+  // `publishAt` while the entry waited, and `publishedAt` takes that same
+  // instant, so the entry keeps its place in the console's Published order.
   docRef
-    .update({ status: 'published', publishedAt: value['publishAt'] })
+    .update({
+      status: 'published',
+      publishedAt: value['publishAt'],
+      [ENTRY_PUBLISH_SORT_FIELD]: value['publishAt'],
+    })
     .catch((error) => console.error(error))
 }
 

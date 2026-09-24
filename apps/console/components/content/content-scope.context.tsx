@@ -17,6 +17,10 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import {
+  ENTRY_PUBLISH_SORT_FIELD,
+  entryPublishSortStamp,
+} from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -66,6 +70,7 @@ import {
   entryListBase,
   entryListEqualityFields,
   entryListFilterKey,
+  entryListStoredSort,
 } from './entry-list-query'
 import { useHostId, useHostSubdomain } from '../host-id-provider'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -152,26 +157,35 @@ export const formatStampShort = (value: any): string => {
 }
 
 /**
- * The instant the Published column speaks for: `publishedAt` once an entry has
- * gone out, the scheduled `publishAt` while it is still due, and nothing at all
- * for a draft (AGL-3206).
+ * The instant the Published column speaks for: the scheduled `publishAt` while
+ * an entry waits to go out, its `publishedAt` otherwise, and nothing at all
+ * for a draft (AGL-3206, AGL-3323).
  *
- * Exported so the column's CELL and its SORT KEY read one function instead of
- * two copies of this rule. They drifted once already: the cell fell back to
- * `publishAt` and the sort did not, so a scheduled entry sorted on a field it
- * does not carry, and DataGrid pins an empty value to the bottom in BOTH
- * directions — a post due next week sat below one published last month.
- *
- * The `status` guard is load-bearing. A draft that still holds a `publishAt`
- * from a cancelled schedule reads as undated here, which is what the cell
- * shows, rather than sorting among the dated rows on a date it never displays.
+ * The cell reads it here and the table's server sort reads the same rule
+ * stored as `publishSortAt` — see `entryPublishSortStamp`. They drifted once
+ * already: the cell fell back to `publishAt` and the sort did not, so a
+ * scheduled entry sorted on a field it does not carry and sat below one
+ * published last month.
  */
 export const entryPublishStamp = (row: {
   publishedAt?: any
   publishAt?: any
   status?: string
-}): any =>
-  row?.publishedAt ?? (row?.status === 'scheduled' ? row?.publishAt : undefined)
+}): any => entryPublishSortStamp(row) ?? undefined
+
+/**
+ * The `publishSortAt` half of a write that changes `status`, `publishedAt` or
+ * `publishAt` (AGL-3323): the entry as it will be AFTER the write, run through
+ * the shared rule, and the field removed when the entry ends up undated so
+ * the sorted walk lists it after every dated entry.
+ */
+export const entryPublishSortPatch = (after: {
+  publishedAt?: any
+  publishAt?: any
+  status?: string
+}) => ({
+  [ENTRY_PUBLISH_SORT_FIELD]: entryPublishSortStamp(after) ?? deleteField(),
+})
 
 /** The full instant behind {@link formatStampShort}, for a tooltip. */
 export const formatStampFull = (value: any): string | undefined => {
@@ -658,7 +672,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
    * ## The sort is a field, and no entry may drop out of it
    *
    * `orderBy` matches only documents that HAVE the field. A draft carries no
-   * `publishedAt` — unpublishing deletes it — and `/api/hosts/import` writes
+   * `publishSortAt` — see `entryListStoredSort` — and `/api/hosts/import` writes
    * entries through `cleanDoc`, which carries no `createdAt`. So the walk is
    * two segments: the entries that have the sorted field, in its order, then
    * the entries that lack it, found by a scan in name order that opens only
@@ -695,7 +709,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         entryFilter,
         entrySort,
       ),
-    entrySort,
+    entryListStoredSort(entrySort),
     [firestore, hostId, selected?.$id, entryFilterKey],
     {
       idField: '$id',
@@ -805,6 +819,7 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
           variant: 'warning',
         })
       }
+      const publishedAt = entry.publishedAt ?? Timestamp.now()
       await updateDoc(
         entryRef(entry.$id),
         /**
@@ -826,9 +841,14 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         publish
           ? {
               status: 'published',
-              publishedAt: entry.publishedAt ?? Timestamp.now(),
+              publishedAt,
+              ...entryPublishSortPatch({ status: 'published', publishedAt }),
             }
-          : { status: 'draft', publishedAt: deleteField() },
+          : {
+              status: 'draft',
+              publishedAt: deleteField(),
+              ...entryPublishSortPatch({ status: 'draft' }),
+            },
       )
       enqueueSnackbar(publish ? 'Entry published' : 'Entry unpublished', {
         variant: 'success',
@@ -970,9 +990,11 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         persist: false,
       })
     }
+    const scheduledAt = Timestamp.fromDate(publishAt)
     await updateDoc(entryRef(scheduler.entry.$id), {
       status: 'scheduled',
-      publishAt: Timestamp.fromDate(publishAt),
+      publishAt: scheduledAt,
+      ...entryPublishSortPatch({ status: 'scheduled', publishAt: scheduledAt }),
     })
     enqueueSnackbar(`Scheduled for ${publishAt.toLocaleString()}`, {
       variant: 'success',
@@ -1013,7 +1035,8 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
    *
    * ## What the write deliberately does NOT say
    *
-   * It names exactly one field. Not `status` — re-dating is not publishing.
+   * It names exactly one field and the sort key derived from it (AGL-3323).
+   * Not `status` — re-dating is not publishing.
    * Not `updatedAt` — that is what `Article.dateModified` reads, and it has to
    * go on meaning "last edited" rather than "last re-dated".
    */
@@ -1034,8 +1057,12 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
         { variant: 'warning', persist: false },
       )
     }
+    const publishedAt = Timestamp.fromDate(at)
     await updateDoc(entryRef(publishDate.entry.$id), {
-      publishedAt: Timestamp.fromDate(at),
+      publishedAt,
+      // A scheduled entry keeps listing under its schedule; anything else
+      // now lists under the date just set (AGL-3323).
+      ...entryPublishSortPatch({ ...publishDate.entry, publishedAt }),
     })
     enqueueSnackbar(`Published date set to ${at.toLocaleString()}`, {
       variant: 'success',

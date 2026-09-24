@@ -100,13 +100,19 @@ import {
   sortFieldIsTotal,
   type CollectionSort,
 } from '@aglyn/tenant-feature-instance/hooks/sorted-collection-window'
+import {
+  ENTRY_PUBLISH_SORT_FIELD,
+  entryPublishSortStamp,
+} from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { IMPORTABLE_FIELDS } from '../app/api/_lib/site-export'
+import { entryPublishSortPatch } from '../components/content/content-scope.context'
 import {
   ENTRY_LIST_DEFAULT_SORT,
   ENTRY_LIST_SORT_FIELDS,
   ENTRY_STATUS_OPTIONS,
   entryListBase,
   entryListEqualityFields,
+  entryListStoredSort,
 } from '../components/content/entry-list-query'
 import { ENTRY_LIST_FILTER_FIELDS } from '../utils/list-filters'
 
@@ -143,17 +149,35 @@ const create = (id: string, data: Record<string, unknown>, at: number) =>
     createdBy: 'uid-editor',
   })
 
-/** The list's Publish: keeps a date the entry already has, else stamps one. */
+/**
+ * The list's Publish: keeps a date the entry already has, else stamps one —
+ * and the sort key the console's Published column walks (AGL-3323).
+ */
 const publish = (id: string, at: number) =>
-  updateDoc(entryRef(id), { status: 'published', publishedAt: day(at) })
+  updateDoc(entryRef(id), {
+    status: 'published',
+    publishedAt: day(at),
+    ...entryPublishSortPatch({ status: 'published', publishedAt: day(at) }),
+  })
 
-/** The list's Unpublish: the date goes with it. */
+/** The list's Unpublish: the date goes with it, and so does the sort key. */
 const unpublish = (id: string) =>
-  updateDoc(entryRef(id), { status: 'draft', publishedAt: deleteField() })
+  updateDoc(entryRef(id), {
+    status: 'draft',
+    publishedAt: deleteField(),
+    ...entryPublishSortPatch({ status: 'draft' }),
+  })
 
-/** The scheduler: a future `publishAt`, and no `publishedAt` of its own. */
+/**
+ * The scheduler: a future `publishAt`, no `publishedAt` of its own, and the
+ * schedule as its sort key (AGL-3323).
+ */
 const schedule = (id: string, at: Timestamp) =>
-  updateDoc(entryRef(id), { status: 'scheduled', publishAt: at })
+  updateDoc(entryRef(id), {
+    status: 'scheduled',
+    publishAt: at,
+    ...entryPublishSortPatch({ status: 'scheduled', publishAt: at }),
+  })
 
 /** The tenant's due-schedule flip, which dates the entry to its schedule. */
 const flipDue = async (id: string) => {
@@ -161,6 +185,7 @@ const flipDue = async (id: string) => {
   await updateDoc(entryRef(id), {
     status: 'published',
     publishedAt: stored['publishAt'],
+    [ENTRY_PUBLISH_SORT_FIELD]: stored['publishAt'],
   })
 }
 
@@ -175,7 +200,12 @@ const restore = (id: string, exported: Record<string, unknown>) => {
   for (const [key, value] of Object.entries(exported)) {
     if (permitted.has(key) && value !== undefined) clean[key] = value
   }
-  return setDoc(entryRef(id), { ...clean, updatedAt: serverTimestamp() })
+  const publishSortAt = entryPublishSortStamp(clean as any)
+  return setDoc(entryRef(id), {
+    ...clean,
+    ...(publishSortAt ? { [ENTRY_PUBLISH_SORT_FIELD]: publishSortAt } : {}),
+    updatedAt: serverTimestamp(),
+  })
 }
 
 /** Every entry, and the writes that made it what it is. */
@@ -348,12 +378,15 @@ const rowsOf = async (built: Query): Promise<Row[]> =>
 
 /** One page, planned exactly as `useSortedPagedCollection` plans it. */
 async function readPage(
-  sort: CollectionSort,
+  columnSort: CollectionSort,
   filter: ListFilterRequest | null,
   page: number,
   pageSize: number,
 ) {
-  const base = entryListBase(db, HOST_ID, COLLECTION_ID, filter, sort)
+  const base = entryListBase(db, HOST_ID, COLLECTION_ID, filter, columnSort)
+  // The walk orders on the stored field, as the content scope hands it to
+  // `useSortedPagedCollection` (AGL-3323).
+  const sort = entryListStoredSort(columnSort)
   const equalityFields = entryListEqualityFields(filter)
   const keyedIsTotal = sortFieldIsTotal(sort, equalityFields)
   const { keyedLimit } = planKeyedSegment({
@@ -529,8 +562,9 @@ describeEmulated('the entries table under every sort and filter (emulator)', () 
 
   it('orders what has the value, then walks what lacks it', async () => {
     for (const filter of filters()) {
-      for (const sort of SORTS) {
-        const rows = (await walk(sort, filter, 3)).flat()
+      for (const columnSort of SORTS) {
+        const rows = (await walk(columnSort, filter, 3)).flat()
+        const sort = entryListStoredSort(columnSort)
         const split = rows.findIndex((row) => lacksSortField(row, sort.field))
         const keyed = split === -1 ? rows : rows.slice(0, split)
         const rest = split === -1 ? [] : rows.slice(split)
@@ -562,9 +596,32 @@ describeEmulated('the entries table under every sort and filter (emulator)', () 
     }
   }, 300_000)
 
-  it('opens on the newest published date', async () => {
+  it('opens on the furthest-future schedule, then the newest published date', async () => {
+    // AGL-3323: `s-jade` is due on day 400 and has no `publishedAt`. Ordered
+    // on `publishedAt` it fell to the unkeyed segment — the last page.
     const [first] = await walk(ENTRY_LIST_DEFAULT_SORT, null, 3)
-    expect(first.map((row) => row.$id)).toEqual(['p-aurora', 'p-basalt', 'p-delta'])
+    expect(first.map((row) => row.$id)).toEqual(['s-jade', 'p-aurora', 'p-basalt'])
+  })
+
+  it('ends the dated entries on the schedule when oldest first, drafts after', async () => {
+    const rows = (
+      await walk({ field: 'publishedAt', direction: 'asc' }, null, 3)
+    ).flat()
+    const ids = rows.map((row) => row.$id)
+    const undated = ['d-garnet', 'd-harbor', 'i-moss', 't-untitled', 'u-iris', 'x-legacy']
+    // Every dated entry, then the undated ones in name order.
+    expect(ids.slice(-undated.length)).toEqual(undated)
+    expect(ids[ids.length - undated.length - 1]).toBe('s-jade')
+  })
+
+  it('lists a Scheduled filter in both directions', async () => {
+    const scheduled = { field: 'status', op: 'equals', value: 'scheduled' }
+    for (const direction of ['desc', 'asc'] as const) {
+      const rows = (
+        await walk({ field: 'publishedAt', direction }, scheduled, 3)
+      ).flat()
+      expect(rows.map((row) => row.$id)).toEqual(['s-jade'])
+    }
   })
 
   it('pays for no scan while the first page is all dated entries', async () => {

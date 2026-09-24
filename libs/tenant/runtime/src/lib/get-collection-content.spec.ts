@@ -674,7 +674,11 @@ describe('the live read drops nothing', () => {
     expect(content.entries.map((entry) => entry.slug)).toContain('due')
     expect(entryUpdates).toContainEqual({
       id: 'due',
-      patch: { status: 'published', publishedAt: expect.anything() },
+      patch: {
+        status: 'published',
+        publishedAt: expect.anything(),
+        publishSortAt: expect.anything(),
+      },
     })
   })
 
