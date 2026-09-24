@@ -28,6 +28,7 @@ import {
   OUTREACH_CLICK_PATH,
   OUTREACH_LINK_ID_LENGTH,
   OUTREACH_SHORT_LINK_PATH,
+  OUTREACH_TEST_LINK_ENROLLMENT,
   outreachClickUrl,
   outreachShortLinkUrl,
   outreachStoredLink,
@@ -491,6 +492,14 @@ describe('the short link id and document', () => {
     expect(readOutreachStoredLink({ ...doc, v: 2 })).toBeNull()
     expect(readOutreachStoredLink(null)).toBeNull()
   })
+
+  it('keeps a test link’s mark, and reads it back only as the boolean it wrote (AGL-3325)', () => {
+    const doc = outreachStoredLink({ ...STORED, enrollmentId: OUTREACH_TEST_LINK_ENROLLMENT, test: true }, 5)
+    expect(doc).toMatchObject({ test: true, enrollmentId: 'test' })
+    expect(readOutreachStoredLink(doc)).toMatchObject({ test: true })
+    expect(readOutreachStoredLink({ ...doc, test: 'yes' })).not.toHaveProperty('test')
+    expect(outreachStoredLink(STORED, 5)).not.toHaveProperty('test')
+  })
 })
 
 describe('the short link route', () => {
@@ -504,6 +513,19 @@ describe('the short link route', () => {
     expect(answer.headers.get('Location')).toBe(TARGET)
     expect(answer.headers.get('Cache-Control')).toContain('no-store')
     expect(answer.headers.get('Referrer-Policy')).toBe('no-referrer')
+  })
+
+  it('follows a test link and records nothing, whoever clicks it (AGL-3325)', async () => {
+    docs.set(LINK_PATH, { v: 1, ...STORED, enrollmentId: OUTREACH_TEST_LINK_ENROLLMENT, test: true, createdAtMs: SENT_AT })
+    const before = JSON.stringify([...docs.entries()])
+    const answer = await callShort(shortVisit(LINK_ID))
+    expect(answer.status).toBe(302)
+    expect(answer.headers.get('Location')).toBe(TARGET)
+    clock += 60_000
+    await callShort(shortVisit(LINK_ID))
+    expect(JSON.stringify([...docs.entries()])).toBe(before)
+    expect(filed).toEqual([])
+    expect(touches).toEqual([])
   })
 
   it('counts clicks exactly as the signed link does: once per person', async () => {

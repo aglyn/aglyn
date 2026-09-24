@@ -45,6 +45,7 @@ import {
   OUTREACH_RAMP_STEPS,
   OUTREACH_WEEKDAY_LABELS,
   outreachEffectiveDailyCap,
+  outreachLocalDay,
   summarizeMailboxHealth,
   validateDailyCap,
   validateDisplayName,
@@ -184,6 +185,12 @@ export function MailboxCard(props: MailboxCardProps) {
   }, [storedKey, stored])
 
   const health = summarizeMailboxHealth(mailbox.health, mailbox.timezone, nowMs)
+  // Tests of a sequence step sent today (AGL-3325): counted beside the
+  // sends, never among them, so the cap and the seven-day sum stay honest.
+  const testsToday = Math.max(
+    0,
+    Number(mailbox.health?.daily?.[outreachLocalDay(nowMs, mailbox.timezone)]?.tests) || 0,
+  )
   const needsReconnect = mailbox.status === 'reconnect_required' || mailbox.status === 'disconnected'
   const capCheck = validateDailyCap(draft.dailyCap === '' ? Number.NaN : Number(draft.dailyCap))
   const windowCheck = validateSendWindow(draft.window)
@@ -362,6 +369,9 @@ export function MailboxCard(props: MailboxCardProps) {
               </Box>
             ))}
           </Stack>
+          <Typography variant="caption" color="text.secondary" aria-label="Tests today">
+            {`Tests today: ${testsToday}`}
+          </Typography>
         </Box>
 
         {canManage ? (

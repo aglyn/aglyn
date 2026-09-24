@@ -28,6 +28,7 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
   listTrackingHosts,
   removeTrackingHost,
+  resolveTrackingLinkOrigin,
   setUpTrackingHost,
   verifyTrackingHost,
 } from '@aglyn/tenant-data-admin/server/tracking-hosts'
@@ -53,6 +54,7 @@ export {
   logOrgActivity,
   removeTrackingHost,
   resolveOrgPermissions,
+  resolveTrackingLinkOrigin,
   setUpTrackingHost,
   stampRecordEmailState,
   verifyTrackingHost,

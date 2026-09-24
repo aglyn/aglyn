@@ -32,7 +32,11 @@
 
 import type { CrmMergeContext } from '@aglyn/aglyn/app-utils/crm-email-templates'
 import { resolveCrmMergeFields } from '@aglyn/aglyn/app-utils/crm-email-templates'
-import { composeOutreachEmail, type OutreachComposeResult } from '../engine/compose'
+import {
+  composeOutreachEmail,
+  type ComposeOutreachEmailInput,
+  type OutreachComposeResult,
+} from '../engine/compose'
 import { isInThreadEmailStep } from '../engine/sequence-validation'
 import type { OutreachOrgSettings, OutreachSequenceStep, OutreachStepOverrides } from './outreach.types'
 
@@ -83,6 +87,12 @@ export interface OutreachStepPreviewInput {
   personalLine: string
   /** The CRM template's body, when the step names a template. */
   templateBody?: string | null
+  /**
+   * The composer's link rewriter (AGL-3325), for a TEST send whose links
+   * are minted as test links. A preview passes nothing and shows the links
+   * as written.
+   */
+  rewriteLink?: ComposeOutreachEmailInput['rewriteLink']
   /** The person's own copies of steps (AGL-3324), as the enrollment would carry them. */
   stepOverrides?: OutreachStepOverrides | null
 }
@@ -116,5 +126,6 @@ export function previewOutreachStep(input: OutreachStepPreviewInput): OutreachCo
     orgSettings: input.orgSettings,
     merge: input.merge,
     templateBody: input.templateBody ?? null,
+    rewriteLink: input.rewriteLink ?? null,
   })
 }

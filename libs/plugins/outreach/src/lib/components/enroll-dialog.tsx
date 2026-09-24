@@ -54,6 +54,7 @@ import {
   type OutreachEnrollPreviewStatus,
   type OutreachEnrollSource,
   type OutreachPreviewResponse,
+  type OutreachStepTestResponse,
 } from '../model/outreach-api'
 import {
   OUTREACH_ATTESTATION_LABELS,
@@ -131,6 +132,12 @@ function hasOpenDrafts(supplied: Supplied | undefined): boolean {
   return Object.values(supplied?.drafts ?? {}).some((draft) => draft.decision === 'pending')
 }
 
+/** Where one person's test send stands (AGL-3325). */
+type StepTest =
+  | { status: 'sending' }
+  | { status: 'sent'; answer: OutreachStepTestResponse }
+  | { status: 'failed'; message: string }
+
 type Stage =
   | { kind: 'source' }
   | { kind: 'previewing' }
@@ -193,6 +200,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
       | { status: 'failed'; message: string }
     >
   >({})
+  const [stepTests, setStepTests] = useState<Record<string, StepTest>>({})
 
   const views = useOutreachSavedViews(props.open ? orgId : null, props.uid)
   const search = useOutreachContactSearch({
@@ -214,6 +222,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     setProblem(null)
     setSupplied({})
     setEmailPreview({})
+    setStepTests({})
   }
   const close = () => {
     reset()
@@ -376,6 +385,33 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
         outreachMemberDraftStates(sequence.steps, stepIndexes).map((draft) => [draft.stepIndex, draft]),
       ),
     })
+  }
+
+  /**
+   * This person's first email, sent to the member as a test (AGL-3325):
+   * their record, the personal line as written so far and the curated copy
+   * they used (AGL-3324) fill it, and nothing is enrolled or stored for
+   * them.
+   */
+  const sendTest = async (person: OutreachEnrollPreviewPerson) => {
+    setStepTests((previous) => ({ ...previous, [person.personId]: { status: 'sending' } }))
+    try {
+      const overrides = usedOverrides(supplied[person.personId])
+      const answer = await api.sendStepTest({
+        sequenceId: sequence.id,
+        ...(person.target === 'lead' && person.leadId
+          ? { leadId: person.leadId }
+          : { contactId: person.contactId }),
+        personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
+        ...(overrides.length ? { stepOverrides: overrides } : {}),
+      })
+      setStepTests((previous) => ({ ...previous, [person.personId]: { status: 'sent', answer } }))
+    } catch (error) {
+      setStepTests((previous) => ({
+        ...previous,
+        [person.personId]: { status: 'failed', message: (error as Error).message },
+      }))
+    }
   }
 
   const title = `Enroll people in ${sequence.name}`
@@ -654,6 +690,8 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                     onSupply={(next) => supply(person.personId, next)}
                     emailPreview={emailPreview[person.personId]}
                     onPreviewEmail={() => void previewEmail(person)}
+                    stepTest={stepTests[person.personId]}
+                    onSendTest={() => void sendTest(person)}
                     onCurate={() => void curate(person)}
                     onWriteThemselves={() => writeThemselves(person)}
                     disabled={stage.kind === 'enrolling'}
@@ -741,6 +779,8 @@ function PersonRow(props: {
     | { status: 'failed'; message: string }
     | undefined
   onPreviewEmail(): void
+  stepTest: StepTest | undefined
+  onSendTest(): void
   onCurate(): void
   onWriteThemselves(): void
   disabled: boolean
@@ -870,12 +910,27 @@ function PersonRow(props: {
                   </Button>
                   <Button
                     size="small"
+                    onClick={props.onSendTest}
+                    disabled={disabled || props.stepTest?.status === 'sending'}
+                  >
+                    {props.stepTest?.status === 'sending' ? 'Sending…' : 'Send me this as a test'}
+                  </Button>
+                  <Button
+                    size="small"
                     onClick={props.onCurate}
                     disabled={disabled || curation.status === 'drafting'}
                   >
                     {drafts.length ? 'Curate again' : 'Curate for this person'}
                   </Button>
                 </Stack>
+                {props.stepTest?.status === 'failed' ? (
+                  <Alert severity="error">{props.stepTest.message}</Alert>
+                ) : null}
+                {props.stepTest?.status === 'sent' ? (
+                  <Alert severity="success">
+                    {`Sent to ${props.stepTest.answer.sentTo} as “${props.stepTest.answer.subject}”. ${name} was not enrolled.`}
+                  </Alert>
+                ) : null}
                 {curation.status === 'drafting' ? (
                   <OutreachLoading label="Drafting their emails…" />
                 ) : null}
