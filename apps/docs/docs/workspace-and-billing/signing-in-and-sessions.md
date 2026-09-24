@@ -357,6 +357,19 @@ refusal, so the card may still ask later. Turning the switch off records a
 refusal, which is honored everywhere Aglyn sends marketing email. Receipts,
 invites, security alerts and other account mail are unaffected by this choice.
 
+The unsubscribe link in the emails themselves counts too. Unsubscribing from
+all of Aglyn's emails, or unticking **Product updates** on an email's
+preference page, turns the switch off, and the switch says it was done from an
+email. Leaving a different list — the newsletter, say — leaves the switch
+alone.
+
+Turning the switch back on resumes product updates and nothing else: any other
+list you left stays left. It needs a verified email address, because it undoes
+something done from your inbox; until then the switch records your answer and
+tells you to verify first. If an earlier email to you bounced or was reported
+as spam, the switch says so instead — that hold protects delivery for everyone
+and is not a preference you can change here.
+
 ## Closing your account
 
 **Manage Account → Close account** permanently deletes your personal account. It removes

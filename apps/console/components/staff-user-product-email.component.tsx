@@ -30,11 +30,15 @@ export interface StaffUserMarketing {
   reach: PlatformMarketingReach
 }
 
-/** The console door a decision came through, as a staffer would say it. */
+/** The door a decision came through, as a staffer would say it. */
 const DOOR: Record<string, string> = {
   'console-signup': 'at sign-up',
   'console-prompt': 'in the console prompt',
   'console-preferences': 'in their account settings',
+  // Mirrored from the marketing site's own pages (AGL-3305).
+  'email-unsubscribe': 'by unsubscribing from a marketing email',
+  'email-preferences': 'on the email preference page',
+  'email-resubscribe': 'by resubscribing from a marketing email',
 }
 
 /** One line for what the person said, from their own document. */
@@ -87,6 +91,19 @@ export function describeReach(reach: PlatformMarketingReach): ReachChip | null {
       color: 'error',
     }
   }
+  // The product-updates list itself (AGL-3305): its other lists may still send.
+  if (reach.topic?.state === 'opted-out') {
+    return {
+      label: `Won’t send product updates — left that list ${formatStaffTimestamp(reach.topic.leftAtMs)}`,
+      color: 'error',
+    }
+  }
+  if (reach.topic?.state === 'pending') {
+    return {
+      label: 'Won’t send product updates — the list is not confirmed yet',
+      color: 'default',
+    }
+  }
   if (reach.verdict === 'consented') {
     return {
       label:
@@ -109,10 +126,14 @@ export function describeReach(reach: PlatformMarketingReach): ReachChip | null {
   }
 }
 
-/** Whether a send would go out, when that can be told at all. */
+/** Whether a product-updates send would go out, when that can be told at all. */
 function reachSends(reach: PlatformMarketingReach): boolean | null {
   if (reach.status !== 'read') return null
-  return !reach.suppression && reach.verdict !== 'withheld'
+  return (
+    !reach.suppression &&
+    reach.verdict !== 'withheld' &&
+    (reach.topic?.state ?? 'subscribed') === 'subscribed'
+  )
 }
 
 /**
@@ -122,9 +143,10 @@ function reachSends(reach: PlatformMarketingReach): boolean | null {
  * step. "Their answer" is the person's own document — what the console
  * asked and shows them. The chip is what a campaign from the operator's
  * marketing site would actually do: that site's CRM contact, the org's consent
- * rule and both suppression lists. An unsubscribe link changes only the
- * lists, so the two can disagree, and when they do the line under them says
- * which one the mail follows.
+ * rule, both suppression lists and the product-updates list. An unsubscribe
+ * about product updates turns their answer to No as well (AGL-3305), but a
+ * record from before that, or a contact changed by hand, can still disagree,
+ * and when the two do the line under them says which one the mail follows.
  */
 export default function StaffUserProductEmail({
   marketing,

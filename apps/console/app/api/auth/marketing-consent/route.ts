@@ -18,14 +18,17 @@
 import { resolveIdpDisplayName } from '@aglyn/aglyn/app-utils/idp-profile'
 import {
   isPlatformMarketingConsentDecision,
-  isPlatformMarketingConsentSourceKind,
+  isPlatformMarketingConsoleSourceKind,
   PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
   platformMarketingPromptDue,
 } from '@aglyn/aglyn/app-utils/platform-marketing-consent'
 import {
   firebaseAdmin,
+  isEmailVerified,
   isImpersonationSession,
+  platformMarketingHold,
   readPlatformMarketingConsentForUser,
+  readPlatformMarketingReach,
   recordPlatformMarketingConsent,
   snoozePlatformMarketingPrompt,
 } from '@aglyn/tenant-data-admin'
@@ -57,6 +60,15 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * a sentence it never showed. The client sends the version it rendered so a
  * mismatch is caught, and a mismatch is refused rather than recorded under
  * the new wording.
+ *
+ * Verification does gate ONE thing (AGL-3305): whether a Yes also reopens the
+ * list on the marketing site that the person left from one of its emails.
+ * That undoes something done from the mailbox, and an unverified account
+ * could have typed somebody else's address — so the answer is recorded
+ * either way, and the list reopens only for a verified one.
+ *
+ * Only a console door may be named here. The email doors are recorded by the
+ * marketing site's own pages, from a link signed for the address.
  */
 
 const UNAUTHENTICATED = () =>
@@ -120,7 +132,7 @@ async function handler(request: Request): Promise<Response> {
   const body = await request.json().catch(() => null)
   const decision = body?.decision
   const source = body?.source
-  if (!isPlatformMarketingConsentSourceKind(source)) {
+  if (!isPlatformMarketingConsoleSourceKind(source)) {
     return Response.json({ error: 'Unknown source' }, { status: 400 })
   }
 
@@ -181,6 +193,7 @@ async function handler(request: Request): Promise<Response> {
       decision,
       source,
       textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
+      mailboxVerified: isEmailVerified(decoded as never),
     })
     return Response.json(
       {
@@ -191,6 +204,9 @@ async function handler(request: Request): Promise<Response> {
         // Which half landed where. The person's document always did by this
         // line; the contact is the operator's and may be unconfigured.
         contact: result.contact.status,
+        // What a Yes did to the list they had left, when there was one to
+        // reopen (AGL-3305).
+        stream: result.stream?.status ?? null,
       },
       { status: 200 },
     )
@@ -213,11 +229,27 @@ async function statusHandler(request: Request): Promise<Response> {
   if ('response' in caller) return caller.response
   try {
     const state = await readPlatformMarketingConsentForUser(caller.decoded.uid)
+    const email =
+      typeof caller.decoded['email'] === 'string' ? caller.decoded['email'] : null
+    /*
+     * What stands between a Yes and the mail (AGL-3305), for the settings card
+     * alone — `?detail=hold` — because it reads the operator's contact and
+     * lists, and the prompt that asks on every console load needs none of it.
+     * Asked only of a Yes: a No is already the reason nothing arrives.
+     */
+    const detail = new URL(request.url).searchParams.get('detail') === 'hold'
+    const hold =
+      detail && state.decision === 'granted'
+        ? platformMarketingHold(await readPlatformMarketingReach({ email }))
+        : null
     return Response.json(
       {
         ...state,
         promptDue: platformMarketingPromptDue(state, Date.now()),
         currentTextVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
+        ...(detail
+          ? { hold, mailboxVerified: isEmailVerified(caller.decoded as never) }
+          : {}),
       },
       { status: 200 },
     )

@@ -42,7 +42,19 @@
  * contact half is written only when the deployment names a marketing host
  * (`PLATFORM_MARKETING_HOST_ID`, read in `@aglyn/tenant-data-admin`); a
  * self-hosted install with no audience of its own records the preference
- * and skips the contact.
+ * and skips the contact — and keeps asking, so the answers are already on
+ * file the day the operator names a marketing host.
+ *
+ * ## An unsubscribe reaches the account, for its own list only (AGL-3305)
+ *
+ * The marketing site's emails carry their own way out, and a person who uses
+ * it has answered the console's question too — but only if what they left
+ * is the list the question was about. Leaving
+ * {@link PLATFORM_MARKETING_TOPIC_ID}, or everything the site sends, turns
+ * the account's answer to No through an email door; leaving the newsletter
+ * leaves it alone. The email doors write the account and nothing else: the
+ * site's lists already say what was left, and declining the contact's basis
+ * would stop every list, not the one the person chose.
  *
  * ## Absence is not refusal
  *
@@ -56,6 +68,7 @@
  * record, all from this one module.
  */
 
+import { EMAIL_TOPIC_PRODUCT_UPDATES } from './email-topics'
 import {
   MARKETING_CONSENT_FIELD,
   MARKETING_CONSENT_SOURCE_FIELD,
@@ -63,20 +76,80 @@ import {
 } from './marketing-consent'
 import { PLATFORM_BRAND_NAME } from './platform-brand'
 
+/**
+ * The list the account's answer stands for on the marketing site (AGL-3305):
+ * the built-in "Product updates" topic, which is what the platform's own
+ * announcements are sent on.
+ *
+ * Named so that "which unsubscribe is about this answer" has one spelling.
+ * Leaving this list, or leaving everything the site sends, is a No to the
+ * question the console asked. Leaving any other list is not, and must not
+ * touch the answer: someone who stops the newsletter has said nothing about
+ * product updates.
+ */
+export const PLATFORM_MARKETING_TOPIC_ID = EMAIL_TOPIC_PRODUCT_UPDATES
+
 /** The console doors a decision can come through, as the record names them. */
-export const PLATFORM_MARKETING_CONSENT_SOURCE_KINDS = [
+export const PLATFORM_MARKETING_CONSOLE_SOURCE_KINDS = [
   'console-signup',
   'console-preferences',
   'console-prompt',
 ] as const
 
+export type PlatformMarketingConsoleSourceKind =
+  (typeof PLATFORM_MARKETING_CONSOLE_SOURCE_KINDS)[number]
+
+/**
+ * The email doors (AGL-3305): the marketing site's own unsubscribe,
+ * preference and resubscribe pages, when what the person changed there was
+ * {@link PLATFORM_MARKETING_TOPIC_ID} or everything.
+ *
+ * Kept apart from the console doors because nothing the console sends may
+ * claim one. The server records these from the signed link a recipient
+ * followed; a console request naming one is refused, because a click in the
+ * console is not a click in a mailbox.
+ */
+export const PLATFORM_MARKETING_EMAIL_SOURCE_KINDS = [
+  'email-unsubscribe',
+  'email-preferences',
+  'email-resubscribe',
+] as const
+
+export type PlatformMarketingEmailSourceKind =
+  (typeof PLATFORM_MARKETING_EMAIL_SOURCE_KINDS)[number]
+
+/** Every door a stored decision can name. */
+export const PLATFORM_MARKETING_CONSENT_SOURCE_KINDS = [
+  ...PLATFORM_MARKETING_CONSOLE_SOURCE_KINDS,
+  ...PLATFORM_MARKETING_EMAIL_SOURCE_KINDS,
+] as const
+
 export type PlatformMarketingConsentSourceKind =
   (typeof PLATFORM_MARKETING_CONSENT_SOURCE_KINDS)[number]
 
+/** Any door, for READING a stored decision. */
 export function isPlatformMarketingConsentSourceKind(
   value: unknown,
 ): value is PlatformMarketingConsentSourceKind {
   return (PLATFORM_MARKETING_CONSENT_SOURCE_KINDS as readonly unknown[]).includes(
+    value,
+  )
+}
+
+/** A console door: the only kind a console request may record. */
+export function isPlatformMarketingConsoleSourceKind(
+  value: unknown,
+): value is PlatformMarketingConsoleSourceKind {
+  return (PLATFORM_MARKETING_CONSOLE_SOURCE_KINDS as readonly unknown[]).includes(
+    value,
+  )
+}
+
+/** An email door: a decision made from a link in one of the site's emails. */
+export function isPlatformMarketingEmailSourceKind(
+  value: unknown,
+): value is PlatformMarketingEmailSourceKind {
+  return (PLATFORM_MARKETING_EMAIL_SOURCE_KINDS as readonly unknown[]).includes(
     value,
   )
 }
@@ -143,7 +216,11 @@ export interface PlatformMarketingConsentState {
   atMs: number | null
   /** The wording version the decision was made under. */
   textVersion: string | null
-  /** Which console door recorded it; `null` for a record another writer left. */
+  /**
+   * Which door recorded it — a console door, or an email door for a decision
+   * mirrored from the marketing site's own pages. `null` for a record another
+   * writer left.
+   */
   sourceKind: PlatformMarketingConsentSourceKind | null
   /** When the prompt was last dismissed without an answer. */
   promptDismissedAtMs: number | null
@@ -207,7 +284,7 @@ export function platformMarketingPromptDue(
  * three doors cannot describe the same act three different ways.
  */
 const PROVENANCE_REASONS: Record<
-  PlatformMarketingConsentSourceKind,
+  PlatformMarketingConsoleSourceKind,
   Record<PlatformMarketingConsentDecision, string>
 > = {
   'console-signup': {
@@ -234,7 +311,7 @@ const PROVENANCE_REASONS: Record<
  * actor are the same human, which is the fact the field records.
  */
 export function platformMarketingConsentSource(input: {
-  kind: PlatformMarketingConsentSourceKind
+  kind: PlatformMarketingConsoleSourceKind
   decision: PlatformMarketingConsentDecision
   uid: string
   atMs: number
@@ -246,6 +323,57 @@ export function platformMarketingConsentSource(input: {
     atMs: input.atMs,
     reason: PROVENANCE_REASONS[input.kind][input.decision],
     textVersion: input.textVersion,
+    actor: 'person',
+  }
+}
+
+/**
+ * What an email door did, and which decisions each door can make.
+ *
+ * The pairs are the whole vocabulary: an unsubscribe only ever refuses, a
+ * resubscribe only ever restores, and only the preference page does both.
+ * Typed as the union rather than a free kind and decision, so an
+ * "unsubscribe that granted" cannot be written down at all.
+ */
+export type PlatformMarketingEmailDecision =
+  | { kind: 'email-unsubscribe'; decision: 'declined' }
+  | { kind: 'email-preferences'; decision: PlatformMarketingConsentDecision }
+  | { kind: 'email-resubscribe'; decision: 'granted' }
+
+const EMAIL_PROVENANCE_REASONS: {
+  [K in PlatformMarketingEmailDecision as `${K['kind']}:${K['decision']}`]: string
+} = {
+  'email-unsubscribe:declined':
+    'Unsubscribed from every email the marketing site sends, from a link in one of its emails.',
+  'email-preferences:declined':
+    'Left product updates on the marketing site’s email preference page.',
+  'email-preferences:granted':
+    'Chose product updates again on the marketing site’s email preference page.',
+  'email-resubscribe:granted':
+    'Resubscribed from the link in one of the marketing site’s emails.',
+}
+
+/**
+ * The provenance stored with a decision mirrored from the marketing site's
+ * own pages (AGL-3305), on the account only.
+ *
+ * Still `actor: 'person'`: the click was the recipient's, on a link signed
+ * for their address. No `textVersion`, because those pages do not version
+ * their wording; the field is absent rather than borrowing the console's
+ * version for a sentence the person never saw.
+ */
+export function platformMarketingEmailSource(
+  input: PlatformMarketingEmailDecision & { uid: string; atMs: number },
+): MarketingConsentSource {
+  return {
+    kind: input.kind,
+    by: input.uid,
+    atMs: input.atMs,
+    // The union narrows the pair; the template type cannot see that, so the
+    // key is asserted to the table's own keys rather than widened to string.
+    reason: EMAIL_PROVENANCE_REASONS[
+      `${input.kind}:${input.decision}` as keyof typeof EMAIL_PROVENANCE_REASONS
+    ],
     actor: 'person',
   }
 }

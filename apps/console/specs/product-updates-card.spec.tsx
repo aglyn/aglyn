@@ -19,6 +19,9 @@
  * The account-level product-updates switch (AGL-3185): it shows what the
  * record says, on records a grant, off records a refusal, and the switch
  * reads back from the server rather than trusting its own click.
+ *
+ * AGL-3305: it names a decision an email made, and says what keeps a Yes from
+ * arriving — with the one action the person has when it is theirs to undo.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -62,13 +65,19 @@ const DECIDED_AT = Date.UTC(2026, 8, 20, 12)
 /** The server's record; a POST moves it the way the real route would. */
 let mockStatus: Record<string, unknown> | null = null
 const postedBodies: Array<Record<string, unknown>> = []
+/** What the route's `?detail=hold` read answers after the next POST. */
+let mockHoldAfterPost: Record<string, unknown> | null = null
+const readUrls: string[] = []
 
 beforeEach(() => {
   mockEnqueue.mockClear()
   postedBodies.length = 0
+  readUrls.length = 0
+  mockHoldAfterPost = null
   mockStatus = { ...NOTHING }
   globalThis.fetch = jest.fn(async (url: string, init?: RequestInit) => {
-    if (url !== '/api/auth/marketing-consent') throw new Error(`unexpected ${url}`)
+    if (url.split('?')[0] !== '/api/auth/marketing-consent') throw new Error(`unexpected ${url}`)
+    if (init?.method !== 'POST') readUrls.push(url)
     if (init?.method === 'POST') {
       const body = JSON.parse(String(init.body))
       postedBodies.push(body)
@@ -79,6 +88,8 @@ beforeEach(() => {
         sourceKind: body.source,
         textVersion: body.textVersion,
         promptDue: false,
+        hold: body.decision === 'granted' ? mockHoldAfterPost : null,
+        mailboxVerified: true,
       }
       return { ok: true, json: async () => ({ ok: true }), text: async () => '' }
     }
@@ -172,5 +183,90 @@ describe('ProductUpdatesCard', () => {
       ),
     )
     expect(theSwitch().checked).toBe(false)
+  })
+})
+
+describe('ProductUpdatesCard · the email doors (AGL-3305)', () => {
+  it('asks the route for the hold detail — the card is its only reader', async () => {
+    await renderCard()
+    await waitFor(() => expect(readUrls).toContain('/api/auth/marketing-consent?detail=hold'))
+  })
+
+  it.each([
+    ['email-unsubscribe', 'declined', /You unsubscribed from .+’s emails on /],
+    ['email-preferences', 'declined', /You left product updates from an email on /],
+    ['email-resubscribe', 'granted', /You resubscribed from an email on /],
+    ['email-preferences', 'granted', /You chose product updates again from an email on /],
+  ])('names a %s %s as an email’s doing', async (sourceKind, decision, sentence) => {
+    mockStatus = { ...NOTHING, decision, atMs: DECIDED_AT, sourceKind, promptDue: false }
+    await renderCard()
+    expect(await screen.findByText(sentence)).toBeTruthy()
+  })
+
+  it('offers Resume for an unsubscribe a verified account may undo, and records a Yes', async () => {
+    mockStatus = {
+      ...NOTHING,
+      decision: 'granted',
+      atMs: DECIDED_AT,
+      sourceKind: 'console-signup',
+      promptDue: false,
+      hold: { kind: 'unsubscribed' },
+      mailboxVerified: true,
+    }
+    await renderCard()
+    expect(await screen.findByText(/none are being sent/)).toBeTruthy()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    })
+    await waitFor(() => expect(postedBodies).toHaveLength(1))
+    expect(postedBodies[0]).toEqual(
+      expect.objectContaining({ decision: 'granted', source: 'console-preferences' }),
+    )
+    // The route reopened the list; the read-back carries no hold.
+    await waitFor(() => expect(screen.queryByText(/none are being sent/)).toBeNull())
+  })
+
+  it('asks an unverified account to verify instead of offering Resume', async () => {
+    mockStatus = {
+      ...NOTHING,
+      decision: 'granted',
+      atMs: DECIDED_AT,
+      promptDue: false,
+      hold: { kind: 'unsubscribed' },
+      mailboxVerified: false,
+    }
+    await renderCard()
+    expect(await screen.findByText(/Verify your email address/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
+  })
+
+  it('explains a bounce and offers nothing — it is not a preference', async () => {
+    mockStatus = {
+      ...NOTHING,
+      decision: 'granted',
+      atMs: DECIDED_AT,
+      promptDue: false,
+      hold: { kind: 'paused', reason: 'bounce' },
+      mailboxVerified: true,
+    }
+    await renderCard()
+    expect(await screen.findByText(/could not be delivered/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull()
+  })
+
+  it('warns instead of celebrating when a Yes is still held', async () => {
+    mockHoldAfterPost = { kind: 'paused', reason: 'complaint' }
+    await renderCard()
+    await waitFor(() => expect(theSwitch().disabled).toBe(false))
+    await act(async () => {
+      fireEvent.click(theSwitch())
+    })
+    await waitFor(() =>
+      expect(mockEnqueue).toHaveBeenCalledWith(
+        'Saved, but product updates are still on hold.',
+        expect.objectContaining({ variant: 'warning' }),
+      ),
+    )
+    expect(await screen.findByText(/reported as spam/)).toBeTruthy()
   })
 })

@@ -534,7 +534,8 @@
         "site": "registerEmailPlugin",
         "console": "registerEmailConsole",
         "tenantApi": "registerEmailApi",
-        "consoleApi": "registerEmailConsoleApi"
+        "consoleApi": "registerEmailConsoleApi",
+        "consoleServerDeclarations": "registerEmailConsoleServerDeclarations"
       },
       "modules": {
         "site": "site"
