@@ -27,7 +27,8 @@ locked, with the rest of the CRM. See
 
 ## The tasks page
 
-The **Tasks** section is one list with six views, chosen from the control above it:
+The **Tasks** section is one list with six views, chosen under **Show** in the table's
+**Filters** panel — **My tasks** unless you choose another:
 
 | View | What it shows |
 | --- | --- |
@@ -243,9 +244,9 @@ Every contact, company and deal carries a **Next activity**: when its earliest
 open task is due. It is a column on the [contacts](./contact-record.md),
 [companies](./companies.md#the-companies-list) and [deals](./deals.md#the-board-and-the-table)
 lists — overdue in the warning color, today emphasized, a dash when nothing is
-scheduled — and a **No next activity** chip beside each list's view control
-keeps only the records with nothing planned. A view saved with the chip on
-reopens with it on. On the reports page, the pipeline card's **Stuck deals**
+scheduled — and filtering it by **is empty** in the table's **Filters** panel
+keeps only the records with nothing planned. A view saved with that filter
+reopens with it. On the reports page, the pipeline card's **Stuck deals**
 counts the open deals with nothing scheduled.
 
 The figure is kept by every task write: creating, editing, snoozing, completing,

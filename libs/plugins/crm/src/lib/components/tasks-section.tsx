@@ -19,6 +19,7 @@
 import {
   type ConsolePluginPageProps,
   CRM_COLLECTIONS,
+  type CrmViewFilterClause,
   findOrgMember,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
@@ -53,10 +54,22 @@ import { completeCrmTask } from '../model/task-api'
 import { crmTaskCallScope } from '../model/task-routes'
 import { type TaskCsvOptions, tasksCsv } from '../model/tasks-csv'
 import {
+  CRM_TASK_KIND_LABELS,
+  CRM_TASK_KINDS,
+  CRM_TASK_PRIORITIES,
+  CRM_TASK_PRIORITY_LABELS,
   CRM_TASK_VIEW_LIMIT,
   CRM_TASK_VIEWS,
   type CrmTaskView,
 } from '../model/task-views'
+import {
+  type ListFilterField,
+  matchListFilter,
+} from '@aglyn/shared-ui-jsx/const/list-filter'
+import { crmFilterColumns, crmRowMatchesSearch } from '../model/crm-grid-filter'
+import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
+import CrmFilterBar from './crm-filter-bar'
+import { CrmListToolbar } from './crm-list-toolbar'
 import {
   TaskDueText,
   TaskKindCell,
@@ -70,6 +83,30 @@ import TaskSnoozeMenu from './task-snooze-menu'
 import TasksBulkBar from './tasks-bulk-bar'
 
 /** What an empty view is headed, by view — "nothing overdue" is good news. */
+/*
+ * What the tasks grid's panel offers (AGL-3313). `view` is the task view
+ * the query serves — a hidden column, since it is no field of a task — and
+ * the rest narrow the rows that view loaded.
+ */
+const TASK_FILTER_FIELDS: readonly ListFilterField[] = [
+  { column: 'view', kind: 'exact', path: 'view', operators: ['equals'] },
+  { column: 'kind', kind: 'exact', path: 'kind', operators: ['equals', 'isAnyOf'] },
+  { column: 'priority', kind: 'exact', path: 'priority', operators: ['equals', 'isAnyOf'] },
+  { column: 'assigneeUid', kind: 'exact', path: 'assigneeUid', operators: ['equals', 'isAnyOf'] },
+]
+const TASK_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  view: 'Show',
+  kind: 'Kind',
+  priority: 'Priority',
+  assigneeUid: 'Assignee',
+}
+/** The filter-only `view` column never shows. */
+const TASK_HIDDEN_COLUMNS: Readonly<Record<string, boolean>> = { view: false }
+/** No `view` clause is "My tasks", which the section opened on before views existed. */
+const TASK_VIEW_DEFAULT: CrmViewFilterClause = { field: 'view', op: 'equals', value: 'mine' }
+/** What the quick search reads on a task. */
+const TASK_SEARCH_FIELDS = ['title', 'notes'] as const
+
 const EMPTY_LABEL: Record<CrmTaskView, string> = {
   mine: 'Nothing is assigned to you',
   overdue: 'Nothing is overdue',
@@ -136,11 +173,33 @@ export function TasksSection(props: ConsolePluginPageProps) {
       ? (value as CrmTaskView)
       : 'mine'
   }, [views.state.filters])
-  const setView = useCallback(
-    (next: CrmTaskView) =>
-      views.setFilters([{ field: 'view', op: 'equals', value: next }]),
+  /*
+   * The grid's own Filters panel and quick search edit the view's clauses
+   * (AGL-3313). "Show" is the task view the query serves — the hidden
+   * `view` column, as the toggle stored it, with none meaning "My tasks" —
+   * and Kind, Priority and Assignee narrow the rows it loaded.
+   */
+  const clauses = useMemo(
+    () =>
+      views.state.filters.some((clause) => clause.field === 'view')
+        ? views.state.filters
+        : [TASK_VIEW_DEFAULT, ...views.state.filters],
+    [views.state.filters],
+  )
+  const setClauses = useCallback(
+    (next: CrmViewFilterClause[]) =>
+      views.setFilters(
+        next.filter(
+          (clause) => !(clause.field === 'view' && clause.value === TASK_VIEW_DEFAULT.value),
+        ),
+      ),
     [views.setFilters],
   )
+  const gridFilter = useCrmGridFilter({
+    clauses,
+    onChange: setClauses,
+    selectFields: ['view', 'kind', 'priority', 'assigneeUid'],
+  })
   const list = useCrmTaskList({
     hostId,
     org: orgRecord,
@@ -148,8 +207,38 @@ export function TasksSection(props: ConsolePluginPageProps) {
     uid: user?.uid,
     nowMs,
   })
-  const { tasks, status, fromCache, truncated, scope, orgId, readTokens } = list
+  const { tasks: loaded, status, fromCache, truncated, scope, orgId, readTokens } = list
   const directory = useOrgMemberDirectory(orgId)
+  const filterOptions = useMemo(
+    () => ({
+      view: CRM_TASK_VIEWS.map((option) => ({ value: option.id, label: option.label })),
+      kind: CRM_TASK_KINDS.map((kind) => ({ value: kind, label: CRM_TASK_KIND_LABELS[kind] })),
+      priority: CRM_TASK_PRIORITIES.map((priority) => ({
+        value: priority,
+        label: CRM_TASK_PRIORITY_LABELS[priority],
+      })),
+      assigneeUid: directory.members.map((member) => ({
+        value: member.uid,
+        label: member.label,
+      })),
+    }),
+    [directory.members],
+  )
+  // Every clause but the served view, and the search, over the loaded rows.
+  const searchKey = gridFilter.searchWords.join(' ')
+  const tasks = useMemo(
+    () =>
+      loaded.filter(
+        (task) =>
+          clauses.every(
+            (clause) =>
+              clause.field === 'view' || matchListFilter(task, TASK_FILTER_FIELDS, clause),
+          ) && crmRowMatchesSearch(task, TASK_SEARCH_FIELDS, gridFilter.searchWords),
+      ),
+    // `searchKey` stands for the words, which are a new array each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loaded, clauses, searchKey],
+  )
 
   /*
    * Every record a task names, not only the one its "For" cell shows: the
@@ -366,7 +455,11 @@ export function TasksSection(props: ConsolePluginPageProps) {
     [busyId, toggleDone, nowMs, directory, routes, nameOf, scope],
   )
   /* The column and sort models are the view's (AGL-2617). */
-  const grid = useCrmViewGrid(views, columns)
+  const filterColumns = useMemo(
+    () => crmFilterColumns(columns, TASK_FILTER_FIELDS, filterOptions, TASK_FILTER_HEADERS),
+    [columns, filterOptions],
+  )
+  const grid = useCrmViewGrid(views, filterColumns, TASK_HIDDEN_COLUMNS)
 
   return (
     <>
@@ -395,29 +488,20 @@ export function TasksSection(props: ConsolePluginPageProps) {
         }}
       >
         <Stack spacing={2}>
-          {/* The saved view this list is showing, beside the task view it narrows to (AGL-2617). */}
-          <Stack
-            direction="row"
-            spacing={2}
-            sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-          >
+          {/*
+            The saved view, and the clauses narrowing it as chips — "Show"
+            among them — set in the grid's own Filters panel (AGL-3313).
+          */}
+          <CrmListToolbar label="Task filters">
             <CrmViewsControl controller={views} allLabel="All tasks" />
-            <ToggleButtonGroup
-              exclusive
-              size="small"
-              color="primary"
-              value={view}
-              onChange={(_event, next) => {
-                if (next) setView(next as CrmTaskView)
-              }}
-              aria-label="Task view"
-            >
-              {CRM_TASK_VIEWS.map((option) => (
-                <ToggleButton key={option.id} value={option.id}>
-                  {option.label}
-                </ToggleButton>
-              ))}
-            </ToggleButtonGroup>
+            <CrmFilterBar
+              fields={TASK_FILTER_FIELDS}
+              headers={TASK_FILTER_HEADERS}
+              clauses={clauses}
+              onChange={setClauses}
+              options={filterOptions}
+              servedField="view"
+            />
             <ToggleButtonGroup
               exclusive
               size="small"
@@ -436,12 +520,12 @@ export function TasksSection(props: ConsolePluginPageProps) {
             <Button size="small" onClick={handleExport} disabled={!tasks.length}>
               {'Export CSV'}
             </Button>
-          </Stack>
+          </CrmListToolbar>
           {status === 'error' ? (
             <Typography variant="body2" color="error">
               {'The tasks could not be loaded. Reload to try again.'}
             </Typography>
-          ) : status === 'success' && !tasks.length ? (
+          ) : status === 'success' && !loaded.length ? (
             <EmptyStateComponent
               label={EMPTY_LABEL[view]}
               description={EMPTY_COPY[view]}
@@ -496,7 +580,12 @@ export function TasksSection(props: ConsolePluginPageProps) {
                     const found = tasks.find((row) => row.$id === id)
                     if (found) setDrawer({ open: true, task: found })
                   }}
-                  disableColumnFilter
+                  // The panel and the search are the grid's; the section
+                  // answers them, the view through the query (AGL-3313).
+                  filterMode="server"
+                  filterModel={gridFilter.filterModel}
+                  onFilterModelChange={gridFilter.onFilterModelChange}
+                  quickFilter
                   // Columns and sort are the view's, controlled (AGL-2617).
                   columnVisibilityModel={grid.columnVisibilityModel}
                   onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}

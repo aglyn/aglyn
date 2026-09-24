@@ -20,6 +20,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import type {
   ConsolePluginPageProps,
   CrmLeadFields,
+  CrmViewFilterClause,
   CrmLeadStatus,
 } from '@aglyn/aglyn'
 import {
@@ -27,7 +28,6 @@ import {
   mdiAccountCancelOutline,
   mdiAccountConvertOutline,
   mdiAccountTieOutline,
-  mdiMagnify,
 } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
@@ -64,13 +64,9 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
-  InputAdornment,
-  InputLabel,
   MenuItem,
   Select,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -86,23 +82,27 @@ import {
   where,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { downloadTextFile } from '../model/contacts-csv'
 import { crmRoutes } from '../model/crm-routes'
 import {
-  LEAD_FILTER_LABELS,
-  LEAD_EMAIL_FILTER_LABELS,
-  LEAD_EMAIL_FILTERS,
-  LEAD_FILTERS,
-  type LeadEmailFilter,
-  type LeadFilter,
-  leadMatchesCampaignFilter,
-  leadMatchesEmailFilter,
-  leadMatchesFilter,
-  leadMatchesLeadSourceFilter,
-  leadMatchesSearch,
+  LEAD_EMAIL_FILTER_OPTIONS,
+  LEAD_FILTER_CODECS,
+  LEAD_LIST_FILTER_FIELDS,
+  LEAD_LIST_FILTER_HEADERS,
   LEAD_SOURCE_FILTER_NONE,
+  LEAD_STATUS_FILTER_OPTIONS,
+  leadClausesForGrid,
+  leadClausesToStore,
+  leadMatchesClauses,
+  leadMatchesSearch,
 } from '../model/lead-filters'
+import {
+  type CrmFilterOption,
+  crmFilterColumns,
+} from '../model/crm-grid-filter'
+import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
+import CrmFilterBar from './crm-filter-bar'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
@@ -246,10 +246,11 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const window = useMemo(() => leadDocs.slice(0, LEADS_WINDOW), [leadDocs])
 
   /*
-   * The `Show` filter is the saved VIEW'S (AGL-2617): a saved view of leads
-   * holds the status beside the columns and the sort, and the select below
-   * writes into it. Unset reads as `open`, which is what the section opened
-   * on before views existed and the one reading a query cannot express.
+   * What the list is narrowed by is the saved VIEW'S (AGL-2617), and the
+   * grid's own Filters panel and quick search edit it (AGL-3313): Status,
+   * Email, Owner, Lead source and Campaign are select columns of the grid.
+   * The clauses keep the shape the old dropdowns stored — see
+   * `leadClausesForGrid` — so no saved view of leads loses its filter.
    */
   const views = useCrmSavedView({
     section: 'leads',
@@ -257,129 +258,77 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     org: props.org,
     basePath: basePath ?? '',
   })
-  const filter: LeadFilter = useMemo(() => {
-    const value = views.state.filters.find(
-      (clause) => clause.field === 'status',
-    )?.value
-    return (LEAD_FILTERS as readonly string[]).includes(value ?? '')
-      ? (value as LeadFilter)
-      : 'open'
-  }, [views.state.filters])
-  /*
-   * The `Email` filter (AGL-3245) is the view's too, as an `emailState`
-   * clause beside the status one. Each setter keeps the other's clause:
-   * narrowing to bounced leads does not reopen the unqualified ones.
-   */
-  const emailFilter: LeadEmailFilter = useMemo(() => {
-    const value = views.state.filters.find(
-      (clause) => clause.field === 'emailState',
-    )?.value
-    return (LEAD_EMAIL_FILTERS as readonly string[]).includes(value ?? '')
-      ? (value as LeadEmailFilter)
-      : 'any'
-  }, [views.state.filters])
-  const setFilter = useCallback(
-    (next: LeadFilter) =>
-      views.setFilters([
-        ...views.state.filters.filter((clause) => clause.field !== 'status'),
-        ...(next === 'open'
-          ? []
-          : [{ field: 'status', op: 'equals', value: next }]),
-      ]),
-    [views.setFilters, views.state.filters],
-  )
-  const setEmailFilter = useCallback(
-    (next: LeadEmailFilter) =>
-      views.setFilters([
-        ...views.state.filters.filter(
-          (clause) => clause.field !== 'emailState',
-        ),
-        ...(next === 'any'
-          ? []
-          : [{ field: 'emailState', op: 'equals', value: next }]),
-      ]),
-    [views.setFilters, views.state.filters],
-  )
-  /*
-   * The `Campaign` filter (AGL-3254) is the view's too, as a `campaignIds`
-   * clause: the id of one of the org's campaign containers, resolved to its
-   * name from the containers themselves — ids only in storage, so a renamed
-   * campaign keeps its leads. Under a site the choice is the campaigns
-   * placed on it; at the organization level, every campaign in the org.
-   */
-  const campaignFilter = useMemo(
-    () =>
-      views.state.filters.find((clause) => clause.field === 'campaignIds')
-        ?.value ?? '',
+  const clauses = useMemo(
+    () => leadClausesForGrid(views.state.filters),
     [views.state.filters],
   )
-  const setCampaignFilter = useCallback(
-    (next: string) =>
-      views.setFilters([
-        ...views.state.filters.filter(
-          (clause) => clause.field !== 'campaignIds',
-        ),
-        ...(next
-          ? [{ field: 'campaignIds', op: 'contains', value: next }]
-          : []),
-      ]),
-    [views.setFilters, views.state.filters],
+  const setClauses = useCallback(
+    (next: CrmViewFilterClause[]) => views.setFilters(leadClausesToStore(next)),
+    [views.setFilters],
   )
-  /*
-   * The `Lead source` filter (AGL-3298) is the view's too: an `equals`
-   * clause naming the label records store, or an `isEmpty` one for the
-   * leads that hold none.
-   */
-  const leadSourceFilter = useMemo(() => {
-    const clause = views.state.filters.find((entry) => entry.field === 'leadSource')
-    if (!clause) return ''
-    return clause.op === 'isEmpty' ? LEAD_SOURCE_FILTER_NONE : String(clause.value ?? '')
-  }, [views.state.filters])
-  const setLeadSourceFilter = useCallback(
-    (next: string) =>
-      views.setFilters([
-        ...views.state.filters.filter((clause) => clause.field !== 'leadSource'),
-        ...(next === LEAD_SOURCE_FILTER_NONE
-          ? [{ field: 'leadSource', op: 'isEmpty', value: '' }]
-          : next
-            ? [{ field: 'leadSource', op: 'equals', value: next }]
-            : []),
-      ]),
-    [views.setFilters, views.state.filters],
-  )
+  const gridFilter = useCrmGridFilter({
+    clauses,
+    onChange: setClauses,
+    selectFields: ['status', 'emailState', 'ownerUid'],
+    codecs: LEAD_FILTER_CODECS,
+  })
   const campaigns = useCrmCampaigns({ hostId, orgId }, { enabled: true })
   const campaignName = useCallback(
     (id: string) =>
       campaigns.options.find((option) => option.value === id)?.label ?? id,
     [campaigns.options],
   )
-  // The label's id, so the filter's combobox is named "Show" rather than
-  // after the option it shows — see `LeadOwnerSelect`.
-  const filterLabelId = useId()
-  const emailFilterLabelId = useId()
-  const campaignFilterLabelId = useId()
-  const leadSourceFilterLabelId = useId()
   /*
-   * The search box is the SECTION'S, not the grid's (AGL-3246). The grid's
-   * quick filter runs over the rows the grid holds, and the grid holds one
-   * PAGE of the window — so a lead on page three answered "no match" while
-   * the footer below went on counting the unfiltered window. The term
-   * narrows the whole loaded window here, beside the status filter and
-   * before the footer's count and the page slice, over the fields a person
-   * types to find a lead: name, email, company, title and tags.
+   * The choices each select column offers. A stored clause naming a value
+   * no longer listed — a retired campaign, a lead source since removed —
+   * stays a choice, so the panel can show it and clear it.
    */
-  const [search, setSearch] = useState('')
+  const filterOptions = useMemo<Record<string, CrmFilterOption[]>>(() => {
+    const stale = (field: string, known: readonly { value: string }[]) =>
+      clauses
+        .filter((clause) => clause.field === field && clause.op !== 'isEmpty')
+        .flatMap((clause) => clause.value.split(','))
+        .map((value) => value.trim())
+        .filter((value) => value && !known.some((option) => option.value === value))
+        .map((value) => ({ value, label: value }))
+    const campaignOptions = campaigns.options.map((option) => ({
+      value: option.value,
+      label: option.label,
+    }))
+    // Salesforce's Lead Source (AGL-3298): every value the org keeps, inactive ones marked.
+    const sourceOptions = [
+      ...leadSourceList.picklist.values.map((value) => ({
+        value: value.label,
+        label: value.active ? value.label : `${value.label} (inactive)`,
+      })),
+      { value: LEAD_SOURCE_FILTER_NONE, label: 'No lead source' },
+    ]
+    return {
+      status: LEAD_STATUS_FILTER_OPTIONS,
+      emailState: LEAD_EMAIL_FILTER_OPTIONS,
+      ownerUid: roster.options.map((option) => ({
+        value: option.uid,
+        label: Aglyn.crmMemberPickerLabel(option),
+      })),
+      campaignIds: [...campaignOptions, ...stale('campaignIds', campaignOptions)],
+      leadSource: [...sourceOptions, ...stale('leadSource', sourceOptions)],
+    }
+  }, [clauses, campaigns.options, leadSourceList.picklist, roster.options])
+  /*
+   * Every clause and the search narrow the whole loaded WINDOW here, before
+   * the footer's count and the page slice (AGL-3246). The grid holds one
+   * page of it, so a filter or a quick search the grid ran itself would
+   * answer "no match" for a lead on page three.
+   */
+  const searchKey = gridFilter.searchWords.join(' ')
   const rows = useMemo(
     () =>
       window.filter(
         (lead) =>
-          leadMatchesFilter(lead, filter) &&
-          leadMatchesEmailFilter(lead, emailFilter) &&
-          leadMatchesCampaignFilter(lead, campaignFilter) &&
-          leadMatchesLeadSourceFilter(lead, leadSourceFilter) &&
-          leadMatchesSearch(lead, search),
+          leadMatchesClauses(lead, clauses) &&
+          leadMatchesSearch(lead, searchKey),
       ),
-    [window, filter, emailFilter, campaignFilter, leadSourceFilter, search],
+    [window, clauses, searchKey],
   )
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
@@ -388,7 +337,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   // renders empty.
   useEffect(() => {
     setPage(0)
-  }, [filter, emailFilter, campaignFilter, leadSourceFilter, search])
+  }, [views.state.filters, searchKey])
   const pageRows = useMemo(
     () => rows.slice(page * pageSize, (page + 1) * pageSize),
     [rows, page, pageSize],
@@ -403,7 +352,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   useEffect(
     () => setSelectedIds([]),
-    [filter, emailFilter, campaignFilter, leadSourceFilter, search],
+    [views.state.filters, searchKey],
   )
   // How the file names the owner and, at the org level, the site.
   const csvOptions: LeadCsvOptions = useMemo(
@@ -790,8 +739,16 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       leadSourceList.picklist,
     ],
   )
-  /* The column and sort models are the view's (AGL-2617). */
-  const grid = useCrmViewGrid(views, columns)
+  /*
+   * The column and sort models are the view's (AGL-2617); the filterable
+   * columns are the declared fields, as selects over their choices (AGL-3313).
+   */
+  const filterColumns = useMemo(
+    () =>
+      crmFilterColumns(columns, LEAD_LIST_FILTER_FIELDS, filterOptions, LEAD_LIST_FILTER_HEADERS),
+    [columns, filterOptions],
+  )
+  const grid = useCrmViewGrid(views, filterColumns)
 
   return (
     <>
@@ -828,119 +785,20 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           ) : (
             <OrgLeadSurfacesNote />
           )}
-          {/* The filters sit above the grid they narrow, wrapping when narrow (AGL-3311). */}
+          {/*
+            The saved view, and every clause it is narrowed by as a chip
+            (AGL-3313). The clauses are set in the grid's own Filters panel;
+            the chips show the whole set, which that panel shows one of.
+          */}
           <CrmListToolbar label="Lead filters">
-            {/* The saved view this list is showing, beside the status it narrows to (AGL-2617). */}
             <CrmViewsControl controller={views} allLabel="All leads" />
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <InputLabel id={filterLabelId}>{'Show'}</InputLabel>
-              <Select
-                labelId={filterLabelId}
-                label="Show"
-                value={filter}
-                onChange={(event) =>
-                  setFilter(event.target.value as LeadFilter)
-                }
-              >
-                {LEAD_FILTERS.map((option) => (
-                  <MenuItem key={option} value={option}>
-                    {LEAD_FILTER_LABELS[option]}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            {/* The verdict on the address (AGL-3245): the bounced, the blocked, the ones who left. */}
-            <FormControl size="small" sx={{ minWidth: 160 }}>
-              <InputLabel id={emailFilterLabelId}>{'Email'}</InputLabel>
-              <Select
-                labelId={emailFilterLabelId}
-                label="Email"
-                value={emailFilter}
-                onChange={(event) =>
-                  setEmailFilter(event.target.value as LeadEmailFilter)
-                }
-              >
-                {LEAD_EMAIL_FILTERS.map((option) => (
-                  <MenuItem key={option} value={option}>
-                    {LEAD_EMAIL_FILTER_LABELS[option]}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            {/* The campaign the lead is filed under (AGL-3254), by name. */}
-            <FormControl size="small" sx={{ minWidth: 180 }}>
-              <InputLabel id={campaignFilterLabelId} shrink>
-                {'Campaign'}
-              </InputLabel>
-              <Select
-                labelId={campaignFilterLabelId}
-                label="Campaign"
-                notched
-                value={campaignFilter}
-                onChange={(event) =>
-                  setCampaignFilter(String(event.target.value))
-                }
-                displayEmpty
-              >
-                <MenuItem value="">{'Any campaign'}</MenuItem>
-                {campaigns.options.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-                {/* A stored filter naming a campaign no longer listed stays selectable, by id, so it can be cleared. */}
-                {campaignFilter &&
-                !campaigns.options.some(
-                  (option) => option.value === campaignFilter,
-                ) ? (
-                  <MenuItem value={campaignFilter}>{campaignFilter}</MenuItem>
-                ) : null}
-              </Select>
-            </FormControl>
-            {/* Salesforce's Lead Source (AGL-3298): every value the org keeps, inactive ones marked. */}
-            <FormControl size="small" sx={{ minWidth: 180 }}>
-              <InputLabel id={leadSourceFilterLabelId} shrink>
-                {'Lead source'}
-              </InputLabel>
-              <Select
-                labelId={leadSourceFilterLabelId}
-                label="Lead source"
-                notched
-                value={leadSourceFilter}
-                onChange={(event) => setLeadSourceFilter(String(event.target.value))}
-                displayEmpty
-              >
-                <MenuItem value="">{'Any lead source'}</MenuItem>
-                {leadSourceList.picklist.values.map((value) => (
-                  <MenuItem key={value.id} value={value.label}>
-                    {value.active ? value.label : `${value.label} (inactive)`}
-                  </MenuItem>
-                ))}
-                <MenuItem value={LEAD_SOURCE_FILTER_NONE}>{'No lead source'}</MenuItem>
-                {/* A stored filter naming a value no longer listed stays selectable, so it can be cleared. */}
-                {leadSourceFilter &&
-                leadSourceFilter !== LEAD_SOURCE_FILTER_NONE &&
-                !Aglyn.crmPicklistValueByLabel(leadSourceList.picklist, leadSourceFilter) ? (
-                  <MenuItem value={leadSourceFilter}>{leadSourceFilter}</MenuItem>
-                ) : null}
-              </Select>
-            </FormControl>
-            <TextField
-              size="small"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search leads"
-              slotProps={{
-                input: {
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <MdiIcon path={mdiMagnify.path} size={0.8} />
-                    </InputAdornment>
-                  ),
-                },
-                htmlInput: { 'aria-label': 'Search leads', type: 'search' },
-              }}
-              sx={{ minWidth: 200 }}
+            <CrmFilterBar
+              fields={LEAD_LIST_FILTER_FIELDS}
+              headers={LEAD_LIST_FILTER_HEADERS}
+              clauses={clauses}
+              onChange={setClauses}
+              options={filterOptions}
+              marksServed={false}
             />
           </CrmListToolbar>
           {status === 'success' && window.length === 0 ? (
@@ -950,12 +808,6 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 'Bookings and lead-routed forms on your site become leads on their own — or add one with New lead, or bring a list in with Import CSV.'
               }
             />
-          ) : status === 'success' && rows.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              {`No ${LEAD_FILTER_LABELS[filter].toLowerCase()} leads` +
-                (search.trim() ? ` match “${search.trim()}”` : '') +
-                ` among the ${window.length.toLocaleString()} most recently seen.`}
-            </Typography>
           ) : (
             <>
               <LeadsBulkBar
@@ -990,9 +842,13 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                   }
                   sortModel={grid.sortModel}
                   onSortModelChange={grid.onSortModelChange}
-                  // The search is the section's, above: the grid's own box
-                  // would search this page alone.
-                  quickFilter={false}
+                  // The panel and the search are the grid's; the section
+                  // answers both over the whole window (AGL-3313).
+                  filterMode="server"
+                  filterModel={gridFilter.filterModel}
+                  onFilterModelChange={gridFilter.onFilterModelChange}
+                  quickFilter
+                  noRowsLabel={`No leads match among the ${window.length.toLocaleString()} most recently seen`}
                   // Paged by the footer below, so the grid must not also slice.
                   hideFooter
                 />
@@ -1010,7 +866,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           {truncated ? (
             <Alert severity="info">
               {`Showing the ${LEADS_WINDOW.toLocaleString()} most recently seen ` +
-                'leads. The search box and the status filter narrow these ' +
+                'leads. The filters and the search narrow these ' +
                 `${LEADS_WINDOW.toLocaleString()} only; older leads are still ` +
                 'listed in the Inbox and reached by campaign audiences.'}
             </Alert>

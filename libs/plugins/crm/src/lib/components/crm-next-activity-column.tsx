@@ -16,14 +16,9 @@
  */
 'use client'
 
-import {
-  CRM_NEXT_ACTIVITY_FIELD,
-  type CrmViewFilterClause,
-  isNoNextActivityClause,
-  readNextTaskAtMs,
-  withNoNextActivity,
-} from '@aglyn/aglyn'
-import { Chip, Tooltip, Typography } from '@mui/material'
+import { CRM_NEXT_ACTIVITY_FIELD, readNextTaskAtMs } from '@aglyn/aglyn'
+import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { Tooltip, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { TaskDueText } from './task-cells'
 
@@ -36,11 +31,10 @@ import { TaskDueText } from './task-cells'
  * color, today emphasized — because it IS that date, seen from the record.
  * A dash for a record with nothing scheduled, and the same dash for one
  * written before the field existed: the reader's question is "is anything
- * planned", and to both the answer is no. Sorting and filtering are off
- * for the same reason the custom columns' are — the value is on the row,
- * and a sort over the loaded window would look like a sort over the
- * collection; the "No next activity" toggle is the filter, and it says
- * what it narrows.
+ * planned", and to both the answer is no. Sorting is off for the reason
+ * the custom columns' is — the value is on the row, and a sort over the
+ * loaded window would look like a sort over the collection. Filtering is
+ * the list's to switch on, through `CRM_NEXT_ACTIVITY_FILTER_FIELD`.
  */
 export function nextActivityColumn(nowMs: number): GridColDef {
   return {
@@ -75,40 +69,20 @@ export function nextActivityColumn(nowMs: number): GridColDef {
   }
 }
 
-export interface NoNextActivityToggleProps {
-  /** The view's clauses; the toggle reads its own state off them. */
-  filters: readonly CrmViewFilterClause[]
-  onChange: (filters: CrmViewFilterClause[]) => void
-  disabled?: boolean
+/**
+ * "No next activity" as a filter of the grid's own panel (AGL-3313): the
+ * Next activity column offers "is empty", which stores the clause
+ * `isNoNextActivityClause` names, so a view saved with the old toggle on
+ * reopens filtered the same way. Window-only: absence has no index, so it
+ * narrows the loaded rows beside whatever the query serves.
+ */
+export const CRM_NEXT_ACTIVITY_FILTER_FIELD: ListFilterField = {
+  column: CRM_NEXT_ACTIVITY_FIELD,
+  kind: 'date',
+  path: CRM_NEXT_ACTIVITY_FIELD,
+  windowOnly: true,
+  operators: ['isEmpty'],
 }
 
-/**
- * The "No next activity" filter as one chip beside the view control: on,
- * the list keeps only the records with nothing scheduled. It is a clause
- * on the SAVED VIEW — `withNoNextActivity` — so a view saved with it on
- * reopens with it on, and the clause survives the other filters a list
- * sets around it.
- */
-export function NoNextActivityToggle(props: NoNextActivityToggleProps) {
-  const { filters, onChange, disabled } = props
-  const on = filters.some(isNoNextActivityClause)
-  return (
-    <Tooltip
-      title={on ? 'Showing records with nothing scheduled' : 'Only records with nothing scheduled'}
-      // Describes rather than names: the chip's label is what a reader — and
-      // a saved view's caption — calls the filter.
-      describeChild
-    >
-      <Chip
-        size="small"
-        label="No next activity"
-        variant={on ? 'filled' : 'outlined'}
-        color={on ? 'primary' : 'default'}
-        disabled={disabled}
-        onClick={() => onChange(withNoNextActivity(filters, !on))}
-        aria-pressed={on}
-      />
-    </Tooltip>
-  )
-}
-NoNextActivityToggle.displayName = 'NoNextActivityToggle'
+/** What the clause reads as on a chip. */
+export const CRM_NEXT_ACTIVITY_FILTER_HEADER = 'Next activity'

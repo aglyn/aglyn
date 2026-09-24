@@ -874,7 +874,7 @@ export const DOCS_HELP_ANCHORS = {
   uptimeAndStatus: ['#the-status-page', '#there-is-no-committed-uptime-percentage', '#where-the-platform-runs', '#reporting-an-outage'],
   versionsAndPublishing: ['#the-versions-dialog', '#publish--roll-back', '#scheduled-publishing', '#plan-requirements', '#related'],
   video: ['#video-source', '#video-preload', '#video-captions', '#video-lightbox', '#video-wistia', '#video-play-from-a-button', '#video-seo', '#related'],
-  views: ['#the-views-control', '#a-view-is-a-link', '#filters-on-the-contacts-list', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
+  views: ['#the-views-control', '#a-view-is-a-link', '#filters', '#filters-on-the-contacts-list', '#filters-on-the-other-lists', '#columns-and-sort', '#segments-and-views', '#who-sees-what', '#related'],
   webhooks: ['#outbound-webhooks', '#inbound-webhooks', '#tips', '#related'],
   whiteLabel: ['#where', '#fields', '#where-you-see-it', '#email', '#merge-tokens', '#email-logo', '#sending-address', '#custom-console-domain', '#platform-brand', '#related'],
   workflows: ['#workflows', '#actions-builder', '#webhooks', '#org-automations', '#run-history', '#related'],

@@ -14,32 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 'use client'
 
-import { CRM_VIEW_MAX_FILTERS, type CrmViewFilterClause } from '@aglyn/aglyn'
-import { mdiFilterPlusOutline } from '@aglyn/shared-data-mdi'
-import { MdiIcon } from '@aglyn/shared-ui-jsx'
+import type { CrmViewFilterClause } from '@aglyn/aglyn'
 import {
   type ListFilterField,
   listFilterOperatorLabel,
-  listFilterOperators,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
-import {
-  Button,
-  Chip,
-  MenuItem,
-  Popover,
-  Stack,
-  TextField,
-  Tooltip,
-} from '@mui/material'
-import { type MouseEvent, useMemo, useState } from 'react'
+import { Chip, Stack, Tooltip } from '@mui/material'
+import type { CrmFilterOption } from '../model/crm-grid-filter'
 
-/** A choice for a field whose value is picked rather than typed. */
-export interface CrmFilterOption {
-  value: string
-  label: string
-}
+export type { CrmFilterOption } from '../model/crm-grid-filter'
 
 export interface CrmFilterBarProps {
   /** The list's grammar — every field a clause may name. */
@@ -48,24 +34,19 @@ export interface CrmFilterBarProps {
   headers: Readonly<Record<string, string>>
   clauses: readonly CrmViewFilterClause[]
   onChange: (clauses: CrmViewFilterClause[]) => void
-  /**
-   * Choices per field — an owner from the roster, a stage from the fixed
-   * list, a source from its labels. A field with choices gets a picker
-   * and its chip shows the label; without them a value is typed.
-   */
+  /** Choices per field, so a chip names a picked value by its label. */
   options?: Readonly<Record<string, readonly CrmFilterOption[]>>
-  /** The field the query is serving, marked so the reader knows which reached everything. */
-  servedField?: string | null
-  disabled?: boolean
   /**
-   * The reader reached for a filter. A section that reads its pickers'
-   * choices lazily — the roster, the companies — starts those reads here,
-   * so a list nobody is narrowing pays for neither.
+   * The field the query is serving, marked so the reader knows which reached
+   * everything. Omitted on a list whose every clause narrows the same rows.
    */
-  onOpen?: () => void
+  servedField?: string | null
+  /** Whether chips carry the served / loaded-window distinction at all. */
+  marksServed?: boolean
+  disabled?: boolean
 }
 
-/** Operators that carry no value, so the value box is not shown for them. */
+/** Operators that carry no value. */
 const VALUELESS = new Set(['isEmpty', 'isNotEmpty'])
 /** Operators that take several values, comma-joined the way the grammar splits them. */
 const MULTI = new Set(['isAnyOf'])
@@ -76,22 +57,16 @@ const dayLabel = (raw: string): string => {
 }
 
 /**
- * The chips above a CRM list: every clause the list is narrowed by, and
- * the one control that adds another (AGL-2617).
+ * Every clause a CRM list is narrowed by, as chips over the grid (AGL-2617,
+ * AGL-3313).
  *
- * A saved view carries several clauses and the data grid's own filter panel
- * holds one, so the list needs an editor of its own for the set. Each
- * clause is a chip that reads as a sentence — "Owner is Dana", "Created on
- * or after 1 Jan" — with the clause the query serves marked, because that
- * is the one that reached every contact and the others narrowed the loaded
- * window; the list's caption says the same thing in prose.
- *
- * Adding one is a popover, not a row of controls: field, operator, value,
- * Add. The value control follows the field — a picker where the section
- * supplied choices, a date box for a date, a number box for a number, a
- * text box otherwise — and the operators offered are exactly the ones the
- * grammar declares for the field, so a clause cannot be built that nothing
- * answers.
+ * The clauses are ADDED through the grid's own Filters panel; this bar is
+ * what shows the SET. The community grid's panel holds one item at a time
+ * and a saved view holds several, so without it a view narrowed by lead
+ * source and status would show one of the two and hide the other. Each
+ * chip reads as a sentence — "Owner is Dana", "Created on or after 1 Jan"
+ * — and removes its clause; where some clauses reach the query and others
+ * narrow the loaded rows, the served one is marked.
  */
 export function CrmFilterBar(props: CrmFilterBarProps) {
   const {
@@ -101,58 +76,10 @@ export function CrmFilterBar(props: CrmFilterBarProps) {
     onChange,
     options = {},
     servedField = null,
+    marksServed = true,
     disabled = false,
-    onOpen,
   } = props
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
-  const [draft, setDraft] = useState<{ field: string; op: string; value: string }>({
-    field: '',
-    op: '',
-    value: '',
-  })
-
-  /** Fields a clause can be added on — those with at least one operator. */
-  const choosable = useMemo(
-    () => fields.filter((field) => listFilterOperators(field).length > 0),
-    [fields],
-  )
   const header = (column: string) => headers[column] ?? column
-  const draftField = choosable.find((field) => field.column === draft.field) ?? null
-  const operators = draftField ? listFilterOperators(draftField) : []
-  const draftOptions = draft.field ? options[draft.field] : undefined
-  const valueless = VALUELESS.has(draft.op)
-  const multi = MULTI.has(draft.op)
-
-  const open = (event: MouseEvent<HTMLElement>) => {
-    const first = choosable[0]
-    const firstOps = first ? listFilterOperators(first) : []
-    setDraft({ field: first?.column ?? '', op: firstOps[0] ?? '', value: '' })
-    setAnchor(event.currentTarget)
-    onOpen?.()
-  }
-  const close = () => setAnchor(null)
-
-  const chooseField = (column: string) => {
-    const field = choosable.find((entry) => entry.column === column)
-    const ops = field ? listFilterOperators(field) : []
-    setDraft({ field: column, op: ops[0] ?? '', value: '' })
-  }
-
-  const canAdd =
-    Boolean(draft.field && draft.op) &&
-    (valueless || draft.value.trim() !== '') &&
-    clauses.length < CRM_VIEW_MAX_FILTERS
-
-  const add = () => {
-    if (!canAdd) return
-    const value = valueless ? '' : draft.value.trim()
-    const label =
-      draftOptions && !multi
-        ? draftOptions.find((option) => option.value === value)?.label
-        : undefined
-    onChange([...clauses, { field: draft.field, op: draft.op, value, ...(label ? { label } : {}) }])
-    close()
-  }
 
   /** How a clause reads: its header, its operator, and its value by label. */
   const sentence = (clause: CrmViewFilterClause): string => {
@@ -173,146 +100,42 @@ export function CrmFilterBar(props: CrmFilterBarProps) {
     return `${header(clause.field)} ${listFilterOperatorLabel(clause.op)}${value ? ` ${value}` : ''}`
   }
 
+  if (!clauses.length) return null
   return (
     <Stack
       direction="row"
       spacing={1}
       useFlexGap
       sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+      role="list"
+      aria-label="Filters"
     >
       {clauses.map((clause, index) => {
-        const served = servedField !== null && clause.field === servedField
-        return (
+        const served = marksServed && servedField !== null && clause.field === servedField
+        const key = `${clause.field}-${clause.op}-${index}`
+        const chip = (
+          <Chip
+            key={key}
+            role="listitem"
+            size="small"
+            variant={served ? 'filled' : 'outlined'}
+            color={served ? 'primary' : 'default'}
+            label={sentence(clause)}
+            disabled={disabled}
+            onDelete={() => onChange(clauses.filter((_entry, at) => at !== index))}
+          />
+        )
+        return marksServed ? (
           <Tooltip
-            key={`${clause.field}-${clause.op}-${index}`}
-            title={
-              served
-                ? 'Searched across every record'
-                : 'Narrows the records already loaded'
-            }
+            key={key}
+            title={served ? 'Searched across every record' : 'Narrows the records already loaded'}
           >
-            <Chip
-              size="small"
-              variant={served ? 'filled' : 'outlined'}
-              color={served ? 'primary' : 'default'}
-              label={sentence(clause)}
-              disabled={disabled}
-              onDelete={() => onChange(clauses.filter((_entry, at) => at !== index))}
-            />
+            {chip}
           </Tooltip>
+        ) : (
+          chip
         )
       })}
-      <Button
-        size="small"
-        startIcon={<MdiIcon path={mdiFilterPlusOutline.path} size={0.8} />}
-        onClick={open}
-        disabled={disabled || !choosable.length || clauses.length >= CRM_VIEW_MAX_FILTERS}
-        aria-haspopup="dialog"
-      >
-        {'Add filter'}
-      </Button>
-      <Popover
-        open={Boolean(anchor)}
-        anchorEl={anchor}
-        onClose={close}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-      >
-        <Stack spacing={1.5} sx={{ p: 2, minWidth: 280 }} role="dialog" aria-label="Add filter">
-          <TextField
-            select
-            size="small"
-            label="Field"
-            value={draft.field}
-            onChange={(event) => chooseField(event.target.value)}
-          >
-            {choosable.map((field) => (
-              <MenuItem key={field.column} value={field.column}>
-                {header(field.column)}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            select
-            size="small"
-            label="Condition"
-            value={draft.op}
-            onChange={(event) => setDraft((prev) => ({ ...prev, op: event.target.value, value: '' }))}
-            disabled={!draftField}
-          >
-            {operators.map((op) => (
-              <MenuItem key={op} value={op}>
-                {listFilterOperatorLabel(op)}
-              </MenuItem>
-            ))}
-          </TextField>
-          {valueless ? null : draftOptions ? (
-            <TextField
-              select
-              size="small"
-              label="Value"
-              value={multi ? draft.value.split(',').filter(Boolean) : draft.value}
-              onChange={(event) => {
-                const next = event.target.value as unknown
-                setDraft((prev) => ({
-                  ...prev,
-                  value: Array.isArray(next) ? next.join(',') : String(next),
-                }))
-              }}
-              slotProps={multi ? { select: { multiple: true } } : undefined}
-            >
-              {draftOptions.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
-          ) : draftField?.kind === 'boolean' ? (
-            <TextField
-              select
-              size="small"
-              label="Value"
-              value={draft.value}
-              onChange={(event) => setDraft((prev) => ({ ...prev, value: event.target.value }))}
-            >
-              <MenuItem value="true">{'Yes'}</MenuItem>
-              <MenuItem value="false">{'No'}</MenuItem>
-            </TextField>
-          ) : (
-            <TextField
-              size="small"
-              label="Value"
-              type={
-                draftField?.kind === 'date'
-                  ? 'date'
-                  : draftField?.kind === 'number'
-                    ? 'number'
-                    : 'text'
-              }
-              placeholder={multi ? 'one, two, three' : undefined}
-              helperText={multi ? 'Separate several with commas' : undefined}
-              value={draft.value}
-              onChange={(event) => setDraft((prev) => ({ ...prev, value: event.target.value }))}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  add()
-                }
-              }}
-              slotProps={
-                draftField?.kind === 'date' ? { inputLabel: { shrink: true } } : undefined
-              }
-            />
-          )}
-          <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end' }}>
-            <Button size="small" onClick={close}>
-              {'Cancel'}
-            </Button>
-            <Button size="small" variant="contained" disabled={!canAdd} onClick={add}>
-              {'Add'}
-            </Button>
-          </Stack>
-        </Stack>
-      </Popover>
     </Stack>
   )
 }
