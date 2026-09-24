@@ -37,6 +37,7 @@ import {
   installStaffOnlyChromeStyles,
   preflightStaffOnlyChrome,
 } from './lib/staff-only-chrome.mjs'
+import { optimizePng } from './lib/optimize-png.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img')
@@ -68,7 +69,9 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
 /**
  * path → output file (under static/img) + the text to wait for.
  * `annotate` draws numbered badges + outlines around the located elements
- * before the shot (the legend lives in the docs page that embeds it).
+ * before the shot (the legend lives in the docs page that embeds it). A mark
+ * is `{ locator | rect, n, badge? }`, where `badge` is `top-left` (default),
+ * `center`, `right` or `below`; a locator that matches nothing fails the shot.
  *
  * `actions` runs before the shutter: `click`, `hover`, `clickXY`,
  * `hoverXY`, `scroll`, `dblclickXY` (select-then-double-click, for the
@@ -94,11 +97,13 @@ const shots = [
     out: 'getting-started/console-chrome-annotated.png',
     path: `/${HOST_BASE}`,
     waitFor: 'Demo Bakery',
+    // Badges go where the bar is empty: the corner default sat on the logo,
+    // the workspace name's first letter and the site name's first letter.
     annotate: [
-      { rect: { x: 0, y: 0, width: 1440, height: 42 }, n: 1 },
-      { locator: 'text=E2E Bakery Co', n: 2 },
+      { rect: { x: 0, y: 0, width: 1440, height: 42 }, n: 1, badge: 'center' },
+      { locator: 'button[aria-label^="Workspace:"]', n: 2, badge: 'right' },
       { rect: { x: 158, y: 46, width: 1274, height: 40 }, n: 3 },
-      { locator: 'text=Demo Bakery', n: 4 },
+      { locator: '#center-nav-hosts', n: 4, badge: 'below' },
       { rect: { x: 16, y: 300, width: 1408, height: 540 }, n: 5 },
     ],
   },
@@ -122,12 +127,7 @@ const shots = [
   {
     out: 'bookings/bookings-page.png',
     path: `/${HOST_BASE}/bookings`,
-    waitFor: 'Grace Hopper',
-  },
-  {
-    out: 'contacts/contacts-page.png',
-    path: `/${HOST_BASE}/contacts`,
-    waitFor: 'wholesale@example.com',
+    waitFor: 'Grace Whitaker',
   },
   {
     out: 'marketing-overlays/marketing-page.png',
@@ -158,11 +158,6 @@ const shots = [
     out: 'redirects/redirects-page.png',
     path: `/${HOST_BASE}/redirects`,
     waitFor: 'Redirects',
-  },
-  {
-    out: 'plugins/marketplace-page.png',
-    path: `/${HOST_BASE}/marketplace`,
-    waitFor: 'Realm demo',
   },
   {
     out: 'plugins/org-plugins-page.png',
@@ -240,8 +235,10 @@ const shots = [
     ],
   },
   {
+    // The card moved from Setup to the site's Admin area (AGL-3178), which
+    // is where the docs pages already send the reader.
     out: 'custom-domains/setup-domains.png',
-    path: `/${HOST_BASE}/setup`,
+    path: `/${HOST_BASE}/admin/domain`,
     waitFor: 'Custom domain',
     settleMs: 2500,
   },
@@ -252,27 +249,15 @@ const shots = [
     // frame. Same scroll trick as setup-languages below, since Setup is one
     // long tab and only the top of it fits a 900px viewport.
     out: 'site-protection/setup-error-pages.png',
-    path: `/${HOST_BASE}/setup`,
-    waitFor: 'Custom domain',
+    // Admin → Error pages, its own section since AGL-3178.
+    path: `/${HOST_BASE}/admin/error-pages`,
+    waitFor: 'Error pages',
     settleMs: 2500,
-    actions: [{ scroll: 'text=Error pages', settleMs: 1000 }],
     // This used to clip the host tab strip away, because the staff capture
     // account rendered "⚑ CONTACTS" in it. The strip is back: the harness now
     // hides staff-only chrome everywhere and refuses to shoot when it can't
     // (AGL-1600), so the frame no longer has to be cropped around the leak —
     // and every other shot that was quietly carrying it is fixed too.
-  },
-  {
-    // The ORG marketplace (AGL-975 retired the per-site tab, so `/hosts/…/
-    // marketplace` is not the surface any more). The previous shot predated
-    // both AGL-975 and AGL-1011: it still carried the pre-rename marketplace
-    // heading, and its org strip had no Plugins tab. Quoting that old heading
-    // here is what left the AGL-975 naming spec red — it reads every tracked
-    // file, comments included.
-    out: 'guides/marketplace-browse.png',
-    path: `/${ORG_SLUG}/marketplace`,
-    waitFor: 'Realm demo',
-    settleMs: 2500,
   },
   {
     // The Page Access card — the image the SEO overview and the three
@@ -308,8 +293,9 @@ const shots = [
   },
   {
     out: 'multilingual/setup-languages.png',
-    path: `/${HOST_BASE}/setup`,
-    waitFor: 'Custom domain',
+    // Setup → Basic details, where the Languages card sits below the fold.
+    path: `/${HOST_BASE}/setup/details`,
+    waitFor: 'Basic details',
     settleMs: 2500,
     actions: [{ scroll: 'text=Languages', settleMs: 1000 }],
   },
@@ -345,8 +331,11 @@ const shots = [
     out: 'besigner/component-properties-dialog.png',
     path: `/${HOST_BASE}/components/${COMPONENT_ID}/versions/${COMPONENT_VERSION_ID}/besigner`,
     waitFor: 'Properties',
-    settleMs: 8000,
+    settleMs: 2000,
     actions: [
+      // The panel mounts well before the canvas finishes laying out, and the
+      // File button is not actionable until it has.
+      { settleMs: 9000 },
       // `text=File` would also match "Profile"/"File name" elsewhere in the
       // chrome; the menu button carries a stable id.
       { click: '#center-nav-file', settleMs: 800 },
@@ -363,8 +352,10 @@ const shots = [
     waitFor: 'Properties',
     settleMs: 6000,
     actions: [
+      { settleMs: 9000 },
       { click: 'text=Document', settleMs: 1200 },
-      { click: 'text=Reusable Component', settleMs: 2000 },
+      // The hierarchy row carries the component's own name.
+      { click: 'text=Marketing CTA', settleMs: 2000 },
     ],
   },
   {
@@ -445,9 +436,10 @@ const shots = [
     waitFor: 'Properties',
     settleMs: 6000,
     actions: [
+      { settleMs: 9000 },
       // The canvas renders in a closed shadow root, so locators can't
       // reach the node — click the title's viewport coordinates instead.
-      { clickXY: [560, 210], settleMs: 1500 },
+      { clickXY: [560, 200], settleMs: 1500 },
     ],
   },
   {
@@ -462,8 +454,8 @@ const shots = [
     waitFor: 'Properties',
     settleMs: 8000,
     annotate: [
-      { rect: { x: 0, y: 0, width: 1440, height: 46 }, n: 1 },
-      { rect: { x: 0, y: 48, width: 1440, height: 38 }, n: 2 },
+      { rect: { x: 0, y: 0, width: 1440, height: 46 }, n: 1, badge: 'center' },
+      { rect: { x: 0, y: 48, width: 1440, height: 38 }, n: 2, badge: 'center' },
       { rect: { x: 0, y: 90, width: 288, height: 806 }, n: 3 },
       { rect: { x: 292, y: 90, width: 772, height: 806 }, n: 4 },
       { rect: { x: 1068, y: 90, width: 370, height: 806 }, n: 5 },
@@ -567,10 +559,15 @@ const shots = [
     actions: [
       { settleMs: 9000 },
       { dblclickXY: [620, 205], settleMs: 2500 },
-      // Bold the last word — `morning` — so the element carries real
-      // formatting rather than being formatted-flagged by fixture data.
+      // Italicize the last word — `morning` — so the element carries real
+      // formatting rather than being formatted-flagged by fixture data. Not
+      // bold: the heading already is, so Bold toggles the word back to
+      // normal weight and the editor saves that as plain text. The
+      // double-click leaves the caret wherever it landed, so it is sent to
+      // the end first; selecting a word back from mid-word selects nothing.
+      { press: 'End', settleMs: 400 },
       { press: 'Shift+Alt+ArrowLeft', settleMs: 800 },
-      { click: 'button[title="Bold"]', settleMs: 1200 },
+      { click: 'button[title="Italic"]', settleMs: 1200 },
       { click: 'button:has-text("DONE")', settleMs: 3000 },
     ],
     // No callout: the crop holds the button, the field and the helper line
@@ -700,7 +697,7 @@ const shots = [
   {
     // A11 (AGL-1950). Needs the seeded site collaborator.
     //
-    // The card header is `Organization members — E2E Bakery Co`, not the
+    // The card header is `Organization members — Demo Bakery Co`, not the
     // `Members` the spec names; the locator still matches because Playwright's
     // `has-text` is a case-insensitive substring, but do not "fix" it to
     // `:text-is()`. The access cells are the content: `ALL SITES` against the
@@ -758,7 +755,7 @@ const shots = [
     // `Refunded` status chip. A lost dispute is a refund the merchant did not
     // choose, and one row says so.
     out: 'commerce/order-charged-back.png',
-    path: `/${HOST_BASE}/products?tab=orders`,
+    path: `/${HOST_BASE}/products/orders`,
     waitFor: 'Charged back',
     settleMs: 2500,
     // No `annotate`, and this one was actively misleading rather than merely
@@ -822,7 +819,7 @@ const shots = [
     // Only `free` lacks `commerce`; every self-serve tier from Starter up
     // carries it, so no other plan produces this shot.
     out: 'commerce/selling-not-enabled.png',
-    path: '/docs-free/hosts/docs-free-site/products?tab=orders',
+    path: '/docs-free/hosts/docs-free-site/products/orders',
     waitFor: 'No orders yet',
     actions: [
       { click: 'button:has-text("Draft order")', settleMs: 2000 },
@@ -859,6 +856,9 @@ const shots = [
     path: `/${ORG_SLUG}/billing`,
     waitFor: 'Current plan',
     actions: [
+      // The page opens on the current plan and the next one up; the lower
+      // tiers sit behind the full comparison.
+      { click: 'text=/Compare all \\d+ plans/i', settleMs: 1500 },
       { click: 'text=/Looking for something smaller/i', settleMs: 1500 },
       { scroll: 'button[aria-expanded="true"]', settleMs: 800 },
       { hover: '[aria-label^="Help: Moving to a lower plan"]', settleMs: 1200 },
@@ -928,6 +928,91 @@ const shots = [
     // The Elements panel is a fixed-width column, so a static box is
     // stable here in a way it would not be beside a growing card.
     clip: { x: 0, y: 137, width: 288, height: 452 },
+  },
+  // ── The CRM (AGL-3319) ──────────────────────────────────────────────
+  //
+  // These four were drawn as mockups (the 920×580 house card) rather than
+  // captured, so they drifted from the hub the moment it moved on: the
+  // contacts table grew the grid's own toolbar (AGL-3313) and the pipeline
+  // stages were renamed. Captured from the seeded book in
+  // `tools/scripts/lib/crm-fixtures.mjs`, whose addresses the docs fixtures
+  // move onto the reserved `.example` TLD.
+  //
+  // Each frame is the hub's rail plus the section, not the page header
+  // above them: the section is the subject, and the rail says where it is.
+  {
+    out: 'contacts/crm-contacts.png',
+    path: `/${HOST_BASE}/crm/contacts`,
+    waitFor: 'Maya Delgado',
+    viewport: { width: 1440, height: 1100 },
+    settleMs: 1500,
+    actions: [
+      // Two people ticked, so the bulk bar the caption names is up.
+      {
+        click: '.MuiDataGrid-row:has-text("Maya Delgado") input[type="checkbox"]',
+        settleMs: 600,
+      },
+      {
+        click: '.MuiDataGrid-row:has-text("Theo Brandt") input[type="checkbox"]',
+        waitFor: 'Set stage',
+        settleMs: 1000,
+      },
+    ],
+    clipTo: {
+      locator: '.MuiCard-root:has(.MuiDataGrid-root)',
+      include: ['.MuiCard-root:has-text("Navigation")'],
+    },
+  },
+  {
+    out: 'contacts/crm-deals-board.png',
+    path: `/${HOST_BASE}/crm/deals`,
+    waitFor: 'Cedar & Salt',
+    viewport: { width: 1440, height: 1000 },
+    settleMs: 2000,
+    clipTo: {
+      locator: '.MuiCard-root:has-text("Cedar & Salt")',
+      include: ['.MuiCard-root:has-text("Navigation")'],
+    },
+  },
+  {
+    out: 'contacts/crm-record.png',
+    path: `/${HOST_BASE}/crm/contacts/seed-crm-contact-maya`,
+    waitFor: 'Maya Delgado',
+    viewport: { width: 1440, height: 1300 },
+    settleMs: 2500,
+  },
+  {
+    out: 'contacts/crm-reports.png',
+    path: `/${HOST_BASE}/crm/reports`,
+    waitFor: 'Reports',
+    viewport: { width: 1440, height: 1200 },
+    settleMs: 3000,
+  },
+  // ── The root README (AGL-3319) ─────────────────────────────────────────
+  //
+  // Hero frames rather than crops: the README shows the product whole. They
+  // land in `docs/assets/readme/`, beside the brand art that is not a
+  // capture at all.
+  {
+    out: 'readme/console-dashboard.png',
+    dest: 'docs/assets/readme/console-dashboard.png',
+    path: `/${HOST_BASE}`,
+    waitFor: 'Demo Bakery',
+    settleMs: 3000,
+  },
+  {
+    out: 'readme/besigner-editor.png',
+    dest: 'docs/assets/readme/besigner-editor.png',
+    path: `/${HOST_BASE}/screens/seed-home/versions/seed-home-v1/besigner`,
+    waitFor: 'Properties',
+    settleMs: 9000,
+  },
+  {
+    out: 'readme/console-commerce.png',
+    dest: 'docs/assets/readme/console-commerce.png',
+    path: `/${HOST_BASE}/products/catalog`,
+    waitFor: 'Products',
+    settleMs: 3000,
   },
 ]
 
@@ -1036,8 +1121,10 @@ for (const path of [`/${HOST_BASE}`, ...selected.map((shot) => shot.path)]) {
 {
   const page = await context.newPage()
   const hidden = await preflightStaffOnlyChrome(page, {
-    url: `${BASE_URL}/${HOST_BASE}`,
-    waitFor: 'Demo Bakery',
+    urls: [
+      { url: `${BASE_URL}/${HOST_BASE}`, waitFor: 'Demo Bakery' },
+      { url: `${BASE_URL}/${ORG_SLUG}/hosts`, waitFor: 'Demo Bakery' },
+    ],
     timeout: TIMEOUT_MS,
   }).catch((error) => error)
   await page.close()
@@ -1063,12 +1150,13 @@ async function annotate(page, marks) {
         .first()
         .boundingBox()
         .catch(() => null))
+    // A callout that lands on nothing leaves the page's numbered legend
+    // pointing at a badge the picture does not have, so it fails the shot.
     if (!box) {
-      console.warn(`  no box for annotation ${mark.n} (${mark.locator})`)
-      continue
+      throw new Error(`annotation ${mark.n} matched nothing: ${mark.locator}`)
     }
     await page.evaluate(
-      ([b, n]) => {
+      ([b, n, place]) => {
         const outline = document.createElement('div')
         outline.style.cssText =
           `position:fixed;left:${b.x - 3}px;top:${b.y - 3}px;` +
@@ -1077,16 +1165,27 @@ async function annotate(page, marks) {
           'pointer-events:none;box-shadow:0 0 0 2px rgba(255,255,255,0.7);'
         const badge = document.createElement('div')
         badge.textContent = String(n)
+        // Where the badge sits relative to its outline. The corner default
+        // lands ON whatever starts at the target's left edge — a logo, the
+        // first letter of a name — so a mark whose corner is content says
+        // where there is empty space instead.
+        const at = {
+          'top-left': [b.x - 14, b.y - 14],
+          center: [b.x + b.width / 2 - 14, b.y + b.height / 2 - 14],
+          right: [b.x + b.width + 10, b.y + b.height / 2 - 14],
+          below: [b.x, b.y + b.height + 8],
+        }[place]
+        if (!at) throw new Error(`unknown badge placement ${place}`)
         badge.style.cssText =
-          `position:fixed;left:${Math.max(2, b.x - 14)}px;` +
-          `top:${Math.max(2, b.y - 14)}px;width:28px;height:28px;` +
+          `position:fixed;left:${Math.max(2, at[0])}px;` +
+          `top:${Math.max(2, at[1])}px;width:28px;height:28px;` +
           'border-radius:50%;background:#e040fb;color:#fff;z-index:99999;' +
           'display:flex;align-items:center;justify-content:center;' +
           'font:700 15px Roboto,sans-serif;pointer-events:none;' +
           'box-shadow:0 1px 4px rgba(0,0,0,0.4);'
         document.body.append(outline, badge)
       },
-      [box, mark.n],
+      [box, mark.n, mark.badge ?? 'top-left'],
     )
   }
 }
@@ -1214,6 +1313,12 @@ async function stripChrome(page) {
       '[data-nextjs-toast]',
     ]) {
       document.querySelectorAll(selector).forEach((el) => el.remove())
+    }
+    // The emulated server holds no Stripe key by design (AGL-2828), so the
+    // console says payments are not configured on this deployment. That is
+    // a fact about the capture stack, not the product a reader runs.
+    for (const alert of document.querySelectorAll('.MuiAlert-root')) {
+      if (/Payments are not configured/.test(alert.textContent ?? '')) alert.remove()
     }
     // AGL-663 notification pre-permission modal overlays the page — drop
     // it (and its backdrop) so shots capture the content beneath.
@@ -1373,13 +1478,26 @@ for (const shot of selected) {
     const clip = shot.clipTo
       ? await resolveClipTo(page, shot.clipTo)
       : shot.clip
-    const outPath = join(IMG_ROOT, shot.out)
+    // `dest` is a repo-relative path, for the few captures that are not docs
+    // images at all (the root README's). `out` stays the shot's name.
+    const outPath = shot.dest ? join(repoRoot, shot.dest) : join(IMG_ROOT, shot.out)
     mkdirSync(dirname(outPath), { recursive: true })
     await page.screenshot({ path: outPath, ...(clip ? { clip } : {}) })
-    console.log(`SHOT  ${shot.out}`)
+    const bytes = await optimizePng(outPath)
+    console.log(`SHOT  ${shot.out} (${Math.round(bytes / 1024)} KB)`)
   } catch (error) {
     failures += 1
-    console.error(`FAIL  ${shot.out}: ${String(error?.message ?? error).split('\n')[0]}`)
+    // What the page showed when the shot gave up, beside the other e2e
+    // failure captures, so a changed surface is diagnosed from a picture.
+    const artifact = join(
+      process.env.E2E_ARTIFACTS_DIR ?? join(repoRoot, 'tmp', 'e2e-artifacts'),
+      `docs-${shot.out.replace(/[^a-z0-9]+/gi, '-')}`,
+    )
+    mkdirSync(dirname(artifact), { recursive: true })
+    await page.screenshot({ path: `${artifact}.png` }).catch(() => undefined)
+    console.error(
+      `FAIL  ${shot.out}: ${String(error?.message ?? error).split('\n')[0]} (page: ${artifact}.png)`,
+    )
   } finally {
     await page.close()
     // Restored whether or not the shot passed, so the next shot (and the next
