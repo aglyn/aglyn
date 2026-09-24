@@ -171,8 +171,15 @@ const pick = (label: string, option: string) => {
   fireEvent.mouseDown(screen.getByRole('combobox', { name: label }))
   fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: option }))
 }
-const statusRead = () =>
-  waitFor(() => expect(calls.filter((c) => c.route === 'recipe-status')).toHaveLength(1))
+/**
+ * The status read, asked for AND on screen. Asked-for alone was a race: the
+ * answer renders a tick after the call, and a loaded CI shard read the rows
+ * while they still said "Reading…".
+ */
+const statusRead = async () => {
+  await waitFor(() => expect(calls.filter((c) => c.route === 'recipe-status')).toHaveLength(1))
+  await waitFor(() => expect(within(card()).queryAllByText('Reading…')).toHaveLength(0))
+}
 /** The drawer's own Install button — named exactly, unlike the rows' "Install <recipe>". */
 const drawerInstall = () => screen.getByRole('button', { name: 'Install' }) as HTMLButtonElement
 

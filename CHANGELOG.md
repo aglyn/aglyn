@@ -9,6 +9,27 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.182 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.181...v1.0.0-beta.182)
+
+### Added
+
+- **outreach:** a tracked sequence link is on the mailbox domain's own links host ([AGL-3306](https://linear.app/aglyn/issue/AGL-3306))
+- **marketing:** campaigns get the List-Unsubscribe setting, on and bulk-guarded ([AGL-3307](https://linear.app/aglyn/issue/AGL-3307), [AGL-3296](https://linear.app/aglyn/issue/AGL-3296))
+
+### Fixed
+
+- **crm:** list filters sit above the grid and the create button top right ([AGL-3311](https://linear.app/aglyn/issue/AGL-3311))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3311 ([AGL-3311](https://linear.app/aglyn/issue/AGL-3311))
+- **tools:** the Linear id ceiling reads AGL-3310 ([AGL-3310](https://linear.app/aglyn/issue/AGL-3310), [AGL-3308](https://linear.app/aglyn/issue/AGL-3308))
+
+</details>
+
 ## v1.0.0-beta.181 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/ad9afe019...v1.0.0-beta.181)
