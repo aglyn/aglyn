@@ -104,6 +104,15 @@ describe('EmailRecipientsCard (AGL-3045)', () => {
     expect(within(row).getByText('Spring sale')).toBeTruthy()
   })
 
+  it('asks for opened or clicked through the grid’s own Filters panel, not a select beside it (AGL-3317)', async () => {
+    render(<EmailRecipientsCard hostId="host-1" screenId="scr-1" />)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(screen.queryByRole('combobox', { name: 'Show' })).toBeNull()
+    expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
+  })
+
   it('drops the Email column when one email is being read', async () => {
     await mount({ emailId: 'msg-1' })
     const headers = within(screen.getByRole('grid', { name: 'Recipients' }))

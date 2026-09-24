@@ -125,6 +125,9 @@
     "@aglyn/shared-util-fbserver": {
       "confirmedAt": "2026-09-24"
     },
+    "@aglyn/shared-util-first-touch": {
+      "confirmedAt": "2026-09-24"
+    },
     "@aglyn/shared-util-http": {
       "confirmedAt": "2026-09-24"
     },

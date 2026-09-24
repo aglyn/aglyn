@@ -48,6 +48,25 @@ import SecondaryAppBarComponent, {
 } from './secondary-app-bar.component'
 
 /**
+ * What publishing changes: the live SITE, or the EMAILS a design sends
+ * (AGL-3318). A site email and an email block have no live site, and an
+ * author told "the live site is unchanged" about a receipt cannot tell what
+ * Save & publish will do to the mail that is going out.
+ */
+export type PublishTarget = 'site' | 'email'
+
+const SAVE_MENU_COPY: Record<PublishTarget, { draft: string; publish: string }> = {
+  site: {
+    draft: 'Keeps your work; the live site is unchanged',
+    publish: 'Saves, then updates the live site',
+  },
+  email: {
+    draft: 'Keeps your work; your emails are unchanged',
+    publish: 'Saves, then your emails send this version',
+  },
+}
+
+/**
  * Save, with the live outcome one click away (AGL-1152).
  *
  * A split button: the main half saves a draft — the default, and what an
@@ -67,6 +86,7 @@ function SaveControl(props: {
   saveAvailable?: boolean
   draftSaved?: boolean
   livePublished?: boolean
+  publishTarget?: PublishTarget
 }) {
   const {
     onSave,
@@ -75,7 +95,9 @@ function SaveControl(props: {
     saveAvailable,
     draftSaved,
     livePublished,
+    publishTarget = 'site',
   } = props
+  const copy = SAVE_MENU_COPY[publishTarget]
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   // NEVER DISABLED, however up to date the editor believes it is (AGL-1262).
   // A disabled Save is a dead control: the one time it matters — the editor's
@@ -199,7 +221,7 @@ function SaveControl(props: {
         >
           <ListItemText
             primary="Save draft"
-            secondary="Keeps your work; the live site is unchanged"
+            secondary={copy.draft}
           />
         </MenuItem>
         <MenuItem
@@ -211,7 +233,7 @@ function SaveControl(props: {
         >
           <ListItemText
             primary="Save & publish"
-            secondary={publishBlockedReason ?? 'Saves, then updates the live site'}
+            secondary={publishBlockedReason ?? copy.publish}
           />
         </MenuItem>
       </Menu>
@@ -270,6 +292,12 @@ export interface BesignerAppBarProps extends SecondaryAppBarProps {
    */
   draftSaved?: boolean
   /**
+   * What Save & publish updates, for the save menu's copy (AGL-3318): the
+   * live site (the default), or the emails a site email or an email block
+   * goes out in.
+   */
+  publishTarget?: PublishTarget
+  /**
    * Who else is in this document (AGL-675). Rendered inside the toolbar
    * rather than beside it: the screen editor passed `<PresenceAvatars />` as
    * a SIBLING of this app bar, so on the first day presence ever produced an
@@ -293,6 +321,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
       draftSaved,
       saveAvailable,
       livePublished,
+      publishTarget,
     } = props
 
     return (
@@ -399,6 +428,7 @@ export const BesignerAppBarComponent = forwardRef<any, BesignerAppBarProps>(
             draftSaved={draftSaved}
             saveAvailable={saveAvailable}
             livePublished={livePublished}
+            publishTarget={publishTarget}
           />
         </Stack>
       </SecondaryAppBarComponent>

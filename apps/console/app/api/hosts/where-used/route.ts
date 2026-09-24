@@ -28,6 +28,7 @@ import {
   isImpersonationSession,
   lockdownRefusal,
 } from '@aglyn/tenant-data-admin'
+import { platformMarketingHostId } from '@aglyn/tenant-data-admin/server/platform-marketing-consent'
 import {
   scanCollectionUsage,
   scanComponentUsage,
@@ -36,7 +37,10 @@ import {
   type CollectionCandidate,
   type UsageCandidate,
 } from '../../../../utils/server/scan-artifact-usage'
-import { readUsageCandidates } from '../../../../utils/server/read-usage-candidates'
+import {
+  readSystemEmailUsageCandidates,
+  readUsageCandidates,
+} from '../../../../utils/server/read-usage-candidates'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 export interface WhereUsedDependent {
@@ -44,7 +48,9 @@ export interface WhereUsedDependent {
    * Resource collection the dependent lives in. `emailTemplate` is one of the
    * site's transactional emails, keyed by its catalog key; `emailDesign` is a
    * campaign's email, a `kind: 'email'` screen that is never a page
-   * (AGL-3287).
+   * (AGL-3287); `systemEmail` is one of the platform's own emails, keyed by
+   * its catalog key, reported only for the platform marketing site's
+   * components (AGL-3318).
    */
   type:
     | 'screen'
@@ -55,6 +61,7 @@ export interface WhereUsedDependent {
     | 'collection'
     | 'emailTemplate'
     | 'emailDesign'
+    | 'systemEmail'
   id: string
   name: string
   /** 'id' = rename-safe reference; 'name' = legacy token, breaks on rename. */
@@ -98,7 +105,9 @@ const SCANNABLE_KINDS = [
  *   `composeReusableComponentNodes` expands nested instances — and in the
  *   site's transactional emails, which graft a placed header or footer at
  *   send time (AGL-3287). All four are scanned. Skipping definitions would
- *   report "used nowhere" for a component used only inside another one.
+ *   report "used nowhere" for a component used only inside another one. On
+ *   the platform marketing site a fifth is too: the platform's own emails,
+ *   which graft that site's header and footer (AGL-3318).
  * - A LAYOUT is referenced by a `layoutId` pointer — on screens bound to it,
  *   and on layouts NESTED inside it, which AGL-703 made possible. Both are
  *   scanned: a nested layout is a real dependent, because deleting the outer
@@ -345,7 +354,23 @@ async function handler(request: Request): Promise<Response> {
           ...scanCollectionUsage(refId, { screens, layouts, components }),
         )
       } else {
-        const [screens, layouts, components, emailTemplates] =
+        /**
+         * The platform's own emails, when this is the site they borrow their
+         * email blocks from (AGL-3318). They live at the root rather than
+         * under any site, so no other site's scan could find them, and on
+         * this one a block they place is as live as one a page places:
+         * deleting it takes the header out of every account email.
+         */
+        const readSystemEmails = async (): Promise<UsageCandidate[]> => {
+          if (hostId !== platformMarketingHostId()) return []
+          const read = await readSystemEmailUsageCandidates(
+            firebaseAdmin.app().firestore(),
+            { limit: 200 },
+          )
+          if (read.truncated) truncated = true
+          return read.candidates
+        }
+        const [screens, layouts, components, emailTemplates, systemEmails] =
           await Promise.all([
             readCandidates('screens', true),
             readCandidates('layouts', true),
@@ -354,6 +379,7 @@ async function handler(request: Request): Promise<Response> {
             // versions: a header or footer placed there is grafted into every
             // one sent (AGL-3287).
             readCandidates('emailTemplates', true),
+            readSystemEmails(),
           ])
         dependents.push(
           ...scanComponentUsage(refId, {
@@ -361,6 +387,7 @@ async function handler(request: Request): Promise<Response> {
             layouts,
             components,
             emailTemplates,
+            systemEmails,
           }),
         )
       }

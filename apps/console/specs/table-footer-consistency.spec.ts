@@ -1945,7 +1945,7 @@ describe('server-filtered lists do not offer a dead filter panel', () => {
  * each once grew its own filter controls — a status select, a search box, a
  * toggle, an "Add filter" builder — until Leads had five in a row that
  * pushed its create button off the card. They now hand the grid's Filters
- * panel and quick search to `useCrmGridFilter`, which binds them to the
+ * panel and quick search to `useListGridFilter`, which binds them to the
  * saved view's clauses, and answer the clauses themselves. A list that
  * turned the panel off, or wired the model by hand, has left that path.
  */
@@ -1966,18 +1966,70 @@ describe('CRM lists filter through the grid, by the shared path', () => {
     ])
   })
 
-  it('each one binds the panel with useCrmGridFilter and never turns it off', () => {
+  it('each one binds the panel with useListGridFilter and never turns it off', () => {
     const off = lists
       .filter((path) => {
         const source = readFileSync(path, 'utf8')
         return (
           source.includes('disableColumnFilter') ||
-          !source.includes('useCrmGridFilter(') ||
+          !source.includes('useListGridFilter(') ||
           !source.includes('filterMode="server"') ||
           !source.includes('onFilterModelChange={gridFilter.onFilterModelChange}')
         )
       })
       .map((path) => path.replace(`${REPO}/`, ''))
+    expect(off).toEqual([])
+  })
+})
+
+/**
+ * Every other list converted to the same path (AGL-3317), area by area.
+ *
+ * A converted list holds its clauses in `useListGridFilter`, hands the grid
+ * the model with `filterMode="server"` so the grid never narrows a page on
+ * its own, and answers the clauses itself — over every row it read
+ * (`filterListRows`), or on its query where one is served. The file list
+ * grows with each area; one that falls off the path, or turns the panel
+ * off, is red here.
+ */
+const GRID_FILTER_LISTS: readonly string[] = [
+  // Sequences
+  'libs/plugins/outreach/src/lib/components/sequences-section.tsx',
+  'libs/plugins/outreach/src/lib/components/enrollments-table.tsx',
+  'libs/plugins/outreach/src/lib/components/do-not-contact-domains.tsx',
+  // Marketing
+  'libs/plugins/marketing/src/lib/components/campaigns-card.tsx',
+  'libs/plugins/marketing/src/lib/components/emails-list-card.tsx',
+  'libs/plugins/marketing/src/lib/components/campaign-detail-card.tsx',
+  'libs/plugins/marketing/src/lib/components/email-recipients-card.tsx',
+  'libs/plugins/marketing/src/lib/components/host-experiments-card.component.tsx',
+]
+
+describe('converted lists filter through the grid, by the shared path (AGL-3317)', () => {
+  it('THE CONTROL: every named list exists and renders a ListTable', () => {
+    const missing = GRID_FILTER_LISTS.filter((path) => !read(path).includes('<ListTable'))
+    expect(missing).toEqual([])
+  })
+
+  it('each one binds the panel through the shared hook and never turns it off', () => {
+    const off = GRID_FILTER_LISTS.filter((path) => {
+      const source = read(path)
+      // The bare hook, wired by hand…
+      const bound =
+        source.includes('useListGridFilter(') &&
+        source.includes('filterMode="server"') &&
+        source.includes('onFilterModelChange={gridFilter.onFilterModelChange}')
+      // …or the recipe for a list that holds its rows (or pages a live
+      // window of them), spread whole.
+      const spread =
+        /use(List|Paged)RowsFilter(<[^>]*>)?\(/.test(source) &&
+        /\{\.\.\.\w+\.gridProps\}/.test(source)
+      return (
+        source.includes('disableColumnFilter') ||
+        source.includes('quickFilter={false}') ||
+        !(bound || spread)
+      )
+    })
     expect(off).toEqual([])
   })
 })

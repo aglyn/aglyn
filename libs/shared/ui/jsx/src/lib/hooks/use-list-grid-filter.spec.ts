@@ -16,28 +16,32 @@
  */
 
 /**
- * The grid's one-item Filters panel over a view's several clauses
- * (AGL-3313): one clause per field, the panel a window onto the last one
- * touched, and the stored shape unchanged.
+ * The grid's one-item Filters panel over a list's several clauses
+ * (AGL-3313, shared since AGL-3317): one clause per field, the panel a
+ * window onto the last one touched, and the stored shape unchanged.
  */
 
-import { CRM_NO_NEXT_ACTIVITY_CLAUSE, type CrmViewFilterClause, isNoNextActivityClause } from '@aglyn/aglyn'
 import { act, renderHook } from '@testing-library/react'
-import { useCrmGridFilter } from './use-crm-grid-filter'
+import type { ListFilterClause } from '../const/list-grid-filter'
+import { useListGridFilter } from './use-list-grid-filter'
 
-const owner: CrmViewFilterClause = { field: 'ownerUid', op: 'equals', value: 'u1' }
+const owner: ListFilterClause = { field: 'ownerUid', op: 'equals', value: 'u1' }
+/** A clause that narrows the loaded page, so it may stand beside a served one. */
+const NO_NEXT_ACTIVITY: ListFilterClause = { field: 'nextActivityAt', op: 'isEmpty', value: '' }
+const isNoNextActivity = (clause: ListFilterClause) =>
+  clause.field === NO_NEXT_ACTIVITY.field && clause.op === NO_NEXT_ACTIVITY.op
 
-function setup(initial: CrmViewFilterClause[], extra: { single?: boolean } = {}) {
+function setup(initial: ListFilterClause[], extra: { single?: boolean } = {}) {
   let clauses = initial
-  const onChange = jest.fn((next: CrmViewFilterClause[]) => {
+  const onChange = jest.fn((next: ListFilterClause[]) => {
     clauses = next
   })
   const hook = renderHook(() =>
-    useCrmGridFilter({
+    useListGridFilter({
       clauses,
       onChange,
       selectFields: ['ownerUid', 'stage'],
-      keepAlongside: isNoNextActivityClause,
+      keepAlongside: isNoNextActivity,
       ...extra,
     }),
   )
@@ -48,23 +52,23 @@ function setup(initial: CrmViewFilterClause[], extra: { single?: boolean } = {})
   return { hook, change, current: () => clauses, onChange }
 }
 
-describe('useCrmGridFilter', () => {
+describe('useListGridFilter', () => {
   it('shows the newest clause in the panel, as the select it is', () => {
     const { hook } = setup([owner])
     expect(hook.result.current.filterModel.items).toEqual([
-      { id: 'crm', field: 'ownerUid', operator: 'is', value: 'u1' },
+      { id: 'list', field: 'ownerUid', operator: 'is', value: 'u1' },
     ])
   })
 
   it('adds a second field beside the first, and a cleared value removes only its own', () => {
     const { change, current } = setup([owner])
     // Another column chosen: no value yet, the owner clause stands.
-    change([{ id: 'crm', field: 'stage', operator: 'is' }])
+    change([{ id: 'list', field: 'stage', operator: 'is' }])
     expect(current()).toEqual([owner])
-    change([{ id: 'crm', field: 'stage', operator: 'is', value: 'lead' }])
+    change([{ id: 'list', field: 'stage', operator: 'is', value: 'lead' }])
     expect(current()).toEqual([owner, { field: 'stage', op: 'equals', value: 'lead' }])
     // The value cleared on the field shown.
-    change([{ id: 'crm', field: 'stage', operator: 'is', value: '' }])
+    change([{ id: 'list', field: 'stage', operator: 'is', value: '' }])
     expect(current()).toEqual([owner])
   })
 
@@ -76,17 +80,32 @@ describe('useCrmGridFilter', () => {
 
   it('carries the quick search words without touching the clauses', () => {
     const { hook, change, onChange } = setup([owner])
-    change([{ id: 'crm', field: 'ownerUid', operator: 'is', value: 'u1' }], ['morgan', 'coffee'])
+    change([{ id: 'list', field: 'ownerUid', operator: 'is', value: 'u1' }], ['morgan', 'coffee'])
     expect(hook.result.current.searchWords).toEqual(['morgan', 'coffee'])
     expect(onChange).not.toHaveBeenCalled()
   })
 
   it('on a single-clause list replaces the served clause, and keeps "No next activity" beside it', () => {
-    const { change, current } = setup([owner, CRM_NO_NEXT_ACTIVITY_CLAUSE], { single: true })
-    change([{ id: 'crm', field: 'stage', operator: 'is', value: 'lead' }])
+    const { change, current } = setup([owner, NO_NEXT_ACTIVITY], { single: true })
+    change([{ id: 'list', field: 'stage', operator: 'is', value: 'lead' }])
     expect(current()).toEqual([
-      CRM_NO_NEXT_ACTIVITY_CLAUSE,
+      NO_NEXT_ACTIVITY,
       { field: 'stage', op: 'equals', value: 'lead' },
     ])
+  })
+
+  it('holds its own clauses when the list passes none', () => {
+    const hook = renderHook(() => useListGridFilter({ selectFields: ['status'] }))
+    act(() =>
+      hook.result.current.onFilterModelChange({
+        items: [{ id: 'list', field: 'status', operator: 'is', value: 'active' }],
+      }),
+    )
+    expect(hook.result.current.clauses).toEqual([
+      { field: 'status', op: 'equals', value: 'active' },
+    ])
+    act(() => hook.result.current.setClauses([]))
+    expect(hook.result.current.clauses).toEqual([])
+    expect(hook.result.current.filterModel.items).toEqual([])
   })
 })

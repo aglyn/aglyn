@@ -139,6 +139,25 @@ beforeEach(() => {
 })
 
 describe('the enrollments table: what it shows (AGL-2980)', () => {
+  it('filters through the grid’s own search, and says it narrows the window read so far (AGL-3317)', async () => {
+    renderTable(
+      loaded(
+        [
+          enrollment({}),
+          enrollment({ id: 'seq-1_c-2', contactId: 'c-2', contactName: '', email: 'avery.quinn@example.org' }),
+        ],
+        { hasMore: true },
+      ),
+    )
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'avery' } })
+    await waitFor(() => {
+      const grid = screen.getByRole('grid', { name: 'Enrollments' })
+      expect(grid.textContent).toContain('avery.quinn@example.org')
+      expect(grid.textContent).not.toContain('Morgan')
+    })
+    expect(screen.getByText(/Filtering the 2 enrollments read so far/)).toBeTruthy()
+  })
+
   it('shows progress, a failure, a refusal, and an empty sequence with the way to enroll', () => {
     const loading = renderTable(loaded([], { status: 'loading' }))
     expect(screen.getByRole('status').textContent).toContain(

@@ -19,20 +19,17 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import {
-  Alert,
-  Chip,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { Alert, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 /** The server's page size. Fixed, so the reader is not offered a choice. */
 const PAGE_SIZE = 25
@@ -40,11 +37,26 @@ const PAGE_SIZE = 25
 /** Which recipients the table asks for. Matches the route's own vocabulary. */
 type EngagementFilter = 'all' | 'opened' | 'clicked'
 
-const FILTER_LABELS: Record<EngagementFilter, string> = {
-  all: 'Everyone this was sent to',
-  opened: 'Opened it',
-  clicked: 'Clicked something',
+/*
+ * What the recipients grid's Filters panel offers (AGL-3317): the one filter
+ * the route serves, as a hidden select column. The route answers it over the
+ * whole delivery log, one cursor page at a time, and serves nothing else —
+ * so no other column filters, and there is no quick search, which could only
+ * ever narrow the page on screen.
+ */
+const RECIPIENT_FILTER_FIELDS: readonly ListFilterField[] = [
+  { column: 'engagement', kind: 'exact', path: 'engagement', operators: ['equals'] },
+]
+const RECIPIENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  engagement: 'Engagement',
 }
+const RECIPIENT_FILTER_OPTIONS = {
+  engagement: [
+    { value: 'opened', label: 'Opened it' },
+    { value: 'clicked', label: 'Clicked something' },
+  ],
+}
+const RECIPIENT_HIDDEN_COLUMNS = { engagement: false }
 
 interface RecipientRow {
   messageId: string
@@ -116,7 +128,10 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
   const { hostId, screenId, emailId } = props
   const { data: user } = useUser()
 
-  const [filter, setFilter] = useState<EngagementFilter>('all')
+  const gridFilter = useListGridFilter({ selectFields: ['engagement'], single: true })
+  const asked = gridFilter.clauses.find((clause) => clause.field === 'engagement')?.value
+  const filter: EngagementFilter =
+    asked === 'opened' || asked === 'clicked' ? asked : 'all'
   const [page, setPage] = useState(0)
   /** Cursor for each page. Index 0 is always `null` — the first page. */
   const [cursors, setCursors] = useState<(string | null)[]>([null])
@@ -213,11 +228,12 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
 
   // A new filter is a new result set, so the cursors collected under the old
   // one describe positions in a query that no longer exists.
-  const handleFilter = useCallback((next: EngagementFilter) => {
-    setFilter(next)
+  const [askedFilter, setAskedFilter] = useState<EngagementFilter>(filter)
+  if (askedFilter !== filter) {
+    setAskedFilter(filter)
     setPage(0)
     setCursors([null])
-  }, [])
+  }
 
   const columns = useMemo<GridColDef<RecipientRow>[]>(
     () => [
@@ -296,6 +312,16 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
     ],
     [emailId],
   )
+  const filterColumns = useMemo(
+    () =>
+      listFilterGridColumns(
+        columns as GridColDef[],
+        RECIPIENT_FILTER_FIELDS,
+        RECIPIENT_FILTER_OPTIONS,
+        RECIPIENT_FILTER_HEADERS,
+      ),
+    [columns],
+  )
 
   return (
     <CardDisplay
@@ -313,22 +339,13 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
             'or pre-fetch, so an absent open is weaker evidence than a click.'}
         </Typography>
 
-        <TextField
-          select
-          size="small"
-          label="Show"
-          value={filter}
-          onChange={(event) =>
-            handleFilter(event.target.value as EngagementFilter)
-          }
-          sx={{ alignSelf: 'flex-start', minWidth: 260 }}
-        >
-          {(Object.keys(FILTER_LABELS) as EngagementFilter[]).map((key) => (
-            <MenuItem key={key} value={key}>
-              {FILTER_LABELS[key]}
-            </MenuItem>
-          ))}
-        </TextField>
+        <ListFilterChips
+          fields={RECIPIENT_FILTER_FIELDS}
+          headers={RECIPIENT_FILTER_HEADERS}
+          clauses={gridFilter.clauses}
+          onChange={gridFilter.setClauses}
+          options={RECIPIENT_FILTER_OPTIONS}
+        />
 
         {failure ? <Alert severity="warning">{failure}</Alert> : null}
 
@@ -342,17 +359,16 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
           </Alert>
         ) : null}
 
-        {rows.length === 0 && !loading && !failure ? (
+        {rows.length === 0 && !loading && !failure && filter === 'all' ? (
           <Typography variant="body2" color="text.secondary">
-            {filter === 'all'
-              ? 'No delivery records have been kept for this yet.'
-              : 'Nobody in the delivery log matches that yet.'}
+            {'No delivery records have been kept for this yet.'}
           </Typography>
         ) : (
           <ListTable
             aria-label="Recipients"
             rows={rows}
-            columns={columns}
+            columns={filterColumns}
+            loading={loading}
             getRowId={(row: RecipientRow) => row.messageId}
             rowHeight={TABLE_ROW_HEIGHT}
             // A recipient carries the links they followed beneath the
@@ -360,9 +376,13 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
             getRowHeight={() => 'auto'}
             // One page of a cursor feed, turned by the footer below: the grid
             // neither slices it nor filters the page and calls that the log.
+            // Its panel's one filter is the route's (AGL-3317).
             hideFooter
-            disableColumnFilter
-            quickFilter={false}
+            filterMode="server"
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            initialState={{ columns: { columnVisibilityModel: RECIPIENT_HIDDEN_COLUMNS } }}
+            noRowsLabel="Nobody in the delivery log matches that yet"
           />
         )}
 

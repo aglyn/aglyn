@@ -41,9 +41,9 @@ import {
   CRM_NEXT_ACTIVITY_FILTER_HEADER,
   nextActivityColumn,
 } from './crm-next-activity-column'
-import CrmFilterBar from './crm-filter-bar'
-import { crmFilterColumns } from '../model/crm-grid-filter'
-import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import CrmViewsControl from './crm-views-control'
 import { CrmListActions, CrmListToolbar } from './crm-list-toolbar'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -407,7 +407,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   )
   const filterColumns = useMemo(
     () =>
-      crmFilterColumns(columns, COMPANY_GRID_FILTER_FIELDS, { ownerUid: ownerOptions }, COMPANY_GRID_FILTER_HEADERS),
+      listFilterGridColumns(columns, COMPANY_GRID_FILTER_FIELDS, { ownerUid: ownerOptions }, COMPANY_GRID_FILTER_HEADERS),
     [columns, ownerOptions],
   )
   const searchWords = useMemo(
@@ -422,7 +422,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
     },
     [filter, setFilter],
   )
-  const gridFilter = useCrmGridFilter({
+  const gridFilter = useListGridFilter({
     clauses: viewFilters,
     onChange: views.setFilters,
     selectFields: ['ownerUid'],
@@ -480,7 +480,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
         {/* The saved view, and the clauses narrowing it as chips (AGL-3313). */}
         <CrmListToolbar label="Company filters">
           <CrmViewsControl controller={views} allLabel="All companies" />
-          <CrmFilterBar
+          <ListFilterChips
             fields={COMPANY_GRID_FILTER_FIELDS}
             headers={COMPANY_GRID_FILTER_HEADERS}
             clauses={viewFilters}

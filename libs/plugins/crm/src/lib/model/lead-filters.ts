@@ -31,7 +31,7 @@ import {
 } from '@aglyn/aglyn'
 import type { CrmViewFilterClause } from '@aglyn/aglyn'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { type CrmGridFilterCodec, crmSelectCodec, crmRowMatchesSearch } from './crm-grid-filter'
+import { type ListGridFilterCodec, listSelectCodec, listRowMatchesSearch } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 
 /**
  * What the Leads section's `Show` control offers (AGL-2608): the two
@@ -143,7 +143,7 @@ export function leadMatchesSearch(
 ): boolean {
   // Tags are a list; a stray string there is no tag of the lead's.
   const tags = Array.isArray(lead['tags']) ? lead['tags'] : undefined
-  return crmRowMatchesSearch({ ...lead, tags }, LEAD_SEARCH_FIELDS, term.trim().split(/\s+/))
+  return listRowMatchesSearch({ ...lead, tags }, LEAD_SEARCH_FIELDS, term.trim().split(/\s+/))
 }
 
 /**
@@ -289,25 +289,25 @@ export function leadMatchesClauses(
 }
 
 /** Campaign clauses were stored as `contains`; the panel's select says `is`. */
-export const LEAD_CAMPAIGN_CODEC: CrmGridFilterCodec = {
+export const LEAD_CAMPAIGN_CODEC: ListGridFilterCodec = {
   toItem: (clause) =>
     clause.op === 'contains' || clause.op === 'equals'
       ? { operator: 'is', value: clause.value }
       : null,
   toClause: (item) => {
-    const clause = crmSelectCodec.toClause(item)
+    const clause = listSelectCodec.toClause(item)
     return clause && clause.op === 'equals' ? { ...clause, op: 'contains' } : null
   },
 }
 
 /** "No lead source" is an `isEmpty` clause, shown as a choice of the select. */
-export const LEAD_SOURCE_CODEC: CrmGridFilterCodec = {
+export const LEAD_SOURCE_CODEC: ListGridFilterCodec = {
   toItem: (clause) =>
     clause.op === 'isEmpty'
       ? { operator: 'is', value: LEAD_SOURCE_FILTER_NONE }
-      : crmSelectCodec.toItem(clause),
+      : listSelectCodec.toItem(clause),
   toClause: (item) => {
-    const clause = crmSelectCodec.toClause(item)
+    const clause = listSelectCodec.toClause(item)
     if (clause?.op === 'equals' && clause.value === LEAD_SOURCE_FILTER_NONE) {
       return { field: clause.field, op: 'isEmpty', value: '' }
     }
@@ -316,7 +316,7 @@ export const LEAD_SOURCE_CODEC: CrmGridFilterCodec = {
 }
 
 /** The Leads fields whose stored clauses translate their own way. */
-export const LEAD_FILTER_CODECS: Readonly<Record<string, CrmGridFilterCodec>> = {
+export const LEAD_FILTER_CODECS: Readonly<Record<string, ListGridFilterCodec>> = {
   campaignIds: LEAD_CAMPAIGN_CODEC,
   leadSource: LEAD_SOURCE_CODEC,
 }

@@ -15,45 +15,83 @@
  * limitations under the License.
  */
 
-import type { CrmViewFilterClause } from '@aglyn/aglyn'
-import {
-  gridFilterRequests,
-  hiddenFilterColumns,
-  type ListFilterField,
-  listFilterColumn,
-  listFilterOperators,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   getGridSingleSelectOperators,
   type GridColDef,
   type GridFilterItem,
 } from '@mui/x-data-grid'
+import {
+  gridFilterRequests,
+  hiddenFilterColumns,
+  type ListFilterField,
+  type ListFilterRequest,
+  listFilterColumn,
+  listFilterOperators,
+  matchListFilter,
+} from './list-filter'
 
 /*
- * ONE path from a CRM list's saved-view clauses to the data grid's own
- * Filters panel and quick search, and back (AGL-3313).
+ * ONE path from a list's filter clauses to the data grid's own Filters panel
+ * and quick search, and back (AGL-3313, shared by every list since AGL-3317).
  *
- * Every CRM list stores what it is narrowed by as view clauses —
- * `{ field, op, value }`, the shape saved views have held since AGL-2617 —
- * and every one of them now edits those clauses through the grid's toolbar
- * rather than a control of its own. What a list declares is its fields,
- * as the `ListFilterField` grammar the console's other paged lists speak
- * (the content entries, the staff lists), plus the choices of the fields
- * whose values are picked rather than typed. The grid then offers each as a
- * typed column: a `singleSelect` with its choices where there are choices,
- * the operators the grammar allows otherwise.
+ * A list stores what it is narrowed by as clauses — `{ field, op, value }`,
+ * the shape saved views hold — and edits them through the grid's toolbar
+ * rather than controls of its own. What a list declares is its fields, as
+ * the `ListFilterField` grammar (`./list-filter`), plus the choices of the
+ * fields whose values are picked rather than typed. The grid then offers
+ * each as a typed column: a `singleSelect` with its choices where there are
+ * choices, the operators the grammar allows otherwise.
  *
- * The clauses keep their stored shape, so a view saved with the old
- * dropdowns reads unchanged: the panel shows `equals` as the select's `is`
- * and writes `is` back as `equals`, and a list whose clauses were stored in
- * some other shape (Leads' campaign `contains`, its lead source `isEmpty`)
- * says so with a codec.
+ * The clauses keep their stored shape, so a view saved before the panel
+ * reads unchanged: the panel shows `equals` as the select's `is` and writes
+ * `is` back as `equals`, and a list whose clauses were stored in some other
+ * shape says so with a codec.
  */
 
+/** One clause a list is narrowed by; `label` names a picked value on a chip. */
+export interface ListFilterClause extends ListFilterRequest {
+  label?: string
+}
+
 /** A choice for a field whose value is picked rather than typed. */
-export interface CrmFilterOption {
+export interface ListFilterOption {
   value: string
   label: string
+}
+
+/**
+ * A field of a list that holds its rows and answers the panel in memory.
+ *
+ * The grammar's derived operators describe what a FIRESTORE query can
+ * serve, so a text field with no lower-case twin offers nothing. A list
+ * that matches over rows it already has is not held to that: plain
+ * JavaScript answers a mid-string `contains` and both empty operators, so
+ * the field names them (`operators`), and `matchListFilter` answers them.
+ * `select` is a field picked from choices — the list passes them as the
+ * field's options, and the panel shows a select over them.
+ */
+export function inMemoryListField(
+  column: string,
+  kind: 'text' | 'select' | 'number' | 'date' | 'boolean',
+  path: string = column,
+): ListFilterField {
+  switch (kind) {
+    case 'text':
+      return {
+        column,
+        path,
+        kind: 'text',
+        operators: ['contains', 'doesNotContain', 'equals', 'startsWith', 'endsWith', 'isEmpty', 'isNotEmpty'],
+      }
+    case 'select':
+      return { column, path, kind: 'exact', operators: ['equals', 'doesNotEqual', 'isAnyOf'] }
+    case 'number':
+      return { column, path, kind: 'number', presence: 'nullable' }
+    case 'date':
+      return { column, path, kind: 'date', presence: 'nullable' }
+    default:
+      return { column, path, kind: 'boolean' }
+  }
 }
 
 /** The grid operator each stored select operator shows as. */
@@ -70,20 +108,21 @@ const SELECT_FROM_GRID: Readonly<Record<string, string>> = {
 
 /**
  * How one field's stored clause and the panel's item translate. A field
- * with choices uses {@link crmSelectCodec}; a typed one, {@link crmPlainCodec}.
- * A list whose clauses predate the panel supplies its own.
+ * with choices uses {@link listSelectCodec}; a typed one,
+ * {@link listPlainCodec}. A list whose clauses predate the panel supplies
+ * its own.
  */
-export interface CrmGridFilterCodec {
-  toItem: (clause: CrmViewFilterClause) => Pick<GridFilterItem, 'operator' | 'value'> | null
-  toClause: (item: GridFilterItem) => CrmViewFilterClause | null
+export interface ListGridFilterCodec {
+  toItem: (clause: ListFilterClause) => Pick<GridFilterItem, 'operator' | 'value'> | null
+  toClause: (item: GridFilterItem) => ListFilterClause | null
 }
 
 /** The panel's item as a clause, through the grammar's one notion of "usable". */
-const plainClause = (item: GridFilterItem): CrmViewFilterClause | null =>
+const plainClause = (item: GridFilterItem): ListFilterClause | null =>
   gridFilterRequests({ items: [item] })[0] ?? null
 
 /** A typed field: the stored operator IS the grid's. */
-export const crmPlainCodec: CrmGridFilterCodec = {
+export const listPlainCodec: ListGridFilterCodec = {
   toItem: (clause) => ({
     operator: clause.op,
     value: clause.value === '' ? undefined : clause.value,
@@ -92,7 +131,7 @@ export const crmPlainCodec: CrmGridFilterCodec = {
 }
 
 /** A picked field: `equals` shows as `is`, and `isAnyOf` holds a comma list. */
-export const crmSelectCodec: CrmGridFilterCodec = {
+export const listSelectCodec: ListGridFilterCodec = {
   toItem: (clause) => {
     const operator = SELECT_TO_GRID[clause.op]
     if (!operator) return null
@@ -112,7 +151,7 @@ export const crmSelectCodec: CrmGridFilterCodec = {
 }
 
 /** The select operators a field's allowed clause operators map to. */
-export function crmSelectOperators(allowed: readonly string[]) {
+export function listSelectOperators(allowed: readonly string[]) {
   const shown = allowed.map((op) => SELECT_TO_GRID[op]).filter(Boolean)
   return getGridSingleSelectOperators().filter((operator) =>
     shown.includes(operator.value),
@@ -130,15 +169,15 @@ export function crmSelectOperators(allowed: readonly string[]) {
  * column no field declares offers no filter, because the list, not the
  * grid, answers every filter and would have nothing to answer it with.
  */
-export function crmFilterColumns(
+export function listFilterGridColumns(
   columns: readonly GridColDef[],
   fields: readonly ListFilterField[],
-  options: Readonly<Record<string, readonly CrmFilterOption[]>> = {},
+  options: Readonly<Record<string, readonly ListFilterOption[]>> = {},
   headers: Readonly<Record<string, string>> = {},
 ): GridColDef[] {
   const selectProps = (field: ListFilterField) => {
     const choices = options[field.column] ?? []
-    const operators = crmSelectOperators(listFilterOperators(field))
+    const operators = listSelectOperators(listFilterOperators(field))
     return {
       type: 'singleSelect' as const,
       valueOptions: choices.map((choice) => ({ value: choice.value, label: choice.label })),
@@ -171,7 +210,7 @@ export function crmFilterColumns(
  * blank search matches every row, so an emptied box is the list unfiltered.
  * An array value (tags) is searched member by member.
  */
-export function crmRowMatchesSearch(
+export function listRowMatchesSearch(
   row: object,
   paths: readonly string[],
   words: readonly string[],
@@ -195,15 +234,36 @@ export function crmRowMatchesSearch(
 }
 
 /**
+ * The rows that answer every clause and the quick search — for a list that
+ * holds its whole data set (or the window its query already narrowed) and
+ * so answers the panel itself. A clause `skip` names is one the query
+ * already served, and is not matched again.
+ */
+export function filterListRows<Row extends object>(
+  rows: readonly Row[],
+  fields: readonly ListFilterField[],
+  clauses: readonly ListFilterClause[],
+  search: { paths: readonly string[]; words: readonly string[] },
+  skip?: (clause: ListFilterClause) => boolean,
+): Row[] {
+  const applied = skip ? clauses.filter((clause) => !skip(clause)) : clauses
+  return rows.filter(
+    (row) =>
+      applied.every((clause) => matchListFilter(row, fields, clause)) &&
+      listRowMatchesSearch(row, search.paths, search.words),
+  )
+}
+
+/**
  * The clauses with one field's clause set: replaced in place where the field
  * already had one, appended where it did not, removed when `next` is null.
  * A field holds ONE clause, which is what the panel edits.
  */
-export function crmUpsertClause(
-  clauses: readonly CrmViewFilterClause[],
+export function upsertListFilterClause<Clause extends ListFilterClause>(
+  clauses: readonly Clause[],
   field: string,
-  next: CrmViewFilterClause | null,
-): CrmViewFilterClause[] {
+  next: Clause | null,
+): Clause[] {
   const at = clauses.findIndex((clause) => clause.field === field)
   const rest = clauses.filter((clause) => clause.field !== field)
   if (!next) return rest

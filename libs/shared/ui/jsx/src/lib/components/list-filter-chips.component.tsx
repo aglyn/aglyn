@@ -17,31 +17,29 @@
 
 'use client'
 
-import type { CrmViewFilterClause } from '@aglyn/aglyn'
-import {
-  type ListFilterField,
-  listFilterOperatorLabel,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
 import { Chip, Stack, Tooltip } from '@mui/material'
-import type { CrmFilterOption } from '../model/crm-grid-filter'
+import { type ListFilterField, listFilterOperatorLabel } from '../const/list-filter'
+import type { ListFilterClause, ListFilterOption } from '../const/list-grid-filter'
 
-export type { CrmFilterOption } from '../model/crm-grid-filter'
-
-export interface CrmFilterBarProps {
+export interface ListFilterChipsProps {
   /** The list's grammar — every field a clause may name. */
   fields: readonly ListFilterField[]
   /** How a field reads on a chip; a field without one reads as its column. */
   headers: Readonly<Record<string, string>>
-  clauses: readonly CrmViewFilterClause[]
-  onChange: (clauses: CrmViewFilterClause[]) => void
+  clauses: readonly ListFilterClause[]
+  onChange: (clauses: ListFilterClause[]) => void
   /** Choices per field, so a chip names a picked value by its label. */
-  options?: Readonly<Record<string, readonly CrmFilterOption[]>>
+  options?: Readonly<Record<string, readonly ListFilterOption[]>>
   /**
    * The field the query is serving, marked so the reader knows which reached
    * everything. Omitted on a list whose every clause narrows the same rows.
    */
   servedField?: string | null
-  /** Whether chips carry the served / loaded-window distinction at all. */
+  /**
+   * Whether chips carry the served / loaded-window distinction at all.
+   * Defaults to whether `servedField` was passed: a list that answers every
+   * clause over the same rows has nothing to distinguish.
+   */
   marksServed?: boolean
   disabled?: boolean
 }
@@ -57,18 +55,18 @@ const dayLabel = (raw: string): string => {
 }
 
 /**
- * Every clause a CRM list is narrowed by, as chips over the grid (AGL-2617,
- * AGL-3313).
+ * Every clause a list is narrowed by, as chips over the grid (AGL-2617,
+ * AGL-3313; shared since AGL-3317).
  *
  * The clauses are ADDED through the grid's own Filters panel; this bar is
  * what shows the SET. The free DataGrid's panel holds one item at a time
- * and a saved view holds several, so without it a view narrowed by lead
- * source and status would show one of the two and hide the other. Each
+ * and a saved view holds several, so without it a list narrowed by two
+ * fields would show one of the two and hide the other. Each
  * chip reads as a sentence — "Owner is Dana", "Created on or after 1 Jan"
  * — and removes its clause; where some clauses reach the query and others
  * narrow the loaded rows, the served one is marked.
  */
-export function CrmFilterBar(props: CrmFilterBarProps) {
+export function ListFilterChips(props: ListFilterChipsProps) {
   const {
     fields,
     headers,
@@ -76,13 +74,13 @@ export function CrmFilterBar(props: CrmFilterBarProps) {
     onChange,
     options = {},
     servedField = null,
-    marksServed = true,
+    marksServed = props.servedField !== undefined,
     disabled = false,
   } = props
   const header = (column: string) => headers[column] ?? column
 
   /** How a clause reads: its header, its operator, and its value by label. */
-  const sentence = (clause: CrmViewFilterClause): string => {
+  const sentence = (clause: ListFilterClause): string => {
     const field = fields.find((entry) => entry.column === clause.field)
     const choices = options[clause.field]
     const named = (value: string) =>
@@ -139,6 +137,6 @@ export function CrmFilterBar(props: CrmFilterBarProps) {
     </Stack>
   )
 }
-CrmFilterBar.displayName = 'CrmFilterBar'
+ListFilterChips.displayName = 'ListFilterChips'
 
-export default CrmFilterBar
+export default ListFilterChips

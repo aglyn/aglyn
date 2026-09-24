@@ -80,7 +80,7 @@ describe('Do not contact domains (AGL-3244)', () => {
       data: [entry(), entry({ domain: 'other.example', reason: 'manual', source: 'member', addedByUid: 'uid-rep', detail: null })],
     }
     render(<OutreachDoNotContactDomainsCard orgId="org-1" />)
-    const list = screen.getByRole('list', { name: 'Do not contact domains' })
+    const list = screen.getByRole('grid', { name: 'Do not contact domains' })
     expect(list.textContent).toContain('kcorp.example')
     expect(list.textContent).toContain('Its mail gateway blocked the sender')
     expect(list.textContent).toContain('(the address:blocked)')
@@ -89,6 +89,20 @@ describe('Do not contact domains (AGL-3244)', () => {
     mockListed = { status: 'ready', data: [] }
     render(<OutreachDoNotContactDomainsCard orgId="org-1" />)
     expect(screen.getByText('No domains yet.')).toBeTruthy()
+  })
+
+  it('filters through the grid’s own search, over every listed domain (AGL-3317)', async () => {
+    mockListed = {
+      status: 'ready',
+      data: [entry(), entry({ domain: 'other.example', reason: 'manual', source: 'member', addedByUid: 'uid-rep', detail: null })],
+    }
+    render(<OutreachDoNotContactDomainsCard orgId="org-1" />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'other' } })
+    await waitFor(() => {
+      const grid = screen.getByRole('grid', { name: 'Do not contact domains' })
+      expect(grid.textContent).toContain('other.example')
+      expect(grid.textContent).not.toContain('kcorp.example')
+    })
   })
 
   it('adds a domain, spelled the way the route stores it, and clears the field', async () => {

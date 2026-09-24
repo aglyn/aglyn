@@ -9,6 +9,68 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.189 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/eaf9b62d8...v1.0.0-beta.189)
+
+### Added
+
+- **console:** aglyn's own emails carry the marketing site's email blocks ([AGL-3318](https://linear.app/aglyn/issue/AGL-3318), [AGL-2428](https://linear.app/aglyn/issue/AGL-2428))
+
+### Fixed
+
+- **console:** an email editor's save menu says what publishing changes ([AGL-3318](https://linear.app/aglyn/issue/AGL-3318))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3318 ([AGL-3318](https://linear.app/aglyn/issue/AGL-3318))
+
+</details>
+
+## v1.0.0-beta.188 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.187...v1.0.0-beta.188)
+
+### Added
+
+- **marketing:** the campaigns and emails lists filter through the grid's own toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **shared-ui-jsx:** the two list recipes every converted list repeats ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **outreach:** the sequences lists filter through the grid's own toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **release:** a publishable package with no trust record reds its own PR ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+### Fixed
+
+- **release:** the sweep says why npm refuses to trust a name it has never held ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+### Changed
+
+- **shared-ui-jsx:** the grid filter path every list uses lives beside ListTable ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317), [AGL-3313](https://linear.app/aglyn/issue/AGL-3313))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3317 ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **tools:** @aglyn/shared-util-first-touch joins the trusted-publisher record ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+</details>
+
+## v1.0.0-beta.187 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.186...v1.0.0-beta.187)
+
+### Added
+
+- **crm:** the deals table searches every deal by any word of its title ([AGL-3315](https://linear.app/aglyn/issue/AGL-3315))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3316 ([AGL-3316](https://linear.app/aglyn/issue/AGL-3316))
+- **tools:** the trusted-publisher record re-confirms the 51 published packages ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+</details>
+
 ## v1.0.0-beta.186 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.185...v1.0.0-beta.186)

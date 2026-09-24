@@ -98,11 +98,11 @@ import {
   leadMatchesSearch,
 } from '../model/lead-filters'
 import {
-  type CrmFilterOption,
-  crmFilterColumns,
-} from '../model/crm-grid-filter'
-import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
-import CrmFilterBar from './crm-filter-bar'
+  type ListFilterOption,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
@@ -266,7 +266,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     (next: CrmViewFilterClause[]) => views.setFilters(leadClausesToStore(next)),
     [views.setFilters],
   )
-  const gridFilter = useCrmGridFilter({
+  const gridFilter = useListGridFilter({
     clauses,
     onChange: setClauses,
     selectFields: ['status', 'emailState', 'ownerUid'],
@@ -283,7 +283,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
    * no longer listed — a retired campaign, a lead source since removed —
    * stays a choice, so the panel can show it and clear it.
    */
-  const filterOptions = useMemo<Record<string, CrmFilterOption[]>>(() => {
+  const filterOptions = useMemo<Record<string, ListFilterOption[]>>(() => {
     const stale = (field: string, known: readonly { value: string }[]) =>
       clauses
         .filter((clause) => clause.field === field && clause.op !== 'isEmpty')
@@ -745,7 +745,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
    */
   const filterColumns = useMemo(
     () =>
-      crmFilterColumns(columns, LEAD_LIST_FILTER_FIELDS, filterOptions, LEAD_LIST_FILTER_HEADERS),
+      listFilterGridColumns(columns, LEAD_LIST_FILTER_FIELDS, filterOptions, LEAD_LIST_FILTER_HEADERS),
     [columns, filterOptions],
   )
   const grid = useCrmViewGrid(views, filterColumns)
@@ -792,7 +792,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           */}
           <CrmListToolbar label="Lead filters">
             <CrmViewsControl controller={views} allLabel="All leads" />
-            <CrmFilterBar
+            <ListFilterChips
               fields={LEAD_LIST_FILTER_FIELDS}
               headers={LEAD_LIST_FILTER_HEADERS}
               clauses={clauses}

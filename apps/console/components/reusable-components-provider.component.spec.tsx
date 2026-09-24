@@ -486,6 +486,65 @@ describe('ReusableComponentsProvider — email blocks (AGL-3287)', () => {
     )
   })
 
+  /**
+   * A platform email (AGL-3318): the staff editor mounts this provider over
+   * the platform marketing site's blocks, on a route that names no workspace
+   * and no site. It draws and offers them; it must not make one there.
+   */
+  it('offers the blocks without Save as reusable component when promotion is off', () => {
+    mockViewType = Aglyn.HostViewType.EMAIL
+    mockComponentDocs = [{ $id: 'ftr', displayName: 'Email footer', kind: 'email' }]
+    let value:
+      | Partial<
+          Record<'onPromote' | 'onDemote' | 'onEditComponent', (node: any) => void>
+        >
+      | undefined
+    function Probe() {
+      value = useContext(ComponentPromotionContext)
+      return null
+    }
+    // No HostSubdomainContext above it: the staff route has none.
+    const { unmount } = render(
+      <ReusableComponentsProvider hostId="aglyn-marketing" allowPromote={false}>
+        <Probe />
+      </ReusableComponentsProvider>,
+    )
+    // The Attributes panel draws the button only when the callback exists.
+    expect(value).not.toHaveProperty('onPromote')
+    expect(typeof value?.onDemote).toBe('function')
+    // The block is still offered in the drawer.
+    expect(Aglyn.components.getPreset('hostcmp:ftr')).toMatchObject({
+      pluginId: 'email',
+      data: { props: { refId: 'ftr' } },
+    })
+    // Edit component has no site to link to here, so it opens nothing.
+    const open = jest.spyOn(window, 'open').mockReturnValue(null)
+    act(() =>
+      value?.onEditComponent?.({
+        $id: 'i1',
+        componentId: Aglyn.REUSABLE_INSTANCE_COMPONENT_ID,
+        props: { refId: 'ftr' },
+      } as never),
+    )
+    expect(open).not.toHaveBeenCalled()
+    open.mockRestore()
+    unmount()
+  })
+
+  it('offers Save as reusable component by default', () => {
+    let promote: unknown
+    function Probe() {
+      promote = useContext(ComponentPromotionContext).onPromote
+      return null
+    }
+    render(
+      <ReusableComponentsProvider hostId="h1">
+        <Probe />
+      </ReusableComponentsProvider>,
+    )
+    expect(typeof promote).toBe('function')
+  })
+
   it.each([
     ['a page', Aglyn.HostViewType.SCREEN],
     ['a layout', Aglyn.HostViewType.LAYOUT],

@@ -33,11 +33,14 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
 import { collection, limit, query, setDoc } from 'firebase/firestore'
@@ -100,6 +103,35 @@ const WINDOW_LABEL: Record<CampaignListRow['windowState'], string> = {
   running: 'Running',
   ended: 'Ended',
 }
+
+/*
+ * What the campaigns grid's Filters panel offers (AGL-3317). The card reads
+ * every campaign under its ceiling, so the panel and the search answer over
+ * all of them. A campaign's lists are ids, matched member by member.
+ */
+const CAMPAIGN_FILTER_FIELDS = [
+  inMemoryListField('name', 'text'),
+  inMemoryListField('windowState', 'select'),
+  { ...inMemoryListField('listIds', 'select'), tokensPath: 'listIds', verbatimTokens: true },
+  inMemoryListField('kind', 'select'),
+  inMemoryListField('sitesLabel', 'text'),
+]
+const CAMPAIGN_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Campaign',
+  windowState: 'Window',
+  listIds: 'Lists',
+  kind: 'Kind',
+  sitesLabel: 'Sites',
+}
+const CAMPAIGN_KIND_OPTIONS = [
+  { value: 'campaign', label: 'Campaign' },
+  { value: 'single', label: 'Single send' },
+]
+const CAMPAIGN_WINDOW_OPTIONS = (
+  Object.keys(WINDOW_LABEL) as Array<CampaignListRow['windowState']>
+).map((state) => ({ value: state, label: WINDOW_LABEL[state] }))
+/** What the quick search reads on a campaign row. */
+const CAMPAIGN_SEARCH_FIELDS = ['name', 'sitesLabel'] as const
 
 /**
  * THE CAMPAIGNS LIST.
@@ -260,11 +292,36 @@ export function HostCampaignsCard(props: {
     ).map((row) => ({
       ...row,
       $id: row.id,
+      kind: row.legacy ? 'single' : 'campaign',
       sitesLabel: orgMount
         ? campaignSitesLabel(orgMount, row, byId.get(row.id))
         : '',
     }))
   }, [readCampaigns, readSends, orgMount])
+
+  const filterOptions = useMemo(
+    () => ({
+      windowState: CAMPAIGN_WINDOW_OPTIONS,
+      listIds: listOptions,
+      kind: CAMPAIGN_KIND_OPTIONS,
+    }),
+    [listOptions],
+  )
+  // Sites is a column on the org hub only; under a site it would say one thing.
+  const filterFields = useMemo(
+    () =>
+      orgMount
+        ? CAMPAIGN_FILTER_FIELDS
+        : CAMPAIGN_FILTER_FIELDS.filter((field) => field.column !== 'sitesLabel'),
+    [orgMount],
+  )
+  const listFilter = useListRowsFilter({
+    rows,
+    fields: filterFields,
+    options: filterOptions,
+    headers: CAMPAIGN_FILTER_HEADERS,
+    search: CAMPAIGN_SEARCH_FIELDS,
+  })
 
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -726,16 +783,25 @@ export function HostCampaignsCard(props: {
       contentGutterY
     >
       <Stack spacing={1.5}>
+        <ListFilterChips {...listFilter.chipsProps} />
         <ListTable
-          rows={rows}
-          columns={columns as any}
+          rows={listFilter.rows}
+          columns={listFilter.filterColumns(columns as any)}
           onOpen={(id) => openCampaign(id)}
-          noRowsLabel="No campaigns yet"
-          noRowsDescription="A campaign groups the emails you send to a set of lists."
+          // The panel and the search are the grid's; the card answers them
+          // over every campaign it read (AGL-3317).
+          {...listFilter.gridProps}
+          initialState={{ columns: { columnVisibilityModel: { kind: false } } }}
+          noRowsLabel={rows.length ? 'No campaigns match these filters' : 'No campaigns yet'}
+          noRowsDescription={
+            rows.length ? undefined : 'A campaign groups the emails you send to a set of lists.'
+          }
           noRowsAction={
-            <Button variant="contained" onClick={() => setCreateOpen(true)}>
-              {'Create campaign'}
-            </Button>
+            rows.length ? undefined : (
+              <Button variant="contained" onClick={() => setCreateOpen(true)}>
+                {'Create campaign'}
+              </Button>
+            )
           }
         />
         {/*

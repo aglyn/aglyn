@@ -19,23 +19,26 @@
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiTrashCanOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
-  Button,
-  Chip,
-  IconButton,
-  List,
-  ListItem,
-  ListItemText,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
-import { useState } from 'react'
+  ListTable,
+  listActionsColumn,
+  type ListTableProps,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import {
+  filterListRows,
+  inMemoryListField,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { Button, Chip, IconButton, Stack, TextField, Typography } from '@mui/material'
+import { useMemo, useState } from 'react'
 import { normalizeOutreachDomain } from '../engine/do-not-contact-domain'
-import type {
-  OutreachDoNotContactDomainEntry,
-  OutreachDoNotContactReason,
+import {
+  OUTREACH_DO_NOT_CONTACT_REASONS,
+  type OutreachDoNotContactDomainEntry,
+  type OutreachDoNotContactReason,
 } from '../model/outreach.types'
 import { OutreachLoading, OutreachLoadProblem } from './outreach-ui'
 import { useOutreachApi } from './use-outreach-api'
@@ -65,9 +68,94 @@ export const DO_NOT_CONTACT_DOMAIN_LABELS = {
 /** What the field says under a value that is not a domain. */
 export const DO_NOT_CONTACT_DOMAIN_HINT = 'A domain, such as example.com. Every address at it is refused.'
 
+/*
+ * What the domains grid's Filters panel offers (AGL-3317). The card reads
+ * every listed domain, so the panel and the search answer over all of them.
+ */
+const DOMAIN_FILTER_FIELDS = [
+  inMemoryListField('domain', 'text'),
+  inMemoryListField('reason', 'select'),
+  inMemoryListField('detail', 'text'),
+]
+const DOMAIN_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  domain: 'Domain',
+  reason: 'Why',
+  detail: 'Detail',
+}
+const DOMAIN_FILTER_OPTIONS = {
+  reason: OUTREACH_DO_NOT_CONTACT_REASONS.map((reason) => ({
+    value: reason,
+    label: OUTREACH_DO_NOT_CONTACT_REASON_LABELS[reason],
+  })),
+}
+/** What the quick search reads on a domain row. */
+const DOMAIN_SEARCH_FIELDS = ['domain', 'detail'] as const
+
 function addedOn(entry: OutreachDoNotContactDomainEntry): string {
   if (!entry.addedAtMs) return ''
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(entry.addedAtMs)
+}
+
+/** The grid's columns; the remove button names its domain for a screen reader. */
+function domainColumns(
+  busy: boolean,
+  remove: (domain: string) => void,
+): NonNullable<ListTableProps['columns']> {
+  return listFilterGridColumns(
+    [
+      {
+        field: 'domain',
+        headerName: 'Domain',
+        flex: 1,
+        minWidth: 160,
+        renderCell: ({ row }) => (
+          <Typography variant="body2" component="span" sx={{ fontWeight: 500 }}>
+            {row.domain}
+          </Typography>
+        ),
+      },
+      {
+        field: 'reason',
+        headerName: 'Why',
+        flex: 1,
+        minWidth: 200,
+        renderCell: ({ row }) => (
+          <Chip
+            size="small"
+            variant="outlined"
+            color={row.reason === 'gateway_block' ? 'warning' : 'default'}
+            label={
+              OUTREACH_DO_NOT_CONTACT_REASON_LABELS[row.reason as OutreachDoNotContactReason] ??
+              row.reason
+            }
+          />
+        ),
+      },
+      {
+        field: 'addedAtMs',
+        headerName: 'Added',
+        width: 140,
+        renderCell: ({ row }) => row.added,
+      },
+      { field: 'detail', headerName: 'Detail', flex: 1, minWidth: 160 },
+      listActionsColumn(
+        (row) => (
+          <IconButton
+            size="small"
+            aria-label={DO_NOT_CONTACT_DOMAIN_LABELS.remove(row.domain)}
+            disabled={busy}
+            onClick={() => remove(row.domain)}
+          >
+            <MdiIcon path={mdiTrashCanOutline.path} fontSize="small" />
+          </IconButton>
+        ),
+        { width: 72 },
+      ),
+    ],
+    DOMAIN_FILTER_FIELDS,
+    DOMAIN_FILTER_OPTIONS,
+    DOMAIN_FILTER_HEADERS,
+  )
 }
 
 /**
@@ -88,6 +176,27 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
   const [busy, setBusy] = useState<string | null>(null)
   const normalized = normalizeOutreachDomain(draft)
   const invalid = draft.trim() !== '' && normalized === null
+  const gridFilter = useListGridFilter({ selectFields: ['reason'] })
+  const searchKey = gridFilter.searchWords.join(' ')
+  const rows = useMemo(
+    () =>
+      filterListRows(
+        listed.data.map((entry) => ({
+          $id: entry.domain,
+          domain: entry.domain,
+          reason: entry.reason,
+          added: addedOn(entry),
+          addedAtMs: entry.addedAtMs ?? 0,
+          detail: entry.detail ?? '',
+        })),
+        DOMAIN_FILTER_FIELDS,
+        gridFilter.clauses,
+        { paths: DOMAIN_SEARCH_FIELDS, words: gridFilter.searchWords },
+      ),
+    // `searchKey` stands for the words, which are a new array each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [listed.data, gridFilter.clauses, searchKey],
+  )
 
   const change = async (action: 'add' | 'remove', domain: string) => {
     setBusy(domain)
@@ -158,43 +267,29 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
             No domains yet.
           </Typography>
         ) : (
-          <List dense disablePadding aria-label="Do not contact domains">
-            {listed.data.map((entry) => (
-              <ListItem
-                key={entry.domain}
-                disableGutters
-                secondaryAction={
-                  <IconButton
-                    edge="end"
-                    size="small"
-                    aria-label={DO_NOT_CONTACT_DOMAIN_LABELS.remove(entry.domain)}
-                    disabled={busy !== null}
-                    onClick={() => void change('remove', entry.domain)}
-                  >
-                    <MdiIcon path={mdiTrashCanOutline.path} fontSize="small" />
-                  </IconButton>
-                }
-              >
-                <ListItemText
-                  primary={
-                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
-                      <Typography variant="body2" component="span" sx={{ fontWeight: 500 }}>
-                        {entry.domain}
-                      </Typography>
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color={entry.reason === 'gateway_block' ? 'warning' : 'default'}
-                        label={OUTREACH_DO_NOT_CONTACT_REASON_LABELS[entry.reason] ?? entry.reason}
-                      />
-                    </Stack>
-                  }
-                  secondary={[addedOn(entry) && `Added ${addedOn(entry)}`, entry.detail].filter(Boolean).join(' · ')}
-                  slotProps={{ secondary: { sx: { wordBreak: 'break-word' } } }}
-                />
-              </ListItem>
-            ))}
-          </List>
+          <Stack spacing={1}>
+            <ListFilterChips
+              fields={DOMAIN_FILTER_FIELDS}
+              headers={DOMAIN_FILTER_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+              options={DOMAIN_FILTER_OPTIONS}
+            />
+            <ListTable
+              aria-label="Do not contact domains"
+              columns={domainColumns(busy !== null, (domain) => void change('remove', domain))}
+              rows={rows}
+              /*
+               * The panel and the search are the grid's; the card answers
+               * them over every listed domain (AGL-3317).
+               */
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              noRowsLabel="No domains match these filters"
+            />
+          </Stack>
         )}
       </Stack>
     </CardDisplay>

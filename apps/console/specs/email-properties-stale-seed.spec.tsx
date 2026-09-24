@@ -40,6 +40,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { PlatformMarketingHostProvider } from '../components/platform-marketing-host.context'
 
 const mockSetDoc = jest.fn().mockResolvedValue(undefined)
 const mockEnqueueSnackbar = jest.fn()
@@ -229,10 +230,15 @@ jest.mock('../components/binding-picker-provider.component', () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 // The site's reusable email blocks (AGL-3287) — their own suite covers them;
-// this one is about what the properties drawer writes.
+// this one is about what the properties drawer writes, and, for the staff
+// page, which site's blocks it mounts (AGL-3318).
+const mockReusableProvider = jest.fn()
 jest.mock('../components/reusable-components-provider.component', () => ({
   __esModule: true,
-  default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  default: (props: { children: ReactNode }) => {
+    mockReusableProvider(props)
+    return <div>{props.children}</div>
+  },
 }))
 jest.mock('../components/besigner-media-picker-provider.component', () => ({
   __esModule: true,
@@ -344,5 +350,43 @@ describe.each(PAGES)('%s besigner properties (AGL-1358)', (_label, Page) => {
     expect(mockEnqueueSnackbar.mock.calls[0][0]).toEqual(
       expect.stringMatching(/could not be loaded/i),
     )
+  })
+})
+
+/**
+ * The staff page draws the platform marketing site's email blocks (AGL-3318).
+ * Asserted here because this is the harness that mounts it. The site is a
+ * server setting its layout provides, and without one the page renders as it
+ * did before blocks existed.
+ */
+describe('staff system email besigner and the marketing site’s blocks (AGL-3318)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    templateSeed.fromCache = false
+    templateSeed.status = 'success'
+  })
+
+  it('offers that site’s blocks, never promotion, when the deployment names one', async () => {
+    render(
+      <PlatformMarketingHostProvider hostId="aglyn-marketing">
+        <StaffPage />
+      </PlatformMarketingHostProvider>,
+    )
+    // Staff are told where the header and footer are changed.
+    expect(
+      await screen.findByText(/come from the platform marketing site/),
+    ).toBeTruthy()
+    expect(mockReusableProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ hostId: 'aglyn-marketing', allowPromote: false }),
+    )
+  })
+
+  it('renders as it always has when the deployment names none', async () => {
+    render(<StaffPage />)
+    // The page has rendered, so the absences below are about it, not about a
+    // loading screen that has not got there yet.
+    expect(await screen.findByLabelText('Subject')).toBeTruthy()
+    expect(mockReusableProvider).not.toHaveBeenCalled()
+    expect(screen.queryByText(/platform marketing site/)).toBeNull()
   })
 })
