@@ -58,7 +58,9 @@ the core's own compose path read it too.
 
 - `.` — the console extension (nav, the Automation page, the activity widget).
 - `./server` — the tenant and console API surfaces: the inbound webhook, the
-  flow-resume job, the automation draft writer.
+  flow-resume job, the automation draft writer, the org automation doors, and
+  the Actions card's test run (`automations/actions/test-run`, console only —
+  the page runtime's `events/dispatch` is a tenant route).
 - `./declarations.server` — the boot registration above.
 
 ## License
