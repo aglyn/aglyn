@@ -52,6 +52,17 @@
  * survives becoming live, and everyone on the list survives becoming fixed.
  * The rule is kept on a fixed list rather than deleted — it is the filter that
  * found these people, and losing it on a toggle would lose the work.
+ *
+ * ## Whose people the filters read is a choice, not a side effect
+ *
+ * A list is the organization's and its rule reads ONE site's leads, members
+ * and form submissions — the list's `hostId`. That is written when somebody
+ * chooses it and at no other time. A rename saved from another site's page
+ * must not move the filters onto that site's people: the next sweep would
+ * re-draw the whole audience from somebody else's customers. So the page
+ * reads the stored site, offers the change in words, and writes `hostId` only
+ * when it differs from what is stored — which is also how a list that never
+ * had one gets the site it is first set up on.
  */
 
 import {
@@ -72,18 +83,20 @@ import {
 import { doc, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import {
-  useFirestore,
-  useFirestoreDoc,
-  useOrgDataScope,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import DynamicListRuleFields, {
   draftToRule,
   useRuleDraft,
 } from './dynamic-list-rule-fields'
+import {
+  OrgSiteSelect,
+  useEmailDataScope,
+  useEmailOrgMount,
+} from './email-org-mount'
 
 export interface ListEditCardProps {
-  hostId: string
+  /** The site, or `null` on the organization's Emails page. */
+  hostId: string | null
   listId: string
   /** The emails hub URL, which the audiences routes hang beneath. */
   basePath: string
@@ -94,7 +107,8 @@ export function ListEditCard(props: ListEditCardProps) {
   const firestore = useFirestore()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
-  const { scope } = useOrgDataScope({ hostId })
+  const orgMount = useEmailOrgMount()
+  const { scope } = useEmailDataScope(hostId)
 
   const { data: list, status } = useFirestoreDoc<Record<string, any>>(
     () => (scope ? doc(firestore, scope[0], scope[1], 'lists', listId) : null),
@@ -130,6 +144,28 @@ export function ListEditCard(props: ListEditCardProps) {
   const [draft, setDraft] = useRuleDraft(storedRule, listId)
   const [busy, setBusy] = useState(false)
 
+  /*
+   * WHOSE PEOPLE THE FILTERS READ — see the file header.
+   *
+   * The stored site stands until somebody chooses another. A list with none
+   * yet starts on the site whose page this is, or on the organization's page
+   * on the reader's pick this session (or the only site). A stored site the
+   * org's page does not list — one since deleted — is not offered as the
+   * answer there, so the reader chooses a live one.
+   */
+  const storedHostId = String(list?.['hostId'] ?? '')
+  const [chosenHostId, setChosenHostId] = useState('')
+  const storedIsOffered = orgMount
+    ? orgMount.hosts.some((site) => site.id === storedHostId)
+    : Boolean(storedHostId)
+  const ruleHostId: string =
+    chosenHostId ||
+    (storedIsOffered ? storedHostId : '') ||
+    (hostId ?? orgMount?.pickedHostId ?? '')
+  /** Under a site, the filters were last set up on a different one. */
+  const drawsFromAnotherSite =
+    hostId != null && Boolean(storedHostId) && storedHostId !== hostId
+
   const audiencesHref = `${basePath}/audiences`
   const detailHref = `${audiencesHref}/${listId}`
 
@@ -158,9 +194,12 @@ export function ListEditCard(props: ListEditCardProps) {
          *
          * Lists are org-shared but leads, members and form submissions are
          * host-owned, and org contacts are read narrowed to one host. A rule
-         * with no host has no silos at all, so the sweep skips it.
+         * with no host has no silos at all, so the sweep skips it. Written
+         * only when it changes — see the file header.
          */
-        hostId,
+        ...(ruleHostId && ruleHostId !== storedHostId
+          ? { hostId: ruleHostId }
+          : {}),
       })
       enqueueSnackbar('List saved', { variant: 'success', persist: false })
       router.push(detailHref)
@@ -258,14 +297,58 @@ export function ListEditCard(props: ListEditCardProps) {
               'you add is who stays on the list.'}
         </Alert>
 
-        {scope ? (
+        {/*
+          WHOSE PEOPLE, said before the filters that read them. On the org
+          page it is a picker. Under a site it is said only when the stored
+          site is another one, with the one control that moves it here.
+         */}
+        {orgMount ? (
+          <OrgSiteSelect
+            mount={orgMount}
+            label="Site"
+            value={ruleHostId}
+            onChange={setChosenHostId}
+            helperText={
+              'The site whose leads, members and form submissions these ' +
+              'filters read. A list draws from one site’s people.'
+            }
+          />
+        ) : drawsFromAnotherSite ? (
+          <Alert
+            severity="info"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() =>
+                  setChosenHostId(chosenHostId ? '' : String(hostId))
+                }
+              >
+                {chosenHostId ? 'Keep the other site' : 'Use this site'}
+              </Button>
+            }
+          >
+            {chosenHostId
+              ? 'Saving moves these filters onto this site’s people. The ' +
+                'next sweep re-draws the audience from them.'
+              : 'These filters read another site’s people — the site this ' +
+                'list was set up on. Saving here keeps it that way.'}
+          </Alert>
+        ) : null}
+
+        {scope && ruleHostId ? (
           <DynamicListRuleFields
+            key={ruleHostId}
             scope={scope as readonly [string, string]}
-            hostId={hostId}
+            hostId={ruleHostId}
             draft={draft}
             onChange={setDraft}
             listId={listId}
           />
+        ) : orgMount ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Choose the site whose people these filters read to edit them.'}
+          </Typography>
         ) : null}
         {/*
           A rule with no source matches nobody, and an audience emptied that

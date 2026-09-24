@@ -41,9 +41,20 @@
  * that claim. The summary spells out every dimension the rule actually
  * carries, so the answer to "why is this person not in the audience" is on the
  * screen the question gets asked on.
+ *
+ * ## On the organization's page, the site it is worked AS
+ *
+ * The list is the organization's, but adding somebody to it is done as one
+ * site — the enrollment and the consent it records are that site's — and the
+ * Consent column reads what each person agreed to with one site's group. So
+ * with no site in the URL the page asks which, defaulting to the site the
+ * list's filters draw from, then the reader's pick this session, then the
+ * org's only site. Nothing below the picker is built until there is an
+ * answer: a consent column for no site would be a column about nobody.
  */
 
 import {
+  consentGroupForHost,
   normalizeDynamicListRule,
   PageHeaderRecord,
   pluginDocsHelp,
@@ -53,32 +64,44 @@ import { mdiPencilOutline, mdiTrayArrowUp } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import { collection, doc, getCountFromServer } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
-import { useFirestore, useFirestoreDoc, useOrgDataScope } from '@aglyn/tenant-feature-instance'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { describeDynamicListRule } from './dynamic-list-rule-fields'
+import {
+  OrgSiteSelect,
+  useEmailDataScope,
+  useEmailOrgMount,
+} from './email-org-mount'
 import ListImportDrawer from './list-import-drawer'
 import ListMembersPanel from './list-members-panel'
 
 export interface ListDetailCardProps {
-  hostId: string
+  /** The site, or `null` on the organization's Emails page. */
+  hostId: string | null
   /**
    * The controller this audience is being read AS, resolved by the page from
-   * the org document it already holds.
+   * the org document it already holds — under a site.
    *
    * Passed through rather than resolved here: the group is a fact about the
    * ORG, one lookup serves every section, and a card that resolved its own
    * would be a second place for the answer to come from.
    */
-  consentGroup: ConsentGroup
+  consentGroup?: ConsentGroup
+  /**
+   * The org document, on the organization's page, where the group can only be
+   * resolved once the reader has said which site they are working as.
+   */
+  org?: Record<string, unknown>
   listId: string
   /** The emails hub URL, for the way back to the audiences list. */
   basePath: string
 }
 
 export function ListDetailCard(props: ListDetailCardProps) {
-  const { hostId, consentGroup, listId, basePath } = props
+  const { hostId, listId, basePath, org } = props
   const firestore = useFirestore()
-  const { scope } = useOrgDataScope({ hostId })
+  const orgMount = useEmailOrgMount()
+  const { scope } = useEmailDataScope(hostId)
 
   const { data: list, status } = useFirestoreDoc<Record<string, any>>(
     () =>
@@ -119,6 +142,31 @@ export function ListDetailCard(props: ListDetailCardProps) {
   )
 
   /*
+   * THE SITE THIS AUDIENCE IS WORKED AS. Under a site, that site. On the
+   * organization's page, the reader's choice — else the site the filters draw
+   * from, else the session's pick, else the only site.
+   */
+  const [chosenHostId, setChosenHostId] = useState('')
+  const listHostId = String(list?.['hostId'] ?? '')
+  const enrollHostId: string =
+    hostId ??
+    (chosenHostId ||
+      (orgMount?.hosts.some((site) => site.id === listHostId)
+        ? listHostId
+        : '') ||
+      orgMount?.pickedHostId ||
+      '')
+  const consentGroup = useMemo<ConsentGroup | null>(
+    () =>
+      hostId != null
+        ? (props.consentGroup ?? null)
+        : enrollHostId
+          ? consentGroupForHost(org, enrollHostId)
+          : null,
+    [hostId, props.consentGroup, enrollHostId, org],
+  )
+
+  /*
    * Importing is a DRAWER opened from the header, not a control inside the
    * membership panel. It is a multi-step act — choose a file, read what is in
    * it, state that you have permission — and the middle step is the one that
@@ -155,6 +203,8 @@ export function ListDetailCard(props: ListDetailCardProps) {
         color="primary"
         variant="contained"
         startIcon={<MdiIcon path={mdiTrayArrowUp.path} size={0.8} />}
+        // An import enrolls as a site; on the org page one has to be chosen.
+        disabled={!enrollHostId}
         onClick={() => setImporting(true)}
       >
         {'Import'}
@@ -263,9 +313,29 @@ export function ListDetailCard(props: ListDetailCardProps) {
           </Stack>
         ) : null}
 
-        {scope ? (
+        {orgMount ? (
+          <OrgSiteSelect
+            mount={orgMount}
+            label="Enroll as"
+            value={enrollHostId}
+            onChange={setChosenHostId}
+            helperText={
+              'People you add are enrolled as this site, and the Consent ' +
+              'column reads what they agreed to with it.'
+            }
+          />
+        ) : null}
+
+        {orgMount && !enrollHostId ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Choose the site to work this audience as. Whether someone may ' +
+              'be emailed depends on what they agreed to with a site, so the ' +
+              'members and their consent are read for one site at a time.'}
+          </Typography>
+        ) : scope && consentGroup ? (
           <ListMembersPanel
-            hostId={hostId}
+            key={enrollHostId}
+            hostId={enrollHostId}
             consentGroup={consentGroup}
             scope={scope as readonly [string, string]}
             listId={listId}
@@ -287,11 +357,11 @@ export function ListDetailCard(props: ListDetailCardProps) {
         none of its effects — the drawer looks for an unfinished import when
         it opens, and that read must not be a cost of visiting an audience.
        */}
-      {importing ? (
+      {importing && enrollHostId ? (
         <ListImportDrawer
           open
           onClose={() => setImporting(false)}
-          hostId={hostId}
+          hostId={enrollHostId}
           listId={listId}
           listName={String(list['name'] ?? '')}
           onMembershipChanged={onMembershipChanged}

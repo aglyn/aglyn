@@ -18,9 +18,11 @@
 
 import { buildRoute, Route } from '@aglyn/aglyn'
 import { useParams } from 'next/navigation'
+import { useMarketingOrgMount } from './marketing-org-mount'
 
 /**
- * The Emails console's URL under the site being read.
+ * The Emails console's URL: under the site being read, or the organization's
+ * own Emails page on a surface mounted over the org.
  *
  * A campaign's page links to two records it does not own — the message that
  * was sent inside it, and the template that message was built from — and both
@@ -33,15 +35,22 @@ import { useParams } from 'next/navigation'
  * Free, deliberately. The org slug and the subdomain are already in the URL
  * the console is on, so this reads the route rather than resolving the host
  * document — the two `getDoc`s that resolution costs would be paid on every
- * open of a campaign, to render a link.
+ * open of a campaign, to render a link. At the organization level the org
+ * mount already carries the slug.
+ *
+ * The org answer comes from the MOUNT rather than from the route having no
+ * site in it: a card is on the organization's page because it was handed the
+ * org mount, and that is the fact a link to the org's messages has to follow.
+ * A message is the org's document, so its page there is
+ * `/[orgSlug]/emails/messages/{id}` — the Emails page over every site.
  *
  * `null` before the params resolve, so callers render plain text rather than
- * a link to nowhere — and on the org Marketing hub, where there is no site
- * and so no Emails console; a card there builds its message links from the
- * org mount instead.
+ * a link to nowhere.
  */
 export function useEmailsHubPath(): string | null {
-  return useConsoleHubPath('emails')
+  const orgMount = useMarketingOrgMount()
+  const siteHub = useConsoleHubPath(EMAILS_SLUG)
+  return orgMount ? orgEmailsHubPath(orgMount.orgSlug) : siteHub
 }
 
 /**
@@ -53,9 +62,8 @@ export function useEmailsHubPath(): string | null {
  * links to the campaign it came from, and those surfaces are handed their own
  * hub's `basePath`, not this one's.
  *
- * Unlike the Emails hub it has an answer with no site in the URL. Campaigns
- * belong to the organization, so the org-level CRM and the org Marketing hub
- * itself link a campaign to `/[orgSlug]/marketing/campaigns/{id}`.
+ * Campaigns belong to the organization, so the org-level CRM and the org
+ * Marketing hub itself link a campaign to `/[orgSlug]/marketing/campaigns/{id}`.
  */
 export function useMarketingHubPath(): string | null {
   const params = useParams<{ orgSlug: string; host: string }>()
@@ -67,11 +75,24 @@ export function useMarketingHubPath(): string | null {
         host: params.host,
         pluginSlug: MARKETING_SLUG,
       })
-    : buildRoute(Route.ORG_PLUGIN, { orgSlug, pluginSlug: MARKETING_SLUG })
+    : orgMarketingHubPath(orgSlug)
 }
 
 /** The Marketing hub's URL slug, under a site and under the org alike. */
 const MARKETING_SLUG = 'marketing'
+
+/** The Emails console's URL slug, under a site and under the org alike. */
+const EMAILS_SLUG = 'emails'
+
+/** The organization's own Marketing hub, `/[orgSlug]/marketing`. */
+export function orgMarketingHubPath(orgSlug: string): string {
+  return buildRoute(Route.ORG_PLUGIN, { orgSlug, pluginSlug: MARKETING_SLUG })
+}
+
+/** The organization's own Emails page, `/[orgSlug]/emails`. */
+export function orgEmailsHubPath(orgSlug: string): string {
+  return buildRoute(Route.ORG_PLUGIN, { orgSlug, pluginSlug: EMAILS_SLUG })
+}
 
 /**
  * Any sibling hub's URL under the site being read, by plugin slug.

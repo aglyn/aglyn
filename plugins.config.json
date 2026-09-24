@@ -575,6 +575,9 @@
           "routes": [
             "/emails"
           ],
+          "orgRoutes": [
+            "/emails"
+          ],
           "slots": [
             "campaignDesignCreate",
             "campaignDesignPreview",

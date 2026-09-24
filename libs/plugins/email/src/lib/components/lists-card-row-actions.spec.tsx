@@ -81,9 +81,15 @@ const PAGE = {
   fromCache: false,
 }
 
+/** What the org scope was last asked for — a site, or the org itself. */
+let scopeAskedFor: unknown = null
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
-  useOrgDataScope: () => SCOPE,
+  useOrgDataScope: (options: unknown) => {
+    scopeAskedFor = options
+    return SCOPE
+  },
   useUser: () => USER,
   useFirestoreCollection: () => NO_SEGMENTS,
   usePagedCollection: () => PAGE,
@@ -300,3 +306,44 @@ describe('creating an audience', () => {
     expect(screen.queryByLabelText(/Description/)).toBeNull()
   })
 })
+
+/*==========================================
+ * ON THE ORGANIZATION'S EMAILS PAGE.
+ *
+ * The lists are the org's already, so the card is the same one — asked for
+ * the organization the mount names rather than resolved through a site, and
+ * linking each list beneath the org page's own path.
+ *=========================================*/
+describe('the audiences on the organization’s page', () => {
+  it('reads the org’s lists by the org the mount names, and links beneath the org page', async () => {
+    mockPush.mockClear()
+    const { EmailOrgMountProvider } = await import('./email-org-mount')
+    render(
+      <EmailOrgMountProvider
+        mount={{
+          orgId: 'org-1',
+          orgSlug: 'acme',
+          hosts: [{ id: 'host-1', name: 'Store', subdomain: 'store' }],
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+        }}
+        basePath="/acme/emails"
+      >
+        <OrgListsCard hostId={null} basePath="/acme/emails" />
+      </EmailOrgMountProvider>,
+    )
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(scopeAskedFor).toEqual({ hostId: undefined, orgId: 'org-1' })
+    fireEvent.click(rowFor('Newsletter'))
+    expect(mockPush).toHaveBeenCalledWith('/acme/emails/audiences/list-manual')
+  })
+
+  it('THE CONTROL: under a site the org is resolved through the site', async () => {
+    await mountCard()
+    expect(scopeAskedFor).toEqual({ hostId: 'host-1', orgId: undefined })
+  })
+})
+

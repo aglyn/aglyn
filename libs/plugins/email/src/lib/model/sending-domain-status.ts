@@ -280,3 +280,98 @@ export function describeSendingDomainRemoval(input: {
     confirmationText: 'Remove domain',
   }
 }
+
+/** One site that sends as a domain, as the organization's page read it. */
+export interface SendingDomainSite {
+  /** The site's name, as a person reads it. */
+  name: string
+  /**
+   * True when the domain is the one Aglyn issued to THIS site — its
+   * `platformDomain` — rather than a domain the customer owns.
+   */
+  issued: boolean
+}
+
+/** `A`, `A and B`, `A, B and C`. */
+function listNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/**
+ * THE SAME THREE ANSWERS, asked over the ORGANIZATION rather than from one
+ * site's page.
+ *
+ * On the organization's page a domain can be what several sites send as, and
+ * the confirmation has to name them: "this site" there is nobody. The three
+ * cases are {@link describeSendingDomainRemoval}'s, per site — a site standing
+ * on the domain issued to it drops to the shared pool, a site on a domain the
+ * customer owns stops sending, and when nothing sends as it only the claim
+ * goes.
+ *
+ * `unchecked` is the number of sites the page did not read. The page reads a
+ * batch of sites at a time, so "nothing sends as it" can only be said of the
+ * sites it read, and the sentence says so rather than overstating it.
+ */
+export function describeOrgSendingDomainRemoval(input: {
+  domain: string
+  /** The sites, of those read, that send as this domain. */
+  sites: readonly SendingDomainSite[]
+  /** Sites the page has not read, so cannot say anything about. */
+  unchecked?: number
+}): { title: string; description: string; confirmationText: string } {
+  const domain = String(input?.domain ?? '')
+  const sites = input?.sites ?? []
+  const issued = sites.filter((site) => site.issued).map((site) => site.name)
+  const owned = sites.filter((site) => !site.issued).map((site) => site.name)
+  const unchecked = Math.max(0, Number(input?.unchecked ?? 0))
+
+  const parts: string[] = []
+  if (!sites.length) {
+    parts.push(
+      'The claim and the signing key are dropped. The DNS records stay in ' +
+        'your zone — nothing is changed at your registrar — and you can add ' +
+        'the domain again later, which issues a new key.',
+    )
+  }
+  if (issued.length) {
+    parts.push(
+      `${listNames(issued)} ${issued.length === 1 ? 'is' : 'are'} currently ` +
+        `sending as ${domain}, the domain issued to ` +
+        `${issued.length === 1 ? 'it' : 'each'}. Removing it moves all of ` +
+        `that email back to the shared address, whose delivery reputation is ` +
+        'pooled with the other sites on it — so campaigns there are held to ' +
+        'tighter complaint and bounce limits. Nothing in your own DNS is ' +
+        'involved — we published these records and we remove them.',
+    )
+  }
+  if (owned.length) {
+    const one = owned.length === 1
+    parts.push(
+      `${listNames(owned)} ${one ? 'is' : 'are'} currently sending as ` +
+        `${domain}. Removing the domain does not move ${one ? 'it' : 'them'} ` +
+        'onto another address — not the one each site is issued, and not the ' +
+        `shared address. It stops ${one ? 'that site' : 'those sites'} ` +
+        `sending at all, receipts included, until ${
+          one ? 'it is' : 'each is'
+        } given another identity. The DNS records stay in your zone; nothing ` +
+        'is changed at your registrar.',
+    )
+  }
+  if (unchecked) {
+    parts.push(
+      unchecked === 1
+        ? 'One site not shown on this page was not checked; if it sends as ' +
+            'this domain, it is affected the same way.'
+        : `${unchecked} sites not shown on this page were not checked; any ` +
+            'of them sending as this domain is affected the same way.',
+    )
+  }
+
+  return {
+    title: `Remove ${domain}?`,
+    description: parts.join(' '),
+    confirmationText: 'Remove domain',
+  }
+}
+

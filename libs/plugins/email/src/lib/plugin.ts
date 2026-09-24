@@ -74,7 +74,7 @@ export function registerEmailConsole(): void {
       surface: 'console',
       layout: 'bare',
       description:
-        'The whole body of `/emails/messages` and the routes under it. A widget here is handed the site, the Emails page’s base path and the segments under `messages`, and draws the list, one message’s report or its composer.',
+        'The whole body of `/emails/messages` and the routes under it, under a site and on the organization’s Emails page. A widget here is handed the site (or `null` and the org mount at the organization level), the Emails page’s base path and the segments under `messages`, and draws the list, one message’s report or its composer.',
     },
     { pluginId: BUNDLE_ID },
   )
@@ -171,6 +171,31 @@ export function registerEmailConsole(): void {
         // Sections as ROUTES (AGL-2501): `/emails/messages` and friends are
         // real URLs the shell resolves and gates, so the page mounts the one
         // being read instead of subscribing all six.
+        sections: EMAILS_CONSOLE_SECTIONS,
+        header: {
+          title: 'Emails',
+          icon: { path: mdiEmailOutline.path },
+          docsTopic: 'emailCampaigns',
+        },
+        Component: EmailsConsolePage,
+      },
+    ],
+    /*
+     * The ORGANIZATION's Emails page, at `/[orgSlug]/emails`: the same six
+     * sections over every site. The audiences and the topics are the org's
+     * already; the messages, the templates, the sending identities and the
+     * suppression lists are read site by site and link into the site that
+     * holds them. The page is the same component — handed no site, it renders
+     * the org sections.
+     *
+     * No `navTabId`, the same as the site tab: this plugin's release flag
+     * gates the plugin itself, so one flag already holds both levels.
+     */
+    orgNavItems: [
+      {
+        label: 'Emails',
+        href: '/emails',
+        icon: { path: mdiEmailOutline.path },
         sections: EMAILS_CONSOLE_SECTIONS,
         header: {
           title: 'Emails',

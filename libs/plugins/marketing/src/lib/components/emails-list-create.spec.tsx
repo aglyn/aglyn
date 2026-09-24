@@ -209,7 +209,7 @@ async function mount(options?: {
           basePath: '/acme/marketing',
         }}
       >
-        <EmailsListCard hostId={null} basePath="/acme/marketing" />
+        <EmailsListCard hostId={null} basePath="/acme/emails" />
       </MarketingOrgMountProvider>
     ) : (
       <EmailsListCard hostId="site1" basePath="/acme/hosts/site/emails" />
@@ -435,14 +435,14 @@ describe('writing an email from the org hub', () => {
     ])
   })
 
-  it('creates the draft AS the chosen site, and opens it on the org hub', async () => {
+  it('creates the draft AS the chosen site, and opens it on the org Emails page', async () => {
     await mount({ orgHosts: TWO_SITES })
     formValues = { displayName: 'Blog digest', hostId: 'site2' }
     await openDrawer()
     await submitDrawer()
 
     expect(posted[0]).toMatchObject({ action: 'draft', hostId: 'site2' })
-    expect(pushed).toBe('/acme/marketing/emails/msg_new/edit')
+    expect(pushed).toBe('/acme/emails/messages/msg_new/edit')
   })
 
   it('refuses to create with no site chosen', async () => {

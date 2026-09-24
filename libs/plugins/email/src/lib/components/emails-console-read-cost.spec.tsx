@@ -40,10 +40,12 @@
  * with `limit(500)` to render twenty rows is buying five hundred.
  */
 
-import { render } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { ORG_SITES_PER_PAGE } from './email-org-mount'
 import { EMAILS_CONSOLE_SECTIONS } from './emails-console-sections'
+import { ORG_TEMPLATE_CEILING } from './org-email-templates-card'
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.
@@ -51,7 +53,17 @@ import { EMAILS_CONSOLE_SECTIONS } from './emails-console-sections'
  * Module-scoped and `mock`-prefixed so the `jest.mock` factories below may
  * close over it — jest's out-of-scope-variable guard admits that one prefix.
  */
-const mockListens: Array<{ path: string; limit: number }> = []
+const mockListens: Array<{ path: string; limit: number; where?: unknown[][] }> =
+  []
+
+/**
+ * Every server aggregate run during a render, by the collection it counts.
+ *
+ * An aggregate is not a listen and returns no documents, so it has its own
+ * meter: the organization's suppression summary is made of nothing else, and
+ * a meter that recorded only listens would report it as free.
+ */
+const mockAggregates: string[] = []
 
 /**
  * A query with no `limit()` still reads the whole collection. Counting it as
@@ -76,7 +88,10 @@ jest.mock('firebase/firestore', () => {
       __path: segments.join('/'),
       __doc: true,
     }),
-    query: (base: { __path?: string }, ...constraints: unknown[]) => {
+    query: (
+      base: { __path?: string; __where?: unknown[][] },
+      ...constraints: unknown[]
+    ) => {
       const limits = constraints
         .filter(
           (c): c is { __constraint: string; args: number[] } =>
@@ -84,9 +99,18 @@ jest.mock('firebase/firestore', () => {
         )
         .map((c) => c.args[0])
         .filter((n) => typeof n === 'number')
+      // Carried through a query built on a query, the way
+      // `collectionCeiling(query(ref, where(…)), n)` composes one.
+      const wheres = constraints
+        .filter(
+          (c): c is { __constraint: string; args: unknown[] } =>
+            !!c && (c as { __constraint?: string }).__constraint === 'where',
+        )
+        .map((c) => c.args)
       return {
         __path: base?.__path ?? '(unknown)',
         __limit: limits.length ? Math.max(...limits) : 0,
+        __where: [...(base?.__where ?? []), ...wheres],
       }
     },
     limit: marker('limit'),
@@ -96,13 +120,19 @@ jest.mock('firebase/firestore', () => {
     count: marker('count'),
     sum: marker('sum'),
     onSnapshot: (
-      ref: { __path?: string; __limit?: number; __doc?: boolean },
+      ref: {
+        __path?: string
+        __limit?: number
+        __doc?: boolean
+        __where?: unknown[][]
+      },
       ...rest: unknown[]
     ) => {
       mockListens.push({
         path: ref?.__path ?? '(unknown)',
         // A single-document listen reads exactly one document.
         limit: ref?.__doc ? 1 : (ref?.__limit ?? 0),
+        where: ref?.__where ?? [],
       })
       /*
        * A DOCUMENT listen ANSWERS, with an empty document that EXISTS.
@@ -142,7 +172,10 @@ jest.mock('firebase/firestore', () => {
     getDocsFromServer: async () => ({ docs: [], empty: true, size: 0 }),
     getDoc: async () => ({ exists: () => false, data: () => undefined }),
     getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
-    getAggregateFromServer: async () => ({ data: () => ({}) }),
+    getAggregateFromServer: async (ref: { __path?: string }) => {
+      mockAggregates.push(ref?.__path ?? '(unknown)')
+      return { data: () => ({}) }
+    },
     addDoc: async () => ({ id: 'x' }),
     setDoc: async () => undefined,
     updateDoc: async () => undefined,
@@ -554,3 +587,172 @@ describe('emails console read cost (AGL-2501)', () => {
     })
   })
 })
+
+/*==========================================
+ * THE ORGANIZATION'S EMAILS PAGE, `/[orgSlug]/emails`.
+ *
+ * Mounted with no site and an org mount. The audiences and the topics are
+ * the org's, so those sections cost exactly what a site's do — one bounded
+ * read of the org's collection, and nothing under `hosts/`. The other four
+ * are site facts, and the ones that read Firestore read one PAGE of sites:
+ * the first `ORG_SITES_PER_PAGE` by name, each with a bounded read, and nothing
+ * at all for a site on a later page until somebody opens it.
+ *
+ * The mount below names more sites than one page holds, so every per-site
+ * assertion is also the assertion that the cap bites.
+ *=========================================*/
+describe('the organization’s Emails page read cost', () => {
+  const ORG_BASE = '/acme/emails'
+  /** More sites than one page, named so the page boundary is predictable. */
+  const SITES = Array.from({ length: ORG_SITES_PER_PAGE + 2 }, (_, index) => {
+    const n = String(index + 1).padStart(2, '0')
+    return { id: `site${n}`, name: `Site ${n}`, subdomain: `site-${n}` }
+  })
+  const ON_FIRST_PAGE = SITES.slice(0, ORG_SITES_PER_PAGE).map((site) => site.id)
+  const ON_LATER_PAGE = SITES.slice(ORG_SITES_PER_PAGE).map((site) => site.id)
+
+  afterEach(() => {
+    mockSection = ''
+    mockListens.length = 0
+    mockAggregates.length = 0
+  })
+
+  async function renderOrgConsole(section: string, detail: string[] = []) {
+    mockSection = [section, ...detail].filter(Boolean).join('/')
+    mockListens.length = 0
+    mockAggregates.length = 0
+    const { EmailsConsolePage } = await import('./emails-console-page')
+    const view = render(
+      <EmailsConsolePage
+        hostId={null}
+        orgMount={{
+          orgId: 'org1',
+          orgSlug: 'acme',
+          hosts: SITES,
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+        }}
+        entitled
+        org={{ plan: 'business' } as never}
+        permissions={{} as never}
+        basePath={ORG_BASE}
+        sections={EMAILS_CONSOLE_SECTIONS.map((item) => ({
+          id: item.id,
+          label: item.label,
+          href: `${ORG_BASE}/${item.id}`,
+          visible: true,
+        }))}
+        section={section}
+        segments={[section, ...detail]}
+      /> as ReactNode as never,
+    )
+    // Aggregates and route reads are promises; let them start.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    return view
+  }
+
+  /*
+   * THE CONTROL. Every assertion below is of the form "no read of X", which
+   * a page that crashed before reading anything satisfies. It did crash once:
+   * the consent group was resolved for a site the org page does not have.
+   */
+  it('CONTROL: an org section renders and reads its own collection', async () => {
+    await renderOrgConsole('audiences')
+    summarize('org audiences section', mockListens)
+    expect(mockListens.map((listen) => listen.path)).toContain(
+      'orgs/org1/lists',
+    )
+  })
+
+  it('hosting the Messages zone reads nothing itself', async () => {
+    await renderOrgConsole('messages')
+    expect(mockListens).toHaveLength(0)
+    expect(mockAggregates).toHaveLength(0)
+  })
+
+  it('reads the org’s audiences once, bounded, and nothing of any site', async () => {
+    await renderOrgConsole('audiences')
+    expect(mockListens).toHaveLength(1)
+    expect(documentCeiling(mockListens)).toBeLessThanOrEqual(
+      AUDIENCES_DOCUMENT_CEILING,
+    )
+    expect(mockListens.some((listen) => listen.path.startsWith('hosts/'))).toBe(
+      false,
+    )
+  })
+
+  it('reads one audience’s members only once a site is chosen to read them as', async () => {
+    /*
+     * Twelve sites, no pick this session and a list naming no site: the
+     * membership and its consent are one site's question, so nothing under
+     * `members` is read until the reader answers it.
+     */
+    await renderOrgConsole('audiences', ['list_1'])
+    const paths = mockListens.map((listen) => listen.path)
+    expect(paths).toContain('orgs/org1/lists/list_1')
+    expect(paths.some((path) => path.endsWith('/members'))).toBe(false)
+  })
+
+  it('reads the org’s topic catalog once, bounded', async () => {
+    await renderOrgConsole('topics')
+    summarize('org topics section', mockListens)
+    expect(mockListens.map((listen) => listen.path)).toEqual([
+      'orgs/org1/emailTopics',
+    ])
+    expect(mockListens[0].limit).toBeGreaterThan(0)
+  })
+
+  it('reads templates for one page of sites, each filtered and ceilinged', async () => {
+    await renderOrgConsole('templates')
+    summarize('org templates section', mockListens)
+
+    const paths = mockListens.map((listen) => listen.path)
+    expect(paths).toEqual(ON_FIRST_PAGE.map((id) => `hosts/${id}/screens`))
+    for (const listen of mockListens) {
+      // The probe row is the one past the ceiling, and nothing more.
+      expect(listen.limit).toBe(ORG_TEMPLATE_CEILING + 1)
+      // Only the emails, not every page the site has.
+      expect(listen.where).toContainEqual(['kind', '==', 'email'])
+    }
+    for (const id of ON_LATER_PAGE) {
+      expect(paths).not.toContain(`hosts/${id}/screens`)
+    }
+  })
+
+  it('counts suppressions with aggregates for one page of sites, and lists no document', async () => {
+    await renderOrgConsole('suppressions')
+
+    expect(mockListens).toHaveLength(0)
+    // Four aggregates per site: the total and the three explicit reasons.
+    expect(mockAggregates).toHaveLength(ON_FIRST_PAGE.length * 4)
+    for (const id of ON_FIRST_PAGE) {
+      expect(
+        mockAggregates.filter((path) => path === `hosts/${id}/suppressions`),
+      ).toHaveLength(4)
+    }
+    for (const id of ON_LATER_PAGE) {
+      expect(mockAggregates).not.toContain(`hosts/${id}/suppressions`)
+    }
+  })
+
+  it('opens one site’s suppression list as that site’s own card', async () => {
+    await renderOrgConsole('suppressions', ['site03'])
+    const paths = mockListens.map((listen) => listen.path)
+    expect(paths).toEqual(['hosts/site03/suppressions'])
+  })
+
+  it('opens no site’s list for a site the org does not have', async () => {
+    await renderOrgConsole('suppressions', ['elsewhere'])
+    expect(mockListens).toHaveLength(0)
+    expect(mockAggregates).toHaveLength(0)
+  })
+
+  it('reads sending identities through the route, and no Firestore collection', async () => {
+    await renderOrgConsole('sending')
+    expect(mockListens).toHaveLength(0)
+    expect(mockAggregates).toHaveLength(0)
+  })
+})
+

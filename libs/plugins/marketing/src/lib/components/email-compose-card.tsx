@@ -71,7 +71,7 @@ import {
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 import CampaignComposer from './campaign-composer'
 import { campaignSendDoc } from './campaign-queries'
-import { useMarketingOrgId, useMarketingOrgMount } from './marketing-org-mount'
+import { useMarketingOrgId } from './marketing-org-mount'
 
 const composeDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#send-a-campaign',
@@ -81,11 +81,14 @@ const composeDocsHelp = pluginDocsHelp('emailCampaigns', {
 })
 
 export interface EmailComposeCardProps {
-  /** The site, or `null` on the org Marketing hub. */
+  /** The site, or `null` on the organization's Emails page. */
   hostId: string | null
   /** The message document under `orgs/{orgId}/campaigns`. */
   emailId: string
-  /** The emails hub URL, for the way back to the message's own page. */
+  /**
+   * The Emails page's own URL, under the site or the organization, for the
+   * way back to the message's own page.
+   */
   basePath: string
 }
 
@@ -93,7 +96,6 @@ export function EmailComposeCard(props: EmailComposeCardProps) {
   const { emailId, basePath } = props
   const firestore = useFirestore()
   const router = useRouter()
-  const orgMount = useMarketingOrgMount()
   const { orgId } = useMarketingOrgId(props.hostId)
 
   const { data: email, status } = useFirestoreDoc<Record<string, any>>(
@@ -104,9 +106,7 @@ export function EmailComposeCard(props: EmailComposeCardProps) {
   const hostId: string | null =
     props.hostId ?? (email?.hostId ? String(email.hostId) : null)
 
-  const detailHref = orgMount
-    ? `${orgMount.basePath}/emails/${emailId}`
-    : `${basePath}/messages/${emailId}`
+  const detailHref = `${basePath}/messages/${emailId}`
   const headerActions = (
     <Button
       component={AppLink as any}

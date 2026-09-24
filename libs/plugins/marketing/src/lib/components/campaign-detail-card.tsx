@@ -519,15 +519,10 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * working has nothing to get wrong, and it costs nothing to leave standing.
    *=========================================*/
   /*
-   * On the org hub there is no Emails console to send a reader to, so a
-   * message opens on the org hub's own Emails section — the same page, over
-   * every site.
+   * A message opens on the Emails page: the site's under a site, and over the
+   * org the organization's own, which lists every site's messages.
    */
-  const messagesPath = orgMount
-    ? `${orgMount.basePath}/emails`
-    : emailsHub
-      ? `${emailsHub}/messages`
-      : null
+  const messagesPath = emailsHub ? `${emailsHub}/messages` : null
   const sendHref = (send: CampaignSend) =>
     messagesPath ? `${messagesPath}/${send.$id}` : undefined
   /** A template is a site's design, so it opens on the site the send used. */

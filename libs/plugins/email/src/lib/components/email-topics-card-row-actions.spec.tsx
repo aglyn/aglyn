@@ -84,13 +84,19 @@ const SCOPE = ['orgs', 'org-1'] as const
  * built-ins with the stored overrides is covered where it lives.
  */
 let topics: Array<Record<string, unknown>> = []
+/** What the catalog was last asked for: the site, and the options. */
+let catalogAskedFor: unknown[] = []
 jest.mock('./use-org-email-topics', () => ({
-  useOrgEmailTopics: () => ({ topics, scope: SCOPE }),
+  useOrgEmailTopics: (...args: unknown[]) => {
+    catalogAskedFor = args
+    return { topics, scope: SCOPE }
+  },
   writeEmailTopic: jest.fn().mockResolvedValue(undefined),
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
+  useOrgDataScope: () => ({ scope: SCOPE, orgId: 'org-1', ready: true }),
 }))
 
 jest.mock('firebase/firestore', () => ({
@@ -311,3 +317,43 @@ describe('retiring a topic from the row', () => {
     )
   })
 })
+
+/*==========================================
+ * ON THE ORGANIZATION'S EMAILS PAGE.
+ *
+ * The catalog is the org's, so with no site the card reads it straight from
+ * the organization the mount names — and every route it links to hangs
+ * beneath the org page's own path.
+ *=========================================*/
+describe('the topics on the organization’s page', () => {
+  it('reads the org’s catalog directly, and links beneath the org page', async () => {
+    const { EmailOrgMountProvider } = await import('./email-org-mount')
+    render(
+      <EmailOrgMountProvider
+        mount={{
+          orgId: 'org-1',
+          orgSlug: 'acme',
+          hosts: [{ id: 'host-1', name: 'Store', subdomain: 'store' }],
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+        }}
+        basePath="/acme/emails"
+      >
+        <EmailTopicsCard hostId={null} basePath="/acme/emails" />
+      </EmailOrgMountProvider>,
+    )
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(catalogAskedFor).toEqual([null, { orgId: 'org-1' }])
+    fireEvent.click(rowFor('Promotions and offers'))
+    expect(mockPush).toHaveBeenCalledWith('/acme/emails/topics/marketing')
+  })
+
+  it('THE CONTROL: under a site the catalog is read through the site', async () => {
+    await mountCard()
+    expect(catalogAskedFor).toEqual(['host-1', { orgId: undefined }])
+  })
+})
+

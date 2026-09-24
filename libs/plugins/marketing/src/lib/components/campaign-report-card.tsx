@@ -249,15 +249,11 @@ export function CampaignReportCard(props: CampaignReportCardProps) {
     [firestore, orgId, campaignId],
   )
   /*
-   * Where this send's links lead. The message's page is the Emails console's
-   * under a site and the org hub's own Emails section over the org; the
+   * Where this send's links lead. The message's page is on the Emails page —
+   * the site's under a site, the organization's over the org; the
    * conversions list is always the sending site's.
    */
-  const messageHref = orgMount
-    ? `${orgMount.basePath}/emails/${campaignId}`
-    : emailsHub
-      ? `${emailsHub}/messages/${campaignId}`
-      : null
+  const messageHref = emailsHub ? `${emailsHub}/messages/${campaignId}` : null
   const conversionsHub = orgMount
     ? orgSiteHubPath(orgMount, String(campaign?.hostId ?? ''), 'marketing')
     : basePath

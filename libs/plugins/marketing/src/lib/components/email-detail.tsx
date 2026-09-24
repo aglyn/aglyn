@@ -100,11 +100,14 @@ const emailDocsHelp = pluginDocsHelp('emailCampaigns', {
 })
 
 export interface EmailDetailProps {
-  /** The site, or `null` on the org Marketing hub. */
+  /** The site, or `null` on the organization's Emails page. */
   hostId: string | null
   /** The message document under `orgs/{orgId}/campaigns`. */
   emailId: string
-  /** The emails hub URL, for the way back and for sibling links. */
+  /**
+   * The Emails page's own URL, under the site or the organization, for the
+   * way back and for sibling links.
+   */
   basePath: string
 }
 
@@ -168,11 +171,11 @@ export function EmailDetail(props: EmailDetailProps) {
   /** On the org hub, a send with no site: readable, but nothing to act as. */
   const siteless = !props.hostId && Boolean(email) && !hostId
   /*
-   * The message pages' own addresses. Under a site they are the Emails
-   * console's; on the org hub, its Emails section. A template is always the
-   * sending site's design, so on the org hub it opens on that site.
+   * The message pages' own addresses, beneath the Emails page this one is on
+   * — the site's or the organization's. A template is always the sending
+   * site's design, so over the org it opens on that site.
    */
-  const messagesPath = orgMount ? `${orgMount.basePath}/emails` : `${basePath}/messages`
+  const messagesPath = `${basePath}/messages`
   const templatesHub = orgMount
     ? orgSiteHubPath(orgMount, hostId, 'emails')
     : basePath

@@ -256,8 +256,10 @@ describe('a single send’s report on the org hub', () => {
     expect(
       screen.getByText('See these conversions').closest('a')?.getAttribute('href'),
     ).toBe('/acme/hosts/site/marketing/conversions/camp_1')
+    // The message itself opens on the organization's Emails page, which
+    // lists every site's messages.
     expect(
       screen.getByText('Spring sale', { selector: 'a' }).getAttribute('href'),
-    ).toBe('/acme/marketing/emails/camp_1')
+    ).toBe('/acme/emails/messages/camp_1')
   })
 })
