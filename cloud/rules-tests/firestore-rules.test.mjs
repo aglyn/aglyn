@@ -9238,7 +9238,7 @@ describe('the CRM answers to data.manage, on both halves of the scope', () => {
  * is asserted in the other direction, because a scoped editor deleting their
  * own record is the product working.
  *
- * Every case runs over ALL SIX by name, so a match block dropped from the
+ * Every case runs over ALL SEVEN by name, so a match block dropped from the
  * rules file fails here naming the collection rather than falling through to
  * the org's catch-all and reading as green.
  */
@@ -9252,6 +9252,7 @@ describe('the CRM companion collections answer to the contacts predicate', () =>
     'crmTasks',
     'crmActivities',
     'contactFields',
+    'crmPicklists',
   ]
   const record = (uid, name, id) => doc(authed(uid), 'orgs', ORG, name, id)
   /** The console's own query shape: filtered on the reader's tokens. */
@@ -9656,7 +9657,7 @@ describe('an email template is every editor\'s when shared and its owner\'s when
  * revocation wins, a missing plan is Free, and a paid plan whose subscription
  * died is Free until billing restores it.
  *
- * The org cases run over all eight collections by name, the companion suite's
+ * The org cases run over all nine collections by name, the companion suite's
  * discipline, so a clause dropped from one block fails naming that block.
  */
 describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
@@ -9669,6 +9670,7 @@ describe('the CRM suite collections answer to the plan (AGL-2801)', () => {
     'contactFields',
     'crmViews',
     'crmEmailTemplates',
+    'crmPicklists',
   ]
   /** A document each collection's rule admits on a plan with the suite. */
   const payload = (name, uid) => ({

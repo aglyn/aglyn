@@ -228,6 +228,8 @@ describe('the profile on a create', () => {
       facet: {
         phone: '(512) 555-0107',
         jobTitle: '  Head of Ops  ',
+        // The lead's value, carried on conversion (AGL-3298).
+        leadSource: '  Outbound ·  Apollo ',
         address: { line1: ' 1 Main St ', city: 'Austin', country: 'us' },
         ownerUid: 'owner-1',
         lifecycleStage: 'sales-qualified',
@@ -240,6 +242,7 @@ describe('the profile on a create', () => {
       expect.objectContaining({
         phone: '+15125550107',
         jobTitle: 'Head of Ops',
+        leadSource: 'Outbound · Apollo',
         address: { line1: '1 Main St', city: 'Austin', country: 'US' },
         ownerUid: 'owner-1',
         lifecycleStage: 'sales-qualified',
@@ -249,6 +252,7 @@ describe('the profile on a create', () => {
     // one holder's business and stay inside the facet.
     expect(written.phone).toBe('+15125550107')
     expect(written.jobTitle).toBeUndefined()
+    expect(written.leadSource).toBeUndefined()
     expect(written.ownerUid).toBeUndefined()
   })
 

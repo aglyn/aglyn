@@ -100,6 +100,8 @@ export const BRITISH_SPELLINGS = {
   centre: 'center', centres: 'centers', centred: 'centered', centring: 'centering',
   theatre: 'theater', metre: 'meter', metres: 'meters', litre: 'liter',
   fibre: 'fiber', calibre: 'caliber', sombre: 'somber', manoeuvre: 'maneuver',
+  millimetre: 'millimeter', millimetres: 'millimeters', centimetre: 'centimeter',
+  centimetres: 'centimeters', kilometre: 'kilometer', kilometres: 'kilometers',
   // -ise / -isation
   organise: 'organize', organised: 'organized', organises: 'organizes',
   organising: 'organizing', organisation: 'organization', organisations: 'organizations',

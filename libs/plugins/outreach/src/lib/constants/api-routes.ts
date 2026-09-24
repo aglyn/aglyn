@@ -87,4 +87,12 @@ export const OUTREACH_API_ROUTES = {
    * not stop working when a rollout is paused.
    */
   click: 'outreach/click',
+  /**
+   * `GET` — the short tracking link (AGL-3297): `outreach/l/<id>`, where the
+   * id names a stored `outreachLinks` document holding the destination. It
+   * replaced the signed `click` link for every send since; `click` keeps
+   * answering the links already in inboxes. A recipient link, for `click`'s
+   * reasons.
+   */
+  shortLink: 'outreach/l/:linkId',
 } as const

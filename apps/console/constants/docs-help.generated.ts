@@ -757,7 +757,7 @@ export const DOCS_HELP_ANCHORS = {
   crm: ['#whats-in-the-crm-area', '#unified-ingestion', '#what-each-plan-includes', '#the-contacts-page', '#import-from-csv', '#segments', '#everywhere-the-crm-shows-up', '#capture-replies', '#at-the-organization-level', '#who-can-open-the-crm', '#related'],
   crmByAi: ['#summarize-a-record', '#summaries-are-reused-until-the-record-changes', '#draft-an-email', '#match-columns', '#what-is-sent', '#who-can-use-it', '#related'],
   customDomains: ['#connect-a-domain', '#related'],
-  customFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#save-a-form-field', '#over-the-api', '#retire-restore-delete', '#recompute-next-activity', '#related'],
+  customFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#save-a-form-field', '#lead-source-values', '#over-the-api', '#retire-restore-delete', '#recompute-next-activity', '#related'],
   customRoles: ['#create-a-custom-role', '#ai-permissions', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],
   datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   datasetsAndSchema: ['#display-names-vs-field-ids', '#naming--describing-fields', '#the-typed-model', '#record-quotas-per-plan', '#import--export', '#repeatables', '#everything-that-writes-records', '#deleting-a-dataset', '#related'],

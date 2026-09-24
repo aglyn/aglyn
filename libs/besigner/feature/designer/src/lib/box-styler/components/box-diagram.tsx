@@ -106,7 +106,7 @@ const HEIGHT = 244
  * the padding region is still named and still identified by its wash —
  * whereas a covered value is data the author simply cannot read.
  *
- * The threshold is measured, with headroom rather than to the millimetre:
+ * The threshold is measured, with headroom rather than to the millimeter:
  * the value clears naturally at a 307px diagram, by 1.3px, which is a
  * coincidence and not a clearance. At 320px it clears by ~5.5px, and by
  * ~1.5px even for a value half again as wide as the ladder's own. The

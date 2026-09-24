@@ -37,7 +37,10 @@
  * answered.
  */
 
-import { normalizeContactEmail, pluginDocsHelp } from '@aglyn/aglyn'
+import { crmLeadSourceRefusal, normalizeContactEmail, pluginDocsHelp } from '@aglyn/aglyn'
+import { Alert } from '@mui/material'
+import { useMemo } from 'react'
+import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import {
   LEAD_IMPORT_CHUNK_SIZE,
   LEAD_IMPORT_FIELD_LABELS,
@@ -51,6 +54,7 @@ import {
   emptyLeadImportResult,
   guessLeadImportMapping,
   leadImportSkippedCsv,
+  leadImportUnknownLeadSources,
   mapLeadImportRow,
   mergeLeadImportResults,
 } from '../model/crm-lead-import'
@@ -118,27 +122,53 @@ export interface LeadImportDrawerProps {
   onClose: () => void
   /** The site the file is filed under, or `null` at the organization level. */
   hostId: string | null
+  /** The org the lead source list is read from (AGL-3298); `null` while it settles. */
+  orgId?: string | null
 }
 
 export function LeadImportDrawer(props: LeadImportDrawerProps) {
-  const { open, onClose, hostId } = props
+  const { open, onClose, hostId, orgId = null } = props
+  /*
+   * THE ORG'S LEAD SOURCES (AGL-3298). The server refuses a row naming a
+   * value outside the list; the notice says so before the file is sent,
+   * naming the values it holds that the list does not and the ones it
+   * allows, so the operator can fix the file or add the value first.
+   */
+  const { picklist } = useLeadSourcePicklist(orgId)
+  const vocabulary = useMemo(
+    () => ({
+      ...LEAD_IMPORT_VOCABULARY,
+      rowsNotice: (rows: readonly (LeadImportRawRow & Record<string, unknown>)[]) => {
+        const unknown = leadImportUnknownLeadSources(rows, picklist)
+        if (!unknown.length) return null
+        return (
+          <Alert severity="warning">
+            {`${unknown.length === 1 ? 'A lead source' : `${unknown.length} lead sources`} in this ` +
+              `file ${unknown.length === 1 ? 'is' : 'are'} not in your list: ` +
+              `${unknown.slice(0, 10).join(', ')}${unknown.length > 10 ? ', …' : ''}. ` +
+              'Those rows will be skipped. ' +
+              crmLeadSourceRefusal(picklist) +
+              ' Add a value under CRM › Fields › Leads to import it.'}
+          </Alert>
+        )
+      },
+    }),
+    [picklist],
+  )
   return (
-    <CsvImportDrawer
-      open={open}
-      onClose={onClose}
-      hostId={hostId}
-      vocabulary={LEAD_IMPORT_VOCABULARY}
-    />
+    <CsvImportDrawer open={open} onClose={onClose} hostId={hostId} vocabulary={vocabulary} />
   )
 }
 LeadImportDrawer.displayName = 'LeadImportDrawer'
 
 /** The "Import CSV" action on the leads list, with the drawer it opens. */
-export function LeadImportButton(props: { hostId: string | null }) {
-  const { hostId } = props
+export function LeadImportButton(props: { hostId: string | null; orgId?: string | null }) {
+  const { hostId, orgId = null } = props
   return (
     <CsvImportButton>
-      {(open, onClose) => <LeadImportDrawer open={open} onClose={onClose} hostId={hostId} />}
+      {(open, onClose) => (
+        <LeadImportDrawer open={open} onClose={onClose} hostId={hostId} orgId={orgId} />
+      )}
     </CsvImportButton>
   )
 }

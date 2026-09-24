@@ -39,11 +39,12 @@
 /**
  * Where Outreach keeps its records.
  *
- * Five collections under the organization, and one at the top level. The
+ * Six collections under the organization, and two at the top level. The
  * org-scoped ones are erased with the org, whose erasure deletes the whole
- * `orgs/{orgId}` tree. The top-level one holds credentials, so it is keyed by
- * an `orgId` FIELD that a path-scoped delete of `orgs/{orgId}` cannot see:
- * the org erasure sweeps it by that field
+ * `orgs/{orgId}` tree. The top-level ones — credentials, and the short
+ * tracking links (AGL-3297) — are keyed by an `orgId` FIELD that a
+ * path-scoped delete of `orgs/{orgId}` cannot see: the org erasure sweeps
+ * them by that field
  * (`libs/tenant/data/admin/src/lib/server/erase.ts` names it as a literal,
  * which the boundary forces, and `outreach.types.spec.ts` holds the two
  * spellings together, along with the rules').
@@ -78,12 +79,20 @@ export const OUTREACH_COLLECTIONS = {
    * token material never shares a readable path with the mailbox it serves.
    */
   mailboxCredentials: 'outreachMailboxCredentials',
+  /**
+   * `outreachLinks/{linkId}` — what one short tracking link in a sent email
+   * points at (AGL-3297): the organization, the enrollment, the step, the
+   * link's index and the destination. TOP-LEVEL so the link's id alone
+   * resolves it with one read, keyed by an `orgId` FIELD that the org
+   * erasure sweeps, and closed to every client.
+   */
+  links: 'outreachLinks',
 } as const
 
 /** The org-scoped collections, by their {@link OUTREACH_COLLECTIONS} key. */
 export type OutreachOrgCollection = Exclude<
   keyof typeof OUTREACH_COLLECTIONS,
-  'mailboxCredentials'
+  'mailboxCredentials' | 'links'
 >
 
 /** `orgs/{orgId}/<collection>` for one of the org-scoped collections. */

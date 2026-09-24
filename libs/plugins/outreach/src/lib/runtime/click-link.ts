@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { randomBytes } from 'node:crypto'
 import {
   signedLinkSignature,
   signedLinkSignatureMatches,
@@ -22,47 +23,57 @@ import {
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
 
 /**
- * THE LINK A TRACKED SEQUENCE EMAIL CARRIES IN PLACE OF YOURS (AGL-3239).
+ * THE LINK A TRACKED SEQUENCE EMAIL CARRIES IN PLACE OF YOURS (AGL-3239,
+ * AGL-3297).
  *
- * `/api/outreach/click?t=…` on the console, minted exactly as the one-click
- * unsubscribe link is and for the same reasons: `<payload>.<signature>`,
- * where the payload is base64url JSON and the signature is the platform's
- * signed-link HMAC under Outreach's own purpose. No other link verifies as
- * this one and this one verifies as no other.
+ * ## Short, and stored
  *
- * ## The destination is IN the token
+ * Every send since AGL-3297 carries `/api/outreach/l/<id>`: a random
+ * {@link OUTREACH_LINK_ID_LENGTH}-character id naming an `outreachLinks`
+ * document that holds the organization, the enrollment, the step, the link's
+ * index and the destination. The send writes those documents before the
+ * email leaves, and the route reads one to answer.
  *
- * The alternative — an index into the enrollment's stored step record — mints
- * a shorter link, and it was rejected. A link in an email has to keep working
- * after the enrollment is gone: a person erased from the workspace, a
- * sequence deleted, a workspace closed. With the destination in the token the
- * redirect needs no read at all to answer, and the RECORDING is what becomes
- * best-effort — bookkeeping beside the act, which is the same order
- * `runtime/timeline.ts` puts them in.
+ * The first design put all of that in a signed token instead, so the
+ * redirect needed no read. It cost a ~350-character link, which in a
+ * one-to-one plain-text email reads as bulk marketing — the whole thing a
+ * sequence is not. A read per click is the cheaper of the two.
  *
- * It costs a long link, which in a cold plain-text email is a real cost and
- * is why a sequence's `trackClicks` setting is off by default.
+ * The signed links already in inboxes keep working: the `click` route still
+ * verifies and follows them, and {@link readOutreachClickToken} stays for it.
+ * Nothing mints one any more.
  *
  * ## It cannot be turned into an open redirect
  *
- * The signature covers the destination, so the only URLs this route will
- * forward to are ones a send of ours signed, and the only URLs a send signs
- * are the ones written in that sequence's own step. Anything else fails the
- * check and is refused rather than followed.
+ * The destination comes only from the stored document, which only the
+ * sending runtime writes, and only for a URL written in that sequence's own
+ * step; clients cannot read or write the collection at all. An id that names
+ * no document is refused rather than followed. For the signed links, the
+ * signature covers the destination, to the same end.
  *
  * ## It names ids, never an address
  *
  * A tracking URL lands in the recipient's history, in their gateway's logs
- * and in ours. It carries the organization, the enrollment, the step and the
- * link's index — the enrollment names the person, and that lookup is ours to
- * make, not a bystander's to read off a URL.
+ * and in ours. The short link carries nothing but a random id; the stored
+ * document names the enrollment, which names the person — a lookup that is
+ * ours to make, not a bystander's to read off a URL.
+ *
+ * ## The id is unguessable
+ *
+ * Ten characters of base 62 from the platform's CSPRNG — about 59.5 bits. A
+ * guess that lands resolves to a destination someone else was sent, and
+ * would count a click that is recorded as the one it is (see
+ * `click-events.ts`); it grants nothing else.
  */
 
 /** The purpose Outreach's click links are signed under. */
 export const OUTREACH_CLICK_PURPOSE = 'outreach-click'
 
-/** The link's path on the console. */
+/** The signed link's path on the console — answered, no longer minted. */
 export const OUTREACH_CLICK_PATH = `/api/${OUTREACH_API_ROUTES.click}`
+
+/** The short link's path on the console, before the id (AGL-3297). */
+export const OUTREACH_SHORT_LINK_PATH = `/api/${OUTREACH_API_ROUTES.shortLink.replace(/\/:linkId$/, '')}`
 
 /**
  * The longest destination a tracking link will carry.
@@ -205,4 +216,103 @@ export function outreachClickUrl(input: {
   if (origin.protocol !== 'https:') return null
   const token = mintOutreachClickToken(input.target, input.secret)
   return token ? `${origin.origin}${OUTREACH_CLICK_PATH}?t=${token}` : null
+}
+
+/*==========================================
+ * THE SHORT LINK (AGL-3297).
+ *=========================================*/
+
+/** How many characters a short link's id has. */
+export const OUTREACH_LINK_ID_LENGTH = 10
+
+const LINK_ID_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+
+/** A short link's id as the route will read one. */
+const LINK_ID = new RegExp(`^[A-Za-z0-9]{${OUTREACH_LINK_ID_LENGTH}}$`)
+
+/** Whether a value is shaped like a short link's id. */
+export function isOutreachLinkId(value: unknown): value is string {
+  return typeof value === 'string' && LINK_ID.test(value)
+}
+
+/**
+ * A fresh short link id: base 62 from the CSPRNG, by rejection sampling so
+ * every character is equally likely (62 does not divide 256).
+ */
+export function newOutreachLinkId(random: (size: number) => Uint8Array = randomBytes): string {
+  let id = ''
+  while (id.length < OUTREACH_LINK_ID_LENGTH) {
+    for (const byte of random(OUTREACH_LINK_ID_LENGTH * 2)) {
+      if (byte >= 248) continue
+      id += LINK_ID_ALPHABET[byte % 62]
+      if (id.length === OUTREACH_LINK_ID_LENGTH) break
+    }
+  }
+  return id
+}
+
+/** What an `outreachLinks/{id}` document holds. */
+export interface OutreachStoredLink extends OutreachClickTarget {
+  v: 1
+  createdAtMs: number
+}
+
+/**
+ * The document for one link, or `null` when the target is not one we would
+ * follow — the same checks the signed token applied at minting.
+ */
+export function outreachStoredLink(target: OutreachClickTarget, nowMs: number): OutreachStoredLink | null {
+  const url = outreachClickTargetUrl(target.url)
+  if (!url) return null
+  if (!DOCUMENT_ID.test(target.orgId) || !DOCUMENT_ID.test(target.enrollmentId)) return null
+  if (!index(target.stepIndex) || !index(target.linkIndex)) return null
+  return {
+    v: 1,
+    orgId: target.orgId,
+    enrollmentId: target.enrollmentId,
+    stepIndex: target.stepIndex,
+    linkIndex: target.linkIndex,
+    url,
+    createdAtMs: nowMs,
+  }
+}
+
+/**
+ * What a stored link names, or `null` for a document that is missing or not
+ * one we will act on. Checked on the way OUT, as the token is: the document
+ * was written by us, and these say it is still one we will follow.
+ */
+export function readOutreachStoredLink(data: unknown): OutreachClickTarget | null {
+  if (!data || typeof data !== 'object') return null
+  const body = data as Record<string, unknown>
+  if (body['v'] !== 1) return null
+  const orgId = String(body['orgId'] ?? '')
+  const enrollmentId = String(body['enrollmentId'] ?? '')
+  const url = outreachClickTargetUrl(body['url'])
+  if (!url) return null
+  if (!DOCUMENT_ID.test(orgId) || !DOCUMENT_ID.test(enrollmentId)) return null
+  if (!index(body['stepIndex']) || !index(body['linkIndex'])) return null
+  return {
+    orgId,
+    enrollmentId,
+    stepIndex: body['stepIndex'] as number,
+    linkIndex: body['linkIndex'] as number,
+    url,
+  }
+}
+
+/**
+ * The short link for an id on the console at `origin`, or `null` when the
+ * origin is not HTTPS or the id is not one — no link rather than one that
+ * points at nothing. A `null` leaves the destination the step wrote.
+ */
+export function outreachShortLinkUrl(input: { origin: string | null | undefined; linkId: string }): string | null {
+  let origin: URL
+  try {
+    origin = new URL(String(input.origin ?? ''))
+  } catch {
+    return null
+  }
+  if (origin.protocol !== 'https:' || !isOutreachLinkId(input.linkId)) return null
+  return `${origin.origin}${OUTREACH_SHORT_LINK_PATH}/${input.linkId}`
 }

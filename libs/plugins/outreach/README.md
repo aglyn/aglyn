@@ -96,9 +96,10 @@ console alone — each run opens a rep's sealed grant:
 
 | module | does |
 | -- | -- |
-| `runtime/send-job` | `outreach-send`: due enrollments claimed in a transaction that reserves the mailbox's day, gates asked again, the email composed with its unsubscribe link and sent, the step recorded and filed on the contact's timeline; task steps file the rep's task |
+| `runtime/send-job` | `outreach-send`: due enrollments claimed in a transaction that reserves the mailbox's day, gates asked again, the email composed — with the `List-Unsubscribe` header when the sequence turns it on (AGL-3296), and its links' `outreachLinks` documents written first when it tracks clicks (AGL-3297) — and sent, the step recorded and filed on the contact's timeline; task steps file the rep's task |
 | `runtime/sync-job` | `outreach-sync`: replies, out-of-office answers, opt-outs and bounces read with `format=full` and classified by the engine; the mailbox's health evidence and its automatic pause |
 | `runtime/unsubscribe-link`, `runtime/unsubscribe-route` | the signed one-click link (`GET` and RFC 8058 `POST /api/outreach/unsubscribe`), a recipient link that outlives a paused rollout, and the `+unsubscribe` mailto |
+| `runtime/click-link`, `runtime/click-route` | click tracking: the short link every send carries (`GET /api/outreach/l/<id>`, resolved through the top-level `outreachLinks` document, AGL-3297) and the signed `GET /api/outreach/click?t=…` link older emails carry; both recipient links, redirect first, then the click counted once per person with scanners kept apart |
 | `runtime/enrollment-events` | status changes as the engine's events, and an opt-out recorded on every list |
 | `runtime/mailbox-notices` | the owner told, once, when a mailbox pauses itself or needs reconnecting |
 | `runtime/timeline` | the contact's timeline, through the core's record-timeline seam |

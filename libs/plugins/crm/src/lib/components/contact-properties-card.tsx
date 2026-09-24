@@ -44,6 +44,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { useContactUpdate } from '../hooks/use-contact-update'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
+import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { type ContactRecord, parseContactTags } from '../model/contact-record'
 import type { ContactUpdateFields } from '../model/contact-update'
 import { setContactStage } from '../model/crm-api'
@@ -58,6 +59,7 @@ import {
   type AddressDraft,
 } from './contact-address-fields'
 import { crmSuiteLockedReason } from './crm-suite-lock'
+import { LeadSourceSelect } from './lead-source-select'
 import type { OrgMembers } from './use-org-members'
 
 export interface ContactPropertiesCardProps {
@@ -67,6 +69,12 @@ export interface ContactPropertiesCardProps {
   org?: Partial<AglynOrgBilling> | null
   /** The row, flattened through the viewing group's facet. */
   record: ContactRecord
+  /**
+   * The org the record belongs to, as the page resolved it — for the org's
+   * lead source values (AGL-3298). Null while it settles, when the select
+   * offers the starter list and the save still sends only what changed.
+   */
+  orgId?: string | null
   /** The controller whose facet the edits are saved into. */
   consentGroup: ConsentGroup
   /**
@@ -144,6 +152,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     hostId,
     org,
     record,
+    orgId = null,
     consentGroup,
     seed,
     members,
@@ -168,6 +177,9 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   const [nameOverride, setNameOverride] = useState(record.nameOverride)
   const [phone, setPhone] = useState(record.phone)
   const [jobTitle, setJobTitle] = useState(record.jobTitle)
+  // Salesforce's Lead Source (AGL-3298), carried from the lead on conversion.
+  const [leadSource, setLeadSource] = useState(record.leadSource)
+  const leadSources = useLeadSourcePicklist(orgId)
   const [companyName, setCompanyName] = useState(record.companyName)
   const [companyId, setCompanyId] = useState<string | null>(
     record.companyId || null,
@@ -195,6 +207,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     setNameOverride(record.nameOverride)
     setPhone(record.phone)
     setJobTitle(record.jobTitle)
+    setLeadSource(record.leadSource)
     setCompanyName(record.companyName)
     setCompanyId(record.companyId || null)
     setOwnerUid(record.ownerUid)
@@ -221,6 +234,9 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       name: nameOverride.trim().slice(0, 120),
       phone: normalizedPhone ?? '',
       jobTitle: jobTitle.trim().slice(0, 120),
+      // Sent only when changed: the route judges a sent value against the
+      // org's list, and an untouched one needs no judging.
+      ...(leadSource !== record.leadSource ? { leadSource } : {}),
       address,
       tags: parseContactTags(tags),
       notes: notes.slice(0, 2000),
@@ -282,6 +298,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     enqueueSnackbar,
     siteHostId,
     jobTitle,
+    leadSource,
     lifecycleStage,
     logActivity,
     nameOverride,
@@ -290,6 +307,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     phone,
     record.$id,
     record.email,
+    record.leadSource,
     record.lifecycleStage,
     record.name,
     seed.fromCache,
@@ -400,6 +418,14 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             onChange={(event) => setJobTitle(event.target.value)}
             slotProps={{ htmlInput: { maxLength: 120 } }}
             fullWidth
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <LeadSourceSelect
+            picklist={leadSources.picklist}
+            value={leadSource}
+            stored={record.leadSource}
+            onChange={setLeadSource}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>

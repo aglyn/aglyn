@@ -128,6 +128,7 @@ export type UpsertHostContactFacet = Partial<
     ContactFacet,
     | 'phone'
     | 'jobTitle'
+    | 'leadSource'
     | 'companyId'
     | 'companyName'
     | 'address'
@@ -160,6 +161,7 @@ export type ContactProfileInput = UpsertHostContactFacet
 function storableProfile(input: ContactProfileInput | undefined): {
   phone?: string
   jobTitle?: string
+  leadSource?: string
   address?: ReturnType<typeof normalizeAddress>
   companyId?: string
   companyName?: string
@@ -176,6 +178,12 @@ function storableProfile(input: ContactProfileInput | undefined): {
   if (typeof input.jobTitle === 'string') {
     const jobTitle = input.jobTitle.trim().slice(0, 120)
     if (jobTitle) out.jobTitle = jobTitle
+  }
+  // The lead's value, carried on conversion (AGL-3298). Judged against the
+  // org's list by the door that took it; held here to the label's shape.
+  if (typeof input.leadSource === 'string') {
+    const leadSource = input.leadSource.trim().replace(/\s+/g, ' ').slice(0, 120)
+    if (leadSource) out.leadSource = leadSource
   }
   if (input.address !== undefined) out.address = normalizeAddress(input.address)
   if (typeof input.companyId === 'string' && input.companyId.trim()) {

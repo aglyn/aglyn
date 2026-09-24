@@ -51,6 +51,15 @@ let mount: Record<string, unknown> | null = null
 /** Every set of props the convert dialog was opened with. */
 const opened: Array<Record<string, unknown>> = []
 
+// The org's lead source list (AGL-3298), read as the starter set.
+jest.mock('../hooks/use-lead-source-picklist', () => {
+  const { effectiveCrmLeadSourcePicklist } = jest.requireActual('@aglyn/aglyn/app-utils/crm')
+  const picklist = effectiveCrmLeadSourcePicklist(null)
+  return {
+    useLeadSourcePicklist: () => ({ picklist, stored: false, ready: true, fromCache: false }),
+  }
+})
+
 jest.mock('../hooks/use-crm-org-mount', () => ({
   useCrmOrgMount: () => mount,
 }))

@@ -455,6 +455,12 @@ export interface ContactFacet {
   /** E.164 — `normalizePhone` before writing. */
   phone?: string
   jobTitle?: string
+  /**
+   * Where this holder met the person — Salesforce's Lead Source, carried
+   * from the lead on conversion and picked from the org's lead source
+   * values after it (AGL-3298). The value's label, as the lead stores it.
+   */
+  leadSource?: string
   /** `orgs/{orgId}/companies/{companyId}`, in this holder's scope. */
   companyId?: string
   /**

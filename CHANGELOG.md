@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.179 — 2026-09-23
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/5ea8546c7...v1.0.0-beta.179)
+
+### Added
+
+- **crm:** lead source is an org-managed picklist, Salesforce-style ([AGL-3298](https://linear.app/aglyn/issue/AGL-3298))
+- **outreach:** a tracked sequence link is a short stored id ([AGL-3297](https://linear.app/aglyn/issue/AGL-3297))
+
+### Fixed
+
+- **besigner:** the unit picker says millimeters and centimeters ([AGL-3304](https://linear.app/aglyn/issue/AGL-3304))
+- **first-touch:** the served capture survives a server compile ([AGL-3289](https://linear.app/aglyn/issue/AGL-3289))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3304 ([AGL-3304](https://linear.app/aglyn/issue/AGL-3304))
+- **tools:** the Linear id ceiling reads AGL-3303 ([AGL-3303](https://linear.app/aglyn/issue/AGL-3303), [AGL-3300](https://linear.app/aglyn/issue/AGL-3300))
+
+</details>
+
 ## v1.0.0-beta.178 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/e699d93ea...v1.0.0-beta.178)

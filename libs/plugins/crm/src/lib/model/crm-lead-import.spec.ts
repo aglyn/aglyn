@@ -49,6 +49,7 @@ describe('the lead vocabulary', () => {
       'duplicate',
       'invalid-email',
       'lead-ceiling',
+      'lead-source-unknown',
       'write-failed',
     ])
   })

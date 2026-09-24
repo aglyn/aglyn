@@ -533,7 +533,14 @@ const RESOURCES: readonly ResourceSpec[] = [
       website: nullable(str('An http(s) URL.')),
       address: nullable(ADDRESS()),
       tags: strList('Lower-cased tags.'),
-      leadSource: nullable(str('Where the lead came from, as text — Sales Navigator, a trade show, a referral.')),
+      leadSource: nullable(
+        str(
+          "Where the lead came from: one of the organization's active lead source values " +
+            '(CRM › Fields › Leads), matched without regard to case. Any other value is refused ' +
+            'with a 400 naming the values allowed; the value a lead already holds is kept even ' +
+            "after it is deactivated. A create that names none starts from the list's default.",
+        ),
+      ),
       sources: strList('The surfaces that captured the lead: `signup`, `booking`, `form:{formId}`, `import`, `manual`, `api`.'),
       submissionCount: int('How many form submissions this lead has made.'),
       firstSeen: ISO('First interaction.'),

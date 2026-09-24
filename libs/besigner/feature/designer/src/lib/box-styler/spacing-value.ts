@@ -225,8 +225,8 @@ export const UNIT_GLOSS: Partial<Record<CssUnit, string>> = {
   [CssUnit.UNSET]: 'inherit, or reset if it cannot',
   [CssUnit.POINTS]: 'points, as in print',
   [CssUnit.PICAS]: 'picas (12 points)',
-  [CssUnit.MILLIMETERS]: 'millimetres, for print',
-  [CssUnit.CENTIMETERS]: 'centimetres, for print',
+  [CssUnit.MILLIMETERS]: 'millimeters, for print',
+  [CssUnit.CENTIMETERS]: 'centimeters, for print',
   [CssUnit.INCHES]: 'inches, for print',
 }
 

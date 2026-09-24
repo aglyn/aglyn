@@ -98,8 +98,11 @@ import {
   leadMatchesCampaignFilter,
   leadMatchesEmailFilter,
   leadMatchesFilter,
+  leadMatchesLeadSourceFilter,
   leadMatchesSearch,
+  LEAD_SOURCE_FILTER_NONE,
 } from '../model/lead-filters'
+import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { type LeadCsvOptions, leadsCsv } from '../model/leads-csv'
 import { LeadConvertDialog } from './lead-convert-dialog'
 import {
@@ -184,6 +187,9 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const roster = useOrgMemberOptions(orgId)
   // The org's lead fields, for the optional columns below (AGL-3272).
   const leadFields = useContactFieldDefinitions(orgId, 'lead')
+  // The org's lead source values (AGL-3298): the filter's menu and the
+  // column's sort order.
+  const leadSourceList = useLeadSourcePicklist(orgId)
   const routes = crmRoutes(basePath ?? '')
 
   /*
@@ -318,6 +324,28 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
       ]),
     [views.setFilters, views.state.filters],
   )
+  /*
+   * The `Lead source` filter (AGL-3298) is the view's too: an `equals`
+   * clause naming the label records store, or an `isEmpty` one for the
+   * leads that hold none.
+   */
+  const leadSourceFilter = useMemo(() => {
+    const clause = views.state.filters.find((entry) => entry.field === 'leadSource')
+    if (!clause) return ''
+    return clause.op === 'isEmpty' ? LEAD_SOURCE_FILTER_NONE : String(clause.value ?? '')
+  }, [views.state.filters])
+  const setLeadSourceFilter = useCallback(
+    (next: string) =>
+      views.setFilters([
+        ...views.state.filters.filter((clause) => clause.field !== 'leadSource'),
+        ...(next === LEAD_SOURCE_FILTER_NONE
+          ? [{ field: 'leadSource', op: 'isEmpty', value: '' }]
+          : next
+            ? [{ field: 'leadSource', op: 'equals', value: next }]
+            : []),
+      ]),
+    [views.setFilters, views.state.filters],
+  )
   const campaigns = useCrmCampaigns({ hostId, orgId }, { enabled: true })
   const campaignName = useCallback(
     (id: string) =>
@@ -329,6 +357,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const filterLabelId = useId()
   const emailFilterLabelId = useId()
   const campaignFilterLabelId = useId()
+  const leadSourceFilterLabelId = useId()
   /*
    * The search box is the SECTION'S, not the grid's (AGL-3246). The grid's
    * quick filter runs over the rows the grid holds, and the grid holds one
@@ -346,9 +375,10 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
           leadMatchesFilter(lead, filter) &&
           leadMatchesEmailFilter(lead, emailFilter) &&
           leadMatchesCampaignFilter(lead, campaignFilter) &&
+          leadMatchesLeadSourceFilter(lead, leadSourceFilter) &&
           leadMatchesSearch(lead, search),
       ),
-    [window, filter, emailFilter, campaignFilter, search],
+    [window, filter, emailFilter, campaignFilter, leadSourceFilter, search],
   )
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
@@ -357,7 +387,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   // renders empty.
   useEffect(() => {
     setPage(0)
-  }, [filter, emailFilter, campaignFilter, search])
+  }, [filter, emailFilter, campaignFilter, leadSourceFilter, search])
   const pageRows = useMemo(
     () => rows.slice(page * pageSize, (page + 1) * pageSize),
     [rows, page, pageSize],
@@ -372,7 +402,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   useEffect(
     () => setSelectedIds([]),
-    [filter, emailFilter, campaignFilter, search],
+    [filter, emailFilter, campaignFilter, leadSourceFilter, search],
   )
   // How the file names the owner and, at the org level, the site.
   const csvOptions: LeadCsvOptions = useMemo(
@@ -620,6 +650,23 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         valueGetter: (_value, row: LeadRow) =>
           leadSources(row).map(leadSourceLabel).join(', '),
       },
+      /*
+       * Salesforce's Lead Source (AGL-3298), beside the surfaces that
+       * captured the person. Sorted in the order the org keeps its values,
+       * as a picklist sorts, with a value the list does not hold after
+       * every listed one and a lead with none last.
+       */
+      {
+        field: 'leadSource',
+        headerName: 'Lead source',
+        flex: 1,
+        minWidth: 150,
+        valueGetter: (_value, row: LeadRow) => String(row.leadSource ?? ''),
+        sortComparator: (a: unknown, b: unknown) =>
+          Aglyn.crmPicklistRank(leadSourceList.picklist, a) -
+            Aglyn.crmPicklistRank(leadSourceList.picklist, b) ||
+          String(a ?? '').localeCompare(String(b ?? '')),
+      } satisfies GridColDef,
       {
         field: 'tags',
         headerName: 'Tags',
@@ -731,7 +778,16 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         },
       },
     ],
-    [roster, routes, writeLead, hostId, mount, campaignName, leadFields.active],
+    [
+      roster,
+      routes,
+      writeLead,
+      hostId,
+      mount,
+      campaignName,
+      leadFields.active,
+      leadSourceList.picklist,
+    ],
   )
   /* The column and sort models are the view's (AGL-2617). */
   const grid = useCrmViewGrid(views, columns)
@@ -812,6 +868,34 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
                 ) : null}
               </Select>
             </FormControl>
+            {/* Salesforce's Lead Source (AGL-3298): every value the org keeps, inactive ones marked. */}
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <InputLabel id={leadSourceFilterLabelId} shrink>
+                {'Lead source'}
+              </InputLabel>
+              <Select
+                labelId={leadSourceFilterLabelId}
+                label="Lead source"
+                notched
+                value={leadSourceFilter}
+                onChange={(event) => setLeadSourceFilter(String(event.target.value))}
+                displayEmpty
+              >
+                <MenuItem value="">{'Any lead source'}</MenuItem>
+                {leadSourceList.picklist.values.map((value) => (
+                  <MenuItem key={value.id} value={value.label}>
+                    {value.active ? value.label : `${value.label} (inactive)`}
+                  </MenuItem>
+                ))}
+                <MenuItem value={LEAD_SOURCE_FILTER_NONE}>{'No lead source'}</MenuItem>
+                {/* A stored filter naming a value no longer listed stays selectable, so it can be cleared. */}
+                {leadSourceFilter &&
+                leadSourceFilter !== LEAD_SOURCE_FILTER_NONE &&
+                !Aglyn.crmPicklistValueByLabel(leadSourceList.picklist, leadSourceFilter) ? (
+                  <MenuItem value={leadSourceFilter}>{leadSourceFilter}</MenuItem>
+                ) : null}
+              </Select>
+            </FormControl>
             <TextField
               size="small"
               value={search}
@@ -829,7 +913,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
               }}
               sx={{ minWidth: 200 }}
             />
-            <LeadImportButton hostId={hostId} />
+            <LeadImportButton hostId={hostId} orgId={orgId} />
             <Button size="small" onClick={handleExport} disabled={!rows.length}>
               {'Export CSV'}
             </Button>

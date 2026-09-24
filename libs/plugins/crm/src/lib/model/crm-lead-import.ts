@@ -75,7 +75,10 @@ import {
   CRM_LEAD_TEXT_MAX,
   type CrmLeadProfile,
   type CrmLeadStatus,
+  type CrmPicklist,
   isCrmLeadStatus,
+  judgeCrmLeadSource,
+  normalizeCrmPicklistLabel,
   normalizeCrmLeadTags,
   normalizeCompanyWebsite,
 } from '@aglyn/aglyn/app-utils/crm'
@@ -257,6 +260,7 @@ export type LeadImportSkipReason =
   | 'duplicate'
   | 'lead-ceiling'
   | 'campaign-unknown'
+  | 'lead-source-unknown'
   | 'write-failed'
 
 /** How a skip reason reads on screen and in the downloaded file. */
@@ -265,6 +269,8 @@ export const LEAD_IMPORT_SKIP_LABELS: Record<LeadImportSkipReason, string> = {
   duplicate: 'The same address appears earlier in this file',
   'lead-ceiling': 'This site is at the platform lead limit',
   'campaign-unknown': 'Names a campaign this site does not have',
+  'lead-source-unknown':
+    "Names a lead source that isn't one of this organization's active values",
   'write-failed': 'Could not be saved',
 }
 
@@ -465,4 +471,24 @@ export function leadImportSkippedCsv(
   entries: readonly { cells: readonly string[]; reason: LeadImportSkipReason }[],
 ): string {
   return importSkippedCsv(columns, entries, LEAD_IMPORT_SKIP_LABELS)
+}
+
+/**
+ * The lead sources a file names that the org's list would refuse
+ * (AGL-3298), each once, as the file spelled it — the drawer's warning
+ * before anything is sent. Judged the way the server judges a NEW lead,
+ * so a value the list holds but has deactivated is named too; a row
+ * merging onto a lead that already holds that value would still pass.
+ */
+export function leadImportUnknownLeadSources(
+  rows: readonly LeadImportRawRow[],
+  picklist: CrmPicklist,
+): string[] {
+  const unknown = new Map<string, string>()
+  for (const row of rows) {
+    const label = normalizeCrmPicklistLabel(row.leadSource)
+    if (!label || unknown.has(label.toLowerCase())) continue
+    if (!judgeCrmLeadSource(picklist, label).ok) unknown.set(label.toLowerCase(), label)
+  }
+  return [...unknown.values()]
 }
