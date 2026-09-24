@@ -216,7 +216,7 @@ const mount = () => render(<HostDatasetsCard orgId="org-1" org={ORG} />)
 /** The grid row holding a cell with this text. */
 const rowFor = (text: string) => {
   const cell = screen.getByText(text)
-  const row = cell.closest('[role="row"]')
+  const row = cell.closest<HTMLElement>('[role="row"]')
   if (!row) throw new Error(`no row for ${text}`)
   return row
 }
