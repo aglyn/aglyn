@@ -88,6 +88,14 @@ as they like. Someone with a publishing role reviews the draft and publishes it.
 This is enforced in the database itself, not just hidden in the console — an Author
 cannot publish through any route into Aglyn.
 
+A site's collaborators are listed in the **Users** card on that site's **Users** page,
+ordered by email address with the organization's owner first. **Filters** in the table's
+toolbar narrows it by **Site access** — one role, or several at once — and the search box
+finds collaborators whose email address starts with what you type. Both reach every
+collaborator on the site, not only the page on screen, and each filter in force shows as
+a chip above the table. The search matches the start of the address, because the list
+holds addresses rather than names.
+
 ### AI access for collaborators {#collaborator-ai-access}
 
 A site collaborator's AI access is decided **per site**, on the site's **Users**

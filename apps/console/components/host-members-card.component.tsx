@@ -21,22 +21,29 @@ import {
   CardDisplay,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import {
+  type ListFilterOption,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
+  Box,
   Button,
   Chip,
   MenuItem,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   doc,
@@ -57,12 +64,19 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { checkHostCollaboratorSeatQuota } from '../constants/entitlements'
 import { buildRoute, Route } from '../constants/route-links'
+import { TABLE_ROW_HEIGHT } from '../constants/shared'
+import {
+  HOST_MEMBER_FILTER_FIELDS,
+  HOST_MEMBER_FILTER_HEADERS,
+  hostMemberEmailRange,
+  hostMemberFilterWheres,
+} from '../utils/host-member-filters'
 import MemberAvatar from './member-avatar.component'
 import {
-  PluginListColumnCells,
-  PluginListColumnHeaders,
-  usePluginListColumns,
-} from './plugin-list-columns.component'
+  pluginGridColumns,
+  useStablePluginColumns,
+} from './plugin-grid-columns.component'
+import { usePluginListColumns } from './plugin-list-columns.component'
 import PluginWidgetSlot from './plugin-widget-slot.component'
 import { useOrgSlug } from '../hooks/use-org-scope'
 import useCurrentOrg from '../hooks/use-current-org'
@@ -96,6 +110,21 @@ const ROLE_OPTIONS = [
   { value: 'admin', label: 'Admin', hint: 'Full control, including people' },
 ]
 
+/** The Site access filter's choices: the roles above, by their labels. */
+const ROLE_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption[]>> = {
+  role: ROLE_OPTIONS.map(({ value, label }) => ({ value, label })),
+}
+
+/** The owner's row, drawn above the roster; no roster document has this id. */
+const OWNER_ROW_ID = '__owner__'
+
+/** A plugin column's header sorts nothing here: the roster keeps its order. */
+const NO_PLUGIN_SORT = () => undefined
+
+/** Keys typed into a cell's picker are the picker's, not the grid's. */
+const stopGridKeys = (event: { stopPropagation: () => void }) =>
+  event.stopPropagation()
+
 export interface HostMembersCardProps {
   hostId: string
 }
@@ -117,8 +146,8 @@ export function HostMembersCard(props: HostMembersCardProps) {
   const { org, ready: orgReady } = useCurrentOrg()
   const { permissions } = useOrgPermissions()
   const canManage = permissions.manageMembers
-  // Columns a plugin contributes to this table (AGL-2940), between the AI
-  // toggles and the actions; cards a plugin adds render under the table.
+  // Columns a plugin contributes to this table (AGL-2940), between the site
+  // access and the actions; cards a plugin adds render under the table.
   const { columns: pluginColumns } = usePluginListColumns('hostMembers')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('editor')
@@ -162,7 +191,25 @@ export function HostMembersCard(props: HostMembersCardProps) {
    * subtler one here: Firestore collates by UTF-8 bytes, `localeCompare` does
    * not, so the two disagree on case and accents and the page would be
    * arranged differently from the walk it was cut from.
+   *
+   * ## Filtered beneath that order, by the query (AGL-3321)
+   *
+   * Site access (`role` equality or `in`) and the quick search (a prefix of
+   * the stored, lower-cased address, as a range on `email`) are the query's
+   * own, so a filtered page is a page of the filtered roster rather than the
+   * rows on screen narrowed. See `utils/host-member-filters.ts` for the index
+   * each shape reads. A new filter is a new walk, and the pager starts over.
    */
+  const gridFilter = useListGridFilter({ selectFields: ['role'] })
+  const wheres = useMemo(
+    () => hostMemberFilterWheres(gridFilter.clauses),
+    [gridFilter.clauses],
+  )
+  const emailRange = useMemo(
+    () => hostMemberEmailRange(gridFilter.searchWords),
+    [gridFilter.searchWords],
+  )
+  const filterKey = JSON.stringify([wheres, emailRange])
   const {
     rows: members,
     hasMore,
@@ -174,10 +221,17 @@ export function HostMembersCard(props: HostMembersCardProps) {
     (pageLimit) =>
       query(
         collection(firestore, 'hosts', hostId, 'members'),
+        ...wheres.map(([path, op, value]) => where(path, op, value)),
+        ...(emailRange
+          ? [
+              where('email', '>=', emailRange.start),
+              where('email', '<=', emailRange.end),
+            ]
+          : []),
         orderBy('email'),
         limit(pageLimit),
       ),
-    [firestore, hostId],
+    [firestore, hostId, filterKey],
     { idField: '$id' },
   )
   /**
@@ -404,6 +458,202 @@ export function HostMembersCard(props: HostMembersCardProps) {
     [confirm, request, enqueueSnackbar],
   )
 
+  /*
+   * The owner leads every page, as a row of its own: it is the ORG's owner,
+   * not a roster document, so no query reaches it. Under a filter it stays
+   * only while it answers one — the row reads Admin, and its address is
+   * matched the way the query matches the roster's.
+   */
+  const ownerEmail = String(ownerMember?.email ?? '').toLowerCase()
+  const ownerShown =
+    wheres.every(([, op, value]) =>
+      op === 'in' ? (value as string[]).includes('admin') : value === 'admin',
+    ) &&
+    (!emailRange || (ownerEmail !== '' && ownerEmail.startsWith(emailRange.start)))
+  const rows = useMemo(
+    () => [
+      ...(ownerShown ? [{ $id: OWNER_ROW_ID, owner: true }] : []),
+      ...members,
+    ],
+    [ownerShown, members],
+  )
+
+  /*
+   * Columns a plugin contributes to this table (AGL-2940), between the role
+   * and the actions. Each cell is handed its member beside the zone's props;
+   * the owner's row hands the owner, when the org names one.
+   */
+  const stablePluginColumns = useStablePluginColumns(pluginColumns)
+  const pluginMemberColumns = useMemo(
+    () =>
+      pluginGridColumns<any>(stablePluginColumns, {
+        slotProps: { orgId, hostId, canManage },
+        sortedBy: null,
+        onSort: NO_PLUGIN_SORT,
+        rowProps: (row) =>
+          row.owner
+            ? { member: { $id: ownerUid, uid: ownerUid, role: 'owner' } }
+            : { member: row },
+      }).map((column) => ({
+        ...column,
+        // With no owner named, the owner's row has no one to hand a cell.
+        renderCell: (params: any) =>
+          params.row.owner && !ownerUid ? null : column.renderCell?.(params),
+      })),
+    [stablePluginColumns, orgId, hostId, canManage, ownerUid],
+  )
+
+  const columns = useMemo(
+    (): GridColDef[] =>
+      listFilterGridColumns(
+        [
+          {
+            field: 'email',
+            headerName: 'Member',
+            flex: 1.4,
+            minWidth: 240,
+            filterable: false,
+            valueGetter: (_value, row: any) =>
+              row.owner ? ownerLabel : String(row.email ?? row.$id),
+            renderCell: ({ row: member }: any) =>
+              member.owner ? (
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', height: '100%' }}
+                >
+                  {/* The owner is a member row like any other, so it gets a
+                      face too — otherwise the top row reads as broken beside
+                      the ones that have one. Photo and email come from the
+                      owner's org-member doc (AGL-1123), never from the
+                      viewer. */}
+                  <MemberAvatar
+                    photoURL={ownerMember?.photoURL}
+                    email={ownerMember?.email}
+                    name={ownerLabel}
+                    size={28}
+                  />
+                  <span>{ownerLabel}</span>
+                  <Chip label="Owner" color="primary" size="small" />
+                  {ownerUid && ownerUid === user?.uid ? (
+                    <Chip label="you" size="small" variant="outlined" />
+                  ) : null}
+                </Stack>
+              ) : (
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', height: '100%' }}
+                >
+                  {/* No avatar here at all before AGL-1126. An invited row
+                      still gets one — the initial comes off the email's
+                      local part, which is all an invite has. */}
+                  <MemberAvatar
+                    photoURL={
+                      member.uid ? photoByUid.get(member.uid) : undefined
+                    }
+                    email={member.email}
+                    name={member.displayName}
+                    size={28}
+                  />
+                  {/* Into the member's detail page, like the org Team
+                      table (AGL-1124) — this list was a dead end, with no
+                      way through to the person it names. An INVITED row
+                      has no account behind it yet, so it stays plain text
+                      rather than linking to a member page that cannot
+                      exist. */}
+                  {member.status === 'invited' ? (
+                    <span>{member.email}</span>
+                  ) : (
+                    <AppLink
+                      href={buildRoute(Route.MANAGE_TEAM_MEMBER, {
+                        orgSlug,
+                        uid: member.$id,
+                      })}
+                      color="inherit"
+                      underline="hover"
+                    >
+                      {member.email || member.$id}
+                    </AppLink>
+                  )}
+                  {member.status === 'invited' ? (
+                    <Chip label="Invited" size="small" variant="outlined" />
+                  ) : null}
+                </Stack>
+              ),
+          },
+          {
+            /* "Site access", not "Role" (AGL-1125). The org Team table's
+               Role column is the ORG role; this one is access to THIS
+               site. Two tables using one word for two different answers
+               was the same confusion AGL-1125 fixed within the Team
+               table, one page over. */
+            field: 'role',
+            headerName: 'Site access',
+            flex: 0.8,
+            minWidth: 150,
+            valueGetter: (_value, row: any) =>
+              row.owner ? 'admin' : (row.role ?? 'editor'),
+            renderCell: ({ row: member }: any) =>
+              member.owner ? (
+                'Admin'
+              ) : (
+                <Box
+                  onKeyDown={stopGridKeys}
+                  sx={{ display: 'flex', alignItems: 'center', height: '100%' }}
+                >
+                  <TextField
+                    select
+                    size="small"
+                    variant="standard"
+                    value={member.role ?? 'editor'}
+                    onChange={handleRoleChange(member)}
+                    disabled={busy || !canManage}
+                  >
+                    {ROLE_OPTIONS.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Box>
+              ),
+          },
+          ...pluginMemberColumns,
+          listActionsColumn((member: any) =>
+            member.owner ? (
+              '--'
+            ) : (
+              <Button
+                size="small"
+                color="error"
+                disabled={busy || !canManage}
+                onClick={handleRemove(member)}
+              >
+                {'Remove'}
+              </Button>
+            ),
+          ),
+        ],
+        HOST_MEMBER_FILTER_FIELDS,
+        ROLE_FILTER_OPTIONS,
+        HOST_MEMBER_FILTER_HEADERS,
+      ),
+    [
+      ownerLabel,
+      ownerMember,
+      ownerUid,
+      user?.uid,
+      photoByUid,
+      orgSlug,
+      handleRoleChange,
+      handleRemove,
+      busy,
+      canManage,
+      pluginMemberColumns,
+    ],
+  )
+
   return (
     <CardDisplay
       header={'Users'}
@@ -528,155 +778,31 @@ export function HostMembersCard(props: HostMembersCardProps) {
             </Typography>
           </>
         ) : null}
-        {/*
-          No Filters panel or search here. The window is ordered by email and
-          grows a page at a time, so a role or status filter is an equality
-          beneath that order, which needs a `role, email` index this
-          collection does not have; matching the rows read so far would
-          answer for one page and call it the site's collaborators.
-        */}
-        <ScrollTable size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{'Member'}</TableCell>
-              {/* "Site access", not "Role" (AGL-1125). The org Team table's
-                  Role column is the ORG role; this one is access to THIS
-                  site. Two tables using one word for two different answers
-                  was the same confusion AGL-1125 fixed within the Team
-                  table, one page over. */}
-              <TableCell>{'Site access'}</TableCell>
-              <PluginListColumnHeaders
-                columns={pluginColumns}
-                orgId={orgId}
-                hostId={hostId}
-                canManage={canManage}
-              />
-              <TableCell align="right">{'Actions'}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            <TableRow>
-              <TableCell>
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  sx={{ alignItems: 'center' }}
-                >
-                  {/* The owner is a member row like any other, so it gets a
-                      face too — otherwise the top row reads as broken beside
-                      the ones that have one. Photo and email come from the
-                      owner's org-member doc (AGL-1123), never from the
-                      viewer. */}
-                  <MemberAvatar
-                    photoURL={ownerMember?.photoURL}
-                    email={ownerMember?.email}
-                    name={ownerLabel}
-                    size={28}
-                  />
-                  <span>{ownerLabel}</span>
-                  <Chip label="Owner" color="primary" size="small" />
-                  {ownerUid && ownerUid === user?.uid ? (
-                    <Chip label="you" size="small" variant="outlined" />
-                  ) : null}
-                </Stack>
-              </TableCell>
-              <TableCell>{'Admin'}</TableCell>
-              {ownerUid ? (
-                <PluginListColumnCells
-                  columns={pluginColumns}
-                  member={{ $id: ownerUid, uid: ownerUid, role: 'owner' }}
-                  orgId={orgId}
-                  hostId={hostId}
-                  canManage={canManage}
-                />
-              ) : (
-                pluginColumns.map((column) => (
-                  <TableCell key={column.widgetId} align={column.align} />
-                ))
-              )}
-              <TableCell align="right">{'--'}</TableCell>
-            </TableRow>
-            {members.map((member) => (
-              <TableRow key={member.$id} hover>
-                <TableCell>
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'center' }}
-                  >
-                    {/* No avatar here at all before AGL-1126. An invited row
-                        still gets one — the initial comes off the email's
-                        local part, which is all an invite has. */}
-                    <MemberAvatar
-                      photoURL={
-                        member.uid ? photoByUid.get(member.uid) : undefined
-                      }
-                      email={member.email}
-                      name={member.displayName}
-                      size={28}
-                    />
-                    {/* Into the member's detail page, like the org Team
-                        table (AGL-1124) — this list was a dead end, with no
-                        way through to the person it names. An INVITED row
-                        has no account behind it yet, so it stays plain text
-                        rather than linking to a member page that cannot
-                        exist. */}
-                    {member.status === 'invited' ? (
-                      <span>{member.email}</span>
-                    ) : (
-                      <AppLink
-                        href={buildRoute(Route.MANAGE_TEAM_MEMBER, {
-                          orgSlug,
-                          uid: member.$id,
-                        })}
-                        color="inherit"
-                        underline="hover"
-                      >
-                        {member.email || member.$id}
-                      </AppLink>
-                    )}
-                    {member.status === 'invited' ? (
-                      <Chip label="Invited" size="small" variant="outlined" />
-                    ) : null}
-                  </Stack>
-                </TableCell>
-                <TableCell>
-                  <TextField
-                    select
-                    size="small"
-                    variant="standard"
-                    value={member.role ?? 'editor'}
-                    onChange={handleRoleChange(member)}
-                    disabled={busy || !canManage}
-                  >
-                    {ROLE_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </TableCell>
-                <PluginListColumnCells
-                  columns={pluginColumns}
-                  member={member}
-                  orgId={orgId}
-                  hostId={hostId}
-                  canManage={canManage}
-                />
-                <TableCell align="right">
-                  <Button
-                    size="small"
-                    color="error"
-                    disabled={busy || !canManage}
-                    onClick={handleRemove(member)}
-                  >
-                    {'Remove'}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </ScrollTable>
+        <ListFilterChips
+          fields={HOST_MEMBER_FILTER_FIELDS}
+          headers={HOST_MEMBER_FILTER_HEADERS}
+          clauses={gridFilter.clauses}
+          onChange={gridFilter.setClauses}
+          options={ROLE_FILTER_OPTIONS}
+        />
+        <ListTable
+          aria-label="Site collaborators"
+          rows={rows}
+          columns={columns}
+          // A row holds a role picker, so it is as tall as what it holds.
+          rowHeight={TABLE_ROW_HEIGHT}
+          // The roster's own order (by address); the grid's sort would be a
+          // second order over one page of it.
+          disableColumnSorting
+          // The query answers the panel and the search; see its comment.
+          filterMode="server"
+          filterModel={gridFilter.filterModel}
+          onFilterModelChange={gridFilter.onFilterModelChange}
+          quickFilter
+          noRowsLabel="No collaborators match these filters"
+          // Paged by the footer below, so the grid must not also slice.
+          hideFooter
+        />
         <ListPagination
           page={page}
           pageSize={pageSize}
