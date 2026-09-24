@@ -16,22 +16,46 @@
  */
 'use client'
 
-import { overlayActiveAt } from '../model'
+import { overlayStatus } from '../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Stack, Typography } from '@mui/material'
-import { collection, limit, query } from 'firebase/firestore'
-import { useMemo } from 'react'
 import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
+  collection,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+} from 'firebase/firestore'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { campaignSendsQuery } from './campaign-queries'
+import {
+  readSendFigures,
+  readSiteExperimentFigures,
+  readSiteOverlayFigures,
+} from './marketing-aggregates'
 import { useMarketingOrgId } from './marketing-org-mount'
+import { useOneShotRead } from './use-one-shot-reads'
 
 export interface HostMarketingSummaryCardProps {
   hostId: string
 }
+
+/**
+ * How many overlays the live count reads.
+ *
+ * "Live" is the one figure here a server aggregate cannot answer — it needs
+ * `enabled` and the schedule window checked against the clock — so it is
+ * counted over a read of the overlays themselves, ordered and ceilinged the
+ * way the Overlays section reads them, with a probe that says when the site
+ * has more.
+ */
+export const LIVE_OVERLAY_CEILING = 50
+
+/** A figure as the row prints it: a dash for one the server did not answer. */
+const figure = (value: number | null | undefined): string =>
+  value == null ? '—' : value.toLocaleString()
 
 /**
  * Marketing at a glance (wave v8): one row of numbers across the
@@ -39,100 +63,80 @@ export interface HostMarketingSummaryCardProps {
  * engagement, campaign sends/opens/clicks, and experiment states — so
  * the hub answers "is anything running and is it working" without
  * opening each card.
+ *
+ * Every total is a server aggregate over the whole collection (see
+ * `marketing-aggregates.ts`), read once rather than listened to: the
+ * overlays' counters move on every impression, and a listener over them
+ * would re-deliver a document per impression while the page stays open.
  */
 export function HostMarketingSummaryCard(props: HostMarketingSummaryCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
   const { orgId } = useMarketingOrgId(hostId)
-  const { data: overlayDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'overlays'), limit(50)),
+
+  const overlayFigures = useOneShotRead(
+    () => readSiteOverlayFigures(firestore, hostId),
     [firestore, hostId],
-    { idField: '$id' },
+  )
+  const live = useOneShotRead(
+    () =>
+      getDocs(
+        query(
+          collection(firestore, 'hosts', hostId, 'overlays'),
+          // Ordered for the reason the Overlays section gives: `name` is on
+          // every overlay its only creator writes, and an unordered `limit`
+          // is an arbitrary window rather than the first N of anything.
+          orderBy('name'),
+          limit(LIVE_OVERLAY_CEILING + 1),
+        ),
+      ).then((snapshot) => {
+        const { rows, truncated } = ceilingedWindow(
+          snapshot.docs.map((entry) => entry.data() as Record<string, any>),
+          LIVE_OVERLAY_CEILING,
+        )
+        const nowMs = Date.now()
+        return {
+          count: rows.filter(
+            (overlay) => !overlay.deletedAt && overlayStatus(overlay, nowMs) === 'live',
+          ).length,
+          truncated,
+        }
+      }),
+    [firestore, hostId],
   )
   // The org's sends, narrowed to the ones this site sent.
-  const { data: campaignDocs } = useFirestoreCollection<any>(
-    () => {
-      const sends = campaignSendsQuery(firestore, orgId, hostId)
-      return sends ? query(sends, limit(50)) : null
-    },
-    [firestore, orgId, hostId],
-    { idField: '$id' },
-  )
-  const { data: experimentDocs } = useFirestoreCollection<any>(
-    () =>
-      query(collection(firestore, 'hosts', hostId, 'experiments'), limit(50)),
+  const sendFigures = useOneShotRead(() => {
+    const sends = campaignSendsQuery(firestore, orgId, hostId)
+    return sends ? readSendFigures(sends) : null
+  }, [firestore, orgId, hostId])
+  const experimentFigures = useOneShotRead(
+    () => readSiteExperimentFigures(firestore, hostId),
     [firestore, hostId],
-    { idField: '$id' },
   )
 
-  const summary = useMemo(() => {
-    const overlays = (overlayDocs ?? []).filter((doc: any) => !doc.deletedAt)
-    const liveOverlays = overlays.filter(
-      (overlay: any) =>
-        overlay.enabled !== false && overlayActiveAt(overlay, Date.now()),
-    ).length
-    let impressions = 0
-    let overlayClicks = 0
-    for (const overlay of overlays) {
-      impressions += Number(overlay.stats?.impressions ?? 0)
-      overlayClicks += Number(overlay.stats?.clicks ?? 0)
-    }
-    const campaigns = (campaignDocs ?? []).filter(
-      (doc: any) => !doc.deletedAt,
-    )
-    let sent = 0
-    let opens = 0
-    let emailClicks = 0
-    let scheduled = 0
-    for (const campaign of campaigns) {
-      sent += Number(campaign.stats?.sent ?? 0)
-      opens += Number(campaign.stats?.opens ?? 0)
-      emailClicks += Number(campaign.stats?.clicks ?? 0)
-      if (campaign.status === 'scheduled') scheduled += 1
-    }
-    const experiments = (experimentDocs ?? []).filter(
-      (doc: any) => !doc.deletedAt,
-    )
-    const running = experiments.filter(
-      (experiment: any) => experiment.status === 'running',
-    ).length
-    const decided = experiments.filter(
-      (experiment: any) => experiment.winnerVariantId,
-    ).length
-    return {
-      liveOverlays,
-      impressions,
-      overlayClicks,
-      sent,
-      opens,
-      emailClicks,
-      scheduled,
-      running,
-      decided,
-    }
-  }, [overlayDocs, campaignDocs, experimentDocs])
-
-  const metrics: Array<{ label: string; value: string }> = [
-    { label: 'Live overlays', value: String(summary.liveOverlays) },
+  const sends = sendFigures.value
+  const tests = experimentFigures.value
+  const metrics: Array<{ label: string; value: string; note?: string }> = [
     {
-      label: 'Overlay views',
-      value: summary.impressions.toLocaleString(),
+      label: 'Live overlays',
+      value: live.value ? figure(live.value.count) : '—',
+      note: live.value?.truncated
+        ? `of the first ${LIVE_OVERLAY_CEILING} by name`
+        : undefined,
     },
-    {
-      label: 'Overlay clicks',
-      value: summary.overlayClicks.toLocaleString(),
-    },
-    { label: 'Emails sent', value: summary.sent.toLocaleString() },
+    { label: 'Overlay views', value: figure(overlayFigures.value?.views) },
+    { label: 'Overlay clicks', value: figure(overlayFigures.value?.clicks) },
+    { label: 'Emails sent', value: figure(sends?.sent) },
     {
       label: 'Opens / clicks',
-      value: `${summary.opens.toLocaleString()} / ${summary.emailClicks.toLocaleString()}`,
+      value: `${figure(sends?.opens)} / ${figure(sends?.clicks)}`,
     },
-    ...(summary.scheduled
-      ? [{ label: 'Scheduled sends', value: String(summary.scheduled) }]
+    ...(sends?.scheduled
+      ? [{ label: 'Scheduled sends', value: figure(sends.scheduled) }]
       : []),
     {
       label: 'Experiments',
-      value: `${summary.running} running · ${summary.decided} decided`,
+      value: `${figure(tests?.running)} running · ${figure(tests?.decided)} decided`,
     },
   ]
 
@@ -156,6 +160,11 @@ export function HostMarketingSummaryCard(props: HostMarketingSummaryCardProps) {
               {metric.label}
             </Typography>
             <Typography variant="h6">{metric.value}</Typography>
+            {metric.note ? (
+              <Typography variant="caption" color="text.secondary">
+                {metric.note}
+              </Typography>
+            ) : null}
           </Stack>
         ))}
       </Stack>

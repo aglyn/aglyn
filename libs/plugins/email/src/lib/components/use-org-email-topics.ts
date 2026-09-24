@@ -133,7 +133,8 @@ const TOPIC_READ_CEILING = 200
  * so that claim is about the writers and not a preference.
  */
 export function useOrgEmailTopics(
-  hostId: string,
+  /** The site the catalog is read through, or `null` on the org page. */
+  hostId: string | null,
   options?: {
     /**
      * Whether to read at all. Default true.
@@ -145,6 +146,12 @@ export function useOrgEmailTopics(
      * does, and the catalog reads as empty until it flips.
      */
     enabled?: boolean
+    /**
+     * The organization itself, for a caller mounted over the org rather than
+     * under one of its sites. It skips the site's org lookup, and it is the
+     * only way the catalog can be read with no site at all.
+     */
+    orgId?: string | null
   },
 ): {
   topics: EmailTopic[]
@@ -154,8 +161,11 @@ export function useOrgEmailTopics(
   const firestore = useFirestore()
   const enabled = options?.enabled ?? true
   // The org lookup is async (AGL-1061): null until it settles, and null
-  // forever for a host with no owning org.
-  const { scope } = useOrgDataScope({ hostId })
+  // forever for a host with no owning org. An explicit org is ready at once.
+  const { scope } = useOrgDataScope({
+    hostId: hostId || undefined,
+    orgId: options?.orgId || undefined,
+  })
   const { data: stored } = useFirestoreCollection<Record<string, unknown>>(
     () =>
       scope && enabled

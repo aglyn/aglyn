@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import type { ConsolePluginOrgMount } from '@aglyn/aglyn'
 import { definePluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 
 /**
@@ -26,11 +27,21 @@ import { definePluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
  * is what the shell handed this page: the site, this page's own base path,
  * and the segments under `messages` (`[]` the list, `[id]` one message,
  * `[id, 'edit']` its composer).
+ *
+ * The same zone serves the ORGANIZATION's Emails page, `/[orgSlug]/emails`,
+ * where there is no site: `hostId` is `null` and `orgMount` names the org and
+ * its sites, so the widget can list every site's messages and ask which site
+ * a new one is sent as. Every message link a widget draws hangs beneath
+ * `basePath` at both levels — `${basePath}/messages/{id}`.
  */
 export interface EmailMessagesZoneProps {
-  hostId: string
+  /** The site, or `null` on the organization's Emails page. */
+  hostId: string | null
+  /** The Emails page's own path, under the site or the organization. */
   basePath: string
   detail: readonly string[]
+  /** The organization and its sites — present only when `hostId` is `null`. */
+  orgMount?: ConsolePluginOrgMount
 }
 
 export const EMAIL_MESSAGES_ZONE =

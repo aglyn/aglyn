@@ -40,13 +40,18 @@
  * with `limit(500)` to render twenty rows is buying five hundred.
  */
 
-import { render } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import {
   MARKETING_CONSOLE_SECTIONS,
   MARKETING_ORG_CONSOLE_SECTIONS,
 } from './marketing-console-sections'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { LIVE_OVERLAY_CEILING } from './host-marketing-summary-card.component'
+import { ORG_EXPERIMENTS_PER_SITE } from './org-experiments-card'
+import { ORG_OVERVIEW_SITE_CAP } from './org-marketing-overview-card'
+import { ORG_OVERLAYS_PER_SITE } from './org-overlays-card'
+import { ORG_SITES_PER_PAGE } from './use-one-shot-reads'
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.
@@ -55,6 +60,25 @@ import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagina
  * close over it — jest's out-of-scope-variable guard admits that one prefix.
  */
 const mockListens: Array<{ path: string; limit: number }> = []
+
+/**
+ * Every ONE-SHOT read issued during a render: a `getDocs`/`getDoc`, a server
+ * count, a server aggregate.
+ *
+ * Kept apart from the listens because they bill apart. A listen and a
+ * `getDocs` both pay per document returned, so `limit` is their ceiling; an
+ * aggregation pays per thousand index entries it scans, so it is counted as
+ * ONE read each, which is its floor and, over collections of a few thousand
+ * documents, its cost. `filters` and `fields` say which question each one
+ * asked, so two aggregations over one collection are told apart.
+ */
+const mockOneShots: Array<{
+  kind: 'get' | 'count' | 'aggregate'
+  path: string
+  limit: number
+  filters: string[]
+  fields: string[]
+}> = []
 
 /**
  * A query with no `limit()` still reads the whole collection. Counting it as
@@ -79,7 +103,10 @@ jest.mock('firebase/firestore', () => {
       __path: segments.join('/'),
       __doc: true,
     }),
-    query: (base: { __path?: string }, ...constraints: unknown[]) => {
+    query: (
+      base: { __path?: string; __limit?: number; __where?: string[] },
+      ...constraints: unknown[]
+    ) => {
       const limits = constraints
         .filter(
           (c): c is { __constraint: string; args: number[] } =>
@@ -87,9 +114,23 @@ jest.mock('firebase/firestore', () => {
         )
         .map((c) => c.args[0])
         .filter((n) => typeof n === 'number')
+      const wheres = constraints
+        .filter(
+          (c): c is { __constraint: string; args: unknown[] } =>
+            !!c && (c as { __constraint?: string }).__constraint === 'where',
+        )
+        .map(
+          (c) =>
+            `${String(c.args[0])}${String(c.args[1])}${
+              Array.isArray(c.args[2])
+                ? c.args[2].join(',')
+                : String(c.args[2])
+            }`,
+        )
       return {
         __path: base?.__path ?? '(unknown)',
-        __limit: limits.length ? Math.max(...limits) : 0,
+        __limit: limits.length ? Math.max(...limits) : (base?.__limit ?? 0),
+        __where: [...(base?.__where ?? []), ...wheres],
       }
     },
     limit: marker('limit'),
@@ -137,11 +178,59 @@ jest.mock('firebase/firestore', () => {
       }
       return () => undefined
     },
-    getDocs: async () => ({ docs: [], empty: true, size: 0 }),
+    getDocs: async (ref: {
+      __path?: string
+      __limit?: number
+      __where?: string[]
+    }) => {
+      mockOneShots.push({
+        kind: 'get',
+        path: ref?.__path ?? '(unknown)',
+        limit: ref?.__limit ?? 0,
+        filters: ref?.__where ?? [],
+        fields: [],
+      })
+      return {
+        docs: [],
+        empty: true,
+        size: 0,
+        forEach: () => undefined,
+      }
+    },
     getDocsFromServer: async () => ({ docs: [], empty: true, size: 0 }),
-    getDoc: async () => ({ exists: () => false, data: () => undefined }),
-    getCountFromServer: async () => ({ data: () => ({ count: 0 }) }),
-    getAggregateFromServer: async () => ({ data: () => ({}) }),
+    getDoc: async (ref: { __path?: string }) => {
+      mockOneShots.push({
+        kind: 'get',
+        path: ref?.__path ?? '(unknown)',
+        limit: 1,
+        filters: [],
+        fields: [],
+      })
+      return { exists: () => false, data: () => undefined }
+    },
+    getCountFromServer: async (ref: { __path?: string; __where?: string[] }) => {
+      mockOneShots.push({
+        kind: 'count',
+        path: ref?.__path ?? '(unknown)',
+        limit: 0,
+        filters: ref?.__where ?? [],
+        fields: [],
+      })
+      return { data: () => ({ count: 0 }) }
+    },
+    getAggregateFromServer: async (
+      ref: { __path?: string; __where?: string[] },
+      spec: Record<string, { args?: unknown[] }>,
+    ) => {
+      mockOneShots.push({
+        kind: 'aggregate',
+        path: ref?.__path ?? '(unknown)',
+        limit: 0,
+        filters: ref?.__where ?? [],
+        fields: Object.values(spec ?? {}).map((field) => String(field?.args?.[0])),
+      })
+      return { data: () => ({}) }
+    },
     addDoc: async () => ({ id: 'x' }),
     setDoc: async () => undefined,
     updateDoc: async () => undefined,
@@ -334,6 +423,40 @@ function listenedCollections(): Set<string> {
   return new Set(mockListens.map((listen) => listen.path.split('/').pop() ?? ''))
 }
 
+/** Every collection read at all — listened to, fetched once, or aggregated. */
+function readCollections(): Set<string> {
+  return new Set(
+    [...mockListens, ...mockOneShots].map(
+      (read) => read.path.split('/').pop() ?? '',
+    ),
+  )
+}
+
+/**
+ * One one-shot read as a line — `kind path filters fields limit` — so a
+ * section's whole bill can be pinned with one `toEqual`.
+ */
+function describeOneShot(read: (typeof mockOneShots)[number]): string {
+  return [
+    read.kind,
+    read.path,
+    ...read.filters,
+    ...read.fields.map((field) => `sum(${field})`),
+    ...(read.kind === 'get' ? [`limit=${read.limit}`] : []),
+  ].join(' ')
+}
+
+/**
+ * The one-shot reads' answers landed and React's queue drained. Every read is
+ * recorded when it is ISSUED, inside the render's effects; this only keeps
+ * the answers from arriving after the test, outside `act`.
+ */
+async function settle(): Promise<void> {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
 /**
  * The section list the SHELL would hand the page, resolved from the registry's
  * own declaration rather than retyped here — a second copy would let this spec
@@ -358,6 +481,7 @@ function shellSections() {
 async function renderConsole(section: string, detail: string[] = []) {
   mockSection = [section, ...detail].filter(Boolean).join('/')
   mockListens.length = 0
+  mockOneShots.length = 0
   const { MarketingConsolePage } = await import('./marketing-console-page')
   return render(
     <MarketingConsolePage
@@ -377,6 +501,7 @@ describe('marketing console read cost (AGL-2501)', () => {
   afterEach(() => {
     mockSection = ''
     mockListens.length = 0
+    mockOneShots.length = 0
   })
 
   /*
@@ -387,11 +512,39 @@ describe('marketing console read cost (AGL-2501)', () => {
    * the reading that proves the meter is live: the section the URL names does
    * listen, and it listens for its OWN collection.
    */
-  it('CONTROL: the open section does listen, and for its own collection', async () => {
+  it('CONTROL: the open section does read, and its own collection', async () => {
     await renderConsole('overview')
-    summarize('overview section', mockListens)
-    expect(mockListens.length).toBeGreaterThan(0)
-    expect(listenedCollections()).toContain('overlays')
+    await settle()
+    expect(mockListens.length + mockOneShots.length).toBeGreaterThan(0)
+    expect(readCollections()).toContain('overlays')
+  })
+
+  /*==========================================
+   * THE SITE OVERVIEW, counted rather than sampled.
+   *
+   * Its figures were three listeners at `limit(50)` summed in the browser,
+   * so a site past fifty sends reported the totals of whichever fifty the
+   * server returned first. Every total is now a server aggregate — one per
+   * field, because an aggregation over two fields drops the documents that
+   * lack either — and the one figure that needs code, how many overlays are
+   * live right now, reads the overlays themselves under a ceiling. Nothing
+   * is listened to: the overlays' counters move on every impression.
+   *=========================================*/
+  it('the site overview is aggregates and one capped read, and no listener', async () => {
+    await renderConsole('overview')
+    await settle()
+    expect(mockListens).toHaveLength(0)
+    expect(mockOneShots.map(describeOneShot)).toEqual([
+      'aggregate hosts/site1/overlays sum(stats.impressions)',
+      'aggregate hosts/site1/overlays sum(stats.clicks)',
+      `get hosts/site1/overlays limit=${LIVE_OVERLAY_CEILING + 1}`,
+      'aggregate orgs/org1/campaigns visibleToarray-contains-anyhost:site1 sum(stats.sent)',
+      'aggregate orgs/org1/campaigns visibleToarray-contains-anyhost:site1 sum(stats.opens)',
+      'aggregate orgs/org1/campaigns visibleToarray-contains-anyhost:site1 sum(stats.clicks)',
+      'count orgs/org1/campaigns visibleToarray-contains-anyhost:site1 status==scheduled',
+      'count hosts/site1/experiments status==running',
+      'count hosts/site1/experiments winnerVariantId!=null',
+    ])
   })
 
   /*
@@ -603,32 +756,50 @@ describe('marketing console read cost (AGL-2501)', () => {
 /*==========================================
  * THE ORGANIZATION'S HUB, `/[orgSlug]/marketing`.
  *
- * Mounted with no site and an org mount, it lists every campaign and every
- * send of the org. Those two reads are unfiltered — the org route admits only
- * org-wide members — and they are the same ceilinged windows the site hub
- * reads, so the org hub costs what one site's does, not one per site. Nothing
- * under `hosts/` is read at all: overlays, experiments and conversions are
- * site sections the org rail does not carry.
+ * Mounted with no site and an org mount, it carries the site rail's sections
+ * over every site. What belongs to the organization is read once for all of
+ * them: the campaigns and their sends are two ceilinged windows over the
+ * org's collections, and the Overview's email figures are four aggregations
+ * over the same sends. What belongs to a SITE — its overlays, its A/B tests,
+ * its visitors' conversions — is read per site, and every one of those reads
+ * is BOUNDED: the Overview reads a capped number of sites, the two lists
+ * read one page of sites at a time, and Conversions reads the one site the
+ * reader picked. These are the numbers that say so.
  *=========================================*/
 describe('the org Marketing hub’s read cost', () => {
   const ORG_BASE = '/acme/marketing'
+  const ONE_SITE = [{ id: 'site1', name: 'Site', subdomain: 'site' }]
+  /** An organization of `count` sites, `site1` first. */
+  const sitesOf = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `site${index + 1}`,
+      name: `Site ${index + 1}`,
+      subdomain: `site-${index + 1}`,
+    }))
 
   afterEach(() => {
     mockSection = ''
     mockListens.length = 0
+    mockOneShots.length = 0
+    window.sessionStorage.clear()
   })
 
-  async function renderOrgConsole(section: string, detail: string[] = []) {
+  async function renderOrgConsole(
+    section: string,
+    detail: string[] = [],
+    hosts: Array<{ id: string; name: string; subdomain: string }> = ONE_SITE,
+  ) {
     mockSection = [section, ...detail].filter(Boolean).join('/')
     mockListens.length = 0
+    mockOneShots.length = 0
     const { MarketingConsolePage } = await import('./marketing-console-page')
-    return render(
+    const rendered = render(
       <MarketingConsolePage
         hostId={null}
         orgMount={{
           orgId: 'org1',
           orgSlug: 'acme',
-          hosts: [{ id: 'site1', name: 'Site', subdomain: 'site' }],
+          hosts,
           hostsReady: true,
           hostsPath: '/acme/hosts',
         }}
@@ -646,7 +817,53 @@ describe('the org Marketing hub’s read cost', () => {
         segments={[section, ...detail]}
       /> as ReactNode as never,
     )
+    await settle()
+    return rendered
   }
+
+  /*
+   * THE LANDING. A bare `/[orgSlug]/marketing` lands on the rail's first
+   * section, so whatever that section costs is what every visit costs.
+   */
+  it('lands on Overview, and carries the site rail in the site rail’s order', () => {
+    expect(MARKETING_ORG_CONSOLE_SECTIONS[0].id).toBe('overview')
+    expect(
+      MARKETING_ORG_CONSOLE_SECTIONS.map((item) => [item.id, item.label]),
+    ).toEqual(MARKETING_CONSOLE_SECTIONS.map((item) => [item.id, item.label]))
+  })
+
+  it('the landing listens to nothing and reads a fixed set of aggregates', async () => {
+    await renderOrgConsole('overview')
+    expect(mockListens).toHaveLength(0)
+    expect(mockOneShots.map(describeOneShot)).toEqual([
+      // The email figures: ONE org collection, every site's sends.
+      'aggregate orgs/org1/campaigns sum(stats.sent)',
+      'aggregate orgs/org1/campaigns sum(stats.opens)',
+      'aggregate orgs/org1/campaigns sum(stats.clicks)',
+      'count orgs/org1/campaigns status==scheduled',
+      // Then four per site: its overlays' engagement and its tests' states.
+      'aggregate hosts/site1/overlays sum(stats.impressions)',
+      'aggregate hosts/site1/overlays sum(stats.clicks)',
+      'count hosts/site1/experiments status==running',
+      'count hosts/site1/experiments winnerVariantId!=null',
+    ])
+  })
+
+  it('bounds the landing at the site cap however many sites there are', async () => {
+    await renderOrgConsole('overview', [], sitesOf(ORG_OVERVIEW_SITE_CAP + 5))
+    const perSite = mockOneShots.filter((read) => read.path.startsWith('hosts/'))
+    expect(perSite).toHaveLength(4 * ORG_OVERVIEW_SITE_CAP)
+    expect(new Set(perSite.map((read) => read.path.split('/')[1])).size).toBe(
+      ORG_OVERVIEW_SITE_CAP,
+    )
+    expect(
+      perSite.some((read) =>
+        read.path.startsWith(`hosts/site${ORG_OVERVIEW_SITE_CAP + 1}/`),
+      ),
+    ).toBe(false)
+    expect(mockOneShots).toHaveLength(4 + 4 * ORG_OVERVIEW_SITE_CAP)
+    expect(mockListens).toHaveLength(0)
+  })
 
   it('lists campaigns from the org collections, and nothing of any one site', async () => {
     await renderOrgConsole('campaigns')
@@ -661,13 +878,80 @@ describe('the org Marketing hub’s read cost', () => {
     ).toBe(31)
   })
 
-  it('lists every site’s emails from one ceilinged read', async () => {
-    await renderOrgConsole('emails')
-    summarize('org emails section', mockListens)
-
-    expect(mockListens.map((listen) => listen.path)).toEqual([
-      'orgs/org1/campaigns',
+  /*
+   * A conversion is one site's, so the section reads ONE site: the first by
+   * default. Its bill is the site hub's own conversions section, unchanged —
+   * two paged windows over that site's attributions — and no other site is
+   * touched.
+   */
+  it('reads the conversions of one site, the first by default', async () => {
+    await renderOrgConsole('conversions', [], sitesOf(3))
+    const attributions = mockListens.filter((listen) =>
+      listen.path.endsWith('/campaignAttributions'),
+    )
+    expect(attributions.map((listen) => listen.path)).toEqual([
+      'hosts/site1/campaignAttributions',
+      'hosts/site1/campaignAttributions',
     ])
-    expect(mockListens[0].limit).toBe(31)
+    attributions.forEach((listen) => {
+      expect(listen.limit).toBe(TABLE_PAGE_SIZE_DEFAULT + 1)
+    })
+    const everyPath = [...mockListens, ...mockOneShots].map((read) => read.path)
+    expect(
+      everyPath.some(
+        (path) => path.startsWith('hosts/site2/') || path.startsWith('hosts/site3/'),
+      ),
+    ).toBe(false)
+    // The retired per-site leads path is never counted: leads are the org's.
+    expect(everyPath).not.toContain('hosts/site1/leads')
+  })
+
+  /*
+   * THE LISTS, one page of sites at a time. Each site on the page costs one
+   * ceilinged read of its overlays and its site document; the sites on the
+   * next page cost nothing until somebody turns to it. No 14-day analytics
+   * row either — that is a document per day per site.
+   */
+  it('reads one page of sites’ overlays, ceilinged per site', async () => {
+    await renderOrgConsole('overlays', [], sitesOf(ORG_SITES_PER_PAGE + 5))
+    expect(mockListens).toHaveLength(0)
+    const overlays = mockOneShots.filter((read) => read.path.endsWith('/overlays'))
+    expect(overlays).toHaveLength(ORG_SITES_PER_PAGE)
+    overlays.forEach((read) => {
+      expect(read.kind).toBe('get')
+      expect(read.limit).toBe(ORG_OVERLAYS_PER_SITE + 1)
+    })
+    const siteDocuments = mockOneShots.filter((read) =>
+      /^hosts\/[^/]+$/.test(read.path),
+    )
+    expect(siteDocuments).toHaveLength(ORG_SITES_PER_PAGE)
+    expect(mockOneShots).toHaveLength(2 * ORG_SITES_PER_PAGE)
+    expect(mockOneShots.some((read) => read.path.includes('/analytics'))).toBe(
+      false,
+    )
+    expect(
+      mockOneShots.some((read) =>
+        read.path.startsWith(`hosts/site${ORG_SITES_PER_PAGE + 1}`),
+      ),
+    ).toBe(false)
+  })
+
+  it('reads one page of sites’ tests, and no results until somebody asks', async () => {
+    await renderOrgConsole('experiments', [], sitesOf(ORG_SITES_PER_PAGE + 5))
+    expect(mockListens).toHaveLength(0)
+    expect(mockOneShots).toHaveLength(ORG_SITES_PER_PAGE)
+    mockOneShots.forEach((read) => {
+      expect(read.kind).toBe('get')
+      expect(read.path).toMatch(/^hosts\/site\d+\/experiments$/)
+      expect(read.limit).toBe(ORG_EXPERIMENTS_PER_SITE + 1)
+    })
+    // A test's per-variant counters are read behind its Results button.
+    expect(mockOneShots.some((read) => read.path.endsWith('/stats'))).toBe(false)
+  })
+
+  it('carries no emails section — the messages are the org’s Emails page', () => {
+    expect(MARKETING_ORG_CONSOLE_SECTIONS.map((item) => item.id)).not.toContain(
+      'emails',
+    )
   })
 })

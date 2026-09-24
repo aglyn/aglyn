@@ -237,7 +237,7 @@ async function renderEmail(options?: {
             <EmailDetail
               hostId={null}
               emailId="msg_1"
-              basePath="/acme/marketing"
+              basePath="/acme/emails"
             />
           </MarketingOrgMountProvider>
         ) : (
@@ -999,11 +999,11 @@ describe('a message opened on the org hub', () => {
     expect(previewProps?.nodes).toEqual(NODES)
   })
 
-  it('links back to the org hub’s own Emails section, and the template on its site', async () => {
+  it('links back to the organization’s Emails page, and the template on its site', async () => {
     await renderEmail({ atOrg: true, email: { hostId: 'site1' } })
     expect(
       screen.getByText('All messages').closest('a')?.getAttribute('href'),
-    ).toBe('/acme/marketing/emails')
+    ).toBe('/acme/emails/messages')
     expect(
       screen.getByText('Open template').closest('a')?.getAttribute('href'),
     ).toBe('/acme/hosts/site/emails/templates/scr_1')

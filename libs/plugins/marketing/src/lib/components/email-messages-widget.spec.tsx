@@ -39,7 +39,10 @@ import { render, screen } from '@testing-library/react'
 /** The props each stub was mounted with, or null while it is not. */
 let detailProps: Record<string, unknown> | null = null
 let composeProps: Record<string, unknown> | null = null
+let listProps: Record<string, unknown> | null = null
 let listMounted = false
+/** The Marketing org mount the list stub read from context. */
+let listOrgMount: unknown = undefined
 
 jest.mock('./email-detail', () => ({
   __esModule: true,
@@ -57,8 +60,11 @@ jest.mock('./email-compose-card', () => ({
 }))
 jest.mock('./emails-list-card', () => ({
   __esModule: true,
-  default: () => {
+  default: function EmailsListCardStub(props: Record<string, unknown>) {
+    const { useMarketingOrgMount } = require('./marketing-org-mount')
     listMounted = true
+    listProps = props
+    listOrgMount = useMarketingOrgMount()
     return <div>{'the list'}</div>
   },
 }))
@@ -70,7 +76,9 @@ const BASE_PATH = '/acme/hosts/site/emails'
 function renderMessages(detail: string[] = []) {
   detailProps = null
   composeProps = null
+  listProps = null
   listMounted = false
+  listOrgMount = undefined
   return render(
     <EmailMessagesWidget hostId="site1" basePath={BASE_PATH} detail={detail} />,
   )
@@ -134,6 +142,76 @@ describe('a message URL, and the two jobs it used to do at once', () => {
     renderMessages(['msg_1', 'something-else'])
 
     expect(detailProps).toMatchObject({ emailId: 'msg_1' })
+    expect(composeProps).toBeNull()
+  })
+})
+
+/*==========================================
+ * THE ORGANIZATION'S EMAILS PAGE.
+ *
+ * The same zone with no site: the widget is handed the shell's org mount and
+ * publishes it to the three cards as the Marketing mount they already read,
+ * so the list names each row's site and asks which site a new email is sent
+ * as. The mount's own `basePath` is the organization's Marketing page, which
+ * is where a campaign's page is; the message pages hang beneath the Emails
+ * page's `basePath`, which is handed through untouched.
+ *=========================================*/
+describe('on the organization’s Emails page', () => {
+  const ORG_EMAILS = '/acme/emails'
+  const ORG_MOUNT = {
+    orgId: 'org-1',
+    orgSlug: 'acme',
+    hosts: [{ id: 'site1', name: 'Store', subdomain: 'store' }],
+    hostsReady: true,
+    hostsPath: '/acme/hosts',
+  }
+
+  function renderAtOrg(orgMount: typeof ORG_MOUNT | undefined) {
+    detailProps = null
+    composeProps = null
+    listProps = null
+    listMounted = false
+    listOrgMount = undefined
+    return render(
+      <EmailMessagesWidget
+        hostId={null}
+        basePath={ORG_EMAILS}
+        detail={[]}
+        orgMount={orgMount}
+      />,
+    )
+  }
+
+  it('lists every site’s messages, under the org’s own Emails page', () => {
+    renderAtOrg(ORG_MOUNT)
+
+    expect(listMounted).toBe(true)
+    expect(listProps).toMatchObject({ hostId: null, basePath: ORG_EMAILS })
+  })
+
+  it('publishes the org and its sites, with the org Marketing page as the campaigns hub', () => {
+    renderAtOrg(ORG_MOUNT)
+
+    expect(listOrgMount).toEqual({
+      orgId: 'org-1',
+      orgSlug: 'acme',
+      hosts: ORG_MOUNT.hosts,
+      hostsReady: true,
+      hostsPath: '/acme/hosts',
+      basePath: '/acme/marketing',
+    })
+  })
+
+  it('THE CONTROL: under a site the cards read no org mount', () => {
+    renderMessages()
+    expect(listMounted).toBe(true)
+    expect(listOrgMount).toBeNull()
+  })
+
+  it('draws nothing with no site and no org mount', () => {
+    renderAtOrg(undefined)
+    expect(listMounted).toBe(false)
+    expect(detailProps).toBeNull()
     expect(composeProps).toBeNull()
   })
 })

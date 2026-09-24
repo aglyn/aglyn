@@ -23,7 +23,6 @@ export type MarketingConsoleSectionId =
   | 'conversions'
   | 'overlays'
   | 'experiments'
-  | 'emails'
 
 /**
  * The marketing console's sections, in rail order (AGL-2501).
@@ -77,20 +76,34 @@ export const MARKETING_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
  */
 
 /**
- * The ORGANIZATION-level Marketing hub's sections, at `/[orgSlug]/marketing`.
+ * The ORGANIZATION-level Marketing hub's sections, at `/[orgSlug]/marketing`
+ * — the site rail's, in the site rail's order, so the two levels of the hub
+ * read as one surface and a bare `/[orgSlug]/marketing` lands on Overview.
  *
- * Campaigns and their emails belong to the organization, so the org hub lists
- * every one of them over every site. The rest of the site rail stays on the
- * site: overlays and A/B tests are drawn on one site's pages, and the
- * conversions list is one site's visitors — each campaign's page links to
- * the conversions of the site it asks about.
+ * Each section reads what it can at the organization's level and what it
+ * must per site. Campaigns and their sends belong to the organization, so
+ * the campaigns list and the Overview's email figures are one org
+ * collection each. Overlays and A/B tests are drawn on one site's pages, so
+ * those two list site by site, a page of sites at a time, and send the
+ * reader to the site to edit; conversions are one site's visitors, so that
+ * section reads the site the reader picks.
  *
- * `emails` is here and not on the site rail because a site's messages
- * already have a page — the Emails console's Messages section, which this
- * plugin fills through a zone. With no site there is no Emails console, so
- * the org hub carries the same list itself.
+ * Overlays and A/B testing carry their plan flags HERE, unlike the site
+ * rail, whose cards run the same checks themselves: at the org level a
+ * section is a fan-out over sites, and gating the section in the shell is
+ * what keeps an organization without the plan from mounting one read per
+ * site to be told it cannot have them.
+ *
+ * A literal rather than a mapping of the site list: the console's title
+ * table and its spec read the ids and labels from this source.
+ *
+ * No `emails` section: an email is one send of a campaign, and the list of
+ * them is the organization's Emails page, as a site's is its own.
  */
 export const MARKETING_ORG_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
+  { id: 'overview', label: 'Overview' },
   { id: 'campaigns', label: 'Campaigns' },
-  { id: 'emails', label: 'Emails' },
+  { id: 'conversions', label: 'Conversions' },
+  { id: 'overlays', label: 'Overlays', featureFlag: 'marketingOverlays' },
+  { id: 'experiments', label: 'A/B testing', featureFlag: 'abTesting' },
 ]

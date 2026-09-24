@@ -126,9 +126,12 @@ const emailsDocsHelp = pluginDocsHelp('emailCampaigns', {
 })
 
 export interface EmailsListCardProps {
-  /** The site, or `null` on the org Marketing hub. */
+  /** The site, or `null` on the organization's Emails page. */
   hostId: string | null
-  /** The emails hub URL, so a row can link to the message's own page. */
+  /**
+   * The Emails page's own URL, under the site or the organization, so a row
+   * can link to the message's own page beneath it.
+   */
   basePath: string
 }
 
@@ -161,10 +164,10 @@ export interface EmailsListCardProps {
  * ## Under a site, and over the organization
  *
  * Sends are the org's. Under a site this lists the ones sent as that site;
- * on the org hub it lists every site's, with a Site column, and every action
- * on a row names the site that row is sent as — the only site that can
- * duplicate it, discard it or open its template. Creating one there first
- * asks which site it is sent as.
+ * on the organization's Emails page it lists every site's, with a Site column,
+ * and every action on a row names the site that row is sent as — the only
+ * site that can duplicate it, discard it or open its template. Creating one
+ * there first asks which site it is sent as.
  */
 export function EmailsListCard(props: EmailsListCardProps) {
   const { hostId, basePath } = props
@@ -172,7 +175,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
   const orgMount = useMarketingOrgMount()
   const { orgId } = useMarketingOrgId(hostId)
   // The sibling hub: a campaign's page belongs to the Marketing console —
-  // which, on the org hub, is the page this list is already on.
+  // over the org, the organization's own Marketing page the mount names.
   const siteMarketingHub = useMarketingHubPath()
   const marketingHub = orgMount ? orgMount.basePath : siteMarketingHub
   const router = useRouter()
@@ -209,13 +212,11 @@ export function EmailsListCard(props: EmailsListCardProps) {
   )
 
   /*
-   * A message's own pages: the Emails console's under a site, the org hub's
-   * Emails section over the org. A template is a site's design, so on the
-   * org hub it opens on the site the row is sent as.
+   * A message's own pages, beneath the Emails page this list is on — the
+   * site's or the organization's. A template is a site's design, so over the
+   * org it opens on the site the row is sent as.
    */
-  const messagesPath = orgMount
-    ? `${orgMount.basePath}/emails`
-    : `${basePath}/messages`
+  const messagesPath = `${basePath}/messages`
   const emailHref = (email: any) => `${messagesPath}/${email.$id}`
   const templatesHub = (email: any): string | null =>
     orgMount ? orgSiteHubPath(orgMount, email?.hostId, 'emails') : basePath

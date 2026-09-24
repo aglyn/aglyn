@@ -49,14 +49,15 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import {
   useFirestore,
-  useOrgDataScope,
   usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import { useEmailDataScope } from './email-org-mount'
 
 export interface OrgListsCardProps {
-  hostId: string
+  /** The site, or `null` on the organization's Emails page. */
+  hostId: string | null
   /** The emails hub URL, which every list route hangs beneath. */
   basePath: string
 }
@@ -89,8 +90,9 @@ export function OrgListsCard(props: OrgListsCardProps) {
   // The org lookup is async (AGL-1061): `scope` is null until it settles,
   // and stays null for a host with no owning org. Lists have always been
   // org-shared (AGL-254) — there is no host path to fall back to any more
-  // (AGL-1050), so creating one is held rather than misdirected.
-  const { scope } = useOrgDataScope({ hostId })
+  // (AGL-1050), so creating one is held rather than misdirected. On the
+  // organization's page the mount names the org and nothing is looked up.
+  const { scope } = useEmailDataScope(hostId)
 
   /*
    * Ordered by the server and paged, rather than capped and re-sorted here

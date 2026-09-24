@@ -186,6 +186,16 @@ module.exports = withAglyn({
         destination: '/:orgSlug/hosts/:host/emails/messages/:path*',
         permanent: true,
       },
+      // The organization's messages left its Marketing hub for its own Emails
+      // page, where a site's have always been. `:path*` carries the bare list,
+      // one message and its `/edit` across, and cannot reach a site's hub:
+      // `/:orgSlug/hosts/:host/marketing/…` has `hosts` where this has
+      // `marketing`, so the second segment never matches.
+      {
+        source: '/:orgSlug/marketing/emails/:path*',
+        destination: '/:orgSlug/emails/messages/:path*',
+        permanent: true,
+      },
     ]
   },
 })

@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { pluginDocsHelp } from '@aglyn/aglyn'
+import { CAPTURED_BY_HOST_FIELD, pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiEyeOutline, mdiMapMarkerOutline } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import {
@@ -250,7 +250,22 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
       case 'form':
         return `hosts/${hostId}/formSubmissions`
       case 'lead':
-        return `hosts/${hostId}/leads`
+        /*
+         * The ORG's leads (AGL-3275), narrowed below to the ones this site
+         * CAPTURED. A lead is one document per person, stamped in
+         * `capturedByHostIds` with every site that met them, and its
+         * attribution is written by the site that captured it — so this
+         * site's captures are exactly the population its lead attributions
+         * are drawn from, and the total does not cross hosts.
+         *
+         * Not `visibleTo`: that also names the sites a consent group shares a
+         * person with, and would count leads a sibling brand captured that
+         * could never have been credited here. The price is that a
+         * collaborator scoped to one site cannot run the count — the rules
+         * prove a lead read by `visibleTo` — and is shown the withheld split,
+         * as they already are for contacts.
+         */
+        return dataScope ? `${dataScope[0]}/${dataScope[1]}/leads` : null
       case 'booking':
         return `hosts/${hostId}/bookings`
       case 'contact':
@@ -265,6 +280,9 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
         return null
     }
   }, [kind, hostId, dataScope])
+
+  /** The total counts only the org records THIS site captured. */
+  const totalCapturedHere = kind === 'lead'
 
   /** The kind's records live outside this host, so the total over-counts. */
   const totalCrossesHosts = kind === 'contact'
@@ -291,8 +309,14 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
         // Left null, which withholds the split. See the block comment.
       })
     const segments = totalCollectionPath.split('/')
+    const records = collection(firestore, segments[0], ...segments.slice(1))
     void getCountFromServer(
-      collection(firestore, segments[0], ...segments.slice(1)),
+      totalCapturedHere
+        ? query(
+            records,
+            where(CAPTURED_BY_HOST_FIELD, 'array-contains', hostId),
+          )
+        : records,
     )
       .then((snapshot) => {
         if (active) setTotalCount(snapshot.data().count)
@@ -303,7 +327,15 @@ export function CampaignConversionsCard(props: CampaignConversionsCardProps) {
     return () => {
       active = false
     }
-  }, [attributions, firestore, kind, campaignId, totalCollectionPath])
+  }, [
+    attributions,
+    firestore,
+    kind,
+    campaignId,
+    totalCollectionPath,
+    totalCapturedHere,
+    hostId,
+  ])
 
   const coverage = campaignConversionsCoverage({
     kind,

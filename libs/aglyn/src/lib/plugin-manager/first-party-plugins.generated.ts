@@ -418,6 +418,12 @@ export const PLUGIN_ORG_COLLECTIONS_DECLARED: readonly ResolvedPluginOrgCollecti
     "mediaScan": "none",
     "mediaScanReason": "The campaign CONTAINER — a name, a date window, the list ids it is aimed at, a topic and the sites it runs on. Distinct from `campaigns`, which holds the sends and IS scanned because a send carries the copy that went out. A container carries no copy and no asset reference: the design a send renders is a screen, and the screen is where the picker writes."
   },
+  {
+    "pluginId": "workflows",
+    "name": "automations",
+    "mediaScan": "none",
+    "mediaScanReason": "An org automation (AGL-3302) — a trigger, its conditions, the sites it is placed on, and a step list drawn from the server steps only: email subject and body as plain text, list, dataset and campaign ids, CRM fields and waits. No step it may hold carries a media reference, the in-page steps that could (custom HTML, popups) are refused by its save route, and it is written only by that route."
+  },
 ]
 
 /**

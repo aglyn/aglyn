@@ -22,7 +22,11 @@ import {
   createResourceUid,
   pluginDocsHelp,
 } from '@aglyn/aglyn'
-import { overlayActiveAt, type HostOverlay } from '../model'
+import {
+  compareOverlayPrecedence,
+  overlayStatus,
+  type HostOverlay,
+} from '../model'
 import { mdiChevronDown, mdiChevronUp } from '@aglyn/shared-data-mdi'
 import {
   CardDisplay,
@@ -67,6 +71,12 @@ import {
   useHostActivityLogger,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
+import {
+  overlayDisplayName,
+  overlayEngagementLabel,
+  overlayPagesLabel,
+  overlayWindowLabel,
+} from './overlay-labels'
 import {
   OVERLAY_COPY_HELPER_TEXT,
   shownAsTypedHelperText,
@@ -201,11 +211,7 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
   const truncated = (overlayDocs?.length ?? 0) > CEILING
   const overlays: OverlayDraft[] = [...(overlayDocs ?? [])]
     .slice(0, CEILING)
-    .sort(
-      (a, b) =>
-        (a.order ?? 0) - (b.order ?? 0) ||
-        String(a.name ?? '').localeCompare(String(b.name ?? '')),
-    )
+    .sort(compareOverlayPrecedence)
 
   const [editor, setEditor] = useState<OverlayDraft | null>(null)
   // The editor's copy is held in its stored form; the fields show it as typed.
@@ -382,24 +388,10 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
     )
   }
 
-  // Engagement (AGL-271): lifetime counters the org beacon increments.
-  const statsLabel = (overlay: OverlayDraft) => {
-    const stats = overlay.stats ?? {}
-    const impressions = stats.impressions ?? 0
-    const clicks = stats.clicks ?? 0
-    const dismissals = stats.dismissals ?? 0
-    if (!impressions && !clicks && !dismissals) return '—'
-    const parts = [`${impressions.toLocaleString()} views`]
-    if (clicks) parts.push(`${clicks.toLocaleString()} clicks`)
-    if (dismissals) parts.push(`${dismissals.toLocaleString()} dismissed`)
-    return parts.join(' · ')
-  }
-
   const statusChip = (overlay: OverlayDraft) => {
-    if (overlay.enabled === false) {
-      return <Chip size="small" label="Off" />
-    }
-    if (!overlayActiveAt(overlay, Date.now())) {
+    const status = overlayStatus(overlay, Date.now())
+    if (status === 'off') return <Chip size="small" label="Off" />
+    if (status === 'scheduled') {
       return <Chip size="small" color="info" label="Scheduled" />
     }
     return <Chip size="small" color="success" label="Live" />
@@ -476,38 +468,17 @@ export function HostOverlaysCard(props: HostOverlaysCardProps) {
               <TableBody>
                 {overlays.map((overlay) => (
                   <TableRow key={overlay.$id}>
-                    <TableCell>
-                      {overlay.name ??
-                        (overlay.kind === 'bar'
-                          ? (overlay.bar?.text ?? '').slice(0, 32)
-                          : (overlay.popup?.headline ?? '').slice(0, 32)) ??
-                        overlay.$id}
-                    </TableCell>
+                    <TableCell>{overlayDisplayName(overlay)}</TableCell>
                     <TableCell>
                       {overlay.kind === 'bar' ? 'Bar' : 'Popup'}
                     </TableCell>
                     <TableCell>{statusChip(overlay)}</TableCell>
+                    <TableCell>{overlayWindowLabel(overlay)}</TableCell>
+                    <TableCell>{overlayPagesLabel(overlay)}</TableCell>
                     <TableCell>
-                      {overlay.startAtMs || overlay.endAtMs
-                        ? `${
-                            overlay.startAtMs
-                              ? new Date(overlay.startAtMs).toLocaleDateString()
-                              : '…'
-                          } → ${
-                            overlay.endAtMs
-                              ? new Date(overlay.endAtMs).toLocaleDateString()
-                              : '…'
-                          }`
-                        : 'Always'}
-                    </TableCell>
-                    <TableCell>
-                      {overlay.pathPatterns?.length
-                        ? overlay.pathPatterns.join(', ')
-                        : 'All pages'}
-                    </TableCell>
-                    <TableCell>
+                      {/* Engagement (AGL-271): lifetime counters the org beacon increments. */}
                       <Typography variant="caption" color="text.secondary">
-                        {statsLabel(overlay)}
+                        {overlayEngagementLabel(overlay.stats)}
                       </Typography>
                     </TableCell>
                     <TableCell align="right">

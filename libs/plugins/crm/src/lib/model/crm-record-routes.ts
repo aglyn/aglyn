@@ -71,10 +71,10 @@ export function registerCrmRecordRoutes(): void {
   }, owner)
   registerPluginRecordRoute('lead', {
     list: (context) => hub(context).section('leads'),
-    // A lead is keyed by person under ONE site, so the organization's hub
-    // addresses it by site and id; a caller that names no site has no
-    // address to be given.
-    record: (context, id) => (context.host ? hub(context).lead(id) : null),
+    // One org row per person since AGL-3275, so the id alone addresses a
+    // lead at both levels — the organization's hub included, where the
+    // organization's Inbox links its leads (AGL-3303).
+    record: (context, id) => hub(context).lead(id),
   }, owner)
   registerPluginRecordRoute('company', {
     list: (context) => hub(context).section('companies'),

@@ -15,8 +15,15 @@
  * limitations under the License.
  */
 
+import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { registerWorkflowsServerDeclarations } from './declarations.server'
 import { registerAutomationDraftWriter } from './server-automation-drafts'
+import {
+  ORG_AUTOMATION_API_ROUTES,
+  orgAutomationPauseHandler,
+  orgAutomationsManageHandler,
+  orgAutomationsManageSubject,
+} from './server/org-automations-routes'
 
 /**
  * The workflows plugin's console server surface (AGL-2919).
@@ -26,7 +33,8 @@ import { registerAutomationDraftWriter } from './server-automation-drafts'
  * does: the automation draft writer another plugin reaches through the core's
  * resource-drafts seam, which the AI jobs that write through it — inline at a
  * door and on the beat — find registered in the console process alone
- * (AGL-3026).
+ * (AGL-3026); and the doors that write the organization's automations
+ * (AGL-3302).
  */
 export function registerWorkflowsConsoleApi(): void {
   // The console raises host events too — a CRM stage moved, a deal won, a
@@ -34,4 +42,13 @@ export function registerWorkflowsConsoleApi(): void {
   // at boot (see `declarations.server.ts`).
   registerWorkflowsServerDeclarations()
   registerAutomationDraftWriter()
+  // The organization hub names its org and no site, so the route names that
+  // org as its subject for the release gate.
+  registerPluginApiRoute(
+    ORG_AUTOMATION_API_ROUTES.manage,
+    orgAutomationsManageHandler,
+    { subject: orgAutomationsManageSubject },
+  )
+  // A site's own pause names the site, and is gated by that site's switch.
+  registerPluginApiRoute(ORG_AUTOMATION_API_ROUTES.pause, orgAutomationPauseHandler)
 }

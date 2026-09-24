@@ -112,6 +112,10 @@ export function InboxGlanceCard(props: { hostId: string }) {
    * The lead silo is the org's (AGL-3275), narrowed to this site by
    * `visibleTo`. Reading `hosts/{hostId}/leads` showed a site its
    * pre-migration rows and nothing captured since.
+   *
+   * `orgId` settles AFTER the first render — it is a `hostIndex` lookup —
+   * so it is a dependency of the counts below: an effect keyed on the site
+   * alone ran once with no org, returned, and never asked again.
    */
   const { orgId } = useOrgDataScope({ hostId })
   const [openLeads, setOpenLeads] = useState<number | null>(null)
@@ -134,7 +138,7 @@ export function InboxGlanceCard(props: { hostId: string }) {
     return () => {
       active = false
     }
-  }, [firestore, hostId])
+  }, [firestore, hostId, orgId])
 
   const submissions = submissionDocs ?? []
   if (!submissions.length && !openLeads) return null

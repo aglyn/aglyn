@@ -68,8 +68,17 @@ describe('the addresses the CRM publishes', () => {
     expect(pluginRecordHref('deal', org, 'd1')).toBe('/acme/crm/deals/d1')
   })
 
-  it('has no address for a lead without its site, and none for a filter it does not know', () => {
-    expect(pluginRecordHref('lead', org, 'l1')).toBeNull()
+  it('addresses a lead by its id alone at the organization level (AGL-3303)', () => {
+    // A lead is one org row per person (AGL-3275), so the org hub's own
+    // lead page takes the id with no site — the page the organization's
+    // Inbox sends "Open in CRM" to.
+    expect(pluginRecordHref('lead', org, 'l 1')).toBe(
+      crmRoutes('/acme/crm').lead('l 1'),
+    )
+    expect(pluginRecordHref('lead', org, 'l1')).toBe('/acme/crm/leads/l1')
+  })
+
+  it('has no address for a filter it does not know', () => {
     expect(pluginRecordFilteredHref('contact', site, 'shoe-size', '9')).toBeNull()
   })
 

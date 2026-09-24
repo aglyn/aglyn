@@ -34,7 +34,8 @@ This plugin owns email designs, the topic catalog, lists, sending identities and
 `registerEmailConsole()` registers:
 
 - An **Emails** nav item and page at `/emails`, with the sections Messages, Templates, Audiences, Topics, Sending and Suppressions as routes. It requires the `data.manage` permission and is code-split.
-- Two zones this plugin hosts for the plugin that owns campaigns: the whole body of the Messages section, and the recipients table under a template's report. This package draws neither.
+- The same page at the organization level, `/[orgSlug]/emails` (an `orgNavItems` entry, served by the shell's generic org route to org-wide members). Audiences and topics are the organization's; messages, templates, sending identities and suppression lists are read site by site over a capped batch of sites, and every write that belongs to a site asks which one.
+- Two zones this plugin hosts for the plugin that owns campaigns: the whole body of the Messages section (under a site, and on the organization's page with `hostId: null` and the org mount), and the recipients table under a template's report. This package draws neither.
 - Five widgets drawn in zones the campaign owner's pages host: `campaignTopicSelect`, `campaignTopicOptions`, `campaignSenderEditor`, `campaignDesignCreate` and `campaignDesignPreview`. Each reports back through a callback; none writes a campaign.
 
 ### On the server

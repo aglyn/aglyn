@@ -50,8 +50,13 @@ const CampaignGlanceCard = lazy(
   () => import('./components/campaign-glance-card.component'),
 )
 
-/** The site's campaigns, drawn in the Inbox's Campaigns section. */
-const HostCampaignsCard = lazy(() => import('./components/campaigns-card'))
+/**
+ * The campaigns drawn in the Inbox's Campaigns section: one site's, or every
+ * site's on the organization's Inbox.
+ */
+const InboxCampaignsWidget = lazy(
+  () => import('./components/inbox-campaigns-widget'),
+)
 
 /** The Emails page's Messages section: the list, one message, its composer. */
 const EmailMessagesWidget = lazy(
@@ -199,7 +204,7 @@ export function registerMarketingConsole(): void {
         slot: 'inboxCampaigns',
         widgetId: 'marketing-inbox-campaigns',
         title: 'Campaigns',
-        Component: HostCampaignsCard,
+        Component: InboxCampaignsWidget,
       },
       {
         slot: 'inboxRecordAttribution',
@@ -226,11 +231,13 @@ export function registerMarketingConsole(): void {
       },
     ],
     /*
-     * The ORGANIZATION's Marketing hub, at `/[orgSlug]/marketing`. Campaigns,
-     * their emails and their sequence rollups belong to the organization, so
-     * this is where one campaign is placed across several sites and where
-     * every site's mail is read at once. The page is the same component;
-     * handed no site, it renders the org sections.
+     * The ORGANIZATION's Marketing hub, at `/[orgSlug]/marketing`: every
+     * section the site hub has, over every site. Campaigns and their sequence
+     * rollups belong to the organization, so this is where one campaign is
+     * placed across several sites; overlays, tests and conversions stay each
+     * site's and are read across them. Every site's mail is on the
+     * organization's Emails page, as a site's is on its own. The page is the
+     * same component; handed no site, it renders the org sections.
      *
      * It carries the SITE tab's id on purpose, the way the org CRM tab does:
      * `release_marketing` names `nav-tab-marketing`, so one flag holds both
@@ -247,7 +254,7 @@ export function registerMarketingConsole(): void {
         header: {
           title: 'Marketing',
           icon: { path: mdiBullhornOutline.path },
-          docsTopic: 'emailCampaigns',
+          docsTopic: 'marketingOverlays',
         },
         Component: MarketingConsolePage,
       },

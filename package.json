@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.179",
+  "version": "1.0.0-beta.180",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -143,6 +143,7 @@
     "test:org-lead-backfill": "node --test tools/scripts/lib/org-lead-backfill.test.mjs",
     "test:org-campaign-backfill": "node --test tools/scripts/lib/org-campaign-backfill.test.mjs",
     "test:account-acquisition-backfill": "node --test tools/scripts/lib/account-acquisition-backfill.test.mjs",
+    "test:submission-scope-backfill": "node --test tools/scripts/lib/submission-scope-backfill.test.mjs",
     "test:email-state-backfill": "node --test tools/scripts/lib/email-state-backfill.test.mjs",
     "test:enrollment-activity-backfill": "node --test tools/scripts/lib/enrollment-activity-backfill.test.mjs",
     "test:gated-media-backfill": "node --test tools/scripts/lib/gated-media-backfill.test.mjs",

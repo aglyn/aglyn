@@ -106,6 +106,15 @@ import {
   runEventWorkflows,
 } from './run-event-workflows'
 import {
+  ORG_AUTOMATION_RUN_TARGET,
+  type OrgAutomation,
+  orgAutomationStepRefusal,
+} from '../model/org-automations'
+import {
+  findOrgAutomationsForEvent,
+  resumeOrgAutomationEnrollment,
+} from './run-org-automations'
+import {
   type AutomationWorkflow,
   isWorkflowActionStep,
   type WorkflowStep,
@@ -169,9 +178,15 @@ export interface WorkflowContext {
  * its document id, and its name for the history and the enrollment.
  */
 export interface AutomationRun {
-  kind: 'action' | 'workflow'
+  /**
+   * `orgAutomation` for an org automation (AGL-3302) — a run on the event's
+   * site of an automation the organization placed there.
+   */
+  kind: 'action' | 'workflow' | 'orgAutomation'
   id: string
   name: string
+  /** The owning organization, on an `orgAutomation` run: a wait enrolls with it. */
+  orgId?: string
 }
 
 /**
@@ -369,6 +384,14 @@ interface ExecuteActionOptions {
    * mints one if it reaches a wait.
    */
   enrollmentRef?: FirebaseFirestore.DocumentReference | null
+  /**
+   * Present for a run of an ORG automation (AGL-3302), naming the
+   * organization that owns it. The steps run on this site exactly as a site
+   * action's do; what changes is that each is held to the org vocabulary as
+   * it runs, a wait enrolls under the org automation's own id, and the
+   * history row is filed under it.
+   */
+  orgAutomation?: { orgId: string }
 }
 
 /** What one step is run against: its place, the list it is in, the event. */
@@ -1135,24 +1158,36 @@ async function runServerStep(
  * Executes one action's SERVER steps in order, collecting per-step errors
  * into the activity summary. Each step runs through {@link runServerStep}.
  *
+ * An org automation's run comes through here too (AGL-3302): on the site the
+ * event happened on, against that site's run environment, so its email goes
+ * from that site and its CRM writes land in that site's facet.
+ *
  * A `wait` step ENDS this call and hands the rest of the list to the job
  * beat: everything after the wait belongs to a run that has not happened yet,
  * so nothing below the wait may execute in this request.
  */
-async function executeAction(
+export async function executeAction(
   env: ActionRunEnv,
   actionId: string,
-  action: HostAction,
+  action: Pick<HostAction, 'name' | 'steps'>,
   event: string,
   payload: HostEventPayload,
   options: ExecuteActionOptions = {},
 ): Promise<ActionRunEnding> {
   const { hostRef } = env
-  const run: AutomationRun = {
-    kind: 'action',
-    id: actionId,
-    name: action.name ?? '',
-  }
+  const orgRun = options.orgAutomation ?? null
+  const run: AutomationRun = orgRun
+    ? {
+        kind: 'orgAutomation',
+        id: actionId,
+        name: action.name ?? '',
+        orgId: orgRun.orgId,
+      }
+    : {
+        kind: 'action',
+        id: actionId,
+        name: action.name ?? '',
+      }
   const enrollmentRef = options.enrollmentRef ?? null
   const steps = (options.steps ?? action.steps ?? []).slice(0, ACTION_MAX_STEPS)
   const startIndex = Math.max(0, options.startIndex ?? 0)
@@ -1167,6 +1202,17 @@ async function executeAction(
   const scope = { event, ...payload }
   for (let index = startIndex; index < steps.length; index += 1) {
     const step = steps[index] as HostActionStep
+    /*
+     * An org automation runs its own vocabulary and nothing else. The save
+     * route refuses the rest, so this answers only a document written around
+     * it — and answers it before the step can reach this site's workflows or
+     * webhooks, which are not the organization's to call.
+     */
+    const refusal = orgRun ? orgAutomationStepRefusal(step) : null
+    if (refusal) {
+      tally.errors.push(refusal)
+      continue
+    }
     const verdict = await runServerStep(env, run, step, {
       index,
       steps,
@@ -1185,14 +1231,15 @@ async function executeAction(
    * runs that did something under a log of the ceiling working.
    */
   if (ending === 'deferred') return ending
+  const noun = orgRun ? 'Org automation' : 'Action'
   const summary = stepErrors.length
-    ? `Action ran on ${event} with errors: ${stepErrors.join('; ')}`.slice(
+    ? `${noun} ran on ${event} with errors: ${stepErrors.join('; ')}`.slice(
         0,
         300,
       )
     : ending === 'waiting'
-      ? `Action is waiting, on ${event}`
-      : `Action ran on ${event}`
+      ? `${noun} is waiting, on ${event}`
+      : `${noun} ran on ${event}`
   await hostRef
     .collection('activity')
     .add({
@@ -1207,7 +1254,13 @@ async function executeAction(
       result: stepErrors.length ? 'failed' : 'succeeded',
       trigger: event,
       summary: (outcomes.length ? outcomes.join(' · ') : 'Ran').slice(0, 300),
-      target: { type: 'workflow', id: actionId, name: action.name ?? '' },
+      target: {
+        // An org automation's run is filed under its own type, so the site's
+        // run history can tell it from a site action sharing the feed.
+        type: orgRun ? ORG_AUTOMATION_RUN_TARGET : 'workflow',
+        id: actionId,
+        name: action.name ?? '',
+      },
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
@@ -1416,6 +1469,11 @@ async function suspendFlow(
     // Absent for an action, which is every enrollment written before a
     // workflow could wait — the resume reads absent as `action`.
     ...(run.kind === 'workflow' ? { automation: 'workflow' as const } : {}),
+    // An org automation waits on the site it ran on, under its own id prefix,
+    // and names the organization whose document the resume re-reads.
+    ...(run.kind === 'orgAutomation'
+      ? { automation: 'org' as const, orgId: run.orgId ?? env.orgId ?? '' }
+      : {}),
     // The SNAPSHOT is the list this run is executing, which on a first run is
     // the automation's own — so one edited later cannot move this person's
     // remaining steps out from under them.
@@ -1466,8 +1524,9 @@ const SKIP_LOG_EXCLUDED_EVENTS = new Set(['pageView'])
 async function recordSkippedRun(
   hostRef: FirebaseFirestore.DocumentReference,
   actionId: string,
-  action: HostAction,
+  action: Pick<HostAction, 'name' | 'trigger'>,
   event: string,
+  kind: 'action' | 'orgAutomation' = 'action',
 ): Promise<void> {
   if (SKIP_LOG_EXCLUDED_EVENTS.has(event)) return
   // `normalizeTriggerConditions`, not `trigger.conditions` — a pre-AGL-565
@@ -1484,11 +1543,15 @@ async function recordSkippedRun(
     .add({
       actorId: null,
       actorEmail: null,
-      action: `Action skipped on ${event}`,
+      action: `${kind === 'orgAutomation' ? 'Org automation' : 'Action'} skipped on ${event}`,
       result: 'skipped',
       trigger: event,
       summary: reason.slice(0, 300),
-      target: { type: 'workflow', id: actionId, name: action.name ?? '' },
+      target: {
+        type: kind === 'orgAutomation' ? ORG_AUTOMATION_RUN_TARGET : 'workflow',
+        id: actionId,
+        name: action.name ?? '',
+      },
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
@@ -1500,6 +1563,10 @@ async function recordSkippedRun(
  * optional filters over the payload, and executes each step list in
  * order. Never throws into the emitting request. Paid feature: the
  * `actions` flag gates and `actionRunsPerMonth` meters runs.
+ *
+ * The organization's automations placed on this site run here too
+ * (AGL-3302), after the site's own, on the same run environment — they run
+ * AS this site — and on the same meter.
  */
 export async function runEventActions(
   hostId: string,
@@ -1529,7 +1596,16 @@ export async function runEventActions(
     const actions = triggered.docs.filter(
       (doc) => !doc.get('deletedAt') && doc.get('enabled') !== false,
     )
-    if (!actions.length) return alerts
+    /*
+     * THE ORGANIZATION'S AUTOMATIONS placed on this site and not paused here.
+     *
+     * Asked only for an org trigger — a server event a person is the subject
+     * of — so a page view, a custom event and every on-page site event cost
+     * nothing more than they did. Never throws: an org lookup that fails runs
+     * this site's own actions exactly as before.
+     */
+    const placed = await findOrgAutomationsForEvent(hostId, event)
+    if (!actions.length && !placed) return alerts
 
     const monthKey = new Date().toISOString().slice(0, 7)
     const runCounterRef = hostRef.collection('counters').doc('actionRuns')
@@ -1537,6 +1613,20 @@ export async function runEventActions(
     // ride the owning org's doc (AGL-238).
     let webhooksAllowed = true
     let crmAllowed = true
+    /*
+     * Whether each half fits under the month's allowance — all or nothing per
+     * half, as the site's own actions always were.
+     *
+     * The site's actions are asked first and on exactly the question they
+     * were always asked, so an organization placing automations on a site can
+     * never be what stops that site's own actions running. The org half is
+     * asked second, against what is left after the site's half, and both
+     * count on this site's one meter: an org automation's run is this site's
+     * run, and the usage card, the usage alerts and the COGS rollup read it
+     * there.
+     */
+    let runSite = false
+    let runOrg = false
     // Plan-less orgs resolve as free (AGL-247) — gates always run. Held for
     // the rest of the run so the dataset caps below cost no second read.
     const owner = await getOrgForHost(hostId)
@@ -1550,7 +1640,23 @@ export async function runEventActions(
       ).actionRunsPerMonth
       const counterSnapshot = await runCounterRef.get()
       const used = Number(counterSnapshot.get(monthKey) ?? 0)
-      if (used + actions.length > limit) return alerts
+      // Asked as "would it go over", the question this gate has always
+      // asked — so a counter that reads as no number refuses nothing, as
+      // before, rather than refusing everything.
+      runSite = actions.length > 0 && !(used + actions.length > limit)
+      /*
+       * Only for the organization the site belongs to NOW: the automations
+       * were found through the site's org, and a site that changed hands
+       * between the two reads runs none of its old organization's.
+       */
+      runOrg =
+        Boolean(placed) &&
+        placed?.orgId === owner?.orgId &&
+        !(
+          used + (runSite ? actions.length : 0) + (placed?.docs.length ?? 0) >
+          limit
+        )
+      if (!runSite && !runOrg) return alerts
     }
 
     const env: ActionRunEnv = {
@@ -1568,7 +1674,7 @@ export async function runEventActions(
     }
 
     let executed = 0
-    for (const doc of actions) {
+    for (const doc of runSite ? actions : []) {
       const action = doc.data() as HostAction
       const filter = action.trigger?.filter?.trim()
       if (filter) {
@@ -1592,6 +1698,31 @@ export async function runEventActions(
       }
       executed += 1
       await executeAction(env, doc.id, action, event, payload)
+    }
+    /*
+     * The org automations, judged by the same filter and conditions a site
+     * action is, skipped and recorded the same way, and run on this site.
+     */
+    for (const doc of runOrg && placed ? placed.docs : []) {
+      const automation = doc.data() as OrgAutomation
+      const filter = automation.trigger?.filter?.trim()
+      if (filter) {
+        try {
+          if (!evaluateExpression(filter, { event, ...payload })) continue
+        } catch {
+          continue // A broken filter never fires.
+        }
+      }
+      if (
+        !evaluateTriggerConditions(automation.trigger, { event, ...payload })
+      ) {
+        await recordSkippedRun(hostRef, doc.id, automation, event, 'orgAutomation')
+        continue
+      }
+      executed += 1
+      await executeAction(env, doc.id, automation, event, payload, {
+        orgAutomation: { orgId: placed?.orgId ?? '' },
+      })
     }
     if (executed > 0) {
       await runCounterRef
@@ -1681,8 +1812,8 @@ export async function runSingleAction(
 /**
  * Ends an enrollment its automation may no longer run, and says why in the
  * run history — the automation was deleted or switched off, or the plan that
- * carried it lapsed. Shared by both kinds of enrollment, so "stopped mid-wait"
- * reads the same for an action and a workflow.
+ * carried it lapsed. Shared by every kind of enrollment, so "stopped mid-wait"
+ * reads the same for an action, a workflow and an org automation.
  */
 export async function stopFlowEnrollment(
   enrollment: FlowEnrollment,
@@ -1705,7 +1836,10 @@ export async function stopFlowEnrollment(
       trigger: enrollment.event,
       summary: reason.slice(0, 300),
       target: {
-        type: 'workflow',
+        type:
+          enrollment.automation === 'org'
+            ? ORG_AUTOMATION_RUN_TARGET
+            : 'workflow',
         id: enrollment.actionId,
         name: enrollment.actionName ?? '',
       },
@@ -1737,6 +1871,15 @@ export async function resumeFlowEnrollment(
   // action's, which is every one written before a workflow could wait.
   if (enrollment.automation === 'workflow') {
     return await resumeWorkflowEnrollment(enrollment, ref, {
+      ...options,
+      nowMs,
+    })
+  }
+  // An org automation's continues against the ORGANIZATION's document, which
+  // is its kill switch — deleted, switched off, taken off this site or paused
+  // here all stop it (AGL-3302).
+  if (enrollment.automation === 'org') {
+    return await resumeOrgAutomationEnrollment(enrollment, ref, {
       ...options,
       nowMs,
     })

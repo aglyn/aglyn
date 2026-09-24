@@ -9,6 +9,25 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.180 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.179...v1.0.0-beta.180)
+
+### Added
+
+- **workflows:** org automations run on the sites an organization places them on ([AGL-3302](https://linear.app/aglyn/issue/AGL-3302))
+- **email:** the organization has its own emails page, over every site ([AGL-3301](https://linear.app/aglyn/issue/AGL-3301))
+- **inbox:** an organization inbox lists every site's submissions in one query ([AGL-3303](https://linear.app/aglyn/issue/AGL-3303), [AGL-3275](https://linear.app/aglyn/issue/AGL-3275))
+- **marketing:** the organization's Marketing hub carries every site section ([AGL-3300](https://linear.app/aglyn/issue/AGL-3300))
+
+### Fixed
+
+- **email:** the org Sending card names no brand in its copy ([AGL-3301](https://linear.app/aglyn/issue/AGL-3301))
+- **marketing:** the org Conversions card carries its help ([AGL-3300](https://linear.app/aglyn/issue/AGL-3300))
+- **inbox:** no client can mint a formSubmissions collection the org inbox would list ([AGL-3303](https://linear.app/aglyn/issue/AGL-3303))
+- **marketing:** the org hub's nav item says what it carries now ([AGL-3300](https://linear.app/aglyn/issue/AGL-3300))
+- **tools:** the acquisition backfill reads every user pool ([AGL-3289](https://linear.app/aglyn/issue/AGL-3289))
+
 ## v1.0.0-beta.179 — 2026-09-23
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/5ea8546c7...v1.0.0-beta.179)

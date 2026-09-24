@@ -17,6 +17,7 @@
 'use client'
 
 import {
+  type ConsolePluginOrgMount,
   type ConsolePluginPageProps,
   formSpamCaughtNotice,
   formSubmissionsPausedNotice,
@@ -26,13 +27,22 @@ import {
 } from '@aglyn/aglyn'
 import { HubSections } from '@aglyn/shared-ui-next'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
-import { Alert, AlertTitle, Typography } from '@mui/material'
+import {
+  Alert,
+  AlertTitle,
+  Box,
+  CircularProgress,
+  MenuItem,
+  TextField,
+  Typography,
+} from '@mui/material'
 import { doc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import ContactsCard from './contacts-card.component'
 import { InboxCampaignsZone } from './inbox-attribution-zone'
 import type { InboxConsoleSectionId } from './inbox-console-sections'
 import SubmissionsCard from './submissions-card.component'
+import { useInboxSitePick } from './use-inbox-site-pick'
 
 /**
  * The body of one inbox section, built only when that section is the one being
@@ -60,6 +70,35 @@ function sectionBody(
 }
 
 /**
+ * The body of one section on the ORGANIZATION's Inbox (AGL-3303): every
+ * site's, with no site picked — the submissions in one collection-group
+ * list, the organization's leads, every campaign — and exactly the site
+ * view, through the same cards, once one is.
+ *
+ * Handing a picked site to the site body is the point rather than a
+ * shortcut: that site's form filter, its members and its campaigns are
+ * facts only a site has, and the cards that already read them are the ones
+ * that read them correctly.
+ */
+function orgSectionBody(
+  section: InboxConsoleSectionId,
+  mount: ConsolePluginOrgMount,
+  siteHostId: string | null,
+): ReactNode {
+  if (siteHostId) return sectionBody(section, siteHostId)
+  switch (section) {
+    case 'submissions':
+      return <SubmissionsCard hostId={null} orgMount={mount} />
+    case 'contacts':
+      return <ContactsCard hostId={null} orgMount={mount} />
+    case 'campaigns':
+      return <InboxCampaignsZone hostId={null} orgMount={mount} />
+    default:
+      return null
+  }
+}
+
+/**
  * Inbox (AGL-77/104/109 → AGL-395): form submissions reader, site members +
  * leads, and campaigns — owned by the inbox plugin and rendered by the shell's
  * generic plugin route. The Campaigns section is a zone this page hosts; the
@@ -80,10 +119,27 @@ function sectionBody(
  * others do not exist to subscribe. What routing adds besides is that the URL
  * names the section: it is linkable, the back button walks sections, and the
  * breadcrumb says where you are.
+ *
+ * The ORGANIZATION's Inbox is this page handed no site (AGL-3303): the same
+ * sections over every site at once, and a site filter above the rail that
+ * narrows the whole page to one site's own view.
  */
 export function InboxConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, section, sections, basePath } = props
+  const { hostId, orgMount, section, sections, basePath } = props
   const firestore = useFirestore()
+  /*
+   * On the organization's Inbox, the site the page is narrowed to — `null`
+   * for every site (AGL-3303). Under a site there is no mount and no pick.
+   */
+  const sitePick = useInboxSitePick(hostId == null ? orgMount : undefined)
+  /*
+   * The site whose ceilings the notices below read: this page's own, or the
+   * one picked on the organization's Inbox. With every site listed there is
+   * no one site to read them for, and reading every site's four counters
+   * would be a listener per site on a page that promises a bounded read, so
+   * the notices wait for a pick.
+   */
+  const noticeHostId = hostId ?? sitePick.hostId
 
   // Submissions this site's abuse ceiling refused (AGL-1655 → AGL-1666).
   //
@@ -95,8 +151,17 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   // the durable one, and it is a plain read of the same document the
   // dropped-contacts alert uses (AGL-891).
   const { data: refusedCounter } = useFirestoreDoc<any>(
-    () => doc(firestore, 'hosts', hostId, 'counters', 'formSubmissionsRefused'),
-    [firestore, hostId],
+    () =>
+      noticeHostId
+        ? doc(
+            firestore,
+            'hosts',
+            noticeHostId,
+            'counters',
+            'formSubmissionsRefused',
+          )
+        : null,
+    [firestore, noticeHostId],
   )
   // Keyed by the month the SERVER wrote, via the shared helper — a key
   // derived differently here would read zero refusals on exactly the sites
@@ -115,8 +180,17 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   // month key — and the shared sentence returns null below one catch, so a
   // quiet month renders nothing rather than a reassuring zero.
   const { data: spamCounter } = useFirestoreDoc<any>(
-    () => doc(firestore, 'hosts', hostId, 'counters', 'formSubmissionsSpam'),
-    [firestore, hostId],
+    () =>
+      noticeHostId
+        ? doc(
+            firestore,
+            'hosts',
+            noticeHostId,
+            'counters',
+            'formSubmissionsSpam',
+          )
+        : null,
+    [firestore, noticeHostId],
   )
   const spamNotice = formSpamCaughtNotice({
     spam: Number(spamCounter?.[submissionMonthKey()] ?? 0),
@@ -139,14 +213,16 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   // notification that `system.` bucket-muting can suppress at write time.
   const { data: membersRefusedCounter } = useFirestoreDoc<any>(
     () =>
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'counters',
-        visitorRecordRefusedCounterId('siteMembers'),
-      ),
-    [firestore, hostId],
+      noticeHostId
+        ? doc(
+            firestore,
+            'hosts',
+            noticeHostId,
+            'counters',
+            visitorRecordRefusedCounterId('siteMembers'),
+          )
+        : null,
+    [firestore, noticeHostId],
   )
   const membersPausedNotice = visitorRecordsPausedNotice({
     kind: 'siteMembers',
@@ -155,14 +231,16 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
   })
   const { data: leadsRefusedCounter } = useFirestoreDoc<any>(
     () =>
-      doc(
-        firestore,
-        'hosts',
-        hostId,
-        'counters',
-        visitorRecordRefusedCounterId('leads'),
-      ),
-    [firestore, hostId],
+      noticeHostId
+        ? doc(
+            firestore,
+            'hosts',
+            noticeHostId,
+            'counters',
+            visitorRecordRefusedCounterId('leads'),
+          )
+        : null,
+    [firestore, noticeHostId],
   )
   const leadsPausedNotice = visitorRecordsPausedNotice({
     kind: 'leads',
@@ -179,11 +257,11 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
    * The four counter reads above run either way, and that is deliberate: they
    * are four single-document listens, and hoisting them behind this guard
    * would make a ceiling notice appear a frame late on the section a reader
-   * lands on.
+   * lands on. (On the organization's Inbox they run once a site is picked.)
    */
   if (!section || !sections?.length || !basePath) return null
 
-  return (
+  const notices = (
     <>
       {/* Above the RAIL on purpose (AGL-1666). A paused form is not a fact
           about the Submissions section — it is why the whole inbox stopped
@@ -234,6 +312,65 @@ export function InboxConsolePage(props: ConsolePluginPageProps) {
           </Alert>
         ) : null,
       )}
+    </>
+  )
+
+  if (hostId == null) {
+    // No site and no org to stand in for it: nothing this page can scope.
+    if (!orgMount) return null
+    return (
+      <>
+        {/*
+          The site filter sits above the rail with the notices, because it
+          is a fact about the whole page: every section follows it, and the
+          notices it brings in are the picked site's. An organization with
+          one site has nothing to choose, and gets that site's page.
+         */}
+        {sitePick.options.length ? (
+          <TextField
+            select
+            size="small"
+            label={'Site'}
+            value={sitePick.hostId ?? ''}
+            onChange={(event) => sitePick.setHostId(event.target.value || null)}
+            // "All sites" is the empty value, which a select would otherwise
+            // draw as a blank rather than as the choice it is — and the label
+            // is shrunk with it, or it paints over that choice.
+            slotProps={{
+              select: { displayEmpty: true },
+              inputLabel: { shrink: true },
+            }}
+            sx={{ mb: 2, minWidth: 240 }}
+          >
+            <MenuItem value="">{'All sites'}</MenuItem>
+            {sitePick.options.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
+        {notices}
+        <HubSections sections={sections}>
+          {sitePick.ready ? (
+            orgSectionBody(
+              section as InboxConsoleSectionId,
+              orgMount,
+              sitePick.hostId,
+            )
+          ) : (
+            <Box sx={{ p: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          )}
+        </HubSections>
+      </>
+    )
+  }
+
+  return (
+    <>
+      {notices}
       <HubSections sections={sections}>
         {sectionBody(section as InboxConsoleSectionId, hostId)}
       </HubSections>

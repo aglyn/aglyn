@@ -78,7 +78,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'email',
     apiPrefixes: ["email"],
     register: {"site":"registerEmailPlugin","console":"registerEmailConsole"},
-    contributes: {"console":{"shell":true,"routes":["/emails"],"slots":["campaignDesignCreate","campaignDesignPreview","campaignSenderEditor","campaignTopicOptions","campaignTopicSelect"]}},
+    contributes: {"console":{"shell":true,"routes":["/emails"],"orgRoutes":["/emails"],"slots":["campaignDesignCreate","campaignDesignPreview","campaignSenderEditor","campaignTopicOptions","campaignTopicSelect"]}},
     load: () => import('@aglyn/plugins-email'),
     loads: {
       site: () => import('@aglyn/plugins-email/site'),
@@ -98,7 +98,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'inbox',
     apiPrefixes: ["inbox"],
     register: {"console":"registerInboxConsole"},
-    contributes: {"console":{"shell":true,"routes":["/inbox"],"slots":["formSubmissions","hostDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/inbox"],"orgRoutes":["/inbox"],"slots":["formSubmissions","hostDashboard"]}},
     load: () => import('@aglyn/plugins-inbox'),
   },
   {
@@ -125,9 +125,9 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'workflows',
-    apiPrefixes: ["hooks"],
+    apiPrefixes: ["hooks","automations"],
     register: {"console":"registerWorkflowsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/automation"],"slots":["hostActivity"]}},
+    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["hostActivity"]}},
     load: () => import('@aglyn/plugins-workflows'),
   },
   {
