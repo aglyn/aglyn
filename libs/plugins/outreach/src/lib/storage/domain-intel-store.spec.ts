@@ -19,9 +19,11 @@
  * @jest-environment node
  */
 
+import { resetMailDeliverabilityMemoryForTests } from '@aglyn/tenant-data-admin/server/email-deliverability'
 import { OUTREACH_DOMAIN_INTEL_TTL_MS } from '../engine/mail-gateway'
 import { outreachDeliveredStepCount } from '../runtime/gateway-ledger'
 import {
+  outreachMailboxSendingDomain,
   readOutreachDomainIntel,
   readOutreachGatewayStandings,
   recordOutreachGatewayOutcome,
@@ -29,15 +31,17 @@ import {
 } from './domain-intel-store'
 
 /**
- * The domain intel and the gateway ledger (AGL-3326), on a store keyed by
- * document path: what a read caches and when it asks the resolver again,
- * what a resolver that cannot answer leaves standing, and how an outcome
- * moves both documents in one transaction.
+ * The domain intel and the gateway ledger (AGL-3326), on the platform's
+ * store (AGL-3328) keyed by document path: what a read caches and when it
+ * asks the resolver again, what a resolver that cannot answer leaves
+ * standing, how an outcome moves the mailbox's sending-domain ledger, and
+ * what the legacy per-gateway ledger still adds.
  */
 
 const ORG = 'org-1'
 const NOW = Date.parse('2026-09-24T15:00:00Z')
 const DAY = 86_400_000
+const SENDER = 'aglyn.io'
 const org = (path: string) => `orgs/${ORG}/${path}`
 
 type Data = Record<string, unknown>
@@ -93,6 +97,7 @@ const resolveMx = async (domain: string) => {
 beforeEach(() => {
   docs = new Map()
   asked = []
+  resetMailDeliverabilityMemoryForTests()
 })
 
 describe('resolveOutreachDomainMx', () => {
@@ -109,26 +114,35 @@ describe('resolveOutreachDomainMx', () => {
   })
 })
 
+describe('outreachMailboxSendingDomain', () => {
+  it('is the send-as address’s domain, else the account’s', () => {
+    expect(outreachMailboxSendingDomain({ sendAs: 'Zach@Aglyn.io', email: 'zach@gmail.com' })).toBe('aglyn.io')
+    expect(outreachMailboxSendingDomain({ sendAs: '', email: 'zach@aglyn.io' })).toBe('aglyn.io')
+    expect(outreachMailboxSendingDomain(null)).toBeNull()
+  })
+})
+
 describe('readOutreachDomainIntel', () => {
-  it('looks a domain up once, caches it on the org, and reads the cache for a week', async () => {
+  it('looks a domain up once, caches it for the whole platform, and reads the cache for a week', async () => {
     const firestore = fakeFirestore(docs)
     const first = await readOutreachDomainIntel(firestore, ORG, ['kristan@lifespire.example', 'other@lifespire.example'], {
       resolveMx,
       nowMs: NOW,
     })
-    expect(first.get('kristan@lifespire.example')).toMatchObject({
+    expect(first.get('kristan@lifespire.example')).toEqual({
       domain: 'lifespire.example',
+      status: 'mx',
       mx: ['d78608a.ess.barracudanetworks.com'],
       gateway: 'barracuda',
       resolvedAtMs: NOW,
-      sent: 0,
-      delivered: 0,
-      blocked: 0,
     })
     expect(asked).toEqual(['lifespire.example'])
-    expect(docs.get(org('outreachDomainIntel/lifespire.example'))).toMatchObject({ gateway: 'barracuda' })
+    // The platform cache, not the organization's: every workspace reads it.
+    expect(docs.get('mailDomains/lifespire.example')).toMatchObject({ gateway: 'barracuda', status: 'mx' })
+    expect(docs.has(org('outreachDomainIntel/lifespire.example'))).toBe(false)
 
-    await readOutreachDomainIntel(firestore, ORG, ['kristan@lifespire.example'], {
+    resetMailDeliverabilityMemoryForTests()
+    await readOutreachDomainIntel(firestore, 'org-2', ['kristan@lifespire.example'], {
       resolveMx,
       nowMs: NOW + OUTREACH_DOMAIN_INTEL_TTL_MS - 1,
     })
@@ -141,12 +155,12 @@ describe('readOutreachDomainIntel', () => {
   })
 
   it('keeps a stale answer when the resolver cannot answer, and reads a domain never known as unchecked', async () => {
-    docs.set(org('outreachDomainIntel/down.example'), {
+    docs.set('mailDomains/down.example', {
       domain: 'down.example',
+      status: 'mx',
       mx: ['mx.down.example'],
       gateway: 'other',
       resolvedAtMs: NOW - 30 * DAY,
-      blocked: 1,
     })
     const answers = await readOutreachDomainIntel(
       fakeFirestore(docs),
@@ -154,41 +168,28 @@ describe('readOutreachDomainIntel', () => {
       ['a@down.example', 'b@never.down.example', 'not-an-address'],
       { resolveMx, nowMs: NOW },
     )
-    expect(answers.get('a@down.example')).toMatchObject({ gateway: 'other', resolvedAtMs: NOW - 30 * DAY, blocked: 1 })
+    expect(answers.get('a@down.example')).toMatchObject({ gateway: 'other', resolvedAtMs: NOW - 30 * DAY })
     expect(answers.get('b@never.down.example')).toBeNull()
     expect(answers.get('not-an-address')).toBeNull()
   })
 
-  it('keeps the counts a refresh finds on the document', async () => {
-    docs.set(org('outreachDomainIntel/lifespire.example'), {
-      domain: 'lifespire.example',
-      mx: [],
-      gateway: 'other',
-      resolvedAtMs: 0,
-      sent: 3,
-      delivered: 1,
-      blocked: 2,
-      lastBlockedAtMs: NOW - DAY,
-    })
-    const answers = await readOutreachDomainIntel(fakeFirestore(docs), ORG, ['kristan@lifespire.example'], {
+  it('reads a domain with no MX but an address record as deliverable when the caller can ask', async () => {
+    const answers = await readOutreachDomainIntel(fakeFirestore(docs), ORG, ['a@parked.example'], {
       resolveMx,
+      resolveAddress: async () => true,
       nowMs: NOW,
     })
-    expect(answers.get('kristan@lifespire.example')).toMatchObject({
-      gateway: 'barracuda',
-      sent: 3,
-      delivered: 1,
-      blocked: 2,
-      lastBlockedAtMs: NOW - DAY,
-    })
-    expect(docs.get(org('outreachDomainIntel/lifespire.example'))).toMatchObject({ gateway: 'barracuda', blocked: 2 })
+    expect(answers.get('a@parked.example')).toMatchObject({ status: 'implicit_mx', gateway: 'other' })
   })
 })
 
 describe('recordOutreachGatewayOutcome and the standings it feeds', () => {
-  it('counts an outcome on the domain and on the gateway, by day, and prunes the ledger to the window', async () => {
+  const ledger = (gateway: string) => org(`mailGatewayLedger/${SENDER}~${gateway}`)
+
+  it('counts an outcome on the mailbox’s sending-domain ledger, by day, pruned to the window', async () => {
     const firestore = fakeFirestore(docs)
-    docs.set(org('outreachGatewayStats/barracuda'), {
+    docs.set(ledger('barracuda'), {
+      sendingDomain: SENDER,
       gateway: 'barracuda',
       sent: 1,
       delivered: 0,
@@ -196,52 +197,76 @@ describe('recordOutreachGatewayOutcome and the standings it feeds', () => {
       days: { '2026-06-01': { sent: 1, delivered: 0, blocked: 0 } },
     })
     await recordOutreachGatewayOutcome(firestore, ORG, {
-      domain: 'LifeSpire.example',
+      sendingDomain: 'Aglyn.io',
       gateway: 'barracuda',
       outcome: 'sent',
       atMs: NOW - 2 * DAY,
     })
     await recordOutreachGatewayOutcome(firestore, ORG, {
-      domain: 'lifespire.example',
+      sendingDomain: SENDER,
       gateway: 'barracuda',
       outcome: 'blocked',
       atMs: NOW - 2 * DAY,
+      detail: '550 5.7.1 <kristan@lifespire.example> blocked using Barracuda Reputation',
     })
     await recordOutreachGatewayOutcome(firestore, ORG, {
-      domain: 'kendal.example',
+      sendingDomain: SENDER,
       gateway: 'barracuda',
       outcome: 'blocked',
       atMs: NOW,
     })
-    expect(docs.get(org('outreachGatewayStats/barracuda'))).toEqual({
+    expect(docs.get(ledger('barracuda'))).toEqual({
+      sendingDomain: SENDER,
       gateway: 'barracuda',
       sent: 2,
       delivered: 0,
       blocked: 2,
       lastBlockedAtMs: NOW,
+      // Scrubbed of the address before it is kept.
+      lastBlockedDetail: '550 5.7.1 <<address>> blocked using Barracuda Reputation',
       days: {
         '2026-09-22': { sent: 1, delivered: 0, blocked: 1 },
         '2026-09-24': { sent: 0, delivered: 0, blocked: 1 },
       },
       updatedAtMs: NOW,
+      orgId: ORG,
     })
-    // A domain the ledger heard of first through a bounce carries what the
-    // bounce said, and no MX until its next read.
-    expect(docs.get(org('outreachDomainIntel/kendal.example'))).toMatchObject({
-      domain: 'kendal.example',
-      mx: [],
-      gateway: 'barracuda',
-      resolvedAtMs: 0,
-      blocked: 1,
-      lastBlockedAtMs: NOW,
-    })
-    expect(docs.get(org('outreachDomainIntel/lifespire.example'))).toMatchObject({ sent: 1, blocked: 1 })
 
-    // What the gates then read for an address at a Barracuda domain: the
-    // week's and the month's counts, on the gateway, not the domain.
+    // What the gates then read for an address at a Barracuda domain, sent
+    // from the same domain: the week's and the month's refusals.
+    resetMailDeliverabilityMemoryForTests()
     const standings = await readOutreachGatewayStandings(firestore, ORG, ['kristan@lifespire.example'], {
       resolveMx,
       nowMs: NOW,
+      sendingDomain: SENDER,
+    })
+    expect(standings.get('kristan@lifespire.example')).toEqual({
+      gateway: 'barracuda',
+      blocked7: 2,
+      delivered7: 0,
+      blocked30: 2,
+      delivered30: 0,
+    })
+    // A mailbox on another domain has no history with that gateway.
+    resetMailDeliverabilityMemoryForTests()
+    const other = await readOutreachGatewayStandings(firestore, ORG, ['kristan@lifespire.example'], {
+      resolveMx,
+      nowMs: NOW,
+      sendingDomain: 'other-sender.example',
+    })
+    expect(other.get('kristan@lifespire.example')).toMatchObject({ blocked30: 0 })
+  })
+
+  it('reads the legacy per-gateway ledger through, for every sending domain', async () => {
+    docs.set(org('outreachGatewayStats/barracuda'), {
+      gateway: 'barracuda',
+      blocked: 2,
+      days: { '2026-09-23': { sent: 2, delivered: 0, blocked: 2 } },
+    })
+    const standings = await readOutreachGatewayStandings(fakeFirestore(docs), ORG, ['kristan@lifespire.example'], {
+      resolveMx,
+      nowMs: NOW,
+      sendingDomain: SENDER,
     })
     expect(standings.get('kristan@lifespire.example')).toEqual({
       gateway: 'barracuda',
@@ -252,27 +277,35 @@ describe('recordOutreachGatewayOutcome and the standings it feeds', () => {
     })
   })
 
-  it('counts several deliveries at once, and nothing for a count of none', async () => {
+  it('counts several deliveries at once, nothing for a count of none, and nothing without a sending domain', async () => {
     const firestore = fakeFirestore(docs)
     await recordOutreachGatewayOutcome(firestore, ORG, {
-      domain: 'belfran.example',
+      sendingDomain: SENDER,
       gateway: 'proofpoint',
       outcome: 'delivered',
       count: 3,
       atMs: NOW,
     })
     await recordOutreachGatewayOutcome(firestore, ORG, {
-      domain: 'belfran.example',
+      sendingDomain: SENDER,
       gateway: 'proofpoint',
       outcome: 'delivered',
       count: 0,
       atMs: NOW,
     })
-    expect(docs.get(org('outreachGatewayStats/proofpoint'))).toMatchObject({
+    await recordOutreachGatewayOutcome(firestore, ORG, {
+      sendingDomain: null,
+      gateway: 'proofpoint',
+      outcome: 'blocked',
+      atMs: NOW,
+    })
+    expect(docs.get(ledger('proofpoint'))).toMatchObject({
       delivered: 3,
+      blocked: 0,
       lastBlockedAtMs: null,
       days: { '2026-09-24': { sent: 0, delivered: 3, blocked: 0 } },
     })
+    expect([...docs.keys()].filter((path) => path.includes('mailGatewayLedger'))).toHaveLength(1)
   })
 })
 

@@ -76,18 +76,19 @@ export const OUTREACH_COLLECTIONS = {
    */
   doNotContactDomains: 'outreachDoNotContactDomains',
   /**
-   * `orgs/{orgId}/outreachDomainIntel/{domain}` — what the organization has
-   * learned about a recipient domain (AGL-3326): its MX records, the mail
-   * gateway they name, and what that gateway did with the organization's
-   * mail. Written by the enroll routes and the sending runtime, read by
-   * the gates before every enrollment and every send.
+   * `orgs/{orgId}/outreachDomainIntel/{domain}` — a recipient domain's MX
+   * as this organization first cached it (AGL-3326). Neither read nor
+   * written any more: the platform-wide `mailDomains` cache replaced it
+   * (AGL-3328), and it is retired with its rule once that has shipped.
    */
   domainIntel: 'outreachDomainIntel',
   /**
    * `orgs/{orgId}/outreachGatewayStats/{gateway}` — the organization's
-   * ledger per mail gateway (AGL-3326): sends, deliveries and blocks, in
-   * total and by UTC day, which is what holds a send into a gateway that
-   * refused the sender twice.
+   * ledger per mail gateway as first written (AGL-3326), with no sending
+   * domain. READ THROUGH, never written: its last thirty days are summed
+   * into the sending-domain ledger's standing
+   * (`orgs/{orgId}/mailGatewayLedger`, AGL-3328) until they age out, and it
+   * is retired with its rule after that.
    */
   gatewayStats: 'outreachGatewayStats',
   /**
@@ -868,29 +869,12 @@ export interface OutreachGatewayHold {
   releasedAtMs: number | null
 }
 
-/**
- * What the organization knows about one recipient domain
- * (`orgs/{orgId}/outreachDomainIntel/{domain}`, AGL-3326).
- */
-export interface OutreachDomainIntel {
-  domain: string
-  /** The MX exchanges, lowest preference first; empty for a domain with none. */
-  mx: string[]
-  gateway: OutreachMailGateway
-  /** When the MX was last looked up; trusted for `OUTREACH_DOMAIN_INTEL_TTL_MS`. */
-  resolvedAtMs: number
-  /** What this organization's mail met at the domain, in total. */
-  sent: number
-  delivered: number
-  blocked: number
-  lastBlockedAtMs: number | null
-  updatedAtMs: number
-}
 
 /**
- * The organization's ledger for one mail gateway
- * (`orgs/{orgId}/outreachGatewayStats/{gateway}`, AGL-3326): totals, and
- * the same counts by UTC day for the windows the hold and the chip read.
+ * The organization's ledger for one mail gateway as first written
+ * (`orgs/{orgId}/outreachGatewayStats/{gateway}`, AGL-3326): totals, and the
+ * same counts by UTC day. Read through, never written — see
+ * `OUTREACH_COLLECTIONS.gatewayStats`.
  */
 export interface OutreachGatewayStats {
   gateway: OutreachMailGateway

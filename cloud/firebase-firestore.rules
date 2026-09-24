@@ -903,16 +903,26 @@ service cloud.firestore {
         allow write: if false;
       }
       // What the organization learned about the domains it writes to and
-      // the mail gateways in front of them (AGL-3326): MX records and a
-      // per-gateway ledger of sends, deliveries and blocks. Written by the
-      // enroll routes and the sending runtime; a client that could write
-      // them could clear the blocks that hold a send.
+      // the mail gateways in front of them, as first written (AGL-3326): MX
+      // records and a per-gateway ledger. No longer written — the platform
+      // cache and the sending-domain ledger below replaced them (AGL-3328)
+      // — and kept readable until that has shipped and the ledger's thirty
+      // days have aged out, when both blocks are retired.
       match /outreachDomainIntel/{domain} {
         allow read: if canReadOutreach();
         allow write: if false;
       }
       match /outreachGatewayStats/{gateway} {
         allow read: if canReadOutreach();
+        allow write: if false;
+      }
+      // What a mail gateway did with one of this organization's mailbox
+      // sending domains (AGL-3328): sends, deliveries and refusals by day,
+      // keyed `{sendingDomain}~{gateway}`. Written only by the sending
+      // runtime; a client that could write it could clear the refusals that
+      // hold a send into a gateway that blocked the sender.
+      match /mailGatewayLedger/{key} {
+        allow read: if isStaff() || isOrgMember();
         allow write: if false;
       }
 
@@ -4456,6 +4466,24 @@ service cloud.firestore {
     // Note this is NOT `hosts/{hostId}/suppressions`, which is a merchant's
     // own list of their own unsubscribes and is governed by the host rules.
     match /emailSuppressions/{emailKey} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // The platform's deliverability store (AGL-3328), written only by the
+    // server. `mailDomains/{domain}` is a recipient domain's MX answer —
+    // a fact about the world, cached once for every organization.
+    // `mailGatewayLedger/{sendingDomain}~{gateway}` is what a mail gateway
+    // did with one Resend sending domain's mail, which is what holds that
+    // domain's bulk mail after two refusals; the platform's own and the
+    // shared pool's rows are the ones a block on hurts every tenant, which
+    // is why staff read them. No client writes either: a write could clear
+    // the refusals that hold a send, or mark a domain as taking no mail.
+    match /mailDomains/{domain} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+    match /mailGatewayLedger/{key} {
       allow read: if isStaff();
       allow write: if false;
     }

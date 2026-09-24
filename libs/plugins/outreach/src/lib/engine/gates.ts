@@ -164,9 +164,10 @@ export interface OutreachGateLookups {
   hasInboundEmail: boolean | null
   /**
    * The mail gateway in front of the address's domain (AGL-3326), as its MX
-   * names it — `outreachDomainIntel/{domain}` — and what that gateway did
-   * with this organization's mail lately, from `outreachGatewayStats`.
-   * `none` blocks; a gateway that holds is answered in `hold`.
+   * names it — the platform's `mailDomains/{domain}` cache — and what that
+   * gateway did lately with mail from the mailbox's sending domain, from
+   * the organization's `mailGatewayLedger` (AGL-3328). `none` blocks; a
+   * gateway that holds is answered in `hold`.
    */
   gateway: OutreachGatewayStanding | null
 }

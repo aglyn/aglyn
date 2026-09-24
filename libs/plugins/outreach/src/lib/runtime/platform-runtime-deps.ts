@@ -16,7 +16,7 @@
  */
 
 import { EMAIL_TOPIC_SALES } from '@aglyn/aglyn/app-utils/email-topics'
-import { resolveMx } from 'node:dns/promises'
+import { platformMailDnsResolver } from '@aglyn/tenant-data-admin/server/email-deliverability'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
@@ -91,8 +91,11 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
     random: Math.random,
     campaignCredit: platformOutreachCampaignCredit(firestore),
     openMailbox: (mailboxId) => openOutreachMailboxClient(firestore(), { mailboxId }),
-    // The domain's MX (AGL-3326), from the console's own resolver.
-    resolveMx: (domain) => resolveMx(domain),
+    // The domain's MX (AGL-3326) and, for a domain with none, its address
+    // record — through the platform's pinned resolver (AGL-3328), which
+    // asks twice before it says a domain takes no mail.
+    resolveMx: (domain) => platformMailDnsResolver().resolveMx(domain),
+    resolveAddress: (domain) => platformMailDnsResolver().resolveAddress?.(domain) ?? Promise.resolve(false),
     async orgRefusal(orgId, org) {
       if (!isPluginEnabled(org as { enabledPlugins?: string[] }, OUTREACH_PLUGIN_ID)) return 'plugin-disabled'
       if (!checkEntitlement(org, 'outreach')) return 'not-entitled'

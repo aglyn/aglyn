@@ -55,6 +55,8 @@
  * executes on load.
  */
 
+import { readBounceText } from './mail-bounce'
+
 /**
  * The lifecycle of one message, in the order it normally happens.
  *
@@ -121,6 +123,28 @@ export interface EmailDeliveryEvent {
   bounceType: 'permanent' | 'transient' | 'undetermined' | null
   /** Provider-supplied explanation, for the states that carry one. */
   detail: string | null
+  /**
+   * The bare sender address, lowercased: the domain it names is the sending
+   * domain a gateway's verdict is filed against (AGL-3328). Absent from
+   * events normalized before it existed, and `null` when the provider sent
+   * none.
+   */
+  from?: string | null
+  /**
+   * `bounced` only: the enhanced status code (`5.7.1`) and the receiving
+   * server the provider's bounce message names, read by `readBounceText` —
+   * what a Gmail DSN hands over as `Status` and `Remote-MTA` (AGL-3328).
+   */
+  bounceStatus?: string | null
+  remoteMta?: string | null
+}
+
+/** The bare address of a `From:` value (`"Acme" <hi@acme.com>` → `hi@acme.com`), lowercased. */
+export function bareSenderAddress(value: unknown): string | null {
+  const raw = String(value ?? '').trim()
+  const angle = raw.match(/<([^>]+)>/)
+  const address = (angle ? angle[1] : raw).trim().toLowerCase()
+  return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(address) ? address : null
 }
 
 /** The later of two statuses on the lifecycle, worst winning a tie. */
@@ -226,6 +250,17 @@ export function normalizeResendDeliveryEvents(
 
   const subject = String(data.subject ?? '').trim() || null
   const tags = normalizeEventTags(data.tags)
+  const from = bareSenderAddress(data.from)
+  // The provider folds a DSN's fields into one sentence; the structured
+  // ones are read first where a payload carries them.
+  const bounceText =
+    type === 'bounced'
+      ? readBounceText(
+          [data.bounce?.diagnosticCode, data.bounce?.diagnostic_code, data.bounce?.remoteMta, data.bounce?.remote_mta, data.bounce?.message]
+            .filter((part: unknown) => typeof part === 'string' && part.trim())
+            .join(' '),
+        )
+      : null
 
   return recipients.map((to: string) => ({
     type,
@@ -240,6 +275,9 @@ export function normalizeResendDeliveryEvents(
     bounceType: type === 'bounced' ? normalizeBounceType(data.bounce?.type) : null,
     detail:
       String(data.bounce?.message ?? data.failed?.reason ?? '').trim() || null,
+    ...(from ? { from } : {}),
+    ...(bounceText?.status ? { bounceStatus: bounceText.status } : {}),
+    ...(bounceText?.remoteMta ? { remoteMta: bounceText.remoteMta } : {}),
   }))
 }
 

@@ -42,6 +42,13 @@
 export const EMAIL_STATE_STATUSES = [
   /** The address may be emailed: released, or confirmed again. */
   'ok',
+  /**
+   * Mail to it WOULD bounce: its domain has no mail server, or publishes a
+   * null MX (AGL-3328). A prediction from DNS rather than a bounce, so the
+   * weakest refusal: any real verdict replaces it, and the check clears it
+   * when the domain starts taking mail.
+   */
+  'undeliverable',
   /** Mail to it bounced for good: the mailbox does not exist. */
   'bounced',
   /** The recipient's mail gateway refused the sender on policy or reputation. */
@@ -56,8 +63,14 @@ export const EMAIL_STATE_STATUSES = [
 
 export type EmailStateStatus = (typeof EMAIL_STATE_STATUSES)[number]
 
-/** Which sender's verdict it is. */
-export type EmailStateSource = 'sequence' | 'campaign' | 'member'
+/**
+ * Which sender's verdict it is. `check` is the deliverability check
+ * (AGL-3328), which reads the domain's DNS when the record is captured and
+ * before a send, and says what it found before anything bounces.
+ */
+export type EmailStateSource = 'sequence' | 'campaign' | 'member' | 'check'
+
+const EMAIL_STATE_SOURCES: readonly EmailStateSource[] = ['sequence', 'campaign', 'member', 'check']
 
 /** The field on the lead and the contact. */
 export const EMAIL_STATE_FIELD = 'emailState'
@@ -76,6 +89,7 @@ export interface EmailState {
 /** How a state reads on the chip — typed so a state cannot ship unlabeled. */
 export const EMAIL_STATE_LABELS: Record<EmailStateStatus, string> = {
   ok: 'Email OK',
+  undeliverable: 'Would bounce',
   bounced: 'Bounced',
   blocked: 'Blocked by their mail gateway',
   unsubscribed: 'Unsubscribed',
@@ -92,11 +106,12 @@ export const EMAIL_STATE_LABELS: Record<EmailStateStatus, string> = {
  */
 const EMAIL_STATE_RANK: Record<EmailStateStatus, number> = {
   ok: 0,
-  bounced: 1,
-  blocked: 2,
-  unsubscribed: 3,
-  complained: 4,
-  do_not_contact: 5,
+  undeliverable: 1,
+  bounced: 2,
+  blocked: 3,
+  unsubscribed: 4,
+  complained: 5,
+  do_not_contact: 6,
 }
 
 export function isEmailStateStatus(value: unknown): value is EmailStateStatus {
@@ -115,7 +130,7 @@ export function readEmailState(record: Record<string, unknown> | null | undefine
   return {
     status: state['status'],
     atMs: Number.isFinite(atMs) && atMs > 0 ? atMs : 0,
-    source: source === 'sequence' || source === 'campaign' || source === 'member' ? source : 'campaign',
+    source: (EMAIL_STATE_SOURCES as readonly unknown[]).includes(source) ? (source as EmailStateSource) : 'campaign',
     detail: typeof state['detail'] === 'string' && state['detail'] ? state['detail'] : null,
     ...(enrollmentId ? { enrollmentId } : {}),
   }
@@ -162,6 +177,8 @@ export function emailStateRefusal(state: EmailState | null | undefined): string 
   const since = when ? ` on ${when}` : ''
   const said = state.detail ? ` ${state.detail}` : ''
   switch (state.status) {
+    case 'undeliverable':
+      return `Email to this address would bounce: its domain has no mail server${since ? ` (checked${since})` : ''}.${said}`
     case 'bounced':
       return `Email to this address bounced${since}: the mailbox does not exist.${said}`
     case 'blocked':

@@ -482,6 +482,22 @@ jest.mock('@aglyn/tenant-data-admin/server/crm-email-activity', () => ({
   },
 }))
 
+/**
+ * What the handler handed the GATEWAY LEDGER (AGL-3328), per call. The
+ * ledger's own rules — only a first-seen event counts, a gateway refusal
+ * and not an unknown address, keyed by the sending domain — are proved
+ * against a Firestore double in `tenant-data-admin`; what only this file
+ * can prove is that every event reaches it beside the delivery log's own
+ * verdict on it.
+ */
+const recordedLedgerCalls: Array<{ events: any[]; outcomes: any[] }> = []
+jest.mock('@aglyn/tenant-data-admin/server/email-deliverability', () => ({
+  recordDeliverabilityFromDeliveryEvents: async (events: any[], outcomes: any[]) => {
+    recordedLedgerCalls.push({ events, outcomes })
+    return events.length
+  },
+}))
+
 import { emailEventsHandler } from './email-events'
 // The REAL cap, not a local copy: a spec that retyped it would go on passing
 // after the value it asserts moved. (`suppressionId` is imported further
@@ -2203,5 +2219,38 @@ describe('the send an event counts against', () => {
     expect(writtenPaths()).toEqual([])
     // The person's touch is still recorded: the click happened.
     expect(recordedTouches).toHaveLength(1)
+  })
+})
+
+describe('the gateway ledger (AGL-3328)', () => {
+  beforeEach(() => {
+    recordedLedgerCalls.length = 0
+  })
+
+  it('hands every event to the ledger with the sender and what the bounce named, beside the log’s verdict', async () => {
+    await deliver(
+      failure('email.bounced', {
+        email_id: 'email_ledger_1',
+        from: 'Acme <hello@mail.acme.example>',
+        bounce: {
+          type: 'Permanent',
+          message: '550 5.7.1 blocked by d78608a.ess.barracudanetworks.com',
+        },
+      }),
+    )
+
+    expect(recordedLedgerCalls).toHaveLength(1)
+    const [{ events, outcomes }] = recordedLedgerCalls
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'bounced',
+        to: RECIPIENT,
+        from: 'hello@mail.acme.example',
+        bounceType: 'permanent',
+        bounceStatus: '5.7.1',
+        remoteMta: 'd78608a.ess.barracudanetworks.com',
+      }),
+    ])
+    expect(outcomes).toEqual([expect.objectContaining({ type: 'bounced', to: RECIPIENT })])
   })
 })

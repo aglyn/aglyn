@@ -6325,6 +6325,68 @@ describe('the lockdowns collection is staff-read, nobody-write (AGL-1507)', () =
   })
 })
 
+describe("the deliverability store is server-written: staff read the platform half, members their org's (AGL-3328)", () => {
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'mailDomains', 'kcorp.example'), {
+        domain: 'kcorp.example', status: 'mx', mx: ['d1.ess.barracudanetworks.com'],
+        gateway: 'barracuda', resolvedAtMs: 1,
+      })
+      await setDoc(doc(db, 'mailGatewayLedger', 'aglyn.com~barracuda'), {
+        sendingDomain: 'aglyn.com', gateway: 'barracuda', blocked: 2, days: {},
+        updatedAtMs: 1, shared: true,
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'mailGatewayLedger', 'acme.example~barracuda'), {
+        sendingDomain: 'acme.example', gateway: 'barracuda', blocked: 2, days: {},
+        updatedAtMs: 1, orgId: ORG,
+      })
+    })
+  })
+
+  it('staff read the MX cache and the platform ledger; members and anon cannot; nobody writes', async () => {
+    const staffDb = authed(STAFF, { staff: true })
+    await mustAllow(
+      'staff reading a cached MX answer',
+      getDoc(doc(staffDb, 'mailDomains', 'kcorp.example')),
+    )
+    await mustAllow(
+      'staff reading the platform gateway ledger',
+      getDoc(doc(staffDb, 'mailGatewayLedger', 'aglyn.com~barracuda')),
+    )
+    await assertFails(getDoc(doc(authed(OWNER), 'mailDomains', 'kcorp.example')))
+    await assertFails(getDoc(doc(authed(OWNER), 'mailGatewayLedger', 'aglyn.com~barracuda')))
+    await assertFails(getDoc(doc(anon(), 'mailDomains', 'kcorp.example')))
+    const superStaffDb = authed(STAFF, { staff: true, staffRole: 'super' })
+    // A write could clear the refusals that hold a send, or mark a domain
+    // as taking no mail and suppress everyone at it.
+    await mustDeny(
+      'super staff clearing a refusal from the client',
+      setDoc(doc(superStaffDb, 'mailGatewayLedger', 'aglyn.com~barracuda'), { blocked: 0 }),
+    )
+    await mustDeny(
+      'super staff marking a domain as taking no mail from the client',
+      setDoc(doc(superStaffDb, 'mailDomains', 'kcorp.example'), { status: 'no_mx' }),
+    )
+  })
+
+  it("members read their organization's mailbox ledger; outsiders cannot; nobody writes", async () => {
+    await mustAllow(
+      "the owner reading the organization's mailbox ledger",
+      getDoc(doc(authed(OWNER), 'orgs', ORG, 'mailGatewayLedger', 'acme.example~barracuda')),
+    )
+    await assertFails(
+      getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'mailGatewayLedger', 'acme.example~barracuda')),
+    )
+    await mustDeny(
+      'the owner clearing a refusal from the client',
+      setDoc(doc(authed(OWNER), 'orgs', ORG, 'mailGatewayLedger', 'acme.example~barracuda'), {
+        blocked: 0,
+      }),
+    )
+  })
+})
+
 /**
  * The host half of AGL-1501 (AGL-1507): `suspendedAt`/`suspendedReasonCode`/
  * `suspendedMessage`/`suspendedUntilMs` on `hosts/{hostId}` are the STAFF

@@ -26,6 +26,10 @@
  * hears in words, so it is inferred from silence, and only after
  * {@link OUTREACH_GATEWAY_DELIVERED_AFTER_MS} of it.
  *
+ * Every count is filed against the MAILBOX's sending domain (AGL-3328):
+ * a gateway refuses a sender, so the ledger that holds the next send is the
+ * one keyed `sendingDomain × gateway`.
+ *
  * Which gateway a block is filed under is read from the bounce itself
  * where it can be: a DSN's `Remote-MTA` names the server that refused,
  * and `*.ess.barracudanetworks.com` is Barracuda whatever the MX says
@@ -48,7 +52,17 @@ type Firestore = FirebaseFirestore.Firestore
 /** A gateway block, counted against the gateway the bounce names — see the module note. */
 export async function recordOutreachGatewayBlock(
   firestore: Firestore,
-  input: { orgId: string; email: string; remoteMta: string | null; resolveMx: OutreachResolveMx; nowMs: number },
+  input: {
+    orgId: string
+    email: string
+    remoteMta: string | null
+    /** The domain the mailbox sends from, whose ledger the block is counted on (AGL-3328). */
+    sendingDomain: string | null
+    /** The bounce's diagnostic, kept scrubbed of addresses for the ledger. */
+    diagnostic?: string | null
+    resolveMx: OutreachResolveMx
+    nowMs: number
+  },
 ): Promise<void> {
   const domain = outreachEmailDomain(input.email)
   if (!domain) return
@@ -62,10 +76,11 @@ export async function recordOutreachGatewayBlock(
   }
   if (!gateway || gateway === 'none') return
   await recordOutreachGatewayOutcome(firestore, input.orgId, {
-    domain,
+    sendingDomain: input.sendingDomain,
     gateway,
     outcome: 'blocked',
     atMs: input.nowMs,
+    detail: input.diagnostic ?? null,
   })
 }
 
@@ -91,7 +106,14 @@ export function outreachDeliveredStepCount(
  */
 export async function creditOutreachGatewayDeliveries(
   firestore: Firestore,
-  input: { orgId: string; enrollments: readonly OutreachEnrollment[]; resolveMx: OutreachResolveMx; nowMs: number },
+  input: {
+    orgId: string
+    enrollments: readonly OutreachEnrollment[]
+    /** The domain the mailbox sends from, whose ledger the deliveries are credited to (AGL-3328). */
+    sendingDomain: string | null
+    resolveMx: OutreachResolveMx
+    nowMs: number
+  },
 ): Promise<number> {
   const due = input.enrollments
     .map((enrollment) => ({
@@ -115,7 +137,7 @@ export async function creditOutreachGatewayDeliveries(
     if (!domain || !gateway || gateway === 'none') continue
     const fresh = delivered - Math.max(0, Number(enrollment.gatewayDeliveredSteps) || 0)
     await recordOutreachGatewayOutcome(firestore, input.orgId, {
-      domain,
+      sendingDomain: input.sendingDomain,
       gateway,
       outcome: 'delivered',
       count: fresh,

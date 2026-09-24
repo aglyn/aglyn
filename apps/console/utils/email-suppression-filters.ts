@@ -107,6 +107,7 @@ export const SUPPRESSION_REASON_LABELS: Readonly<
   bounce: { label: 'Bounced', color: 'warning' },
   complaint: { label: 'Marked as spam', color: 'error' },
   staff: { label: 'Recorded by staff', color: 'default' },
+  no_mail_server: { label: 'No mail server', color: 'warning' },
 }
 
 export const SUPPRESSION_FILTER_OPTIONS: Readonly<

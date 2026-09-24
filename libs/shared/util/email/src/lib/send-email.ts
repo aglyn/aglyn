@@ -44,6 +44,13 @@ import {
   unsubscribeHeaders,
   type MarketingSendContext,
 } from './marketing-send'
+import {
+  EMAIL_DELIVERABILITY_PREFLIGHT_TIMEOUT_MS,
+  getEmailDeliverabilityPreflight,
+  type EmailDeliverabilityPreflightVerdict,
+  type EmailSendPurpose,
+} from './email-deliverability'
+import { bareSenderAddress } from './email-delivery-events'
 
 export const RESEND_SEND_ENDPOINT = 'https://api.resend.com/emails'
 
@@ -295,6 +302,24 @@ export type SendEmailFailureReason =
    * after they open anything goes.
    */
   | 'unengaged'
+  /**
+   * The recipient's domain takes no mail — no MX and no address record, or
+   * an RFC 7505 null MX — so the message would only have bounced
+   * (AGL-3328). Refused for every purpose, transactional included, before
+   * the provider was called; the address is suppressed with a reason of its
+   * own. Terminal: the preflight answers the same until the domain's DNS
+   * changes, which it re-reads daily.
+   */
+  | 'undeliverable'
+  /**
+   * A BULK or cold message whose recipient sits behind a mail gateway that
+   * refused this sending domain twice in thirty days and delivered nothing
+   * (AGL-3328). Terminal for this message rather than deferrable: the hold
+   * lifts when the gateway delivers again or the refusals age out, which is
+   * not something a sweep's next beat can wait out. Mail the recipient asked
+   * for is never held.
+   */
+  | 'gateway-held'
 
 export type SendEmailResult =
   | { sent: true; id: string | null }
@@ -432,6 +457,56 @@ export function isDeferrableSendResult(
 ): boolean {
   const reason = sendFailureReason(result)
   return reason === 'rate-limited' || reason === 'frequency-capped'
+}
+
+/**
+ * Who a message is for, as the deliverability preflight reads it
+ * (AGL-3328): `bulk` for anything a control may already refuse — marketing
+ * by either of its two marks, a campaign, a resumable sweep — and
+ * `transactional` for the rest, which a gateway hold never touches.
+ *
+ * Derived from what a sender already declares, for the reason
+ * `isMarketingMessage` is: a label callers had to remember would be
+ * forgotten by the one that matters, and the permissive answer is the one a
+ * forgotten caller gets.
+ */
+export function emailSendPurpose(
+  options: Pick<SendEmailOptions, 'marketing' | 'priority' | 'context' | 'headers'>,
+): EmailSendPurpose {
+  if (isMarketingMessage(options)) return 'bulk'
+  if (options.headers?.['List-Unsubscribe']) return 'bulk'
+  return isRefusablePriority(resolveSendPriority(options.context, options.priority))
+    ? 'bulk'
+    : 'transactional'
+}
+
+/** The preflight's answer, or `null` when none is installed, it failed or it ran out of time. */
+async function askDeliverabilityPreflight(
+  request: Parameters<NonNullable<ReturnType<typeof getEmailDeliverabilityPreflight>>>[0],
+  label: string,
+): Promise<EmailDeliverabilityPreflightVerdict | null> {
+  const preflight = getEmailDeliverabilityPreflight()
+  if (!preflight) return null
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      preflight(request),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => {
+          console.warn(`${label} deliverability preflight timed out — allowing`)
+          resolve(null)
+        }, EMAIL_DELIVERABILITY_PREFLIGHT_TIMEOUT_MS)
+        ;(timer as { unref?: () => void })?.unref?.()
+      }),
+    ])
+  } catch (error) {
+    // Fails OPEN, the governor's posture: an outage on the control must not
+    // become an outage on the mail.
+    console.error(`${label} deliverability preflight failed — allowing`, error)
+    return null
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 }
 
 export interface EmailConfig {
@@ -640,10 +715,58 @@ export async function sendEmail(
     return { sent: false, reason: 'unconfigured' }
   }
 
-  const to = normalizeRecipients(options.to)
+  let to = normalizeRecipients(options.to)
   if (!to.length) {
     console.warn(`${label} skipped — no valid recipient address`)
     return { sent: false, reason: 'no-recipient' }
+  }
+
+  /*
+   * THE DELIVERABILITY PREFLIGHT (AGL-3328).
+   *
+   * Asked before every other gate, because its refusal is the most final: a
+   * recipient whose domain takes no mail is not a recipient this message or
+   * any other can reach, and spending the marketing gate's reads or the
+   * governor's hourly budget deciding more about them would be spending it
+   * on a bounce. A recipient behind a gateway that refused this sending
+   * domain twice is held — for bulk mail only; the purpose decides that,
+   * and the preflight is told it.
+   *
+   * A multi-recipient message drops the refused and held recipients and goes
+   * to the rest: one colleague's dead address must not stop the others'
+   * notification.
+   */
+  const sendingAddress = bareSenderAddress(from)
+  const preflight = await askDeliverabilityPreflight(
+    {
+      recipients: to.map((address) => address.toLowerCase()),
+      purpose: emailSendPurpose(options),
+      sendingDomain: sendingAddress ? sendingAddress.slice(sendingAddress.lastIndexOf('@') + 1) : null,
+      sendingSource: options.sendingIdentity?.source ?? 'platform',
+      context: options.context,
+      hostId: options.marketing?.hostId ?? null,
+    },
+    label,
+  )
+  if (preflight && (preflight.refused?.length || preflight.held?.length)) {
+    const stopped = new Set(
+      [...(preflight.refused ?? []), ...(preflight.held ?? [])].map((entry) =>
+        String(entry?.email ?? '').toLowerCase(),
+      ),
+    )
+    const remaining = to.filter((address) => !stopped.has(address.toLowerCase()))
+    if (!remaining.length) {
+      const refused = preflight.refused?.[0]
+      const held = preflight.held?.[0]
+      const detail = refused?.reason ?? held?.reason ?? 'The recipient cannot receive this message.'
+      console.warn(`${label} not sent — ${detail}`)
+      return { sent: false, reason: refused ? 'undeliverable' : 'gateway-held', detail }
+    }
+    console.warn(
+      `${label} — ${to.length - remaining.length} of ${to.length} recipients ` +
+        'dropped by the deliverability preflight',
+    )
+    to = remaining
   }
 
   /*

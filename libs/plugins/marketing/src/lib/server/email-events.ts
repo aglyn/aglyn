@@ -62,6 +62,9 @@ import { getOrgForHost } from '@aglyn/tenant-data-admin/server/organizations'
 // them.
 import { resolveCampaignSendRef } from '@aglyn/tenant-data-admin/server/campaign-conversion-attribution'
 import { recordEmailReputationFailure } from '@aglyn/tenant-data-admin/server/email-sender-reputation'
+// The leaf again: the ledger is what holds a sending domain's bulk mail, and
+// a wholesale mock would green a webhook that taught it nothing.
+import { recordDeliverabilityFromDeliveryEvents } from '@aglyn/tenant-data-admin/server/email-deliverability'
 // The link rollup's key derivation and its cap live beside the READER that
 // renders them (`@aglyn/shared-ui-email-campaigns/model`) rather than here, so
 // the shape the webhook writes and the shape the report reads cannot drift
@@ -378,6 +381,16 @@ export const emailEventsHandler: PluginApiHandler = async (req, res) => {
     const deliveryEvents = normalizeResendDeliveryEvents(event, Date.now())
     const outcomes = await recordEmailDeliveryEvents(deliveryEvents).catch(
       () => [],
+    )
+    /*
+     * THE GATEWAY LEDGER (AGL-3328): a delivery credits the gateway in front
+     * of the recipient with the sending domain, and a permanent bounce that
+     * reads as the gateway refusing the sender counts as a block — which is
+     * what holds the sending domain's next bulk send into that gateway. Only
+     * events the log saw first count, so a redelivery counts nothing twice.
+     */
+    await recordDeliverabilityFromDeliveryEvents(deliveryEvents, outcomes).catch(
+      () => 0,
     )
 
     /*

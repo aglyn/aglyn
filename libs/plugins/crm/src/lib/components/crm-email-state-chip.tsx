@@ -29,10 +29,13 @@ import { Chip, type ChipProps, Tooltip } from '@mui/material'
  * One palette key per state (AGL-3245): a bounce and a block are the
  * address failing, red; a person's own act — unsubscribed, do not contact —
  * is a fact, not a fault, and reads neutral; a complaint is the one that
- * scores the sender and reads as the warning it is.
+ * scores the sender and reads as the warning it is. "Would bounce" is a
+ * prediction from the domain's DNS (AGL-3328), not a failure yet, and reads
+ * as a warning too.
  */
 const STATE_COLOR: Record<EmailStateStatus, ChipProps['color']> = {
   ok: 'success',
+  undeliverable: 'warning',
   bounced: 'error',
   blocked: 'error',
   unsubscribed: 'default',

@@ -50,6 +50,8 @@ import {
   type SendingIdentityView,
 } from '@aglyn/tenant-feature-instance/hooks/use-sending-identity-api'
 import { describeCallFailure } from '@aglyn/shared-util-http/authorized-token'
+// By its own path: the one sentence, without the send path behind the barrel.
+import { deliverabilityExclusionSummary } from '@aglyn/shared-util-email/email-deliverability'
 import CampaignTestSendDrawer from './campaign-test-send-drawer'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -106,6 +108,13 @@ interface AudiencePreview {
    * outside their interval reaches them.
    */
   cadenceHeld: number
+  /**
+   * Of the paced recipients, how many the deliverability check took out
+   * (AGL-3328): their domain has no mail server, or their mail gateway
+   * refused this sending domain twice this month.
+   */
+  noMailServer: number
+  gatewayHeld: number
   /** Which address this send would leave on, in the server's own words. */
   identity: string
   identitySource: 'custom' | 'shared' | 'platform' | null
@@ -725,6 +734,8 @@ export function CampaignComposer(props: CampaignComposerProps) {
           grandfathered: Number(payload?.grandfathered ?? 0),
           consentWithheld: Number(payload?.consentWithheld ?? 0),
           cadenceHeld: Number(payload?.cadenceHeld ?? 0),
+          noMailServer: Number(payload?.noMailServer ?? 0),
+          gatewayHeld: Number(payload?.gatewayHeld ?? 0),
           identity: String(payload?.identity ?? ''),
           identitySource: (payload?.identitySource ?? null) as
             | 'custom'
@@ -1138,6 +1149,10 @@ export function CampaignComposer(props: CampaignComposerProps) {
             `consent is not enforced retroactively`,
         )
       }
+      // Addresses that would bounce, named apart from the rest: nobody
+      // unsubscribed, and the fix is the list rather than the send.
+      const excluded = deliverabilityExclusionSummary(counts)
+      if (excluded) withheld.push(excluded)
       return (
         `${quoted} goes to ${reach}${when}.` +
         (withheld.length ? ` Not counted: ${withheld.join('; ')}.` : '')
@@ -1436,6 +1451,9 @@ export function CampaignComposer(props: CampaignComposerProps) {
                 : '') +
               (preview.cadenceHeld
                 ? ` · ${preview.cadenceHeld.toLocaleString()} asked for mail less often than this`
+                : '') +
+              (deliverabilityExclusionSummary(preview)
+                ? ` · ${deliverabilityExclusionSummary(preview)}`
                 : '')}
       </Typography>
       {/*

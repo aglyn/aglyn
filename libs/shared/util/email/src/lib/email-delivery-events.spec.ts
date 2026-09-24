@@ -124,6 +124,36 @@ describe('normalizeResendDeliveryEvents', () => {
     expect(event.detail).toBe('mailbox does not exist')
   })
 
+  it('carries the sender and what a bounce names — the status and the gateway’s server (AGL-3328)', () => {
+    const [event] = normalizeResendDeliveryEvents(
+      {
+        type: 'email.bounced',
+        data: {
+          email_id: 'msg_5',
+          from: 'Acme <Hello@Mail.Acme.example>',
+          to: 'kristan@lifespire.example',
+          bounce: {
+            type: 'Permanent',
+            message: '550 5.7.1 Service unavailable; blocked by d78608a.ess.barracudanetworks.com',
+          },
+        },
+      },
+      RECEIVED_AT,
+    )
+    expect(event).toMatchObject({
+      from: 'hello@mail.acme.example',
+      bounceStatus: '5.7.1',
+      remoteMta: 'd78608a.ess.barracudanetworks.com',
+    })
+    const [delivered] = normalizeResendDeliveryEvents(
+      { type: 'email.delivered', data: { email_id: 'msg_6', to: 'a@example.org' } },
+      RECEIVED_AT,
+    )
+    // A payload with no sender carries no `from` at all, not a null.
+    expect('from' in delivered).toBe(false)
+    expect('bounceStatus' in delivered).toBe(false)
+  })
+
   it('falls back to receipt time when the payload carries no timestamp', () => {
     const [event] = normalizeResendDeliveryEvents(
       { type: 'email.delivered', data: { email_id: 'msg_5', to: 'a@example.com' } },

@@ -139,6 +139,15 @@ export type EmailSuppressionReason =
   | 'complaint'
   /** Recorded by staff (a written request, a court order, a correction). */
   | 'staff'
+  /**
+   * The address's domain takes no mail — no MX and no address record, or a
+   * null MX — as the deliverability preflight found before a send
+   * (AGL-3328). Filed without a bounce ever happening, which is the point:
+   * the bounce is what it prevents. A fact about the address for everyone,
+   * like a bounce; a staff release lifts it, and the preflight files it
+   * again only if the domain still takes no mail.
+   */
+  | 'no_mail_server'
 
 /**
  * The reasons that may be filed PLATFORM-WIDE, as a runtime set.
@@ -172,6 +181,7 @@ export const PLATFORM_SUPPRESSION_REASONS: readonly EmailSuppressionReason[] = [
   'bounce',
   'complaint',
   'staff',
+  'no_mail_server',
 ]
 
 /**
@@ -345,9 +355,14 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
       hostId: input.hostId,
       email: input.email,
       state: {
-        status: input.reason === 'complaint' ? 'complained' : 'bounced',
+        status:
+          input.reason === 'complaint'
+            ? 'complained'
+            : input.reason === 'no_mail_server'
+              ? 'undeliverable'
+              : 'bounced',
         atMs: Date.now(),
-        source: 'campaign',
+        source: input.reason === 'no_mail_server' ? 'check' : 'campaign',
         detail: input.context ? `Reported by the ${input.context} send.` : null,
       },
     })

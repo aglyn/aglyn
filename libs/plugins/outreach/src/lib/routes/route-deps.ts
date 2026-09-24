@@ -62,7 +62,9 @@ export interface OutreachRouteDeps {
   creditCampaign: OutreachCampaignCredit['credit']
   /**
    * The MX resolver the enroll routes classify a domain's mail gateway with
-   * (AGL-3326) — Node's `dns.promises.resolveMx` on the platform.
+   * (AGL-3326) — the platform's pinned resolver (`platformMailDnsResolver`).
    */
   resolveMx: OutreachResolveMx
+  /** Whether a domain with no MX has an address record (AGL-3328); see the runtime's twin. */
+  resolveAddress?: (domain: string) => Promise<boolean>
 }

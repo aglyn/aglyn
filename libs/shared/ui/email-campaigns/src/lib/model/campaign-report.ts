@@ -107,6 +107,13 @@ export interface CampaignStats {
   /** Of `recipients`, how many asked this site for mail less often than this
    * send would have arrived. Still subscribed; reached by a later campaign. */
   cadenceHeld?: number
+  /**
+   * Of `recipients`, how many the deliverability check took out (AGL-3328):
+   * their domain has no mail server, or their mail gateway refused this
+   * sending domain twice in thirty days and delivered nothing.
+   */
+  noMailServer?: number
+  gatewayHeld?: number
   /** Recipients the hourly send governor refused mid-batch. */
   deferred?: number
   /**
@@ -416,6 +423,20 @@ export function campaignReport(stats: CampaignStats | undefined): CampaignReport
     'cadenceHeld',
     'Asked for mail less often than this',
     source.cadenceHeld,
+    'addressed',
+    recipients,
+  )
+  addPopulation(
+    'noMailServer',
+    'Excluded: no mail server',
+    source.noMailServer,
+    'addressed',
+    recipients,
+  )
+  addPopulation(
+    'gatewayHeld',
+    'Excluded: behind a gateway that refused this sender',
+    source.gatewayHeld,
     'addressed',
     recipients,
   )
