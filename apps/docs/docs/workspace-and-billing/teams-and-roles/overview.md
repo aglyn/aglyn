@@ -16,9 +16,10 @@ Aglyn has two kinds of people: your **team** (who build and manage the site) and
 ![The organization Team page: the invite row above the members roster, with each member's role, access and AI credits, under the table's Columns, Filters, Export and Search controls](/img/teams-and-roles/org-team-page.png)
 
 The **Team** page's roster filters through its table's toolbar: **Filters** narrows it
-by **Role** or by **Access** (team manager or site collaborator), and **Search** matches
-any word of a member's name, email, or title. Each filter in force shows as a chip above
-the table. The role pickers and **Permissions** in each row work as before.
+by **Member** (the name), **Role** or **Access** (team manager or site collaborator), and
+**Search** matches any word of a member's name, email, or title. Both look at the whole
+roster, not only the page on screen, and each filter in force shows as a chip above
+the table; see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The role pickers and **Permissions** in each row work as before.
 
 ## Team roles
 
@@ -88,13 +89,18 @@ as they like. Someone with a publishing role reviews the draft and publishes it.
 This is enforced in the database itself, not just hidden in the console — an Author
 cannot publish through any route into Aglyn.
 
+#### A site's collaborators {#site-collaborators}
+
 A site's collaborators are listed in the **Users** card on that site's **Users** page,
 ordered by email address with the organization's owner first. **Filters** in the table's
 toolbar narrows it by **Site access** — one role, or several at once — and the search box
 finds collaborators whose email address starts with what you type. Both reach every
 collaborator on the site, not only the page on screen, and each filter in force shows as
-a chip above the table. The search matches the start of the address, because the list
-holds addresses rather than names.
+a chip above the table. The filter and the search add up. The search matches the start
+of the address, because the list holds addresses rather than names. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+
+![A site's Users card: the add-by-email row with its Site access picker, then the collaborators table with the owner first, an Editor and an invited Viewer, their AI access and credits, under the table's Columns, Filters, Export and Search controls](/img/teams-and-roles/site-collaborators.png)
 
 ### AI access for collaborators {#collaborator-ai-access}
 

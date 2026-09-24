@@ -21,6 +21,7 @@ import {
   type ListFilterInput,
 } from './list-filter'
 import { ACTIVITY_LIST_FILTER_FIELDS } from '../list-filters'
+import { scanCursorPage } from '../scan-cursor-page'
 
 /**
  * One person's activity, wherever it happened.
@@ -115,6 +116,16 @@ export interface ReadActorActivityOptions {
    * which on an audit log is the wrong answer to the question being asked.
    */
   filter?: ListFilterInput | null
+  /**
+   * Several clauses, every one applied to the query. The caller has checked
+   * them against the fields it offers (`auditLogFilterRefusal`).
+   */
+  filters?: readonly ListFilterInput[]
+  /**
+   * Keeps only the entries it accepts — a word search no index can answer.
+   * Matched as the feed is read, like the scope below.
+   */
+  matches?: ((entry: ActorActivityEntry) => boolean) | null
   /** The `nextCursor` of the previous page — a document path. */
   cursor?: string | null
   /**
@@ -125,10 +136,46 @@ export interface ReadActorActivityOptions {
   scopePaths?: ReadonlySet<string>
 }
 
+/** A stored activity document as the client reads it. */
+function flattenEntry(
+  doc: FirebaseFirestore.QueryDocumentSnapshot,
+  scopePath: string,
+): ActorActivityEntry {
+  const data = doc.data() as Record<string, unknown>
+  const seconds = timestampSeconds(data['createdAt'])
+  return {
+    $id: doc.id,
+    scopePath,
+    ...describeScope(scopePath),
+    action: typeof data['action'] === 'string' ? data['action'] : undefined,
+    target: (data['target'] as Record<string, unknown> | null) ?? null,
+    actorEmail: typeof data['actorEmail'] === 'string' ? data['actorEmail'] : null,
+    createdAt: seconds === null ? null : { seconds },
+  }
+}
+
+/**
+ * A document path read back as a cursor, or `null` when it is not one.
+ * `doc()` throws on a path with an odd number of segments, and a cursor from
+ * the org-wide merge is not a path at all.
+ */
+async function cursorDocument(
+  firestore: FirebaseFirestore.Firestore,
+  cursor: string | null | undefined,
+): Promise<FirebaseFirestore.DocumentSnapshot | null> {
+  if (!cursor) return null
+  try {
+    const snapshot = await firestore.doc(cursor).get()
+    return snapshot.exists ? snapshot : null
+  } catch {
+    return null
+  }
+}
+
 export async function readActorActivity(
   options: ReadActorActivityOptions,
 ): Promise<ActorActivityPage> {
-  const { actorId, cursor, scopePaths } = options
+  const { actorId, cursor, scopePaths, matches } = options
   const pageSize = Math.min(
     Math.max(1, Math.floor(options.pageSize) || 25),
     ACTOR_ACTIVITY_MAX_PAGE,
@@ -149,70 +196,51 @@ export async function readActorActivity(
    * rather than reordering, and the feed comes back unfiltered — which is the
    * honest answer to an ask this query cannot serve.
    */
-  const base = (
-    applyListFilter(unfiltered, ACTIVITY_LIST_FILTER_FIELDS, options.filter ?? null, {
-      fixedOrderBy: 'createdAt',
-    }) ?? unfiltered
-  ).orderBy('createdAt', 'desc')
+  let filtered: FirebaseFirestore.Query = unfiltered
+  for (const clause of [
+    ...(options.filter ? [options.filter] : []),
+    ...(options.filters ?? []),
+  ]) {
+    filtered =
+      applyListFilter(filtered, ACTIVITY_LIST_FILTER_FIELDS, clause, {
+        fixedOrderBy: 'createdAt',
+      }) ?? filtered
+  }
+  const base = filtered.orderBy('createdAt', 'desc')
 
   // The cursor is a document PATH, not a timestamp. Two entries can share a
   // second — a save and its revalidation, a bulk role change — and starting
   // after a timestamp would either repeat them on the next page or skip them.
-  let after = cursor
-    ? await firestore.doc(cursor).get().catch(() => null)
-    : null
-  if (after && !after.exists) after = null
-
-  const entries: ActorActivityEntry[] = []
-  let scanned = 0
-  let exhausted = false
-
-  while (entries.length < pageSize && scanned < SCAN_CAP && !exhausted) {
-    // One extra so a full batch can be told from the last batch without a
-    // second query.
-    const batchSize = Math.min(pageSize + 1, ACTOR_ACTIVITY_MAX_PAGE)
-    const query = after
-      ? base.startAfter(after).limit(batchSize)
-      : base.limit(batchSize)
-    const snapshot = await query.get()
-    if (snapshot.empty) {
-      exhausted = true
-      break
-    }
-    if (snapshot.docs.length < batchSize) exhausted = true
-    for (const doc of snapshot.docs) {
-      // Stop BEFORE consuming a document the page has no room for. `after`
-      // is the resume point, so advancing past a row that was never shown
-      // would drop it from every page — the quiet half of an off-by-one in
-      // an audit log, where the missing entry is the one nobody looks for.
-      if (entries.length >= pageSize) break
-      scanned += 1
-      after = doc
-      const scopePath = doc.ref.parent.parent?.path ?? ''
-      if (scopePaths && !scopePaths.has(scopePath)) continue
-      const data = doc.data() as Record<string, unknown>
-      const seconds = timestampSeconds(data['createdAt'])
-      entries.push({
-        $id: doc.id,
-        scopePath,
-        ...describeScope(scopePath),
-        action: typeof data['action'] === 'string' ? data['action'] : undefined,
-        target: (data['target'] as Record<string, unknown> | null) ?? null,
-        actorEmail:
-          typeof data['actorEmail'] === 'string' ? data['actorEmail'] : null,
-        createdAt: seconds === null ? null : { seconds },
-      })
-    }
-  }
+  const after = await cursorDocument(firestore, cursor)
 
   /*
-   * More to come unless the query genuinely ran out. A page cut short by the
-   * scan cap counts as more — the reader clicks Next and the walk continues
-   * from the last document READ, not the last one shown, so the filtered-out
-   * rows in between are never re-walked.
+   * Rows outside the scope, or not matching the search, are READ and not
+   * kept. The read budget bounds the walk: a person with a great deal of
+   * activity in other organizations comes back as a short page with a
+   * cursor, and Next carries on from the last document read.
    */
-  const nextCursor = exhausted ? null : (after?.ref.path ?? null)
-  return { entries, nextCursor, scanned }
+  const page = await scanCursorPage<FirebaseFirestore.DocumentSnapshot, ActorActivityEntry>({
+    pageSize,
+    scanCap: SCAN_CAP,
+    // One extra so a full batch can be told from the last batch without a
+    // second query.
+    batchSize: Math.min(pageSize + 1, ACTOR_ACTIVITY_MAX_PAGE),
+    after,
+    read: async (from, count) =>
+      (await (from ? base.startAfter(from) : base).limit(count).get()).docs,
+    accept: (doc) => {
+      const scopePath = doc.ref.parent.parent?.path ?? ''
+      if (scopePaths && !scopePaths.has(scopePath)) return null
+      const entry = flattenEntry(doc as FirebaseFirestore.QueryDocumentSnapshot, scopePath)
+      return !matches || matches(entry) ? entry : null
+    },
+  })
+
+  return {
+    entries: page.rows,
+    nextCursor: page.exhausted ? null : (page.last?.ref.path ?? null),
+    scanned: page.scanned,
+  }
 }
 
 /**
@@ -236,6 +264,64 @@ export async function orgActivityScopePaths(
   return paths
 }
 
+
+/** A choice the org-wide log offers in its Who and Where filters. */
+export interface OrgActivityFacet {
+  value: string
+  label: string
+}
+
+/** How many members the Who filter lists; an organization past it is typed into. */
+const FACET_MEMBERS_LIMIT = 500
+
+/**
+ * The org-wide log's picked filter values: the organization's members, by
+ * the address they are listed under, and the organization itself beside each
+ * of its sites. Read once, with the first page, rather than on every page.
+ *
+ * Members only — someone who has left the organization has no member
+ * document, and their entries are still in the log under the search box.
+ */
+export async function orgActivityFacets(orgId: string): Promise<{
+  actors: OrgActivityFacet[]
+  sites: OrgActivityFacet[]
+}> {
+  const firestore = firebaseAdmin.app().firestore()
+  const [members, hosts] = await Promise.all([
+    firestore
+      .collection('orgs')
+      .doc(orgId)
+      .collection('members')
+      .select('email', 'displayName')
+      .limit(FACET_MEMBERS_LIMIT)
+      .get()
+      .catch(() => null),
+    firestore
+      .collection('hosts')
+      .where('orgId', '==', orgId)
+      .select('displayName', 'subdomain')
+      .get()
+      .catch(() => null),
+  ])
+  const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null)
+  const byLabel = (a: OrgActivityFacet, b: OrgActivityFacet) => a.label.localeCompare(b.label)
+  const actors = (members?.docs ?? [])
+    .map((doc) => {
+      const data = doc.data() as Record<string, unknown>
+      return { value: doc.id, label: text(data['email']) ?? text(data['displayName']) ?? doc.id }
+    })
+    .sort(byLabel)
+  const sites = (hosts?.docs ?? [])
+    .map((doc) => {
+      const data = doc.data() as Record<string, unknown>
+      return {
+        value: doc.id,
+        label: text(data['displayName']) ?? text(data['subdomain']) ?? doc.id,
+      }
+    })
+    .sort(byLabel)
+  return { actors, sites: [{ value: orgId, label: 'Organization' }, ...sites] }
+}
 
 /**
  * Everything that happened in one organization, its SITES included
@@ -303,115 +389,165 @@ export interface OrgWideActivityPage {
   entries: ActorActivityEntry[]
   /** Opaque; hand it back to continue. `null` at the end of the feed. */
   nextCursor: string | null
+  /** Entries read to fill this page, matching the search or not. */
+  scanned: number
+}
+
+/** A merged entry, and the cursor that resumes the feed just after it. */
+interface MergedEntry {
+  /** `null` only for the resume point a cursor names, which is not re-read. */
+  entry: ActorActivityEntry | null
+  position: OrgWideCursor | null
+}
+
+/** The position after `entry`, given the position before it. */
+function advance(
+  position: OrgWideCursor | null,
+  entry: ActorActivityEntry,
+): OrgWideCursor | null {
+  const seconds = entry.createdAt?.seconds
+  // An entry with no timestamp cannot be resumed after; the position stays
+  // where it was, and the merge sorts such an entry after every dated one.
+  if (seconds === undefined) return position
+  // Everything shown at the boundary second, including what an earlier page
+  // showed there — otherwise a second spanning three pages would serve its
+  // first page's rows again on the third.
+  return position?.seconds === seconds
+    ? { seconds, ids: [...position.ids, entry.$id] }
+    : { seconds, ids: [entry.$id] }
 }
 
 export async function readOrgWideActivity(options: {
   orgId: string
   limit: number
   cursor?: string | null
-  /** Narrows every subject's query, not the merged page. See below. */
+  /**
+   * Narrow every subject's query, never the merged page. The merge takes the
+   * newest `limit` across subjects, so narrowing afterwards would first
+   * discard the rows the filter wanted and then report what survived — a
+   * filter that gets emptier the busier the organization is.
+   */
   filter?: ListFilterInput | null
+  filters?: readonly ListFilterInput[]
+  /** Keeps only the entries it accepts; matched as the merge is read. */
+  matches?: ((entry: ActorActivityEntry) => boolean) | null
+  /** How many entries one page may read while `matches` looks. */
+  scanCap?: number
+  /** The subjects to read. Every one the organization has, when absent. */
+  paths?: ReadonlySet<string>
 }): Promise<OrgWideActivityPage> {
   const firestore = firebaseAdmin.app().firestore()
   const limit = Math.min(
     Math.max(1, Math.floor(options.limit) || 25),
     ACTOR_ACTIVITY_MAX_PAGE,
   )
-  const cursor = decodeOrgWideCursor(options.cursor)
-  const paths = await orgActivityScopePaths(options.orgId)
-  const perSubject = await Promise.all(
-    [...paths].map(async (path) => {
-      const [collection, id] = path.split('/')
-      if (!collection || !id) return []
-      // `limit + 1` from EACH, because the newest `limit` overall could all
-      // have come from one site — taking fewer per subject to save reads
-      // would silently cap how much of a busy site can appear. The extra row
-      // is what tells a full subject from an exhausted one.
-      //
-      // `select` because the merge reads four fields and a version of an
-      // activity document can carry considerably more. It does not change
-      // what Firestore bills — that is per document — only what crosses the
-      // wire.
-      const subject = firestore
-        .collection(collection)
-        .doc(id)
-        .collection('activity')
-      /*
-       * The filter is applied to EACH subject before the merge, never to the
-       * merged page. The merge takes the newest `limit` across subjects, so
-       * narrowing afterwards would first discard the rows the filter wanted
-       * and then report what survived — a filter that gets emptier the busier
-       * the organization is.
-       */
-      let query = (
-        applyListFilter(subject, ACTIVITY_LIST_FILTER_FIELDS, options.filter ?? null, {
+  const start = decodeOrgWideCursor(options.cursor)
+  const paths = options.paths ?? (await orgActivityScopePaths(options.orgId))
+  const clauses = [
+    ...(options.filter ? [options.filter] : []),
+    ...(options.filters ?? []),
+  ]
+  const subjects = [...paths].flatMap((path) => {
+    const [collection, id] = path.split('/')
+    if (!collection || !id) return []
+    let query: FirebaseFirestore.Query = firestore
+      .collection(collection)
+      .doc(id)
+      .collection('activity')
+    for (const clause of clauses) {
+      query =
+        applyListFilter(query, ACTIVITY_LIST_FILTER_FIELDS, clause, {
           fixedOrderBy: 'createdAt',
-        }) ?? subject
-      )
-        .orderBy('createdAt', 'desc')
-        .select('action', 'target', 'actorEmail', 'createdAt')
-      if (cursor) {
-        query = query.where(
-          'createdAt',
-          '<=',
-          firebaseAdmin.firestore.Timestamp.fromMillis(cursor.seconds * 1000),
-        )
-      }
-      const snapshot = await query
-        .limit(limit + 1)
-        .get()
-        .catch(() => null)
-      return (snapshot?.docs ?? []).map((doc) => {
-        const data = doc.data() as Record<string, unknown>
-        const seconds = timestampSeconds(data['createdAt'])
-        return {
-          $id: doc.id,
-          scopePath: path,
-          ...describeScope(path),
-          action:
-            typeof data['action'] === 'string' ? data['action'] : undefined,
-          target: (data['target'] as Record<string, unknown> | null) ?? null,
-          actorEmail:
-            typeof data['actorEmail'] === 'string' ? data['actorEmail'] : null,
-          createdAt: seconds === null ? null : { seconds },
-        } satisfies ActorActivityEntry
-      })
-    }),
-  )
+        }) ?? query
+    }
+    // `select` because the merge reads four fields and a version of an
+    // activity document can carry considerably more. It does not change
+    // what Firestore bills — that is per document — only what crosses the
+    // wire.
+    return [
+      {
+        path,
+        query: query
+          .orderBy('createdAt', 'desc')
+          .select('action', 'target', 'actorEmail', 'createdAt'),
+      },
+    ]
+  })
 
-  const alreadyShown = new Set(cursor?.ids ?? [])
-  const merged = perSubject
-    .flat()
-    .filter((entry) => !alreadyShown.has(entry.$id))
-    // An entry with no timestamp sorts last rather than first: an unreadable
-    // date is not a reason to lead the feed with it.
-    .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
-
-  const entries = merged.slice(0, limit)
-  const last = entries[entries.length - 1]
-  const lastSeconds = last?.createdAt?.seconds ?? null
-  /*
-   * More to come only when this page was FULL and the boundary second is
-   * readable. A short page means every subject ran out; a final row with no
-   * timestamp cannot be a cursor, and continuing from a guess would repeat or
-   * skip rows rather than admit the feed ended.
+  /**
+   * The next `count` entries after `from`, merged across subjects.
+   *
+   * `count` plus the ids already shown at the boundary from EACH subject,
+   * because the newest `count` overall could all have come from one site and
+   * the boundary second is read again. Taking fewer per subject to save reads
+   * would silently cap how much of a busy site can appear.
+   *
+   * The boundary is `< second + 1`, not `<= second`: a stored timestamp
+   * carries a fraction, and `<=` the whole second would drop every entry
+   * written later within it that the last page did not reach.
    */
-  const hasMore = merged.length > limit && lastSeconds !== null
+  const readMerged = async (
+    from: OrgWideCursor | null,
+    count: number,
+  ): Promise<MergedEntry[]> => {
+    const perSubject = await Promise.all(
+      subjects.map(async ({ path, query }) => {
+        const bounded = from
+          ? query.where(
+              'createdAt',
+              '<',
+              firebaseAdmin.firestore.Timestamp.fromMillis((from.seconds + 1) * 1000),
+            )
+          : query
+        const snapshot = await bounded
+          .limit(count + (from?.ids.length ?? 0))
+          .get()
+          .catch(() => null)
+        return (snapshot?.docs ?? []).map((doc) => flattenEntry(doc, path))
+      }),
+    )
+    const shown = new Set(from?.ids ?? [])
+    const merged = perSubject
+      .flat()
+      .filter(
+        (entry) =>
+          !(from && entry.createdAt?.seconds === from.seconds && shown.has(entry.$id)),
+      )
+      // An entry with no timestamp sorts last rather than first: an
+      // unreadable date is not a reason to lead the feed with it.
+      .sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0))
+      // Only the newest `count` are certain: past them, a subject that
+      // returned its full share may hold older rows not read yet.
+      .slice(0, count)
+    const out: MergedEntry[] = []
+    let position = from
+    for (const entry of merged) {
+      position = advance(position, entry)
+      out.push({ entry, position })
+    }
+    return out
+  }
+
+  const matches = options.matches ?? null
+  const page = await scanCursorPage<MergedEntry, ActorActivityEntry>({
+    pageSize: limit,
+    scanCap: matches ? (options.scanCap ?? SCAN_CAP) : limit,
+    // One extra so a full merge can be told from the last one.
+    batchSize: limit + 1,
+    after: start ? { entry: null, position: start } : null,
+    read: (from, count) => readMerged(from?.position ?? null, count),
+    accept: ({ entry }) => (entry && (!matches || matches(entry)) ? entry : null),
+  })
+
+  /*
+   * More to come unless the merge genuinely ran out. A position that cannot
+   * be expressed — the last entry read had no timestamp — ends the feed
+   * rather than continuing from a guess that would repeat or skip rows.
+   */
+  const position = page.last?.position ?? null
   return {
-    entries,
-    nextCursor: hasMore
-      ? encodeOrgWideCursor({
-          seconds: lastSeconds,
-          // Everything shown at the boundary second, including what an
-          // earlier page showed there — otherwise a second spanning three
-          // pages would serve its first page's rows again on the third.
-          ids: [
-            ...(cursor?.seconds === lastSeconds ? (cursor?.ids ?? []) : []),
-            ...entries
-              .filter((entry) => entry.createdAt?.seconds === lastSeconds)
-              .map((entry) => entry.$id),
-          ],
-        })
-      : null,
+    entries: page.rows,
+    nextCursor: !page.exhausted && position ? encodeOrgWideCursor(position) : null,
+    scanned: page.scanned,
   }
 }

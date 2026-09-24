@@ -125,9 +125,10 @@ them. The password itself is never written to the log.
 
 ## Activity log
 
-The organization's **Team** page shows a **Recent Activity** feed — renames, workspace URL
-changes, ownership transfers, members added/removed or re-roled, and invites sent, revoked,
-or accepted — each with who did it and when.
+The organization's **Team** page shows a **Recent Activity** log: what happened at
+organization level — renames, workspace URL changes, ownership transfers, members
+added/removed or re-roled, and invites sent, revoked, or accepted — together with the changes
+made on each of the organization's sites, newest first, each with who did it, where and when.
 
 Visible to members whose role carries the **Activity & audit log** permission.
 Owners and admins have it by default; **viewers do not**, and neither does a
@@ -139,18 +140,34 @@ Entries name the thing that changed and link straight to it, so "Saved the scree
 takes you to that screen. Entries recorded before this shipped show a plain description
 instead of a link.
 
+The log filters through its table's toolbar, across the whole log rather than the page on
+screen:
+
+- **Filters** narrows it by **Action** — picked from the actions the log records as named
+  entries, such as the AI entries below — by **Who** (one of the organization's members), by
+  **Where** (the organization itself or one of its sites), and by **When** (before or after a
+  date). They add up, and every one is answered by the log's own query.
+- **Search** matches the address of the person who made the change and the name of what
+  changed. It reads the log as it goes, up to 250 entries a page, so a page of results can come
+  back short; **Next** carries on from where it stopped.
+
+Changing a filter or the search starts the log again at its first page. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+
 A site's own activity log, on its **Setup** page, filters through its table's toolbar:
-**Filters** narrows it to one **Action** (or several, with **is any of**) or to entries
-before or after a date, across the whole log rather than the page on screen. It has no
-search box, because nothing can search the whole log by word.
+**Filters** narrows it to one **Action** (or several, with **is any of**) — typed as
+the action is recorded, since the panel offers no list of them — or to entries before or
+after a date, and the two add up, across the whole log rather than the page on screen.
+It has no search box, because nothing can search the whole log by word. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### AI actions in the log {#ai-actions}
 
 Everything the AI does in your workspace is recorded in the same feed, attributed to the
 member who asked for it — or to nobody, when nothing a person did caused it (a generation
 that paused because the included band ran out, or the add-on leaving at the end of a billing
-period). The feed shows an **AI** chip whenever the page holds one of these rows; press it to
-see only them.
+period). The feed's **AI** chip keeps only these rows, across the whole log; press it again to
+see everything.
 
 | Entry | What it records |
 | --- | --- |

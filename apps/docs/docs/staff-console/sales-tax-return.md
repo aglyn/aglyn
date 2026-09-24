@@ -80,8 +80,9 @@ worse than seeing all of it.
 
 Press a finding's count, or pick it under **Finding** in the grid's Filters, to narrow
 the table to its rows and read what it means. **Bucketed as** is a picker too, and the
-search matches the invoice id, organization or jurisdiction across every row, not the
-page shown.
+search matches the invoice id, organization or jurisdiction across every row the
+return read, not the page shown. **Invoice** and **Paid** filter as a typed value and a
+date. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 A count is only ever as good as the rows behind it, so the count and the list are
 computed by the same predicate. If a response arrives without per-row findings, the card

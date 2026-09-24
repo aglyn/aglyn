@@ -605,8 +605,9 @@ monthly invoice as a usage line. See
   invoice** (View), a **PDF download** of the invoice, and the payment **Receipt** once
   it's paid — everything you need for expense reports and bookkeeping. Older invoices
   load on demand. **Filters** in the table's toolbar narrows it by **Status**, invoice
-  number, or date, and **Search** matches an invoice number; both look at the invoices
-  loaded so far, so load older ones to reach further back.
+  number, or date, and **Search** matches an invoice number or its Stripe invoice ID;
+  both look at the invoices loaded so far — 24 at a time — so load older ones to reach
+  further back. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 - **Changing your billing address** — edit it under **Billing → Settings**. It is
   the workspace's address, kept separate from the personal address on your own
   Manage Account page: the workspace's is what appears on invoices, and yours is

@@ -245,3 +245,25 @@ describe('the pages below the section (AGL-2980)', () => {
     ).toBe('seq-1:enrollments')
   })
 })
+
+describe('the sequence list says when it stops at its cap (AGL-3321)', () => {
+  it('says so when the read found older sequences than it lists', () => {
+    mockSequences = {
+      status: 'ready',
+      data: [sequence('seq-1', 'Second locations', 'active')],
+      truncated: true,
+    } as OutreachLoad<OutreachSequence[]>
+    renderSection()
+    expect(screen.getByText(/Showing the 1 newest sequences/)).toBeTruthy()
+  })
+
+  it('says nothing when every sequence was read', () => {
+    mockSequences = {
+      status: 'ready',
+      data: [sequence('seq-1', 'Second locations', 'active')],
+      truncated: false,
+    } as OutreachLoad<OutreachSequence[]>
+    renderSection()
+    expect(screen.queryByText(/newest sequences/)).toBeNull()
+  })
+})

@@ -50,6 +50,12 @@ line of notes under it), the kind, the priority, the due date colored by where i
 the record it is for, as a link into that record's page. A view shows at most 200 rows
 and says so when it is full; narrow the view to see the rest.
 
+Beside **Show**, the **Filters** panel narrows a view by **Kind** (call, email,
+meeting, to-do), **Priority** (low, normal, high) and **Assignee**, and
+**Search** matches words in a task's title and notes. Those narrow the rows the
+view loaded — at most 200 — and add up with each other; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+
 ### The calendar view
 
 **List** and **Calendar** sit beside the view control. The calendar draws one month,

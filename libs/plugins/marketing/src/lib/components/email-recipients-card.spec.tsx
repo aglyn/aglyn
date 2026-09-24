@@ -25,7 +25,7 @@
  * read, and the pager under the grid turns the route's cursor.
  */
 
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 jest.mock('@aglyn/aglyn', () => ({
@@ -111,6 +111,26 @@ describe('EmailRecipientsCard (AGL-3045)', () => {
     })
     expect(screen.queryByRole('combobox', { name: 'Show' })).toBeNull()
     expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
+  })
+
+  it('marks the Engagement chip as served, since the route answers it over the whole log (AGL-3321)', async () => {
+    await mount({ screenId: 'scr-1' })
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Value' }))
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('option', { name: 'Opened it' }))
+    })
+    const chip = await waitFor(() => {
+      const found = screen
+        .getAllByRole('listitem')
+        .find((item) => item.textContent?.includes('Engagement'))
+      expect(found).toBeTruthy()
+      return found as HTMLElement
+    })
+    expect(chip.className).toContain('MuiChip-filled')
+    expect(chip.className).toContain('MuiChip-colorPrimary')
+    // And the route was asked for it, rather than the page on screen narrowed.
+    expect(mockBodies[mockBodies.length - 1]).toMatchObject({ filter: 'opened' })
   })
 
   it('drops the Email column when one email is being read', async () => {

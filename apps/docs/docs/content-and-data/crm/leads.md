@@ -148,6 +148,8 @@ Each row carries:
 | **Campaign** | The campaigns the lead is filed under, by name. Under a site only — a campaign belongs to one site. |
 | **Last seen** | When the person last did something on your site. |
 
+### Filter and search the leads {#filter-the-leads}
+
 The table's own toolbar filters the list: **Filters** opens the filter
 panel, and **Search** finds a lead by name, email, company, title or tag.
 **Status**, **Email**, **Owner**, **Lead source** and **Campaign** are
@@ -166,7 +168,8 @@ The panel edits one filter at a time, and filters on different columns add
 up: filter **Lead source**, then **Status**, and the list keeps both. Every
 filter in force shows as a chip beside the views control; the chip's ✕
 removes it. The filters are part of the saved view, and a view saved before
-the panel existed filters exactly as it did.
+the panel existed filters exactly as it did. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search) for the toolbar every console list shares.
 
 The list reads the 200 most recently seen leads and shows them a page at a
 time, with the usual footer to turn the page and pick how many rows it holds.

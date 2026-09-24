@@ -754,8 +754,8 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     <>
       <CardDisplay
         header={'Leads'}
-        help={Aglyn.pluginDocsHelp('contacts', {
-          anchor: '#whats-in-the-crm-area',
+        help={Aglyn.pluginDocsHelp('crmLeads', {
+          anchor: '#filter-the-leads',
         })}
         contentGutterX
         contentGutterY

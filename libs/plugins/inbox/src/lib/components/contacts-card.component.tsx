@@ -503,8 +503,8 @@ export function ContactsCard({
     <>
       <CardDisplay
         header={hostId == null ? 'Leads' : 'Site Members & Leads'}
-        help={pluginDocsHelp('membersOnly', {
-          anchor: '#manage-your-members',
+        help={pluginDocsHelp('forms', {
+          anchor: '#filter-the-inbox',
         })}
         contentGutterX
         contentGutterY

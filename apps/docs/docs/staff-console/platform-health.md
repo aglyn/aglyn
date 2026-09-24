@@ -126,6 +126,7 @@ The **Window** picker chooses which days are read. Within them, the table's tool
 filters and searches every row the window returned: **App**, **Directive** and **Blocked
 or measured** are pickers over the values present, and the day, blocked origin and count
 filter as typed values. The search also matches the last site and path a row was seen on.
+See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ## Sharing-scope drift
 
@@ -173,7 +174,8 @@ Each row answers the one question worth asking:
 - **Due** — the hold has expired. The next scheduled run will take it.
 
 The table's **Filters** picks **State** (*Due* or *Holding*) and matches the organization
-name; the search matches its name, slug or id.
+name; the search matches its name, slug or id. Both look at every erasure the listing
+read.
 
 **Run due erasures now** is for when a deadline will not wait for the schedule. Three
 things about it:
@@ -237,7 +239,8 @@ not a property of the claim.
 Listing is capped, and the card says so when it hits the cap. Treat the count as a floor.
 
 The table's toolbar filters and searches every claim read: **State** picks *stranded* or
-*in flight*, and the operation, scope, organization and age filter as typed values.
+*in flight*, and the operation, scope, organization and age (in milliseconds) filter
+as typed values; the search matches the operation, scope, organization or claim id.
 
 ## Resolved server config {#resolved-server-config}
 

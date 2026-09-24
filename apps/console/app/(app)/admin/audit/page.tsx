@@ -18,37 +18,37 @@
 
 import { orgOverrideReasonSummary } from '@aglyn/aglyn'
 import {
+  listPluginActivityFilters,
   pluginStaffAuditActionGroup as staffAuditActionGroup,
   pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
-  Button,
-  Chip,
-  MenuItem,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
+  filterListRows,
+  type ListFilterClause,
+  type ListFilterOption,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
+import { Alert, Button, Chip, Stack, TextField, Typography } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
   getDocs,
   limit,
   orderBy,
   query,
-  type QueryConstraint,
-  Timestamp,
-  where,
+  type QueryDocumentSnapshot,
+  startAfter,
 } from 'firebase/firestore'
-import { useMemo, useState } from 'react'
-import {
-  useFirestore,
-  usePagedCollection,
-  useUser,
-} from '@aglyn/tenant-feature-instance'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { listFilterConstraints } from '@aglyn/tenant-feature-instance/hooks/list-filter-constraints'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -56,7 +56,21 @@ import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import {
+  CONTENT_MAX_WIDTH,
+  TABLE_PAGE_SIZE_DEFAULT,
+  TABLE_ROW_HEIGHT,
+} from '../../../../constants/shared'
+import {
+  ADMIN_AUDIT_FILTER_FIELDS,
+  ADMIN_AUDIT_FILTER_HEADERS,
+  ADMIN_AUDIT_SCAN,
+  ADMIN_AUDIT_SEARCH_PATHS,
+  ADMIN_AUDIT_SELECT_FIELDS,
+  adminAuditClauseStandsAlongside,
+  adminAuditPlan,
+} from '../../../../utils/audit-log-filters'
+import { scanCursorPage } from '../../../../utils/scan-cursor-page'
 
 /**
  * THE ARCHIVE, GIVEN A DOOR (AGL-2324).
@@ -253,236 +267,313 @@ function ArchiveCard() {
  * High enough that a normal range comes back whole, bounded because an
  * unbounded fleet-wide read from a browser is how a staff page becomes an
  * outage. When the range holds more, the page says so and the auditor
- * narrows the dates — a capped export that announced nothing would be the
+ * narrows the filters — a capped export that announced nothing would be the
  * same silence the paging fix exists to end.
  */
 const EXPORT_CEILING = 5000
 
+/** A stored entry as the list holds it, with the group its action files under. */
+const auditRow = (doc: QueryDocumentSnapshot): Record<string, any> => {
+  const data = doc.data() as Record<string, any>
+  return { ...data, $id: doc.id, actionGroup: staffAuditActionGroup(data['action']) }
+}
+
+/**
+ * WHY the action was taken (AGL-1652), when the row carries one.
+ * `org.override` rows get the reason vocabulary's label; any other row that
+ * grows a top-level reason renders its raw code rather than being silently
+ * dropped for not being an override.
+ */
+const auditWhy = (entry: Record<string, any>): string | null =>
+  orgOverrideReasonSummary(entry['reason'], entry['note']) ??
+  (entry['reason'] ? [entry['reason'], entry['note']].filter(Boolean).join(' — ') : null)
+
 /**
  * Staff audit log viewer (AGL-203): every admin mutation writes an
- * append-only `adminAudit` entry (AGL-42) — this page finally makes them
- * readable: newest first, client-side filtering over actor/action/target,
- * expandable before/after diffs. Read access is staff-only in rules; the
- * page also hides itself without the claim, matching the orgs page.
+ * append-only `adminAudit` entry (AGL-42), and this page reads them newest
+ * first, filterable through the grid's toolbar, with each entry's
+ * before/after one click away. Read access is staff-only in rules; the page
+ * also hides itself without the claim, matching the orgs page.
  */
 const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
 
   /*==========================================
-   * THE WINDOW, AND WHY IT MOVES (AGL-2324, AGL-2501).
+   * ONE QUERY, FILTERED WHERE IT CAN BE (AGL-3321).
    *
-   * This read was `orderBy('at','desc').limit(200)` with no cursor, no date
-   * range and no way to ask for row 201. Roughly seventy distinct action
-   * strings write to `adminAudit`, and several are system-actored and
-   * high-frequency — `billing.disputeOpened`, `plugins.artifacts.reap`,
-   * `erasure.runBatch`, `plugins.remoteServer.load`. Those can fill a
-   * 200-row window within hours and push every staff action out of the only
-   * surface that shows them. The row most likely to be evicted is
-   * `org.override`: the lowest-frequency, highest-consequence entry in the
-   * log, and the one this page has bespoke handling for.
+   * `orderBy('at','desc')` and a cursor, so a page is the newest N entries
+   * after the last one read — an unordered `limit()` is answered in
+   * document-id order, and every row here is keyed by a generated id, so a
+   * window without the order is an arbitrary sample of the log (AGL-2324).
+   * `orderBy('at')` matches only documents that HAVE `at`; every writer sets
+   * it on the same write that creates the entry, and `adminAudit` has no
+   * client write path.
    *
-   * It then grew a page at a time behind a "Load older" button — a control
-   * that only ever goes forward, offers no way to change the page size, and
-   * is a fourth pagination grammar in a console that already had too many.
-   * This is the shared one: `usePagedCollection` for the window,
-   * `ListPagination` for the footer, so an auditor learns the control once
-   * and reads the same count line here as on every other list.
+   * The toolbar's clauses split two ways (`adminAuditPlan`):
    *
-   * TWO CONTROLS, both chosen because they run on the SINGLE-FIELD index
-   * that already exists:
+   *  - SERVED: one of Action, Who (uid) or Target as an equality, each on its
+   *    own composite, and When as a range over the sort field. They narrow
+   *    the query, so they reach every entry in the log.
+   *  - MATCHED: Action group, Scope and the search. A group is a namespace
+   *    prefix or a plugin's list of codes and `scope` has no composite, so no
+   *    query under the date sort can ask for them; the page reads the log in
+   *    batches and keeps what matches, up to `ADMIN_AUDIT_SCAN` entries a
+   *    page, and Next resumes after the last entry READ. Nothing is skipped —
+   *    a page can only come back short.
    *
-   *  - The page window is `orderBy('at','desc')` plus a limit the hook
-   *    sizes. Ordering is what makes the limit mean "the newest N": an
-   *    unordered `limit()` is answered in document-id order, and every row
-   *    here is keyed by a generated id, so the window would be an arbitrary
-   *    sample of the log arranged to look like its newest page.
-   *  - `from`/`to` are a RANGE on `at`, the same field the query orders by,
-   *    so Firestore serves it from the single-field index too.
-   *
-   * ⚠️ `orderBy('at')` matches only documents that HAVE `at`, so ordering
-   * on a field a writer omits hides rows instead of arranging them. Every
-   * writer of this collection sets it: the ~60 `adminAudit` call sites all
-   * write `at` on the same `add`/`set` that creates the document, most as
-   * `FieldValue.serverTimestamp()`, and there is no client write path —
-   * the rules make `adminAudit` server-only.
-   *
-   * ⚠️ What is deliberately NOT here: a server-side `where('scope','==',x)`.
-   * That needs a composite `adminAudit (scope ASC, at DESC)` index, which is
-   * absent from `cloud/firebase-firestore.indexes.json` and from production,
-   * and shipping the query before the index throws at runtime for every
-   * staff member. The scope facet therefore stays client-side over the page,
-   * as does the free-text filter — see the filter block below.
+   * The scope facet exists because `scope` is stored top-level for exactly
+   * this (AGL-2287): `lockdowns/` alone covers several different scopes, so
+   * the target path cannot answer it. `actorEmail` is searchable because it
+   * is the only identifier a reviewer outside engineering has.
    *=========================================*/
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-
-  /**
-   * The ordering and the date range, in ONE place.
-   *
-   * Shared by the paged window and by the CSV export so the two cannot
-   * disagree about which rows the range covers. An export built from its own
-   * copy of these constraints is an export that quietly drifts from the
-   * screen it was taken off.
-   */
-  const rangeConstraints = useMemo((): QueryConstraint[] => {
-    const constraints: QueryConstraint[] = [orderBy('at', 'desc')]
-    // A range on `at` and an order by `at`. Same field, so no composite
-    // index — and `to` is EXCLUSIVE of the following day rather than
-    // inclusive of midnight, or "to 2026-03-31" would silently drop every
-    // row written on the 31st.
-    const fromDate = from ? new Date(`${from}T00:00:00`) : null
-    const toDate = to ? new Date(`${to}T00:00:00`) : null
-    if (fromDate && !Number.isNaN(fromDate.getTime())) {
-      constraints.push(where('at', '>=', Timestamp.fromDate(fromDate)))
-    }
-    if (toDate && !Number.isNaN(toDate.getTime())) {
-      toDate.setDate(toDate.getDate() + 1)
-      constraints.push(where('at', '<', Timestamp.fromDate(toDate)))
-    }
-    return constraints
-  }, [from, to])
-
-  const {
-    rows: entryDocs,
-    hasMore,
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
-      query(
-        collection(firestore, 'adminAudit'),
-        ...rangeConstraints,
-        limit(pageLimit),
+  const [clauses, setClauses] = useState<ListFilterClause[]>([])
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const gridFilter = useListGridFilter({
+    selectFields: ADMIN_AUDIT_SELECT_FIELDS,
+    // One served equality at a time; the date and the matched fields stand
+    // beside it.
+    single: true,
+    keepAlongside: adminAuditClauseStandsAlongside,
+    clauses,
+    onChange: setClauses,
+    search: { words: searchWords, onChange: setSearchWords },
+  })
+  const plan = useMemo(() => adminAuditPlan(clauses), [clauses])
+  const servedConstraints = useMemo(
+    () =>
+      plan.served.flatMap(
+        (clause) =>
+          listFilterConstraints(ADMIN_AUDIT_FILTER_FIELDS, clause, { fixedOrderBy: 'at' }) ?? [],
       ),
-    [firestore, from, to],
-    { idField: '$id' },
+    [plan],
+  )
+  const matching = plan.matched.length > 0 || searchWords.length > 0
+  const matches = useCallback(
+    (row: Record<string, any>) =>
+      filterListRows([row], ADMIN_AUDIT_FILTER_FIELDS, plan.matched, {
+        paths: ADMIN_AUDIT_SEARCH_PATHS,
+        words: searchWords,
+      }).length > 0,
+    [plan, searchWords],
   )
 
-  const [filter, setFilter] = useState('')
-  /*==========================================
-   * THE SCOPE FACET (AGL-2287).
-   *
-   * `scope` has been written top-level by five call sites — the five lockdown
-   * branches, media quarantine, abuse reports and DMCA counter-notices — since
-   * it was added, and `admin/lockdown/route.ts` says why in as many words:
-   *
-   *   "Stored top-level so the audit log filters by scope on an equality
-   *    match. It is derivable from `target`, but only by prefix-matching a
-   *    path — and `lockdowns/` alone covers three different scopes."
-   *
-   * The audit log had no scope filter, did not display the field, and left it
-   * out of the compliance export. Five writers, zero readers: the one field
-   * put there expressly to be filtered on was the one field nothing could
-   * reach.
-   *
-   * DERIVED FROM THE ROWS IN VIEW rather than a hardcoded list. A fixed
-   * vocabulary here would drift the first time a route audits a new scope, and
-   * would offer facets that match nothing — the phantom-filter half of the
-   * same defect. What is offered is exactly what is present.
-   *
-   * "In view" now means THE PAGE, not a 200-row window, and the labels say
-   * so. Both facets are client-side because neither has an index behind it,
-   * and a client-side filter can only narrow rows the client already holds —
-   * so a page-scoped filter is the only honest one until `scope` gets its
-   * composite index. The DATE RANGE is the control that narrows the read.
-   *=========================================*/
-  const scopes = useMemo(
-    () =>
-      [
-        ...new Set(
-          (entryDocs ?? [])
-            .map((entry: any) => entry.scope)
-            .filter((scope: unknown): scope is string => typeof scope === 'string' && !!scope),
-        ),
-      ].sort(),
-    [entryDocs],
+  const [rows, setRows] = useState<Record<string, any>[]>([])
+  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  /** `cursors[i]` is the last entry page `i` READ, which page `i + 1` resumes after. */
+  const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [unreadable, setUnreadable] = useState(false)
+  /*
+   * The scopes and action groups of every entry read so far — what the
+   * pickers offer. A fixed vocabulary would drift the first time a route
+   * audits a new scope and offer choices that match nothing; the registered
+   * plugin groups are offered from the start because the catalog names them.
+   */
+  const [seen, setSeen] = useState<{ scopes: string[]; groups: string[] }>({
+    scopes: [],
+    groups: [],
+  })
+
+  const loadPage = useCallback(
+    async (targetPage: number, after: QueryDocumentSnapshot | null) => {
+      setLoading(true)
+      const scopes = new Set<string>()
+      const groups = new Set<string>()
+      try {
+        const base = collection(firestore, 'adminAudit')
+        const result = await scanCursorPage<QueryDocumentSnapshot, Record<string, any>>({
+          pageSize,
+          scanCap: matching ? ADMIN_AUDIT_SCAN : pageSize,
+          // One extra row says whether a next page exists; a matched page
+          // reads in larger batches so it is not one round trip per row.
+          batchSize: matching ? Math.max(pageSize + 1, 100) : pageSize + 1,
+          after,
+          read: async (from, count) =>
+            (
+              await getDocs(
+                query(
+                  base,
+                  ...servedConstraints,
+                  orderBy('at', 'desc'),
+                  ...(from ? [startAfter(from)] : []),
+                  limit(count),
+                ),
+              )
+            ).docs,
+          accept: (doc) => {
+            const row = auditRow(doc)
+            if (typeof row['scope'] === 'string' && row['scope']) scopes.add(row['scope'])
+            if (row['actionGroup']) groups.add(row['actionGroup'])
+            return matches(row) ? row : null
+          },
+        })
+        setUnreadable(false)
+        setRows(result.rows)
+        setHasMore(!result.exhausted)
+        setPage(targetPage)
+        setCursors((previous) => {
+          const next = previous.slice(0, targetPage)
+          if (result.last) next[targetPage] = result.last
+          return next
+        })
+        setSeen((previous) => {
+          const merged = {
+            scopes: [...new Set([...previous.scopes, ...scopes])].sort(),
+            groups: [...new Set([...previous.groups, ...groups])].sort(),
+          }
+          return merged.scopes.length === previous.scopes.length &&
+            merged.groups.length === previous.groups.length
+            ? previous
+            : merged
+        })
+      } catch (error) {
+        console.error(error)
+        setUnreadable(true)
+        setRows([])
+        setHasMore(false)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [firestore, pageSize, servedConstraints, matching, matches],
   )
-  const [scope, setScope] = useState('')
-  /*==========================================
-   * THE ACTION FACET (AGL-2929), grouped.
-   *
-   * Roughly seventy distinct action strings write to this collection, so a
-   * facet over the raw values would be a seventy-entry menu. It offers the
-   * actions' NAMESPACES instead — `billing`, `org`, `plugins` — and files
-   * every AI row under one `AI` group, whatever its literal prefix: the
-   * customer's overage controls write `billing.assistOverage.*`, the
-   * free-spend pause writes `platform.aiFreeSpend.*`, and the catalog's own
-   * `ai.*` codes join them. "What did we do about AI this week" is one
-   * question, and the grouping is the shared catalog's, so the feed's chip
-   * and this menu cannot disagree about what counts.
-   *
-   * Derived from the page in view, like the scope facet and for the same
-   * reason: a fixed vocabulary offers groups that match nothing.
-   *=========================================*/
-  const actionGroups = useMemo(
-    () =>
-      [
-        ...new Set(
-          (entryDocs ?? [])
-            .map((entry: any) => staffAuditActionGroup(entry.action))
-            .filter(Boolean),
-        ),
-      ].sort(),
-    [entryDocs],
-  )
-  const [actionGroup, setActionGroup] = useState('')
-  /** The page, narrowed by the three page-scoped facets. */
-  const entries = useMemo(() => {
-    const term = filter.trim().toLowerCase()
-    const all = (entryDocs ?? []).filter(
-      (entry: any) =>
-        (!scope || entry.scope === scope) &&
-        (!actionGroup || staffAuditActionGroup(entry.action) === actionGroup),
-    )
-    if (!term) return all
-    // The reason and its note are searchable too (AGL-1652) — "why did we
-    // give them the enterprise rate" is a question asked by the reason, not
-    // by an actor or a target anyone remembers.
-    //
-    // `actorEmail` joined the haystack with AGL-2287. Nine routes wrote it and
-    // nothing read it: a staff reviewer searching for a colleague by the only
-    // identifier they know — an email address — got no rows, off a log that
-    // had been storing exactly that string all along.
-    return all.filter((entry: any) =>
-      [
-        entry.actorUid,
-        entry.actorEmail,
-        entry.action,
-        entry.scope,
-        entry.target,
-        entry.reason,
-        entry.note,
+
+  // A new filter, search or page size is a different query: page one.
+  useEffect(() => {
+    void loadPage(0, null)
+  }, [loadPage])
+
+  const options = useMemo(
+    (): Record<string, readonly ListFilterOption[]> => ({
+      actionGroup: [
+        ...new Set([
+          ...listPluginActivityFilters().map(({ group }) => group.id),
+          ...seen.groups,
+        ]),
       ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-        .includes(term),
-    )
-  }, [entryDocs, filter, scope, actionGroup])
+        .sort()
+        .map((group) => ({ value: group, label: staffAuditActionGroupLabel(group) })),
+      scope: seen.scopes.map((scope) => ({ value: scope, label: scope })),
+    }),
+    [seen],
+  )
 
   const [expanded, setExpanded] = useState<string | null>(null)
+  const expandedRow = rows.find((row) => row['$id'] === expanded) ?? null
+
+  const columns = useMemo((): GridColDef[] => {
+    const shown: GridColDef[] = [
+      {
+        field: 'action',
+        headerName: 'Action',
+        flex: 1.1,
+        minWidth: 190,
+        renderCell: ({ row }: any) => <Chip label={row.action} size="small" />,
+      },
+      {
+        field: 'scope',
+        headerName: 'Scope',
+        flex: 0.7,
+        minWidth: 110,
+        /*
+          AGL-2287. `lockdowns/` alone covers platform, feature, user, org and
+          host locks, so the target path cannot be read as a scope — which is
+          why the writers store it separately.
+        */
+        renderCell: ({ row }: any) =>
+          row.scope ? <Chip label={row.scope} size="small" variant="outlined" /> : null,
+      },
+      {
+        field: 'target',
+        headerName: 'Target',
+        flex: 1.3,
+        minWidth: 220,
+        renderCell: ({ row }: any) => (
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
+            <Typography variant="body2" sx={{ fontFamily: 'monospace' }} noWrap>
+              {row.target}
+            </Typography>
+            {/*
+              A staff grant made inside a CUSTOMER's identity pool (AGL-2324),
+              in `warning` because that is what distinguishes it from the
+              ordinary project-pool grant beside it.
+            */}
+            {row.targetTenantId ? (
+              <Chip
+                label={`tenant pool: ${row.targetTenantId}`}
+                size="small"
+                color="warning"
+                variant="outlined"
+              />
+            ) : null}
+          </Stack>
+        ),
+      },
+      {
+        field: 'actorUid',
+        /*
+         * The address AS IT WAS when the entry was written, never re-resolved
+         * from the account: the row is evidence. The uid beside it is the
+         * identifier that does not go out of date, which is why it is always
+         * shown — and what the Who filter matches.
+         */
+        headerName: 'Who (then)',
+        flex: 1.2,
+        minWidth: 220,
+        valueGetter: (_value, row: any) =>
+          row.actorEmail ? `${row.actorEmail} (${row.actorUid})` : row.actorUid,
+      },
+      {
+        field: 'at',
+        headerName: 'When',
+        flex: 0.9,
+        minWidth: 170,
+        type: 'date',
+        valueGetter: (_value, row: any) =>
+          row.at?.seconds ? new Date(row.at.seconds * 1000) : null,
+        renderCell: ({ row }: any) =>
+          row.at?.seconds ? new Date(row.at.seconds * 1000).toLocaleString() : '—',
+      },
+      {
+        field: 'why',
+        headerName: 'Why',
+        flex: 1,
+        minWidth: 180,
+        sortable: false,
+        valueGetter: (_value, row: any) => auditWhy(row) ?? '',
+        /*
+          Shown in the row, not only in the expanded entry: a reason nobody
+          sees without clicking is the same failure as no reason at all.
+          `org.override` rows written before AGL-1652 have none, and say so
+          rather than rendering a blank that would pass for one.
+        */
+        renderCell: ({ row }: any) => {
+          const why = auditWhy(row)
+          if (why) return why
+          return row.action === 'org.override' ? (
+            <Typography variant="caption" color="warning.main">
+              {'Not recorded — this override predates the required reason.'}
+            </Typography>
+          ) : null
+        },
+      },
+    ]
+    return listFilterGridColumns(shown, ADMIN_AUDIT_FILTER_FIELDS, options, ADMIN_AUDIT_FILTER_HEADERS)
+  }, [options])
 
   /*==========================================
    * COMPLIANCE EXPORT (AGL-206), AND WHY IT READS FOR ITSELF.
    *
-   * The export used to serialize whatever was on screen, which was fine
-   * while the screen held 200 rows and stopped being fine the moment the
-   * list started at ten. A compliance export cut to a page size chosen for
-   * READING is not a smaller export, it is a different document — and one
-   * that looks complete, because a CSV carries no footer saying which page
-   * it came off.
+   * A CSV of the page on screen would be a document cut to a size chosen for
+   * READING, and one that looks complete, because a CSV carries no footer
+   * saying which page it came off. So the export runs its own one-shot read
+   * over the same served filters the list is showing, matches the same
+   * clauses and search over it, and happens on a CLICK.
    *
-   * So it runs its own one-shot `getDocs` over the SAME ordering and date
-   * range the screen is showing, independent of the page and of the two
-   * page-scoped facets. That is an expensive read, and it happens on a
-   * CLICK: nothing here reads the range on mount.
-   *
-   * Bounded, and the bound is reported. Fetching the ceiling PLUS ONE is
-   * what makes truncation a fact rather than a guess — the alternative is a
-   * short CSV that reads as the whole range, which is the 200-row window's
-   * defect one layer down.
+   * Bounded, and the bound is reported. Reading the ceiling PLUS ONE is what
+   * makes truncation a fact rather than a guess.
    *=========================================*/
   const [exporting, setExporting] = useState(false)
   const [exportNote, setExportNote] = useState<string | null>(null)
@@ -490,28 +581,27 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   const handleExport = async () => {
     setExporting(true)
     setExportNote(null)
-    let exported: any[]
+    let exported: Record<string, any>[]
     try {
       const snapshot = await getDocs(
         query(
           collection(firestore, 'adminAudit'),
-          ...rangeConstraints,
+          ...servedConstraints,
+          orderBy('at', 'desc'),
           limit(EXPORT_CEILING + 1),
         ),
       )
       const capped = snapshot.size > EXPORT_CEILING
-      exported = snapshot.docs
-        .slice(0, EXPORT_CEILING)
-        .map((entry) => ({ $id: entry.id, ...entry.data() }))
+      exported = snapshot.docs.slice(0, EXPORT_CEILING).map(auditRow).filter(matches)
       setExportNote(
         capped
-          ? `Exported the newest ${EXPORT_CEILING.toLocaleString()} entries in this range — there are more. Narrow the dates to export the rest.`
+          ? `Exported from the newest ${EXPORT_CEILING.toLocaleString()} entries these filters reach — there are more. Narrow the dates to export the rest.`
           : `Exported ${exported.length.toLocaleString()} entries.`,
       )
     } catch {
       // A refused or failed read must not hand the auditor a short CSV. No
       // file is a state they can act on; a truncated one is not.
-      setExportNote('Could not read the range to export. Nothing was written.')
+      setExportNote('Could not read the entries to export. Nothing was written.')
       return
     } finally {
       setExporting(false)
@@ -523,15 +613,12 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
           : String(value ?? '')
       return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
     }
-    // `reason`/`note` are columns of their own (AGL-1652) rather than being
-    // left inside a JSON blob: the compliance export is read in a
-    // spreadsheet, and a why nobody can filter on is a why nobody reads.
-    // `scope` and `actorEmail` are columns too (AGL-2287), for the same reason
-    // `reason`/`note` were given columns in AGL-1652: the compliance export is
+    // `reason`/`note` (AGL-1652), `scope` and `actorEmail` (AGL-2287) and
+    // `targetTenantId` (AGL-2324) are columns of their own: the export is
     // read in a spreadsheet, and a field nobody can filter or sort on is a
-    // field nobody reads. `actorEmail` in particular is the only column an
-    // auditor outside engineering can act on — a bare uid names nobody.
-    const rows = [
+    // field nobody reads. An empty `targetTenantId` is the project pool; a
+    // tenant id is a staff grant inside a CUSTOMER's identity pool.
+    const table = [
       [
         'at',
         'actorUid',
@@ -545,29 +632,21 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         'before',
         'after',
       ],
-      ...exported.map((entry: any) => [
-        entry.at?.seconds
-          ? new Date(entry.at.seconds * 1000).toISOString()
-          : '',
-        entry.actorUid,
-        entry.actorEmail ?? '',
-        entry.action,
-        entry.scope ?? '',
-        entry.target,
-        // WHICH identity pool the claim landed in (AGL-2324). `users/manage`
-        // has written this since AGL-1993 and its own comment calls it
-        // "exactly the row a staff-access review needs to see"; no reader
-        // projected it. Empty means the project pool; a tenant id means a
-        // staff grant was made on an identity inside a CUSTOMER's tenant,
-        // which is the case the review exists to find.
-        entry.targetTenantId ?? '',
-        entry.reason ?? '',
-        entry.note ?? '',
-        entry.before,
-        entry.after,
+      ...exported.map((entry) => [
+        entry['at']?.seconds ? new Date(entry['at'].seconds * 1000).toISOString() : '',
+        entry['actorUid'],
+        entry['actorEmail'] ?? '',
+        entry['action'],
+        entry['scope'] ?? '',
+        entry['target'],
+        entry['targetTenantId'] ?? '',
+        entry['reason'] ?? '',
+        entry['note'] ?? '',
+        entry['before'],
+        entry['after'],
       ]),
     ]
-    const csv = rows.map((row) => row.map(escape).join(',')).join('\n')
+    const csv = table.map((row) => row.map(escape).join(',')).join('\n')
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
     const anchor = document.createElement('a')
     anchor.href = url
@@ -575,6 +654,8 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
     anchor.click()
     URL.revokeObjectURL(url)
   }
+
+  const filtering = clauses.length > 0 || searchWords.length > 0
 
   return (
     <DashboardLayout
@@ -594,25 +675,19 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
           <CardDisplay
             header={'Admin actions'}
             help={docsHelp('staffConsole', {
-              anchor: '#whats-there',
+              anchor: '#audit-log',
               excerpt:
-                'Append-only record of every staff mutation with before/after diffs. Filter by actor, action, or target and export the slice as CSV.',
+                'Append-only record of every staff mutation with before/after diffs. Filter by action, who, target, scope or date, search it, and export the slice as CSV.',
             })}
             contentGutterX
             contentGutterY
           >
-            <Stack spacing={2}>
+            <Stack spacing={1.5}>
               {/*
-                * SAID ONCE, ABOUT EVERY ROW.
-                *
-                * `actorEmail` is a snapshot taken when the entry was written,
-                * and an account's address can change afterwards. The stored
-                * value is evidence and is never rewritten to match a current
-                * address — an audit trail that mutates is worth less than one
-                * that is stale — but a reader who assumes the address is
-                * current will contact the wrong mailbox. One statement here
-                * covers the whole list; a per-row suffix would repeat it on
-                * every line of a page that is historical by definition.
+                * SAID ONCE, ABOUT EVERY ROW. `actorEmail` is a snapshot taken
+                * when the entry was written and is never rewritten to match a
+                * current address — an audit trail that mutates is worth less
+                * than one that is stale.
                 */}
               <Typography variant="caption" color="text.secondary">
                 {'Each entry shows the actor’s address as it was when the ' +
@@ -621,259 +696,111 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                   'identifier that does not go out of date.'}
               </Typography>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                <TextField
-                  size="small"
-                  label="Filter this page (actor, email, action, target)"
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  sx={{ width: 360 }}
-                />
                 {/*
-                  Rendered only when the window actually contains scoped rows.
-                  An always-present select whose only option is "All scopes"
-                  advertises a facet that answers nothing.
-                */}
-                {actionGroups.length > 1 ? (
-                  <TextField
-                    select
-                    size="small"
-                    label="Action"
-                    value={actionGroup}
-                    onChange={(event) => setActionGroup(event.target.value)}
-                    sx={{ width: 170 }}
-                  >
-                    <MenuItem value="">{'All actions'}</MenuItem>
-                    {actionGroups.map((option: string) => (
-                      <MenuItem key={option} value={option}>
-                        {staffAuditActionGroupLabel(option)}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                ) : null}
-                {scopes.length > 0 ? (
-                  <TextField
-                    select
-                    size="small"
-                    label="Scope"
-                    value={scope}
-                    onChange={(event) => setScope(event.target.value)}
-                    sx={{ width: 200 }}
-                  >
-                    <MenuItem value="">{'All scopes'}</MenuItem>
-                    {scopes.map((option: string) => (
-                      <MenuItem key={option} value={option}>
-                        {option}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                ) : null}
-                {/*
-                  A DATE RANGE, not just a text box (AGL-2324). "What did we
-                  do on the 4th" was previously answerable only if the 4th
-                  happened to still be inside the newest 200 rows. Both bounds
-                  are a range on `at`, the field the query already orders by,
-                  so this needs no index that does not already exist.
-                */}
-                <TextField
-                  size="small"
-                  type="date"
-                  label="From"
-                  value={from}
-                  onChange={(event) => setFrom(event.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                  sx={{ width: 170 }}
-                />
-                <TextField
-                  size="small"
-                  type="date"
-                  label="To"
-                  value={to}
-                  onChange={(event) => setTo(event.target.value)}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                  sx={{ width: 170 }}
-                />
-                {/*
-                  Enabled off the DATE RANGE, never off the page. The export
-                  reads for itself, so a page filtered down to nothing still
-                  has a range to export — disabling on `entries` would refuse
-                  the whole log because the current ten rows did not match a
-                  search term.
+                  Enabled whatever the page holds: the export reads for
+                  itself, so a page filtered down to nothing still has
+                  entries to export.
                 */}
                 <Button size="small" onClick={handleExport} disabled={exporting}>
                   {exporting ? 'Exporting…' : 'Export CSV'}
                 </Button>
+                {exportNote ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {exportNote}
+                  </Typography>
+                ) : null}
               </Stack>
-              {exportNote ? (
+              <ListFilterChips
+                fields={ADMIN_AUDIT_FILTER_FIELDS}
+                headers={ADMIN_AUDIT_FILTER_HEADERS}
+                options={options}
+                clauses={clauses}
+                onChange={setClauses}
+              />
+              {matching ? (
                 <Typography variant="caption" color="text.secondary">
-                  {exportNote}
+                  {'Action group, Scope and the search are matched as the log ' +
+                    `is read: each page looks through up to ${ADMIN_AUDIT_SCAN} ` +
+                    'entries, so a page can come back short — Next carries on ' +
+                    'from where it stopped.'}
                 </Typography>
               ) : null}
-              {entries.length === 0 ? (
+              {unreadable && !loading ? (
+                <Alert severity="warning">
+                  {'Could not read the audit log. This is not the same as there ' +
+                    'being no entries.'}
+                </Alert>
+              ) : rows.length === 0 && !loading && !filtering ? (
                 <Typography variant="body2" color="text.secondary">
-                  {(entryDocs ?? []).length
-                    ? 'Nothing on this page matches the filter.'
-                    : 'No audit entries in this range.'}
+                  {'No audit entries yet.'}
                 </Typography>
               ) : (
-                entries.map((entry: any) => {
-                  /**
-                   * WHY the action was taken (AGL-1652), when the row
-                   * carries one. `org.override` rows get the reason
-                   * vocabulary's label; any other row that grows a
-                   * top-level reason renders its raw code rather than
-                   * being silently dropped for not being an override.
+                <ListTable
+                  aria-label="Admin actions"
+                  rows={rows}
+                  columns={columns}
+                  /*
+                   * A row opens its entry — the reason, the note and the
+                   * before/after — below the list.
                    */
-                  const why =
-                    orgOverrideReasonSummary(entry.reason, entry.note) ??
-                    (entry.reason
-                      ? [entry.reason, entry.note].filter(Boolean).join(' — ')
-                      : null)
-                  return (
-                  <Stack
-                    key={entry.$id}
-                    spacing={0.5}
-                    sx={{
-                      cursor: 'pointer',
-                      borderBottom: 1,
-                      borderColor: 'divider',
-                      pb: 1,
-                    }}
-                    onClick={() =>
-                      setExpanded((previous) =>
-                        previous === entry.$id ? null : entry.$id,
-                      )
-                    }
-                  >
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      sx={{ alignItems: 'center', flexWrap: 'wrap' }}
-                    >
-                      <Chip label={entry.action} size="small" />
-                      {/*
-                        AGL-2287. `lockdowns/` alone covers platform, feature,
-                        user, org and host locks, so the target path cannot be
-                        read as a scope — which is why the writers store it
-                        separately, and why leaving it off the row made five
-                        different kinds of lock look like one kind.
-                      */}
-                      {/*
-                        A staff grant made inside a CUSTOMER's identity pool
-                        (AGL-2324). Rendered in `warning` because that is what
-                        distinguishes it from the ordinary project-pool grant
-                        beside it — a chip in the same colour as every other
-                        chip is a field nobody reads twice.
-                      */}
-                      {entry.targetTenantId ? (
-                        <Chip
-                          label={`tenant pool: ${entry.targetTenantId}`}
-                          size="small"
-                          color="warning"
-                          variant="outlined"
-                        />
-                      ) : null}
-                      {entry.scope ? (
-                        <Chip
-                          label={entry.scope}
-                          size="small"
-                          variant="outlined"
-                        />
-                      ) : null}
-                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                        {entry.target}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ ml: 'auto' }}
-                      >
-                        {/*
-                          * The address AS IT WAS when the entry was written,
-                          * and never re-resolved from the account: the row is
-                          * evidence, and rewriting stored history to match a
-                          * current address would make the trail worth less
-                          * than leaving it stale.
-                          *
-                          * Not suffixed per row — the page says it once, above
-                          * the list, and every row here is historical by
-                          * definition. The uid beside it is the identifier
-                          * that does not go out of date, which is why it is
-                          * always rendered.
-                          */}
-                        {`${
-                          entry.actorEmail
-                            ? `${entry.actorEmail} (${entry.actorUid})`
-                            : entry.actorUid
-                        } · ${
-                          entry.at?.seconds
-                            ? new Date(
-                                entry.at.seconds * 1000,
-                              ).toLocaleString()
-                            : '—'
-                        }`}
-                      </Typography>
-                    </Stack>
-                    {/*
-                      Shown COLLAPSED, not only in the expanded diff: a
-                      reason nobody sees without clicking is the same
-                      failure as no reason at all. `org.override` rows
-                      written before AGL-1652 have none, and say so rather
-                      than rendering a blank that would pass for one.
-                    */}
-                    {why ? (
-                      <Typography variant="caption" color="text.secondary">
-                        {`Why: ${why}`}
-                      </Typography>
-                    ) : entry.action === 'org.override' ? (
-                      <Typography variant="caption" color="warning.main">
-                        {'Why: not recorded — this override predates the ' +
-                          'required reason.'}
-                      </Typography>
-                    ) : null}
-                    {expanded === entry.$id ? (
-                      <Typography
-                        component="pre"
-                        variant="caption"
-                        sx={{
-                          m: 0,
-                          p: 1,
-                          bgcolor: 'action.hover',
-                          borderRadius: 1,
-                          overflowX: 'auto',
-                        }}
-                      >
-                        {JSON.stringify(
-                          {
-                            reason: entry.reason ?? null,
-                            note: entry.note ?? null,
-                            before: entry.before,
-                            after: entry.after,
-                          },
-                          null,
-                          2,
-                        )}
-                      </Typography>
-                    ) : null}
-                  </Stack>
-                  )
-                })
+                  onOpen={(id) => setExpanded((previous) => (previous === id ? null : id))}
+                  hideFooter
+                  rowHeight={TABLE_ROW_HEIGHT}
+                  /*
+                   * The grid holds one page of a cursor feed, so it never
+                   * filters that page itself: the clauses and the search go
+                   * to the read above.
+                   */
+                  filterMode="server"
+                  filterModel={gridFilter.filterModel}
+                  onFilterModelChange={gridFilter.onFilterModelChange}
+                  quickFilter
+                  loading={loading}
+                  noRowsLabel="No audit entries match these filters"
+                />
               )}
+              {expandedRow ? (
+                <Typography
+                  component="pre"
+                  variant="caption"
+                  aria-label="Entry details"
+                  sx={{
+                    m: 0,
+                    p: 1,
+                    bgcolor: 'action.hover',
+                    borderRadius: 1,
+                    overflowX: 'auto',
+                  }}
+                >
+                  {JSON.stringify(
+                    {
+                      action: expandedRow['action'],
+                      target: expandedRow['target'],
+                      reason: expandedRow['reason'] ?? null,
+                      note: expandedRow['note'] ?? null,
+                      before: expandedRow['before'],
+                      after: expandedRow['after'],
+                    },
+                    null,
+                    2,
+                  )}
+                </Typography>
+              ) : null}
               {/*
-                The shared footer (AGL-2501). `hasMore` is a FACT here, not a
-                guess off `length >= pageSize`: the hook over-fetches by one
-                and never renders the probe row, so the last page cannot
-                offer a Next that leads nowhere — nor hide one that leads
-                somewhere, which is what a full final page used to do.
-
-                `rowCount` is the FILTERED count, so the count line describes
-                what the reader is looking at rather than what was fetched.
+                The shared footer (AGL-2501). `hasMore` is a FACT: the read
+                over-fetches by one, or the matched walk stopped before the
+                log ran out.
               */}
               <ListPagination
                 page={page}
                 pageSize={pageSize}
-                rowCount={entries.length}
+                rowCount={rows.length}
                 hasMore={hasMore}
-                onPageChange={setPage}
+                disabled={loading}
+                onPageChange={(next) => {
+                  if (next === page) return
+                  void loadPage(next, next > 0 ? (cursors[next - 1] ?? null) : null)
+                }}
                 onPageSizeChange={setPageSize}
               />
             </Stack>

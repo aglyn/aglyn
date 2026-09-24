@@ -76,7 +76,9 @@ a version stopped separately stays stopped.
 Audited plan and entitlement overrides, suspension,
 and GDPR-erasure flags, per organization. The directory is listed server-side with
 the Admin SDK (so it shows *every* org, not the subset client rules would return),
-ordered by organization id, 25 per page with Previous/Next.
+ordered by organization id, 10 per page by default (25 or 50 from the page-size menu).
+
+#### Filter the directory {#filter-the-directory}
 
 The grid's toolbar filters the whole directory, not the page on screen. **Filters**
 offers the organization name, slug, id, owner, created and updated dates, and two
@@ -84,8 +86,9 @@ pickers: **Stored plan** (the plan written on the org, which is not always the p
 reads as — the Plan column shows both when they differ) and **Billing status** (the
 Stripe subscription status mirrored onto the org). The query answers one filter at a
 time, so a new filter replaces the last; the chip above the grid shows the one in
-force. **Search** matches the start of any word in the name. A filter and a search are
-not combined: while a filter is set, the search waits until it is removed.
+force. **Search** matches the start of any word in the name, using the first word you
+type. A filter and a search are not combined: while a filter is set, the search waits
+until it is removed. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search) for the toolbar itself.
 
 #### Free workspace limit {#free-workspace-limit}
 
@@ -246,16 +249,21 @@ Aglyn once and then search their email again.
 Each account opens a **detail page** showing identity/auth state, staff role, every
 organization membership with roles and per-site access, and its recent audit trail.
 
-The list's **Filters** reach every account in every pool, not the loaded page: email,
+The list's **Filters** look past the loaded page into every pool: email,
 display name, uid, SSO pool, sign-in providers, created and last sign-in dates, the
 disabled flag, the staff claim, and **Staff role** picked from *support*, *billing* and
 *super*. A role picks the claim as stored, so a staff account granted no role (which
-acts as *support*) is not matched by *support*. One filter applies at a time, and a
-search and a filter are not combined: while a search is typed, the filter waits.
+acts as *support*) is not matched by *support*. **Search** takes a whole email address
+as an exact lookup, and anything else as part of an email, display name or uid. A
+filter or a search scans up to 2,000 accounts and lists up to 200 matches, and says
+when it stopped at either. One filter applies at a time, and a search and a filter are
+not combined: while a search is typed, the filter waits. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 On the detail page, **Recent audit trail** and **Data access by staff** each filter and
-search their whole trail — action, target, reason, actor and date — before they page it,
-so a match on a later page is never missed. **Activity by this account** filters by
+search the recent entries the page read — the newest ten from each of the lookups
+behind them — by action, target, reason, actor and date, with the note in the search
+too, before they page them, so a match on a later page is never missed. The
+**Audit log** page holds the full record. **Activity by this account** filters by
 action or date through its Filters panel; the action group chips above it are shortcuts
 for the actions a plugin names.
 
@@ -337,11 +345,12 @@ devices": do not tell anyone their account is clean from that screen until it lo
 ### Email delivery {#email-delivery}
 
 An **Email delivery** card on the same detail page answers *"they say they never got
-it."* It lists every message we sent the account's address, newest first: the subject,
+it."* It lists the 50 newest messages we sent the account's addresses: the subject,
 which of our senders produced it, when it was sent and delivered, and whether it was
 opened or clicked. The grid's toolbar filters and searches every message the card read:
 **Status** is a picker (*Sent*, *Delivered*, *Bounced*, *Spam complaint* and the rest),
-and the subject, sender and open and click counts filter as typed values.
+and the subject, sender and open and click counts filter as typed values. The search
+matches the subject, the sender and the recipient address.
 
 Read it before you resend anything. The four states that change what you do next:
 
@@ -433,7 +442,8 @@ Every organization's Stripe **invoice history** and default
 **Staff → Margin** scans organizations on request and ranks them worst margin first. Its
 per-organization table filters and searches every organization the scan read, before
 the rendering is capped: **Plan** is a picker, and the name, rollup month, net revenue
-and margin filter as typed values.
+and margin (typed as a fraction, such as `0.4`) filter as typed values. The search
+matches the name, organization id, plan and month.
 
 ### [Refunds](refunds.md) {#refunds}
 
@@ -539,7 +549,7 @@ runs on its own, alongside **Last reported** only: while a search is in the
 box, the other filters are set aside, and a note above the list says so;
 clear the search to apply them again. Filters and search apply to the whole
 list rather than the page on screen, and each filter in force shows as a chip
-above the list; remove the chip to drop it.
+above the list; remove the chip to drop it. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ### [Feature flags](feature-flags.md) {#feature-flags}
 
@@ -578,9 +588,25 @@ fully read, and export the working papers for the Webfile session.
 
 ### Audit log viewer {#audit-log}
 
-A record of staff actions. The **Action** menu groups the page's entries by their
-namespace, with every AI-related entry — the customer overage controls, the free-spend
-pause, and the AI actions themselves — under one **AI** group.
+A record of staff actions, newest first. Click an entry to read its reason, note and
+before/after below the list.
+
+The list filters through its table's toolbar, across the whole log rather than the page on
+screen:
+
+- **Action** (typed as it is recorded, such as `org.override`), **Who (uid)** and **Target**
+  are answered by the log's query, one at a time, and **When** (before or after a date) goes
+  alongside any of them.
+- **Action group** groups entries by their namespace, with every AI-related entry — the
+  customer overage controls, the free-spend pause, and the AI actions themselves — under one
+  **AI** group. **Scope** picks the lockdown, quarantine or report scope an entry was written
+  with. The pickers offer the groups and scopes of the entries read so far.
+- **Search** matches the actor's uid and address, the action, scope, target, reason and note.
+
+Action group, Scope and the search are matched as the log is read: each page looks through up
+to 500 entries, so a page can come back short, and **Next** carries on from where it stopped.
+**Export CSV** exports what the filters and search match, from up to 5,000 entries. See
+[Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ### Coupons {#coupons}
 
@@ -606,11 +632,14 @@ so treat it as a ceiling rather than a profit. The infrastructure number behind 
 per-site floor for almost every organization — measured usage only replaces it once it
 costs more than the floor, which no organization's usage does yet.
 
-**Existing coupons** lists every Stripe coupon with its promotion codes, redemption
-count, and a **valid** or **expired** state. Its toolbar filters and searches every
-coupon, not only the page shown: **Duration** (*Once*, *Repeating*, *Forever*) and
-**Status** (*Valid*, *Expired*) are pickers, and the search matches a coupon's name, its
-Stripe id or any of its promotion codes. The fields above the list are the create form,
+#### Existing coupons {#existing-coupons}
+
+**Existing coupons** lists Stripe coupons with their promotion codes, redemption
+count, and a **valid** or **expired** state — the first 100 coupons and 100 promotion
+codes Stripe returns. Its toolbar filters and searches every coupon it read, not only
+the page shown: **Duration** (*Once*, *Repeating*, *Forever*) and **Status** (*Valid*,
+*Expired*) are pickers, the name and redemption count filter as typed values, and the
+search matches a coupon's name, its Stripe id or any of its promotion codes. The fields above the list are the create form,
 not filters.
 
 Each promotion code carries **Activate** / **Deactivate**. Checkout only resolves a code

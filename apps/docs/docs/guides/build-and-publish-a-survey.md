@@ -48,7 +48,7 @@ organization **Data** page (or any site's Data page — both edit the same data)
    - `comments` → type **Text**.
 4. **Save schema**.
 
-![The organization Data page with the Survey responses dataset selected, showing the records table and the Add record, Schema, Import, CSV, and JSON toolbar buttons](/img/guides/survey-data-page.png)
+![A site's Data page with the Survey responses dataset selected: the Add record, Schema, Import, CSV and JSON buttons above the records table and its Columns, Filters, Export and Search controls](/img/guides/survey-data-page.png)
 
 Each field's **Display name** is what you see in dialogs and table headers; the
 **field id** next to it (a slug generated once from the display name) is the
@@ -165,7 +165,7 @@ On the Data page, use **Filter** (`satisfaction >= 4`) and **Sort**
 (`satisfaction desc`) over the loaded records, and export everything with the
 **CSV** / **JSON** buttons.
 
-![The Data page after submissions: survey records in the table with filter and sort inputs and export buttons](/img/guides/survey-records-after-submit.png)
+![The Data page after a submission: the new survey response at the top of the records table, under the table's Columns, Filters, Export and Search controls](/img/guides/survey-records-after-submit.png)
 
 :::tip Chart it
 Bind a container's **Repeat over dataset** to `Survey responses` and reference

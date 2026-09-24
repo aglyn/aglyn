@@ -30,8 +30,9 @@ The site's **Layouts** page lists every layout. **Filters** in the table's toolb
 narrows it by display name, ID, description, or the date it was created or last
 updated, and **Search** matches any word of the name, ID, or description. Each filter in
 force shows as a chip above the table; remove a chip to drop it. The list pages as you
-go, so a filter looks through the layouts read so far and reads further as you page on;
-the table says so while more remain.
+go, so the first filter or search reads 100 layouts and matches over them, and paging
+past the last match reads further; the table says so while more remain. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Nested layouts
 

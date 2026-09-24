@@ -123,19 +123,26 @@ and the unsubscribe links in mail already delivered are untouched.
 
 The campaigns list, the Emails list and a campaign's own emails each filter
 through their table's toolbar. **Filters** narrows the list by a column, and
-**Search** matches any word of a name or subject:
+**Search** matches any word of a name or subject, and on the organization's
+page a site name too:
 
-- **Campaigns:** Window (no dates, upcoming, running, ended), Lists, Kind
-  (campaign or single send) and, on the organization's page, Sites.
-- **Emails:** State (draft, scheduled, sending, sent, stopped), Campaign
-  (or single send) and, on the organization's page, Site. State is what the
-  email is doing, so an email part way through a large audience is
+- **Campaigns:** the campaign's name, Window (no dates, upcoming, running,
+  ended), Lists, Kind (campaign or single send) and, on the organization's
+  page, Sites.
+- **Emails:** the subject, State (draft, scheduled, sending, sent, stopped),
+  Campaign (one of up to 50 campaigns by name, or **Single send** for the
+  emails filed under none) and, on the organization's page, Site. State is
+  what the email is doing, so an email part way through a large audience is
   **Sending**, not **Scheduled**.
+- **A campaign's emails:** the subject and State.
 
 The filters look at every campaign or email the list read, not only the page
-on screen. Each filter in force shows as a chip above the table; remove a
+on screen. The campaigns list reads up to 50 campaigns and 30 sends, the
+Emails list 30 emails, and a campaign's own table 50; each says so when there
+are more. Each filter in force shows as a chip above the table; remove a
 chip to drop it. The **Filters** panel edits one filter at a time, and
-filters on different columns add up.
+filters on different columns add up; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### What belongs to a campaign {#what-belongs-to-a-campaign}
 
@@ -579,7 +586,8 @@ kinds, chosen when you create it.
 The lists table filters through its toolbar: **Filters** narrows it by name or by
 **Membership** (manual or rule), and **Search** matches any word of a list's name. The
 table is paged, so the first filter reads the first 100 lists and matches over them;
-the table says when there are more, and paging forward reads the next page.
+the table says when there are more, and paging forward reads the next page. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Manual lists
 
@@ -601,7 +609,7 @@ leaves when they stop matching; a person who was added stays.
 The membership table filters through its toolbar by address, name, **How** (rule or
 added) and **Consent** (each of the kinds below), and **Search** matches an address,
 name or source. Like the lists table, it filters over the first 100 members it read
-and says when there are more. The address and name boxes above the table add people;
+and says when there are more; see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The address and name boxes above the table add people;
 they are not filters.
 
 **Consent** is the basis the membership carries, read for the site you are on — or, on
@@ -767,9 +775,11 @@ Two ways to finish a test without watching it:
   winner is picked every later send uses the winning copy.
 
 The Experiments table filters through its toolbar by name, what it tests
-(screen, section or email) and status. The list is paged, so the first
-filter reads the first 100 experiments and matches over them; the table says
-when there are more, and paging forward reads the next page.
+(screen, section or email) and status, and **Search** matches any word of an
+experiment's name. The list is paged, so the first filter or search reads the
+first 100 experiments and matches over them; the table says when there are
+more, and paging forward reads the next page. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Across your organization's sites {#experiments-across-sites}
 
@@ -845,8 +855,9 @@ never yours, and account mail — receipts, confirmations — is not listed at a
 An email's **Recipients** table lists everyone it was sent to. To see only
 the people who opened it, or only those who clicked something, choose
 **Engagement** in the table's **Filters** panel. That filter reaches the
-whole delivery log, one page at a time. The table has no search box, because
-the delivery log can only be narrowed by engagement.
+whole delivery log, one page at a time, and a new choice replaces the last.
+The table has no search box, because the delivery log can only be narrowed by
+engagement. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Which links were clicked
 
@@ -1258,7 +1269,8 @@ a list is going stale.
 The table filters through its toolbar by address and by **Reason**, and **Search**
 matches any part of an address. It is paged newest first, so the first filter reads
 the 100 most recent entries and matches over them; the table says when there are
-more, and paging forward reads the next page.
+more, and paging forward reads the next page. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 Each site keeps its own list: somebody who unsubscribed from one site can still
 be emailed by another — unless your organization has declared the two sites one

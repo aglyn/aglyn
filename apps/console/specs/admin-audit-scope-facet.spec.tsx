@@ -16,36 +16,22 @@
  */
 
 /**
- * THE AUDIT LOG READS THE FIELDS IT IS WRITTEN (AGL-2287).
+ * THE AUDIT LOG READS THE FIELDS IT IS WRITTEN (AGL-2287), THROUGH ITS
+ * TOOLBAR (AGL-3321).
  *
- * `admin/lockdown/route.ts` stores `scope` on every audit row and says why, in
- * the field's own docblock:
+ * `admin/lockdown/route.ts` stores `scope` on every audit row so the log can
+ * filter by it: it is derivable from `target` only by prefix-matching a path,
+ * and `lockdowns/` alone covers several different scopes. Nine routes write
+ * `actorEmail`, the only identifier a reviewer outside engineering has.
  *
- * > "Stored top-level so the audit log filters by scope on an equality match.
- * >  It is derivable from `target`, but only by prefix-matching a path — and
- * >  `lockdowns/` alone covers three different scopes."
- *
- * Five call sites wrote it — the five lockdown branches, media quarantine,
- * abuse reports, DMCA counter-notices. The audit log did not filter on it, did
- * not display it, and did not export it. Nine routes likewise wrote
- * `actorEmail`, and all three readers projected `actorUid` alone, so an
- * auditor searching for a colleague by the only identifier they have got
- * nothing off a log that had been storing exactly that string all along.
- *
- * WHAT THIS FILE HAS TO CATCH. Not "does the word `scope` appear in the
- * file" — a docblock satisfies that, and a guard satisfied by its own comment
- * is the false green this sweep exists to end. Every assertion below drives
- * the rendered page: a chip that carries the row's value, a select that
- * changes which rows survive, a text filter that matches on the email, and an
- * exported CSV whose bytes are read back.
- *
- * The load-bearing shape is that two rows differing ONLY in `scope` must be
- * separable. A page that rendered a constant, or filtered on `target` and
- * happened to agree, dies on the two `lockdowns/…` rows below — which is
- * precisely the case the writers' comment says a path prefix cannot answer.
+ * Every assertion drives the rendered page: a chip that carries the row's
+ * value, a Scope pick in the grid's Filters panel that changes which rows
+ * survive, a search that matches on the email, and an exported CSV whose
+ * bytes are read back. The load-bearing case is two rows differing ONLY in
+ * `scope`, under the same `lockdowns/` target prefix.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 jest.mock('@aglyn/aglyn', () => {
   // The action facet groups entries through the plugin activity-action
@@ -57,6 +43,7 @@ jest.mock('@aglyn/aglyn', () => {
   return {
     __esModule: true,
     orgOverrideReasonSummary: () => null,
+    listPluginActivityFilters: actions.listPluginActivityFilters,
     pluginStaffAuditActionGroup: actions.pluginStaffAuditActionGroup,
     pluginStaffAuditActionGroupLabel: actions.pluginStaffAuditActionGroupLabel,
   }
@@ -115,54 +102,74 @@ jest.mock('../constants/route-links', () => ({
   Route: { ADMIN_OVERVIEW: 'ADMIN_OVERVIEW', ADMIN_AUDIT: 'ADMIN_AUDIT' },
 }))
 
-/**
- * The rows the page is handed. Modelled as the paging hook's real return
- * shape, because a double thinner than the thing it stands in for hides the
- * change it is meant to catch.
- *
- * These fixtures are all smaller than one page, so `rows` is the whole set
- * and the facets under test see every row. `audit-window-and-archive.spec`
- * owns the paging itself and models the window arithmetic in full; splitting
- * it that way keeps this file about scope and actorEmail.
- */
+/** Held: a Firestore handle minted per render would re-run every read. */
+const mockFirestore = {}
+
+/** Every query's constraints, in the order the page built them. */
+const queries: any[][] = []
 let mockRows: any[] = []
 
-jest.mock('@aglyn/tenant-feature-instance', () => ({
-  __esModule: true,
-  useFirestore: () => ({}),
-  // AGL-2324's archive card reads the staff id token off the user. A
-  // wholesale module mock is a CLOSED WORLD — an export the tree reaches and
-  // the mock omits is a TypeError, not a missing feature. AGL-2501 added a
-  // second export the page reaches, and omitting it renders the whole page
-  // as "Element type is invalid" against this file's assertions.
-  useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
-  usePagedCollection: () => ({
-    data: mockRows,
-    rows: mockRows,
-    hasMore: false,
-    page: 0,
-    setPage: () => undefined,
-    pageSize: 10,
-    setPageSize: () => undefined,
-  }),
-}))
+/*==========================================
+ * A Firestore double that ANSWERS the constraints: equalities and `in`,
+ * ranges on `at`, the order, the cursor and the limit. An unordered query is
+ * answered in document-id order, as Firestore answers it.
+ *=========================================*/
+const mockServe = (constraints: any[]) => {
+  const seconds = (row: any) => Number(row?.at?.seconds ?? 0)
+  let served = [...mockRows].sort((a, b) => String(a.$id).localeCompare(String(b.$id)))
+  for (const bound of constraints.filter((entry: any) => entry?.kind === 'where')) {
+    served = served.filter((row) => {
+      if (bound.field === 'at') {
+        const edge = Date.parse(bound.value?.iso ?? '') / 1000
+        return bound.op === '>=' ? seconds(row) >= edge : seconds(row) < edge
+      }
+      if (bound.op === 'in') return bound.value.includes(row[bound.field])
+      return row[bound.field] === bound.value
+    })
+  }
+  const order = constraints.find((entry: any) => entry?.kind === 'orderBy')
+  if (order) {
+    const direction = order.direction === 'desc' ? -1 : 1
+    served.sort((a, b) => direction * (seconds(a) - seconds(b)))
+  }
+  const after = constraints.find((entry: any) => entry?.kind === 'startAfter')
+  if (after) {
+    served = served.slice(served.findIndex((row) => row.$id === after.cursor.id) + 1)
+  }
+  const capped = constraints.find((entry: any) => entry?.kind === 'limit')
+  return capped ? served.slice(0, capped.count) : served
+}
 
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
-  collection: () => ({}),
-  query: () => ({}),
-  orderBy: () => ({}),
-  limit: () => ({}),
-  // The date-range constraints AGL-2324 added. Same closed-world rule: the
-  // page calls both, so both must exist here or the render throws.
-  where: () => ({}),
-  // The compliance export reads the range for itself (AGL-2501) instead of
-  // serializing the page, so the closed world needs a one-shot get too.
-  getDocs: async () => ({
-    size: mockRows.length,
-    docs: mockRows.map((row: any) => ({ id: row.$id, data: () => row })),
-  }),
-  Timestamp: { fromDate: (date: Date) => ({ seconds: date.getTime() / 1000 }) },
+  collection: () => ({ kind: 'collection' }),
+  query: (_ref: unknown, ...constraints: any[]) => {
+    queries.push(constraints)
+    return { constraints }
+  },
+  orderBy: (field: string, direction: string) => ({ kind: 'orderBy', field, direction }),
+  limit: (count: number) => ({ kind: 'limit', count }),
+  startAfter: (cursor: unknown) => ({ kind: 'startAfter', cursor }),
+  where: (field: string, op: string, value: unknown) => ({ kind: 'where', field, op, value }),
+  documentId: () => '__name__',
+  startAt: (value: unknown) => ({ kind: 'startAt', value }),
+  endAt: (value: unknown) => ({ kind: 'endAt', value }),
+  getDocs: async (built: any) => {
+    const served = mockServe(built?.constraints ?? [])
+    return {
+      size: served.length,
+      docs: served.map((row) => ({ id: row.$id, data: () => row })),
+    }
+  },
+  Timestamp: {
+    fromDate: (date: Date) => ({ kind: 'ts', iso: date.toISOString() }),
+  },
+}))
+
+jest.mock('@aglyn/tenant-feature-instance', () => ({
+  __esModule: true,
+  useFirestore: () => mockFirestore,
+  useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
 }))
 
 import AdminAudit from '../app/(app)/admin/audit/page'
@@ -170,17 +177,10 @@ import AdminAudit from '../app/(app)/admin/audit/page'
 /** Seconds, as Firestore hands a `Timestamp` to the browser. */
 const AT = { seconds: 1_760_000_000 }
 
-/**
- * Two lockdown rows under the SAME `lockdowns/` target prefix and two
- * different scopes, plus one row from a different subsystem.
- *
- * The first two are the case the writers' comment names: their targets cannot
- * distinguish them, so anything that separates them has to be reading `scope`.
- */
 const ROWS = [
   {
     $id: 'row-platform',
-    at: AT,
+    at: { seconds: AT.seconds + 3 },
     actorUid: 'uid-alice',
     actorEmail: 'alice@aglyn.com',
     action: 'lockdown.lock',
@@ -189,7 +189,7 @@ const ROWS = [
   },
   {
     $id: 'row-host',
-    at: AT,
+    at: { seconds: AT.seconds + 2 },
     actorUid: 'uid-bob',
     actorEmail: 'bob@aglyn.com',
     action: 'lockdown.lock',
@@ -198,7 +198,7 @@ const ROWS = [
   },
   {
     $id: 'row-asset',
-    at: AT,
+    at: { seconds: AT.seconds + 1 },
     actorUid: 'uid-carol',
     actorEmail: 'carol@aglyn.com',
     action: 'mediaQuarantine.quarantine',
@@ -207,82 +207,85 @@ const ROWS = [
   },
 ]
 
+const lastQuery = () => queries[queries.length - 1] ?? []
+const constraint = (kind: string) =>
+  lastQuery().filter((entry: any) => entry?.kind === kind)
+
+/** Picks a column and a value in the grid's Filters panel. */
+async function pickFilter(column: string, value: string) {
+  fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+  fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Column' }))
+  act(() => {
+    fireEvent.click(screen.getByRole('option', { name: column }))
+  })
+  fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Value' }))
+  return screen.findByRole('option', { name: value })
+}
+
 beforeEach(() => {
+  queries.length = 0
   mockRows = ROWS.map((row) => ({ ...row }))
 })
 
 describe('the staff audit log surfaces scope and actorEmail', () => {
-  it('renders the row’s own scope, not a constant', () => {
+  it('renders the row’s own scope, not a constant', async () => {
     render(<AdminAudit />)
     // Each value once, from its own row. A page rendering a fixed string, or
     // deriving one from the shared `lockdowns/` prefix, cannot produce three.
-    expect(screen.getByText('platform')).toBeTruthy()
+    expect(await screen.findByText('platform')).toBeTruthy()
     expect(screen.getByText('host')).toBeTruthy()
     expect(screen.getByText('asset')).toBeTruthy()
   })
 
-  it('names the actor by email, keeping the uid', () => {
+  it('names the actor by email, keeping the uid', async () => {
     render(<AdminAudit />)
-    // Both halves: the email is what an auditor outside engineering can act
-    // on, and the uid is the identifier that survives a mailbox change.
-    expect(
-      screen.getByText(/alice@aglyn\.com \(uid-alice\)/),
-    ).toBeTruthy()
+    expect(await screen.findByText('alice@aglyn.com (uid-alice)')).toBeTruthy()
   })
 
-  it('falls back to the uid on a row written before actorEmail', () => {
+  it('falls back to the uid on a row written before actorEmail', async () => {
     mockRows = [{ ...ROWS[0], actorEmail: undefined }]
     render(<AdminAudit />)
-    expect(screen.getByText(/uid-alice/)).toBeTruthy()
+    expect(await screen.findByText('uid-alice')).toBeTruthy()
     expect(screen.queryByText(/alice@aglyn\.com/)).toBeNull()
   })
 
-  it('the Scope select separates two rows with the SAME target prefix', () => {
-    const { container } = render(<AdminAudit />)
-    expect(screen.getByText('lockdowns/platform')).toBeTruthy()
-    expect(screen.getByText('lockdowns/host-77')).toBeTruthy()
-
-    // MUI renders the select through a hidden native input; setting it is the
-    // only interaction that does not depend on the popup's portal.
-    const select = container.querySelector(
-      'input[name="scope"], select',
-    ) as HTMLSelectElement | null
-    if (select) {
-      fireEvent.change(select, { target: { value: 'host' } })
-    } else {
-      // BY LABEL, not by role alone. The shared footer (AGL-2501) puts a
-      // second combobox on the card — the rows-per-page menu — and a bare
-      // `getByRole('combobox')` stops being a question with one answer.
-      fireEvent.mouseDown(screen.getByLabelText('Scope'))
-      fireEvent.click(screen.getByRole('option', { name: 'host' }))
-    }
-
+  it('a Scope pick separates two rows with the SAME target prefix, across the log', async () => {
+    render(<AdminAudit />)
+    await screen.findByText('lockdowns/platform')
+    const host = await pickFilter('Scope', 'host')
+    act(() => {
+      fireEvent.click(host)
+    })
     // THE ASSERTION. The two lockdown rows share `lockdowns/` and differ only
     // in `scope`, so a filter that survived on `target` would keep both.
-    expect(screen.queryByText('lockdowns/platform')).toBeNull()
+    await waitFor(() => expect(screen.queryByText('lockdowns/platform')).toBeNull())
     expect(screen.getByText('lockdowns/host-77')).toBeTruthy()
     expect(screen.queryByText('mediaQuarantines/index')).toBeNull()
+    // Matched as the log is read — `scope` has no composite — and said so.
+    expect(constraint('where')).toEqual([])
+    expect(screen.getByText(/matched as the log is read/)).toBeTruthy()
+    expect(screen.getByText('Scope is host')).toBeTruthy()
   })
 
-  it('offers exactly the scopes present — no phantom facet', () => {
-    // The other half of the same defect: a hardcoded vocabulary would offer
-    // options that match nothing, which is a filter that lies about coverage.
+  it('offers exactly the scopes the log has shown — no phantom facet', async () => {
     mockRows = [{ ...ROWS[0] }]
     render(<AdminAudit />)
-    fireEvent.mouseDown(screen.getByLabelText('Scope'))
-    expect(screen.getByRole('option', { name: 'platform' })).toBeTruthy()
+    await screen.findByText('lockdowns/platform')
+    expect(await pickFilter('Scope', 'platform')).toBeTruthy()
     expect(screen.queryByRole('option', { name: 'host' })).toBeNull()
     expect(screen.queryByRole('option', { name: 'asset' })).toBeNull()
   })
 
-  it('the free-text filter matches an actor’s email address', () => {
+  it('the search matches an actor’s email address', async () => {
     render(<AdminAudit />)
-    fireEvent.change(
-      screen.getByLabelText(/Filter this page \(actor, email, action, target\)/),
-      { target: { value: 'carol@aglyn.com' } },
-    )
+    await screen.findByText('lockdowns/platform')
+    act(() => {
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'carol@aglyn.com' } })
+    })
+    await waitFor(() => expect(screen.queryByText('lockdowns/platform')).toBeNull(), {
+      timeout: 3000,
+    })
     expect(screen.getByText('mediaQuarantines/index')).toBeTruthy()
-    expect(screen.queryByText('lockdowns/platform')).toBeNull()
   })
 
   it('the compliance CSV carries scope and actorEmail as columns', async () => {
@@ -304,6 +307,7 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
     ;(URL as any).revokeObjectURL = () => undefined
     try {
       render(<AdminAudit />)
+      await screen.findByText('lockdowns/platform')
       fireEvent.click(screen.getByText('Export CSV'))
       await waitFor(() => expect(written).toHaveLength(1))
       const [header, ...rows] = written[0].split('\n')

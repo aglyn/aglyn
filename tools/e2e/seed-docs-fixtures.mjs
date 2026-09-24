@@ -195,6 +195,30 @@ await put(
     createdAt: daysAgo(21),
   },
 )
+// The site's own roster, which the site Users card lists. Shaped as
+// `POST /api/hosts/members` writes it: an active collaborator carries the
+// account's uid, an invited address has none yet.
+await put(
+  firestore.collection('hosts').doc(hostId).collection('members').doc('docs-collab'),
+  {
+    email: 'docs-collab@aglyn.test',
+    role: 'editor',
+    status: 'active',
+    uid: 'docs-collab',
+    addedBy: 'e2e-owner',
+    createdAt: daysAgo(21),
+  },
+)
+await put(
+  firestore.collection('hosts').doc(hostId).collection('members').doc('docs-reviewer'),
+  {
+    email: 'docs-reviewer@aglyn.test',
+    role: 'viewer',
+    status: 'invited',
+    addedBy: 'e2e-owner',
+    createdAt: daysAgo(3),
+  },
+)
 
 // ── A13. A charged-back order (and enough neighbours to be a list) ──────────
 // Field names come from `HostOrder`, NOT from the demo-brands seeder. That

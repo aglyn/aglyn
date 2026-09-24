@@ -658,7 +658,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
     <CardDisplay
       header={'Users'}
       help={docsHelp('team', {
-        anchor: '#site-membership',
+        anchor: '#site-collaborators',
         excerpt:
           'Teammates with console access to this site — add by email ' +
           'with a role; membership uses your plan’s member seats.',
@@ -810,6 +810,20 @@ export function HostMembersCard(props: HostMembersCardProps) {
           hasMore={hasMore}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
+          /*
+           * The owner's row is pinned above every page and read from the
+           * org, not from the roster the pager walks, so the pager's own
+           * figures leave it out: three rows on screen read "1–2 of 2". The
+           * owner is counted once, as the list's first row (AGL-3321).
+           */
+          {...(ownerShown
+            ? {
+                labelDisplayedRows: ({ from, to, count }: { from: number; to: number; count: number }) =>
+                  `${page === 0 ? 1 : from + 1}–${to + 1} of ${
+                    count === -1 ? `more than ${to + 1}` : count + 1
+                  }`,
+              }
+            : {})}
         />
         <Typography variant="caption" color="text.secondary">
           {'Admins get full console access to this site. An Author can edit ' +

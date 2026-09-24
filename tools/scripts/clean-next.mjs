@@ -119,8 +119,19 @@ function runningNextProcesses() {
   }
   const processes = []
   for (const line of lines) {
-    const pid = line.split(/\s+/)[0]
-    const cmd = line.slice(pid.length).trim()
+    /*
+     * A process whose command line holds a newline prints its continuation
+     * as a line of its own, with no pid in front. Only a line that STARTS
+     * with a pid is a process; a continuation belongs to the one before it.
+     * Taking its first word as a pid handed `lsof -p` an empty or bogus
+     * argument, and the run hung (AGL-3321).
+     */
+    const match = /^(\d+)\s+(.*)$/.exec(line)
+    if (!match) {
+      if (processes.length) processes[processes.length - 1].cmd += `\n${line}`
+      continue
+    }
+    const [, pid, cmd] = match
     let cwd
     try {
       const out = execFileSync('lsof', ['-a', '-d', 'cwd', '-p', pid, '-Fn'], {

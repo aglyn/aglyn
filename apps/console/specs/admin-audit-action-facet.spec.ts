@@ -37,6 +37,7 @@ import { readFileSync } from 'node:fs'
 // plugin's levers and activity codes come from its declaration, not core.
 import { registerPluginDeclarations } from '../constants/plugins.declarations.generated'
 import { join } from 'node:path'
+import { ADMIN_AUDIT_FILTER_FIELDS } from '../utils/audit-log-filters'
 import {
   pluginStaffAuditActionGroup as staffAuditActionGroup,
   pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,
@@ -52,18 +53,19 @@ beforeAll(() => registerPluginDeclarations())
 describe('the audit page wires an Action facet through the shared catalog', () => {
   it('imports the grouping and its label from the registry, not a local prefix list', () => {
     expect(PAGE).toMatch(
-      /import \{\s*pluginStaffAuditActionGroup as staffAuditActionGroup,\s*pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,?\s*\} from '@aglyn\/aglyn'/,
+      /pluginStaffAuditActionGroup as staffAuditActionGroup,\s*pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,?\s*\} from '@aglyn\/aglyn'/,
     )
     expect(PAGE).not.toMatch(/['"]billing\.assistOverage\.['"]/)
   })
 
-  it('derives the facet from the page in view and narrows the page by it', () => {
-    expect(PAGE).toContain('staffAuditActionGroup(entry.action)')
-    expect(PAGE).toMatch(/label="Action"/)
-    expect(PAGE).toContain('staffAuditActionGroupLabel(option)')
-    expect(PAGE).toMatch(
-      /!actionGroup \|\| staffAuditActionGroup\(entry\.action\) === actionGroup/,
-    )
+  it('files each entry it reads under its group, and offers the groups by label', () => {
+    // The group rides on the row, so the toolbar's Action group pick is
+    // matched against the same grouping the menu offers.
+    expect(PAGE).toContain("actionGroup: staffAuditActionGroup(data['action'])")
+    expect(PAGE).toContain('label: staffAuditActionGroupLabel(group)')
+    expect(
+      ADMIN_AUDIT_FILTER_FIELDS.find((field) => field.column === 'actionGroup'),
+    ).toMatchObject({ windowOnly: true })
   })
 
   it('files every AI row the staff log holds under the one group the menu labels AI', () => {
