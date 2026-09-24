@@ -17,7 +17,7 @@
 
 'use client'
 
-import { listConsoleWidgets } from '@aglyn/aglyn'
+import { listConsoleWidgets, type ConsolePluginOrgMount } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { Alert, AlertTitle } from '@mui/material'
 import { definePluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
@@ -57,9 +57,16 @@ InboxRecordAttributionZone.displayName = 'InboxRecordAttributionZone'
  * Inbox keeps a Campaigns tab. The campaigns themselves belong to a plugin
  * that sends them, which draws its own card here; the Inbox hands it the site
  * and nothing else.
+ *
+ * On the organization's Inbox there is no site (AGL-3303): `hostId` is
+ * `null` and `orgMount` names the organization and its sites, which is the
+ * shell's own shape for a surface mounted with no site. A widget lists every
+ * site's campaigns then, the way the organization's Marketing page does.
  */
 export interface InboxCampaignsZoneProps {
-  hostId: string
+  hostId: string | null
+  /** Present exactly when `hostId` is `null`. */
+  orgMount?: ConsolePluginOrgMount
 }
 
 export const INBOX_CAMPAIGNS_ZONE =
@@ -72,8 +79,11 @@ export function InboxCampaignsZone(props: InboxCampaignsZoneProps) {
     return (
       <Alert severity="info">
         <AlertTitle>{'Campaigns are part of Marketing'}</AlertTitle>
-        {'Marketing is switched off for this workspace or this site, so there ' +
-          'are no campaigns to show here.'}
+        {props.hostId == null
+          ? 'Marketing is switched off for this workspace, so there are no ' +
+            'campaigns to show here.'
+          : 'Marketing is switched off for this workspace or this site, so ' +
+            'there are no campaigns to show here.'}
       </Alert>
     )
   }

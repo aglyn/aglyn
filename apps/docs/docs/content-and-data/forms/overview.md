@@ -338,6 +338,31 @@ offering a Send that would fail.
 
 <!-- screenshot: forms/inbox-submission-reader.png per SCREENSHOT_PLAN.md -->
 
+### Every site's Inbox at once {#every-sites-inbox-at-once}
+
+Your organization has an **Inbox** of its own, beside **CRM** and **Marketing**, for
+the people who span the whole organization — owners, admins, and members with access to
+every site. It has the same three tabs, over every site at once:
+
+- **Submissions** lists every site's form submissions in one list, newest first, with a
+  **Site** column saying where each one was sent. Open one to read it and it's marked
+  read, as on the site's own Inbox. **Reply**, **Add to list** and **Where this came
+  from** act as the site the submission was sent to, so a reply leaves on that site's
+  sending address.
+- **Members & leads** lists the organization's leads, each with the sites that captured
+  the person. A member signs up to one site, so members are listed once you choose a
+  site. This tab needs the **Manage data** permission, the one the CRM asks for.
+- **Campaigns** lists every campaign, as the organization's **Marketing** page does.
+
+The **Site** filter above the tabs narrows the whole page to one site: its submissions
+with their **Form** filter, its members beside its leads, its campaigns, and its
+**paused** and **spam** notices, which belong to a single site. Your choice is kept while
+you move between tabs. An organization with only one site goes straight to that site's
+view, with no filter to set.
+
+Collaborators invited to particular sites don't see the organization's Inbox — they keep
+each site's own, which is unchanged.
+
 ### One form's own page {#one-forms-own-page}
 
 The Inbox answers "who is waiting for a reply" for the whole site. **Forms →** a form

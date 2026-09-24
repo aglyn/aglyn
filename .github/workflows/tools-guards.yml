@@ -1077,6 +1077,14 @@ jobs:
       # invented beyond what the auth record and first device can still say.
       - run: npm run test:account-acquisition-backfill
 
+      # AGL-3303. The submission-scope backfill's decisions: the org a site
+      # stamps (refused, never guessed, when its host document and hostIndex
+      # disagree), that a row already carrying the pair is left alone and a
+      # second run plans nothing, and the tree guard that refuses `--apply` on
+      # a checkout whose submit route does not stamp or whose rules do not
+      # freeze the pair.
+      - run: npm run test:submission-scope-backfill
+
       # AGL-2814. The members-video backfill's decisions: which files become
       # private, which download tokens are rotated, which stored links are
       # rewritten, and the public file used elsewhere that is listed and left

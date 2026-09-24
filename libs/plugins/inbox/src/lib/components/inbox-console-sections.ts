@@ -64,3 +64,22 @@ export const INBOX_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
  * deliberately no separate default constant — a second place to say which
  * section is first is a second place for it to disagree with the rail.
  */
+
+/**
+ * The ORGANIZATION's Inbox sections, at `/[orgSlug]/inbox` (AGL-3303): the
+ * same three, read off the list above so a section keeps one id and one
+ * label at both levels.
+ *
+ * Members & leads asks for `data.manage` here and not on the site rail.
+ * Without a site it lists the organization's leads unscoped, and the rules
+ * admit that read on the authority the CRM's own gate names
+ * (`canReadScopedPeople`); a reader without it would be offered a table that
+ * is refused. Under a site the same section still lists the site's members,
+ * which nobody's permission narrows.
+ */
+export const INBOX_ORG_CONSOLE_SECTIONS: readonly ConsoleNavSection[] =
+  INBOX_CONSOLE_SECTIONS.map((section) =>
+    section.id === 'contacts'
+      ? { ...section, permission: 'data.manage' }
+      : section,
+  )

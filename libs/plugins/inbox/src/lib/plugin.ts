@@ -18,7 +18,10 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiInboxArrowDown } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
-import { INBOX_CONSOLE_SECTIONS } from './components/inbox-console-sections'
+import {
+  INBOX_CONSOLE_SECTIONS,
+  INBOX_ORG_CONSOLE_SECTIONS,
+} from './components/inbox-console-sections'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import {
   INBOX_CAMPAIGNS_ZONE,
@@ -46,9 +49,10 @@ const InboxGlanceCard = lazy(
  * Inbox feature plugin (AGL-395). Console-only — form submissions, site
  * members/leads and campaigns live in Firestore and have no canvas element,
  * so there is no UI bundle. The console half declares the Inbox nav + its
- * three sections through the ConsoleExtension registry (always-on). The
- * Campaigns section and the attribution shown inside a submission are zones
- * this plugin hosts; the plugin that owns campaigns draws in them.
+ * three sections through the ConsoleExtension registry (always-on), once
+ * under each site and once for the organization (AGL-3303). The Campaigns
+ * section and the attribution shown inside a submission are zones this
+ * plugin hosts; the plugin that owns campaigns draws in them.
  */
 export function registerInboxConsole(): void {
   registerPluginZone(
@@ -68,7 +72,7 @@ export function registerInboxConsole(): void {
       label: 'The Inbox’s Campaigns section',
       surface: 'console',
       description:
-        'The body of the Inbox’s Campaigns tab. A widget here lists the site’s campaigns; it is handed the site and nothing else.',
+        'The body of the Inbox’s Campaigns tab. A widget here lists the site’s campaigns; it is handed the site and nothing else — or, on the organization’s Inbox, no site (`hostId: null`) and the organization with its sites (`orgMount`), and lists every site’s.',
     },
     { pluginId: BUNDLE_ID },
   )
@@ -103,6 +107,32 @@ export function registerInboxConsole(): void {
         // Sections as ROUTES (AGL-2501): each is a real URL the shell
         // resolves and gates, so the page mounts the one being read.
         sections: INBOX_CONSOLE_SECTIONS,
+        navTabId: 'nav-tab-inbox',
+        icon: { path: mdiInboxArrowDown.path },
+        header: {
+          title: 'Inbox',
+          icon: { path: mdiInboxArrowDown.path },
+          docsTopic: 'forms',
+        },
+        Component: InboxConsolePage,
+      },
+    ],
+    /*
+     * The ORGANIZATION's Inbox, at `/[orgSlug]/inbox` (AGL-3303): every
+     * site's submissions in one list, the organization's leads, and every
+     * campaign, with a site filter that narrows the page to one site's own
+     * view. The page is the same component; handed no site, it draws the
+     * org sections.
+     *
+     * It carries the SITE tab's id on purpose, as the org CRM and Marketing
+     * tabs do: `release_inbox` names `nav-tab-inbox`, so one flag holds both
+     * levels and the org Inbox cannot ship while the site's is switched off.
+     */
+    orgNavItems: [
+      {
+        label: 'Inbox',
+        href: '/inbox',
+        sections: INBOX_ORG_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-inbox',
         icon: { path: mdiInboxArrowDown.path },
         header: {

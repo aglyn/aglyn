@@ -423,8 +423,10 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'The capture doors write leads through the Admin SDK.',
   formSubmissions:
     'Create is denied (AGL-1668) because the row is what the meter counts; ' +
-    'update and delete stay open because the inbox marks a submission read ' +
-    'and deletes it client-side.',
+    'update is excluded from the catch-all and re-granted by a dedicated ' +
+    'block for `read` alone, since `orgId` and `hostId` decide which ' +
+    'organization Inbox lists the row (AGL-3303); delete stays open because ' +
+    'the inbox deletes a submission client-side.',
   forms:
     'Form definitions, authored on the site Forms page and bound to a `Form` ' +
     'node by id. Create is denied so it routes through /api/hosts/resources, ' +

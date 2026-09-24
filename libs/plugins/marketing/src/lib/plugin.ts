@@ -50,8 +50,13 @@ const CampaignGlanceCard = lazy(
   () => import('./components/campaign-glance-card.component'),
 )
 
-/** The site's campaigns, drawn in the Inbox's Campaigns section. */
-const HostCampaignsCard = lazy(() => import('./components/campaigns-card'))
+/**
+ * The campaigns drawn in the Inbox's Campaigns section: one site's, or every
+ * site's on the organization's Inbox.
+ */
+const InboxCampaignsWidget = lazy(
+  () => import('./components/inbox-campaigns-widget'),
+)
 
 /** The Emails page's Messages section: the list, one message, its composer. */
 const EmailMessagesWidget = lazy(
@@ -199,7 +204,7 @@ export function registerMarketingConsole(): void {
         slot: 'inboxCampaigns',
         widgetId: 'marketing-inbox-campaigns',
         title: 'Campaigns',
-        Component: HostCampaignsCard,
+        Component: InboxCampaignsWidget,
       },
       {
         slot: 'inboxRecordAttribution',

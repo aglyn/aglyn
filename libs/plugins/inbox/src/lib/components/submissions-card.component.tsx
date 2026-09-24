@@ -16,7 +16,12 @@
  */
 'use client'
 
-import { FORMS_MAX_PER_HOST, INBOX_SUBMISSION_PARAM, pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  FORMS_MAX_PER_HOST,
+  INBOX_SUBMISSION_PARAM,
+  pluginDocsHelp,
+  type ConsolePluginOrgMount,
+} from '@aglyn/aglyn'
 // A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published
@@ -68,6 +73,7 @@ import {
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
@@ -85,6 +91,7 @@ import {
   senderHue,
   submissionSender,
 } from '../model/submission-presenter'
+import { orgSiteName } from './inbox-org-sites'
 import SubmissionListAssignment from './submission-list-assignment.component'
 import SubmissionReply from './submission-reply.component'
 import { useRecordRouteContext } from './use-record-route-context'
@@ -99,7 +106,14 @@ import { useRecordRouteContext } from './use-record-route-context'
  * of them whichever one the URL names.
  */
 export interface SubmissionsCardProps {
-  hostId: string
+  /**
+   * The site whose submissions are listed, or `null` on the organization's
+   * Inbox, where the card lists every site's at once (AGL-3303) and each row
+   * is acted on as the site it was sent to.
+   */
+  hostId: string | null
+  /** The organization and its sites — present exactly when `hostId` is `null`. */
+  orgMount?: ConsolePluginOrgMount
   /**
    * Narrow this card to ONE form, permanently.
    *
@@ -120,12 +134,33 @@ export interface SubmissionsCardProps {
   formId?: string
 }
 
-export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
+export function SubmissionsCard({
+  hostId,
+  formId,
+  orgMount,
+}: SubmissionsCardProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   /** Scoped to one form: the subject is fixed and nothing may widen it. */
   const scoped = Boolean(formId)
+  /** Every site of this organization at once, when no site is named. */
+  const orgId = hostId == null ? (orgMount?.orgId ?? null) : null
+  /*
+   * The site a row lives on, which is where every act on it is addressed:
+   * this card's own site, or — across every site — the `hostId` the submit
+   * route stamps on the row. That stamp is frozen against a client update and
+   * written from the row's own path, so it names the document's real parent;
+   * the rules check the host role on that site either way.
+   */
+  const siteOf = useCallback(
+    (submission: any): string | null =>
+      hostId ??
+      (typeof submission?.hostId === 'string' && submission.hostId
+        ? submission.hostId
+        : null),
+    [hostId],
+  )
   /*
    * Where the sender's CONTACT is (AGL-2612). A submission that carried an
    * address updated a contact in the CRM at stage Lead; the row links to
@@ -154,7 +189,9 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
    */
   const { data: formDocs } = useFirestoreCollection<any>(
     () =>
-      scoped
+      // Forms are one site's catalog. Across every site there is no single
+      // catalog to filter by, and picking a site is how a reader gets one.
+      scoped || !hostId
         ? null
         : query(
             collection(firestore, 'hosts', hostId, 'forms'),
@@ -223,17 +260,40 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
     setPageSize: setSubmissionPageSize,
   } = usePagedCollection<any>(
     (pageLimit) =>
-      query(
-        collection(firestore, 'hosts', hostId, 'formSubmissions'),
-        // Served by the `formId ASC, createdAt DESC` composite index in
-        // `cloud/firebase-firestore.indexes.json`, which must be deployed
-        // before this ships — without it Firestore refuses the query rather
-        // than answering it slowly.
-        ...(activeForm ? [where('formId', '==', activeForm)] : []),
-        orderBy('createdAt', 'desc'),
-        limit(pageLimit),
-      ),
-    [firestore, hostId, activeForm],
+      hostId
+        ? query(
+            collection(firestore, 'hosts', hostId, 'formSubmissions'),
+            // Served by the `formId ASC, createdAt DESC` composite index in
+            // `cloud/firebase-firestore.indexes.json`, which must be deployed
+            // before this ships — without it Firestore refuses the query
+            // rather than answering it slowly.
+            ...(activeForm ? [where('formId', '==', activeForm)] : []),
+            orderBy('createdAt', 'desc'),
+            limit(pageLimit),
+          )
+        : orgId
+          ? query(
+              /*
+               * EVERY SITE'S SUBMISSIONS IN ONE BOUNDED QUERY (AGL-3303), not
+               * a listener per site: the same page-plus-probe window, over
+               * the collection group, newest first.
+               *
+               * The `orgId` clause is not a filter this card could drop. The
+               * rules admit a group read only when it is narrowed to an org
+               * the reader spans, so an unfiltered group query is refused
+               * outright. Served by the `orgId ASC, createdAt DESC`
+               * COLLECTION_GROUP index. A row written before the submit route
+               * stamped `orgId` is in no organization's list until the scope
+               * backfill (`docs/SUBMISSION_SCOPE_BACKFILL.md`) stamps it; its
+               * own site's Inbox lists it either way.
+               */
+              collectionGroup(firestore, 'formSubmissions'),
+              where('orgId', '==', orgId),
+              orderBy('createdAt', 'desc'),
+              limit(pageLimit),
+            )
+          : null,
+    [firestore, hostId, orgId, activeForm],
     { idField: '$id' },
   )
 
@@ -243,24 +303,27 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
   const handleOpenReader = useCallback(
     (submission: any) => () => {
       setReader(submission)
-      if (!submission.read) {
+      const site = siteOf(submission)
+      if (!submission.read && site) {
         void updateDoc(
-          doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
+          doc(firestore, 'hosts', site, 'formSubmissions', submission.$id),
           { read: true },
         )
       }
     },
-    [firestore, hostId],
+    [firestore, siteOf],
   )
 
   const handleToggleRead = useCallback(
     (submission: any) => () => {
+      const site = siteOf(submission)
+      if (!site) return
       void updateDoc(
-        doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
+        doc(firestore, 'hosts', site, 'formSubmissions', submission.$id),
         { read: !submission.read },
       )
     },
-    [firestore, hostId],
+    [firestore, siteOf],
   )
 
   /*
@@ -286,6 +349,9 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
   const seededSubmissionId = searchParams?.get(INBOX_SUBMISSION_PARAM) ?? null
   const seededOpened = useRef<string | null>(null)
   useEffect(() => {
+    // A submission link names one site's Inbox; the org's has no site to read
+    // the id under.
+    if (!hostId) return
     if (!seededSubmissionId || seededOpened.current === seededSubmissionId) return
     seededOpened.current = seededSubmissionId
     void getDoc(doc(firestore, 'hosts', hostId, 'formSubmissions', seededSubmissionId))
@@ -305,6 +371,8 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
 
   const handleDelete = useCallback(
     (submission: any) => async () => {
+      const site = siteOf(submission)
+      if (!site) return
       const confirmed = await confirm({
         title: 'Delete this submission?',
         description: 'The submission is removed permanently.',
@@ -315,14 +383,14 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
         .catch(() => false)
       if (!confirmed) return
       await deleteDoc(
-        doc(firestore, 'hosts', hostId, 'formSubmissions', submission.$id),
+        doc(firestore, 'hosts', site, 'formSubmissions', submission.$id),
       )
       enqueueSnackbar('Submission deleted', {
         variant: 'success',
         persist: false,
       })
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [confirm, firestore, siteOf, enqueueSnackbar],
   )
 
   /*
@@ -434,6 +502,22 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
         )
       },
     },
+    /*
+      Which site it was sent to, on the organization's Inbox only — under a
+      site every row is that site's, and a column saying so would be noise.
+     */
+    ...(hostId == null
+      ? [
+          {
+            field: 'hostId',
+            headerName: 'Site',
+            flex: 1,
+            minWidth: 140,
+            valueGetter: (_value: unknown, submission: any) =>
+              orgSiteName(orgMount, submission.hostId),
+          } satisfies GridColDef,
+        ]
+      : []),
     {
       field: 'message',
       headerName: 'Message',
@@ -484,16 +568,29 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
     ),
   ]
 
+  /** The site the open submission was sent to, which its reader acts as. */
+  const readerSite = reader ? siteOf(reader) : null
+
   return (
     <>
       <CardDisplay
         header={scoped ? 'Submissions to this form' : 'Form Submissions'}
-        help={pluginDocsHelp('forms', {
-          anchor: '#the-inbox',
-          excerpt:
-            'Messages your forms collected, newest first, showing who sent ' +
-            'each one and where it was routed.',
-        })}
+        help={pluginDocsHelp(
+          'forms',
+          hostId == null
+            ? {
+                anchor: '#every-sites-inbox-at-once',
+                excerpt:
+                  'Every site’s form messages in one list, newest first, ' +
+                  'each under the site it was sent to.',
+              }
+            : {
+                anchor: '#the-inbox',
+                excerpt:
+                  'Messages your forms collected, newest first, showing who ' +
+                  'sent each one and where it was routed.',
+              },
+        )}
         contentGutterX
         contentGutterY
         contentBordered="all"
@@ -535,6 +632,16 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
             ))}
           </TextField>
         ) : null}
+        {hostId == null ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mb: submissions.length ? 2 : 1 }}
+          >
+            {'Every site’s submissions, newest first. Choose a site to ' +
+              'narrow them by form.'}
+          </Typography>
+        ) : null}
         {submissions.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {scoped
@@ -544,8 +651,10 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
               : activeForm
                 ? 'No submissions for this form yet. Submissions sent before ' +
                   'the form was created stay under All forms.'
-                : 'No form submissions yet. Add a Contact Form element to a ' +
-                  'screen — visitor messages arrive here.'}
+                : hostId == null
+                  ? 'No form submissions on any site yet.'
+                  : 'No form submissions yet. Add a Contact Form element to a ' +
+                    'screen — visitor messages arrive here.'}
           </Typography>
         ) : (
           <>
@@ -586,6 +695,10 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
         <DialogContent>
           <Typography variant="caption" color="text.secondary">
             {`Received ${reader?.createdAt?.toDate?.().toLocaleString() ?? ''}` +
+              // The site it was sent to, where the list spans every site.
+              (hostId == null && readerSite
+                ? ` · ${orgSiteName(orgMount, readerSite)}`
+                : '') +
               (reader?.screenId ? ` · screen ${reader.screenId}` : '')}
             {/*
               THE PAGE THE FORM WAS ON. Stored by the submit route since the
@@ -646,10 +759,10 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
             was credited to nobody renders the sentence saying so; it never
             renders a campaign with a zero beside it.
            */}
-          {reader?.$id ? (
+          {reader?.$id && readerSite ? (
             <Box sx={{ mt: 2 }}>
               <InboxRecordAttributionZone
-                hostId={hostId}
+                hostId={readerSite}
                 recordKind="form"
                 recordId={String(reader.$id)}
               />
@@ -663,8 +776,8 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
             name and the replies already sent — are paid when a merchant opens
             a submission and not once per visit to this page.
            */}
-          {reader ? (
-            <SubmissionReply hostId={hostId} submission={reader} />
+          {reader && readerSite ? (
+            <SubmissionReply hostId={readerSite} submission={reader} />
           ) : null}
           {/*
             Enrolling the sender in a marketing list — a SEPARATE act from
@@ -673,8 +786,8 @@ export function SubmissionsCard({ hostId, formId }: SubmissionsCardProps) {
             only when a merchant presses its own button, so opening a
             submission to read it costs nothing extra.
            */}
-          {reader ? (
-            <SubmissionListAssignment hostId={hostId} submission={reader} />
+          {reader && readerSite ? (
+            <SubmissionListAssignment hostId={readerSite} submission={reader} />
           ) : null}
         </DialogContent>
         <DialogActions>

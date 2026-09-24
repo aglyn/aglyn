@@ -98,7 +98,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'inbox',
     apiPrefixes: ["inbox"],
     register: {"console":"registerInboxConsole"},
-    contributes: {"console":{"shell":true,"routes":["/inbox"],"slots":["formSubmissions","hostDashboard"]}},
+    contributes: {"console":{"shell":true,"routes":["/inbox"],"orgRoutes":["/inbox"],"slots":["formSubmissions","hostDashboard"]}},
     load: () => import('@aglyn/plugins-inbox'),
   },
   {

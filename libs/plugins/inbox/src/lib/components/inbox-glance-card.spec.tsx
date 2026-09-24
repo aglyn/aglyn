@@ -37,11 +37,23 @@ let askedLeadScope = ''
 let askedLeadStatuses: string | undefined
 let leadCounts = { all: 0, closed: 0 }
 let askedOrder: string | undefined
+/**
+ * The org the site resolves to. It is a `hostIndex` lookup in the product, so
+ * it can arrive after the first render — which the card has to survive.
+ */
+let mockOrgId: string | null = 'org-1'
+const mockFirestore = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The lead silo is the org's (AGL-3275), so these cards resolve it.
-  useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
-  useFirestore: () => ({}),
+  useOrgDataScope: () => ({
+    scope: mockOrgId ? ['orgs', mockOrgId] : null,
+    orgId: mockOrgId,
+    ready: Boolean(mockOrgId),
+  }),
+  // Held: a handle minted per render would re-run the counts on every
+  // render, and the late-org case below would pass for that reason alone.
+  useFirestore: () => mockFirestore,
   useFirestoreCollection: (factory: () => unknown) => {
     factory()
     return { data: submissions, status: 'success', fromCache: false }
@@ -167,6 +179,7 @@ beforeEach(() => {
   askedLeadStatuses = undefined
   askedLeadScope = ''
   leadCounts = { all: 0, closed: 0 }
+  mockOrgId = 'org-1'
 })
 
 describe('the inbox glance card', () => {
@@ -272,6 +285,22 @@ describe('the inbox glance card', () => {
     await renderCard()
     expect(screen.getByText(/1 open lead ·/)).toBeTruthy()
     expect(screen.getByText('All caught up')).toBeTruthy()
+  })
+
+  it('counts the open leads once the org resolves, after the first render', async () => {
+    // The org is a lookup that lands a render late. Counts keyed on the site
+    // alone ran once with no org, returned, and never asked again — so the
+    // line never appeared on any dashboard.
+    mockOrgId = null
+    submissions = [submission('a', { name: 'Priya Nair' })]
+    leadCounts = { all: 4, closed: 1 }
+    const rendered = await renderCard()
+    expect(screen.queryByText(/open lead/)).toBeNull()
+    mockOrgId = 'org-1'
+    await act(async () => {
+      rendered.rerender(<InboxGlanceCard hostId="host-1" />)
+    })
+    expect(screen.getByText(/3 open leads/)).toBeTruthy()
   })
 
   it('says nothing about leads when none are open', async () => {
