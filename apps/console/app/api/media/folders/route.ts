@@ -33,6 +33,7 @@ import {
   folderStoragePath,
   mediaObjectPath,
   resolveMediaScope,
+  customMetadataStorageMap,
   sanitizeCustomMetadata,
   mediaCdnPathUpdate,
   scopeCascadeSlice,
@@ -655,7 +656,8 @@ async function handler(request: Request): Promise<Response> {
         return Response.json({ error: 'Unknown media' }, { status: 404 })
       }
       // Mirror onto the Storage object's customMetadata, preserving the
-      // download token (setMetadata replaces the whole custom map).
+      // download token. `setMetadata` PATCHes the custom map, so a dropped
+      // field has to be sent as `null` to leave it (AGL-3331).
       const path = mediaObjectPath(snapshot, scope.base)
       const file = bucket.file(path)
       const [exists] = await file.exists()
@@ -663,19 +665,22 @@ async function handler(request: Request): Promise<Response> {
         const [metadata] = await file.getMetadata()
         const token = (metadata?.metadata as any)?.firebaseStorageDownloadTokens
         await file.setMetadata({
-          metadata: {
-            ...(token ? { firebaseStorageDownloadTokens: token } : {}),
-            ...clean,
-          },
+          metadata: customMetadataStorageMap({
+            previous: snapshot.get('customMetadata'),
+            next: clean,
+            token,
+          }),
         })
       }
-      await snapshot.ref.set(
-        {
-          customMetadata: clean,
-          updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true },
-      )
+      // `update`, not `set(…, { merge: true })` (AGL-3331). A merge set
+      // merges INTO the map — a key it is not sent survives — so a removed
+      // or renamed field came back the next time the drawer opened. An
+      // update replaces the field whole, which is what "save these pairs"
+      // means; the document is known to exist from the read above.
+      await snapshot.ref.update({
+        customMetadata: clean,
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
       return Response.json({ ok: true, customMetadata: clean }, { status: 200 })
     }
 
