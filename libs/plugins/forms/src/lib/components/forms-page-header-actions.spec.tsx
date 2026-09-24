@@ -38,7 +38,7 @@
  * down.
  */
 
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { PageHeaderActionsContext } from '@aglyn/aglyn'
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
@@ -93,6 +93,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
 }))
 
+/** What the forms table was last handed. */
+let mockTableProps: any = {}
+
 /** What `CardDisplay` was handed, so the card header can be checked as empty. */
 let mockCardProps: any = {}
 
@@ -120,7 +123,10 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
  */
 jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
   __esModule: true,
-  default: () => <div>{'table'}</div>,
+  default: (props: any) => {
+    mockTableProps = props
+    return <div>{'table'}</div>
+  },
   ListRowActions: () => null,
   listActionsColumn: () => ({ field: 'actions' }),
 }))
@@ -296,8 +302,8 @@ describe('other ways to start a form sit beside Create Form (AGL-3043)', () => {
       hostId: 'host-1',
       orgId: 'org-1',
     })
-    // Among the create actions: after the list's own toggle, before Create Form.
-    expect(pageHeader().textContent).toMatch(/Show retired.*widget in hostForms.*Create Form/s)
+    // Among the create actions, before Create Form.
+    expect(pageHeader().textContent).toMatch(/widget in hostForms.*Create Form/s)
   })
 
   it('draws no zone outside the console shell, where there is no workspace to gate on', () => {
@@ -347,5 +353,37 @@ describe('the readout names the plan’s allowance', () => {
     // customer they are on 0. The count it does know is still shown.
     renderForms({ org: undefined, used: 3 })
     expect(quotaReadout()).toBe('3 forms · checking your plan…')
+  })
+})
+
+describe('retired forms are reached through the Status filter (AGL-3317)', () => {
+  const tableIds = () => (mockTableProps.rows ?? []).map((row: any) => row.$id)
+
+  beforeEach(() => {
+    mockRows.length = 0
+    mockRows.push(
+      { $id: 'form-live', displayName: 'Contact' },
+      { $id: 'form-retired', displayName: 'Old survey', archivedAt: 1 },
+    )
+  })
+  afterEach(() => {
+    mockRows.length = 0
+  })
+
+  it('leaves retired forms out while no Status filter is in force', () => {
+    renderForms({})
+    expect(tableIds()).toEqual(['form-live'])
+    expect(screen.queryByRole('button', { name: /Show retired/ })).toBeNull()
+  })
+
+  it('shows only the retired forms under Status is Retired', () => {
+    renderForms({})
+    act(() => {
+      mockTableProps.onFilterModelChange({
+        items: [{ id: 1, field: 'status', operator: 'is', value: 'retired' }],
+        quickFilterValues: [],
+      })
+    })
+    expect(tableIds()).toEqual(['form-retired'])
   })
 })
