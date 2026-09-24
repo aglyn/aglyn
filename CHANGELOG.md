@@ -9,6 +9,29 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.183 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/d6462ed10...v1.0.0-beta.183)
+
+### Added
+
+- **besigner:** components can be email blocks ([AGL-3287](https://linear.app/aglyn/issue/AGL-3287))
+- **console:** where-used lists the site's emails that place a component ([AGL-3287](https://linear.app/aglyn/issue/AGL-3287))
+- **marketplace:** a published email carries its reusable blocks inlined ([AGL-3287](https://linear.app/aglyn/issue/AGL-3287))
+- **email:** a placed reusable block renders in every send and preview ([AGL-3287](https://linear.app/aglyn/issue/AGL-3287))
+
+### Fixed
+
+- **outreach:** the links-host resolver is a static import, so nx lint passes ([AGL-3306](https://linear.app/aglyn/issue/AGL-3306))
+- **console:** a duplicated email block stays an email block ([AGL-3287](https://linear.app/aglyn/issue/AGL-3287))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **crm:** the recipes card spec waits for its status on screen, not just asked for ([AGL-3311](https://linear.app/aglyn/issue/AGL-3311))
+
+</details>
+
 ## v1.0.0-beta.182 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.181...v1.0.0-beta.182)
