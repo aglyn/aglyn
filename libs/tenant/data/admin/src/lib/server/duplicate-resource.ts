@@ -154,7 +154,10 @@ const RECIPES: Record<DuplicableHostResourceKind, KindRecipe> = {
   component: {
     collection: 'components',
     nameField: 'displayName',
-    fields: ['description', 'icon', 'rootId', 'nodes', 'props'],
+    // `kind` keeps an email block an email block (AGL-3287): without it the
+    // copy reads as a page component, leaves every email editor's palette,
+    // and turns up in page editors where its email blocks cannot render.
+    fields: ['description', 'icon', 'rootId', 'nodes', 'props', 'kind'],
     versionParentField: 'componentId',
     entitlement: 'reusableComponents',
   },
@@ -170,6 +173,9 @@ const RECIPES: Record<DuplicableHostResourceKind, KindRecipe> = {
     nameField: 'displayName',
     fields: [
       'kind',
+      // A component template's own kind — email block or page component —
+      // so Use template on a copy still makes the right one (AGL-3287).
+      'componentKind',
       'description',
       'category',
       'placeholders',

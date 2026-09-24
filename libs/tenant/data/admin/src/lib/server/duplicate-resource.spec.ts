@@ -566,6 +566,19 @@ describe('a component', () => {
     expect(orgRows()[0]).toMatchObject({ action: 'component.duplicated', target: { type: 'component' } })
   })
 
+  it('keeps an email block an email block (AGL-3287)', async () => {
+    store.set(`hosts/${HOST}/components/src`, {
+      ...(store.get(`hosts/${HOST}/components/src`) as Doc),
+      kind: 'email',
+    })
+    const result = await run('component')
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(store.get(`hosts/${HOST}/components/${result.id}`)).toMatchObject({
+      kind: 'email',
+    })
+  })
+
   it('needs the reusable components entitlement', async () => {
     const result = await run('component', { org: FREE })
     expect(result).toEqual({
