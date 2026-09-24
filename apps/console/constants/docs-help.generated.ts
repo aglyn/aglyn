@@ -763,7 +763,7 @@ export const DOCS_HELP_ANCHORS = {
   customDomains: ['#connect-a-domain', '#related'],
   customFields: ['#define-a-field', '#fields-per-record', '#where-values-show', '#save-a-form-field', '#lead-source-values', '#over-the-api', '#retire-restore-delete', '#recompute-next-activity', '#related'],
   customRoles: ['#create-a-custom-role', '#ai-permissions', '#effective-permissions', '#per-member-overrides', '#tips', '#related'],
-  datasets: ['#model-builder', '#typed-documents', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
+  datasets: ['#model-builder', '#typed-documents', '#filter-records', '#relations', '#query-layer', '#repeatable-components', '#who-a-dataset-is-shared-with', '#import--export', '#related'],
   datasetsAndSchema: ['#display-names-vs-field-ids', '#naming--describing-fields', '#the-typed-model', '#record-quotas-per-plan', '#import--export', '#repeatables', '#everything-that-writes-records', '#deleting-a-dataset', '#related'],
   deals: ['#pipelines', '#stages', '#the-board-and-the-table', '#import-from-csv', '#creating-a-deal', '#line-items', '#moving-winning-and-losing', '#a-won-deal-makes-its-contact-a-customer', '#a-deals-page', '#files', '#related'],
   designedEmails: ['#create-a-template', '#find-a-template', '#duplicate-a-template', '#styling-email-blocks', '#merge-tokens', '#send-it', '#the-plain-text-version', '#start-from-a-brief-instead'],

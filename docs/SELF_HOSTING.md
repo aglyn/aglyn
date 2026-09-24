@@ -352,6 +352,7 @@ idempotent, so running it twice changes nothing the second time.
 | since | what | command |
 | -- | -- | -- |
 | AGL-3321 | the notifications feed's Type and Status filters, and the app bar's unread count, read a `read` field older notifications lack | `node tools/scripts/backfill-notification-read.mjs --apply` |
+| AGL-3321 | a dataset's Records table serves its filters and search from a `filterKeys` token array older records lack (no index needed: Firestore's automatic single-field index answers it) | `node tools/scripts/backfill-dataset-filter-keys.mjs --apply` |
 
 Each uses Application Default Credentials against the project in
 `GOOGLE_CLOUD_PROJECT`.

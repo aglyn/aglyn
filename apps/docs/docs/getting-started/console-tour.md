@@ -100,19 +100,27 @@ without opening the editor. When you want to design it, open the
 
 ## The Sites list {#the-sites-list}
 
-**All Sites** is the front door of a workspace: one card per site, for the workspace
-currently selected in the switcher. A site you can reach in another organization isn't
-missing — it's behind the workspace switcher.
+**All Sites** is the front door of a workspace: a table with one row per site, for the
+workspace currently selected in the switcher. A site you can reach in another organization
+isn't missing — it's behind the workspace switcher.
 
-Each card carries:
+Each row carries:
 
-- The site's **display name** as the title, with its **hostname** underneath as the
-  subheader — the custom domain when the site has one, otherwise its `name.aglyn.app`
-  address. Both are also listed inside the card, as **Aglyn Domain** and **Custom
-  Domain**.
+- The site's **display name**, with its **hostname** underneath — the custom domain when
+  the site has one, otherwise its `name.aglyn.app` address. Both are also columns of their
+  own, **Aglyn domain** and **Custom domain**.
 - A **status pill** (below).
+- When the site was **created** and last **updated**.
 - **Visit**, which opens the live site in a new tab, and **Manage**, which opens that
   site's dashboard in the console.
+
+**Filters** in the table's toolbar narrows the list by name, **Status** (Live, Draft,
+Maintenance or Suspended), either domain, **Custom domain status** (Connected, Pending
+while a connect or disconnect is unfinished, or None), or the date a site was created or
+last updated. **Search** matches any word of the name, the slug, or either domain. Each
+filter in force shows as a chip above the table; remove a chip to drop it. The list holds
+every site you have in the workspace, so a filter or a search looks through all of them,
+not only the page on screen. The site count beside the heading always counts every site.
 
 ### The status pill {#the-status-pill}
 
