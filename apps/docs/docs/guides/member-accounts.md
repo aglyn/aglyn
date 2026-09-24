@@ -152,8 +152,9 @@ guide) and **Users** (console collaborators). The Site users card is
 searchable and paged, newest first, with **Email**, **Name**, **Joined**, and
 **Status** columns. **Filters** in the table's toolbar narrows it by email, name,
 or join date, one filter at a time, across every member rather than the page on
-screen; the filter in force shows as a chip above the table. Status is not a
-filter, because an active member carries no status to match. For members who may open the
+screen. **Status** (Active or Suspended) is a filter too, and it combines with
+any one of the others — suspended members whose email starts with a given
+address, say. Each filter in force shows as a chip above the table. For members who may open the
 [CRM](../content-and-data/crm/overview.md), each row's **⋮** menu holds
 **Open in CRM** — the member's contact, found by the address they signed up
 with.
