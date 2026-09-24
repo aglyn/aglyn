@@ -101,6 +101,7 @@ import {
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
 } from '@aglyn/aglyn/app-utils/email-topics'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import firebaseAdmin from './firebase-admin'
@@ -197,6 +198,16 @@ export interface EmailSuppressionRecord {
   hostId: string | null
   /** Non-null once released. A released record does not suppress. */
   releasedAt: unknown | null
+  /**
+   * `releasedAt` as a boolean, which the staff list filters by EQUALITY
+   * beneath its `suppressedAt` cursor: "released" read from `releasedAt`
+   * would be `!= null`, an inequality Firestore makes the first sort.
+   * Absent on records written before it existed until
+   * `tools/scripts/backfill-email-suppression-filters.mjs` stamps them.
+   */
+  released?: boolean
+  /** Search tokens for the address; see {@link emailSearchTokens}. */
+  emailTokens?: string[]
   /** What lifted it. Absent on records written before releases were typed. */
   releasedVia?: EmailReleaseChannel
   /** The site whose confirmed double opt-in lifted it, when one did. */
@@ -226,6 +237,38 @@ export function emailSuppressionKey(
    * hashes through, so a suppression filed by either is found by both.
    */
   return personKey(email)
+}
+
+/**
+ * The `array-contains` search tokens for an address.
+ *
+ * Every prefix, up to `NAME_TOKEN_MAX_PREFIX` characters, of each of: the
+ * whole address, the domain, the domain behind an `@`, and each piece of the
+ * local part and of the domain. So `jane.doe@mail.example.com` is found by
+ * `jane`, `doe`, `jane.doe@ma`, `example`, `example.com`, `mail.example` and
+ * `@mail`. A query becomes one token through `nameSearchToken`, which caps
+ * it at the same length, so a typed address longer than that narrows by its
+ * first twelve characters rather than matching nothing.
+ *
+ * Mirrored by `tools/scripts/backfill-email-suppression-filters.mjs`, which
+ * stamps the records written before this field existed; the two share the
+ * same fixtures.
+ */
+export function emailSearchTokens(email: string | null | undefined): string[] {
+  const address = String(email ?? '')
+    .trim()
+    .toLowerCase()
+  if (!address) return []
+  const at = address.lastIndexOf('@')
+  const local = at === -1 ? address : address.slice(0, at)
+  const domain = at === -1 ? '' : address.slice(at + 1)
+  const words = [
+    address,
+    ...(domain ? [domain, `@${domain}`] : []),
+    ...local.split(/[._+-]+/),
+    ...domain.split('.'),
+  ]
+  return nameSearchTokens(words.filter(Boolean).join(' '))
 }
 
 export interface SuppressEmailInput {
@@ -274,13 +317,16 @@ export async function suppressEmail(input: SuppressEmailInput): Promise<{
   const db = input.firestore ?? defaultFirestore()
   const ref = db.collection(EMAIL_SUPPRESSIONS_COLLECTION).doc(key)
   const snapshot = await ref.get()
+  const email = String(input.email).trim().toLowerCase()
   await ref.set(
     {
-      email: String(input.email).trim().toLowerCase(),
+      email,
+      emailTokens: emailSearchTokens(email),
       reason: input.reason,
       context: input.context ?? null,
       hostId: input.hostId ?? null,
       releasedAt: null,
+      released: false,
       suppressedAt: FieldValue.serverTimestamp(),
       ...(snapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
     },
@@ -353,6 +399,7 @@ export async function releaseEmail(input: {
   await ref.set(
     {
       releasedAt: FieldValue.serverTimestamp(),
+      released: true,
       releasedByUid: input.releasedByUid ?? null,
       releasedNote: input.note ?? null,
       releasedVia: 'staff' satisfies EmailReleaseChannel,
@@ -462,6 +509,7 @@ export async function releaseEmailForConfirmedOptIn(input: {
     await ref.set(
       {
         releasedAt: FieldValue.serverTimestamp(),
+        released: true,
         // No human released this, so the field says so rather than naming
         // whoever last touched the record.
         releasedByUid: null,
@@ -860,12 +908,20 @@ export async function listEmailSuppressions(options?: {
    * neither is necessary.
    */
   startAfter?: string | null
+  /**
+   * Predicates the caller adds beneath the ordering — equalities, one
+   * `array-contains`, and ranges over `suppressedAt` itself, which are the
+   * only shapes that keep this cursor valid. It must not add an `orderBy`.
+   */
+  narrow?: (query: any) => any
   firestore?: any
 }): Promise<Array<EmailSuppressionRecord & { $id: string }>> {
   const db = options?.firestore ?? defaultFirestore()
-  let query = db
-    .collection(EMAIL_SUPPRESSIONS_COLLECTION)
-    .orderBy('suppressedAt', 'desc')
+  const collection = db.collection(EMAIL_SUPPRESSIONS_COLLECTION)
+  let query = (options?.narrow ? options.narrow(collection) : collection).orderBy(
+    'suppressedAt',
+    'desc',
+  )
   const cursor = suppressionCursorTimestamp(options?.startAfter)
   if (cursor) query = query.startAfter(cursor)
   const snapshot = await query

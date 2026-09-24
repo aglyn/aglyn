@@ -18,6 +18,7 @@
 import { createHash } from 'crypto'
 import {
   UNSUBSCRIBE_SUPPRESSION_REASON,
+  emailSearchTokens,
   emailSuppressionKey,
   filterSendableForHost,
   filterSuppressedEmails,
@@ -122,6 +123,79 @@ describe('suppressEmail', () => {
       suppressEmail({ email: 'nonsense', reason: 'bounce', firestore }),
     ).rejects.toThrow(/cannot key/i)
     expect(Object.keys(firestore.docs('emailSuppressions'))).toHaveLength(0)
+  })
+})
+
+describe('the fields the staff list filters and searches by (AGL-3321)', () => {
+  it('stamps released: false and the address tokens on every suppression', async () => {
+    const firestore = fakeFirestore()
+    await suppressEmail({ email: 'DANA@Example.com', reason: 'bounce', firestore })
+    const record = firestore.docs('emailSuppressions')[KEY]
+    expect(record.released).toBe(false)
+    expect(record.emailTokens).toEqual(emailSearchTokens(ADDRESS))
+  })
+
+  it('stamps released: true on a staff release and back to false on a fresh failure', async () => {
+    const firestore = fakeFirestore()
+    await suppressEmail({ email: ADDRESS, reason: 'bounce', firestore })
+    await releaseEmail({ email: ADDRESS, firestore })
+    expect(firestore.docs('emailSuppressions')[KEY].released).toBe(true)
+    await suppressEmail({ email: ADDRESS, reason: 'bounce', firestore })
+    expect(firestore.docs('emailSuppressions')[KEY].released).toBe(false)
+  })
+
+  it('stamps released: true on a confirmed double opt-in release', async () => {
+    const firestore = fakeFirestore()
+    await suppressEmail({ email: ADDRESS, reason: 'bounce', firestore })
+    await releaseEmailForConfirmedOptIn({
+      email: ADDRESS,
+      hostId: 'host-1',
+      topicId: 'newsletter',
+      firestore,
+    })
+    expect(firestore.docs('emailSuppressions')[KEY].released).toBe(true)
+  })
+
+  /*
+   * The SAME fixtures `tools/scripts/backfill-email-suppression-filters.mjs`
+   * runs in its `--self-test`, so the records it stamps are found by the
+   * search exactly as the ones written here are.
+   */
+  it.each([
+    ['jane.doe@mail.example.com', ['jane', 'doe', 'jane.doe@mai', 'mail.example', '@mail.exampl', 'example', 'com', 'm']],
+    ['Dana@Example.com', ['dana', 'dana@example', 'example.com', '@example.com', 'example', 'com']],
+  ])('tokens for %s include the prefixes a search box types', (address, expected) => {
+    const tokens = emailSearchTokens(address)
+    for (const token of expected) expect(tokens).toContain(token)
+    // Nothing longer than the cap a query is cut to.
+    expect(tokens.every((token) => token.length <= 12)).toBe(true)
+    expect(new Set(tokens).size).toBe(tokens.length)
+  })
+
+  it('has no tokens for no address', () => {
+    expect(emailSearchTokens('')).toEqual([])
+    expect(emailSearchTokens(null)).toEqual([])
+  })
+
+  it('narrows the query beneath its order, never reordering it', async () => {
+    const calls: string[] = []
+    const query: any = {
+      where: (path: string, op: string) => {
+        calls.push(`where ${path} ${op}`)
+        return query
+      },
+      orderBy: (field: string, direction: string) => {
+        calls.push(`orderBy ${field} ${direction}`)
+        return query
+      },
+      limit: () => query,
+      get: async () => ({ docs: [] }),
+    }
+    await listEmailSuppressions({
+      narrow: (ref) => ref.where('reason', '=='),
+      firestore: { collection: () => query } as any,
+    })
+    expect(calls).toEqual(['where reason ==', 'orderBy suppressedAt desc'])
   })
 })
 

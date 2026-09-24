@@ -43,6 +43,14 @@
  */
 
 const mockListed: Array<Record<string, unknown>> = []
+/** Every `where` the route's narrowing added, in order. */
+const mockWheres: Array<[unknown, string, unknown]> = []
+const mockQuery = (): any => ({
+  where: (path: unknown, op: string, value: unknown) => {
+    mockWheres.push([path, op, value])
+    return mockQuery()
+  },
+})
 /** Enough rows that a page can end short of them. */
 let mockRows: Array<Record<string, unknown>> = []
 const mockReleased: Array<Record<string, unknown>> = []
@@ -69,11 +77,26 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
   isImpersonationSession: () => false,
-  firebaseAdmin: {
-    app: () => ({ auth: () => ({ verifyIdToken: async () => mockDecoded }) }),
-  },
+  EMAIL_SUPPRESSIONS_COLLECTION: 'emailSuppressions',
+  firebaseAdmin: Object.assign(
+    {
+      app: () => ({
+        auth: () => ({ verifyIdToken: async () => mockDecoded }),
+        firestore: () => ({ collection: () => mockQuery() }),
+      }),
+    },
+    {
+      firestore: {
+        FieldPath: { documentId: () => '__name__' },
+        Timestamp: { fromDate: (date: Date) => ({ __ts: date.toISOString() }) },
+      },
+    },
+  ),
   listEmailSuppressions: async (options: Record<string, unknown>) => {
     mockListed.push(options)
+    // The narrowing the route built, applied as the module applies it.
+    const narrow = options.narrow as ((mockRef: unknown) => unknown) | undefined
+    narrow?.(mockQuery())
     return mockRows.slice(0, Number(options.limit ?? 100))
   },
   // The REAL cursor derivation, so a spec asserting on the cursor asserts on
@@ -119,6 +142,7 @@ const request = (
 
 beforeEach(() => {
   mockListed.length = 0
+  mockWheres.length = 0
   mockRows = Array.from({ length: 5 }, (_unused, index) => ({
     $id: `hash-${index}`,
     email: `person${index}@example.com`,
@@ -170,6 +194,52 @@ describe('GET /api/admin/emails/suppressions', () => {
   it('carries a cursor through to the read', async () => {
     await GET(request('GET', { query: { cursor: '1699999999.1' } }))
     expect(mockListed[0].startAfter).toBe('1699999999.1')
+  })
+
+  it('serves the filters and the search on the query, beneath the cursor (AGL-3321)', async () => {
+    const response = await GET(
+      request('GET', {
+        query: {
+          cursor: '1699999999.1',
+          search: 'Person1',
+          filters: JSON.stringify([
+            { field: 'reason', op: 'equals', value: 'bounce' },
+            { field: 'status', op: 'equals', value: 'false' },
+          ]),
+        },
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect(mockListed[0].startAfter).toBe('1699999999.1')
+    expect(mockWheres).toEqual([
+      ['released', '==', false],
+      ['reason', '==', 'bounce'],
+      ['emailTokens', 'array-contains', 'person1'],
+    ])
+  })
+
+  it('refuses an ask the query cannot serve rather than listing everything', async () => {
+    const response = await GET(
+      request('GET', {
+        query: {
+          filters: JSON.stringify([
+            { field: 'reason', op: 'equals', value: 'bounce' },
+            { field: 'context', op: 'equals', value: 'invite' },
+          ]),
+        },
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toMatch(/one of Reason/)
+    expect(mockListed).toHaveLength(0)
+    expect((await GET(request('GET', { query: { filters: 'nope' } }))).status).toBe(400)
+  })
+
+  it('does not hand the search tokens to the reader', async () => {
+    mockRows = mockRows.map((row) => ({ ...row, emailTokens: ['p', 'pe'] }))
+    const body = await (await GET(request('GET'))).json()
+    expect(body.entries[0].emailTokens).toBeUndefined()
+    expect(body.entries[0].email).toBe('person0@example.com')
   })
 
   it('refuses a non-staff account', async () => {

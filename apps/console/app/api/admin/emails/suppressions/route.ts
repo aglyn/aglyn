@@ -17,6 +17,7 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  EMAIL_SUPPRESSIONS_COLLECTION,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
@@ -29,6 +30,10 @@ import {
   recordAdminAudit,
   subjectAddressKeyForRecipients,
 } from '@aglyn/tenant-data-admin/server/admin-audit'
+import {
+  readSuppressionFilters,
+  suppressionQuery,
+} from '../../../../../utils/server/email-suppression-filter'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 /**
@@ -114,6 +119,31 @@ async function listHandler(request: Request): Promise<Response> {
     const cursor =
       String((query as Record<string, unknown>)?.cursor ?? '').trim() || null
     /*
+     * THE FILTERS AND THE SEARCH, served by the query (AGL-3321).
+     *
+     * Every clause is a predicate beneath the `suppressedAt` cursor, so each
+     * page is a page of the narrowed list rather than a narrowed page — on
+     * this list, "not suppressed" for an address past the page on screen is
+     * the wrong answer in the reassuring direction. An ask the query cannot
+     * serve is refused with the reason, never answered unfiltered under a
+     * chip that says otherwise. See `utils/email-suppression-filters.ts`.
+     */
+    const clauses = readSuppressionFilters(query as Record<string, unknown>)
+    if (!clauses) {
+      return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+    }
+    const rawSearch = (query as Record<string, unknown>)?.search
+    const search = typeof rawSearch === 'string' ? rawSearch : ''
+    const narrowed = suppressionQuery(
+      firebaseAdmin.app().firestore().collection(EMAIL_SUPPRESSIONS_COLLECTION),
+      clauses,
+      search,
+    )
+    if (narrowed.error || !narrowed.query) {
+      return Response.json({ error: narrowed.error }, { status: 400 })
+    }
+    const narrowedQuery = narrowed.query
+    /*
      * OVER-FETCH BY ONE, so "is there another page" is an observation rather
      * than a guess. A footer that offers Next on faith takes an operator to
      * an empty page; one that hides it on faith strands whatever is past the
@@ -122,8 +152,14 @@ async function listHandler(request: Request): Promise<Response> {
     const page = await listEmailSuppressions({
       limit: limit + 1,
       startAfter: cursor,
+      narrow: () => narrowedQuery,
     })
-    const entries = page.slice(0, limit)
+    // The search tokens are the query's, not the reader's.
+    const entries = page.slice(0, limit).map((entry) => {
+      const shown: Partial<typeof entry> = { ...entry }
+      delete shown.emailTokens
+      return shown
+    })
     const hasMore = page.length > limit
     return Response.json(
       {
