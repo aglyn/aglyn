@@ -37,7 +37,7 @@
  */
 
 import type { ReactNode } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { TaxReturnPayload, TaxReturnRow } from '../utils/tx-return-webfile'
 
 jest.mock('@aglyn/shared-data-enums', () => ({
@@ -232,10 +232,24 @@ describe('a finding names the rows it is about', () => {
     )
     // A cross-origin dashboard link must not hand the console's tab over.
     expect(link?.getAttribute('rel')).toContain('noopener')
-    const row = screen.getByText(UNTAXED_INVOICE).closest('tr')?.textContent ?? ''
+    const row =
+      screen.getByText(UNTAXED_INVOICE).closest('[role="row"]')?.textContent ?? ''
     expect(row).toContain('US-TX')
     expect(row).toContain('25.00')
     expect(row).toContain('2026-09-18')
+  })
+
+  it('narrows to a finding from its count, the same clause the grid panel writes', async () => {
+    await rendered(payload())
+    fireEvent.click(
+      screen.getByRole('button', { name: /Rows billed without automatic tax/ }),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('list', { name: 'Filters' }).textContent).toContain(
+        'Finding is Rows billed without automatic tax',
+      ),
+    )
+    expect(screen.getByText(UNTAXED_INVOICE)).toBeTruthy()
   })
 
   it('THE CONTROL: a response with no per-row findings says so', async () => {

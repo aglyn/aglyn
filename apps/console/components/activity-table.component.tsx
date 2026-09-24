@@ -49,12 +49,30 @@ export interface ActivityTableProps {
   emptyLabel?: string
   unreadableLabel?: string
   /**
-   * Supply only when the SOURCE narrows itself. Its presence is what puts the
-   * grid in `filterMode="server"`; without it the grid filters the page it
-   * holds, which on a paged feed answers "nothing happened" about everything
-   * that is not on screen.
+   * Supply only when the SOURCE narrows itself — the route, or the caller
+   * over every row it holds before it slices a page. Its presence is what
+   * puts the grid in `filterMode="server"`; without it the panel is off,
+   * because the grid would filter only the page it holds, which answers
+   * "nothing happened" about everything that is not on screen.
    */
   onFilterModelChange?: (model: GridFilterModel) => void
+  /** The panel's controlled model, from `useListGridFilter` or its recipes. */
+  filterModel?: GridFilterModel
+  /**
+   * The toolbar's search box, for a caller whose handler answers the
+   * search words. Off otherwise: a search the grid ran itself would
+   * narrow one page.
+   */
+  quickFilter?: boolean
+  /**
+   * Whether a clause or a search narrows the rows. A narrowed table with no
+   * rows keeps its grid, so the reader can see and undo what narrowed it,
+   * and says `filteredLabel` rather than `emptyLabel`.
+   */
+  filtering?: boolean
+  filteredLabel?: string
+  /** The clauses in force, as chips (`ListFilterChips`), above the grid. */
+  filterChips?: ReactNode
   page: number
   pageSize: number
   onPageChange: (page: number) => void
@@ -110,6 +128,11 @@ export function ActivityTable(props: ActivityTableProps) {
     unreadableLabel = 'The activity log could not be read. This is not the ' +
       'same as there being none — try again, or check the browser console.',
     onFilterModelChange,
+    filterModel,
+    quickFilter,
+    filtering = false,
+    filteredLabel = 'No activity matches these filters',
+    filterChips,
     page,
     pageSize,
     onPageChange,
@@ -136,9 +159,10 @@ export function ActivityTable(props: ActivityTableProps) {
             {toolbar}
           </Stack>
         ) : null}
+        {filterChips}
         {unreadable ? (
           <Alert severity="warning">{unreadableLabel}</Alert>
-        ) : rows.length === 0 && !loading ? (
+        ) : rows.length === 0 && !loading && !filtering ? (
           <Typography variant="body2" color="text.secondary">
             {emptyLabel}
           </Typography>
@@ -164,8 +188,14 @@ export function ActivityTable(props: ActivityTableProps) {
              * one. The panel is turned off there rather than left inert.
              */
             {...(onFilterModelChange
-              ? { filterMode: 'server' as const, onFilterModelChange }
-              : { disableColumnFilter: true })}
+              ? {
+                  filterMode: 'server' as const,
+                  onFilterModelChange,
+                  ...(filterModel ? { filterModel } : {}),
+                  ...(quickFilter ? { quickFilter } : {}),
+                  noRowsLabel: filtering ? filteredLabel : emptyLabel,
+                }
+              : { disableColumnFilter: true, quickFilter: false })}
           />
         )}
         <ListPagination

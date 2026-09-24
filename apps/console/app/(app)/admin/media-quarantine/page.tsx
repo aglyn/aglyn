@@ -74,7 +74,11 @@ import {
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -89,10 +93,6 @@ import {
   MenuItem,
   Stack,
   Switch,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -213,6 +213,63 @@ function rowState(record: QuarantineRecord, nowMs: number): RowState {
   if (!state) return 'malformed'
   return isMediaQuarantineActive(state, nowMs) ? 'active' : 'expired'
 }
+
+/** How each row state reads, on its chip and in the filter. */
+const ROW_STATE_LABEL: Record<RowState, string> = {
+  active: 'enforcing',
+  expired: 'EXPIRED',
+  malformed: 'UNREADABLE',
+}
+
+/** One deny-list row as the grid matches it: the record, and what it derives. */
+interface DenyListRow {
+  $id: string
+  record: QuarantineRecord
+  state: RowState
+  kind: ReturnType<typeof listedKeyKind>
+  key: string
+  reason: string
+  note: string
+  origin: string
+}
+
+/*
+ * What the deny-list grid filters and searches by. The page holds the whole
+ * list (one read, capped at `maxEntries`) and pages it itself, so both answer
+ * over every entry before a page is sliced. The Library select and the id
+ * fields above are the LOOKUP form, which asks the server about one file;
+ * they are not filters of this list.
+ */
+const DENY_FILTER_FIELDS = [
+  inMemoryListField('key', 'text'),
+  inMemoryListField('reason', 'select'),
+  inMemoryListField('state', 'select'),
+  inMemoryListField('kind', 'select'),
+  inMemoryListField('note', 'text'),
+]
+const DENY_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  key: 'Key',
+  reason: 'Reason',
+  state: 'State',
+  kind: 'Key kind',
+  note: 'Note',
+}
+const DENY_FILTER_OPTIONS = {
+  reason: MEDIA_QUARANTINE_REASONS.map((code) => ({
+    value: code,
+    label: MEDIA_QUARANTINE_REASON_LABELS[code],
+  })),
+  state: (Object.keys(ROW_STATE_LABEL) as RowState[]).map((state) => ({
+    value: state,
+    label: ROW_STATE_LABEL[state],
+  })),
+  kind: (Object.keys(LISTED_KIND_LABEL) as Array<keyof typeof LISTED_KIND_LABEL>).map(
+    (kind) => ({ value: kind, label: LISTED_KIND_LABEL[kind] }),
+  ),
+}
+const DENY_SEARCH_PATHS = ['key', 'reason', 'note', 'origin']
+/** Filterable, but shown as chips inside the Key cell rather than columns. */
+const DENY_HIDDEN_COLUMNS = { state: false, kind: false }
 
 /** What a key of each kind actually reaches, in the operator's words. */
 const KEY_REACH: Record<AssetKey['kind'], string> = {
@@ -496,12 +553,20 @@ function AdminMediaQuarantine() {
    * there, and an entry with no `atMs` predates the field, so it sorts ahead
    * of every dated one rather than behind them.
    */
-  const rows = useMemo(() => {
+  const rows = useMemo((): DenyListRow[] => {
     if (!listing) return []
     return [...listing.records]
       .map((record) => ({
+        $id: record.key,
         record,
         state: rowState(record, listing.readAtMs),
+        kind: listedKeyKind(record.key),
+        key: record.key,
+        reason: record.reason ?? '',
+        note: record.note ?? '',
+        origin: [record.originScopeSegment, record.originMediaId]
+          .filter(Boolean)
+          .join(' / '),
       }))
       .sort(
         (a, b) =>
@@ -522,16 +587,141 @@ function AdminMediaQuarantine() {
    */
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
+  const denyFilter = useListRowsFilter({
+    rows,
+    fields: DENY_FILTER_FIELDS,
+    options: DENY_FILTER_OPTIONS,
+    headers: DENY_FILTER_HEADERS,
+    search: DENY_SEARCH_PATHS,
+  })
+  const filteredRows = denyFilter.rows
   const pagedRows = useMemo(
-    () => rows.slice(page * pageSize, page * pageSize + pageSize),
-    [rows, page, pageSize],
+    () => filteredRows.slice(page * pageSize, page * pageSize + pageSize),
+    [filteredRows, page, pageSize],
   )
-  // Releasing a key shortens the list, and a reader on the last page of a
-  // list that just shrank gets an empty table with no way back.
+  // Releasing a key, or a filter, shortens the list, and a reader on the
+  // last page of a list that just shrank gets an empty table with no way
+  // back.
   useEffect(() => {
-    const lastPage = Math.max(0, Math.ceil(rows.length / pageSize) - 1)
+    const lastPage = Math.max(0, Math.ceil(filteredRows.length / pageSize) - 1)
     if (page > lastPage) setPage(lastPage)
-  }, [rows.length, page, pageSize])
+  }, [filteredRows.length, page, pageSize])
+  const { filterColumns: denyFilterColumns } = denyFilter
+  const denyColumns = useMemo(
+    () =>
+      denyFilterColumns([
+        {
+          field: 'key',
+          headerName: 'Key',
+          flex: 1.6,
+          minWidth: 240,
+          renderCell: ({ row }: { row: DenyListRow }) => (
+            <Stack spacing={0.5} sx={{ py: 1 }}>
+              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                <Chip size="small" label={LISTED_KIND_LABEL[row.kind]} />
+                <Chip
+                  size="small"
+                  color={row.state === 'active' ? 'error' : 'default'}
+                  label={ROW_STATE_LABEL[row.state]}
+                />
+              </Stack>
+              <Typography
+                variant="caption"
+                sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+              >
+                {row.key}
+              </Typography>
+            </Stack>
+          ),
+        },
+        {
+          field: 'reason',
+          headerName: 'Reason',
+          flex: 0.9,
+          minWidth: 140,
+          renderCell: ({ row }: { row: DenyListRow }) => (
+            <Typography variant="caption">
+              {(row.reason &&
+                (MEDIA_QUARANTINE_REASON_LABELS as any)[row.reason]) ||
+                row.reason ||
+                'none recorded'}
+            </Typography>
+          ),
+        },
+        {
+          field: 'atMs',
+          headerName: 'Set',
+          width: 170,
+          valueGetter: (_value, row: DenyListRow) => row.record.atMs ?? null,
+          renderCell: ({ row }: { row: DenyListRow }) => (
+            <Typography variant="caption">
+              {typeof row.record.atMs === 'number'
+                ? new Date(row.record.atMs).toLocaleString()
+                : 'unknown'}
+            </Typography>
+          ),
+        },
+        {
+          field: 'untilMs',
+          headerName: 'Expires',
+          width: 170,
+          valueGetter: (_value, row: DenyListRow) => row.record.untilMs ?? null,
+          renderCell: ({ row }: { row: DenyListRow }) => (
+            <Typography variant="caption">
+              {typeof row.record.untilMs === 'number'
+                ? new Date(row.record.untilMs).toLocaleString()
+                : 'no expiry'}
+            </Typography>
+          ),
+        },
+        {
+          field: 'origin',
+          headerName: 'Set from',
+          flex: 1,
+          minWidth: 160,
+          renderCell: ({ row }: { row: DenyListRow }) => (
+            <Typography variant="caption" sx={{ wordBreak: 'break-all' }}>
+              {row.record.originScopeSegment || row.record.originMediaId
+                ? `${row.record.originScopeSegment ?? '?'} / ${row.record.originMediaId ?? '?'}`
+                : 'not recorded'}
+            </Typography>
+          ),
+        },
+        {
+          field: 'note',
+          headerName: 'Note',
+          flex: 1,
+          minWidth: 140,
+          renderCell: ({ row }: { row: DenyListRow }) => (
+            <Typography variant="caption" color="text.secondary">
+              {row.note || '—'}
+            </Typography>
+          ),
+        },
+        { field: 'state', headerName: 'State' },
+        { field: 'kind', headerName: 'Key kind' },
+        {
+          field: 'release',
+          headerName: '',
+          width: 110,
+          sortable: false,
+          filterable: false,
+          hideable: false,
+          disableColumnMenu: true,
+          renderCell: ({ row }: { row: DenyListRow }) => (
+            <Button
+              size="small"
+              color="success"
+              disabled={busy || !canWrite}
+              onClick={() => void releaseKey(row.key)}
+            >
+              {'Release'}
+            </Button>
+          ),
+        },
+      ] as GridColDef<DenyListRow>[] as GridColDef[]),
+    [denyFilterColumns, busy, canWrite, releaseKey],
+  )
   const clearable = rows.filter((row) => row.state !== 'active').length
   const listFull = listing ? listing.count >= listing.maxEntries : false
 
@@ -939,123 +1129,29 @@ function AdminMediaQuarantine() {
                 ) : null}
 
                 {rows.length ? (
-                  <Stack>
-                    <ScrollTable size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>{'Key'}</TableCell>
-                          <TableCell>{'Reason'}</TableCell>
-                          <TableCell>{'Set'}</TableCell>
-                          <TableCell>{'Expires'}</TableCell>
-                          <TableCell>{'Set from'}</TableCell>
-                          <TableCell>{'Note'}</TableCell>
-                          <TableCell>{''}</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {pagedRows.map(({ record, state }) => (
-                          <TableRow key={record.key}>
-                            <TableCell>
-                              <Stack spacing={0.5}>
-                                <Stack
-                                  direction="row"
-                                  spacing={0.5}
-                                  sx={{ alignItems: 'center' }}
-                                >
-                                  <Chip
-                                    size="small"
-                                    label={
-                                      LISTED_KIND_LABEL[
-                                        listedKeyKind(record.key)
-                                      ]
-                                    }
-                                  />
-                                  <Chip
-                                    size="small"
-                                    color={
-                                      state === 'active' ? 'error' : 'default'
-                                    }
-                                    label={
-                                      state === 'active'
-                                        ? 'enforcing'
-                                        : state === 'expired'
-                                          ? 'EXPIRED'
-                                          : 'UNREADABLE'
-                                    }
-                                  />
-                                </Stack>
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    fontFamily: 'monospace',
-                                    wordBreak: 'break-all',
-                                  }}
-                                >
-                                  {record.key}
-                                </Typography>
-                              </Stack>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="caption">
-                                {(record.reason &&
-                                  (MEDIA_QUARANTINE_REASON_LABELS as any)[
-                                    record.reason
-                                  ]) ||
-                                  record.reason ||
-                                  'none recorded'}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="caption">
-                                {typeof record.atMs === 'number'
-                                  ? new Date(record.atMs).toLocaleString()
-                                  : 'unknown'}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography variant="caption">
-                                {typeof record.untilMs === 'number'
-                                  ? new Date(record.untilMs).toLocaleString()
-                                  : 'no expiry'}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography
-                                variant="caption"
-                                sx={{ wordBreak: 'break-all' }}
-                              >
-                                {record.originScopeSegment || record.originMediaId
-                                  ? `${record.originScopeSegment ?? '?'} / ${record.originMediaId ?? '?'}`
-                                  : 'not recorded'}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                {record.note || '—'}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="small"
-                                color="success"
-                                disabled={busy || !canWrite}
-                                onClick={() => void releaseKey(record.key)}
-                              >
-                                {'Release'}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </ScrollTable>
+                  <Stack spacing={1}>
+                    <ListFilterChips {...denyFilter.chipsProps} />
+                    <ListTable
+                      aria-label="The whole deny list"
+                      rows={pagedRows}
+                      columns={denyColumns}
+                      {...denyFilter.gridProps}
+                      // A key wraps under its chips, so a row is as tall as
+                      // its key.
+                      getRowHeight={() => 'auto'}
+                      // The page holds the whole list and pages it with the
+                      // footer below; the grid draws the page it is handed.
+                      hideFooter
+                      initialState={{
+                        columns: { columnVisibilityModel: DENY_HIDDEN_COLUMNS },
+                      }}
+                      noRowsLabel="No entries match these filters"
+                    />
                     <ListPagination
                       page={page}
                       pageSize={pageSize}
                       rowCount={pagedRows.length}
-                      count={rows.length}
+                      count={filteredRows.length}
                       onPageChange={setPage}
                       onPageSizeChange={setPageSize}
                     />

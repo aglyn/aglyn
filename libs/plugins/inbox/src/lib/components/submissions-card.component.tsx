@@ -40,6 +40,7 @@ import {
   mdiEmailOutline,
 } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   ListRowActions,
@@ -47,7 +48,13 @@ import {
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  inMemoryListField,
+  type ListFilterClause,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   useFirestore,
@@ -64,9 +71,7 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
-  MenuItem,
   Stack,
-  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -95,6 +100,52 @@ import { orgSiteName } from './inbox-org-sites'
 import SubmissionListAssignment from './submission-list-assignment.component'
 import SubmissionReply from './submission-reply.component'
 import { useRecordRouteContext } from './use-record-route-context'
+
+/*
+ * What the submissions grid's Filters panel offers (AGL-3317).
+ *
+ * Form is SERVED: its clause is the query's `where('formId', '==')`, so it
+ * reaches every submission to that form, and the rows are not matched
+ * against it again. It is offered only where a site's catalog is read — not
+ * on a card scoped to one form, and not across every site. The rest match
+ * over what the paged window has read, which the first filter widens
+ * (`usePagedRowsFilter`): From and Message (as the columns draw them), Read
+ * (`readKey`), and Site on the organization's Inbox.
+ */
+const FORM_FIELD: ListFilterField = {
+  ...inMemoryListField('formId', 'select'),
+  operators: ['equals'],
+}
+const SUBMISSION_BASE_FIELDS = [
+  inMemoryListField('from', 'text', 'senderLabel'),
+  inMemoryListField('message', 'text', 'messageText'),
+  inMemoryListField('read', 'select', 'readKey'),
+]
+const SUBMISSION_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  from: 'From',
+  message: 'Message',
+  read: 'Read',
+  formId: 'Form',
+  hostId: 'Site',
+}
+const READ_OPTIONS = [
+  { value: 'unread', label: 'Unread' },
+  { value: 'read', label: 'Read' },
+]
+const SUBMISSION_SEARCH_FIELDS = ['senderLabel', 'formName', 'messageText'] as const
+const SUBMISSION_HIDDEN_COLUMNS = { read: false, formId: false }
+/** The one clause the query serves. */
+const servedByQuery = (clause: ListFilterClause) => clause.field === 'formId'
+
+/** A submission with the derived values its filters and search read. */
+const withFilterValues = (submission: any) => ({
+  ...submission,
+  senderLabel: submissionSender(submission.fields).label,
+  messageText: Object.entries(submission.fields ?? {})
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(' · '),
+  readKey: submission.read ? 'read' : 'unread',
+})
 
 /**
  * The Submissions section of the Inbox (AGL-77/104/109 → AGL-395): the form
@@ -215,21 +266,26 @@ export function SubmissionsCard({
     [formDocs],
   )
   /*
-   * `null` is "All forms"; a form id narrows to one form's submissions.
+   * The panel's clauses, held here because the Form clause is the query's.
+   * No clause is "All forms"; a Form clause narrows to one form's
+   * submissions.
    *
-   * A PRIMITIVE, deliberately: `usePagedCollection` reopens its listener when
-   * a dep changes, and an object identity would tear down and reopen on every
-   * render. It also resets the reader to page 1, which is what switching
-   * subjects should do.
+   * `formFilter` is a PRIMITIVE, deliberately: `usePagedCollection` reopens
+   * its listener when a dep changes, and an object identity would tear down
+   * and reopen on every render. It also resets the reader to page 1, which
+   * is what switching subjects should do.
    */
-  const [formFilter, setFormFilter] = useState<string | null>(null)
+  const [clauses, setClauses] = useState<ListFilterClause[]>([])
+  const formFilter =
+    clauses.find((clause) => clause.field === 'formId' && clause.op === 'equals')
+      ?.value || null
   /**
    * The form the query is actually narrowed to.
    *
-   * The scope wins over the picker rather than seeding it. A scoped card
-   * renders no picker, so a `formFilter` that could outrank `formId` would be
-   * a filter with no control — reachable only by a state change nothing on
-   * screen can cause, and unclearable if one ever could.
+   * The scope wins over the panel rather than seeding it. A scoped card
+   * offers no Form filter, so a `formFilter` that could outrank `formId`
+   * would be a filter with no control — reachable only by a state change
+   * nothing on screen can cause, and unclearable if one ever could.
    */
   const activeForm = formId ?? formFilter
 
@@ -252,7 +308,8 @@ export function SubmissionsCard({
    * from `IMPORTABLE_FIELDS`, so no restore path can make one without it.
    */
   const {
-    rows: submissions,
+    data: submissionData,
+    rows: submissionRows,
     hasMore: hasMoreSubmissions,
     page: submissionPage,
     setPage: setSubmissionPage,
@@ -297,6 +354,73 @@ export function SubmissionsCard({
     [firestore, hostId, orgId, activeForm],
     { idField: '$id' },
   )
+  /** Form is offered where the site's catalog is read. */
+  const offersForm = !scoped && Boolean(hostId) && forms.length > 0
+  const submissionFields = useMemo(
+    () => [
+      ...SUBMISSION_BASE_FIELDS,
+      ...(offersForm ? [FORM_FIELD] : []),
+      ...(hostId == null ? [inMemoryListField('hostId', 'select')] : []),
+    ],
+    [offersForm, hostId],
+  )
+  const submissionOptions = useMemo(
+    () => ({
+      read: READ_OPTIONS,
+      ...(offersForm
+        ? {
+            formId: forms.map((form: any) => ({
+              value: String(form.$id),
+              label: String(form.displayName || form.$id),
+            })),
+          }
+        : {}),
+      ...(hostId == null
+        ? {
+            hostId: (orgMount?.hosts ?? []).map((host) => ({
+              value: host.id,
+              label: host.name || host.id,
+            })),
+          }
+        : {}),
+    }),
+    [offersForm, forms, hostId, orgMount],
+  )
+  const submissionWindow = useMemo(
+    () => submissionData?.map(withFilterValues),
+    [submissionData],
+  )
+  const submissionPageRows = useMemo(
+    () => submissionRows.map(withFilterValues),
+    [submissionRows],
+  )
+  const submissionFilter = usePagedRowsFilter<any>(
+    {
+      data: submissionWindow,
+      rows: submissionPageRows,
+      hasMore: hasMoreSubmissions,
+      page: submissionPage,
+      setPage: setSubmissionPage,
+      pageSize: submissionPageSize,
+      setPageSize: setSubmissionPageSize,
+    },
+    {
+      fields: submissionFields,
+      options: submissionOptions,
+      headers: SUBMISSION_FILTER_HEADERS,
+      search: SUBMISSION_SEARCH_FIELDS,
+      served: servedByQuery,
+      clauses,
+      onChange: setClauses,
+    },
+  )
+  // The rows on screen: the page, or the page of the matches.
+  const submissions = submissionFilter.rows
+  /** Narrowed by nothing but the served Form clause. */
+  const onlyForm =
+    Boolean(formFilter) &&
+    clauses.every(servedByQuery) &&
+    submissionFilter.gridFilter.searchWords.length === 0
 
   // Mail reader (AGL-104): opening a submission shows the full message and
   // marks it read.
@@ -461,7 +585,7 @@ export function SubmissionsCard({
       headerName: 'From',
       flex: 1,
       minWidth: 220,
-      valueGetter: (_value, submission) => submissionSender(submission.fields).label,
+      valueGetter: (_value, submission) => submission.senderLabel,
       renderCell: ({ row: submission }) => {
         const sender = submissionSender(submission.fields)
         const hue = senderHue(sender.label)
@@ -514,7 +638,10 @@ export function SubmissionsCard({
             headerName: 'Site',
             flex: 1,
             minWidth: 140,
+            // Sorted and drawn by name; the filter matches the id.
             valueGetter: (_value: unknown, submission: any) =>
+              orgSiteName(orgMount, submission.hostId),
+            renderCell: ({ row: submission }: { row: any }) =>
               orgSiteName(orgMount, submission.hostId),
           } satisfies GridColDef,
         ]
@@ -524,10 +651,7 @@ export function SubmissionsCard({
       headerName: 'Message',
       flex: 2,
       minWidth: 260,
-      valueGetter: (_value, submission) =>
-        Object.entries(submission.fields ?? {})
-          .map(([key, value]) => `${key}: ${value}`)
-          .join(' · '),
+      valueGetter: (_value, submission) => submission.messageText,
       renderCell: ({ value }) => (
         <Typography variant="body2" noWrap>
           {value}
@@ -598,40 +722,17 @@ export function SubmissionsCard({
       >
         {/*
           * The Inbox stays the site-wide answer to "who is waiting for a
-          * reply" — that question does not decompose by form. This narrows
-          * it on request; it does not turn the page into a per-form view.
-          *
-          * Rendered only when the site HAS forms, so a site that has not
-          * adopted any sees the page exactly as it was.
+          * reply" — that question does not decompose by form. The panel's
+          * Form filter narrows it on request; it does not turn the page into
+          * a per-form view. It is offered only when the site HAS forms, and
+          * never on a card already scoped to one.
           */}
-        {/*
-          * Withheld when the card is scoped: the subject is settled by the
-          * surface this is rendered on, and a picker offering to widen it
-          * would be a control that navigates away from the page it is on.
-          */}
-        {!scoped && forms.length > 0 ? (
-          <TextField
-            select
-            size="small"
-            label={'Form'}
-            value={formFilter ?? ''}
-            onChange={(event) => setFormFilter(event.target.value || null)}
-            helperText={
-              formsTruncated
-                ? `Showing the first ${FORMS_MAX_PER_HOST.toLocaleString()} ` +
-                  'forms. Narrow by form is incomplete; All forms still ' +
-                  'covers every submission.'
-                : undefined
-            }
-            sx={{ mb: 2, minWidth: 240 }}
-          >
-            <MenuItem value="">{'All forms'}</MenuItem>
-            {forms.map((form: any) => (
-              <MenuItem key={form.$id} value={form.$id}>
-                {form.displayName || form.$id}
-              </MenuItem>
-            ))}
-          </TextField>
+        {offersForm && formsTruncated ? (
+          <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
+            {`The Form filter offers the first ${FORMS_MAX_PER_HOST.toLocaleString()} ` +
+              'forms. Narrow by form is incomplete; with no Form filter the ' +
+              'list still covers every submission.'}
+          </Typography>
         ) : null}
         {hostId == null ? (
           <Typography
@@ -643,26 +744,38 @@ export function SubmissionsCard({
               'narrow them by form.'}
           </Typography>
         ) : null}
-        {submissions.length === 0 ? (
+        {submissionRows.length === 0 &&
+        !hasMoreSubmissions &&
+        !submissionFilter.filtering ? (
           <Typography variant="body2" color="text.secondary">
             {scoped
               ? 'No submissions carry this form’s id yet. Messages this ' +
                 'form’s design collected before it became a form entity are ' +
                 'in the Inbox, filed under the name they were sent with.'
-              : activeForm
-                ? 'No submissions for this form yet. Submissions sent before ' +
-                  'the form was created stay under All forms.'
-                : hostId == null
+              : hostId == null
                   ? 'No form submissions on any site yet.'
                   : 'No form submissions yet. Add a Contact Form element to a ' +
                     'screen — visitor messages arrive here.'}
           </Typography>
         ) : (
           <>
+            <ListFilterChips {...submissionFilter.chipsProps} servedField="formId" />
+            {submissionFilter.filtering && hasMoreSubmissions ? (
+              <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
+                {`Filtering the ${submissionFilter.read} submissions read so far — the next page reads more.`}
+              </Typography>
+            ) : null}
             <ListTable
               aria-label={scoped ? 'Submissions to this form' : 'Form submissions'}
               rows={submissions}
-              columns={submissionColumns}
+              columns={submissionFilter.filterColumns(submissionColumns)}
+              initialState={{ columns: { columnVisibilityModel: SUBMISSION_HIDDEN_COLUMNS } }}
+              noRowsLabel={
+                onlyForm
+                  ? 'No submissions for this form yet. Submissions sent before ' +
+                    'the form was created are listed with no Form filter.'
+                  : 'No submissions match these filters'
+              }
               rowHeight={TABLE_ROW_HEIGHT}
               onOpen={(_id, submission) => handleOpenReader(submission)()}
               // An unread submission reads bold across its row, which is why
@@ -674,15 +787,11 @@ export function SubmissionsCard({
               }}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
+              // The panel and the search are the grid's: Form is the query's
+              // clause, the rest are answered over what the window read.
+              {...submissionFilter.gridProps}
             />
-            <ListPagination
-              page={submissionPage}
-              pageSize={submissionPageSize}
-              rowCount={submissions.length}
-              hasMore={hasMoreSubmissions}
-              onPageChange={setSubmissionPage}
-              onPageSizeChange={setSubmissionPageSize}
-            />
+            <ListPagination {...submissionFilter.pagination} />
           </>
         )}
       </CardDisplay>

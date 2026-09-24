@@ -35,12 +35,18 @@ import {
   mdiVectorSquare,
 } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListTable, {
   ListRowActions,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import {
+  inMemoryListField,
+  type ListFilterClause,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { Alert, Button, Stack, Typography } from '@mui/material'
@@ -57,8 +63,39 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { collectionPage } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import { useRouter } from 'next/navigation'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+
+/*
+ * What the forms grid's Filters panel offers (AGL-3317). The list is a paged
+ * listener, so a filter matches over what its window has read, which the
+ * first filter widens (`usePagedRowsFilter`). Status is a hidden column
+ * reading `statusKey`, whether the form is retired.
+ */
+const FORM_FILTER_FIELDS = [
+  inMemoryListField('displayName', 'text'),
+  inMemoryListField('slug', 'text'),
+  inMemoryListField('status', 'select', 'statusKey'),
+]
+const FORM_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  displayName: 'Display name',
+  slug: 'Slug',
+  status: 'Status',
+}
+const FORM_FILTER_OPTIONS = {
+  status: [
+    { value: 'active', label: 'Active' },
+    { value: 'retired', label: 'Retired' },
+  ],
+}
+const FORM_SEARCH_FIELDS = ['displayName', 'slug'] as const
+const FORM_HIDDEN_COLUMNS = { status: false }
+
+/** A form row with the status its filter matches on. */
+const withStatusKey = (form: any) => ({
+  ...form,
+  statusKey: isFormArchived(form) ? 'retired' : 'active',
+})
 
 export interface HostFormsCardProps {
   hostId: string
@@ -202,6 +239,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
    */
   const {
     status,
+    data: formData,
     rows: formWindow,
     hasMore,
     page,
@@ -225,14 +263,53 @@ export function HostFormsCard(props: HostFormsCardProps) {
    * not one value to filter on. The cost is that a tombstone spends a slot in
    * whichever page it falls in.
    *
-   * The toggle is not decoration. Retiring a form removes it from this list,
-   * and a retirement with no way to see what has been retired is a one-way
-   * door: the row is the only route back to Restore.
+   * The Filters panel's Status is how the reader asks (AGL-3317). With no
+   * Status clause the list leaves the tombstones out, as it always has, and
+   * reads one page; a Status clause hands the panel every row the window
+   * read, retired included, and the clause itself picks which to show. That
+   * default is the absence of a clause rather than a clause the list starts
+   * with, because a starting clause would widen the window on every visit to
+   * answer a question nobody asked. Retiring a form removes it from the list,
+   * and without the Status filter that would be a one-way door: the row is
+   * the only route back to Restore.
    */
-  const [showArchived, setShowArchived] = useState(false)
-  const forms = showArchived
-    ? formWindow
-    : formWindow.filter((form: any) => !isFormArchived(form))
+  const [formClauses, setFormClauses] = useState<ListFilterClause[]>([])
+  const askedStatus = formClauses.some((clause) => clause.field === 'status')
+  const formRows = useMemo(
+    () =>
+      formWindow
+        .filter((form: any) => askedStatus || !isFormArchived(form))
+        .map(withStatusKey),
+    [formWindow, askedStatus],
+  )
+  const formWindowRows = useMemo(
+    () =>
+      formData
+        ?.filter((form: any) => askedStatus || !isFormArchived(form))
+        .map(withStatusKey),
+    [formData, askedStatus],
+  )
+  const formFilter = usePagedRowsFilter<any>(
+    {
+      data: formWindowRows,
+      rows: formRows,
+      hasMore,
+      page,
+      setPage,
+      pageSize,
+      setPageSize,
+    },
+    {
+      fields: FORM_FILTER_FIELDS,
+      options: FORM_FILTER_OPTIONS,
+      headers: FORM_FILTER_HEADERS,
+      search: FORM_SEARCH_FIELDS,
+      clauses: formClauses,
+      onChange: setFormClauses,
+    },
+  )
+  // The rows on screen: the page, or the page of the matches.
+  const forms = formFilter.rows
 
   /*
    * The COUNT is a server aggregate, not the length of a page. `forms` is one
@@ -242,7 +319,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
   const liveFormCount = useLiveArtifactCount(hostId, 'forms')
   // Pending or refused, the page window stands in: a LOWER bound, never a
   // confident zero.
-  const formsUsed = liveFormCount ?? forms.length
+  const formsUsed = liveFormCount ?? formWindow.length
 
   /**
    * Name first, then create (AGL-700).
@@ -521,22 +598,6 @@ export function HostFormsCard(props: HostFormsCardProps) {
               {'Retired forms keep their slot'}
             </Typography>
           ) : null}
-          {/*
-            The only route back to a retired form (AGL-2671). Retiring one
-            removes its row, so without this the Restore action would exist on
-            a row nobody could reach again.
-
-            A plain toggle rather than a filter control: there are exactly two
-            states, and the retired set is expected to be small and rarely
-            looked at.
-          */}
-          <Button
-            size="small"
-            variant={showArchived ? 'outlined' : 'text'}
-            onClick={() => setShowArchived((shown) => !shown)}
-          >
-            {showArchived ? 'Hide retired' : 'Show retired'}
-          </Button>
           <Stack direction="row" spacing={1}>
             {/*
               Other ways to start a form, from plugins (AGL-3043): the
@@ -575,16 +636,31 @@ export function HostFormsCard(props: HostFormsCardProps) {
             {retireError}
           </Alert>
         ) : null}
+        <ListFilterChips {...formFilter.chipsProps} />
+        {formFilter.filtering && hasMore ? (
+          <Typography variant="caption" color="text.secondary">
+            {`Filtering the ${formFilter.read} forms read so far — the next page reads more.`}
+          </Typography>
+        ) : null}
         <ListTable
           rowHeight={TABLE_ROW_HEIGHT}
-          columns={columns}
-          noRowsLabel={showArchived ? 'No forms' : 'No forms yet'}
-          noRowsDescription="A form collects submissions, dedupes the people who send them, and can route them to a lead. Its design is drawn in the besigner and published like any other artifact."
-          noRowsAction={
-            <Button variant="contained" onClick={() => setCreateOpen(true)}>
-              {'Create your first form'}
-            </Button>
-          }
+          columns={formFilter.filterColumns(columns)}
+          initialState={{ columns: { columnVisibilityModel: FORM_HIDDEN_COLUMNS } }}
+          // The panel and the search are the grid's; the card answers them
+          // over what its window read.
+          {...formFilter.gridProps}
+          {...(formFilter.filtering
+            ? { noRowsLabel: 'No forms match these filters' }
+            : {
+                noRowsLabel: 'No forms yet',
+                noRowsDescription:
+                  'A form collects submissions, dedupes the people who send them, and can route them to a lead. Its design is drawn in the besigner and published like any other artifact.',
+                noRowsAction: (
+                  <Button variant="contained" onClick={() => setCreateOpen(true)}>
+                    {'Create your first form'}
+                  </Button>
+                ),
+              })}
           rows={forms}
           // The whole row opens the detail page; the action cluster stops
           // propagation so a menu click never navigates underneath it.
@@ -595,14 +671,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
           // Paged by the footer below, so the grid must not also slice.
           hideFooter
         />
-        <ListPagination
-          page={page}
-          pageSize={pageSize}
-          rowCount={forms.length}
-          hasMore={hasMore}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-        />
+        <ListPagination {...formFilter.pagination} />
         {/*
           The console's own create drawer, from the shared library rather than a
           second one that looks like it. The empty state and the header open the

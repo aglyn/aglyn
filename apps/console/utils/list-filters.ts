@@ -91,8 +91,16 @@ export const ORG_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'updatedAt', kind: 'date', path: 'updatedAt', presence: 'always' },
 ]
 
-/** Headers for the fields above that are filterable without being columns. */
+/**
+ * How each field above reads — as a hidden column's header, and on the chip
+ * over the grid. `plan` and `subscription` name what the query matches, the
+ * STORED values, which is not always what the row shows beside them.
+ */
 export const ORG_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Organization',
+  plan: 'Stored plan',
+  subscription: 'Billing status',
+  createdAt: 'Created',
   $id: 'Org ID',
   slug: 'Org slug',
   ownerUid: 'Owner UID',
@@ -137,6 +145,13 @@ const MEMORY_DATE_OPERATORS = [
   'isNotEmpty',
 ] as const
 
+/**
+ * The staff roles a `staffRole` claim may hold — what the role picker offers,
+ * what `/api/admin/users/manage` accepts, and the choices the list's Staff
+ * role filter shows.
+ */
+export const STAFF_ROLES = ['support', 'billing', 'super'] as const
+
 /** Accounts, as `/api/admin/users` serializes them. */
 export const USER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'email', kind: 'text', path: 'email', operators: MEMORY_TEXT_OPERATORS },
@@ -150,6 +165,11 @@ export const USER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   { column: 'disabled', kind: 'boolean', path: 'disabled' },
   { column: 'staff', kind: 'boolean', path: 'staff' },
   {
+    /*
+     * The claim as stored. A staff account with no role claim holds `null`
+     * here although every enforcing check reads it as `support`, so
+     * `is support` finds only the accounts granted the role explicitly.
+     */
     column: 'staffRole',
     kind: 'exact',
     path: 'staffRole',
@@ -189,8 +209,10 @@ export const USER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   },
 ]
 
-/** Headers for account fields that are filterable without being columns. */
+/** How each account field reads — as a hidden column's header, and on a chip. */
 export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  email: 'User',
+  createdAt: 'Created',
   uid: 'UID',
   displayName: 'Display name',
   staff: 'Staff claim',
@@ -199,6 +221,11 @@ export const USER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   providers: 'Sign-in providers',
   lastSignInAt: 'Last sign-in',
   disabled: 'Disabled',
+}
+
+/** The choices of the account fields that are picked rather than typed. */
+export const USER_LIST_FILTER_OPTIONS = {
+  staffRole: STAFF_ROLES.map((role) => ({ value: role, label: role })),
 }
 
 /*
@@ -234,6 +261,12 @@ export const ACTIVITY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
   },
 ]
+
+/** How the activity fields read on a chip. */
+export const ACTIVITY_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  action: 'Action',
+  createdAt: 'When',
+}
 
 /*
  * Site members (`hosts/{hostId}/siteMembers`) — the site's AUDIENCE.

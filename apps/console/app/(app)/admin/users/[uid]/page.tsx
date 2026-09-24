@@ -71,6 +71,9 @@ import {
   TABLE_PAGE_SIZE_DEFAULT,
 } from '../../../../../constants/shared'
 import ActivityTable from '../../../../../components/activity-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
 import PluginWidgetSlot, {
@@ -238,6 +241,27 @@ interface UserDetail {
  * state, staff role, org memberships with per-site access, and its
  * recent audit trail — plus impersonation (AGL-246).
  */
+/*
+ * What the two audit tables filter and search by. Both hold the whole window
+ * the detail route returned and page it themselves, so the panel and the
+ * search answer over every entry in that window before a page is sliced.
+ */
+const AUDIT_FILTER_FIELDS = [
+  inMemoryListField('action', 'text'),
+  inMemoryListField('target', 'text'),
+  inMemoryListField('reason', 'text'),
+  inMemoryListField('actorUid', 'text'),
+  inMemoryListField('at', 'date'),
+]
+const AUDIT_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  action: 'Action',
+  target: 'Target',
+  reason: 'Why',
+  actorUid: 'Actor',
+  at: 'When',
+}
+const AUDIT_SEARCH_PATHS = ['action', 'target', 'reason', 'note', 'actorUid']
+
 const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ uid: string }>()
   const uid = params?.uid
@@ -398,38 +422,53 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
     ],
     [detail?.user.uid],
   )
+  const auditFilter = useListRowsFilter({
+    rows: auditEntries,
+    fields: AUDIT_FILTER_FIELDS,
+    headers: AUDIT_FILTER_HEADERS,
+    search: AUDIT_SEARCH_PATHS,
+  })
+  const accessFilter = useListRowsFilter({
+    rows: accessEntries,
+    fields: AUDIT_FILTER_FIELDS,
+    headers: AUDIT_FILTER_HEADERS,
+    search: AUDIT_SEARCH_PATHS,
+  })
+  const filteredAudit = auditFilter.rows
+  const filteredAccess = accessFilter.rows
   const pagedAudit = useMemo(
     () =>
-      auditEntries.slice(
+      filteredAudit.slice(
         auditPage * auditPageSize,
         auditPage * auditPageSize + auditPageSize,
       ),
-    [auditEntries, auditPage, auditPageSize],
+    [filteredAudit, auditPage, auditPageSize],
   )
   const pagedAccess = useMemo(
     () =>
-      accessEntries.slice(
+      filteredAccess.slice(
         accessPage * accessPageSize,
         accessPage * accessPageSize + accessPageSize,
       ),
-    [accessEntries, accessPage, accessPageSize],
+    [filteredAccess, accessPage, accessPageSize],
   )
-  // A reload that returns a shorter trail can strand a reader past the last
-  // page, which renders as an empty table with no way back.
+  // A reload that returns a shorter trail, or a filter that narrows it, can
+  // strand a reader past the last page, which renders as an empty table with
+  // no way back.
   useEffect(() => {
     const lastPage = Math.max(
       0,
-      Math.ceil(auditEntries.length / auditPageSize) - 1,
+      Math.ceil(filteredAudit.length / auditPageSize) - 1,
     )
     if (auditPage > lastPage) setAuditPage(lastPage)
-  }, [auditEntries.length, auditPage, auditPageSize])
+  }, [filteredAudit.length, auditPage, auditPageSize])
   useEffect(() => {
     const lastPage = Math.max(
       0,
-      Math.ceil(accessEntries.length / accessPageSize) - 1,
+      Math.ceil(filteredAccess.length / accessPageSize) - 1,
     )
     if (accessPage > lastPage) setAccessPage(lastPage)
-  }, [accessEntries.length, accessPage, accessPageSize])
+  }, [filteredAccess.length, accessPage, accessPageSize])
 
   useEffect(() => {
     if (!uid || !user) return
@@ -1258,13 +1297,19 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                       'LOOKED at is the card below. The full record lives ' +
                       'on the Audit log page.'
                     }
-                    columns={auditColumns}
+                    columns={auditFilter.filterColumns(auditColumns)}
                     rows={pagedAudit}
                     getRowId={(row: any) => row.id}
                     emptyLabel="No audited actions involve this account."
+                    filteredLabel="No audited actions match these filters"
+                    filtering={auditFilter.filtering}
+                    filterModel={auditFilter.gridProps.filterModel}
+                    onFilterModelChange={auditFilter.gridProps.onFilterModelChange}
+                    quickFilter
+                    filterChips={<ListFilterChips {...auditFilter.chipsProps} />}
                     page={auditPage}
                     pageSize={auditPageSize}
-                    count={auditEntries.length}
+                    count={filteredAudit.length}
                     onPageChange={setAuditPage}
                     onPageSizeChange={setAuditPageSize}
                   />
@@ -1301,13 +1346,19 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                       'collapse onto one row and say how many; two separate ' +
                       'openings are two rows.'
                     }
-                    columns={auditColumns}
+                    columns={accessFilter.filterColumns(auditColumns)}
                     rows={pagedAccess}
                     getRowId={(row: any) => row.id}
                     emptyLabel="No audited staff reads of this account's data."
+                    filteredLabel="No audited staff reads match these filters"
+                    filtering={accessFilter.filtering}
+                    filterModel={accessFilter.gridProps.filterModel}
+                    onFilterModelChange={accessFilter.gridProps.onFilterModelChange}
+                    quickFilter
+                    filterChips={<ListFilterChips {...accessFilter.chipsProps} />}
                     page={accessPage}
                     pageSize={accessPageSize}
-                    count={accessEntries.length}
+                    count={filteredAccess.length}
                     onPageChange={setAccessPage}
                     onPageSizeChange={setAccessPageSize}
                   />

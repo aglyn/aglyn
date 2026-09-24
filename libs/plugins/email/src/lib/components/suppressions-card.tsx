@@ -26,13 +26,16 @@ import {
   SrOnly,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
 /*
  * The shared drawer, reached by its own path.
  *
@@ -64,7 +67,7 @@ import {
   orderBy,
   query,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   usePagedCollection,
@@ -74,6 +77,7 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   describeSuppressionReason as describeReason,
   readSuppressionTotals,
+  SUPPRESSION_REASONS,
   type SuppressionTotals,
 } from './suppression-totals'
 
@@ -90,6 +94,35 @@ interface SuppressionRow {
   createdAt?: { seconds?: number } | null
 }
 
+/*
+ * What the suppressions grid's Filters panel offers (AGL-3317). The list is a
+ * paged listener, so a filter matches over what its window has read, which
+ * the first filter widens (`usePagedRowsFilter`). Reason reads `reasonKey`,
+ * the stored reason with an absent one read as an unsubscribe, which is how
+ * the column and the breakdown describe it.
+ */
+const SUPPRESSION_FILTER_FIELDS = [
+  inMemoryListField('email', 'text'),
+  inMemoryListField('reason', 'select', 'reasonKey'),
+]
+const SUPPRESSION_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  email: 'Address',
+  reason: 'Reason',
+}
+const SUPPRESSION_FILTER_OPTIONS = {
+  reason: Object.entries(SUPPRESSION_REASONS).map(([value, described]) => ({
+    value,
+    label: described.label,
+  })),
+}
+const SUPPRESSION_SEARCH_FIELDS = ['email'] as const
+
+type FilterableSuppressionRow = SuppressionRow & { reasonKey: string }
+
+const withReasonKey = (row: SuppressionRow): FilterableSuppressionRow => ({
+  ...row,
+  reasonKey: String(row.reason ?? 'unsubscribe'),
+})
 
 /**
  * `YYYY-MM-DD` from a Firestore timestamp shape, or an em dash.
@@ -182,7 +215,8 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
    * field rather than mis-sorting them.
    */
   const {
-    rows: entries,
+    data: entryData,
+    rows: entryRows,
     hasMore,
     page,
     setPage,
@@ -198,6 +232,27 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
     [firestore, hostId],
     { idField: '$id' },
   )
+  const entryWindow = useMemo(() => entryData?.map(withReasonKey), [entryData])
+  const entryPage = useMemo(() => entryRows.map(withReasonKey), [entryRows])
+  const entryFilter = usePagedRowsFilter<FilterableSuppressionRow>(
+    {
+      data: entryWindow,
+      rows: entryPage,
+      hasMore,
+      page,
+      setPage,
+      pageSize,
+      setPageSize,
+    },
+    {
+      fields: SUPPRESSION_FILTER_FIELDS,
+      options: SUPPRESSION_FILTER_OPTIONS,
+      headers: SUPPRESSION_FILTER_HEADERS,
+      search: SUPPRESSION_SEARCH_FIELDS,
+    },
+  )
+  // The rows on screen: the page, or the page of the matches.
+  const entries = entryFilter.rows
 
   /*==========================================
    * THE BREAKDOWN IS A SERVER AGGREGATE, not a tally of the page.
@@ -401,7 +456,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
     }
   }
 
-  const columns: GridColDef<SuppressionRow>[] = [
+  const columns: GridColDef<FilterableSuppressionRow>[] = [
     {
       field: 'email',
       headerName: 'Address',
@@ -424,7 +479,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
       field: 'reason',
       headerName: 'Reason',
       width: 170,
-      valueGetter: (_value, row) => describeReason(row.reason).label,
+      valueGetter: (_value, row) => row.reasonKey,
       renderCell: ({ row }) => {
         const described = describeReason(row.reason)
         return (
@@ -497,7 +552,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
             'gap between a campaign’s recipient count and what it actually ' +
             'sent comes from.'}
         </Typography>
-        {entries.length === 0 ? (
+        {entryRows.length === 0 && !hasMore && !entryFilter.filtering ? (
           <Typography variant="body2" color="text.secondary">
             {'Nobody is suppressed. Every address in your audiences is ' +
               'currently mailable.'}
@@ -529,26 +584,35 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
                   })
               )}
             </Stack>
+            <ListFilterChips {...entryFilter.chipsProps} />
+            {entryFilter.filtering && hasMore ? (
+              <Typography variant="caption" color="text.secondary">
+                {`Filtering the ${entryFilter.read} suppressions read so far — the next page reads more.`}
+              </Typography>
+            ) : null}
             <ListTable
               aria-label="Suppressed addresses"
               rows={entries}
-              columns={columns}
+              columns={entryFilter.filterColumns(columns as GridColDef[])}
               rowHeight={TABLE_ROW_HEIGHT}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
+              // The panel and the search are the grid's; the card answers
+              // them over what its window read.
+              {...entryFilter.gridProps}
+              noRowsLabel="No suppressions match these filters"
             />
             <ListPagination
-              page={page}
-              pageSize={pageSize}
-              rowCount={entries.length}
-              hasMore={hasMore}
+              {...entryFilter.pagination}
               // The collection's real size, so the footer's count line says
               // "1–10 of 812" rather than "of more than 10" — the aggregate
               // above already knows it, and it is the same number the chips
-              // are a breakdown of.
-              count={totals ? Object.values(totals).reduce((a, b) => a + b, 0) : undefined}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
+              // are a breakdown of. A filtered list's size is unknown.
+              count={
+                totals && !entryFilter.filtering
+                  ? Object.values(totals).reduce((a, b) => a + b, 0)
+                  : undefined
+              }
             />
           </>
         )}

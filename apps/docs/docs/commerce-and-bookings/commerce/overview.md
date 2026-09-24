@@ -45,6 +45,14 @@ The **Products** page is the catalog manager:
 - **Payments** — Stripe Connect onboarding status and your plan's fee
   ladder.
 
+The product list filters through its own toolbar. **Search** looks for the
+text in the field **Search in** names — **Name**, **SKU (whole)** or
+**Barcode (whole)** — and reaches the whole catalog, not only the rows on
+screen. **Filters** offers **Status** (Active, Draft, Archived); on its own it
+also reaches the whole catalog, and beside a search it narrows that search's
+matches. Each filter in force shows as a chip above the table; remove the chip
+to clear it.
+
 ## Inventory
 
 - Per-variant stock; blank = untracked, 0 = sold out.
@@ -90,11 +98,16 @@ sale at the register, and any hand adjustment you make from the products hub.
 Each row carries **when**, **which product** (and variant, when the product has
 options), **how much the count changed**, the **reason** — Sale, Refund return,
 Restock, Correction, Damaged, Order canceled — and the **source** that wrote
-it. Filter by product or by reason to narrow it.
+it.
 
-The list holds the most recent 100 movements. Filtering happens inside that
-window, so a product with no recent movement will not appear in the product
-filter at all — that is the absence of a movement, not a missing row.
+The table's toolbar narrows it: **Filters** offers **Product**, **Reason** and
+**When**, and **Search** finds a product name, variant, order or location. Each
+filter in force shows as a chip above the table.
+
+The list holds the most recent 100 movements. Filtering and search happen
+inside that window, so a product with no recent movement will not appear in
+the Product filter at all — that is the absence of a movement, not a missing
+row.
 
 :::note A change and an applied change can differ
 A row shows two numbers when they disagree. The first is the change that was
@@ -188,20 +201,23 @@ snapshots, totals, and a timeline:
 Open your site's **Products** hub and choose the **Orders** tab. Before your first
 sale the tab is an invitation rather than a table: it explains where orders come from
 and offers **Draft order**, so you can invoice a customer you already have. The
-filters and **Export CSV** appear once there are rows to filter.
+table and **Export CSV** appear once there are rows to filter.
 
-Above the table sit six filters and two buttons:
+The table filters through its own toolbar. **Search** finds an order number, a
+buyer's email or a product name. **Filters** offers:
 
-| Control | Choices |
+| Filter | Choices |
 | --- | --- |
-| **Product** | **All products**, or one product — matched against the order's line items, so carts, POS and draft orders are found too. |
-| **Period** | **All time**, **Last 7 days**, **Last 30 days**. |
-| **Status** | **All statuses**, or one of the seven below. |
-| **Channel** | **All channels**, or one of the four below. |
+| **Product** | One or more products — matched against the order's line items, so carts, POS and draft orders are found too. |
+| **Date** | On, before or after a day — the order date. |
+| **Status** | One or more of the seven below. |
+| **Channel** | One or more of the four below. |
 | **Customer** | A buyer's email address, or part of one — `acme.com` finds every buyer at a company. Filled in for you when you arrive from a contact's page in the CRM. |
-| **Disputes** | **All orders**, **Open dispute**, **Charged back**. |
-| **Export CSV** | Writes the rows currently shown — the filters apply. |
-| **Draft order** | Builds an order by hand and sends the buyer a payment link. |
+| **Disputes** | **Open dispute** or **Charged back**. |
+
+Each filter in force shows as a chip above the table; remove the chip to clear
+it. Beside the table, **Export CSV** writes the rows the filters leave, and
+**Draft order** builds an order by hand and sends the buyer a payment link.
 
 **Disputes is its own filter, not a status.** An open dispute sits on an order that is
 still **Paid**, and a lost one sits on **Refunded** beside every ordinary refund, so

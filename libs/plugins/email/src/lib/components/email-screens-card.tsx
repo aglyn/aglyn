@@ -29,13 +29,16 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   ceilingedWindow,
@@ -66,6 +69,28 @@ import { createEmailScreen } from '../utils/create-email-screen'
 
 /** How many of the site's screens one read of this list covers. */
 const TEMPLATE_CEILING = 200
+
+/*
+ * What the templates grid's Filters panel offers (AGL-3317). The card holds
+ * the templates its capped window read, so it answers the panel over all of
+ * them; the notice under the table says when the cap truncated the window.
+ * Origin reads `originKey`, the provenance the column draws.
+ */
+const TEMPLATE_FILTER_FIELDS = [
+  inMemoryListField('displayName', 'text', 'templateName'),
+  inMemoryListField('origin', 'select', 'originKey'),
+]
+const TEMPLATE_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  displayName: 'Template',
+  origin: 'Origin',
+}
+const TEMPLATE_FILTER_OPTIONS = {
+  origin: [
+    { value: 'local', label: 'Yours' },
+    { value: 'installed', label: 'Installed' },
+  ],
+}
+const TEMPLATE_SEARCH_FIELDS = ['templateName'] as const
 
 // The besigner route is `/[orgSlug]/hosts/[host]/screens/[screenId]/
 // versions/[versionId]/besigner`. This built `/{hostDocId}/screens/…`, the
@@ -155,9 +180,22 @@ export function EmailScreensCard(props: {
           String(a.displayName ?? '').localeCompare(
             String(b.displayName ?? ''),
           ),
-        ),
+        )
+        .map((screen: any) => ({
+          ...screen,
+          templateName: String(screen.displayName ?? 'Untitled template'),
+          originKey:
+            templateProvenance(screen).origin === 'installed' ? 'installed' : 'local',
+        })),
     [readScreens],
   )
+  const templateFilter = useListRowsFilter<any>({
+    rows: emailScreens,
+    fields: TEMPLATE_FILTER_FIELDS,
+    options: TEMPLATE_FILTER_OPTIONS,
+    headers: TEMPLATE_FILTER_HEADERS,
+    search: TEMPLATE_SEARCH_FIELDS,
+  })
 
   const handleCreate = async () => {
     try {
@@ -275,10 +313,9 @@ export function EmailScreensCard(props: {
       field: 'origin',
       headerName: 'Origin',
       width: 140,
-      valueGetter: (_value, row) =>
-        templateProvenance(row).origin === 'installed' ? 'Installed' : 'Yours',
+      valueGetter: (_value, row) => row.originKey,
       renderCell: ({ value }) =>
-        value === 'Installed' ? (
+        value === 'installed' ? (
           <Chip size="small" label="Installed" />
         ) : (
           <Typography variant="body2" color="text.secondary">
@@ -321,13 +358,20 @@ export function EmailScreensCard(props: {
               'only.'}
           </Typography>
         ) : (
-          <ListTable
-            aria-label="Email templates"
-            rows={emailScreens}
-            columns={columns}
-            rowHeight={TABLE_ROW_HEIGHT}
-            onOpen={(_id, row) => router.push(templateHref(row))}
-          />
+          <>
+            <ListFilterChips {...templateFilter.chipsProps} />
+            <ListTable
+              aria-label="Email templates"
+              rows={templateFilter.rows}
+              columns={templateFilter.filterColumns(columns)}
+              rowHeight={TABLE_ROW_HEIGHT}
+              onOpen={(_id, row) => router.push(templateHref(row))}
+              // The panel and the search are the grid's; the card answers
+              // them over every template its window read.
+              {...templateFilter.gridProps}
+              noRowsLabel="No templates match these filters"
+            />
+          </>
         )}
         {truncated ? (
           <Alert severity="info">

@@ -27,7 +27,7 @@
  * this file holds what the table says and where it sends people.
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 const mockPush = jest.fn()
@@ -301,5 +301,16 @@ describe('an organization with more sites than one page', () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
     })
     expect(rowFor('Template 11')).toBeTruthy()
+  })
+})
+
+describe('the organization’s templates filter through the grid toolbar (AGL-3317)', () => {
+  it('searches template and site names over every site read', async () => {
+    await mount()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'blog' } })
+    await waitFor(() => {
+      expect(rowFor('Weekly digest')).toBeTruthy()
+      expect(rowFor('Spring promo')).toBeUndefined()
+    })
   })
 })

@@ -17,20 +17,14 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
-import {
-  Alert,
-  MenuItem,
-  Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { Alert, Stack, Typography } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -76,6 +70,28 @@ const REASON_LABEL: Record<CommerceModel.InventoryAdjustmentReason, string> = {
 
 type MovementRow = CommerceModel.InventoryAdjustment & { $id: string }
 
+/*
+ * What the movements grid's Filters panel offers. The card holds its whole
+ * window, so the panel and the search answer over every movement it read.
+ * Product is picked by id and shown by name; Reason is the stored closed set.
+ */
+const MOVEMENT_FILTER_FIELDS = [
+  inMemoryListField('productId', 'select'),
+  inMemoryListField('reason', 'select'),
+  inMemoryListField('atMs', 'date'),
+]
+const MOVEMENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  productId: 'Product',
+  reason: 'Reason',
+  atMs: 'When',
+}
+const REASON_OPTIONS = Object.entries(REASON_LABEL).map(([value, label]) => ({
+  value,
+  label,
+}))
+/** What the quick search reads on a movement row. */
+const MOVEMENT_SEARCH_FIELDS = ['productName', 'variantId', 'orderId', 'locationId'] as const
+
 /**
  * Stock movements (AGL-2341) — the adjustment history that had no history
  * view.
@@ -102,8 +118,6 @@ type MovementRow = CommerceModel.InventoryAdjustment & { $id: string }
 export function StockMovementsCard(props: StockMovementsCardProps) {
   const { hostId } = props
   const firestore = useFirestore()
-  const [productFilter, setProductFilter] = useState('all')
-  const [reasonFilter, setReasonFilter] = useState('all')
 
   const { data: movementDocs } = useFirestoreCollection<any>(
     () =>
@@ -149,25 +163,49 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
     [movementDocs],
   )
 
-  const movements: MovementRow[] = useMemo(
+  const windowMovements = useMemo(
     () =>
       [...windowRows]
         // The query already orders, but a cached snapshot can arrive before
         // the server's and the sort is what makes "newest first" a promise
         // rather than a hope.
         .sort((a, b) => Number(b.atMs ?? 0) - Number(a.atMs ?? 0))
-        .filter(
-          (row) => productFilter === 'all' || row.productId === productFilter,
-        )
-        .filter((row) => reasonFilter === 'all' || row.reason === reasonFilter),
-    [windowRows, productFilter, reasonFilter],
+        .map((row) => ({
+          ...row,
+          productName: productNames.get(row.productId) ?? row.productId,
+        })),
+    [windowRows, productNames],
   )
+
+  /** Products that actually appear in the window — filtering to an empty
+   * option is a dead end, and the whole catalog is not the answer here. */
+  const productOptions = useMemo(() => {
+    const ids = new Set<string>()
+    for (const row of windowRows) {
+      if (row.productId) ids.add(row.productId)
+    }
+    return [...ids]
+      .map((id) => ({ value: id, label: productNames.get(id) ?? id }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [windowRows, productNames])
+  const filterOptions = useMemo(
+    () => ({ productId: productOptions, reason: REASON_OPTIONS }),
+    [productOptions],
+  )
+  const listFilter = useListRowsFilter({
+    rows: windowMovements,
+    fields: MOVEMENT_FILTER_FIELDS,
+    options: filterOptions,
+    headers: MOVEMENT_FILTER_HEADERS,
+    search: MOVEMENT_SEARCH_FIELDS,
+  })
+  const movements = listFilter.rows
 
   /*
    * The page is a SLICE of the window, and the window stays where it is.
    *
    * Paging the QUERY would be the cheaper read and the wrong control here,
-   * because both filters above run in the browser: on a ten-row server page
+   * because the grid's filters run in the browser: on a ten-row server page
    * "Damaged" would search ten movements instead of a hundred and answer "no
    * stock movements" about a ledger full of them. Moving those filters to the
    * server is what would earn a query-level page, and it cannot be done
@@ -181,132 +219,123 @@ export function StockMovementsCard(props: StockMovementsCardProps) {
   // unfiltered ledger is not a position in the filtered one — MUI renders an
   // out-of-range page as an empty table with no explanation, which reads as
   // the filter having matched nothing.
-  useEffect(() => setPage(0), [productFilter, reasonFilter])
+  const searchKey = listFilter.gridFilter.searchWords.join(' ')
+  useEffect(() => setPage(0), [listFilter.gridFilter.clauses, searchKey])
   const shown = useMemo(
     () => movements.slice(page * pageSize, page * pageSize + pageSize),
     [movements, page, pageSize],
   )
 
-  /** Products that actually appear in the window — filtering to an empty
-   * option is a dead end, and the whole catalog is not the answer here. */
-  const filterableProducts = useMemo(() => {
-    const ids = new Set<string>()
-    for (const row of windowRows) {
-      if (row.productId) ids.add(row.productId)
-    }
-    return [...ids].sort((a, b) =>
-      (productNames.get(a) ?? a).localeCompare(productNames.get(b) ?? b),
-    )
-  }, [windowRows, productNames])
+  const { filterColumns } = listFilter
+  const columns = useMemo(
+    () =>
+      filterColumns([
+        {
+          field: 'atMs',
+          headerName: 'When',
+          width: 190,
+          renderCell: ({ row }: { row: MovementRow }) =>
+            row.atMs ? new Date(Number(row.atMs)).toLocaleString() : '—',
+        },
+        {
+          field: 'productId',
+          headerName: 'Product',
+          flex: 1,
+          minWidth: 180,
+          renderCell: ({ row }: { row: MovementRow & { productName: string } }) => (
+            <span>
+              {row.productName}
+              {row.variantId ? (
+                <Typography variant="caption" color="text.secondary">
+                  {` · ${row.variantId}`}
+                </Typography>
+              ) : null}
+            </span>
+          ),
+        },
+        {
+          field: 'delta',
+          headerName: 'Change',
+          type: 'number',
+          width: 150,
+          align: 'right',
+          headerAlign: 'right',
+          renderCell: ({ row }: { row: MovementRow }) => {
+            const delta = Number(row.delta ?? 0)
+            const applied = Number(row.appliedDelta ?? delta)
+            return (
+              <span>
+                {/*
+                 * The sign is carried explicitly. "3" and "-3" are the same
+                 * width and opposite facts, and a merchant scanning a column
+                 * for the movement that broke their count reads the sign
+                 * before the number.
+                 */}
+                <Typography
+                  variant="body2"
+                  color={delta < 0 ? 'error.main' : 'success.main'}
+                  component="span"
+                >
+                  {delta > 0 ? `+${delta}` : String(delta)}
+                </Typography>
+                {applied !== delta ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {` (${applied > 0 ? `+${applied}` : applied} applied)`}
+                  </Typography>
+                ) : null}
+              </span>
+            )
+          },
+        },
+        {
+          field: 'reason',
+          headerName: 'Reason',
+          width: 150,
+          renderCell: ({ row }: { row: MovementRow }) =>
+            REASON_LABEL[row.reason] ?? row.reason,
+        },
+        {
+          field: 'source',
+          headerName: 'Source',
+          flex: 1,
+          minWidth: 160,
+          sortable: false,
+          renderCell: ({ row }: { row: MovementRow }) => (
+            <Typography variant="caption" color="text.secondary">
+              {[
+                row.orderId ? `order ${row.orderId}` : null,
+                row.locationId ? `at ${row.locationId}` : null,
+              ]
+                .filter(Boolean)
+                .join(' · ') || '—'}
+            </Typography>
+          ),
+        },
+      ] as GridColDef[]),
+    [filterColumns],
+  )
 
   return (
     <CardDisplay header="Stock movements" help={movementsHelp} contentGutterX contentGutterY>
       <Stack spacing={2}>
-        <Stack direction="row" spacing={2}>
-          <TextField
-            label="Product"
-            size="small"
-            select
-            value={productFilter}
-            onChange={(event) => setProductFilter(event.target.value)}
-            sx={{ minWidth: 200 }}
-          >
-            <MenuItem value="all">{'All products'}</MenuItem>
-            {filterableProducts.map((productId) => (
-              <MenuItem key={productId} value={productId}>
-                {productNames.get(productId) ?? productId}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            label="Reason"
-            size="small"
-            select
-            value={reasonFilter}
-            onChange={(event) => setReasonFilter(event.target.value)}
-            sx={{ minWidth: 180 }}
-          >
-            <MenuItem value="all">{'Every reason'}</MenuItem>
-            {Object.entries(REASON_LABEL).map(([value, label]) => (
-              <MenuItem key={value} value={value}>
-                {label}
-              </MenuItem>
-            ))}
-          </TextField>
-        </Stack>
-        {movements.length === 0 ? (
+        {windowMovements.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             {'No stock movements recorded yet. Sales, returns, cancellations ' +
               'and hand adjustments all land here.'}
           </Typography>
         ) : (
-          <ScrollTable size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'When'}</TableCell>
-                <TableCell>{'Product'}</TableCell>
-                <TableCell align="right">{'Change'}</TableCell>
-                <TableCell>{'Reason'}</TableCell>
-                <TableCell>{'Source'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {shown.map((row) => {
-                const delta = Number(row.delta ?? 0)
-                const applied = Number(row.appliedDelta ?? delta)
-                return (
-                  <TableRow key={row.$id}>
-                    <TableCell>
-                      {row.atMs
-                        ? new Date(Number(row.atMs)).toLocaleString()
-                        : '—'}
-                    </TableCell>
-                    <TableCell>
-                      {productNames.get(row.productId) ?? row.productId}
-                      {row.variantId ? (
-                        <Typography variant="caption" color="text.secondary">
-                          {` · ${row.variantId}`}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell align="right">
-                      {/*
-                       * The sign is carried explicitly. "3" and "-3" are the
-                       * same width and opposite facts, and a merchant
-                       * scanning a column for the movement that broke their
-                       * count reads the sign before the number.
-                       */}
-                      <Typography
-                        variant="body2"
-                        color={delta < 0 ? 'error.main' : 'success.main'}
-                        component="span"
-                      >
-                        {delta > 0 ? `+${delta}` : String(delta)}
-                      </Typography>
-                      {applied !== delta ? (
-                        <Typography variant="caption" color="text.secondary">
-                          {` (${applied > 0 ? `+${applied}` : applied} applied)`}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      {REASON_LABEL[row.reason] ?? row.reason}
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="caption" color="text.secondary">
-                        {[
-                          row.orderId ? `order ${row.orderId}` : null,
-                          row.locationId ? `at ${row.locationId}` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ') || '—'}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </ScrollTable>
+          <>
+            <ListFilterChips {...listFilter.chipsProps} />
+            <ListTable
+              aria-label="Stock movements"
+              rows={shown}
+              columns={columns}
+              {...listFilter.gridProps}
+              // `ListPagination` below pages the matches.
+              hideFooter
+              noRowsLabel="No stock movements match these filters"
+            />
+          </>
         )}
         {movements.length === 0 ? null : (
           <ListPagination

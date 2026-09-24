@@ -185,6 +185,13 @@ export default function StaffEmailSuppressionsCard() {
     [busy, user, note, enqueueSnackbar, pagination],
   )
 
+  /*
+   * No filter and no search. The route pages the list by cursor and serves
+   * no predicate, so a filter here could only narrow the page on screen and
+   * would answer "not suppressed" for every address past it — the wrong
+   * answer in the reassuring direction. Filtering needs the route to serve
+   * one first.
+   */
   const live = (entries ?? []).filter((row) => !row.releasedAt)
   const loading = pagination.loading && !entries.length
 

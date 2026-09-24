@@ -178,12 +178,10 @@ describe('the orders window is ordered, capped and probed', () => {
   it('renders 200 rows and says the filters stop there', () => {
     orderRows = orders(201)
 
-    const { getAllByRole, getByText } = render(
-      <HostOrdersCard hostId="host-1" />,
-    )
+    const { getByText } = render(<HostOrdersCard hostId="host-1" />)
 
-    // The probe row is never drawn: one header row plus 200 order rows.
-    expect(getAllByRole('row')).toHaveLength(201)
+    // The probe row is never handed to the grid: it pages 200 orders.
+    expect(getByText(/of 200$/)).toBeTruthy()
     expect(
       getByText(
         /Showing the 200 most recent orders\. Filters and Export CSV cover these\./,
@@ -196,11 +194,11 @@ describe('the orders window is ordered, capped and probed', () => {
     // while telling every store its list was short.
     orderRows = orders(200)
 
-    const { getAllByRole, queryByText } = render(
+    const { getByText, queryByText } = render(
       <HostOrdersCard hostId="host-1" />,
     )
 
-    expect(getAllByRole('row')).toHaveLength(201)
+    expect(getByText(/of 200$/)).toBeTruthy()
     expect(queryByText(/Showing the 200 most recent orders/)).toBeNull()
   })
 })

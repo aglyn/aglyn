@@ -449,6 +449,22 @@ const asTime = (value: unknown): number | null => {
 }
 
 /**
+ * The calendar day a date clause names, as a LOCAL date.
+ *
+ * The panel's date input holds a day, not an instant, and hands it over as
+ * `YYYY-MM-DD` — which `new Date` reads as UTC midnight, the previous
+ * evening anywhere west of UTC. Travelled through `toISOString`, the same
+ * day arrives as `YYYY-MM-DDT00:00:00.000Z`. Either spelling is read by its
+ * date parts, so "on or after Sep 17" starts on Sep 17 wherever the reader
+ * is. Any other value is an instant and is read as one.
+ */
+const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.000)?Z)?$/
+const askedDay = (raw: string): Date => {
+  const day = DAY_ONLY.exec(raw)
+  return day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(raw)
+}
+
+/**
  * Match ONE row against a filter, for a list that cannot push it to a query.
  *
  * The staff account list is the reason this exists: it is Firebase Auth, whose
@@ -532,7 +548,7 @@ export function matchListFilter(
 
   if (field.kind === 'date') {
     const at = asTime(value)
-    const day = new Date(raw)
+    const day = askedDay(raw)
     if (at === null || Number.isNaN(day.getTime())) return false
     const start = new Date(day)
     start.setHours(0, 0, 0, 0)

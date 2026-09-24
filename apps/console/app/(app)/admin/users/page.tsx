@@ -58,19 +58,22 @@ import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
-  gridFilterRequest,
-  hiddenFilterColumns,
-  hiddenFilterVisibility,
-  listFilterColumn,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
+  type ListFilterClause,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { displayWindow } from '../../../../utils/display-window'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
+  STAFF_ROLES,
   USER_LIST_FILTER_FIELDS,
   USER_LIST_FILTER_HEADERS,
+  USER_LIST_FILTER_OPTIONS,
 } from '../../../../utils/list-filters'
 import { collapseAdminUserRows } from '../../../../utils/collapse-admin-user-rows'
 import { formatStaffTimestamp } from '../../../../utils/staff-timestamps'
@@ -121,6 +124,8 @@ const poolLabel = (tenantId: string | null) =>
  * `USER_LIST_FILTER_FIELDS` still reaches the filter panel, as hidden columns.
  */
 const USER_FILTER_COLUMNS = ['email', 'staffRole', 'createdAt', 'lastSignInAt']
+/** The account fields the panel shows as selects over their choices. */
+const USER_SELECT_FIELDS = Object.keys(USER_LIST_FILTER_OPTIONS)
 
 const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
@@ -286,6 +291,44 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
     [pagination],
   )
 
+  /*
+   * The grid's Filters panel and quick search, bound to the query.
+   *
+   * `single`, because the route answers ONE clause: a clause set in the
+   * panel replaces the last. Each change goes straight through `applyQuery`
+   * — which reads the other half from `queryRef`, written synchronously —
+   * so the first page is asked for with the query the reader just set.
+   */
+  const [clauses, setClauses] = useState<ListFilterClause[]>([])
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const onClausesChange = useCallback(
+    (next: ListFilterClause[]) => {
+      setClauses(next)
+      applyQuery(queryRef.current.search, next[0] ?? null)
+    },
+    [applyQuery],
+  )
+  const onSearchChange = useCallback(
+    (words: string[]) => {
+      setSearchWords(words)
+      applyQuery(words.join(' ').trim(), queryRef.current.filter)
+    },
+    [applyQuery],
+  )
+  const searchBinding = useMemo(
+    () => ({ words: searchWords, onChange: onSearchChange }),
+    [searchWords, onSearchChange],
+  )
+  const gridFilter = useListGridFilter({
+    selectFields: USER_SELECT_FIELDS,
+    single: true,
+    clauses,
+    onChange: onClausesChange,
+    search: searchBinding,
+  })
+  const searching = searchWords.join('').trim() !== ''
+  const filtering = clauses.length > 0 || searching
+
 
   const visible = useMemo(() => {
     // One row per human across EVERY page visited (AGL-2005). The route
@@ -440,12 +483,11 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * `USER_LIST_FILTER_FIELDS`, the same declaration `/api/admin/users` matches
    * against. This list matches in memory rather than through an index, so it
    * offers a mid-string `contains` and a `doesNotContain` that the
-   * Firestore-backed lists cannot.
+   * Firestore-backed lists cannot. `listFilterGridColumns` applies it to the
+   * columns below — the staff role as a select over `STAFF_ROLES`, the other
+   * fields with their operators, and the ones with no column of their own as
+   * hidden columns.
    */
-  const filterColumn = useCallback(
-    (column: string) => listFilterColumn(USER_LIST_FILTER_FIELDS, column),
-    [],
-  )
 
   /*
    * One row grammar, the console's (AGL-2501). `valueGetter` on every column
@@ -453,13 +495,12 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * rendered as text sorts as text, which puts 12 January before 2 February.
    */
   const userColumns: GridColDef[] = useMemo(
-    () => [
+    () => listFilterGridColumns([
       {
         field: 'email',
         headerName: 'User',
         flex: 1.6,
         minWidth: 280,
-        ...filterColumn('email'),
         valueGetter: (_value, row: any) =>
           String(row.email ?? row.displayName ?? ''),
         renderCell: ({ row }: any) => (
@@ -542,7 +583,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         headerName: 'Status',
         flex: 0.8,
         minWidth: 150,
-        ...filterColumn('staffRole'),
         valueGetter: (_value, row: any) =>
           row.staff ? (row.staffRole ?? 'support') : row.disabled ? 'disabled' : '',
         renderCell: ({ row }: any) => (
@@ -566,9 +606,11 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 onChange={(event) => void handleSetRole(row, event.target.value)}
                 sx={{ minWidth: 96 }}
               >
-                <MenuItem value="support">{'support'}</MenuItem>
-                <MenuItem value="billing">{'billing'}</MenuItem>
-                <MenuItem value="super">{'super'}</MenuItem>
+                {STAFF_ROLES.map((role) => (
+                  <MenuItem key={role} value={role}>
+                    {role}
+                  </MenuItem>
+                ))}
               </TextField>
             ) : null}
             {row.disabled ? (
@@ -585,7 +627,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         // `type: 'date'` is what gives the panel a date PICKER rather than a
         // free-text box for a value the route parses as a day.
         type: 'date',
-        ...filterColumn('createdAt'),
         valueGetter: (_value, row: any) =>
           row.createdAt ? new Date(row.createdAt) : null,
         renderCell: ({ row }: any) => (
@@ -602,7 +643,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
         // `type: 'date'` is what gives the panel a date PICKER rather than a
         // free-text box for a value the route parses as a day.
         type: 'date',
-        ...filterColumn('lastSignInAt'),
         valueGetter: (_value, row: any) =>
           row.lastSignInAt ? new Date(row.lastSignInAt) : null,
         renderCell: ({ row }: any) => (
@@ -611,17 +651,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           </Typography>
         ),
       },
-      /*
-       * Filterable fields that are not worth a column of their own — the uid,
-       * the SSO pool, the sign-in providers, the disabled flag. MUI's panel
-       * lists column definitions, hidden ones included, so this is what makes
-       * a filterable non-column reachable at all.
-       */
-      ...hiddenFilterColumns(
-        USER_LIST_FILTER_FIELDS,
-        USER_FILTER_COLUMNS,
-        USER_LIST_FILTER_HEADERS,
-      ),
       listActionsColumn((row: any) => (
         <ListRowActions
           label={row.email ?? row.uid}
@@ -661,8 +690,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
           ]}
         />
       )),
-    ],
-    [busy, notSuper, handleAction, handleSetRole, filterColumn],
+    ], USER_LIST_FILTER_FIELDS, USER_LIST_FILTER_OPTIONS, USER_LIST_FILTER_HEADERS),
+    [busy, notSuper, handleAction, handleSetRole],
   )
 
   return (
@@ -700,6 +729,25 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   "isn't found, have them sign in to Aglyn once, then search " +
                   'their email here.'}
               </Typography>
+              <ListFilterChips
+                fields={USER_LIST_FILTER_FIELDS}
+                headers={USER_LIST_FILTER_HEADERS}
+                options={USER_LIST_FILTER_OPTIONS}
+                clauses={gridFilter.clauses}
+                onChange={gridFilter.setClauses}
+                servedField={clauses[0]?.field ?? null}
+                marksServed={!searching}
+              />
+              {/* The route answers a search OR a filter, never both: with
+                  words in the search box it runs the search and the filter
+                  waits. Said, so the chip does not read as applied. */}
+              {searching && clauses.length ? (
+                <Alert severity="info">
+                  {'The filter is set aside while a search is in force — ' +
+                    'this list answers one of the two. Clear the search to ' +
+                    'apply the filter.'}
+                </Alert>
+              ) : null}
               <ListTable
                 rows={window.shown}
                 columns={userColumns}
@@ -716,12 +764,11 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 // The route answers the search box as well as the column
                 // filter, so the box stays.
                 quickFilter
-                onFilterModelChange={(model) => {
-                  applyQuery(
-                    (model.quickFilterValues ?? []).join(' ').trim(),
-                    gridFilterRequest(model),
-                  )
-                }}
+                filterModel={gridFilter.filterModel}
+                onFilterModelChange={gridFilter.onFilterModelChange}
+                noRowsLabel={
+                  filtering ? 'No accounts match these filters' : undefined
+                }
                 onOpen={(id) =>
                   router.push(buildRoute(Route.ADMIN_USER_DETAIL, { uid: id }))
                 }

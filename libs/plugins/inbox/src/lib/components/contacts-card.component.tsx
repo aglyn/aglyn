@@ -35,11 +35,14 @@ import {
   mdiBullhornOutline,
 } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -76,6 +79,41 @@ import { orgSiteNames } from './inbox-org-sites'
  * between them.
  */
 const CONTACT_CEILING = 200
+
+/*
+ * What the contacts grid's Filters panel offers (AGL-3317). The card holds
+ * both capped windows, so it answers the panel over every contact they read;
+ * the notice under the table says when a cap truncated one. Type reads
+ * `typeKey`: `member`, or `lead` with the lead's `source` when it has one,
+ * which is what the column draws. On the organization's Inbox, Site matches
+ * any site that captured the lead.
+ */
+const CONTACT_FILTER_FIELDS = [
+  inMemoryListField('email', 'text'),
+  inMemoryListField('contactKind', 'select', 'typeKey'),
+]
+const ORG_CONTACT_FILTER_FIELDS = [
+  ...CONTACT_FILTER_FIELDS,
+  {
+    ...inMemoryListField('capturedByHostIds', 'select'),
+    tokensPath: 'capturedByHostIds',
+    verbatimTokens: true,
+  },
+]
+const CONTACT_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  email: 'Email',
+  contactKind: 'Type',
+  capturedByHostIds: 'Site',
+}
+const CONTACT_SEARCH_FIELDS = ['email', 'displayName', 'name', 'source'] as const
+
+/** How a contact's type reads, from its `typeKey`. */
+const contactTypeLabel = (typeKey: string): string =>
+  typeKey === 'member'
+    ? 'Member'
+    : typeKey.startsWith('lead:')
+      ? `Lead · ${typeKey.slice('lead:'.length)}`
+      : 'Lead'
 
 /**
  * The Members & leads section of the Inbox (AGL-109): everybody a site
@@ -222,11 +260,53 @@ export function ContactsCard({
    */
   const contacts = useMemo(
     () => [
-      ...siteMembers.map((member: any) => ({ ...member, contactKind: 'member' })),
-      ...dedupedLeads.map((lead: any) => ({ ...lead, contactKind: 'lead' })),
+      ...siteMembers.map((member: any) => ({
+        ...member,
+        contactKind: 'member',
+        typeKey: 'member',
+      })),
+      ...dedupedLeads.map((lead: any) => ({
+        ...lead,
+        contactKind: 'lead',
+        typeKey: lead.source ? `lead:${lead.source}` : 'lead',
+      })),
     ],
     [siteMembers, dedupedLeads],
   )
+  /*
+   * A lead's source is open-ended, so the Type choices are the ones the rows
+   * hold, member and plain lead first.
+   */
+  const contactFilterOptions = useMemo(() => {
+    const leadSources = [
+      ...new Set(
+        contacts
+          .map((contact: any) => contact.typeKey as string)
+          .filter((typeKey) => typeKey.startsWith('lead:')),
+      ),
+    ].sort()
+    return {
+      contactKind: ['member', 'lead', ...leadSources].map((value) => ({
+        value,
+        label: contactTypeLabel(value),
+      })),
+      ...(hostId == null
+        ? {
+            capturedByHostIds: (orgMount?.hosts ?? []).map((host) => ({
+              value: host.id,
+              label: host.name || host.id,
+            })),
+          }
+        : {}),
+    }
+  }, [contacts, hostId, orgMount])
+  const contactFilter = useListRowsFilter({
+    rows: contacts,
+    fields: hostId == null ? ORG_CONTACT_FILTER_FIELDS : CONTACT_FILTER_FIELDS,
+    options: contactFilterOptions,
+    headers: CONTACT_FILTER_HEADERS,
+    search: CONTACT_SEARCH_FIELDS,
+  })
   /*
    * REMOVED BY THE ROUTE THAT OWNS MEMBER ACCOUNTS (AGL-3308), not by a
    * client delete. A member's password hash lives in a document no client can
@@ -371,17 +451,12 @@ export function ContactsCard({
       field: 'contactKind',
       headerName: 'Type',
       width: 170,
-      valueGetter: (_value, contact) =>
-        contact.contactKind === 'member'
-          ? 'Member'
-          : contact.source
-            ? `Lead · ${contact.source}`
-            : 'Lead',
-      renderCell: ({ row: contact, value }) =>
+      valueGetter: (_value, contact) => contact.typeKey,
+      renderCell: ({ row: contact }) =>
         contact.contactKind === 'member' ? (
-          <Chip label={value} color="primary" size="small" />
+          <Chip label={contactTypeLabel(contact.typeKey)} color="primary" size="small" />
         ) : (
-          <Chip label={value} size="small" variant="outlined" />
+          <Chip label={contactTypeLabel(contact.typeKey)} size="small" variant="outlined" />
         ),
     },
     /*
@@ -396,7 +471,10 @@ export function ContactsCard({
             headerName: 'Site',
             flex: 1,
             minWidth: 160,
+            // Sorted and drawn by name; the filter matches the ids.
             valueGetter: (_value: unknown, contact: any) =>
+              orgSiteNames(orgMount, contact.capturedByHostIds),
+            renderCell: ({ row: contact }: { row: any }) =>
               orgSiteNames(orgMount, contact.capturedByHostIds),
           } satisfies GridColDef,
         ]
@@ -451,10 +529,15 @@ export function ContactsCard({
           </Typography>
         ) : (
           <>
+            <ListFilterChips {...contactFilter.chipsProps} />
             <ListTable
               aria-label="Site members and leads"
-              rows={contacts}
-              columns={contactColumns}
+              rows={contactFilter.rows}
+              columns={contactFilter.filterColumns(contactColumns)}
+              // The panel and the search are the grid's; the card answers
+              // them over every contact both windows read.
+              {...contactFilter.gridProps}
+              noRowsLabel="No contacts match these filters"
               // A member and a lead are two collections, so an id alone could
               // name one of each.
               getRowId={(contact: any) => `${contact.contactKind}:${contact.$id}`}

@@ -73,10 +73,15 @@ mistaken for a passing check.
 ### Which rows
 
 Every count above resolves to its invoices on the **Findings** card directly beneath the
-banner. Pick a finding and the card lists the rows it is about: the invoice id (linked
-into Stripe), the jurisdiction the row was bucketed under, the gross and tax, the paid
-date, and the row's *other* findings — a row commonly raises two, and fixing one half of
-a problem is worse than seeing all of it.
+banner. The card lists every flagged invoice once: the invoice id (linked into Stripe),
+the jurisdiction the row was bucketed under, the gross and tax, the paid date, and every
+finding the row raises — a row commonly raises two, and fixing one half of a problem is
+worse than seeing all of it.
+
+Press a finding's count, or pick it under **Finding** in the grid's Filters, to narrow
+the table to its rows and read what it means. **Bucketed as** is a picker too, and the
+search matches the invoice id, organization or jurisdiction across every row, not the
+page shown.
 
 A count is only ever as good as the rows behind it, so the count and the list are
 computed by the same predicate. If a response arrives without per-row findings, the card

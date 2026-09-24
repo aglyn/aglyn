@@ -28,6 +28,7 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   ListRowActions,
@@ -35,6 +36,8 @@ import {
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_ROW_HEIGHT,
@@ -95,6 +98,28 @@ import {
  * its own Templates page, which reads its whole set.
  */
 export const ORG_TEMPLATE_CEILING = 50
+
+/*
+ * What the organization's templates grid's Filters panel offers (AGL-3317).
+ * The table holds every template its page of sites read, so it answers the
+ * panel over all of them before the footer's slice. Site offers the sites on
+ * that page; Origin reads `originKey`, the provenance the column draws.
+ */
+const ORG_TEMPLATE_FILTER_FIELDS = [
+  inMemoryListField('displayName', 'text', 'templateName'),
+  inMemoryListField('site', 'select', 'hostId'),
+  inMemoryListField('origin', 'select', 'originKey'),
+]
+const ORG_TEMPLATE_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  displayName: 'Template',
+  site: 'Site',
+  origin: 'Origin',
+}
+const ORIGIN_OPTIONS = [
+  { value: 'local', label: 'Yours' },
+  { value: 'installed', label: 'Installed' },
+]
+const ORG_TEMPLATE_SEARCH_FIELDS = ['templateName', 'siteName'] as const
 
 /** One site's read, as the table assembles it. */
 interface SiteRead {
@@ -224,6 +249,10 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
               $id: `${site.id}:${screen['$id']}`,
               screenId: String(screen['$id']),
               hostId: site.id,
+              templateName: String(screen['displayName'] ?? 'Untitled template'),
+              siteName: orgSiteName(mount, site.id),
+              originKey:
+                templateProvenance(screen).origin === 'installed' ? 'installed' : 'local',
             })),
         )
         .sort(
@@ -245,12 +274,32 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
    * another page of sites starts the templates from their first page: page
    * four of one set of sites is not a position in another.
    */
+  const filterOptions = useMemo(
+    () => ({
+      site: sites.map((site) => ({ value: site.id, label: orgSiteName(mount, site.id) })),
+      origin: ORIGIN_OPTIONS,
+    }),
+    [sites, mount],
+  )
+  const templateFilter = useListRowsFilter({
+    rows,
+    fields: ORG_TEMPLATE_FILTER_FIELDS,
+    options: filterOptions,
+    headers: ORG_TEMPLATE_FILTER_HEADERS,
+    search: ORG_TEMPLATE_SEARCH_FIELDS,
+  })
+  const matched = templateFilter.rows
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  useEffect(() => setPage(0), [sitePage.page])
+  const searchKey = templateFilter.gridFilter.searchWords.join(' ')
+  // A narrowed list starts again at its first page.
+  useEffect(
+    () => setPage(0),
+    [sitePage.page, templateFilter.gridFilter.clauses, searchKey],
+  )
   const shown = useMemo(
-    () => rows.slice(page * pageSize, page * pageSize + pageSize),
-    [rows, page, pageSize],
+    () => matched.slice(page * pageSize, page * pageSize + pageSize),
+    [matched, page, pageSize],
   )
   const sitePageCount = Math.ceil(sitePage.count / sitePage.pageSize)
 
@@ -363,17 +412,17 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
       field: 'site',
       headerName: 'Site',
       width: 170,
-      valueGetter: (_value, row) => orgSiteName(mount, row.hostId),
+      valueGetter: (_value, row) => row.hostId,
+      renderCell: ({ row }) => row.siteName,
     },
     {
       // Whose template this is, as on a site's own list.
       field: 'origin',
       headerName: 'Origin',
       width: 130,
-      valueGetter: (_value, row) =>
-        templateProvenance(row).origin === 'installed' ? 'Installed' : 'Yours',
+      valueGetter: (_value, row) => row.originKey,
       renderCell: ({ value }) =>
-        value === 'Installed' ? (
+        value === 'installed' ? (
           <Chip size="small" label="Installed" />
         ) : (
           <Typography variant="body2" color="text.secondary">
@@ -465,7 +514,8 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
         {/*
           WHICH SITES' TEMPLATES ARE LISTED, when there are more sites than
           one page holds. Only the chosen page's sites are read; a template on
-          a site of another page is one choice away, not missing.
+          a site of another page is one choice away, not missing. It picks
+          what is read, a scope, so it is not one of the grid's filters.
          */}
         {sitePageCount > 1 ? (
           <TextField
@@ -502,13 +552,18 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
           </Typography>
         ) : (
           <>
+            <ListFilterChips {...templateFilter.chipsProps} />
             <ListTable
               aria-label="Email templates"
               rows={shown}
-              columns={columns}
+              columns={templateFilter.filterColumns(columns)}
               rowHeight={TABLE_ROW_HEIGHT}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
+              // The panel and the search are the grid's; the table answers
+              // them over every template it read, before the footer's slice.
+              {...templateFilter.gridProps}
+              noRowsLabel="No templates match these filters"
               onOpen={(_id, row) => {
                 const href = templateHref(row)
                 if (href) router.push(href)
@@ -518,7 +573,7 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
               page={page}
               pageSize={pageSize}
               rowCount={shown.length}
-              count={rows.length}
+              count={matched.length}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
             />

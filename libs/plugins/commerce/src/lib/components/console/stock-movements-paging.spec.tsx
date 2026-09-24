@@ -41,10 +41,40 @@
  * both directions are asserted below.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { StockMovementsCard } from './stock-movements-card.component'
+
+/*
+ * The real grid, with its props kept so a case can set a filter the way the
+ * grid's Filters panel does: through `onFilterModelChange`.
+ */
+let mockGrid: {
+  filterModel: { quickFilterValues?: unknown[] }
+  onFilterModelChange: (model: {
+    items: Array<Record<string, unknown>>
+    quickFilterValues?: unknown[]
+  }) => void
+}
+jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => {
+  const actual = jest.requireActual('@aglyn/shared-ui-jsx/components/list-table.component')
+  return {
+    ...actual,
+    ListTable: (props: typeof mockGrid) => {
+      mockGrid = props
+      return <actual.ListTable {...props} />
+    },
+  }
+})
+/** Picks a value for a column in the grid's Filters panel. */
+const pickFilter = (field: string, value: string) =>
+  act(() =>
+    mockGrid.onFilterModelChange({
+      items: [{ id: 'panel', field, operator: 'is', value }],
+      quickFilterValues: mockGrid.filterModel.quickFilterValues,
+    }),
+  )
 
 jest.setTimeout(30_000)
 
@@ -129,16 +159,12 @@ beforeEach(() => {
 })
 
 const renderedIds = () =>
-  Array.from(document.querySelectorAll('tbody tr')).map(
-    (row) => row.querySelectorAll('td')[3]?.textContent?.trim() ?? '',
+  Array.from(document.querySelectorAll('.MuiDataGrid-row')).map(
+    (row) => row.querySelector('[data-field="reason"]')?.textContent?.trim() ?? '',
   )
 
-const chooseReason = (label: string) => {
-  // MUI's select opens on mousedown, not click.
-  const trigger = screen.getByLabelText('Reason')
-  fireEvent.mouseDown(trigger)
-  fireEvent.click(screen.getByRole('option', { name: label }))
-}
+/** Narrows to one reason through the grid's Filters panel. */
+const chooseReason = (reason: string) => pickFilter('reason', reason)
 
 describe('the stock ledger pages what it holds (AGL-2501)', () => {
   it('THE CONTROL: the fixture is bigger than a page and than the ceiling', () => {
@@ -155,7 +181,7 @@ describe('the stock ledger pages what it holds (AGL-2501)', () => {
 
   it('renders one page instead of the whole window', () => {
     render(<StockMovementsCard hostId="host-1" />)
-    expect(document.querySelectorAll('tbody tr')).toHaveLength(
+    expect(document.querySelectorAll('.MuiDataGrid-row')).toHaveLength(
       TABLE_PAGE_SIZE_DEFAULT,
     )
     // The count line describes the window, which is what the card holds.
@@ -169,8 +195,8 @@ describe('the stock ledger pages what it holds (AGL-2501)', () => {
     // Every damage row is past the first page. A filter narrowed to the page
     // would render an empty table here, which reads as a shop that has never
     // damaged anything.
-    chooseReason('Damaged')
-    const rows = document.querySelectorAll('tbody tr')
+    chooseReason('damage')
+    const rows = document.querySelectorAll('.MuiDataGrid-row')
     expect(rows.length).toBeGreaterThan(0)
     expect(
       document.querySelector('.MuiTablePagination-displayedRows')?.textContent,
@@ -181,7 +207,7 @@ describe('the stock ledger pages what it holds (AGL-2501)', () => {
     render(<StockMovementsCard hostId="host-1" />)
     fireEvent.click(screen.getByLabelText('Go to next page'))
     await waitFor(() => expect(renderedIds()[0]).toBe('Sale'))
-    chooseReason('Damaged')
+    chooseReason('damage')
     // Page four of the unfiltered ledger is not a position in the filtered
     // one, and MUI renders an out-of-range page as an empty table with no
     // explanation — which reads as the filter having matched nothing.

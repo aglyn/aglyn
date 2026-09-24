@@ -67,13 +67,16 @@ import {
 } from '@aglyn/aglyn'
 import { mdiAccountRemoveOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -96,7 +99,7 @@ import {
   orderBy,
   query,
 } from 'firebase/firestore'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useFirestore,
   usePagedCollection,
@@ -238,16 +241,24 @@ interface AddResult {
  * alone, and an operator who cannot see why reads it as the product having
  * lost their subscriber.
  */
+type ConsentKey =
+  | 'opted-out'
+  | 'attested'
+  | 'opted-in'
+  | 'other-site'
+  | 'no-site'
+  | 'none'
+
 function consentLabel(
   member: MemberRow,
   group: ConsentGroup,
-): { label: string; color: 'default' | 'warning' | 'error' } {
+): { key: ConsentKey; label: string; color: 'default' | 'warning' | 'error' } {
   const record = readMarketingBasis(member as Record<string, unknown>, group)
   const when = record.basisAtMs
     ? ` · ${new Date(record.basisAtMs).toLocaleDateString()}`
     : ''
   if (record.basis === 'declined') {
-    return { label: `Opted out${when}`, color: 'error' }
+    return { key: 'opted-out', label: `Opted out${when}`, color: 'error' }
   }
   if (record.basis === 'granted') {
     /*
@@ -257,8 +268,8 @@ function consentLabel(
      * and the reader has already resolved both into this one answer.
      */
     return record.assertedBy === 'operator'
-      ? { label: `Attested by your team${when}`, color: 'warning' }
-      : { label: `Opted in${when}`, color: 'default' }
+      ? { key: 'attested', label: `Attested by your team${when}`, color: 'warning' }
+      : { key: 'opted-in', label: `Opted in${when}`, color: 'default' }
   }
   /*
    * A grant this site may not use. Reported rather than folded into "no
@@ -267,13 +278,58 @@ function consentLabel(
    * of another brand in this account and this brand may not borrow it.
    */
   if (record.otherGrant === 'other-host') {
-    return { label: 'Opted in to another site', color: 'warning' }
+    return { key: 'other-site', label: 'Opted in to another site', color: 'warning' }
   }
   if (record.otherGrant === 'unscoped') {
-    return { label: 'Opted in — no site recorded', color: 'warning' }
+    return { key: 'no-site', label: 'Opted in — no site recorded', color: 'warning' }
   }
-  return { label: 'No basis on record', color: 'default' }
+  return { key: 'none', label: 'No basis on record', color: 'default' }
 }
+
+/*
+ * What the membership grid's Filters panel offers (AGL-3317). The table is a
+ * paged listener, so a filter matches over what its window has read, which
+ * the first filter widens (`usePagedRowsFilter`). `How` and `Consent` read
+ * the keys `withFilterKeys` derives, the same answers the columns draw.
+ */
+const MEMBER_FILTER_FIELDS = [
+  inMemoryListField('email', 'text'),
+  inMemoryListField('name', 'text'),
+  inMemoryListField('via', 'select', 'viaKey'),
+  inMemoryListField('consent', 'select', 'consentKey'),
+]
+const MEMBER_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  email: 'Address',
+  name: 'Name',
+  via: 'How',
+  consent: 'Consent',
+}
+const VIA_LABELS: Readonly<Record<'rule' | 'manual', string>> = {
+  rule: 'Rule',
+  manual: 'Added',
+}
+const CONSENT_LABELS: Readonly<Record<ConsentKey, string>> = {
+  'opted-in': 'Opted in',
+  attested: 'Attested by your team',
+  'opted-out': 'Opted out',
+  'other-site': 'Opted in to another site',
+  'no-site': 'Opted in — no site recorded',
+  none: 'No basis on record',
+}
+const MEMBER_FILTER_OPTIONS = {
+  via: Object.entries(VIA_LABELS).map(([value, label]) => ({ value, label })),
+  consent: Object.entries(CONSENT_LABELS).map(([value, label]) => ({ value, label })),
+}
+const MEMBER_SEARCH_FIELDS = ['email', 'name', 'source'] as const
+
+/** A member row with the keys its `How` and `Consent` filters match on. */
+type FilterableMemberRow = MemberRow & { viaKey: 'rule' | 'manual'; consentKey: ConsentKey }
+
+const withFilterKeys = (member: MemberRow, group: ConsentGroup): FilterableMemberRow => ({
+  ...member,
+  viaKey: member.via === 'rule' ? 'rule' : 'manual',
+  consentKey: consentLabel(member, group).key,
+})
 
 /** Free text — a paste, a typed address, commas or newlines — to addresses. */
 export function splitAddresses(value: string): string[] {
@@ -314,7 +370,8 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
    * every row has.
    */
   const {
-    rows: members,
+    data: memberData,
+    rows: memberRows,
     hasMore,
     page,
     setPage,
@@ -330,6 +387,33 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
     [firestore, scope[0], scope[1], listId],
     { idField: '$id' },
   )
+  const memberWindow = useMemo(
+    () => memberData?.map((member) => withFilterKeys(member, consentGroup)),
+    [memberData, consentGroup],
+  )
+  const memberPage = useMemo(
+    () => memberRows.map((member) => withFilterKeys(member, consentGroup)),
+    [memberRows, consentGroup],
+  )
+  const memberFilter = usePagedRowsFilter<FilterableMemberRow>(
+    {
+      data: memberWindow,
+      rows: memberPage,
+      hasMore,
+      page,
+      setPage,
+      pageSize,
+      setPageSize,
+    },
+    {
+      fields: MEMBER_FILTER_FIELDS,
+      options: MEMBER_FILTER_OPTIONS,
+      headers: MEMBER_FILTER_HEADERS,
+      search: MEMBER_SEARCH_FIELDS,
+    },
+  )
+  // The rows on screen: the page, or the page of the matches.
+  const members = memberFilter.rows
 
   const [addInput, setAddInput] = useState('')
   const [addName, setAddName] = useState('')
@@ -580,16 +664,16 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
       field: 'via',
       headerName: 'How',
       width: 200,
-      valueGetter: (_value, row) => (row.via === 'rule' ? 'Rule' : 'Added'),
+      valueGetter: (_value, row) => row.viaKey,
       /*
         `via` says whether a rule put them here or a person did, which is what
         decides whether they LEAVE on their own: the materializer reconciles its
         own rows away and never touches a manual one. `source` is the finer
         provenance underneath it.
        */
-      renderCell: ({ row, value }) => (
+      renderCell: ({ row }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-          <Chip size="small" variant="outlined" label={value} />
+          <Chip size="small" variant="outlined" label={VIA_LABELS[row.viaKey as 'rule' | 'manual']} />
           {row.source ? (
             <Typography variant="caption" color="text.secondary" noWrap>
               {row.source}
@@ -602,7 +686,7 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
       field: 'consent',
       headerName: 'Consent',
       width: 190,
-      valueGetter: (_value, row) => consentLabel(row, consentGroup).label,
+      valueGetter: (_value, row) => row.consentKey,
       renderCell: ({ row }) => {
         const consent = consentLabel(row, consentGroup)
         return (
@@ -836,28 +920,31 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
         </Stack>
       ) : null}
 
-      {members.length === 0 ? (
+      {memberRows.length === 0 && !hasMore && !memberFilter.filtering ? (
         <Typography variant="body2" color="text.secondary">
           {'Nobody is on this list yet.'}
         </Typography>
       ) : (
         <>
+          <ListFilterChips {...memberFilter.chipsProps} />
+          {memberFilter.filtering && hasMore ? (
+            <Typography variant="caption" color="text.secondary">
+              {`Filtering the ${memberFilter.read} members read so far — the next page reads more.`}
+            </Typography>
+          ) : null}
           <ListTable
             aria-label={`Members of ${listName}`}
             rows={members}
-            columns={columns}
+            columns={memberFilter.filterColumns(columns)}
             rowHeight={TABLE_ROW_HEIGHT}
             // Paged by the footer below, so the grid must not also slice.
             hideFooter
+            // The panel and the search are the grid's; the panel answers
+            // them over what its window read.
+            {...memberFilter.gridProps}
+            noRowsLabel="No members match these filters"
           />
-          <ListPagination
-            page={page}
-            pageSize={pageSize}
-            rowCount={members.length}
-            hasMore={hasMore}
-            onPageChange={setPage}
-            onPageSizeChange={setPageSize}
-          />
+          <ListPagination {...memberFilter.pagination} />
         </>
       )}
 

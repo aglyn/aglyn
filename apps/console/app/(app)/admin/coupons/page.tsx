@@ -24,7 +24,11 @@ import {
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import type { GridColDef } from '@mui/x-data-grid'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -40,10 +44,6 @@ import {
   FormControlLabel,
   MenuItem,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -73,6 +73,46 @@ interface CouponRow {
   valid: boolean
   codes: Array<{ id: string; code: string; active: boolean; timesRedeemed: number }>
 }
+
+/** A Stripe coupon's durations, as the create form offers them. */
+const COUPON_DURATIONS = [
+  { value: 'once', label: 'Once' },
+  { value: 'repeating', label: 'Repeating' },
+  { value: 'forever', label: 'Forever' },
+] as const
+
+/** A coupon row as the list matches it: the fields the panel reads, derived. */
+type CouponListRow = CouponRow & {
+  $id: string
+  status: 'valid' | 'expired'
+  codeText: string[]
+}
+
+/*
+ * What the coupons grid filters and searches by. The list holds every coupon
+ * one `/api/admin/coupons` read returned and pages them itself, so both
+ * answer over all of them before a page is sliced.
+ */
+const COUPON_FILTER_FIELDS = [
+  inMemoryListField('name', 'text'),
+  inMemoryListField('duration', 'select'),
+  inMemoryListField('status', 'select'),
+  inMemoryListField('timesRedeemed', 'number'),
+]
+const COUPON_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  name: 'Coupon',
+  duration: 'Duration',
+  status: 'Status',
+  timesRedeemed: 'Redeemed',
+}
+const COUPON_FILTER_OPTIONS = {
+  duration: COUPON_DURATIONS.map(({ value, label }) => ({ value, label })),
+  status: [
+    { value: 'valid', label: 'Valid' },
+    { value: 'expired', label: 'Expired' },
+  ],
+}
+const COUPON_SEARCH_PATHS = ['name', 'id', 'codeText']
 
 /**
  * A representative paying subscription for the live rating readout — a
@@ -242,10 +282,10 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     pendingToggle.percentOff != null &&
     pendingToggle.percentOff >= DISCOUNT_APPROVAL_THRESHOLD_PCT
 
-  const openToggle = (pending: PendingToggle) => {
+  const openToggle = useCallback((pending: PendingToggle) => {
     setPendingToggle(pending)
     setToggleConfirmed(false)
-  }
+  }, [])
 
   const toggleCode = async () => {
     if (!pendingToggle) return
@@ -280,23 +320,154 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     }
   }
 
-  const pagedCoupons = useMemo(
-    () => coupons.slice(page * pageSize, page * pageSize + pageSize),
-    [coupons, page, pageSize],
+  const couponRows = useMemo<CouponListRow[]>(
+    () =>
+      coupons.map((row) => ({
+        ...row,
+        $id: row.id,
+        status: row.valid ? 'valid' : 'expired',
+        codeText: row.codes.map((code) => code.code),
+      })),
+    [coupons],
   )
-  // A refresh that returns fewer coupons can strand a reader past the last
-  // page, which MUI renders as an empty table with no explanation.
+  const couponFilter = useListRowsFilter({
+    rows: couponRows,
+    fields: COUPON_FILTER_FIELDS,
+    options: COUPON_FILTER_OPTIONS,
+    headers: COUPON_FILTER_HEADERS,
+    search: COUPON_SEARCH_PATHS,
+  })
+  const filteredCoupons = couponFilter.rows
+  const pagedCoupons = useMemo(
+    () => filteredCoupons.slice(page * pageSize, page * pageSize + pageSize),
+    [filteredCoupons, page, pageSize],
+  )
+  // A refresh that returns fewer coupons, or a filter that narrows them, can
+  // strand a reader past the last page, which MUI renders as an empty table
+  // with no explanation.
   useEffect(() => {
-    const lastPage = Math.max(0, Math.ceil(coupons.length / pageSize) - 1)
+    const lastPage = Math.max(0, Math.ceil(filteredCoupons.length / pageSize) - 1)
     if (page > lastPage) setPage(lastPage)
-  }, [coupons.length, page, pageSize])
+  }, [filteredCoupons.length, page, pageSize])
 
-  const discountLabel = (row: CouponRow) =>
+  const discountLabel = (row: Pick<CouponRow, 'percentOff' | 'amountOffUsd'>) =>
     row.percentOff != null
       ? `${row.percentOff}% off`
       : row.amountOffUsd != null
         ? `$${row.amountOffUsd} off`
         : '—'
+
+  const couponColumns = useMemo(() => couponFilter.filterColumns([
+    {
+      field: 'name',
+      headerName: 'Coupon',
+      flex: 1.2,
+      minWidth: 180,
+      valueGetter: (_value, row: CouponListRow) => row.name ?? row.id,
+      renderCell: ({ row }: { row: CouponListRow }) => (
+        <Stack spacing={0.25} sx={{ py: 1 }}>
+          <Typography variant="body2">{row.name ?? row.id}</Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontFamily: 'monospace' }}
+          >
+            {row.id}
+          </Typography>
+        </Stack>
+      ),
+    },
+    {
+      field: 'discount',
+      headerName: 'Discount',
+      width: 120,
+      sortable: false,
+      valueGetter: (_value, row: CouponListRow) => discountLabel(row),
+    },
+    {
+      field: 'duration',
+      headerName: 'Duration',
+      width: 130,
+      renderCell: ({ row }: { row: CouponListRow }) =>
+        row.duration === 'repeating'
+          ? `${row.durationInMonths}mo`
+          : (row.duration ?? '—'),
+    },
+    {
+      field: 'codes',
+      headerName: 'Codes',
+      flex: 1.4,
+      minWidth: 240,
+      sortable: false,
+      renderCell: ({ row }: { row: CouponListRow }) =>
+        row.codes.length === 0 ? (
+          <Typography variant="caption" color="text.secondary">
+            {'—'}
+          </Typography>
+        ) : (
+          <Stack spacing={0.5} sx={{ py: 1 }}>
+            {row.codes.map((code) => (
+              <Stack
+                key={code.id}
+                direction="row"
+                spacing={0.5}
+                sx={{ alignItems: 'center' }}
+              >
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={code.code}
+                  color={code.active ? 'default' : 'error'}
+                />
+                {/* An inactive code is not merely a badge: checkout looks
+                    codes up with `active=true`, so a customer typing it is
+                    told it is not recognized. */}
+                <Button
+                  size="small"
+                  color={code.active ? 'error' : 'primary'}
+                  disabled={busy}
+                  onClick={() =>
+                    openToggle({
+                      id: code.id,
+                      code: code.code,
+                      activate: !code.active,
+                      percentOff: row.percentOff,
+                    })
+                  }
+                >
+                  {code.active ? 'Deactivate' : 'Activate'}
+                </Button>
+              </Stack>
+            ))}
+          </Stack>
+        ),
+    },
+    {
+      field: 'timesRedeemed',
+      headerName: 'Redeemed',
+      type: 'number',
+      width: 110,
+      renderCell: ({ row }: { row: CouponListRow }) =>
+        row.maxRedemptions
+          ? `${row.timesRedeemed}/${row.maxRedemptions}`
+          : row.timesRedeemed,
+    },
+    {
+      field: 'status',
+      headerName: 'Status',
+      width: 120,
+      renderCell: ({ row }: { row: CouponListRow }) => (
+        <Chip
+          size="small"
+          label={row.valid ? 'valid' : 'expired'}
+          color={row.valid ? 'success' : 'default'}
+        />
+      ),
+    },
+  ] as GridColDef<CouponListRow>[] as GridColDef[]),
+  // `discountLabel` reads nothing from the component's state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [couponFilter.filterColumns, busy, openToggle])
 
   return (
     <DashboardLayout
@@ -392,9 +563,11 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                     }
                     sx={{ width: 160 }}
                   >
-                    <MenuItem value="once">{'Once'}</MenuItem>
-                    <MenuItem value="repeating">{'Repeating'}</MenuItem>
-                    <MenuItem value="forever">{'Forever'}</MenuItem>
+                    {COUPON_DURATIONS.map(({ value, label }) => (
+                      <MenuItem key={value} value={value}>
+                        {label}
+                      </MenuItem>
+                    ))}
                   </TextField>
                   {form.duration === 'repeating' ? (
                     <TextField
@@ -542,105 +715,27 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
                 </Typography>
               ) : (
                 <>
-                <ScrollTable size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'Coupon'}</TableCell>
-                      <TableCell>{'Discount'}</TableCell>
-                      <TableCell>{'Duration'}</TableCell>
-                      <TableCell>{'Codes'}</TableCell>
-                      <TableCell align="right">{'Redeemed'}</TableCell>
-                      <TableCell>{'Status'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {pagedCoupons.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell>
-                          <Stack spacing={0.25}>
-                            <Typography variant="body2">
-                              {row.name ?? row.id}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ fontFamily: 'monospace' }}
-                            >
-                              {row.id}
-                            </Typography>
-                          </Stack>
-                        </TableCell>
-                        <TableCell>{discountLabel(row)}</TableCell>
-                        <TableCell>
-                          {row.duration === 'repeating'
-                            ? `${row.durationInMonths}mo`
-                            : (row.duration ?? '—')}
-                        </TableCell>
-                        <TableCell>
-                          {row.codes.length === 0 ? (
-                            <Typography variant="caption" color="text.secondary">
-                              {'—'}
-                            </Typography>
-                          ) : (
-                            <Stack spacing={0.5}>
-                              {row.codes.map((code) => (
-                                <Stack
-                                  key={code.id}
-                                  direction="row"
-                                  spacing={0.5}
-                                  sx={{ alignItems: 'center' }}
-                                >
-                                  <Chip
-                                    size="small"
-                                    variant="outlined"
-                                    label={code.code}
-                                    color={code.active ? 'default' : 'error'}
-                                  />
-                                  {/* An inactive code is not merely a badge:
-                                      checkout looks codes up with
-                                      `active=true`, so a customer typing it
-                                      is told it is not recognized. */}
-                                  <Button
-                                    size="small"
-                                    color={code.active ? 'error' : 'primary'}
-                                    disabled={busy}
-                                    onClick={() =>
-                                      openToggle({
-                                        id: code.id,
-                                        code: code.code,
-                                        activate: !code.active,
-                                        percentOff: row.percentOff,
-                                      })
-                                    }
-                                  >
-                                    {code.active ? 'Deactivate' : 'Activate'}
-                                  </Button>
-                                </Stack>
-                              ))}
-                            </Stack>
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          {row.maxRedemptions
-                            ? `${row.timesRedeemed}/${row.maxRedemptions}`
-                            : row.timesRedeemed}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            label={row.valid ? 'valid' : 'expired'}
-                            color={row.valid ? 'success' : 'default'}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </ScrollTable>
+                <Stack spacing={1}>
+                <ListFilterChips {...couponFilter.chipsProps} />
+                <ListTable
+                  aria-label="Existing coupons"
+                  rows={pagedCoupons}
+                  columns={couponColumns}
+                  {...couponFilter.gridProps}
+                  // A coupon lists one line per promotion code, so a row is
+                  // as tall as its codes.
+                  getRowHeight={() => 'auto'}
+                  // Every coupon is held and paged by the footer below, so
+                  // the grid draws the page it is handed and slices nothing.
+                  hideFooter
+                  noRowsLabel="No coupons match these filters"
+                />
+                </Stack>
                 <ListPagination
                   page={page}
                   pageSize={pageSize}
                   rowCount={pagedCoupons.length}
-                  count={coupons.length}
+                  count={filteredCoupons.length}
                   onPageChange={setPage}
                   onPageSizeChange={setPageSize}
                 />

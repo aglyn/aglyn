@@ -9,6 +9,38 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.190 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.189...v1.0.0-beta.190)
+
+### Added
+
+- **marketplace:** both license lists filter and search through the grid's toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **workflows:** run history filters by trigger, result and time in the grid ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **commerce:** orders, products and stock movements filter through the grid's toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **console:** the staff coupons, health and finding lists filter through the grid ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **console:** the staff org, account and audit lists filter through the grid toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **inbox:** submissions and members & leads filter through the grid toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **forms:** the forms list filters through the grid toolbar, retired forms by Status ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **email:** lists, members, suppressions and templates filter through the grid toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+
+### Fixed
+
+- **shared-ui-jsx:** a date filter names the calendar day, not the UTC evening before it ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+
+### Documentation
+
+- each converted list says what its toolbar filters ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **data:** say why dataset records offer no grid filter or search ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+
+<details>
+<summary>Also in this release: 1 test, 1 chore</summary>
+
+- **commerce, workflows:** declare the data grid their converted lists now import ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **console:** the sweep holds every converted list to the shared grid filter path ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+
+</details>
+
 ## v1.0.0-beta.189 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/eaf9b62d8...v1.0.0-beta.189)

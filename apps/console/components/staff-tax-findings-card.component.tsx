@@ -18,27 +18,67 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import {
+  inMemoryListField,
+  type ListFilterOption,
+  upsertListFilterClause,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import {
   Alert,
   AlertTitle,
   Chip,
   Link,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
 import {
   taxReturnFindingGroups,
+  type TaxReturnFindingRow,
   type TaxReturnPayload,
 } from '../utils/tx-return-webfile'
+
+/** One flagged invoice, once, with every finding that lists it. */
+type FindingListRow = TaxReturnFindingRow & {
+  $id: string
+  /** The ids of the finding groups this row appears under. */
+  groups: string[]
+}
+
+/*
+ * What the findings grid filters and searches by. The card holds every row
+ * the period's findings name (the route caps the read and says so above) and
+ * pages them itself, so both answer over all of them before a page is
+ * sliced. `groups` is an array of finding ids, matched member by member.
+ */
+const FINDING_FILTER_FIELDS = [
+  inMemoryListField('invoiceId', 'text'),
+  {
+    ...inMemoryListField('groups', 'select'),
+    tokensPath: 'groups',
+    verbatimTokens: true,
+  },
+  inMemoryListField('jurisdiction', 'select'),
+  inMemoryListField('paidAt', 'date'),
+]
+const FINDING_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  invoiceId: 'Invoice',
+  groups: 'Finding',
+  jurisdiction: 'Bucketed as',
+  paidAt: 'Paid',
+}
+const FINDING_SEARCH_PATHS = ['invoiceId', 'orgId', 'jurisdiction']
+
+/** How a bucket reads: `unknown` is the row with no readable address. */
+const bucketLabel = (jurisdiction: string) =>
+  jurisdiction === 'unknown' ? 'No address' : jurisdiction
 
 /**
  * WHICH ROWS — the half of every finding that never reached the screen.
@@ -63,11 +103,13 @@ import {
  * Submit at the authority. Up to `ROW_CAP` rows inside it would destroy
  * exactly that property.
  *
- * A single table with the finding chosen by chip, rather than a table per
- * finding, because a row commonly raises two — no address AND no stated base —
- * and repeating it under each would make one problem look like several. The
- * chips carry the counts, so the banner's list and this card's selector show
- * the same numbers from the same source.
+ * A single table, every flagged row once, rather than a table per finding,
+ * because a row commonly raises two — no address AND no stated base — and
+ * repeating it under each would make one problem look like several. Which
+ * finding to read is the grid's Finding filter, a select over the findings
+ * this period raised; the chips above carry the counts, so the banner's list
+ * and this card show the same numbers from the same source, and pressing one
+ * sets that same filter.
  *
  * ## What it shows, and what it deliberately does not
  *
@@ -85,21 +127,179 @@ export default function StaffTaxFindingsCard({
   loading: boolean
 }) {
   const groups = useMemo(() => taxReturnFindingGroups(payload), [payload])
-  const [selected, setSelected] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
 
+  const rows = useMemo((): FindingListRow[] => {
+    const byInvoice = new Map<string, FindingListRow>()
+    for (const group of groups) {
+      for (const row of group.rows) {
+        const held = byInvoice.get(row.invoiceId)
+        if (held) held.groups.push(group.id)
+        else byInvoice.set(row.invoiceId, { ...row, $id: row.invoiceId, groups: [group.id] })
+      }
+    }
+    return [...byInvoice.values()]
+  }, [groups])
+  const options = useMemo(
+    (): Record<string, readonly ListFilterOption[]> => ({
+      groups: groups.map((group) => ({ value: group.id, label: group.label })),
+      // The buckets the period's rows were filed under — the resolver's own
+      // keys, so there is no catalog beyond what the rows hold.
+      jurisdiction: [...new Set(rows.map((row) => row.jurisdiction))]
+        .sort()
+        .map((jurisdiction) => ({ value: jurisdiction, label: bucketLabel(jurisdiction) })),
+    }),
+    [groups, rows],
+  )
+  const findingFilter = useListRowsFilter({
+    rows,
+    fields: FINDING_FILTER_FIELDS,
+    options,
+    headers: FINDING_FILTER_HEADERS,
+    search: FINDING_SEARCH_PATHS,
+  })
+  const { clauses, setClauses } = findingFilter.gridFilter
+  const matched = findingFilter.rows
+
   /*
-   * The selection follows the DATA, not the click history. A finding chosen
-   * for one period commonly does not exist in the next, and a card left
-   * pointing at a group that is gone renders an empty table under a heading
-   * for a finding this period never raised — indistinguishable from a finding
-   * whose rows failed to load.
+   * The finding a clause asks for, when it asks for exactly one — the one
+   * whose explanation the card shows. A clause the period no longer raises
+   * matches nothing, and the chips still show it so it can be removed.
    */
-  const active = groups.find((group) => group.id === selected) ?? groups[0] ?? null
+  const askedGroupId = clauses.find(
+    (clause) => clause.field === 'groups' && clause.op === 'equals',
+  )?.value
+  const asked = groups.find((group) => group.id === askedGroupId) ?? null
+  const unnamed = groups.filter((group) => !group.namesRows)
+
   useEffect(() => {
     setPage(0)
-  }, [active?.id, payload])
+  }, [payload, clauses])
+  const visible = matched.slice(page * pageSize, page * pageSize + pageSize)
+
+  const labelOf = useMemo(
+    () => new Map(groups.map((group) => [group.id as string, group.label])),
+    [groups],
+  )
+  const { filterColumns } = findingFilter
+  const columns = useMemo(
+    () =>
+      filterColumns([
+        {
+          field: 'invoiceId',
+          headerName: 'Invoice',
+          flex: 1.2,
+          minWidth: 200,
+          renderCell: ({ row }: { row: FindingListRow }) => (
+            <Stack sx={{ py: 1 }}>
+              {/*
+                Into Stripe, where the invoice can be read and fixed.
+                `noopener` because the dashboard is another origin and the
+                console's tab must not be reachable from it.
+              */}
+              {row.stripeUrl ? (
+                <Link
+                  href={row.stripeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="body2"
+                  sx={{ fontFamily: 'monospace' }}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {row.invoiceId}
+                </Link>
+              ) : (
+                <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                  {row.invoiceId}
+                </Typography>
+              )}
+              {row.orgId ? (
+                <Typography variant="caption" color="text.secondary">
+                  {row.orgId}
+                </Typography>
+              ) : null}
+            </Stack>
+          ),
+        },
+        {
+          field: 'jurisdiction',
+          headerName: 'Bucketed as',
+          width: 140,
+          renderCell: ({ row }: { row: FindingListRow }) => (
+            <Typography
+              variant="body2"
+              sx={{ fontFamily: 'monospace' }}
+              color={row.jurisdiction === 'unknown' ? 'warning.main' : 'text.primary'}
+            >
+              {bucketLabel(row.jurisdiction)}
+            </Typography>
+          ),
+        },
+        {
+          field: 'grossDollars',
+          headerName: 'Gross',
+          type: 'number',
+          width: 120,
+          valueGetter: (_value, row: FindingListRow) => Number(row.grossDollars),
+          renderCell: ({ row }: { row: FindingListRow }) => (
+            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+              {`$${row.grossDollars}`}
+            </Typography>
+          ),
+        },
+        {
+          field: 'taxDollars',
+          headerName: 'Tax',
+          type: 'number',
+          width: 110,
+          valueGetter: (_value, row: FindingListRow) => Number(row.taxDollars),
+          renderCell: ({ row }: { row: FindingListRow }) => (
+            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+              {`$${row.taxDollars}`}
+            </Typography>
+          ),
+        },
+        {
+          field: 'paidAt',
+          headerName: 'Paid',
+          type: 'date',
+          width: 120,
+          valueGetter: (_value, row: FindingListRow) =>
+            row.paidAt ? new Date(row.paidAt) : null,
+          renderCell: ({ row }: { row: FindingListRow }) => (
+            <Typography variant="caption" color="text.secondary">
+              {row.paidAt ? row.paidAt.slice(0, 10) : 'Not stated'}
+            </Typography>
+          ),
+        },
+        {
+          /*
+            EVERY finding the row raises. A row that raises two is one
+            problem, and seeing both at once is what stops it being fixed
+            twice or half.
+          */
+          field: 'groups',
+          headerName: 'Findings',
+          flex: 1.4,
+          minWidth: 220,
+          sortable: false,
+          renderCell: ({ row }: { row: FindingListRow }) => (
+            <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap', gap: 0.5, py: 1 }}>
+              {row.groups.map((finding) => (
+                <Chip
+                  key={finding}
+                  size="small"
+                  variant="outlined"
+                  label={labelOf.get(finding) ?? finding}
+                />
+              ))}
+            </Stack>
+          ),
+        },
+      ] as GridColDef<FindingListRow>[] as GridColDef[]),
+    [filterColumns, labelOf],
+  )
 
   if (!payload) {
     return null
@@ -107,9 +307,6 @@ export default function StaffTaxFindingsCard({
   if (!groups.length) {
     return null
   }
-
-  const rows = active?.rows ?? []
-  const visible = rows.slice(page * pageSize, page * pageSize + pageSize)
 
   return (
     <CardDisplay
@@ -122,21 +319,34 @@ export default function StaffTaxFindingsCard({
           'Stripe.',
       })}
       subheader={
-        'A count with no rows behind it cannot be acted on. Pick a finding to ' +
-        'see the invoices it is about.'
+        'A count with no rows behind it cannot be acted on. Every flagged ' +
+        'invoice is listed once; pick a finding to narrow the table to it.'
       }
       contentGutterX
       contentGutterY
     >
       <Stack spacing={2}>
+        {/* The counts, one per finding. Pressing one sets the grid's Finding
+            filter to it — the same clause the Filters panel writes. */}
         <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
           {groups.map((group) => (
             <Chip
               key={group.id}
               size="small"
               clickable
-              onClick={() => setSelected(group.id)}
-              variant={active?.id === group.id ? 'filled' : 'outlined'}
+              aria-pressed={asked?.id === group.id}
+              onClick={() =>
+                setClauses(
+                  upsertListFilterClause(
+                    clauses,
+                    'groups',
+                    asked?.id === group.id
+                      ? null
+                      : { field: 'groups', op: 'equals', value: group.id },
+                  ),
+                )
+              }
+              variant={asked?.id === group.id ? 'filled' : 'outlined'}
               color={
                 group.severity === 'blocking'
                   ? 'error'
@@ -149,141 +359,51 @@ export default function StaffTaxFindingsCard({
           ))}
         </Stack>
 
-        {active ? (
+        {asked ? (
+          <Typography variant="body2" color="text.secondary">
+            {asked.detail}
+          </Typography>
+        ) : null}
+        {/*
+          A COUNT WITH NO ROWS IS NOT A CLEAN FINDING. It is a response that
+          could not name them — the state a client chunk cached from before
+          the per-row findings lands in. The table below would silently lack
+          them, on a page about money owed to a state, so each is named.
+        */}
+        {unnamed.map((group) => (
+          <Alert key={group.id} severity="warning">
+            <AlertTitle>{`This response cannot name these rows — ${group.label}`}</AlertTitle>
+            {`The period reports ${group.count} of these and carries no ` +
+              'per-row findings, which is what a response from before ' +
+              'they existed looks like. Reload the page; if it persists, ' +
+              'export the working papers and read the rows there.'}
+          </Alert>
+        ))}
+
+        {rows.length ? (
           <>
-            <Typography variant="body2" color="text.secondary">
-              {active.detail}
-            </Typography>
-            {/*
-              A COUNT WITH NO ROWS IS NOT A CLEAN FINDING. It is a response
-              that could not name them — the state a client chunk cached from
-              before the per-row findings lands in. Rendering an empty table
-              there would report "no rows" for a finding whose count says
-              otherwise, on a page about money owed to a state.
-            */}
-            {!active.namesRows ? (
-              <Alert severity="warning">
-                <AlertTitle>{'This response cannot name these rows'}</AlertTitle>
-                {`The period reports ${active.count} of these and carries no ` +
-                  'per-row findings, which is what a response from before ' +
-                  'they existed looks like. Reload the page; if it persists, ' +
-                  'export the working papers and read the rows there.'}
-              </Alert>
-            ) : (
-              <>
-                <ScrollTable size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>{'Invoice'}</TableCell>
-                      <TableCell>{'Bucketed as'}</TableCell>
-                      <TableCell align="right">{'Gross'}</TableCell>
-                      <TableCell align="right">{'Tax'}</TableCell>
-                      <TableCell>{'Paid'}</TableCell>
-                      <TableCell>{'Also'}</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {visible.map((row) => (
-                      <TableRow key={row.invoiceId}>
-                        <TableCell>
-                          {/*
-                            Into Stripe, where the invoice can be read and
-                            fixed. `noopener` because the dashboard is another
-                            origin and the console's tab must not be reachable
-                            from it.
-                          */}
-                          {row.stripeUrl ? (
-                            <Link
-                              href={row.stripeUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              variant="body2"
-                              sx={{ fontFamily: 'monospace' }}
-                            >
-                              {row.invoiceId}
-                            </Link>
-                          ) : (
-                            <Typography
-                              variant="body2"
-                              sx={{ fontFamily: 'monospace' }}
-                            >
-                              {row.invoiceId}
-                            </Typography>
-                          )}
-                          {row.orgId ? (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ display: 'block' }}
-                            >
-                              {row.orgId}
-                            </Typography>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <Typography
-                            variant="body2"
-                            sx={{ fontFamily: 'monospace' }}
-                            color={
-                              row.jurisdiction === 'unknown'
-                                ? 'warning.main'
-                                : 'text.primary'
-                            }
-                          >
-                            {row.jurisdiction === 'unknown'
-                              ? 'No address'
-                              : row.jurisdiction}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                          {`$${row.grossDollars}`}
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                          {`$${row.taxDollars}`}
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="caption" color="text.secondary">
-                            {row.paidAt ? row.paidAt.slice(0, 10) : 'Not stated'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          {/*
-                            The row's OTHER findings. A row that raises two is
-                            one problem, and seeing both at once is what stops
-                            it being fixed twice or half.
-                          */}
-                          <Stack
-                            direction="row"
-                            spacing={0.5}
-                            sx={{ flexWrap: 'wrap', gap: 0.5 }}
-                          >
-                            {row.findings
-                              .filter((finding) => finding !== active.id)
-                              .map((finding) => (
-                                <Chip
-                                  key={finding}
-                                  size="small"
-                                  variant="outlined"
-                                  label={finding}
-                                />
-                              ))}
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </ScrollTable>
-                <ListPagination
-                  page={page}
-                  pageSize={pageSize}
-                  rowCount={visible.length}
-                  count={rows.length}
-                  onPageChange={setPage}
-                  onPageSizeChange={setPageSize}
-                  disabled={loading}
-                />
-              </>
-            )}
+            <ListFilterChips {...findingFilter.chipsProps} />
+            <ListTable
+              aria-label="Findings"
+              rows={visible}
+              columns={columns}
+              {...findingFilter.gridProps}
+              // An invoice carries its org beneath it and a row may raise
+              // several findings, so a row is as tall as its content.
+              getRowHeight={() => 'auto'}
+              // Held whole and paged by the footer below.
+              hideFooter
+              noRowsLabel="No rows match these filters"
+            />
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={visible.length}
+              count={matched.length}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              disabled={loading}
+            />
           </>
         ) : null}
       </Stack>

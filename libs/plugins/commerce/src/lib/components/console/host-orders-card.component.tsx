@@ -18,7 +18,15 @@
 
 import * as CommerceModel from '../../model'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  inMemoryListField,
+  type ListFilterClause,
+  upsertListFilterClause,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   checkEntitlement,
@@ -37,14 +45,11 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import { collection, doc, getDoc, limit, orderBy, query } from 'firebase/firestore'
 import { useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -66,16 +71,78 @@ import OrderDetailDialog, {
 /**
  * How far back the table, its filters and its export reach.
  *
- * This window cannot be paged the way a plain list can. Five filters and the
- * CSV export all run over what was read, so a page of ten would quietly narrow
- * every one of them — a status filter would search a tenth of the orders and
- * report confidently on what it found. Bounding the read and saying where the
+ * This window cannot be paged the way a plain list can. The Filters panel,
+ * the search and the CSV export all run over what was read, so a page of ten
+ * would quietly narrow every one of them — a status filter would search a
+ * tenth of the orders and report confidently on what it found. Bounding the read and saying where the
  * bound falls keeps the filters honest about their own scope.
  */
 const ORDERS_WINDOW = 200
 
 /** A name map for the filter menu; it renders no product rows of its own. */
 const PRODUCT_NAME_WINDOW = 100
+
+/*
+ * What the orders grid's Filters panel offers. The card holds its whole
+ * window, so the panel and the search answer over every order it read.
+ *
+ * Status and Channel are the order's own enumerations; Disputes is apart
+ * from Status on purpose, because the two are orthogonal: an OPEN dispute
+ * sits on an order that is still `paid`, and a lost one on `refunded`
+ * beside every ordinary refund. Product is the ids of every line item, so
+ * a cart, POS or draft order is found by any product it holds. The date is
+ * the field the query orders by, which every order writer stamps.
+ */
+const ORDER_FILTER_FIELDS = [
+  inMemoryListField('orderLabel', 'text'),
+  inMemoryListField('customerEmail', 'text'),
+  inMemoryListField('channelKey', 'select'),
+  inMemoryListField('statusKey', 'select'),
+  inMemoryListField('createdAtMs', 'date'),
+  { ...inMemoryListField('productIds', 'select'), tokensPath: 'productIds', verbatimTokens: true },
+  inMemoryListField('disputeKey', 'select'),
+]
+const ORDER_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  orderLabel: 'Order',
+  customerEmail: 'Customer',
+  channelKey: 'Channel',
+  statusKey: 'Status',
+  createdAtMs: 'Date',
+  productIds: 'Product',
+  disputeKey: 'Disputes',
+}
+const ORDER_STATUS_OPTIONS = (
+  Object.keys(CommerceModel.ORDER_STATUS_LABELS) as (keyof typeof CommerceModel.ORDER_STATUS_LABELS)[]
+).map((status) => ({ value: status, label: CommerceModel.ORDER_STATUS_LABELS[status] }))
+const ORDER_CHANNEL_OPTIONS = (
+  Object.keys(CommerceModel.ORDER_CHANNEL_LABELS) as (keyof typeof CommerceModel.ORDER_CHANNEL_LABELS)[]
+).map((channel) => ({ value: channel, label: CommerceModel.ORDER_CHANNEL_LABELS[channel] }))
+/*
+ * `lost` is the badge's tone, not the raw dispute status: a dispute that was
+ * WON also closes with money untouched, and listing it as charged back would
+ * tell a merchant they lost a case they won.
+ */
+const ORDER_DISPUTE_OPTIONS = [
+  { value: 'open', label: 'Open dispute' },
+  { value: 'lost', label: 'Charged back' },
+]
+/** What the quick search reads on an order row. */
+const ORDER_SEARCH_FIELDS = ['orderLabel', 'customerEmail', 'itemName'] as const
+/** The filter-only columns never show. */
+const ORDER_HIDDEN_COLUMNS = hiddenFilterVisibility(ORDER_FILTER_FIELDS, [
+  'orderLabel',
+  'customerEmail',
+  'channelKey',
+  'statusKey',
+  'createdAtMs',
+])
+
+/** The clause the dispute banner's "Show them" sets. */
+const OPEN_DISPUTE_CLAUSE: ListFilterClause = {
+  field: 'disputeKey',
+  op: 'equals',
+  value: 'open',
+}
 
 export interface HostOrdersCardProps {
   hostId: string
@@ -149,30 +216,20 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   // would only restate the order it arrived in.
   const orders = orderWindow.rows
 
-  // Filters + CSV export (AGL-96) over the loaded window.
-  const [productFilter, setProductFilter] = useState('')
-  const [dateFilter, setDateFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [channelFilter, setChannelFilter] = useState('')
-  /**
-   * Disputes filter (AGL-1796), separate from Status on purpose: the two are
-   * orthogonal. An OPEN dispute sits on an order that is still `paid`, and a
-   * lost one sits on `refunded` beside every ordinary refund — so folding
-   * either into the Status select would make that control lie about what it
-   * selects.
-   */
-  const [disputeFilter, setDisputeFilter] = useState('')
   /*
-   * Customer filter (AGL-2622): the buyer's address, matched as a substring
-   * of `customerEmail` so a domain finds every buyer at a company. Seeded
-   * from the URL, because the CRM's contact page links here with the
-   * person's address to answer "what has this customer ordered" — the
-   * orders count on the record is the number, and this list is the rows.
+   * The grid's clauses (AGL-96, AGL-3317), held here so two things outside
+   * the grid can set one: the CRM's contact page links with the buyer's
+   * address to answer "what has this customer ordered" (AGL-2622), seeded as
+   * a Customer clause matched as a substring so a domain finds every buyer at
+   * a company; and the dispute banner's "Show them".
    */
   const searchParams = useSearchParams()
-  const [customerFilter, setCustomerFilter] = useState(
-    () => searchParams?.get(ORDERS_CUSTOMER_PARAM) ?? '',
-  )
+  const [clauses, setClauses] = useState<ListFilterClause[]>(() => {
+    const customer = searchParams?.get(ORDERS_CUSTOMER_PARAM)?.trim()
+    return customer
+      ? [{ field: 'customerEmail', op: 'contains', value: customer }]
+      : []
+  })
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
    * An order named in the URL opens in its dialog on arrival (AGL-2622). A
@@ -220,60 +277,80 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
   } | null>(null)
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const visibleOrders = useMemo(() => {
-    const now = Date.now() / 1000
-    return orders.filter((order: any) => {
-      const lifted = CommerceModel.liftLegacyOrder(order)
-      // Line items first (AGL-1747): the flat `productId` is written only by
-      // the two buy-now Stripe paths, so matching on it alone hid every cart,
-      // POS and draft order behind the product filter.
-      if (productFilter && !CommerceModel.orderContainsProduct(lifted, productFilter)) {
-        return false
-      }
-      if (statusFilter && lifted.status !== statusFilter) return false
-      if (
-        customerFilter &&
-        !String(order.customerEmail ?? '')
-          .toLowerCase()
-          .includes(customerFilter.trim().toLowerCase())
-      ) {
-        return false
-      }
-      if (channelFilter && (lifted.channel ?? 'online') !== channelFilter) {
-        return false
-      }
-      if (
-        disputeFilter === 'open' &&
-        !CommerceModel.orderHasOpenDispute(lifted)
-      ) {
-        return false
-      }
-      // `lost` is the tone, not the raw status: a dispute that was WON also
-      // closes with money untouched, and listing it under "charged back"
-      // would tell a merchant they lost a case they won.
-      if (
-        disputeFilter === 'lost' &&
-        CommerceModel.describeOrderDispute(lifted)?.tone !== 'lost'
-      ) {
-        return false
-      }
-      // The same field the query orders by. `createdAt` is not universal
-      // across order writers, and a row missing it read as epoch zero — which
-      // both date filters excluded outright.
-      const created = (order.createdAtMs ?? 0) / 1000
-      if (dateFilter === '7d' && now - created > 7 * 86400) return false
-      if (dateFilter === '30d' && now - created > 30 * 86400) return false
-      return true
-    })
-  }, [
-    orders,
-    productFilter,
-    dateFilter,
-    statusFilter,
-    channelFilter,
-    disputeFilter,
-    customerFilter,
-  ])
+  /**
+   * Each order with the values the grid shows and filters by. `liftLegacyOrder`
+   * names a status and channel on a row that predates them, and Product
+   * reads the line items first (AGL-1747): the flat `productId` is written
+   * only by the two buy-now Stripe paths.
+   */
+  const orderRows = useMemo(
+    () =>
+      orders.map((order: any) => {
+        const lifted = CommerceModel.liftLegacyOrder(order)
+        const dispute = CommerceModel.describeOrderDispute(lifted)
+        const productIds = [
+          ...new Set(
+            [
+              ...(lifted.lineItems ?? []).map((line) => line.productId),
+              order.productId,
+            ].filter((id): id is string => typeof id === 'string' && id !== ''),
+          ),
+        ]
+        return {
+          ...order,
+          orderLabel: CommerceModel.formatOrderNumber(lifted, order.$id),
+          itemName:
+            lifted.lineItems?.[0]?.name ??
+            productNames[order.productId] ??
+            order.productId ??
+            '',
+          statusKey: lifted.status,
+          channelKey: lifted.channel ?? 'online',
+          netCents: CommerceModel.orderNetCents(lifted),
+          disputeBadge: dispute,
+          productIds,
+          disputeKey: CommerceModel.orderHasOpenDispute(lifted)
+            ? 'open'
+            : dispute?.tone === 'lost'
+              ? 'lost'
+              : '',
+        }
+      }),
+    [orders, productNames],
+  )
+  const productOptions = useMemo(
+    () =>
+      productWindow.rows.map((product: any) => ({
+        value: String(product.$id),
+        label: String(product.name ?? product.$id),
+      })),
+    [productWindow],
+  )
+  const filterOptions = useMemo(
+    () => ({
+      statusKey: ORDER_STATUS_OPTIONS,
+      channelKey: ORDER_CHANNEL_OPTIONS,
+      productIds: productOptions,
+      disputeKey: ORDER_DISPUTE_OPTIONS,
+    }),
+    [productOptions],
+  )
+  const listFilter = useListRowsFilter({
+    rows: orderRows,
+    fields: ORDER_FILTER_FIELDS,
+    options: filterOptions,
+    headers: ORDER_FILTER_HEADERS,
+    search: ORDER_SEARCH_FIELDS,
+    clauses,
+    onChange: setClauses,
+  })
+  const visibleOrders = listFilter.rows
+  const showingOpenDisputes = clauses.some(
+    (clause) =>
+      clause.field === OPEN_DISPUTE_CLAUSE.field &&
+      clause.op === OPEN_DISPUTE_CLAUSE.op &&
+      clause.value === OPEN_DISPUTE_CLAUSE.value,
+  )
 
   /**
    * Raised over EVERY loaded order, not the visible ones (AGL-1796). A
@@ -424,6 +501,155 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     [productWindow],
   )
 
+  /*
+   * The six columns `/product/commerce` advertises, in the order the mockup
+   * shows them — every fact scannable on its own, Channel included.
+   */
+  const orderColumns = useMemo<GridColDef[]>(
+    () => [
+      {
+        field: 'orderLabel',
+        headerName: 'Order',
+        flex: 1,
+        minWidth: 160,
+        renderCell: ({ row }: any) => {
+          const extraItems = Math.max(0, (row.lineItems?.length ?? 0) - 1)
+          return (
+            <Stack sx={{ minWidth: 0 }}>
+              <Typography variant="body2" noWrap>
+                {row.orderLabel}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {extraItems ? `${row.itemName} +${extraItems} more` : row.itemName}
+              </Typography>
+            </Stack>
+          )
+        },
+      },
+      {
+        field: 'customerEmail',
+        headerName: 'Customer',
+        flex: 1,
+        minWidth: 180,
+        renderCell: ({ row }: any) => (
+          <Typography variant="body2" noWrap>
+            {row.customerEmail || '—'}
+          </Typography>
+        ),
+      },
+      {
+        field: 'channelKey',
+        headerName: 'Channel',
+        width: 120,
+        renderCell: ({ row }: any) => (
+          <Typography variant="body2">
+            {CommerceModel.orderChannelLabel(row.channelKey)}
+          </Typography>
+        ),
+      },
+      {
+        field: 'netCents',
+        headerName: 'Total',
+        type: 'number',
+        width: 150,
+        align: 'right',
+        headerAlign: 'right',
+        renderCell: ({ row }: any) => (
+          <Stack sx={{ alignItems: 'flex-end', minWidth: 0, width: 1 }}>
+            <Typography variant="body2">
+              {`$${(row.netCents / 100).toFixed(2)}`}
+            </Typography>
+            {row.refundedCents ? (
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {`$${((row.totals?.totalCents ?? row.amountCents ?? 0) / 100).toFixed(2)} less refunds`}
+              </Typography>
+            ) : null}
+          </Stack>
+        ),
+      },
+      {
+        field: 'statusKey',
+        headerName: 'Status',
+        width: 230,
+        renderCell: ({ row }: any) => {
+          // A lost chargeback leaves `status: 'refunded'` (AGL-1787), so the
+          // status pill cannot tell the two apart either — which is why the
+          // dispute chip sits beside it rather than being folded into it.
+          const dispute: ReturnType<typeof CommerceModel.describeOrderDispute> =
+            row.disputeBadge
+          return (
+            <Stack sx={{ minWidth: 0 }}>
+              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                <Chip
+                  label={
+                    CommerceModel.ORDER_STATUS_LABELS[
+                      row.statusKey as CommerceModel.OrderStatus
+                    ] ?? row.statusKey
+                  }
+                  size="small"
+                  color={
+                    CommerceModel.ORDER_STATUS_COLOR[
+                      row.statusKey as CommerceModel.OrderStatus
+                    ] ?? 'default'
+                  }
+                  variant="outlined"
+                />
+                {dispute ? (
+                  <Tooltip title={dispute.detail}>
+                    <Chip
+                      label={dispute.label}
+                      size="small"
+                      color={DISPUTE_COLOR[dispute.tone]}
+                      variant="filled"
+                    />
+                  </Tooltip>
+                ) : null}
+              </Stack>
+              {/*
+                The deadline on the row itself, while the case is open — the
+                one fact on this screen that expires.
+               */}
+              {dispute?.evidenceDaysLeft !== undefined ? (
+                <Typography
+                  variant="caption"
+                  component="div"
+                  color={dispute.evidenceDaysLeft < 0 ? 'error' : 'warning.main'}
+                >
+                  {dispute.evidenceDaysLeft < 0
+                    ? 'Evidence deadline passed'
+                    : `Evidence due in ${dispute.evidenceDaysLeft} day${
+                        dispute.evidenceDaysLeft === 1 ? '' : 's'
+                      }`}
+                </Typography>
+              ) : null}
+            </Stack>
+          )
+        },
+      },
+      {
+        field: 'createdAtMs',
+        headerName: 'Date',
+        width: 130,
+        renderCell: ({ row }: any) => {
+          const createdAt =
+            row.createdAt?.toDate?.() ??
+            (row.createdAtMs ? new Date(row.createdAtMs) : null)
+          return (
+            <Stack sx={{ minWidth: 0 }}>
+              <Typography variant="body2" noWrap>
+                {createdAt ? createdAt.toLocaleDateString() : '—'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {createdAt ? createdAt.toLocaleTimeString() : ''}
+              </Typography>
+            </Stack>
+          )
+        },
+      },
+    ],
+    [],
+  )
+
   return (
     <CardDisplay
       header={'Orders'}
@@ -502,11 +728,19 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
             <Alert
               severity={openDisputes.overdue ? 'error' : 'warning'}
               action={
-                disputeFilter === 'open' ? undefined : (
+                showingOpenDisputes ? undefined : (
                   <Button
                     size="small"
                     color="inherit"
-                    onClick={() => setDisputeFilter('open')}
+                    onClick={() =>
+                      setClauses(
+                        upsertListFilterClause(
+                          clauses,
+                          OPEN_DISPUTE_CLAUSE.field,
+                          OPEN_DISPUTE_CLAUSE,
+                        ),
+                      )
+                    }
                   >
                     {'Show them'}
                   </Button>
@@ -527,92 +761,16 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
                     } on the tightest of these. An unanswered dispute is decided for the shopper.`}
             </Alert>
           ) : null}
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-            <TextField
-              select
-              size="small"
-              label="Product"
-              value={productFilter}
-              onChange={(event) => setProductFilter(event.target.value)}
-              sx={{ minWidth: 160 }}
-            >
-              <MenuItem value="">{'All products'}</MenuItem>
-              {productWindow.rows.map((product: any) => (
-                <MenuItem key={product.$id} value={product.$id}>
-                  {product.name ?? product.$id}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              size="small"
-              label="Period"
-              value={dateFilter}
-              onChange={(event) => setDateFilter(event.target.value)}
-              sx={{ minWidth: 130 }}
-            >
-              <MenuItem value="">{'All time'}</MenuItem>
-              <MenuItem value="7d">{'Last 7 days'}</MenuItem>
-              <MenuItem value="30d">{'Last 30 days'}</MenuItem>
-            </TextField>
-            <TextField
-              select
-              size="small"
-              label="Status"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-              sx={{ minWidth: 130 }}
-            >
-              <MenuItem value="">{'All statuses'}</MenuItem>
-              {(
-                Object.keys(
-                  CommerceModel.ORDER_STATUS_LABELS,
-                ) as (keyof typeof CommerceModel.ORDER_STATUS_LABELS)[]
-              ).map((status) => (
-                <MenuItem key={status} value={status}>
-                  {CommerceModel.ORDER_STATUS_LABELS[status]}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              select
-              size="small"
-              label="Channel"
-              value={channelFilter}
-              onChange={(event) => setChannelFilter(event.target.value)}
-              sx={{ minWidth: 120 }}
-            >
-              <MenuItem value="">{'All channels'}</MenuItem>
-              {(
-                Object.keys(
-                  CommerceModel.ORDER_CHANNEL_LABELS,
-                ) as (keyof typeof CommerceModel.ORDER_CHANNEL_LABELS)[]
-              ).map((channel) => (
-                <MenuItem key={channel} value={channel}>
-                  {CommerceModel.ORDER_CHANNEL_LABELS[channel]}
-                </MenuItem>
-              ))}
-            </TextField>
-            <TextField
-              size="small"
-              label="Customer"
-              placeholder="Email"
-              value={customerFilter}
-              onChange={(event) => setCustomerFilter(event.target.value)}
-              sx={{ minWidth: 180 }}
-            />
-            <TextField
-              select
-              size="small"
-              label="Disputes"
-              value={disputeFilter}
-              onChange={(event) => setDisputeFilter(event.target.value)}
-              sx={{ minWidth: 140 }}
-            >
-              <MenuItem value="">{'All orders'}</MenuItem>
-              <MenuItem value="open">{'Open dispute'}</MenuItem>
-              <MenuItem value="lost">{'Charged back'}</MenuItem>
-            </TextField>
+          {/*
+            The buttons stay beside the grid: Export CSV writes the model's
+            own order columns (`buildOrdersCsv`) for the rows the filters
+            leave, which the grid's own export cannot.
+           */}
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ alignItems: 'center', justifyContent: 'flex-end' }}
+          >
             <Button size="small" onClick={handleExportCsv}>
               {'Export CSV'}
             </Button>
@@ -625,148 +783,24 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
               {'Draft order'}
             </Button>
           </Stack>
-          <ScrollTable size="small" aria-label="Orders">
-            <TableHead>
-              <TableRow>
-                {/*
-                  The six columns `/product/commerce` advertises, in the
-                  order the mockup shows them. They were previously one
-                  `Typography` reading `#1042 · Product · $88.00` plus a
-                  caption of `email · date` — every fact present, none of
-                  them scannable, and Channel not present at all.
-                 */}
-                <TableCell>{'Order'}</TableCell>
-                <TableCell>{'Customer'}</TableCell>
-                <TableCell>{'Channel'}</TableCell>
-                <TableCell align="right">{'Total'}</TableCell>
-                <TableCell>{'Status'}</TableCell>
-                <TableCell>{'Date'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visibleOrders.map((order: any) => {
-                const lifted = CommerceModel.liftLegacyOrder(order)
-                // A lost chargeback leaves `status: 'refunded'` (AGL-1787),
-                // so the status pill on this row cannot tell the two apart
-                // either — which is why the dispute chip sits beside it
-                // rather than being folded into the status.
-                const dispute = CommerceModel.describeOrderDispute(lifted)
-                const createdAt = order.createdAt?.toDate?.()
-                const itemName =
-                  lifted.lineItems?.[0]?.name ??
-                  productNames[order.productId] ??
-                  order.productId ??
-                  ''
-                const extraItems = Math.max(
-                  0,
-                  (lifted.lineItems?.length ?? 0) - 1,
-                )
-                return (
-                  <TableRow
-                    key={order.$id}
-                    hover
-                    onClick={() => setSelectedId(order.$id)}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    <TableCell>
-                      <Typography variant="body2">
-                        {CommerceModel.formatOrderNumber(lifted, order.$id)}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {extraItems
-                          ? `${itemName} +${extraItems} more`
-                          : itemName}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" noWrap>
-                        {order.customerEmail || '—'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {CommerceModel.orderChannelLabel(lifted.channel)}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2">
-                        {`$${(CommerceModel.orderNetCents(lifted) / 100).toFixed(2)}`}
-                      </Typography>
-                      {order.refundedCents ? (
-                        <Typography variant="caption" color="text.secondary">
-                          {`$${((lifted.totals?.totalCents ?? order.amountCents ?? 0) / 100).toFixed(2)} less refunds`}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Stack
-                        direction="row"
-                        spacing={0.5}
-                        sx={{ alignItems: 'center' }}
-                      >
-                        <Chip
-                          label={
-                            CommerceModel.ORDER_STATUS_LABELS[lifted.status] ??
-                            lifted.status
-                          }
-                          size="small"
-                          color={
-                            CommerceModel.ORDER_STATUS_COLOR[lifted.status] ??
-                            'default'
-                          }
-                          variant="outlined"
-                        />
-                        {dispute ? (
-                          <Tooltip title={dispute.detail}>
-                            <Chip
-                              label={dispute.label}
-                              size="small"
-                              color={DISPUTE_COLOR[dispute.tone]}
-                              variant="filled"
-                            />
-                          </Tooltip>
-                        ) : null}
-                      </Stack>
-                      {/*
-                        The deadline on the row itself, while the case is
-                        open — the one fact on this screen that expires.
-                       */}
-                      {dispute?.evidenceDaysLeft !== undefined ? (
-                        <Typography
-                          variant="caption"
-                          component="div"
-                          color={
-                            dispute.evidenceDaysLeft < 0
-                              ? 'error'
-                              : 'warning.main'
-                          }
-                        >
-                          {dispute.evidenceDaysLeft < 0
-                            ? 'Evidence deadline passed'
-                            : `Evidence due in ${dispute.evidenceDaysLeft} day${
-                                dispute.evidenceDaysLeft === 1 ? '' : 's'
-                              }`}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" noWrap>
-                        {createdAt ? createdAt.toLocaleDateString() : '—'}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {createdAt ? createdAt.toLocaleTimeString() : ''}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </ScrollTable>
+          <ListFilterChips {...listFilter.chipsProps} />
+          <ListTable
+            aria-label="Orders"
+            rows={visibleOrders}
+            columns={listFilter.filterColumns(orderColumns)}
+            onOpen={(id) => setSelectedId(id)}
+            {...listFilter.gridProps}
+            initialState={{
+              columns: { columnVisibilityModel: ORDER_HIDDEN_COLUMNS },
+            }}
+            noRowsLabel="No orders match these filters"
+          />
           {orderWindow.truncated ? (
             /*
-             * Where the filters and the export stop. Both run over what was
-             * read, so a store past this window would otherwise see a status
-             * filter return nothing and read it as having no such orders.
+             * Where the filters, the search and the export stop. All run over
+             * what was read, so a store past this window would otherwise see
+             * a status filter return nothing and read it as having no such
+             * orders.
              */
             <Typography variant="caption" color="text.secondary">
               {`Showing the ${ORDERS_WINDOW} most recent orders. Filters and Export CSV cover these.`}

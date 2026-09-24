@@ -136,6 +136,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     const built = build(windowSize + 1)
     const answered = firestoreAnswer(memberDocs, built?.constraints ?? [])
     return {
+      data: answered,
       rows: answered.slice(page * pageSize, windowSize),
       hasMore: answered.length > windowSize,
       page,
@@ -354,5 +355,13 @@ describe('removing somebody is not suppressing them', () => {
     await mountPanel()
     pressRemove()
     await waitFor(() => expect(deleteDoc).toHaveBeenCalled())
+  })
+})
+
+describe('the membership table filters through the grid toolbar (AGL-3317)', () => {
+  it('searches every member its window read, not only the page on screen', async () => {
+    await mountPanel()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'p37@' } })
+    await waitFor(() => expect(addressesShown()).toEqual(['p37@lumen.co']))
   })
 })

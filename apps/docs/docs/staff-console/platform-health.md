@@ -122,6 +122,11 @@ Three things to read carefully:
 Unlike the health probes, this data is staff-only rather than public: the rows carry
 customer site hostnames and page paths.
 
+The **Window** picker chooses which days are read. Within them, the table's toolbar
+filters and searches every row the window returned: **App**, **Directive** and **Blocked
+or measured** are pickers over the values present, and the day, blocked origin and count
+filter as typed values. The search also matches the last site and path a row was seen on.
+
 ## Sharing-scope drift
 
 A scoped document with no sharing scope is **invisible to every scoped read** — both
@@ -166,6 +171,9 @@ Each row answers the one question worth asking:
 
 - **Holding** — the 7-day hold has not expired. Nothing will run, and nothing should.
 - **Due** — the hold has expired. The next scheduled run will take it.
+
+The table's **Filters** picks **State** (*Due* or *Holding*) and matches the organization
+name; the search matches its name, slug or id.
 
 **Run due erasures now** is for when a deadline will not wait for the schedule. Three
 things about it:
@@ -227,6 +235,9 @@ old is a process that is not coming back. The **stranded** threshold is the card
 not a property of the claim.
 
 Listing is capped, and the card says so when it hits the cap. Treat the count as a floor.
+
+The table's toolbar filters and searches every claim read: **State** picks *stranded* or
+*in flight*, and the operation, scope, organization and age filter as typed values.
 
 ## Resolved server config {#resolved-server-config}
 

@@ -570,6 +570,11 @@ choose who receives it and when, as with any new email.
 Marketing page and target any of them from the campaign composer. A list is one of two
 kinds, chosen when you create it.
 
+The lists table filters through its toolbar: **Filters** narrows it by name or by
+**Membership** (manual or rule), and **Search** matches any word of a list's name. The
+table is paged, so the first filter reads the first 100 lists and matches over them;
+the table says when there are more, and paging forward reads the next page.
+
 ### Manual lists
 
 A manual list holds the people you put in it. Grow it with the **"Enroll in a list"**
@@ -586,6 +591,12 @@ read until you open a list.
 
 **How** tells a rule match apart from somebody who was added. A person a rule enrolled
 leaves when they stop matching; a person who was added stays.
+
+The membership table filters through its toolbar by address, name, **How** (rule or
+added) and **Consent** (each of the kinds below), and **Search** matches an address,
+name or source. Like the lists table, it filters over the first 100 members it read
+and says when there are more. The address and name boxes above the table add people;
+they are not filters.
 
 **Consent** is the basis the membership carries, read for the site you are on — or, on
 your [organization's Emails page](#organization-emails-page), for the site chosen under
@@ -1084,6 +1095,11 @@ reason and the date:
 This is where the gap between a campaign's recipient count and what it
 actually sent comes from, and a rising **Bounced** count is the earliest sign
 a list is going stale.
+
+The table filters through its toolbar by address and by **Reason**, and **Search**
+matches any part of an address. It is paged newest first, so the first filter reads
+the 100 most recent entries and matches over them; the table says when there are
+more, and paging forward reads the next page.
 
 Each site keeps its own list: somebody who unsubscribed from one site can still
 be emailed by another — unless your organization has declared the two sites one
