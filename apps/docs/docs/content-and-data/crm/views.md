@@ -92,9 +92,10 @@ reorders the loaded window.
 - **Companies** — Company (starts with or is) and Owner reach every company;
   the search box is the same **Company starts with** filter. The list is
   paged, so one of the two applies at a time.
-- **Deals** (the table) — Status reaches every deal. There is no search box:
-  nothing indexes a deal's title, and a search over one page would miss the
-  deal on the next.
+- **Deals** (the table) — Status reaches every deal. The search box finds a
+  deal by any word of its title, across the 1,000 most recently changed
+  deals of that status and pipeline — for nearly every organization, all of
+  them.
 - **Tasks** — **Show** is the task view (My tasks, Overdue, Today, Upcoming,
   All open, Done) and reaches every task; Kind, Priority and Assignee, and
   the search over title and notes, narrow the rows that view loaded.

@@ -88,7 +88,11 @@ of every deal in the pipeline, including the closed ones. The table's
 **Filters** panel narrows it by **Status** (open, won or lost), and **Next
 activity** › **is empty** keeps only the deals on the page with no open task
 scheduled against them — the ones the reports page counts as
-[stuck](./reports.md#pipeline).
+[stuck](./reports.md#pipeline). **Search** finds a deal by any word of its
+title, the middle of a title too, across every deal of the status and
+pipeline on screen rather than only the page. While it holds a word, the
+table lists the matches a page at a time, and a notice says so if it read
+the 1,000 most recently changed deals rather than all of them.
 
 The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
 appears above it to set their stage, set their owner, mark them lost with one

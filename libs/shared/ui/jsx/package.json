@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-ui-jsx",
-  "version": "1.0.0-beta.186",
+  "version": "1.0.0-beta.187",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,10 +25,10 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-mdi": "1.0.0-beta.186",
-    "@aglyn/shared-ui-theme": "1.0.0-beta.186",
-    "@aglyn/shared-util-tools": "1.0.0-beta.186",
-    "@aglyn/shared-util-vendor": "1.0.0-beta.186",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.187",
+    "@aglyn/shared-ui-theme": "1.0.0-beta.187",
+    "@aglyn/shared-util-tools": "1.0.0-beta.187",
+    "@aglyn/shared-util-vendor": "1.0.0-beta.187",
     "@mdi/js": "^7.4.47",
     "@swc/helpers": "0.5.23",
     "change-case": "^5.4.4",

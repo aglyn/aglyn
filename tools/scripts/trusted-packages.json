@@ -3,157 +3,157 @@
   "seeded": "The 2026-09-21 rows are the owner sweep recorded on AGL-3201, where all 51 packages then publishable were verified one by one (repo aglyn/aglyn, file publish-packages.yml, createPackage on every one). They were transcribed here rather than written by the sweep because this record did not exist yet; every row after that is written by the sweep itself.",
   "packages": {
     "@aglyn/aglyn": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/aglyn-markdown-editor": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/aglyn-node-renderer": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/besigner": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/besigner-ui": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/cli": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-ai": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-bookings": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-commerce": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-crm": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-data": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-email": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-events-calendar": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-forms": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-inbox": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-logic": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-marketing": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-marketplace": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-mui": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-outreach": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-redirects": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-video-delivery": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/plugins-workflows": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-data-enums": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-data-forms": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-data-mdi": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-data-regex": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-data-types": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-svg-icons": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-ui-color-picker": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-ui-email-campaigns": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-ui-json-editor": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-ui-jsx": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-ui-jsx-forms": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-ui-next": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-ui-snackstack": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-ui-theme": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-dom": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-email": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-errors": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-fbserver": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-http": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-logger": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-next": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-rest-api": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-timestamp": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-tools": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/shared-util-vendor": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/tenant-data-admin": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/tenant-feature-instance": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     },
     "@aglyn/tenant-runtime": {
-      "confirmedAt": "2026-09-21"
+      "confirmedAt": "2026-09-24"
     }
   }
 }
