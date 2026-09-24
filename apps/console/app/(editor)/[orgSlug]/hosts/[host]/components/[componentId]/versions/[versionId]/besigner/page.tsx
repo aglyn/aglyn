@@ -1082,6 +1082,8 @@ function ComponentBesignerPage(props) {
                           // what still lets the button say Publish
                           // (AGL-3271).
                           draftSaved={workingDraftSaved}
+                          // An email block updates emails, not the live site.
+                          publishTarget={isEmailBlock ? 'email' : 'site'}
                         />
                         <BesignerDraftAlertComponent
                           draft={draft}

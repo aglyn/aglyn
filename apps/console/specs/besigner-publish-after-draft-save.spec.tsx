@@ -132,3 +132,35 @@ describe('the besigner toolbar after a draft save', () => {
     expect(primary().textContent).toContain('Save draft')
   })
 })
+
+describe('the save menu names what publishing changes (AGL-3318)', () => {
+  it('speaks of the live site by default', () => {
+    renderBar({ saveAvailable: true, livePublished: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Save options' }))
+    expect(
+      screen.getByText('Keeps your work; the live site is unchanged'),
+    ).toBeTruthy()
+    expect(screen.getByText('Saves, then updates the live site')).toBeTruthy()
+  })
+
+  it('speaks of emails for a site email or an email block', () => {
+    render(
+      <BesignerAppBarComponent
+        detailsUrl="/console/host/emails"
+        onSave={onSave}
+        onSaveAndPublish={onSaveAndPublish}
+        saveAvailable
+        livePublished
+        publishTarget="email"
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save options' }))
+    expect(
+      screen.getByText('Keeps your work; your emails are unchanged'),
+    ).toBeTruthy()
+    expect(
+      screen.getByText('Saves, then your emails send this version'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/live site/)).toBeNull()
+  })
+})

@@ -619,6 +619,7 @@ function HostEmailBesignerPage() {
                 livePublished={editingLiveVersion && !draftPending}
                 saveAvailable={saveAvailable}
                 onPropertiesEdit={() => setPropertiesOpen(true)}
+                publishTarget="email"
               />
               <BesignerDraftAlertComponent
                 draft={draft}
