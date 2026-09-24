@@ -154,7 +154,7 @@ describe('the email console surface declares its own authorization', () => {
  * THE ORGANIZATION'S EMAILS PAGE (AGL-3301).
  *
  * The same page, mounted at `/[orgSlug]/emails` through the shell's generic
- * org route, with the same six sections. Declared as the site item's twin so
+ * org route, with the same seven sections. Declared as the site item's twin so
  * the two cannot drift: a section added to one and not the other would be a
  * route that exists at one level only.
  *=========================================*/
@@ -184,6 +184,7 @@ describe('the email console’s organization page', () => {
       'audiences',
       'topics',
       'sending',
+      'consent-groups',
       'suppressions',
     ])
   })
@@ -201,5 +202,19 @@ describe('the email console’s organization page', () => {
     ])
     expect(resolved?.extension.pluginId).toBe(BUNDLE_ID)
     expect(resolved?.section?.id).toBe('sending')
+  })
+
+  it('resolves the consent groups section at both levels (AGL-3320)', () => {
+    // The organization declares the groups; a site's own page says which one
+    // it is in. One section id, so a link to either level names the same one.
+    expect(
+      Aglyn.resolveConsoleOrgPluginPage('/emails/consent-groups', [BUNDLE_ID])
+        ?.section?.id,
+    ).toBe('consent-groups')
+    expect(
+      consoleExtension()?.navItems?.[0]?.sections?.find(
+        (section) => section.id === 'consent-groups',
+      )?.label,
+    ).toBe('Consent groups')
   })
 })

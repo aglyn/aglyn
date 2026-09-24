@@ -1090,6 +1090,15 @@ const NOT_A_LIST: Array<[string, string]> = [
       'different problem than a truncated table.',
   ],
   [
+    'libs/plugins/email/src/lib/components/consent-groups-card.tsx',
+    'The org’s consent GROUPS (AGL-3320) — a declaration read off the org ' +
+      'document, not a collection anything writes into. A site is in at most ' +
+      'one group and a group names at least two, so an org has at most half ' +
+      'as many groups as it has sites, each one made by hand. The table is the ' +
+      'whole declaration on purpose: every change is made against all of it, ' +
+      'and a pager would hide part of what the next change rewrites.',
+  ],
+  [
     'libs/plugins/marketing/src/lib/components/campaign-composer.tsx',
     'A FORM, not a list. Everything it maps over is a picker’s options — the ' +
       'org’s segments and lists at `limit(50)`, the site’s email designs at ' +
@@ -1855,7 +1864,12 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // probe that links into the site's own paged list, over a capped and
     // folded set of sites — and the site hub's panel of the org automations
     // placed on it, bounded by the organization's cap and read whole.
-    expect(NOT_A_LIST).toHaveLength(67)
+    //
+    // 68 since consent groups have an editor (AGL-3320), and this one IS a
+    // new table: the org's declaration of which sites are one sender, read
+    // off the org document, which cannot name more groups than half the
+    // org's sites.
+    expect(NOT_A_LIST).toHaveLength(68)
   })
 })
 

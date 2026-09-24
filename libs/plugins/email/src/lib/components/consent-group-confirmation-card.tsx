@@ -17,22 +17,14 @@
 'use client'
 
 import {
-  type AglynOrgCustomRole,
   consentGroupsAwaitConfirmation,
-  type OrgPermission,
-  orgPermissionLabel,
   pluginDocsHelp,
   readConsentGroups,
-  resolveOrgPermissions,
 } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
-import {
-  useFirestore,
-  useFirestoreDoc,
-  useUser,
-} from '@aglyn/tenant-feature-instance'
+import { useUser } from '@aglyn/tenant-feature-instance'
 import {
   FormControlLabel,
   FormHelperText,
@@ -40,68 +32,18 @@ import {
   Switch,
   Typography,
 } from '@mui/material'
-import { doc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
+import { type ConsentGroupAccess, useConsentGroupAccess } from './consent-group-access'
 import { useEmailOrgMount } from './email-org-mount'
-
-/**
- * What `/api/orgs/settings` asks of a member for this switch: the route's own
- * gate, and the permission that opens this console.
- */
-const REQUIRED_PERMISSIONS: readonly OrgPermission[] = [
-  'org.settings',
-  'data.manage',
-]
-
-/** A membership document, as the permission resolver reads one. */
-type MemberRecord = NonNullable<Parameters<typeof resolveOrgPermissions>[0]>
-
-/**
- * Which permission the signed-in member lacks for this switch — its label, or
- * `null` when they hold both — and whether that is known yet.
- *
- * Read off the member's own membership document, and their custom role when
- * they hold one, both of which the rules let a member read. The shell's
- * permission map carries the legacy keys and the plugin-declared ones, not
- * these two, and the CRM's org settings cards answer the same question the
- * same way. `ready` separates "no" from "not yet", so the switch disables
- * with a reason instead of hiding until the read lands. A membership that
- * cannot be read resolves no permission at all; the route decides either way.
- */
-export function useConsentGroupConfirmationAccess(orgId: string | undefined): {
-  missing: string | null
-  ready: boolean
-} {
-  const firestore = useFirestore()
-  const { data: user } = useUser()
-  const uid = user?.uid ?? ''
-  const memberRead = useFirestoreDoc<MemberRecord>(
-    () => (orgId && uid ? doc(firestore, 'orgs', orgId, 'members', uid) : null),
-    [firestore, orgId, uid],
-  )
-  const member = memberRead.status === 'success' ? memberRead.data : undefined
-  const roleId = typeof member?.roleId === 'string' ? member.roleId : ''
-  const roleRead = useFirestoreDoc<AglynOrgCustomRole>(
-    () => (orgId && roleId ? doc(firestore, 'orgs', orgId, 'roles', roleId) : null),
-    [firestore, orgId, roleId],
-  )
-  // A reference that is never built stays `loading`, so a member with no
-  // custom role has nothing left to wait for.
-  const ready =
-    Boolean(orgId && uid) &&
-    memberRead.status !== 'loading' &&
-    (!roleId || roleRead.status !== 'loading')
-  const granted = resolveOrgPermissions(
-    member ?? null,
-    roleId && roleRead.status === 'success' ? (roleRead.data ?? null) : null,
-  )
-  const lacking = REQUIRED_PERMISSIONS.find((key) => granted[key] !== true)
-  return { missing: lacking ? orgPermissionLabel(lacking) : null, ready }
-}
 
 export interface ConsentGroupConfirmationCardProps {
   /** The org document the shell passes, kept live by its listener. */
   org?: Record<string, unknown> | null
+  /**
+   * Whether the reader may move the switch, when the section already asked.
+   * Absent, the card reads the reader's membership itself.
+   */
+  access?: ConsentGroupAccess
 }
 
 /**
@@ -129,11 +71,13 @@ export interface ConsentGroupConfirmationCardProps {
 export function ConsentGroupConfirmationCard(
   props: ConsentGroupConfirmationCardProps,
 ) {
-  const { org } = props
+  const { org, access } = props
   const orgId = useEmailOrgMount()?.orgId
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
-  const { missing, ready } = useConsentGroupConfirmationAccess(orgId)
+  // Handed the answer, the card opens no read of its own for it.
+  const own = useConsentGroupAccess(access ? undefined : orgId)
+  const { missing, ready } = access ?? own
 
   const stored = consentGroupsAwaitConfirmation(org)
   const declared = Object.keys(readConsentGroups(org)).length > 0

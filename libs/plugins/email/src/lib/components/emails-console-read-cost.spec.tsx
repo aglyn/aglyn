@@ -66,6 +66,29 @@ const mockListens: Array<{ path: string; limit: number; where?: unknown[][] }> =
 const mockAggregates: string[] = []
 
 /**
+ * What a single-document listen answers, by path. Absent paths answer an
+ * empty document that exists — see the note in `onSnapshot` below.
+ */
+const mockDocPayloads: Record<string, Record<string, unknown>> = {}
+
+/**
+ * Set by a case whose page would call a route while it is metered: the
+ * consent group banner drives a running change with `continue` as soon as it
+ * mounts. Held, the call never answers, so the case measures reads alone.
+ */
+let mockHoldFetch = false
+jest.mock('@aglyn/shared-util-http/authorized-token', () => {
+  const actual = jest.requireActual('@aglyn/shared-util-http/authorized-token')
+  return {
+    ...actual,
+    authorizedFetch: (...args: unknown[]) =>
+      mockHoldFetch
+        ? new Promise(() => undefined)
+        : actual.authorizedFetch(...args),
+  }
+})
+
+/**
  * A query with no `limit()` still reads the whole collection. Counting it as
  * zero would let an unbounded listen look CHEAPER than a bounded one, which
  * inverts the measurement. This stands for "unbounded" at a figure no console
@@ -161,7 +184,7 @@ jest.mock('firebase/firestore', () => {
            * the reads.
            */
           exists: () => true,
-          data: () => ({}),
+          data: () => mockDocPayloads[String(ref.__path ?? '')] ?? {},
           id: String(ref.__path ?? '').split('/').pop() ?? '',
           metadata: { hasPendingWrites: false, fromCache: false },
         })
@@ -454,6 +477,17 @@ describe('emails console read cost (AGL-2501)', () => {
   })
 
 
+  /*
+   * A site's Consent groups section says which group the site is in. It is
+   * drawn from the org document the shell already passed, so it costs nothing:
+   * no listen, and no read of the other sites it names by count.
+   */
+  it('the consent groups section reads nothing (AGL-3320)', async () => {
+    await renderConsole('consent-groups')
+    summarize('site consent groups section', mockListens)
+    expect(mockListens).toHaveLength(0)
+  })
+
   it('reports the designs section too', async () => {
     await renderConsole('templates')
     summarize('designs section', mockListens)
@@ -615,9 +649,15 @@ describe('the organization’s Emails page read cost', () => {
     mockSection = ''
     mockListens.length = 0
     mockAggregates.length = 0
+    mockHoldFetch = false
+    for (const path of Object.keys(mockDocPayloads)) delete mockDocPayloads[path]
   })
 
-  async function renderOrgConsole(section: string, detail: string[] = []) {
+  async function renderOrgConsole(
+    section: string,
+    detail: string[] = [],
+    org: Record<string, unknown> = { plan: 'business' },
+  ) {
     mockSection = [section, ...detail].filter(Boolean).join('/')
     mockListens.length = 0
     mockAggregates.length = 0
@@ -633,7 +673,7 @@ describe('the organization’s Emails page read cost', () => {
           hostsPath: '/acme/hosts',
         }}
         entitled
-        org={{ plan: 'business' } as never}
+        org={org as never}
         permissions={{} as never}
         basePath={ORG_BASE}
         sections={EMAILS_CONSOLE_SECTIONS.map((item) => ({
@@ -695,18 +735,86 @@ describe('the organization’s Emails page read cost', () => {
     expect(paths.some((path) => path.endsWith('/members'))).toBe(false)
   })
 
-  it('reads the org’s topic catalog once, bounded, and the reader’s own membership', async () => {
+  it('reads the org’s topic catalog once, bounded, and nothing else', async () => {
+    // The confirmation switch that used to sit under the catalog lives with
+    // the consent groups now, and so does the membership read it asked.
     await renderOrgConsole('topics')
     summarize('org topics section', mockListens)
     expect(mockListens.map((listen) => listen.path)).toEqual([
       'orgs/org1/emailTopics',
-      // The consent-group confirmation switch (AGL-3316) asks one document —
-      // the reader's own membership — whether it may move for them. A member
-      // holding a custom role adds that role's document; this one holds none.
-      'orgs/org1/members/u1',
     ])
     expect(mockListens[0].limit).toBeGreaterThan(0)
+  })
+
+  /*==========================================
+   * CONSENT GROUPS (AGL-3320).
+   *
+   * The groups and a running change's marker are fields of the org document
+   * the shell already holds. What the section reads is the reader's own
+   * membership — ONCE, for both the editor and the confirmation switch, which
+   * ask the same permissions — and, only while a change runs and only for a
+   * reader who may drive it, that change's one job document.
+   *=========================================*/
+  const DECLARED = {
+    plan: 'business',
+    consentGroups: {
+      acme: { name: 'Acme', hostIds: ['site01', 'site02', 'site03'] },
+    },
+  }
+
+  it('reads the reader’s membership once, for both cards, and nothing else', async () => {
+    await renderOrgConsole('consent-groups', [], DECLARED)
+    summarize('org consent groups section', mockListens)
+    expect(mockListens.map((listen) => listen.path)).toEqual([
+      'orgs/org1/members/u1',
+    ])
+    expect(mockListens[0].limit).toBe(1)
+    expect(mockAggregates).toHaveLength(0)
+  })
+
+  it('reads no site at all, however many sites the groups name', async () => {
+    await renderOrgConsole('consent-groups', [], DECLARED)
+    expect(mockListens.some((listen) => listen.path.startsWith('hosts/'))).toBe(
+      false,
+    )
+  })
+
+  it('reads a running change’s job document, once, for a reader who may drive it', async () => {
+    mockHoldFetch = true
+    mockDocPayloads['orgs/org1/members/u1'] = { role: 'owner', allHosts: true }
+    await renderOrgConsole('consent-groups', [], {
+      ...DECLARED,
+      consentGroupsChange: {
+        changeId: 'chg_1',
+        phase: 'carry',
+        hostIds: ['site01', 'site02'],
+        startedAtMs: 1,
+      },
+    })
+    summarize('org consent groups, change running', mockListens)
+    expect(mockListens.map((listen) => listen.path)).toEqual([
+      'orgs/org1/members/u1',
+      'orgs/org1/consentGroupChanges/chg_1',
+    ])
     expect(mockListens[1].limit).toBe(1)
+  })
+
+  it('opens no job read for a reader who may not change consent groups', async () => {
+    mockHoldFetch = true
+    mockDocPayloads['orgs/org1/members/u1'] = { role: 'viewer', allHosts: true }
+    await renderOrgConsole('consent-groups', [], {
+      ...DECLARED,
+      consentGroupsChange: {
+        changeId: 'chg_1',
+        phase: 'rehome',
+        hostIds: ['site01', 'site02'],
+        startedAtMs: 1,
+        declaredAtMs: 2,
+      },
+    })
+    expect(mockListens.map((listen) => listen.path)).toEqual([
+      'orgs/org1/members/u1',
+    ])
   })
 
   it('opens no membership read on a topic’s own page', async () => {

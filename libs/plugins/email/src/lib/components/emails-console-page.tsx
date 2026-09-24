@@ -26,7 +26,9 @@ import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot
 import { HubSections } from '@aglyn/shared-ui-next'
 import { Stack } from '@mui/material'
 import { useMemo, type ReactNode } from 'react'
+import { useConsentGroupAccess } from './consent-group-access'
 import ConsentGroupConfirmationCard from './consent-group-confirmation-card'
+import ConsentGroupsCard from './consent-groups-card'
 import EmailScreensCard from './email-screens-card'
 import EmailTemplateDetail from './email-template-detail'
 import EmailTopicDetail from './email-topic-detail'
@@ -41,9 +43,10 @@ import OrgSiteSuppressions from './org-site-suppressions'
 import OrgSuppressionsCard from './org-suppressions-card'
 import SendingDomainDetail from './sending-domain-detail'
 import SendingDomainsCard from './sending-domains-card'
+import SiteConsentGroupCard from './site-consent-group-card'
 import SuppressionsCard from './suppressions-card'
 import type { EmailsConsoleSectionId } from './emails-console-sections'
-import { EmailOrgMountProvider } from './email-org-mount'
+import { EmailOrgMountProvider, useEmailOrgMount } from './email-org-mount'
 import { EMAIL_MESSAGES_ZONE, type EmailMessagesZoneProps } from './email-zones'
 
 /**
@@ -56,6 +59,25 @@ import { EMAIL_MESSAGES_ZONE, type EmailMessagesZoneProps } from './email-zones'
 function EmailMessagesSection(props: EmailMessagesZoneProps) {
   const Zone = useConsoleWidgetSlot()
   return Zone ? <Zone slot={EMAIL_MESSAGES_ZONE.id} {...props} /> : null
+}
+
+/**
+ * The organization's Consent groups section: the editor, and under it the
+ * switch over how a group's sites treat each other's confirmations.
+ *
+ * Both ask whether the reader may change consent groups, and the two routes
+ * behind them ask the same two permissions, so the section reads the
+ * reader's membership once and hands the answer to both.
+ */
+function OrgConsentGroupsSection(props: { org?: Record<string, unknown> }) {
+  const orgId = useEmailOrgMount()?.orgId
+  const access = useConsentGroupAccess(orgId || undefined)
+  return (
+    <Stack spacing={3}>
+      <ConsentGroupsCard org={props.org} access={access} />
+      <ConsentGroupConfirmationCard org={props.org} access={access} />
+    </Stack>
+  )
 }
 
 /**
@@ -85,6 +107,11 @@ function sectionBody(
    * property of the org and this is the one place holding the org document.
    */
   consentGroup: ConsentGroup,
+  /**
+   * The org document, from which the Consent groups section reads the org's
+   * slug and any change in flight.
+   */
+  org: Record<string, unknown> | undefined,
 ): ReactNode {
   switch (section) {
     case 'messages':
@@ -199,6 +226,16 @@ function sectionBody(
       ) : (
         <SendingDomainsCard hostId={hostId} basePath={basePath} />
       )
+    case 'consent-groups':
+      // Which sender this site is. Declared for the organization, so here it
+      // is said and linked, never changed.
+      return (
+        <SiteConsentGroupCard
+          hostId={hostId}
+          consentGroup={consentGroup}
+          org={org}
+        />
+      )
     case 'suppressions':
       return <SuppressionsCard hostId={hostId} />
     default:
@@ -209,13 +246,13 @@ function sectionBody(
 /**
  * The body of one ORGANIZATION-level section, at `/[orgSlug]/emails`.
  *
- * The same six sections as a site's, each answering over the organization.
- * Two of them are already the org's — an audience and a topic are shared by
- * every site — so their cards render unchanged with no site. The other four
- * are site facts: a message is sent as one site, a template is one site's
- * screen, a sending identity and a suppression list are one site's. Those
- * sections read each site in turn, a page of sites at a time, and link a row
- * into the site that holds it.
+ * The same seven sections as a site's, each answering over the organization.
+ * Three of them are already the org's — an audience and a topic are shared by
+ * every site, and a consent group is declared for several — so their cards
+ * render with no site. The other four are site facts: a message is sent as
+ * one site, a template is one site's screen, a sending identity and a
+ * suppression list are one site's. Those sections read each site in turn, a
+ * page of sites at a time, and link a row into the site that holds it.
  *
  * Built only when that section is the one being read, for the reason
  * {@link sectionBody} is: every card opens its reads on mount.
@@ -270,16 +307,7 @@ function orgSectionBody(
           basePath={basePath}
         />
       ) : (
-        /*
-         * The catalog, whose topics each set their own confirmation, and under
-         * it the organization's one switch over how a declared consent group
-         * treats a confirmation one of its sites is waiting on. Only here: the
-         * switch is the organization's, so a site's Topics page has none.
-         */
-        <Stack spacing={3}>
-          <EmailTopicsCard hostId={null} basePath={basePath} />
-          <ConsentGroupConfirmationCard org={org} />
-        </Stack>
+        <EmailTopicsCard hostId={null} basePath={basePath} />
       )
     case 'sending':
       /*
@@ -295,6 +323,14 @@ function orgSectionBody(
       ) : (
         <OrgSendingCard basePath={basePath} />
       )
+    case 'consent-groups':
+      /*
+       * The declaration itself, and under it the organization's one switch
+       * over how a declared group treats a confirmation one of its sites is
+       * waiting on — the switch belongs with the groups it governs rather
+       * than with the topics that each set their own confirmation.
+       */
+      return <OrgConsentGroupsSection org={org} />
     case 'suppressions':
       /*
        * `…/suppressions` totals every site's list; `…/suppressions/{hostId}`
@@ -338,7 +374,7 @@ function orgSectionBody(
  *
  * The same page is the ORGANIZATION's Emails page at `/[orgSlug]/emails`.
  * Handed no site, it publishes the org mount to its cards and renders
- * {@link orgSectionBody} instead: the same six sections, over every site.
+ * {@link orgSectionBody} instead: the same seven sections, over every site.
  */
 export function EmailsConsolePage(props: ConsolePluginPageProps) {
   const { hostId, orgMount, org, section, sections, basePath, segments } =
@@ -405,6 +441,7 @@ export function EmailsConsolePage(props: ConsolePluginPageProps) {
         detail,
         basePath,
         consentGroup as ConsentGroup,
+        org as Record<string, unknown> | undefined,
       )}
     </HubSections>
   )
