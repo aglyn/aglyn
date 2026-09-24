@@ -53,6 +53,8 @@ const mockMemberHasOrgPermission = jest.fn(async (..._args: unknown[]) => true)
 const mockAuditAdd = jest.fn(async (..._args: unknown[]) => undefined)
 /** Lazy so the hoisted mock factory never touches a const in its TDZ. */
 const mockHostData = jest.fn()
+/** The owning org's document; a case declares a consent group on it. */
+let mockOrgDoc: Record<string, unknown> = {}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
@@ -88,7 +90,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     firestore: { FieldValue: { serverTimestamp: () => '__now__' } },
   },
   eraseHost: (...args: unknown[]) => mockEraseHost(...args),
-  getOrgForHost: async () => ({ orgId: 'org-1', org: {} }),
+  getOrgForHost: async () => ({ orgId: 'org-1', org: mockOrgDoc }),
   resolveOrgMembership: async () => ({ orgId: 'org-1', member: {} }),
   memberHasOrgPermission: (...args: unknown[]) =>
     mockMemberHasOrgPermission(...args),
@@ -150,6 +152,7 @@ beforeEach(() => {
     email_verified: true,
   })
   mockHostData.mockReturnValue(LIVE_SITE)
+  mockOrgDoc = {}
   mockEraseHost.mockResolvedValue(undefined)
   mockMemberHasOrgPermission.mockResolvedValue(true)
   jest.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -262,5 +265,85 @@ describe("a deleted site's last event goes to the workspace (AGL-118)", () => {
     })
     expect(mockLogOrgActivity).not.toHaveBeenCalled()
     expect(mockAuditAdd).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * A SITE ITS CONSENT GROUP STILL NEEDS IS NOT DELETED (AGL-3320).
+ *
+ * A grouped site's opt-outs are read by every site in its group, so erasing
+ * them would start mailing, from the sites that stay, people who
+ * unsubscribed here. The site leaves the group first — the change that
+ * removes it carries its refusals over — and a change still running holds
+ * its sites the same way.
+ */
+describe('a site in a consent group (AGL-3320)', () => {
+  it('is refused with a 409 while it is in a declared group, and nothing is erased', async () => {
+    mockOrgDoc = {
+      consentGroups: { nw: { name: 'Northwind', hostIds: ['host-1', 'host-2'] } },
+    }
+
+    const response = await post()
+
+    expect(response.status).toBe(409)
+    const body = await response.json()
+    expect(body.reason).toBe('consent-group')
+    expect(body.error).toContain('Northwind')
+    expect(mockEraseHost).not.toHaveBeenCalled()
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('is refused while a consent group change naming it is still running', async () => {
+    mockOrgDoc = { consentGroupsChange: { changeId: 'c1', phase: 'rehome', hostIds: ['host-1'] } }
+
+    const response = await post()
+
+    expect(response.status).toBe(409)
+    expect((await response.json()).reason).toBe('consent-group-change')
+    expect(mockEraseHost).not.toHaveBeenCalled()
+  })
+
+  it('holds staff to it too — the hazard is to the people on the list', async () => {
+    mockVerifyIdToken.mockResolvedValue({
+      uid: 'staff-1',
+      email: 'staff@example.test',
+      email_verified: true,
+      staff: true,
+    })
+    mockOrgDoc = {
+      consentGroups: { nw: { name: 'Northwind', hostIds: ['host-1', 'host-2'] } },
+    }
+
+    expect((await post()).status).toBe(409)
+    expect(mockEraseHost).not.toHaveBeenCalled()
+  })
+
+  it('answers the same 409 when the erase itself refuses the site', async () => {
+    // The group changed between the route's check and the erase: `eraseHost`
+    // refused before destroying anything.
+    mockEraseHost.mockRejectedValue(
+      Object.assign(new Error('in a consent group'), {
+        name: 'SiteInConsentGroupError',
+        hold: { reason: 'grouped', groupId: 'nw', name: 'Northwind' },
+      }),
+    )
+
+    const response = await post()
+
+    expect(response.status).toBe(409)
+    expect((await response.json()).reason).toBe('consent-group')
+    expect(mockLogOrgActivity).not.toHaveBeenCalled()
+  })
+
+  it('THE CONTROL: a site the group does not name is deleted as before', async () => {
+    mockOrgDoc = {
+      consentGroups: { nw: { name: 'Northwind', hostIds: ['host-2', 'host-3'] } },
+      consentGroupsChange: { hostIds: ['host-3'] },
+    }
+
+    expect((await post()).status).toBe(200)
+    expect(mockEraseHost).toHaveBeenCalledWith('host-1', {
+      tearDownSendingDomain: expect.any(Function),
+    })
   })
 })

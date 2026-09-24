@@ -207,20 +207,36 @@ const firestoreHandle: any = {
   getAll: async (...refs: any[]) => refs.map((ref) => snapshotFor(ref.path)),
 }
 
+/**
+ * The sites of the declared consent group the importing site is in, when a
+ * case declares one; `null` is the site alone, as every other case is.
+ */
+let mockGroupHostIds: string[] | null = null
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
    * The real resolution's shape: an org that declared no pooling resolves
    * every site to a group of ONE. Faked rather than imported because this
    * file mocks the whole module — but faked to the NARROW answer, which is
-   * the direction a wrong group may fail in.
+   * the direction a wrong group may fail in, unless a case declares a group.
    */
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
-  }),
+  consentGroupForSite: async (hostId: string) =>
+    mockGroupHostIds
+      ? {
+          hostId,
+          groupId: 'acme',
+          name: 'Acme',
+          hostIds: mockGroupHostIds,
+          declared: true,
+          awaitsConfirmation: false,
+        }
+      : {
+          hostId,
+          groupId: hostId,
+          name: null,
+          hostIds: [hostId],
+          declared: false,
+        },
   __esModule: true,
   enrollListMember: jest.requireActual(
     '@aglyn/tenant-data-admin/server/list-members',
@@ -314,6 +330,7 @@ const seedContact = (email: string, consent: Record<string, unknown>) => {
 beforeEach(() => {
   store = {}
   contactSeq = 0
+  mockGroupHostIds = null
   platformSuppressed.clear()
   hostSuppressed.clear()
   decodedToken = { uid: 'editor-uid' }
@@ -637,5 +654,30 @@ describe('who may import', () => {
   it('refuses a run against an unknown import', async () => {
     const answer = await runImport({ importId: 'nope' })
     expect(answer.code).toBe(404)
+  })
+})
+
+/*
+ * AN IMPORT ON A SITE IN A DECLARED GROUP (AGL-3320). The pass-through carries
+ * each person's grants as their contact holds them, and an attested row is the
+ * importing site's alone — the rule the one-address add keeps, since both go
+ * through the same gate.
+ */
+describe('the sites an import’s basis covers on a grouped site', () => {
+  const sitesOf = (email: string) =>
+    Object.keys(memberFor(email)?.['marketingConsentByHost'] ?? {}).sort()
+
+  beforeEach(() => {
+    mockGroupHostIds = [HOST_ID, 'site-2']
+  })
+
+  it('keeps a grant given before the group to the site it was given to', async () => {
+    await importFile(`${OPTED_IN}`)
+    expect(sitesOf(OPTED_IN)).toEqual([HOST_ID])
+  })
+
+  it('records an attested address for the importing site alone', async () => {
+    await importFile('fresh@lumen.co', true)
+    expect(sitesOf('fresh@lumen.co')).toEqual([HOST_ID])
   })
 })

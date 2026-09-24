@@ -77,6 +77,7 @@
  */
 
 import {
+  consentGroupDisclosureKey,
   consentGroupScope,
   CRM_COLLECTIONS,
   type CrmDealStage,
@@ -85,6 +86,7 @@ import {
   type CrmPipeline,
   crmScopeTokens,
   DEFAULT_DEAL_STAGES,
+  grantedUnderConsentGroup,
   nameSearchFields,
   contactFacetPath,
   normalizeContactEmail,
@@ -312,6 +314,17 @@ export async function convertHostLead(
    *=========================================*/
   const leadTags = Array.isArray(lead.tags) ? lead.tags.map(String) : []
   const leadConsent = readMarketingBasis(lead, soloConsentGroup(hostId))
+  /*
+   * WHICH SITES THE CONTACT'S GRANT COVERS (AGL-3320): the lead's, never
+   * more. The capture door records a fresh grant, so it is handed the group's
+   * disclosure key only when the lead ALREADY holds a grant given under the
+   * group as it stands, at every site it names — a lead captured by one site
+   * before the group existed, or before a site joined, converts to a contact
+   * that site alone may mail, exactly as the lead was.
+   */
+  const leadDisclosure = grantedUnderConsentGroup(lead, group)
+    ? consentGroupDisclosureKey(group)
+    : null
   const captured = await captureHostContact({
     hostId,
     email,
@@ -319,6 +332,9 @@ export async function convertHostLead(
     source: 'manual',
     interaction: { summary: 'Converted from a lead', refId: leadId },
     ...(leadConsent.basis === 'granted' ? { marketingConsent: true } : {}),
+    ...(leadConsent.basis === 'granted' && leadDisclosure
+      ? { disclosedConsentGroup: leadDisclosure }
+      : {}),
     ...(leadTags.length ? { tags: leadTags } : {}),
     facet: {
       lifecycleStage: 'sales-qualified',

@@ -55,6 +55,11 @@ const contacts: Record<string, Record<string, any>> = {}
  * widening an org running one brand across several sites may choose.
  */
 let mockOrgDefaultScope: 'org' | 'host' | undefined
+/**
+ * The org's consent-group declaration, when a case declares one; `null` is
+ * the org that declared nothing, which is every other case in this file.
+ */
+let mockConsentGroups: Record<string, unknown> | null = null
 let added: Record<string, any>[] = []
 
 /**
@@ -163,12 +168,15 @@ jest.mock('./crm-records', () => ({
 }))
 
 jest.mock('./organizations', () => ({
-  // The real resolution, which for an org that declared nothing is the
-  // group of one — the shape every case in this file exercises.
+  // The real resolution: the group of one for an org that declared nothing,
+  // and the declared group when a case gives the org a declaration.
   consentGroupForSite: async (hostId: string) =>
     jest
       .requireActual('@aglyn/aglyn/app-utils/consent-groups')
-      .soloConsentGroup(hostId),
+      .consentGroupForHost(
+        mockConsentGroups ? { consentGroups: mockConsentGroups } : null,
+        hostId,
+      ),
   getOrgForHost: async () => ({
     orgId: 'org1',
     org: { plan: 'starter', defaultResourceScope: mockOrgDefaultScope },
@@ -728,5 +736,95 @@ describe('the CRM profile a door passes with a capture', () => {
       facet: { lifecycleStage: 'vip' as never },
     })
     expect(added[0].facets.h1.lifecycleStage).toBeUndefined()
+  })
+})
+
+/*==========================================
+ * A GRANT COVERS THE SITES THE PERSON WAS TOLD ABOUT (AGL-3320).
+ *
+ * A site in a declared group captures under the group — its visibility and
+ * its holder are the group's — but the opt-in reaches the other sites only
+ * when the capture surface sent back the key of the group's CURRENT
+ * disclosure. Everything else records the capturing site alone.
+ *=========================================*/
+describe('the sites a captured opt-in covers', () => {
+  const {
+    consentGroupDisclosureKey,
+    consentGroupForHost,
+  } = jest.requireActual('@aglyn/aglyn/app-utils/consent-groups')
+  const NORTHWIND = { nw: { name: 'Northwind', hostIds: ['h1', 'h2'] } }
+
+  beforeEach(() => {
+    for (const key of Object.keys(contacts)) delete contacts[key]
+    added = []
+    mockOrgDefaultScope = undefined
+    mockConsentGroups = NORTHWIND
+  })
+  afterAll(() => {
+    mockConsentGroups = null
+  })
+
+  const capture = (disclosedConsentGroup?: string | null) =>
+    upsertHostContact({
+      hostId: 'h1',
+      email: 'grouped@example.com',
+      source: 'form',
+      interaction: { refId: 'f1' },
+      marketingConsent: true,
+      ...(disclosedConsentGroup === undefined ? {} : { disclosedConsentGroup }),
+    })
+
+  it('records a grouped capture WITHOUT a key for the capturing site alone', async () => {
+    await capture()
+    const byHost = added[0].marketingConsentByHost
+    expect(Object.keys(byHost)).toEqual(['h1'])
+    expect(byHost.h1).toEqual({
+      marketingConsent: true,
+      marketingConsentAtMs: expect.any(Number),
+    })
+    // ⛔ …while the row is still the GROUP's to see, and filed under it.
+    expect(added[0].visibleTo).toEqual(['host:h1', 'host:h2'])
+    expect(Object.keys(added[0].facets)).toEqual(['nw'])
+  })
+
+  it('pools the grant across the group when the key is the current one', async () => {
+    const key = consentGroupDisclosureKey(consentGroupForHost({ consentGroups: NORTHWIND }, 'h1'))
+    await capture(key)
+    const byHost = added[0].marketingConsentByHost
+    expect(Object.keys(byHost).sort()).toEqual(['h1', 'h2'])
+    for (const hostId of ['h1', 'h2']) {
+      expect(byHost[hostId]).toMatchObject({
+        marketingConsent: true,
+        consentGroupId: 'nw',
+        consentGroupName: 'Northwind',
+      })
+    }
+  })
+
+  it('records the site alone for a key a rename or a new site made stale', async () => {
+    const before = consentGroupDisclosureKey(consentGroupForHost({ consentGroups: NORTHWIND }, 'h1'))
+    mockConsentGroups = { nw: { name: 'Northwind', hostIds: ['h1', 'h2', 'h3'] } }
+    await capture(before)
+    expect(Object.keys(added[0].marketingConsentByHost)).toEqual(['h1'])
+    // Visibility follows the group as it stands, key or no key.
+    expect(added[0].visibleTo).toEqual(['host:h1', 'host:h2', 'host:h3'])
+  })
+
+  it('narrows the grant on the MERGE branch too', async () => {
+    contacts['c1'] = {
+      email: 'grouped@example.com',
+      facets: { nw: { sources: { form: true }, interactions: [] } },
+    }
+    await capture('not-the-key')
+    expect(Object.keys(contacts['c1'].marketingConsentByHost)).toEqual(['h1'])
+  })
+
+  it('THE CONTROL: an org that declared nothing records the site, as it always has', async () => {
+    mockConsentGroups = null
+    await capture()
+    expect(added[0].marketingConsentByHost).toEqual({
+      h1: { marketingConsent: true, marketingConsentAtMs: expect.any(Number) },
+    })
+    expect(added[0].visibleTo).toEqual(['host:h1'])
   })
 })

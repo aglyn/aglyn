@@ -42,6 +42,12 @@ import {
   type PluginOrgErasureReport,
 } from '@aglyn/aglyn/plugin-manager/plugin-org-erasure'
 import { isBillingSubscription } from '@aglyn/aglyn/server'
+// The module path rather than the barrel: this module's specs substitute the
+// barrel, and which sites a consent group still needs is the rule itself.
+import {
+  type ConsentGroupSiteHold,
+  consentGroupSiteHold,
+} from '@aglyn/aglyn/app-utils/consent-groups'
 import { listPluginOrgCollections } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { readOrgBilling } from './org-billing'
 import {
@@ -234,6 +240,37 @@ export interface EraseHostOptions {
    * not fail or stall because a vendor is unreachable.
    */
   tearDownSendingDomain?: TeardownSendingDomainDriver | null
+  /**
+   * Erase the site even while its consent group still needs it (AGL-3320).
+   *
+   * Only the organization's own erasure passes this: it takes every site and
+   * the declaration with them, so no sibling is left to read the refusals.
+   * Every other caller is refused with {@link SiteInConsentGroupError} for a
+   * site that is in a declared group or in a change still running — its
+   * opt-outs are read by its siblings, and erasing them would start mailing
+   * people who said no.
+   */
+  allowInConsentGroup?: boolean
+}
+
+/**
+ * {@link eraseHost} refused a site its consent group still needs (AGL-3320).
+ * Nothing was erased; the site leaves its group, and is deleted after.
+ */
+export class SiteInConsentGroupError extends Error {
+  readonly hostId: string
+  readonly hold: ConsentGroupSiteHold
+
+  constructor(hostId: string, hold: ConsentGroupSiteHold) {
+    super(
+      hold.reason === 'grouped'
+        ? `Site ${hostId} is in the consent group "${hold.name}"; remove it from the group before deleting it`
+        : `Site ${hostId} is in a consent group change that has not finished`,
+    )
+    this.name = 'SiteInConsentGroupError'
+    this.hostId = hostId
+    this.hold = hold
+  }
 }
 
 export interface EraseHostResult {
@@ -249,6 +286,24 @@ export async function eraseHost(
   const hostRef = firestore.collection('hosts').doc(hostId)
   const hostSnapshot = await hostRef.get()
   const orgId = hostSnapshot.get('orgId') as string | undefined
+
+  /*==========================================
+   * A SITE ITS CONSENT GROUP STILL NEEDS IS NOT ERASED (AGL-3320).
+   *
+   * Asked before anything is destroyed. A grouped site's opt-outs are read by
+   * every site in its group, so erasing them would let its siblings mail the
+   * people who unsubscribed here, and would leave the declaration naming a
+   * site that no longer exists. The site leaves the group first — the change
+   * that removes it carries its refusals to the sites that stay.
+   *=========================================*/
+  if (orgId && options.allowInConsentGroup !== true) {
+    const orgSnapshot = await firestore.collection('orgs').doc(orgId).get()
+    const hold = consentGroupSiteHold(
+      (orgSnapshot.data() ?? null) as Record<string, unknown> | null,
+      hostId,
+    )
+    if (hold) throw new SiteInConsentGroupError(hostId, hold)
+  }
 
   /*==========================================
    * THE SENDING DOMAIN, READ FIRST AND RELEASED LAST.
@@ -1380,7 +1435,12 @@ export async function eraseOrg(
     progress.sendingDomains = { released: 0, deferred: 0, protected: 0 }
     for (const host of hosts.docs) {
       if (!dryRun) {
-        const erased = await eraseHost(host.id, { tearDownSendingDomain })
+        // The whole organization goes, declaration and all, so no site is
+        // left to read the refusals a grouped site holds.
+        const erased = await eraseHost(host.id, {
+          tearDownSendingDomain,
+          allowInConsentGroup: true,
+        })
         if (erased.sendingDomain === 'released') {
           progress.sendingDomains.released += 1
         }

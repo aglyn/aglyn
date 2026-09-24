@@ -282,11 +282,12 @@ const RESOURCES: readonly ResourceSpec[] = [
     schemaName: 'Contact',
     required: ['id', 'object', 'email'],
     writable: [
-      'email', 'name', 'tags', 'notes', 'marketingConsent', 'consentSiteId', 'custom',
+      'email', 'name', 'tags', 'notes', 'marketingConsent', 'consentSiteId', 'consentGroupId', 'custom',
       'phone', 'jobTitle', 'companyId', 'address', 'ownerUid', 'lifecycleStage', 'mediaIds',
     ],
     writeOnly: {
       consentSiteId: str('The site this write is made on behalf of: where the person opted in, and whose profile the profile fields land on.'),
+      consentGroupId: str('With `marketingConsent: true`: the consent group the person was shown when they opted in. The opt-in then covers every site of that group; without it, or when the site is no longer in that group, it covers `consentSiteId` alone.'),
       custom: objectOf('Contact custom fields, keyed by field key.'),
       mediaIds: strList('Media library files attached by the named site, by id, at most 20. An empty array clears them.'),
     },

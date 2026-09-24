@@ -22,6 +22,8 @@ import {
   planContactMerge,
 } from './contact-merge'
 import { CONTACT_INTERACTIONS_CAP } from './contacts'
+import { soloConsentGroup } from './consent-groups'
+import { readMarketingBasis } from './marketing-consent'
 
 /**
  * The merge rule (AGL-2625): survivor wins per field, empty fields fill,
@@ -189,6 +191,65 @@ describe('planContactMerge — consent', () => {
         'marketingConsent'
       ],
     ).toBeUndefined()
+  })
+
+  /*
+   * PER SITE TOO (AGL-3320). The merged record's refusal for site `a` used to
+   * be spread UNDER the survivor's grant for `a` and vanish, so merging two
+   * records of somebody who said no made them mailable again.
+   */
+  it('keeps a per-site refusal over the survivor’s grant for the same site', () => {
+    const grant = {
+      marketingConsent: true,
+      marketingConsentAtMs: 10,
+      consentGroupId: 'nw',
+      consentGroupName: 'Northwind',
+      marketingConsentSource: { kind: 'console', by: 'u-1', actor: 'person' },
+    }
+    const refusal = { marketingConsent: false, marketingConsentAtMs: 30 }
+    const plan = planContactMerge(
+      { ...survivor, marketingConsentByHost: { a: grant } },
+      { ...merged, marketingConsentByHost: { a: refusal } },
+    )
+    const entry = (plan.survivor['marketingConsentByHost'] as any).a
+    expect(entry).toEqual({
+      marketingConsent: false,
+      marketingConsentAtMs: 30,
+      // Named empty, so the merging write cannot leave the grant's
+      // disclosure and provenance standing on a refusal.
+      consentGroupId: null,
+      consentGroupName: null,
+      marketingConsentSource: null,
+      supersededEntry: grant,
+    })
+    // Read as the send reads it: declined, from the site and its group.
+    expect(
+      readMarketingBasis(
+        { marketingConsentByHost: { a: { ...grant, ...entry } } },
+        soloConsentGroup('a'),
+      ).basis,
+    ).toBe('declined')
+  })
+
+  it('keeps the survivor’s own refusal over a grant the merged record holds', () => {
+    const refusal = { marketingConsent: false, marketingConsentAtMs: 30 }
+    const plan = planContactMerge(
+      { ...survivor, marketingConsentByHost: { a: refusal } },
+      { ...merged, marketingConsentByHost: { a: { marketingConsent: true, marketingConsentAtMs: 99 } } },
+    )
+    expect((plan.survivor['marketingConsentByHost'] as any).a).toEqual(refusal)
+  })
+
+  it('THE CONTROL: a refusal for a site the survivor never held arrives as it is', () => {
+    const refusal = { marketingConsent: false, marketingConsentAtMs: 30 }
+    const plan = planContactMerge(survivor, {
+      ...merged,
+      marketingConsentByHost: { b: refusal },
+    })
+    expect(plan.survivor['marketingConsentByHost']).toEqual({
+      a: { marketingConsent: true, marketingConsentAtMs: 10 },
+      b: refusal,
+    })
   })
 })
 

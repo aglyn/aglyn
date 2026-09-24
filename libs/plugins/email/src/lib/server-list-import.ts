@@ -569,6 +569,11 @@ export const emailListImportRunHandler: PluginApiHandler = async (req, res) => {
         // rows away when somebody stops matching, and a file a merchant
         // uploaded is not a rule match that can lapse.
         via: 'manual',
+        // A pass-through carries the person's grants as their record holds
+        // them (AGL-3320); an attestation carries none and is this site's.
+        ...(decision.basis === 'contact-opt-in'
+          ? { grantEntries: resolution.grants.get(verdict.email) ?? {} }
+          : {}),
         consent: {
           ...decision,
           /*

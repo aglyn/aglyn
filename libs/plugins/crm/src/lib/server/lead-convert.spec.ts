@@ -287,12 +287,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   },
   getOrgForHost: async (hostId: string) =>
     hostId === HOST ? { orgId: ORG, org: mockOrg } : null,
-  // The real resolution's narrow answer: an org that declared no pooling
-  // resolves every site to a group of one.
-  consentGroupForSite: async (hostId: string) =>
+  // The real resolution over the org the door hands over: every site a
+  // group of one for an org that declared no pooling, which is every case
+  // but the consent-group ones below.
+  consentGroupForSite: async (hostId: string, org?: Record<string, unknown> | null) =>
     jest
       .requireActual('../../../../../aglyn/src/lib/app-utils/consent-groups')
-      .soloConsentGroup(hostId),
+      .consentGroupForHost(org ?? mockOrg, hostId),
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionRef(`orgs/${ORG}/${name}`),
   upsertHostContact: (...args: unknown[]) => (mockUpsertHostContact as any)(...args),
@@ -983,5 +984,71 @@ describe('stageForNewDeal', () => {
 
   it('answers null for a pipeline with no stages', () => {
     expect(stageForNewDeal({ stages: [] }, undefined)).toBeNull()
+  })
+})
+
+/**
+ * THE CONTACT'S GRANT COVERS THE LEAD'S SITES, NEVER MORE (AGL-3320).
+ *
+ * The conversion re-records the lead's opt-in through the capture door, which
+ * pools it over the site's consent group only when handed the group's current
+ * disclosure key. The key is handed over only when the lead already holds a
+ * grant given under that disclosure at every site the group names — so a lead
+ * one site captured before the group existed converts to a contact that site
+ * alone may mail.
+ */
+describe('the sites a converted lead’s opt-in covers', () => {
+  const consent = jest.requireActual('../../../../../aglyn/src/lib/app-utils/marketing-consent')
+  const groups = jest.requireActual('../../../../../aglyn/src/lib/app-utils/consent-groups')
+  const NORTHWIND = { nw: { name: 'Northwind', hostIds: [HOST, 'site-2'] } }
+  const grouped = () => groups.consentGroupForHost({ consentGroups: NORTHWIND }, HOST)
+  const withGrant = (fields: Record<string, unknown>) =>
+    docs.set(leadPath('lead-1'), { ...docs.get(leadPath('lead-1')), ...fields })
+  const captured = () => mockUpsertHostContact.mock.calls[0]?.[0] as Record<string, unknown>
+
+  beforeEach(() => {
+    mockOrg = { plan: 'starter', consentGroups: NORTHWIND }
+  })
+
+  it('keeps a solo lead’s grant solo', async () => {
+    withGrant(consent.marketingConsentFieldsForGroup(groups.soloConsentGroup(HOST), 1_000))
+    expect((await call({ hostId: HOST, leadId: 'lead-1' })).status).toBe(200)
+    expect(captured()).toMatchObject({ marketingConsent: true })
+    expect(captured()).not.toHaveProperty('disclosedConsentGroup')
+  })
+
+  it('pools a lead whose grant was given under the group as it stands', async () => {
+    withGrant(consent.marketingConsentFieldsForGroup(grouped(), 1_000))
+    expect((await call({ hostId: HOST, leadId: 'lead-1' })).status).toBe(200)
+    expect(captured()).toMatchObject({
+      marketingConsent: true,
+      disclosedConsentGroup: groups.consentGroupDisclosureKey(grouped()),
+    })
+  })
+
+  it('keeps it solo when the group has since grown or been renamed', async () => {
+    withGrant(consent.marketingConsentFieldsForGroup(grouped(), 1_000))
+    mockOrg = {
+      plan: 'starter',
+      consentGroups: { nw: { name: 'Northwind', hostIds: [HOST, 'site-2', 'site-3'] } },
+    }
+    await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(captured()).not.toHaveProperty('disclosedConsentGroup')
+
+    mockUpsertHostContact.mockClear()
+    mockOrg = { plan: 'starter', consentGroups: { nw: { ...NORTHWIND.nw, name: 'Northwind Brands' } } }
+    docs.set(leadPath('lead-1'), {
+      ...docs.get(leadPath('lead-1')),
+      convertedContactId: undefined,
+      status: 'new',
+    })
+    await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(captured()).not.toHaveProperty('disclosedConsentGroup')
+  })
+
+  it('THE CONTROL: a lead with no grant hands over no opt-in and no key', async () => {
+    await call({ hostId: HOST, leadId: 'lead-1' })
+    expect(captured()).not.toHaveProperty('marketingConsent')
+    expect(captured()).not.toHaveProperty('disclosedConsentGroup')
   })
 })

@@ -55,6 +55,15 @@ jest.mock('firebase/firestore', () => ({
   where: (...args: unknown[]) => ({ type: 'where', args }),
 }))
 
+/** The viewer's reach, as `useScopeTokens` answers it; varied per case. */
+let mockReach: { tokens: string[]; orgWide: boolean; loaded: boolean } = {
+  tokens: ['org'],
+  orgWide: true,
+  loaded: true,
+}
+/** Every org the hook asked for a reach about — `undefined` is "none". */
+const mockReachAsked: Array<string | undefined> = []
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The org root from whichever identifier was handed over — a site's org
   // is `org-1`; an explicit org is itself; neither is no org at all.
@@ -65,6 +74,10 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       ready: true,
       scope: orgId ? (['orgs', orgId] as const) : null,
     }
+  },
+  useScopeTokens: (orgId?: string) => {
+    mockReachAsked.push(orgId)
+    return mockReach
   },
 }))
 
@@ -89,6 +102,8 @@ function orgMount(hosts = HOSTS, hostsReady = true) {
 
 beforeEach(() => {
   window.sessionStorage.clear()
+  mockReach = { tokens: ['org'], orgWide: true, loaded: true }
+  mockReachAsked.length = 0
 })
 
 describe('useCrmScope under a site', () => {
@@ -183,5 +198,62 @@ describe('useCrmScope at the organization level', () => {
     const { result } = renderHook(() => useCrmScope({ hostId: null, org: ORG }))
     expect(result.current.scope).toBeNull()
     expect(result.current.createHostId).toBeNull()
+  })
+})
+
+/**
+ * A SITE IN A DECLARED GROUP, READ BY SOMEBODY WHO REACHES ONLY PART OF IT
+ * (AGL-3320, I10).
+ *
+ * The group's read tokens name every site in it, and the rules admit a row
+ * by `visibleTo.hasAny(memberTokens)`. A collaborator invited to Site A holds
+ * `[org, host:A]`, so a list query naming `host:B` asks for rows they cannot
+ * be proved to read — and Firestore refuses the WHOLE query, so the CRM page
+ * shows an error instead of their records. Narrowed to what they hold, the
+ * same list is provable row by row.
+ */
+describe('useCrmScope on a site that shares a consent group', () => {
+  const GROUPED = {
+    $id: 'org-1',
+    consentGroups: { nw: { name: 'Northwind', hostIds: ['host-a', 'host-b'] } },
+  }
+
+  it('narrows a site-scoped member to the sites they hold', () => {
+    mockReach = { tokens: ['org', 'host:host-a'], orgWide: false, loaded: true }
+    const { result } = renderHook(() => useCrmScope({ hostId: 'host-a', org: GROUPED }))
+    expect(result.current.visibleTo).toEqual(['org', 'host:host-a'])
+    // The group is still the group: consent and creates are not narrowed.
+    expect(result.current.consentGroup?.hostIds).toEqual(['host-a', 'host-b'])
+    expect(result.current.createTokens).toEqual(
+      crmScopeTokens(GROUPED, consentGroupForHost(GROUPED, 'host-a')),
+    )
+    expect(mockReachAsked).toContain('org-1')
+  })
+
+  it('leaves an org-wide member the whole group', () => {
+    const { result } = renderHook(() => useCrmScope({ hostId: 'host-a', org: GROUPED }))
+    expect(result.current.visibleTo).toEqual(
+      crmReadTokens(consentGroupForHost(GROUPED, 'host-a')),
+    )
+    expect(result.current.visibleTo).toEqual(['org', 'host:host-a', 'host:host-b'])
+  })
+
+  it('lists with the site’s own tokens until the member’s reach has loaded', () => {
+    mockReach = { tokens: ['org'], orgWide: true, loaded: false }
+    const { result } = renderHook(() => useCrmScope({ hostId: 'host-a', org: GROUPED }))
+    // Never the group's — the refused query — and never empty, which
+    // Firestore will not build: what everybody on this site holds.
+    expect(result.current.visibleTo).toEqual(['org', 'host:host-a'])
+    expect(crmScopeListable(result.current.visibleTo)).toBe(true)
+  })
+
+  it('THE CONTROL: a site alone reads as it always has, and asks nobody', () => {
+    mockReach = { tokens: ['org'], orgWide: false, loaded: false }
+    const { result } = renderHook(() => useCrmScope({ hostId: 'host-a', org: ORG }))
+    expect(result.current.visibleTo).toEqual(
+      crmReadTokens(consentGroupForHost(ORG, 'host-a')),
+    )
+    // No member read: every call asked about no org.
+    expect(mockReachAsked.every((orgId) => orgId === undefined)).toBe(true)
   })
 })

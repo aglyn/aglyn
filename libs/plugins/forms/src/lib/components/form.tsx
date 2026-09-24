@@ -31,6 +31,7 @@ import Checkbox from '@mui/material/Checkbox'
 import FormControl from '@mui/material/FormControl'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import FormGroup from '@mui/material/FormGroup'
+import FormHelperText from '@mui/material/FormHelperText'
 import FormLabel from '@mui/material/FormLabel'
 import Link from '@mui/material/Link'
 import MenuItem from '@mui/material/MenuItem'
@@ -40,9 +41,11 @@ import Rating from '@mui/material/Rating'
 import Stack from '@mui/material/Stack'
 import TextField from '@mui/material/TextField'
 import {
+  createContext,
   type FormEvent,
   forwardRef,
   useCallback,
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -129,6 +132,61 @@ export interface FormProps {
  * `__` prefix keeps it out of the submitted fields.
  */
 export const FIELD_MAP_INPUT_PREFIX = '__map__'
+
+/**
+ * The hidden input the field carrying the consent-group sentence posts its
+ * key under (AGL-3320). `__`-prefixed like the map inputs, so it never
+ * reaches the submitted fields; the Form lifts it into the request body as
+ * `__consentGroup`, where the submit route reads it.
+ *
+ * Posted by the FIELD, not the Form: the key is proof the sentence was on
+ * screen, and the field that rendered it is the only thing that knows it was.
+ * A form whose consent field never mounted posts no key, and its opt-in is
+ * recorded for the one site the visitor is on.
+ */
+export const CONSENT_GROUP_INPUT = '__consentGroup'
+
+/** The site's consent-group sentence, as `/api/consent/disclosure` answers it. */
+export interface FormConsentDisclosure {
+  /**
+   * The field the form declares as its opt-in, or `null` for a form that
+   * declares none — the sentence then sits under whichever field the submit
+   * route would read an opt-in from by its name.
+   */
+  fieldName: string | null
+  /** What the person is told they are agreeing to hear from. */
+  text: string
+  /** The key of exactly this sentence, posted back with the submission. */
+  key: string
+}
+
+/**
+ * The disclosure a Form fetched, handed to the fields inside it. A context
+ * because the answer flows DOWN, from the one request the Form makes to the
+ * one field it describes; the key flows back up through the DOM, like the
+ * dataset mapping does.
+ */
+const FormConsentDisclosureContext =
+  createContext<FormConsentDisclosure | null>(null)
+
+/**
+ * The route's answer, or `null` when it has no sentence for this site — a
+ * site that sends on its own, or an answer that is not the shape it should
+ * be. `null` renders nothing and posts no key.
+ */
+export function readFormConsentDisclosure(
+  body: unknown,
+): FormConsentDisclosure | null {
+  const value = (body ?? {}) as Record<string, unknown>
+  const text = typeof value['text'] === 'string' ? value['text'].trim() : ''
+  const key = typeof value['key'] === 'string' ? value['key'].trim() : ''
+  if (!text || !key) return null
+  const fieldName =
+    typeof value['fieldName'] === 'string' && value['fieldName'].trim()
+      ? value['fieldName'].trim()
+      : null
+  return { fieldName, text, key }
+}
 
 /**
  * Redirect targets are restricted to same-origin paths (`/thanks`) and
@@ -294,6 +352,35 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
   const [alerts, setAlerts] = useState<
     Array<{ message: string; severity?: string }>
   >([])
+  /*
+   * THE CONSENT-GROUP SENTENCE, when this site sends as part of a group
+   * (AGL-3320).
+   *
+   * Asked for on the rendered site only — the canvas has no site to ask
+   * about — and handed to the fields, one of which renders it under the
+   * opt-in and posts its key. Until the answer arrives, and whenever it has
+   * none, nothing renders and nothing is posted: the opt-in is then recorded
+   * for this site alone, which is the safe way to be early or wrong.
+   */
+  const [disclosure, setDisclosure] = useState<FormConsentDisclosure | null>(
+    null,
+  )
+  useEffect(() => {
+    if (!hostId) return
+    let current = true
+    const query = new URLSearchParams({ hostId, ...(formId ? { formId } : {}) })
+    siteFetch(`/api/consent/disclosure?${query.toString()}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (current) setDisclosure(readFormConsentDisclosure(body))
+      })
+      .catch(() => {
+        if (current) setDisclosure(null)
+      })
+    return () => {
+      current = false
+    }
+  }, [hostId, formId, siteFetch])
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -302,10 +389,16 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       const data = new FormData(event.currentTarget)
       const fields: Record<string, string> = {}
       let website = ''
+      let consentGroup = ''
       for (const [key, value] of data.entries()) {
         if (typeof value !== 'string') continue
         if (key === 'website') {
           website = value
+          continue
+        }
+        // The key the consent field posted beside the sentence it rendered.
+        if (key === CONSENT_GROUP_INPUT) {
+          consentGroup = value
           continue
         }
         // `__`-prefixed inputs are internal controls — the rating field's
@@ -340,6 +433,9 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
             path: window.location.pathname,
             fields,
             website,
+            // Only when the consent field rendered the site's consent-group
+            // sentence; the route pools the opt-in on nothing else.
+            ...(consentGroup ? { [CONSENT_GROUP_INPUT]: consentGroup } : {}),
             // The campaign this visitor came from, when they came from one.
             // Absent entirely for direct traffic — never a placeholder, so
             // the server can tell "arrived from nowhere" from "this door does
@@ -481,7 +577,9 @@ const Form = forwardRef<HTMLFormElement, FormProps>((props, ref) => {
       {revealSelector ? (
         <style>{`${revealSelector}{display:none !important}`}</style>
       ) : null}
-      {children}
+      <FormConsentDisclosureContext.Provider value={disclosure}>
+        {children}
+      </FormConsentDisclosureContext.Provider>
       {/* Honeypot: humans never see or fill this. */}
       <input
         type="text"
@@ -645,6 +743,31 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
       readOnly
     />
   ) : null
+  /*
+   * THE CONSENT-GROUP SENTENCE, under the field that records the opt-in
+   * (AGL-3320): the field the form declares, or — where it declares none —
+   * one the submit route reads an opt-in from by its name. The key rides
+   * beside it, so a submission carries the key only while the sentence is
+   * on screen.
+   */
+  const disclosure = useContext(FormConsentDisclosureContext)
+  const describesOptIn = disclosure
+    ? disclosure.fieldName
+      ? disclosure.fieldName === name
+      : Aglyn.isMarketingConsentFieldName(name)
+    : false
+  const consentNote =
+    disclosure && describesOptIn ? (
+      <>
+        <FormHelperText>{disclosure.text}</FormHelperText>
+        <input
+          type="hidden"
+          name={CONSENT_GROUP_INPUT}
+          value={disclosure.key}
+          readOnly
+        />
+      </>
+    ) : null
 
   if (fieldType === 'select') {
     return (
@@ -686,6 +809,7 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
           ))}
         </TextField>
         {mapInput}
+        {consentNote}
       </>
     )
   }
@@ -705,6 +829,7 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
           ))}
         </RadioGroup>
         {mapInput}
+        {consentNote}
       </FormControl>
     )
   }
@@ -735,6 +860,7 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
           ))}
         </FormGroup>
         {mapInput}
+        {consentNote}
       </FormControl>
     )
   }
@@ -752,6 +878,7 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
         />
         <input type="hidden" name={name} value={rating ?? ''} />
         {mapInput}
+        {consentNote}
       </FormControl>
     )
   }
@@ -773,6 +900,7 @@ const FormField = forwardRef<HTMLDivElement, FormFieldProps>((props, ref) => {
         {...rest}
       />
       {mapInput}
+      {consentNote}
     </>
   )
 })

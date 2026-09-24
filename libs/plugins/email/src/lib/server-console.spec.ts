@@ -894,3 +894,64 @@ describe('finding people by rule meets the consent gate', () => {
     expect(out.code).toBe(401)
   })
 })
+
+/*
+ * WHICH SITES THE MEMBERSHIP'S BASIS COVERS, for a site in a declared group
+ * (AGL-3320).
+ *
+ * The add is made in the group's name, but a pass-through carries the
+ * person's own grants as their contact holds them: an opt-in given to this
+ * site before the group existed stays this site's, and one given under the
+ * group's sentence reaches the sites that sentence named. An attestation is
+ * this site's alone.
+ */
+describe('the sites a pass-through covers on a grouped site', () => {
+  const SIBLING = 'site-sibling'
+  const sites = (email: string) =>
+    Object.keys(memberFor(email)?.['marketingConsentByHost'] ?? {}).sort()
+  /** The person's ONE contact, carrying exactly these consent facts. */
+  const holdsOnly = (email: string, consent: Record<string, unknown>) => {
+    for (const path of Object.keys(store)) {
+      if (path.startsWith(`orgs/${ORG_ID}/contacts/`) && store[path]?.['email'] === email) {
+        delete store[path]
+      }
+    }
+    seedContact(email, consent)
+  }
+
+  beforeEach(() => {
+    mockOrgDeclaration = {
+      consentGroups: { acme: { name: 'Acme', hostIds: [HOST_ID, SIBLING] } },
+    }
+  })
+
+  it('keeps a grant given before the group to this site alone', async () => {
+    holdsOnly(OPTED_IN, grantedHere(OPTED_IN_AT))
+    const out = await add({ email: OPTED_IN })
+    expect(out.body.added).toBe(1)
+    expect(sites(OPTED_IN)).toEqual([HOST_ID])
+    expect(entryOf(memberFor(OPTED_IN))).toMatchObject({
+      marketingConsentAtMs: OPTED_IN_AT,
+      marketingConsentBasis: 'contact-opt-in',
+    })
+  })
+
+  it('carries a grant given under the group to every site it named', async () => {
+    const pooled = { consentGroupId: 'acme', consentGroupName: 'Acme' }
+    holdsOnly(OPTED_IN, {
+      marketingConsentByHost: {
+        [HOST_ID]: { marketingConsent: true, marketingConsentAtMs: OPTED_IN_AT, ...pooled },
+        [SIBLING]: { marketingConsent: true, marketingConsentAtMs: OPTED_IN_AT, ...pooled },
+      },
+    })
+    await add({ email: OPTED_IN })
+    expect(sites(OPTED_IN)).toEqual([HOST_ID, SIBLING].sort())
+    expect(memberFor(OPTED_IN)?.['marketingConsentByHost'][SIBLING]).toMatchObject(pooled)
+  })
+
+  it('records an attestation for this site alone', async () => {
+    const out = await add({ email: UNKNOWN, attestConsent: true })
+    expect(out.body.added).toBe(1)
+    expect(sites(UNKNOWN)).toEqual([HOST_ID])
+  })
+})

@@ -39,6 +39,11 @@
 
 const isEmailSuppressed = jest.fn()
 const sendEmail = jest.fn()
+/**
+ * The sites of the declared consent group the assigning site is in, when a
+ * case declares one; `null` is the site alone, as every other case is.
+ */
+let mockGroupHostIds: string[] | null = null
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -200,13 +205,23 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
    * file mocks the whole module — but faked to the NARROW answer, which is
    * the direction a wrong group may fail in.
    */
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
-  }),
+  consentGroupForSite: async (hostId: string) =>
+    mockGroupHostIds
+      ? {
+          hostId,
+          groupId: 'acme',
+          name: 'Acme',
+          hostIds: mockGroupHostIds,
+          declared: true,
+          awaitsConfirmation: false,
+        }
+      : {
+          hostId,
+          groupId: hostId,
+          name: null,
+          hostIds: [hostId],
+          declared: false,
+        },
   __esModule: true,
   emailSuppressionKey: (email: string) =>
     email.includes('@') ? `key:${email.trim().toLowerCase()}` : null,
@@ -278,6 +293,7 @@ const seedContact = (consent: Record<string, unknown>) => {
 beforeEach(() => {
   store = {}
   autoId = 0
+  mockGroupHostIds = null
   decodedToken = { uid: 'editor-uid', email: 'owner@lumen.co' }
   membership = { orgId: ORG_ID, member: { role: 'editor', allHosts: true } }
   isEmailSuppressed.mockReset().mockResolvedValue(false)
@@ -609,5 +625,45 @@ describe('the picker', () => {
       submissionId: 'sub-1',
     })
     expect(out.body.lists.map((list: any) => list.id)).toContain('list-2')
+  })
+})
+
+/*
+ * A SITE IN A DECLARED GROUP (AGL-3320). The enrollment is made in the
+ * group's name, and the pass-through carries the sender's grants as their
+ * contact holds them — never re-recorded over the group as it stands today.
+ */
+describe('a stored opt-in on a grouped site', () => {
+  const OPTED_IN_AT = Date.UTC(2025, 2, 14)
+  const sites = () => Object.keys(theMember()?.marketingConsentByHost ?? {}).sort()
+
+  beforeEach(() => {
+    mockGroupHostIds = [HOST_ID, 'site-2']
+  })
+
+  it('keeps a grant given before the group to the one site it was given to', async () => {
+    seedContact(grantedHere(OPTED_IN_AT))
+    const out = await assign()
+    expect(out.code).toBe(200)
+    expect(out.body.basis).toBe('contact-opt-in')
+    expect(sites()).toEqual([HOST_ID])
+    expect(memberEntry().marketingConsentAtMs).toBe(OPTED_IN_AT)
+  })
+
+  it('carries a grant given under the group to the sites it named', async () => {
+    const pooled = {
+      marketingConsent: true,
+      marketingConsentAtMs: OPTED_IN_AT,
+      consentGroupId: 'acme',
+      consentGroupName: 'Acme',
+    }
+    seedContact({ marketingConsentByHost: { [HOST_ID]: pooled, 'site-2': pooled } })
+    await assign()
+    expect(sites()).toEqual([HOST_ID, 'site-2'])
+  })
+
+  it('records an assertion for the assigning site alone', async () => {
+    await assign({ attestConsent: true })
+    expect(sites()).toEqual([HOST_ID])
   })
 })

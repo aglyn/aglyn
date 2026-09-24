@@ -23,8 +23,9 @@ import {
   crmReadTokens,
   crmScopeTokens,
   type ScopeToken,
+  soloConsentGroup,
 } from '@aglyn/aglyn'
-import { useOrgDataScope } from '@aglyn/tenant-feature-instance'
+import { useOrgDataScope, useScopeTokens } from '@aglyn/tenant-feature-instance'
 import { type QueryConstraint, where } from 'firebase/firestore'
 import { useMemo } from 'react'
 import { useCrmOrgMount } from './use-crm-org-mount'
@@ -69,6 +70,16 @@ export interface CrmScope {
    * it to {@link crmVisibleToClause}, which spells both cases. Stable across
    * renders for the same org and site, so it can sit in a query's
    * dependency list.
+   *
+   * On a site in a declared consent group, a member who reaches only SOME of
+   * its sites lists with the group's tokens narrowed to their own (AGL-3320):
+   * the rules admit a row by `visibleTo.hasAny(memberTokens)`, so a query
+   * naming a sibling the member cannot reach is one they cannot prove for a
+   * row stamped with that sibling alone, and Firestore refuses the whole
+   * list. Until the member's reach has loaded it is the SITE's own tokens,
+   * which everybody who can open this site's CRM holds — never the group's,
+   * which would be exactly that refused query, and never empty, which
+   * Firestore refuses to build at all.
    */
   visibleTo: readonly ScopeToken[] | null
   /**
@@ -140,10 +151,31 @@ export function useCrmScope(props: {
     () => (hostId ? consentGroupForHost(org, hostId) : null),
     [org, hostId],
   )
-  const visibleTo = useMemo(
-    () => (consentGroup ? crmReadTokens(consentGroup) : null),
-    [consentGroup],
-  )
+  /*
+   * WHO IS READING, for a site that shares a consent group (AGL-3320).
+   *
+   * A site alone reads `['org', 'host:{id}']`, and every member who can open
+   * that site's CRM holds both — so the member's own tokens could only ever
+   * return the same list, and the read is skipped: `useScopeTokens` opens
+   * nothing for an undefined org. A DECLARED group's tokens name its other
+   * sites too, and a collaborator invited to one of them does not hold the
+   * rest.
+   */
+  const readsSiblings = consentGroup?.declared === true
+  const reach = useScopeTokens(readsSiblings && orgId ? orgId : undefined)
+  const visibleTo = useMemo(() => {
+    if (!consentGroup) return null
+    const tokens = crmReadTokens(consentGroup)
+    if (!readsSiblings) return tokens
+    // The site's own, until the reader's reach answers: provable for anybody
+    // on this site, and an org-wide reader's list widens when it does.
+    if (!orgId || !reach.loaded) {
+      return crmReadTokens(soloConsentGroup(consentGroup.hostId))
+    }
+    if (reach.orgWide) return tokens
+    const held = new Set<string>(reach.tokens)
+    return tokens.filter((token) => held.has(token))
+  }, [consentGroup, readsSiblings, orgId, reach.loaded, reach.orgWide, reach.tokens])
   const createHostId = hostId ?? mount?.createHostId ?? null
   const createGroup = useMemo(
     () => (createHostId ? consentGroupForHost(org, createHostId) : null),
