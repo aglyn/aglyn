@@ -289,6 +289,12 @@ on:
           # scheduled tick. It can SEND: a plugin's job may send what its
           # workspaces scheduled.
           - /api/admin/plugin-crons
+          # Every consent group change still in flight (AGL-3320), the same as
+          # the fifteen-minute `consoleFastCrons` tick. A GET reports which
+          # changes are running; the POST works them. Safe to run by hand at any
+          # time — each change is leased, so a manual run beside a scheduled one
+          # never does a unit twice, and every unit is idempotent.
+          - /api/admin/consent-group-changes
       force:
         # Only /api/admin/reverify-plugin-versions reads this (AGL-1086). A
         # stored verdict is skipped while it is current, which is what makes
