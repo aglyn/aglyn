@@ -111,6 +111,15 @@ describe('StaffEmailSuppressionsCard (AGL-3321)', () => {
     await screen.findByText('No suppressions match these filters')
   })
 
+  it('sends the search alone, never beside an equality filter', async () => {
+    render(<StaffEmailSuppressionsCard />)
+    await screen.findByText('jane@example.com')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'jane' } })
+    await waitFor(() => expect(urls().some((url) => /[?&]search=jane(&|$)/.test(url))).toBe(true))
+    const searched = urls().filter((url) => /[?&]search=/.test(url))
+    for (const url of searched) expect(url).not.toMatch(/filters=/)
+  })
+
   it('keeps the inline Why box on a release', async () => {
     render(<StaffEmailSuppressionsCard />)
     await screen.findByText('jane@example.com')

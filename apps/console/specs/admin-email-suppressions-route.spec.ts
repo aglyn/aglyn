@@ -196,12 +196,11 @@ describe('GET /api/admin/emails/suppressions', () => {
     expect(mockListed[0].startAfter).toBe('1699999999.1')
   })
 
-  it('serves the filters and the search on the query, beneath the cursor (AGL-3321)', async () => {
+  it('serves the filters on the query, beneath the cursor (AGL-3321)', async () => {
     const response = await GET(
       request('GET', {
         query: {
           cursor: '1699999999.1',
-          search: 'Person1',
           filters: JSON.stringify([
             { field: 'reason', op: 'equals', value: 'bounce' },
             { field: 'status', op: 'equals', value: 'false' },
@@ -214,8 +213,26 @@ describe('GET /api/admin/emails/suppressions', () => {
     expect(mockWheres).toEqual([
       ['released', '==', false],
       ['reason', '==', 'bounce'],
-      ['emailTokens', 'array-contains', 'person1'],
     ])
+  })
+
+  it('serves the search on its own', async () => {
+    const response = await GET(request('GET', { query: { search: 'Person1' } }))
+    expect(response.status).toBe(200)
+    expect(mockWheres).toEqual([['emailTokens', 'array-contains', 'person1']])
+  })
+
+  it('refuses the search beside an equality filter rather than dropping either', async () => {
+    const response = await GET(
+      request('GET', {
+        query: {
+          search: 'person1',
+          filters: JSON.stringify([{ field: 'status', op: 'equals', value: 'false' }]),
+        },
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect(mockListed).toHaveLength(0)
   })
 
   it('refuses an ask the query cannot serve rather than listing everything', async () => {

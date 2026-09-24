@@ -85,8 +85,11 @@ const refuse = (error: string): SuppressionQuery => ({ query: null, error })
  * one-at-a-time fields. Dropping any of those would list a superset under a
  * chip that says it was narrowed.
  *
- * The search is a word prefix of the address (`emailTokens`); a query that
- * normalizes to nothing is no search.
+ * The search is a word prefix of the address (`emailTokens`), and it
+ * stands beside the Last reported range only — never beside an equality —
+ * so a request carrying both is refused; the card sets the equalities aside
+ * while a search is in force. A query that normalizes to nothing is no
+ * search.
  */
 export function suppressionQuery(
   ref: FirebaseFirestore.Query,
@@ -138,7 +141,14 @@ export function suppressionQuery(
       op: 'contains',
       value: words,
     })
-    if (next) query = next
+    if (next) {
+      // The search stands beside the date range only: each pairing with an
+      // equality would need an index of its own.
+      if (equalities.length) {
+        return refuse('Search the address on its own, or remove it to filter')
+      }
+      query = next
+    }
   }
   for (const clause of ranges) {
     const next = apply(SUPPRESSION_FILTER_FIELDS, clause)

@@ -2923,44 +2923,8 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "reason",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "emailTokens",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
           "fieldPath": "context",
           "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "context",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "emailTokens",
-          "arrayConfig": "CONTAINS"
         },
         {
           "fieldPath": "suppressedAt",
@@ -2987,44 +2951,8 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "hostId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "emailTokens",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
           "fieldPath": "released",
           "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "released",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "emailTokens",
-          "arrayConfig": "CONTAINS"
         },
         {
           "fieldPath": "suppressedAt",
@@ -3059,69 +2987,7 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "reason",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "emailTokens",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "released",
-          "order": "ASCENDING"
-        },
-        {
           "fieldPath": "context",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "released",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "context",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "emailTokens",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "released",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "hostId",
           "order": "ASCENDING"
         },
         {
@@ -3141,10 +3007,6 @@
         {
           "fieldPath": "hostId",
           "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "emailTokens",
-          "arrayConfig": "CONTAINS"
         },
         {
           "fieldPath": "suppressedAt",

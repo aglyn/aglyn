@@ -39,7 +39,9 @@ import type {
  *   - Reason, Learned from and Site ID are one at a time: a clause on one
  *     replaces a clause on another. Every pair would need an index of its
  *     own, and a pair nobody indexed fails the read rather than narrowing it.
- *   - The search stands beside all of them.
+ *   - The search stands beside Last reported only. With a search in force
+ *     the card sets the other clauses aside and says so, and the route
+ *     refuses a request that carries both.
  *
  * Status reads `released`, the boolean the writers stamp beside
  * `releasedAt`: "released" read from the timestamp would be `!= null`, an

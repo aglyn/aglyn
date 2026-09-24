@@ -75,6 +75,9 @@ function onDate(row: PlatformSuppression): string {
   return day(row.createdAt?.seconds ?? row.suppressedAt?.seconds)
 }
 
+/** The one filter the route serves beside a search: a range over its sort. */
+const SEARCH_ALONGSIDE = 'suppressedAt'
+
 /** Columns the table draws; the other filter fields reach the panel hidden. */
 const VISIBLE_COLUMNS = ['email', 'reason', 'context', 'status', 'createdAt']
 
@@ -126,15 +129,16 @@ export default function StaffEmailSuppressionsCard() {
    * beside anything; Reason, Learned from and Site ID are one at a time,
    * because each pair would need an index of its own. See
    * `utils/email-suppression-filters.ts`.
+   *
+   * The search wins over the filters: with a search in force only the Last
+   * reported range travels beside it, the other clauses wait, and an Alert
+   * says so — the route answers the two together with no index.
    */
   const gridFilter = useListGridFilter({
     selectFields: SUPPRESSION_SELECT_FIELDS,
     single: true,
     keepAlongside: suppressionClauseStandsAlongside,
   })
-  const filtersKey = JSON.stringify(
-    gridFilter.clauses.map(({ field, op, value }) => ({ field, op, value })),
-  )
   const searchKey = gridFilter.searchWords.join(' ').trim()
   /** The debounced search the route was last asked, one query per settled term. */
   const [search, setSearch] = useState('')
@@ -142,6 +146,11 @@ export default function StaffEmailSuppressionsCard() {
     const timer = setTimeout(() => setSearch(searchKey), 300)
     return () => clearTimeout(timer)
   }, [searchKey])
+  const sent = search
+    ? gridFilter.clauses.filter((clause) => clause.field === SEARCH_ALONGSIDE)
+    : gridFilter.clauses
+  const setAside = sent.length < gridFilter.clauses.length
+  const filtersKey = JSON.stringify(sent.map(({ field, op, value }) => ({ field, op, value })))
   const filtering = gridFilter.clauses.length > 0 || Boolean(searchKey)
 
   /*
@@ -407,6 +416,13 @@ export default function StaffEmailSuppressionsCard() {
           clauses={gridFilter.clauses}
           onChange={gridFilter.setClauses}
         />
+        {setAside ? (
+          <Alert severity="info">
+            {'The search is in force, so only Last reported applies beside ' +
+              'it — the other filters are set aside. Clear the search to ' +
+              'filter by them.'}
+          </Alert>
+        ) : null}
         {error ? (
           <Alert severity="warning">{error}</Alert>
         ) : loading ? (

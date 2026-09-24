@@ -90,28 +90,50 @@ describe('suppressionQuery', () => {
     expect(wheres).toEqual([])
   })
 
-  it('serves Status, Reason, the search and a date range together, in index order', () => {
-    const { result, wheres, refused } = run(
-      [
-        { field: 'suppressedAt', op: 'onOrAfter', value: '2026-09-01T00:00:00.000Z' },
-        { field: 'reason', op: 'isAnyOf', value: 'bounce,complaint' },
-        { field: 'status', op: 'equals', value: 'false' },
-      ],
-      '  Jane.Doe@Example ',
-    )
+  it('serves Status, Reason and a date range together, in index order', () => {
+    const { result, wheres, refused } = run([
+      { field: 'suppressedAt', op: 'onOrAfter', value: '2026-09-01T00:00:00.000Z' },
+      { field: 'reason', op: 'isAnyOf', value: 'bounce,complaint' },
+      { field: 'status', op: 'equals', value: 'false' },
+    ])
     expect(result.error).toBeNull()
     expect(wheres.map(([path, op]) => `${path} ${op}`)).toEqual([
       'released ==',
       'reason in',
-      'emailTokens array-contains',
       'suppressedAt >=',
     ])
     expect(wheres[0][2]).toBe(false)
     expect(wheres[1][2]).toEqual(['bounce', 'complaint'])
-    // Lower-cased, first word, capped at the stored token length.
-    expect(wheres[2][2]).toBe('jane.doe@exa')
     // The list owns its order and its cursor; nothing here may touch either.
     expect(refused).toEqual([])
+  })
+
+  it('serves the search beside a date range', () => {
+    const { result, wheres, refused } = run(
+      [{ field: 'suppressedAt', op: 'before', value: '2026-09-01T00:00:00.000Z' }],
+      '  Jane.Doe@Example ',
+    )
+    expect(result.error).toBeNull()
+    expect(wheres.map(([path, op]) => `${path} ${op}`)).toEqual([
+      'emailTokens array-contains',
+      'suppressedAt <',
+    ])
+    // Lower-cased, first word, capped at the stored token length.
+    expect(wheres[0][2]).toBe('jane.doe@exa')
+    expect(refused).toEqual([])
+  })
+
+  it.each([
+    ['Status', { field: 'status', op: 'equals', value: 'false' }],
+    ['Reason', { field: 'reason', op: 'equals', value: 'bounce' }],
+  ])('refuses the search beside %s, which no index serves', (_label, clause) => {
+    expect(run([clause], 'jane').result.error).toMatch(/Search the address on its own/)
+  })
+
+  it('serves an equality beside a search that normalizes to nothing', () => {
+    const { result, wheres } = run([{ field: 'reason', op: 'equals', value: 'bounce' }], '   ')
+    expect(result.error).toBeNull()
+    expect(wheres).toEqual([['reason', '==', 'bounce']])
   })
 
   it('serves Learned from and Site ID by equality', () => {
@@ -210,15 +232,15 @@ describe('every query the list can issue has its composite index', () => {
 
   /*
    * Every ask the card can make: at most one of the one-at-a-time fields,
-   * with or without each field that stands alongside, with or without the
-   * search — every operator of each.
+   * with or without each field that stands alongside, every operator of
+   * each; and the search, alone or beside each Last reported range.
    */
   const asks: Array<{ clauses: Array<{ field: string; op: string; value: string }>; search: string }> = []
   const optional = (field: string) => [null, ...clausesFor(field)]
   for (const single of [null, ...SUPPRESSION_SINGLE_FIELDS.flatMap(clausesFor)]) {
     for (const status of optional(SUPPRESSION_ALONGSIDE_FIELDS[0])) {
       for (const range of optional(SUPPRESSION_ALONGSIDE_FIELDS[1])) {
-        for (const search of ['', 'jane']) {
+        for (const search of single || status ? [''] : ['', 'jane']) {
           asks.push({
             clauses: [single, status, range].filter(
               (clause): clause is { field: string; op: string; value: string } => clause !== null,
@@ -247,6 +269,23 @@ describe('every query the list can issue has its composite index', () => {
     // A range over the sort field alone is served by its single-field index.
     if (!equalities.length && !contains.length) return
     expect(indexes).toContain(shape)
+  })
+
+  it('holds exactly the composites those asks need, and no more', () => {
+    const needed = new Set<string>()
+    for (const ask of asks) {
+      const { wheres } = run(ask.clauses, ask.search)
+      const keyed = wheres.filter(([, op]) => ['==', 'in', 'array-contains'].includes(op))
+      if (!keyed.length) continue
+      needed.add(
+        [
+          ...keyed.map(([path, op]) => `${path}:${op === 'array-contains' ? 'CONTAINS' : 'ASCENDING'}`),
+          'suppressedAt:DESCENDING',
+        ].join(','),
+      )
+    }
+    expect([...needed].sort()).toEqual([...indexes].sort())
+    expect(indexes).toHaveLength(8)
   })
 
   it('the enumeration reaches every declared field', () => {
