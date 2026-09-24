@@ -138,8 +138,8 @@ beforeEach(() => {
 })
 
 const renderedSummaries = () =>
-  Array.from(document.querySelectorAll('tbody tr')).map(
-    (row) => row.querySelectorAll('td')[3]?.textContent?.trim() ?? '',
+  Array.from(document.querySelectorAll('.MuiDataGrid-row')).map(
+    (row) => row.querySelector('[data-field="summary"] p')?.textContent?.trim() ?? '',
   )
 
 describe('the run history pages its runs (AGL-2501)', () => {
@@ -155,7 +155,7 @@ describe('the run history pages its runs (AGL-2501)', () => {
 
   it('shows one page of runs, not every run in the window', () => {
     render(<HostRunHistoryCard hostId="host-1" targetId="wf-1" />)
-    expect(document.querySelectorAll('tbody tr')).toHaveLength(
+    expect(document.querySelectorAll('.MuiDataGrid-row')).toHaveLength(
       TABLE_PAGE_SIZE_DEFAULT,
     )
   })
@@ -177,6 +177,12 @@ describe('the run history pages its runs (AGL-2501)', () => {
     // `actionRunSummary` renders it as `Ran`. Its presence is the reason the
     // filter cannot move into the query.
     expect(renderedSummaries()).toContain('Ran')
+  })
+
+  it('finds a run through the grid’s own search, across every page (AGL-3317)', async () => {
+    render(<HostRunHistoryCard hostId="host-1" targetId="wf-1" />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Run 026' } })
+    await waitFor(() => expect(renderedSummaries()).toEqual(['Run 026']))
   })
 
   it('PROBES past the ceiling and says the history is longer', () => {

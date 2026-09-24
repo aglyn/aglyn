@@ -22,22 +22,17 @@ import {
   actionTriggerLabel,
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { HOST_EVENT_TYPES } from '@aglyn/aglyn/app-utils/workflows'
 import type { ConsoleAutomationTarget } from '@aglyn/aglyn/plugin-manager/feature-plugins'
 import { CardDisplay, type HelpTipContent } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
-import {
-  Alert,
-  Chip,
-  Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Typography,
-} from '@mui/material'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { Alert, Chip, Stack, Tooltip, Typography } from '@mui/material'
+import type { GridColDef } from '@mui/x-data-grid'
 import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -93,6 +88,50 @@ const RESULT_LABEL = {
   failed: 'Failed',
   skipped: 'Skipped',
 } as const
+
+type RunResult = keyof typeof RESULT_LABEL
+
+/** One run as the grid holds it: the entry, and what it is shown and filtered by. */
+interface RunRow {
+  $id: string
+  entry: any
+  result: RunResult
+  trigger: string
+  triggerLabel: string
+  summary: string
+  createdAtMs: number | null
+}
+
+/*
+ * What the run grid's Filters panel offers. The card holds its whole window,
+ * so the panel and the search answer over every run it read. Trigger and
+ * Result are picked from the event list and the three verdicts; what
+ * happened is typed.
+ */
+const RUN_FILTER_FIELDS = [
+  inMemoryListField('createdAtMs', 'date'),
+  inMemoryListField('trigger', 'select'),
+  inMemoryListField('result', 'select'),
+  inMemoryListField('summary', 'text'),
+]
+const RUN_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  createdAtMs: 'Time',
+  trigger: 'Trigger',
+  result: 'Result',
+  summary: 'What happened',
+}
+const RUN_FILTER_OPTIONS = {
+  trigger: HOST_EVENT_TYPES.map((event) => ({
+    value: event,
+    label: actionTriggerLabel(event),
+  })),
+  result: (Object.keys(RESULT_LABEL) as RunResult[]).map((result) => ({
+    value: result,
+    label: RESULT_LABEL[result],
+  })),
+}
+/** What the quick search reads on a run row. */
+const RUN_SEARCH_FIELDS = ['summary', 'triggerLabel'] as const
 
 /**
  * The run-history table `/product/workflows` advertises (AGL-2171):
@@ -187,16 +226,39 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
         .filter((entry) => !targetId || entry.target?.id === targetId)
         .map((entry) => ({ entry, result: actionRunResult(entry) }))
         .filter(
-          (row): row is { entry: any; result: keyof typeof RESULT_LABEL } =>
+          (row): row is { entry: any; result: RunResult } =>
             Boolean(row.result),
         )
         .sort(
           (a, b) =>
             (b.entry.createdAt?.seconds ?? 0) -
             (a.entry.createdAt?.seconds ?? 0),
+        )
+        .map(
+          ({ entry, result }): RunRow => ({
+            $id: String(entry.$id),
+            entry,
+            result,
+            trigger: String(entry.trigger ?? ''),
+            // `formSubmission` → `Form submitted`.
+            triggerLabel: actionTriggerLabel(entry.trigger),
+            summary: actionRunSummary(entry),
+            createdAtMs:
+              typeof entry.createdAt?.seconds === 'number'
+                ? entry.createdAt.seconds * 1000
+                : null,
+          }),
         ),
     [entries, targetId],
   )
+  const listFilter = useListRowsFilter({
+    rows: runs,
+    fields: RUN_FILTER_FIELDS,
+    options: RUN_FILTER_OPTIONS,
+    headers: RUN_FILTER_HEADERS,
+    search: RUN_SEARCH_FIELDS,
+  })
+  const matched = listFilter.rows
 
   /*
    * The page is a SLICE, because the rows are already in hand.
@@ -213,10 +275,84 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
   // A different workflow is a different history: page three of the last one
   // is not a position in this one, and an out-of-range page renders empty
   // with no explanation, which reads as the runs having gone.
-  useEffect(() => setPage(0), [targetId, hostId])
+  // A narrowed list starts again at its first page, for the same reason.
+  const searchKey = listFilter.gridFilter.searchWords.join(' ')
+  useEffect(
+    () => setPage(0),
+    [targetId, hostId, listFilter.gridFilter.clauses, searchKey],
+  )
   const shown = useMemo(
-    () => runs.slice(page * pageSize, page * pageSize + pageSize),
-    [runs, page, pageSize],
+    () => matched.slice(page * pageSize, page * pageSize + pageSize),
+    [matched, page, pageSize],
+  )
+
+  const { filterColumns } = listFilter
+  const columns = useMemo(
+    () =>
+      filterColumns([
+        {
+          field: 'createdAtMs',
+          headerName: 'Time',
+          width: 120,
+          renderCell: ({ row }: { row: RunRow }) => {
+            const at = row.entry.createdAt?.toDate?.()
+            return (
+              <Tooltip title={at ? at.toLocaleString() : ''}>
+                <span>{at ? at.toLocaleTimeString() : '--'}</span>
+              </Tooltip>
+            )
+          },
+        },
+        {
+          field: 'trigger',
+          headerName: 'Trigger',
+          width: 180,
+          renderCell: ({ row }: { row: RunRow }) => row.triggerLabel,
+        },
+        {
+          field: 'result',
+          headerName: 'Result',
+          width: 120,
+          renderCell: ({ row }: { row: RunRow }) => (
+            <Chip
+              size="small"
+              variant="outlined"
+              color={RESULT_COLOR[row.result]}
+              label={RESULT_LABEL[row.result]}
+            />
+          ),
+        },
+        {
+          field: 'summary',
+          headerName: 'What happened',
+          flex: 1,
+          minWidth: 220,
+          renderCell: ({ row }: { row: RunRow }) => (
+            <Stack sx={{ minWidth: 0, py: 0.75 }}>
+              <Typography variant="body2">{row.summary}</Typography>
+              {row.entry.durationMs != null ? (
+                <Typography variant="caption" color="text.secondary">
+                  {`${row.entry.durationMs}ms`}
+                </Typography>
+              ) : null}
+              {/*
+                What other plugins add to a failed run (AGL-2919): the
+                `automationRun` zone, through the shell's gated slot.
+              */}
+              {RunZone && zoneTarget && row.result === 'failed' ? (
+                <RunZone
+                  slot="automationRun"
+                  hostId={hostId}
+                  orgId={orgId}
+                  target={zoneTarget}
+                  runId={row.$id}
+                />
+              ) : null}
+            </Stack>
+          ),
+        },
+      ] as GridColDef[]),
+    [filterColumns, RunZone, zoneTarget, hostId, orgId],
   )
 
   return (
@@ -234,74 +370,27 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
         </Typography>
       ) : (
         <Stack spacing={1.5}>
-        <ScrollTable size="small" aria-label="Run history">
-          <TableHead>
-            <TableRow>
-              <TableCell>{'Time'}</TableCell>
-              <TableCell>{'Trigger'}</TableCell>
-              <TableCell>{'Result'}</TableCell>
-              <TableCell>{'What happened'}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {shown.map(({ entry, result }) => {
-              const at = entry.createdAt?.toDate?.()
-              return (
-                <TableRow key={entry.$id}>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                    <Tooltip title={at ? at.toLocaleString() : ''}>
-                      <span>{at ? at.toLocaleTimeString() : '--'}</span>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                    {/* `formSubmission` → `Form submitted`. */}
-                    {actionTriggerLabel(entry.trigger)}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      variant="outlined"
-                      color={RESULT_COLOR[result]}
-                      label={RESULT_LABEL[result]}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {actionRunSummary(entry)}
-                    </Typography>
-                    {entry.durationMs != null ? (
-                      <Typography variant="caption" color="text.secondary">
-                        {`${entry.durationMs}ms`}
-                      </Typography>
-                    ) : null}
-                    {/*
-                      What other plugins add to a failed run (AGL-2919): the
-                      `automationRun` zone, through the shell's gated slot.
-                    */}
-                    {RunZone && zoneTarget && result === 'failed' ? (
-                      <RunZone
-                        slot="automationRun"
-                        hostId={hostId}
-                        orgId={orgId}
-                        target={zoneTarget}
-                        runId={entry.$id}
-                      />
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </ScrollTable>
+        <ListFilterChips {...listFilter.chipsProps} />
+        <ListTable
+          aria-label="Run history"
+          rows={shown}
+          columns={columns}
+          {...listFilter.gridProps}
+          // A failed run carries what other plugins add under its summary.
+          getRowHeight={() => 'auto'}
+          // `ListPagination` below pages the matches.
+          hideFooter
+          noRowsLabel="No runs match these filters"
+        />
         <ListPagination
           page={page}
           pageSize={pageSize}
           rowCount={shown.length}
-          // The runs in the window, which is a number this card genuinely
-          // holds. What it does not know is how many runs are OLDER than the
-          // window, and the notice below says so rather than letting the
-          // count line imply a total it cannot see.
-          count={runs.length}
+          // The runs in the window that match, which is a number this card
+          // genuinely holds. What it does not know is how many runs are OLDER
+          // than the window, and the notice below says so rather than letting
+          // the count line imply a total it cannot see.
+          count={matched.length}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />
