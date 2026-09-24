@@ -9,6 +9,34 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.184 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/b203f4340...v1.0.0-beta.184)
+
+### Added
+
+- **crm:** every CRM list filters through the grid's own toolbar ([AGL-3313](https://linear.app/aglyn/issue/AGL-3313))
+
+### Fixed
+
+- **release:** one package that will not publish no longer strands the rest ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201), [AGL-3289](https://linear.app/aglyn/issue/AGL-3289), [AGL-1094](https://linear.app/aglyn/issue/AGL-1094))
+- **crm:** the grid filter notes name the free DataGrid, not a community one ([AGL-3313](https://linear.app/aglyn/issue/AGL-3313), [AGL-975](https://linear.app/aglyn/issue/AGL-975))
+- **console:** the switcher names the workspace a subdomain or custom domain names ([AGL-3314](https://linear.app/aglyn/issue/AGL-3314))
+- **consent:** an opt-out on one site of a consent group holds every site in it ([AGL-3310](https://linear.app/aglyn/issue/AGL-3310))
+- **commerce:** a site member's password hash leaves the profile the whole site reads ([AGL-3308](https://linear.app/aglyn/issue/AGL-3308), [AGL-914](https://linear.app/aglyn/issue/AGL-914))
+- **workflows:** the actions card's test run reaches a console door that runs it ([AGL-3309](https://linear.app/aglyn/issue/AGL-3309))
+
+### Documentation
+
+- **plugins:** an api route answers only on the app whose surface registered it ([AGL-3309](https://linear.app/aglyn/issue/AGL-3309))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3314 ([AGL-3314](https://linear.app/aglyn/issue/AGL-3314), [AGL-3313](https://linear.app/aglyn/issue/AGL-3313))
+
+</details>
+
 ## v1.0.0-beta.183 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/d6462ed10...v1.0.0-beta.183)
