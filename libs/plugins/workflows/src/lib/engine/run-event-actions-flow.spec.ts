@@ -527,6 +527,7 @@ describe('an email sent from a flow is still marketing mail', () => {
     await resumeOnce()
 
     expect(sent[0].marketing.consentHostIds).toEqual([HOST_ID])
+    expect(sent[0].marketing.consentAwaitsConfirmation).toBe(false)
   })
 
   it('names every site of a declared consent group as the sender (AGL-3310)', async () => {
@@ -549,8 +550,28 @@ describe('an email sent from a flow is still marketing mail', () => {
     expect(sent[0].marketing.consentHostIds).toEqual(
       [HOST_ID, 'site-sibling'].sort(),
     )
+    expect(sent[0].marketing.consentAwaitsConfirmation).toBe(false)
     expect(flowGateCalls.at(-1)?.['org']).toMatchObject({
       consentGroups: { acme: { hostIds: [HOST_ID, 'site-sibling'] } },
+    })
+  })
+
+  it('tells the gate the group waits for a confirmation click once the org turns it on (AGL-3316)', async () => {
+    // The same org read: the switch rides into the send with the group, and
+    // the flow gate is handed the org it resolves its own group from.
+    mockOrg = {
+      plan: 'pro',
+      consentGroups: {
+        acme: { name: 'Acme', hostIds: [HOST_ID, 'site-sibling'] },
+      },
+      consentGroupsAwaitConfirmation: true,
+    }
+
+    await resumeOnce()
+
+    expect(sent[0].marketing.consentAwaitsConfirmation).toBe(true)
+    expect(flowGateCalls.at(-1)?.['org']).toMatchObject({
+      consentGroupsAwaitConfirmation: true,
     })
   })
 

@@ -71,6 +71,22 @@
  * (`marketing-consent.ts`) — and the preference pages lift one across the
  * group, since a person rejoining the sender has rejoined all of it.
  *
+ * ## A pending CONFIRMATION is the asking site's, unless the org says the group waits
+ *
+ * A site that asks for a confirmation click holds its own mail on that stream
+ * until the click comes. A pending question is not a refusal, so by default
+ * the rule above does not carry it: the sibling sites go on mailing. An org
+ * may turn {@link CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD} on, and then every
+ * site of a declared group waits for the click the way the asking site does —
+ * a pending entry on any of them holds the stream from all of them, read
+ * across the CURRENT group exactly as a refusal is.
+ *
+ * The switch is resolved INTO the group ({@link ConsentGroup.awaitsConfirmation}),
+ * so a send path already holding the group holds the answer and reads nothing
+ * more for it. A group of one never waits on anybody: there is nobody else.
+ * Off is the default and the absence, and an org that never set it reads
+ * exactly the documents it read before the field existed.
+ *
  * ⚠️ The one change that runs AGAINST reading is a site LEAVING a group. A
  * refusal is stored on the site the person acted on, so once that site is no
  * longer named, its former siblings stop seeing a refusal that was given to
@@ -87,6 +103,7 @@
  * other.
  */
 
+import type { TopicSubscriptionState } from './email-topics'
 import { hostScopeToken, MAX_SCOPE_HOSTS, type ScopeToken } from './scope-tokens'
 
 /**
@@ -99,6 +116,19 @@ import { hostScopeToken, MAX_SCOPE_HOSTS, type ScopeToken } from './scope-tokens
  * and there is no reading of that which is safe to pool on.
  */
 export const CONSENT_GROUPS_FIELD = 'consentGroups'
+
+/**
+ * The org field that makes a declared group's sites wait for each other's
+ * confirmation click (AGL-3316): `true` is on; absent is off.
+ *
+ * One switch for the org beside {@link CONSENT_GROUPS_FIELD} rather than a
+ * flag on each declaration, because a declaration decides WHICH sites are one
+ * sender and this decides how the org treats a question one of them has put.
+ * Written only by `/api/orgs/settings`; the rules deny both fields to every
+ * client.
+ */
+export const CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD =
+  'consentGroupsAwaitConfirmation'
 
 /**
  * The most sites one group may name.
@@ -147,6 +177,13 @@ export interface ConsentGroup {
   hostIds: string[]
   /** False for the implicit group of one. */
   declared: boolean
+  /**
+   * Whether a confirmation one site of the group is waiting on holds the
+   * other sites' mail too — the org's
+   * {@link CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD}, for a declared group.
+   * Always `false` for a group of one, which has no other site to hold.
+   */
+  awaitsConfirmation: boolean
 }
 
 /**
@@ -166,7 +203,20 @@ export function soloConsentGroup(hostId: string): ConsentGroup {
     name: null,
     hostIds: [hostId],
     declared: false,
+    awaitsConfirmation: false,
   }
+}
+
+/**
+ * Whether the org turned {@link CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD} on.
+ *
+ * Only a stored `true` is on. Absent, `false`, or anything a stray write left
+ * is off — the state every org was in before the field existed.
+ */
+export function consentGroupsAwaitConfirmation(
+  org: Record<string, unknown> | null | undefined,
+): boolean {
+  return (org ?? {})[CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD] === true
 }
 
 /**
@@ -256,6 +306,7 @@ export function consentGroupForHost(
       name: group.name,
       hostIds: [...group.hostIds],
       declared: true,
+      awaitsConfirmation: consentGroupsAwaitConfirmation(org),
     }
   }
   return soloConsentGroup(hostId)
@@ -268,8 +319,9 @@ export function consentGroupForHost(
  * Every site the group names, because a refusal filed against any of them is
  * a refusal of the sender — see "OPT-OUT runs the other way" above. The
  * sending site leads so a reader that treats its own record differently from
- * a sibling's (a pending confirmation is the sending site's own concern) can
- * tell them apart by position. A group of one is the site alone.
+ * a sibling's (a sibling's pending confirmation holds the send only when the
+ * group {@link ConsentGroup.awaitsConfirmation}) can tell them apart by
+ * position. A group of one is the site alone.
  */
 export function consentGroupOptOutHosts(
   group: Pick<ConsentGroup, 'hostId' | 'hostIds'>,
@@ -278,6 +330,29 @@ export function consentGroupOptOutHosts(
     (id) => typeof id === 'string' && id && id !== group.hostId,
   )
   return [group.hostId, ...new Set(siblings)]
+}
+
+/**
+ * The sending site's standing on one stream, read across its group.
+ *
+ * `states` are the stream's states on {@link consentGroupOptOutHosts}' sites,
+ * in that order, so the sending site's comes first. A refusal on any of them
+ * is a refusal of the sender. The sending site's own pending confirmation
+ * holds its mail; a sibling's holds it only when the group
+ * {@link ConsentGroup.awaitsConfirmation}. The precedence is the one
+ * `readTopicSubscriptionState` keeps within one entry: a refusal outranks a
+ * pending question, and an expired question is still pending.
+ */
+export function consentGroupTopicState(
+  group: Pick<ConsentGroup, 'awaitsConfirmation'>,
+  states: readonly TopicSubscriptionState[],
+): TopicSubscriptionState {
+  const [own = 'subscribed', ...siblings] = states
+  if (own === 'opted-out' || siblings.includes('opted-out')) return 'opted-out'
+  if (own === 'pending') return 'pending'
+  return group.awaitsConfirmation === true && siblings.includes('pending')
+    ? 'pending'
+    : 'subscribed'
 }
 
 /**

@@ -787,7 +787,14 @@ describe('crmReadTokens', () => {
     // the org token in front of it is the one token over — built directly,
     // because `consentGroupForHost` refuses a declaration any wider.
     const hostIds = Array.from({ length: 30 }, (_, index) => `host-${index}`)
-    const group = { hostId: 'host-0', groupId: 'wide', name: 'Wide', hostIds, declared: true }
+    const group = {
+      hostId: 'host-0',
+      groupId: 'wide',
+      name: 'Wide',
+      hostIds,
+      declared: true,
+      awaitsConfirmation: false,
+    }
     const tokens = crmReadTokens(group)
     expect(tokens).toHaveLength(30)
     expect(tokens[0]).toBe('org')

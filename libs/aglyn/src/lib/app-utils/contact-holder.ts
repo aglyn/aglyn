@@ -34,6 +34,7 @@ import { CAPTURED_BY_HOST_FIELD } from './marketing-consent'
 import {
   type ConsentGroup,
   consentGroupForHost,
+  consentGroupsAwaitConfirmation,
   readConsentGroups,
   soloConsentGroup,
 } from './consent-groups'
@@ -56,6 +57,7 @@ export const NO_HOLDER_GROUP: ConsentGroup = Object.freeze({
   name: null,
   hostIds: [],
   declared: false,
+  awaitsConfirmation: false,
 }) as ConsentGroup
 
 /**
@@ -142,6 +144,7 @@ export function contactPrimaryGroup(
         name: declared.name,
         hostIds: [...declared.hostIds],
         declared: true,
+        awaitsConfirmation: consentGroupsAwaitConfirmation(org),
       }
     }
     return soloConsentGroup(key)

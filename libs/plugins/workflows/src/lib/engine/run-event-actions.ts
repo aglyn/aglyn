@@ -896,6 +896,10 @@ async function runServerStep(
       }
       const emailSubject = String(step.subject ?? '').slice(0, 200)
       const emailText = String(step.body ?? '').slice(0, 5000)
+      const consentGroup = consentGroupForHost(
+        (env.org as Record<string, unknown> | null) ?? null,
+        hostId,
+      )
       /*
        * THE TIMELINE ENTRY (AGL-2615). A message addressed to the contact
        * the event is about is logged on that contact's timeline as an
@@ -934,15 +938,14 @@ async function runServerStep(
         // every reader of it treats as absent — see `flowEmailTopicId`.
         // The consent group comes off the org the run already holds, so the
         // gate honors an unsubscribe from any site of a declared group —
-        // the sender this site mails as — at no extra read.
+        // the sender this site mails as — and the org's confirmation switch,
+        // at no extra read.
         marketing: {
           hostId,
           siteBase,
           topicId,
-          consentHostIds: consentGroupForHost(
-            (env.org as Record<string, unknown> | null) ?? null,
-            hostId,
-          ).hostIds,
+          consentHostIds: consentGroup.hostIds,
+          consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
         },
       })
       /*

@@ -241,7 +241,8 @@ export async function flowEmailRefusal(options: {
   const topicId = flowEmailTopicId(options.topicId, options.scope)
   if (!topicId) return null
   // Across the same group: a person who left this stream on a sibling site
-  // left it from the sender this automation mails as.
+  // left it from the sender this automation mails as — and, where the org
+  // turned the switch on, a sibling's pending confirmation holds it too.
   const sendable = await filterTopicSendable(
     options.hostId,
     topicId,

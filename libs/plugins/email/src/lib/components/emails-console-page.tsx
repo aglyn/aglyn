@@ -24,7 +24,9 @@ import {
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
 import { HubSections } from '@aglyn/shared-ui-next'
+import { Stack } from '@mui/material'
 import { useMemo, type ReactNode } from 'react'
+import ConsentGroupConfirmationCard from './consent-group-confirmation-card'
 import EmailScreensCard from './email-screens-card'
 import EmailTemplateDetail from './email-template-detail'
 import EmailTopicDetail from './email-topic-detail'
@@ -268,7 +270,16 @@ function orgSectionBody(
           basePath={basePath}
         />
       ) : (
-        <EmailTopicsCard hostId={null} basePath={basePath} />
+        /*
+         * The catalog, whose topics each set their own confirmation, and under
+         * it the organization's one switch over how a declared consent group
+         * treats a confirmation one of its sites is waiting on. Only here: the
+         * switch is the organization's, so a site's Topics page has none.
+         */
+        <Stack spacing={3}>
+          <EmailTopicsCard hostId={null} basePath={basePath} />
+          <ConsentGroupConfirmationCard org={org} />
+        </Stack>
       )
     case 'sending':
       /*

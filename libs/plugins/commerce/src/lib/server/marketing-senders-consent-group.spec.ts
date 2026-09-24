@@ -27,7 +27,8 @@
  * them. Each of these reads the owning org already (for the plan, the
  * brand), so the group comes off that read and costs nothing; this file pins
  * that the value handed over is the declared group, and the site alone for an
- * org that declared none.
+ * org that declared none — and, with it, whether the org said the group waits
+ * for a confirmation click (AGL-3316).
  */
 
 /** Every marketing context the senders handed to `sendEmail`. */
@@ -225,11 +226,28 @@ describe.each([
     expect(contexts).toHaveLength(1)
     expect(contexts[0]?.['hostId']).toBe(SITE_A)
     expect(contexts[0]?.['consentHostIds']).toEqual([SITE_A, SITE_B].sort())
+    // A declared group whose org never set the switch does not wait.
+    expect(contexts[0]?.['consentAwaitsConfirmation']).toBe(false)
+  })
+
+  it('says the group waits for a confirmation click once the org turns it on (AGL-3316)', async () => {
+    mockOrg = { ...DECLARED, consentGroupsAwaitConfirmation: true }
+    await run()
+    expect(contexts).toHaveLength(1)
+    expect(contexts[0]?.['consentAwaitsConfirmation']).toBe(true)
   })
 
   it('CONTROL: names the site alone for an org that declared no group', async () => {
     await run()
     expect(contexts).toHaveLength(1)
     expect(contexts[0]?.['consentHostIds']).toEqual([SITE_A])
+    expect(contexts[0]?.['consentAwaitsConfirmation']).toBe(false)
+  })
+
+  it('CONTROL: a site alone never waits on anybody, even with the switch on', async () => {
+    mockOrg = { plan: 'pro', consentGroupsAwaitConfirmation: true }
+    await run()
+    expect(contexts[0]?.['consentHostIds']).toEqual([SITE_A])
+    expect(contexts[0]?.['consentAwaitsConfirmation']).toBe(false)
   })
 })

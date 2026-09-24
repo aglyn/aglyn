@@ -179,6 +179,18 @@ export interface MarketingSendContext {
    * mails somebody who unsubscribed from the site next door.
    */
   consentHostIds: readonly string[]
+  /**
+   * Whether a confirmation one of {@link consentHostIds} is still waiting on
+   * holds this message too — `consentGroupForHost(org, hostId)
+   * .awaitsConfirmation`, from the same resolved group. `false` for a site in
+   * no declared group, and for every org that has not turned the switch on.
+   *
+   * The sending site's own pending confirmation holds the message either way;
+   * this decides only a sibling's. Required beside {@link consentHostIds} for
+   * the reason that one is: a sender that could leave it out would mail
+   * somebody the org asked every site of the group to wait on.
+   */
+  consentAwaitsConfirmation: boolean
 }
 
 /** What the gate is asked, once per marketing message. */
@@ -203,6 +215,11 @@ export interface MarketingSendGateRequest {
    * not name `hostId`, is the site alone.
    */
   consentHostIds?: readonly string[]
+  /**
+   * See {@link MarketingSendContext.consentAwaitsConfirmation}. Only `true`
+   * lets a sibling's pending confirmation hold the message.
+   */
+  consentAwaitsConfirmation?: boolean
 }
 
 /** Why a marketing message was not sent, or `null` when it may go. */

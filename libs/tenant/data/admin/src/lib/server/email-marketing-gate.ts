@@ -608,20 +608,21 @@ export async function filterCadenceSendable(
 /**
  * The consent group a gate request was made by, or `null` for the site alone.
  *
- * The sender resolved it — `MarketingSendContext.consentHostIds`, from the org
- * it already held — so the gate spends no org read on it. A list that does
- * not name the sending site is not a group resolved for it, and reads as the
- * site alone: the gate must never throw, because `sendEmail` answers a gate
- * that throws by sending ungated.
+ * The sender resolved it — `MarketingSendContext.consentHostIds` and
+ * `consentAwaitsConfirmation`, from the org it already held — so the gate
+ * spends no org read on it. A list that does not name the sending site is not
+ * a group resolved for it, and reads as the site alone: the gate must never
+ * throw, because `sendEmail` answers a gate that throws by sending ungated.
  */
 function requestConsentGroup(
   request: MarketingSendGateRequest,
-): Pick<ConsentGroup, 'hostId' | 'hostIds'> | null {
+): Pick<ConsentGroup, 'hostId' | 'hostIds' | 'awaitsConfirmation'> | null {
   const hostIds = request.consentHostIds
   if (!Array.isArray(hostIds) || !hostIds.includes(request.hostId)) return null
   return {
     hostId: request.hostId,
     hostIds: hostIds.filter((id) => typeof id === 'string' && id),
+    awaitsConfirmation: request.consentAwaitsConfirmation === true,
   }
 }
 
@@ -680,7 +681,9 @@ async function readGroupFrequency(
  * Every opt-out below is read across the sender's consent group
  * (`request.consentHostIds`) — the suppression list, the stream, and the
  * pace — because a person who left one site of a declared group left the
- * sender. The frequency ceiling and the sunset stay the sending site's own.
+ * sender. A sibling's pending confirmation holds the stream too when the
+ * request says the group waits (`request.consentAwaitsConfirmation`). The
+ * frequency ceiling and the sunset stay the sending site's own.
  */
 export async function marketingSendVerdict(
   request: MarketingSendGateRequest,

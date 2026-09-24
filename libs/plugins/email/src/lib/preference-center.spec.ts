@@ -1696,3 +1696,101 @@ describe('a declared consent group is one sender on every page', () => {
     expect(docs.get(SIBLING_SUPPRESSION)).toMatchObject({ reason: 'unsubscribe' })
   })
 })
+
+// ---------------------------------------------------------------------------
+// 7. The org's confirmation switch, on the page (AGL-3316)
+// ---------------------------------------------------------------------------
+
+/**
+ * Turned on, a topic one site of a declared group is waiting on holds every
+ * site's mail on it, so the page agrees with the send path in both directions
+ * it acts in: it SHOWS that topic as waiting rather than as a ticked box the
+ * send path would refuse, and a tick on it CONFIRMS it for the group — the
+ * tick is a click on a signed link delivered to that mailbox, exactly what
+ * makes a tick confirm the link site's own question. Off, the page is what it
+ * was: a sibling's question is the sibling's.
+ */
+describe('a sibling’s pending confirmation, under the org’s switch', () => {
+  const SIBLING = 'host-2'
+  const SIBLING_OPT_OUT = `hosts/${SIBLING}/topicOptOuts/${KEY}`
+  const declare = (awaitConfirmation?: boolean) => {
+    mockOrgDeclaration = {
+      consentGroups: { acme: { name: 'Acme Goods', hostIds: [HOST, SIBLING] } },
+      ...(awaitConfirmation === undefined
+        ? {}
+        : { consentGroupsAwaitConfirmation: awaitConfirmation }),
+    }
+  }
+  const pendingOnSibling = () => {
+    docs.set(SIBLING_OPT_OUT, {
+      email: RECIPIENT,
+      topics: { newsletter: { pendingAt: 5, confirmedAt: null } },
+    })
+  }
+  const everyTopic = () =>
+    Object.fromEntries(DEFAULT_EMAIL_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']))
+
+  it('shows the topic as waiting, unticked, once the org turns it on', async () => {
+    declare(true)
+    pendingOnSibling()
+    const reply = await call({ method: 'GET', query: topicQuery() })
+    expect(checkedTopics(reply.body)).not.toContain('newsletter')
+    expect(checkedTopics(reply.body)).toContain('marketing')
+    expect(reply.body).toContain('Waiting for you to confirm')
+  })
+
+  it('confirms it for the group when it is ticked here, keeping the evidence', async () => {
+    declare(true)
+    pendingOnSibling()
+    await call({ method: 'POST', query: topicQuery(), body: everyTopic() })
+    const sibling = (docs.get(SIBLING_OPT_OUT) as any).topics.newsletter
+    // When the site asked stays; when the person answered is added.
+    expect(sibling.pendingAt).toBe(5)
+    expect(sibling.confirmedAt).toEqual(expect.any(Number))
+  })
+
+  it('leaves the question standing when the box is left unticked', async () => {
+    declare(true)
+    pendingOnSibling()
+    const kept = everyTopic()
+    delete kept['topic:newsletter']
+    await call({ method: 'POST', query: topicQuery(), body: kept })
+    expect((docs.get(SIBLING_OPT_OUT) as any).topics.newsletter).toEqual({
+      pendingAt: 5,
+      confirmedAt: null,
+    })
+    // The choice not to have it is filed on the link site, as any stream
+    // left here is.
+    expect((docs.get(OPT_OUT_PATH) as any).topics.newsletter.optedOutAt).toBeTruthy()
+  })
+
+  it('OFF, stored or absent: the page shows it ticked and leaves the sibling’s question alone', async () => {
+    for (const setting of [undefined, false]) {
+      docs.clear()
+      declare(setting)
+      pendingOnSibling()
+      const page = await call({ method: 'GET', query: topicQuery() })
+      expect(checkedTopics(page.body)).toContain('newsletter')
+      expect(page.body).not.toContain('Waiting for you to confirm')
+
+      await call({ method: 'POST', query: topicQuery(), body: everyTopic() })
+      expect((docs.get(SIBLING_OPT_OUT) as any).topics.newsletter).toEqual({
+        pendingAt: 5,
+        confirmedAt: null,
+      })
+    }
+  })
+
+  it('an account’s rejoin leaves it pending — the console is not the mailbox', async () => {
+    declare(true)
+    pendingOnSibling()
+    await rejoinStreamForAccount(
+      { hostId: HOST, email: RECIPIENT, topicId: 'newsletter' },
+      fakeFirestore,
+    )
+    expect((docs.get(SIBLING_OPT_OUT) as any).topics.newsletter).toEqual({
+      pendingAt: 5,
+      confirmedAt: null,
+    })
+  })
+})

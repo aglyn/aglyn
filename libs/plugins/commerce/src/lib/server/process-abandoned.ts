@@ -104,9 +104,10 @@ export async function scanAbandonedCheckouts(
   /**
    * Each site's consent group, off the same org read as its entitlement, so
    * the gate honors an unsubscribe from any site the org declared one sender
-   * with this one.
+   * with this one, and the org's word on whether its sites wait for each
+   * other's confirmation click.
    */
-  const consentHostIdsByHost = new Map<string, readonly string[]>()
+  const consentGroupByHost = new Map<string, Aglyn.ConsentGroup>()
   // Resolve each host's designed template once per run (AGL-770).
   const templateCache = new Map<string, LoadedHostEmail | null>()
   let skippedLocked = 0
@@ -144,12 +145,12 @@ export async function scanAbandonedCheckouts(
         Aglyn.checkEntitlement(org?.org as any, 'abandonedCart'),
       )
       brandingByHost.set(hostId, Aglyn.resolveBrandingProfile(org?.org as any))
-      consentHostIdsByHost.set(
+      consentGroupByHost.set(
         hostId,
         Aglyn.consentGroupForHost(
           (org?.org as Record<string, unknown> | undefined) ?? null,
           hostId,
-        ).hostIds,
+        ),
       )
       // The site's own origin, for the unsubscribe link. Resolved once per
       // host for the same reason the branding beside it is: this sweep is a
@@ -195,6 +196,8 @@ export async function scanAbandonedCheckouts(
      * both suppression lists, and counts this against how much mail the
      * shopper has had from this site today.
      */
+    const consentGroup =
+      consentGroupByHost.get(hostId) ?? Aglyn.soloConsentGroup(hostId)
     const result = await sendEmail({
       to: String(data.email),
       subject: designed?.subject ?? 'You left something in your cart',
@@ -219,7 +222,8 @@ export async function scanAbandonedCheckouts(
         hostId,
         siteBase: siteBaseByHost.get(hostId) ?? '',
         topicId: Aglyn.EMAIL_TOPIC_MARKETING,
-        consentHostIds: consentHostIdsByHost.get(hostId) ?? [hostId],
+        consentHostIds: consentGroup.hostIds,
+        consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
       },
     })
     /*

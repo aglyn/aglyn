@@ -26,11 +26,14 @@
  */
 
 import {
+  CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD,
   CONSENT_GROUPS_FIELD,
   consentGroupDisclosure,
   consentGroupForHost,
   consentGroupOptOutHosts,
   consentGroupScope,
+  consentGroupsAwaitConfirmation,
+  consentGroupTopicState,
   MAX_CONSENT_GROUP_HOSTS,
   readConsentGroups,
   soloConsentGroup,
@@ -50,6 +53,7 @@ describe('an undeclared site is alone', () => {
       name: null,
       hostIds: ['site-a'],
       declared: false,
+      awaitsConfirmation: false,
     })
     expect(consentGroupForHost({}, 'site-a').hostIds).toEqual(['site-a'])
   })
@@ -211,5 +215,119 @@ describe('what a group hands the surfaces that use it', () => {
     expect(
       consentGroupOptOutHosts(consentGroupForHost(org({ nw: GROUP }), 'site-c')),
     ).toEqual(['site-c'])
+  })
+})
+
+/**
+ * The org's confirmation switch (AGL-3316), resolved INTO the group so a send
+ * path holding the group holds the answer. Off is the default and the
+ * absence; on reaches a declared group and nothing else, because a group of
+ * one has no sibling to wait for.
+ */
+describe('whether a group waits for a confirmation click', () => {
+  const waiting = (groups: Record<string, unknown>, value: unknown = true) => ({
+    ...org(groups),
+    [CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD]: value,
+  })
+
+  it('is off for every declared group of an org that never set it', () => {
+    expect(consentGroupForHost(org({ nw: GROUP }), 'site-a').awaitsConfirmation).toBe(
+      false,
+    )
+  })
+
+  it('is on for every member of a declared group once the org turns it on', () => {
+    for (const hostId of ['site-a', 'site-b']) {
+      expect(consentGroupForHost(waiting({ nw: GROUP }), hostId)).toMatchObject({
+        groupId: 'nw',
+        declared: true,
+        awaitsConfirmation: true,
+      })
+    }
+  })
+
+  it('reads only a stored `true` as on', () => {
+    for (const value of [false, 'true', 1, null, {}]) {
+      expect(consentGroupsAwaitConfirmation(waiting({ nw: GROUP }, value))).toBe(false)
+      expect(
+        consentGroupForHost(waiting({ nw: GROUP }, value), 'site-a').awaitsConfirmation,
+      ).toBe(false)
+    }
+    expect(consentGroupsAwaitConfirmation(null)).toBe(false)
+    expect(consentGroupsAwaitConfirmation(waiting({}))).toBe(true)
+  })
+
+  /** ANTI-VACUITY: the switch is about a group, so a site alone never waits. */
+  it('never makes a group of one wait, whatever the org says', () => {
+    expect(soloConsentGroup('site-a').awaitsConfirmation).toBe(false)
+    // An org that turned it on and declared nothing.
+    expect(consentGroupForHost(waiting({}), 'site-a').awaitsConfirmation).toBe(false)
+    // A site the declaration does not name.
+    expect(consentGroupForHost(waiting({ nw: GROUP }), 'site-c')).toMatchObject({
+      declared: false,
+      awaitsConfirmation: false,
+    })
+    // A declaration the reader refuses is no group at all.
+    expect(
+      consentGroupForHost(
+        waiting({ nw: { name: '  ', hostIds: ['site-a', 'site-b'] } }),
+        'site-a',
+      ),
+    ).toMatchObject({ declared: false, awaitsConfirmation: false })
+  })
+
+  it('leaves every refusal of the declaration exactly as it was', () => {
+    const contested = waiting({
+      one: { name: 'One', hostIds: ['site-a', 'site-b'] },
+      two: { name: 'Two', hostIds: ['site-b', 'site-c'] },
+    })
+    expect(readConsentGroups(contested)).toEqual({})
+    expect(readConsentGroups(waiting({ nw: GROUP }))).toEqual(
+      readConsentGroups(org({ nw: GROUP })),
+    )
+  })
+})
+
+/**
+ * The fold every group read decides by: the sending site's standing first,
+ * then its siblings'. Off, it is exactly the rule that shipped with AGL-3310 —
+ * a sibling's refusal holds and its pending question does not.
+ */
+describe('the sending site’s standing on a stream, across its group', () => {
+  const OFF = { awaitsConfirmation: false }
+  const ON = { awaitsConfirmation: true }
+
+  it('holds on a refusal anywhere in the group, switch or no switch', () => {
+    for (const group of [OFF, ON]) {
+      expect(consentGroupTopicState(group, ['opted-out'])).toBe('opted-out')
+      expect(consentGroupTopicState(group, ['subscribed', 'opted-out'])).toBe(
+        'opted-out',
+      )
+      // A refusal outranks a pending question, here as within one entry.
+      expect(consentGroupTopicState(group, ['pending', 'opted-out'])).toBe(
+        'opted-out',
+      )
+      expect(consentGroupTopicState(group, ['opted-out', 'pending'])).toBe(
+        'opted-out',
+      )
+    }
+  })
+
+  it('holds on the sending site’s own pending question, switch or no switch', () => {
+    expect(consentGroupTopicState(OFF, ['pending', 'subscribed'])).toBe('pending')
+    expect(consentGroupTopicState(ON, ['pending', 'subscribed'])).toBe('pending')
+  })
+
+  it('holds on a sibling’s pending question only when the group waits', () => {
+    expect(consentGroupTopicState(OFF, ['subscribed', 'pending'])).toBe('subscribed')
+    expect(consentGroupTopicState(ON, ['subscribed', 'pending'])).toBe('pending')
+    expect(consentGroupTopicState(ON, ['subscribed', 'subscribed', 'pending'])).toBe(
+      'pending',
+    )
+  })
+
+  it('is subscribed when nothing in the group holds', () => {
+    expect(consentGroupTopicState(ON, ['subscribed', 'subscribed'])).toBe('subscribed')
+    expect(consentGroupTopicState(ON, [])).toBe('subscribed')
   })
 })
