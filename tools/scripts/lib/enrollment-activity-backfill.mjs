@@ -69,15 +69,17 @@ export function enrolledActivityBody(sequenceName, campaignNames) {
 
 /**
  * `readConsentGroups`, restated: the usable groups of an org document —
- * named, two to thirty distinct sites, and no site claimed by two groups
- * (both are dropped).
+ * named, two to thirty distinct sites, an id that is no site's id, and no
+ * site claimed by two groups (both are dropped).
  */
 export function readConsentGroups(org) {
   const raw = org?.consentGroups
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const siteIds = consentGroupSiteIds(org, raw)
   const usable = {}
   for (const [groupId, value] of Object.entries(raw)) {
     if (!groupId || !value || typeof value !== 'object') continue
+    if (siteIds.has(groupId)) continue
     const name = typeof value.name === 'string' ? value.name.trim() : ''
     if (!name) continue
     const hostIds = Array.isArray(value.hostIds)
@@ -98,6 +100,28 @@ export function readConsentGroups(org) {
     settled[groupId] = group
   }
   return settled
+}
+
+/**
+ * `consentGroupSiteIds`, restated: the org's `hosts` (map or list) and every
+ * site any raw entry names, usable or not — the ids a group id may not take.
+ */
+function consentGroupSiteIds(org, raw) {
+  const ids = new Set()
+  const hosts = org?.hosts
+  if (Array.isArray(hosts)) {
+    for (const id of hosts) if (typeof id === 'string' && id) ids.add(id)
+  } else if (hosts && typeof hosts === 'object') {
+    for (const id of Object.keys(hosts)) if (id) ids.add(id)
+  }
+  for (const value of Object.values(raw)) {
+    if (!Array.isArray(value?.hostIds)) continue
+    for (const id of value.hostIds) {
+      const trimmed = String(id ?? '').trim()
+      if (trimmed) ids.add(trimmed)
+    }
+  }
+  return ids
 }
 
 /** `crmScopeTokens(org, consentGroupForHost(org, hostId))`, restated. */

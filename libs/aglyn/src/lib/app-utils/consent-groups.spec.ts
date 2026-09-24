@@ -29,9 +29,12 @@ import {
   CONSENT_GROUPS_AWAIT_CONFIRMATION_FIELD,
   CONSENT_GROUPS_FIELD,
   consentGroupDisclosure,
+  consentGroupDisclosureKey,
+  consentGroupForGrant,
   consentGroupForHost,
   consentGroupOptOutHosts,
   consentGroupScope,
+  consentGroupSiteHold,
   consentGroupsAwaitConfirmation,
   consentGroupTopicState,
   MAX_CONSENT_GROUP_HOSTS,
@@ -175,6 +178,151 @@ describe('a declared group pools, and only when it could be disclosed', () => {
     for (const broken of [null, 'nw', 42, [GROUP]]) {
       expect(readConsentGroups({ [CONSENT_GROUPS_FIELD]: broken })).toEqual({})
     }
+  })
+})
+
+/**
+ * A site that declared nothing uses its own id as its group id, so a group
+ * spelled like a site would share that site's key — its grant stamps, its
+ * opt-out lookups, and every record the CRM files under a group id.
+ */
+describe('a group id that is also a site id', () => {
+  it('is dropped when it names one of the org’s sites', () => {
+    const colliding = {
+      hosts: { 'site-a': true, 'site-b': true, 'site-c': true },
+      ...org({ 'site-c': GROUP }),
+    }
+    expect(readConsentGroups(colliding)).toEqual({})
+    for (const hostId of ['site-a', 'site-b', 'site-c']) {
+      expect(consentGroupForHost(colliding, hostId)).toMatchObject({
+        groupId: hostId,
+        hostIds: [hostId],
+        declared: false,
+      })
+    }
+  })
+
+  it('is dropped when it names a site another group lists, usable or not', () => {
+    // `site-x` is in no `hosts` map, but a second entry names it — and that
+    // entry is itself unusable (a group of one), which does not excuse it.
+    expect(
+      readConsentGroups(
+        org({
+          'site-x': GROUP,
+          other: { name: 'Other', hostIds: ['site-x'] },
+        }),
+      ),
+    ).toEqual({})
+    // …and a group listing its OWN id among its sites is the same collision.
+    expect(
+      readConsentGroups(org({ 'site-a': GROUP })),
+    ).toEqual({})
+  })
+
+  it('reads a `hosts` list as well as the map the org writes', () => {
+    expect(
+      readConsentGroups({ hosts: ['site-z'], ...org({ 'site-z': GROUP }) }),
+    ).toEqual({})
+  })
+
+  it('leaves the other groups standing, and contests nothing it named', () => {
+    const mixed = {
+      hosts: { 'site-a': true, 'site-b': true, 'site-c': true, 'site-d': true },
+      ...org({
+        'site-d': { name: 'Collides', hostIds: ['site-a', 'site-b'] },
+        kept: { name: 'Kept', hostIds: ['site-b', 'site-c'] },
+      }),
+    }
+    // The colliding entry is refused on its own, like a nameless one, so its
+    // claim on `site-b` is not a second controller for the overlap pass.
+    expect(readConsentGroups(mixed)).toEqual({
+      kept: { name: 'Kept', hostIds: ['site-b', 'site-c'] },
+    })
+  })
+
+  it('THE CONTROL: a group id no site uses is kept', () => {
+    expect(
+      readConsentGroups({
+        hosts: { 'site-a': true, 'site-b': true },
+        ...org({ nw: GROUP }),
+      }),
+    ).toEqual({ nw: GROUP })
+  })
+})
+
+/**
+ * A grant pools only where the person was shown THIS disclosure. The key is
+ * what a capture surface sends back to prove which sentence it rendered.
+ */
+describe('the disclosure key, and the group a grant is recorded for', () => {
+  const grouped = consentGroupForHost(org({ nw: GROUP }), 'site-a')
+
+  it('keys only a group that has something to disclose', () => {
+    expect(consentGroupDisclosureKey(soloConsentGroup('site-a'))).toBeNull()
+    expect(consentGroupDisclosureKey(grouped)).toMatch(/^[0-9a-f]{8}$/)
+  })
+
+  it('is the same for every member of the group, and on every call', () => {
+    const fromB = consentGroupForHost(org({ nw: GROUP }), 'site-b')
+    expect(consentGroupDisclosureKey(fromB)).toBe(consentGroupDisclosureKey(grouped))
+    expect(consentGroupDisclosureKey(grouped)).toBe(consentGroupDisclosureKey(grouped))
+    // The stored order of the sites is not part of what was disclosed.
+    const reordered = consentGroupForHost(
+      org({ nw: { name: 'Northwind Group', hostIds: ['site-b', 'site-a'] } }),
+      'site-a',
+    )
+    expect(consentGroupDisclosureKey(reordered)).toBe(consentGroupDisclosureKey(grouped))
+  })
+
+  it('changes with the name, the sites and the id', () => {
+    const key = consentGroupDisclosureKey(grouped)
+    const renamed = consentGroupForHost(
+      org({ nw: { ...GROUP, name: 'Northwind Brands' } }),
+      'site-a',
+    )
+    const grown = consentGroupForHost(
+      org({ nw: { ...GROUP, hostIds: ['site-a', 'site-b', 'site-c'] } }),
+      'site-a',
+    )
+    const redeclared = consentGroupForHost(org({ nw2: GROUP }), 'site-a')
+    for (const changed of [renamed, grown, redeclared]) {
+      expect(consentGroupDisclosureKey(changed)).not.toBe(key)
+    }
+  })
+
+  it('pools a grant for the group when the key is the current one', () => {
+    expect(
+      consentGroupForGrant(grouped, consentGroupDisclosureKey(grouped)),
+    ).toEqual(grouped)
+  })
+
+  it('records the site alone for a missing, stale-name or stale-membership key', () => {
+    const renamed = consentGroupForHost(
+      org({ nw: { ...GROUP, name: 'Northwind Brands' } }),
+      'site-a',
+    )
+    const grown = consentGroupForHost(
+      org({ nw: { ...GROUP, hostIds: ['site-a', 'site-b', 'site-c'] } }),
+      'site-a',
+    )
+    const keyFromBefore = consentGroupDisclosureKey(grouped)
+    for (const [group, key] of [
+      [grouped, undefined],
+      [grouped, null],
+      [grouped, ''],
+      [grouped, 'not-a-key'],
+      [renamed, keyFromBefore],
+      [grown, keyFromBefore],
+    ] as const) {
+      expect(consentGroupForGrant(group, key)).toEqual(soloConsentGroup('site-a'))
+    }
+  })
+
+  it('never pools a group of one, whatever key arrives', () => {
+    const solo = soloConsentGroup('site-a')
+    expect(
+      consentGroupForGrant(solo, consentGroupDisclosureKey(grouped)),
+    ).toEqual(solo)
   })
 })
 
@@ -329,5 +477,47 @@ describe('the sending site’s standing on a stream, across its group', () => {
   it('is subscribed when nothing in the group holds', () => {
     expect(consentGroupTopicState(ON, ['subscribed', 'subscribed'])).toBe('subscribed')
     expect(consentGroupTopicState(ON, [])).toBe('subscribed')
+  })
+})
+
+/**
+ * A site's opt-outs are read across its group, so a grouped site — or one a
+ * change is still moving — is not deleted until it is out (AGL-3320).
+ */
+describe('whether a site may be deleted', () => {
+  it('holds a site in a declared group, naming the group', () => {
+    expect(consentGroupSiteHold(org({ nw: GROUP }), 'site-a')).toEqual({
+      reason: 'grouped',
+      groupId: 'nw',
+      name: 'Northwind Group',
+    })
+  })
+
+  it('holds a site a running change names, grouped or not', () => {
+    const changing = {
+      consentGroupsChange: { changeId: 'c1', phase: 'rehome', hostIds: ['site-x'] },
+    }
+    expect(consentGroupSiteHold(changing, 'site-x')).toEqual({ reason: 'changing' })
+    // The declared group answers first: the site is in it either way.
+    expect(
+      consentGroupSiteHold(
+        { ...org({ nw: GROUP }), consentGroupsChange: { hostIds: ['site-a'] } },
+        'site-a',
+      ),
+    ).toMatchObject({ reason: 'grouped' })
+  })
+
+  it('lets a site alone go, and a site no running change names', () => {
+    expect(consentGroupSiteHold(null, 'site-a')).toBeNull()
+    expect(consentGroupSiteHold(org({ nw: GROUP }), 'site-c')).toBeNull()
+    expect(
+      consentGroupSiteHold({ consentGroupsChange: { hostIds: ['site-b'] } }, 'site-a'),
+    ).toBeNull()
+    // A declaration that cannot be honored holds nothing: the site reads as
+    // alone, and nothing reads its refusals across a group.
+    expect(
+      consentGroupSiteHold(org({ nw: { name: '', hostIds: ['site-a', 'site-b'] } }), 'site-a'),
+    ).toBeNull()
+    expect(consentGroupSiteHold(org({ nw: GROUP }), '')).toBeNull()
   })
 })
