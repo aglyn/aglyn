@@ -35,7 +35,13 @@ import {
   type TopicSubscriptionEntry,
 } from '@aglyn/aglyn/app-utils/email-topics'
 import {
+  consentGroupOptOutHosts,
+  soloConsentGroup,
+  type ConsentGroup,
+} from '@aglyn/aglyn/app-utils/consent-groups'
+import {
   confirmTopicSubscription,
+  consentGroupForSite,
   EMAIL_FREQUENCY_SUBCOLLECTION,
   firebaseAdmin,
   mirrorPlatformResubscribe,
@@ -242,6 +248,84 @@ async function loadHostBrand(hostId: string): Promise<EmailPageBrand> {
   }
 }
 
+/**
+ * THE SENDER A PERSON LEAVES HERE — the link site's consent group
+ * (`consent-groups.ts`), or the site alone.
+ *
+ * An org may declare several sites ONE sender, and every capture form in the
+ * group named it as one. So these pages treat it as one: an opt-out made here
+ * is read by every site in it (the send paths read across the group), the
+ * state shown is the group's, a way back in lifts the group's records, and
+ * the page names the group rather than one of its sites.
+ *
+ * `consentGroupForSite` fails to the site alone, and so does this when it
+ * throws. `waitMs` bounds the wait where a page only NAMES the sender, for the
+ * reason {@link BRAND_READ_TIMEOUT_MS} gives; a page deciding what to read or
+ * lift waits for the real answer.
+ */
+async function loadConsentGroup(
+  hostId: string,
+  waitMs?: number,
+): Promise<ConsentGroup> {
+  const alone = soloConsentGroup(hostId)
+  const resolving = (async () => {
+    try {
+      return await consentGroupForSite(hostId)
+    } catch (error) {
+      console.error('[email] consent group read failed', error)
+      return alone
+    }
+  })()
+  if (!waitMs) return resolving
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      resolving,
+      new Promise<ConsentGroup>((resolve) => {
+        timer = setTimeout(() => resolve(alone), waitMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/** How the pages name the sender, escaped for HTML. */
+interface EmailPageSender {
+  /** The group's name for a declared group, else the site's brand. */
+  name: string
+  /**
+   * The sentence that says an act here covers every site in the group, or
+   * `''` for a site alone, where the brand already says everything.
+   */
+  reach: string
+}
+
+/**
+ * The sender as a page names it.
+ *
+ * The group's name is what the capture form disclosed — "You'll receive
+ * marketing email from" the group — so it is the name the person knows this
+ * sender by, and the one an opt-out here reaches. The site's own brand still
+ * frames the page; `reach` is what stops the two names reading as a mistake.
+ */
+function pageSender(brand: EmailPageBrand, group: ConsentGroup): EmailPageSender {
+  if (!group.declared || !group.name) {
+    return { name: escapeHtml(brand.name), reach: '' }
+  }
+  return {
+    name: escapeHtml(group.name),
+    reach:
+      `${escapeHtml(group.name)} sends from ${group.hostIds.length} sites, ` +
+      `${escapeHtml(brand.name)} among them, and this covers all of them.`,
+  }
+}
+
+/** The `reach` sentence as a paragraph, or nothing for a site alone. */
+function reachParagraph(sender: EmailPageSender, gap = 20): string {
+  return sender.reach ? paragraph(sender.reach, gap) : ''
+}
+
 const unsubscribeHandler: PluginApiHandler = async (req, res) => {
   const method = String(req.method ?? 'GET').toUpperCase()
   if (method !== 'GET' && method !== 'HEAD' && method !== 'POST') {
@@ -258,9 +342,14 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
   const query = signedQuery(params)
 
   if (method !== 'POST') {
-    // SAFE. A prescanner lands here and nothing is written — the brand read
-    // is the only Firestore access on this path, and it is a read.
-    const brand = await loadHostBrand(hostId)
+    // SAFE. A prescanner lands here and nothing is written — the brand and
+    // the consent group are the only Firestore access on this path, and both
+    // are reads.
+    const [brand, group] = await Promise.all([
+      loadHostBrand(hostId),
+      loadConsentGroup(hostId, BRAND_READ_TIMEOUT_MS),
+    ])
+    const sender = pageSender(brand, group)
     return void sendPage(
       res,
       page(
@@ -269,10 +358,10 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
             `Confirm that <strong style="color:${PAL.ink}">${escapeHtml(
               email,
             )}</strong> should stop receiving emails from ` +
-            `<strong style="color:${PAL.ink}">${escapeHtml(
-              brand.name,
-            )}</strong>.`,
+            `<strong style="color:${PAL.ink}">${sender.name}</strong>.`,
+            sender.reach ? 8 : 24,
           ) +
+          reachParagraph(sender, 24) +
           `<form method="post" action="/api/email/unsubscribe?${escapeHtml(
             query,
           )}">` +
@@ -294,14 +383,22 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const [created, brand] = await Promise.all([
+    /*
+     * Written against the ONE site the link names, and honored by every site
+     * in its consent group: the send paths read a group's lists together, so
+     * the one row is the refusal for the whole sender — and it reaches a site
+     * that joins the group later, which a copy written now could not.
+     */
+    const [created, brand, group] = await Promise.all([
       writeSiteSuppression(firestore, hostId, key, {
         email,
         campaignId,
         topicId,
       }),
       loadHostBrand(hostId),
+      loadConsentGroup(hostId, BRAND_READ_TIMEOUT_MS),
     ])
+    const sender = pageSender(brand, group)
 
     /*
      * The campaign's own unsubscribe count.
@@ -324,11 +421,10 @@ const unsubscribeHandler: PluginApiHandler = async (req, res) => {
         successBadge(brand.pal) +
           heading("You're unsubscribed") +
           paragraph(
-            `You won't receive further emails from ${escapeHtml(
-              brand.name,
-            )}.`,
-            20,
+            `You won't receive further emails from ${sender.name}.`,
+            sender.reach ? 8 : 20,
           ) +
+          reachParagraph(sender) +
           // Same signed params, so the click that just proved this is really
           // this recipient's link doubles as the resubscribe link — no new
           // token, no second email round-trip (AGL-2499).
@@ -504,18 +600,24 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
   if (method !== 'POST') {
     // SAFE, same reasoning as the unsubscribe GET: a prescanner must not be
     // able to resubscribe someone either.
-    const brand = await loadHostBrand(hostId)
+    const [brand, group] = await Promise.all([
+      loadHostBrand(hostId),
+      loadConsentGroup(hostId, BRAND_READ_TIMEOUT_MS),
+    ])
+    const sender = pageSender(brand, group)
     return void sendPage(
       res,
       page(
         heading('Resubscribe?') +
           paragraph(
             `Start receiving emails from <strong style="color:${PAL.ink}">` +
-              `${escapeHtml(brand.name)}</strong> again at ` +
+              `${sender.name}</strong> again at ` +
               `<strong style="color:${PAL.ink}">${escapeHtml(
                 email,
               )}</strong>.`,
+            sender.reach ? 8 : 24,
           ) +
+          reachParagraph(sender, 24) +
           `<form method="post" action="/api/email/resubscribe?${escapeHtml(
             query,
           )}">` +
@@ -529,9 +631,14 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const [released, brand] = await Promise.all([
-      releaseSiteSuppression(firestore, hostId, key),
+    // The group decides which rows are lifted, so it is waited for in full.
+    const groupRead = loadConsentGroup(hostId)
+    const [released, brand, group] = await Promise.all([
+      groupRead.then((resolved) =>
+        releaseSiteSuppression(firestore, resolved, key),
+      ),
       loadHostBrand(hostId),
+      groupRead,
     ])
     if (!released) {
       return void sendPage(res, page(protectedAddressBody(), 420, brand))
@@ -539,17 +646,17 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
     // Restores the account's Yes only when an email door took it away and
     // product updates now reach them (AGL-3305).
     await mirrorPlatformResubscribe({ hostId, email, via: 'email-resubscribe' })
+    const sender = pageSender(brand, group)
     return void sendPage(
       res,
       page(
         successBadge(brand.pal) +
           heading("You're resubscribed") +
           paragraph(
-            `You'll receive emails from ${escapeHtml(
-              brand.name,
-            )} again.`,
-            0,
-          ),
+            `You'll receive emails from ${sender.name} again.`,
+            sender.reach ? 8 : 0,
+          ) +
+          reachParagraph(sender, 0),
         420,
         brand,
       ),
@@ -572,30 +679,50 @@ const resubscribeHandler: PluginApiHandler = async (req, res) => {
  * back in circulation goes through here so that there is exactly one place the
  * rule is stated.
  *
- * @returns false when the record was left standing because it is not an
+ * ## Across the consent group, all or nothing
+ *
+ * The send paths read every site's list in the link site's consent group, so
+ * an unsubscribe filed on a sibling holds this site's mail too — and a way
+ * back in that lifted only this site's row would tell the person they were
+ * resubscribed while the sender went on withholding. Every site's row is
+ * therefore read first, and the release happens only if none of them is a
+ * record this rule may not lift: one bounce or complaint anywhere in the
+ * group still holds the whole group, so lifting the unsubscribes beside it
+ * would change nothing the person could see, and the page says so instead.
+ *
+ * @returns false when a record was left standing because it is not an
  *          unsubscribe.
  */
 async function releaseSiteSuppression(
   firestore: any,
-  hostId: string,
+  group: ConsentGroup,
   key: string,
 ): Promise<boolean> {
-  const ref = firestore
-    .collection('hosts')
-    .doc(hostId)
-    .collection('suppressions')
-    .doc(key)
-  const snapshot = await ref.get()
+  const [own, ...siblings] = consentGroupOptOutHosts(group).map((id) =>
+    firestore.collection('hosts').doc(id).collection('suppressions').doc(key),
+  )
+  const [ownSnapshot, ...siblingSnapshots] = await Promise.all(
+    [own, ...siblings].map((ref) => ref.get()),
+  )
   if (
-    snapshot.exists &&
-    snapshot.get('reason') !== UNSUBSCRIBE_SUPPRESSION_REASON
+    [ownSnapshot, ...siblingSnapshots].some(
+      (snapshot) =>
+        snapshot.exists &&
+        snapshot.get('reason') !== UNSUBSCRIBE_SUPPRESSION_REASON,
+    )
   ) {
     return false
   }
   // Idempotent whether or not a doc existed — a resubscribe click on an
   // address that was never suppressed (or already resubscribed) is not an
-  // error, it is the state the visitor wanted.
-  await ref.delete()
+  // error, it is the state the visitor wanted. A sibling's row is deleted
+  // only where one stands.
+  await Promise.all([
+    own.delete(),
+    ...siblings
+      .filter((_ref, index) => siblingSnapshots[index].exists)
+      .map((ref) => ref.delete()),
+  ])
   return true
 }
 
@@ -656,22 +783,35 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
 
   try {
     const firestore = firebaseAdmin.app().firestore()
-    // Three independent reads, so they go together rather than in series —
-    // the brand is not worth a third round trip on the page a recipient is
-    // waiting for.
-    const [catalog, state, brand] = await Promise.all([
+    // Independent reads, so they go together rather than in series — the
+    // brand is not worth another round trip on the page a recipient is
+    // waiting for. The state is the consent GROUP's, so it waits on the group.
+    const groupRead = loadConsentGroup(hostId)
+    const [catalog, state, brand, group] = await Promise.all([
       loadTopicCatalog(firestore, hostId),
-      readSubscriptionState(firestore, hostId, key),
+      groupRead.then((resolved) =>
+        readSubscriptionState(firestore, resolved, key),
+      ),
       loadHostBrand(hostId),
+      groupRead,
     ])
     const topics = activeEmailTopics(catalog)
+    const sender = pageSender(brand, group)
 
     if (method !== 'POST') {
       // SAFE. Reads only, exactly like the other two GETs.
       return void sendPage(
         res,
         page(
-          preferencesFormBody({ email, query, topics, state, topicId, brand }),
+          preferencesFormBody({
+            email,
+            query,
+            topics,
+            state,
+            topicId,
+            brand,
+            sender,
+          }),
           520,
           brand,
         ),
@@ -695,9 +835,10 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
             paragraph(
               `<strong style="color:${PAL.ink}">${escapeHtml(email)}</strong> ` +
                 'has been unsubscribed from every email ' +
-                `${escapeHtml(brand.name)} sends.`,
-              20,
+                `${sender.name} sends.`,
+              sender.reach ? 8 : 20,
             ) +
+            reachParagraph(sender) +
             paragraph(
               'Changed your mind? ' +
                 `<a href="/api/email/resubscribe?${escapeHtml(query)}" ` +
@@ -733,6 +874,14 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
       optOut: drop.map((topic) => topic.id),
       resume: [...keep],
     })
+    /*
+     * A ticked box is a stream the person wants back FROM THE SENDER, and the
+     * send paths read an opt-out on any site of the consent group — so an
+     * opt-out a sibling holds is lifted too, or the box would be a choice the
+     * send path goes on refusing. The unticked ones are written here alone:
+     * this site's record is read across the group already.
+     */
+    await resumeTopicsAcrossGroup(firestore, group, key, [...keep])
 
     /*
      * HOW OFTEN, recorded from the same submit as WHAT.
@@ -761,7 +910,7 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
      */
     let stillBlocked = false
     if (keep.size) {
-      stillBlocked = !(await releaseSiteSuppression(firestore, hostId, key))
+      stillBlocked = !(await releaseSiteSuppression(firestore, group, key))
     }
 
     /*
@@ -789,9 +938,10 @@ const preferencesHandler: PluginApiHandler = async (req, res) => {
         successBadge(brand.pal) +
           heading(drop.length ? 'Sorry to see you go' : 'Preferences saved') +
           paragraph(
-            changeSummary({ email, keep: [...keep], drop, topics }),
-            cadence === 'all' && cadenceStored ? 20 : 8,
+            changeSummary({ email, keep: [...keep], drop, topics, sender }),
+            cadence === 'all' && cadenceStored && !sender.reach ? 20 : 8,
           ) +
+          reachParagraph(sender, cadence === 'all' && cadenceStored ? 20 : 8) +
           /*
            * The pace is reported only when it is a CHOICE. "As they come" is
            * the default and the absence, so announcing it would tell somebody
@@ -886,6 +1036,8 @@ interface SubscriptionState {
    * lift it.
    */
   protectedRecord: boolean
+  /** The reason on that record, when there is one. */
+  protectedReason: string | null
   /** Topic ids this address has left and not rejoined. */
   optedOut: Set<string>
   /**
@@ -910,59 +1062,95 @@ function cadenceSentence(cadence: MarketingCadence): string {
 }
 
 /**
- * All three per-site records for one address, in three keyed `get()`s.
+ * All three per-site records for one address, in three keyed `get()`s per
+ * site of the link site's consent group.
  *
  * By document id rather than a query, matching `filterSendableForHost`: no
  * composite index to go missing, and nothing that can fail open on a read
  * window. The third is the send counter, which is where the recipient's
  * chosen pace lives — see `EmailFrequencyRecord.cadence` for why it is stored
  * on the document the send path already reads rather than on this page's own.
+ *
+ * ## The group's state, read the way the send paths read it
+ *
+ * The page shows what the SENDER will do, and the sender is the consent
+ * group: a suppression standing on any of its sites, and a stream left on any
+ * of them, holds this site's mail too, so both show here. The pace is the one
+ * chosen most recently on any site's page. A pending confirmation is the link
+ * site's own, as it is on the send path. A group of one is the three reads
+ * this page always made.
  */
 async function readSubscriptionState(
   firestore: any,
-  hostId: string,
+  group: ConsentGroup,
   key: string,
 ): Promise<SubscriptionState> {
-  const hostRef = firestore.collection('hosts').doc(hostId)
-  const [suppression, optOuts, frequency] = await Promise.all([
-    hostRef.collection('suppressions').doc(key).get(),
-    hostRef.collection(TOPIC_OPT_OUTS_SUBCOLLECTION).doc(key).get(),
-    hostRef
-      .collection(EMAIL_FREQUENCY_SUBCOLLECTION)
-      .doc(key)
-      .get()
-      // The pace is the one field on this page whose absence is a legitimate
-      // answer, so a read that fails renders the default rather than an
-      // error — the recipient still gets their topic checkboxes.
-      .catch(() => null),
-  ])
-  const stored = (optOuts?.exists ? optOuts.get('topics') : null) ?? {}
+  const sites = await Promise.all(
+    consentGroupOptOutHosts(group).map((id) => {
+      const hostRef = firestore.collection('hosts').doc(id)
+      return Promise.all([
+        hostRef.collection('suppressions').doc(key).get(),
+        hostRef.collection(TOPIC_OPT_OUTS_SUBCOLLECTION).doc(key).get(),
+        hostRef
+          .collection(EMAIL_FREQUENCY_SUBCOLLECTION)
+          .doc(key)
+          .get()
+          // The pace is the one field on this page whose absence is a
+          // legitimate answer, so a read that fails renders the default
+          // rather than an error — the recipient still gets their topic
+          // checkboxes.
+          .catch(() => null),
+      ])
+    }),
+  )
   const optedOut = new Set<string>()
   const pending = new Set<string>()
-  for (const [id, record] of Object.entries(
-    stored as Record<string, TopicSubscriptionEntry | null>,
-  )) {
-    /*
-     * The shared reader, not a field test. An entry with a `resubscribedAt`
-     * is EVIDENCE of an opt-out that has been lifted rather than a live one —
-     * see `writeTopicOptOuts` for why the entry stays — and an entry with a
-     * `confirmedAt` carries the same shape of evidence for a confirmation.
-     * Only one function knows all three states.
-     */
-    const state = readTopicSubscriptionState(record)
-    if (state === 'opted-out') optedOut.add(id)
-    if (state === 'pending') pending.add(id)
-  }
+  let suppressed = false
+  let protectedReason: string | null = null
+  let cadence: unknown = null
+  let cadenceSetAtMs = Number.NEGATIVE_INFINITY
+  sites.forEach(([suppression, optOuts, frequency], index) => {
+    const own = index === 0
+    if (suppression?.exists) {
+      suppressed = true
+      const reason = suppression.get('reason')
+      if (reason !== UNSUBSCRIBE_SUPPRESSION_REASON && protectedReason === null) {
+        protectedReason = String(reason ?? 'held')
+      }
+    }
+    const stored = (optOuts?.exists ? optOuts.get('topics') : null) ?? {}
+    for (const [id, record] of Object.entries(
+      stored as Record<string, TopicSubscriptionEntry | null>,
+    )) {
+      /*
+       * The shared reader, not a field test. An entry with a `resubscribedAt`
+       * is EVIDENCE of an opt-out that has been lifted rather than a live one
+       * — see `writeTopicOptOuts` for why the entry stays — and an entry with
+       * a `confirmedAt` carries the same shape of evidence for a
+       * confirmation. Only one function knows all three states.
+       */
+      const state = readTopicSubscriptionState(record)
+      if (state === 'opted-out') optedOut.add(id)
+      if (own && state === 'pending') pending.add(id)
+    }
+    // The most recent choice on any site, the link site keeping a tie — the
+    // rule `filterCadenceSendable` decides by.
+    if (frequency?.exists && frequency.get('cadence') != null) {
+      const setAtMs = Number(frequency.get('cadenceSetAtMs'))
+      const atMs = Number.isFinite(setAtMs) ? setAtMs : 0
+      if (atMs > cadenceSetAtMs) {
+        cadenceSetAtMs = atMs
+        cadence = frequency.get('cadence')
+      }
+    }
+  })
   return {
-    suppressed: !!suppression?.exists,
-    protectedRecord:
-      !!suppression?.exists &&
-      suppression.get('reason') !== UNSUBSCRIBE_SUPPRESSION_REASON,
+    suppressed,
+    protectedRecord: protectedReason !== null,
+    protectedReason,
     optedOut,
     pending,
-    cadence: normalizeMarketingCadence(
-      frequency?.exists ? frequency.get('cadence') : null,
-    ),
+    cadence: normalizeMarketingCadence(cadence),
   }
 }
 
@@ -1085,6 +1273,63 @@ async function writeTopicOptOuts(
 }
 
 /**
+ * Lifts the opt-outs the link site's consent-group SIBLINGS hold on streams
+ * the person has just asked for back, so a stream rejoined here is rejoined
+ * from the whole sender — the send paths read a sibling's opt-out as this
+ * site's own.
+ *
+ * Only a live opt-out is touched, and it is lifted the way
+ * `writeTopicOptOuts` lifts one: `resubscribedAt` stamped onto the entry,
+ * which stays as the evidence that the opt-out was honored while it stood. A
+ * sibling's pending confirmation is left alone — it is that site's question,
+ * not a refusal of the sender. Nothing is read or written for a site alone.
+ */
+async function resumeTopicsAcrossGroup(
+  firestore: any,
+  group: ConsentGroup,
+  key: string,
+  topicIds: readonly string[],
+): Promise<void> {
+  const siblings = consentGroupOptOutHosts(group).slice(1)
+  if (!siblings.length || !topicIds.length) return
+  await Promise.all(
+    siblings.map(async (id) => {
+      const ref = firestore
+        .collection('hosts')
+        .doc(id)
+        .collection(TOPIC_OPT_OUTS_SUBCOLLECTION)
+        .doc(key)
+      await firestore.runTransaction(async (transaction: any) => {
+        const existing = await transaction.get(ref)
+        if (!existing.exists) return
+        const stored = (existing.get('topics') ?? {}) as Record<
+          string,
+          Record<string, unknown>
+        >
+        const lifted: Record<string, unknown> = {}
+        for (const topicId of topicIds) {
+          const previous = stored[topicId]
+          if (readTopicSubscriptionState(previous) !== 'opted-out') continue
+          lifted[topicId] = {
+            ...previous,
+            resubscribedAt: FieldValue.serverTimestamp(),
+          }
+        }
+        if (!Object.keys(lifted).length) return
+        transaction.set(
+          ref,
+          {
+            topics: { ...stored, ...lifted },
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        )
+      })
+    }),
+  )
+}
+
+/**
  * Reopens ONE stream for a signed-in account (AGL-3305) — this plugin's side
  * of `plugin-email-streams`, which the console asks when an account's answer
  * about a stream turns back to yes. The caller has already proven the
@@ -1115,15 +1360,12 @@ export async function rejoinStreamForAccount(
 ): Promise<PluginEmailStreamRejoinResult> {
   const key = suppressionKeyFor(request.email)
   if (!key) return { status: 'held', reason: 'unusable-address' }
-  const state = await readSubscriptionState(firestore, request.hostId, key)
+  // The sender the stream is rejoined FROM — the site's consent group, whose
+  // records hold its mail as its own do.
+  const group = await loadConsentGroup(request.hostId)
+  const state = await readSubscriptionState(firestore, group, key)
   if (state.protectedRecord) {
-    const suppression = await firestore
-      .collection('hosts')
-      .doc(request.hostId)
-      .collection('suppressions')
-      .doc(key)
-      .get()
-    return { status: 'held', reason: String(suppression.get('reason') ?? 'held') }
+    return { status: 'held', reason: state.protectedReason ?? 'held' }
   }
   const email = String(request.email).trim().toLowerCase()
   if (!state.suppressed) {
@@ -1133,6 +1375,7 @@ export async function rejoinStreamForAccount(
       resume: [request.topicId],
       confirmPending: false,
     })
+    await resumeTopicsAcrossGroup(firestore, group, key, [request.topicId])
     return { status: 'rejoined', releasedSuppression: false, keptLeft: 0 }
   }
   const others = activeEmailTopics(await loadTopicCatalog(firestore, request.hostId, true))
@@ -1144,7 +1387,8 @@ export async function rejoinStreamForAccount(
     resume: [request.topicId],
     confirmPending: false,
   })
-  if (!(await releaseSiteSuppression(firestore, request.hostId, key))) {
+  await resumeTopicsAcrossGroup(firestore, group, key, [request.topicId])
+  if (!(await releaseSiteSuppression(firestore, group, key))) {
     // Turned into a bounce or a complaint between the read and the lift.
     return { status: 'held', reason: 'protected' }
   }
@@ -1246,8 +1490,10 @@ function preferencesFormBody(args: {
   state: SubscriptionState
   topicId: string
   brand: EmailPageBrand
+  /** Who the choices are made about — see {@link pageSender}. */
+  sender: EmailPageSender
 }): string {
-  const { email, query, topics, state, topicId, brand } = args
+  const { email, query, topics, state, topicId, brand, sender } = args
   const pal = brand.pal
   // A bounce or a complaint is not a preference, so the page does not pretend
   // the recipient can edit their way out of one. Shown instead of the form
@@ -1262,11 +1508,11 @@ function preferencesFormBody(args: {
       `Choose what <strong style="color:${PAL.ink}">${escapeHtml(
         email,
       )}</strong> should keep receiving from ` +
-        `<strong style="color:${PAL.ink}">${escapeHtml(
-          brand.name,
-        )}</strong>. Unticked emails stop; everything else carries on.`,
+        `<strong style="color:${PAL.ink}">${sender.name}</strong>. ` +
+        'Unticked emails stop; everything else carries on.',
       8,
     ) +
+    reachParagraph(sender, 8) +
     (state.suppressed
       ? paragraph(
           'You are currently unsubscribed from everything. Tick anything ' +
@@ -1327,20 +1573,23 @@ function changeSummary(args: {
   keep: string[]
   drop: EmailTopic[]
   topics: EmailTopic[]
+  /** A declared group is named; a site alone is "this site". */
+  sender: EmailPageSender
 }): string {
   const address = `<strong style="color:${PAL.ink}">${escapeHtml(
     args.email,
   )}</strong>`
+  const from = args.sender.reach ? args.sender.name : 'this site'
   if (!args.drop.length) {
-    return `${address} keeps receiving everything this site sends.`
+    return `${address} keeps receiving everything ${from} sends.`
   }
   const names = args.drop
     .map((topic) => escapeHtml(topic.name))
     .join(', ')
   if (!args.keep.length) {
     return (
-      `${address} has been unsubscribed from ${names} — everything this ` +
-      'site currently sends.'
+      `${address} has been unsubscribed from ${names} — everything ` +
+      `${from} currently sends.`
     )
   }
   return `${address} will stop receiving ${names}, and keeps the rest.`

@@ -169,6 +169,8 @@ async function loadActiveSequence(
 interface EnrollContext {
   settings: OutreachGateQuestion['settings']
   contactGroupId: string
+  /** The sequence site's consent group, whose opt-outs all apply. */
+  consentHostIds: readonly string[]
   siteName: string
 }
 
@@ -181,6 +183,7 @@ async function enrollContext(
     readOutreachComplianceSettingsDoc(firestore, caller.orgId),
     firestore.collection('hosts').doc(sequence.hostId).get(),
   ])
+  const consentGroup = consentGroupForHost(caller.org, sequence.hostId)
   return {
     // The organization's countries are a ceiling over the sequence's.
     settings: {
@@ -190,7 +193,8 @@ async function enrollContext(
         orgSettings.allowedCountries,
       ),
     },
-    contactGroupId: consentGroupForHost(caller.org, sequence.hostId).groupId,
+    contactGroupId: consentGroup.groupId,
+    consentHostIds: consentGroup.hostIds,
     siteName: host.exists ? String(host.get('name') ?? '') : '',
   }
 }
@@ -236,6 +240,7 @@ async function readPeople(
     ? await readOutreachGateLookups(firestore, {
         orgId: caller.orgId,
         hostId: sequence.hostId,
+        consentHostIds: context.consentHostIds,
         people: askable.map((candidate) => ({
           personId: candidate.personId,
           contactId: candidate.contactId || null,

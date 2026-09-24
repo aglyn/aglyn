@@ -65,7 +65,18 @@
  * joining a group inherits every refusal already standing against it. The
  * asymmetry is the same one the rest of this area keeps: a permissive fact is
  * written narrowly and read exactly, a restrictive fact is read as broadly as
- * it could possibly apply.
+ * it could possibly apply. Every opt-out the send paths consult is read this
+ * way — the site suppression lists, the topic opt-outs and the recipient's
+ * cadence (`email-suppression.ts`), and the consent refusal
+ * (`marketing-consent.ts`) — and the preference pages lift one across the
+ * group, since a person rejoining the sender has rejoined all of it.
+ *
+ * ⚠️ The one change that runs AGAINST reading is a site LEAVING a group. A
+ * refusal is stored on the site the person acted on, so once that site is no
+ * longer named, its former siblings stop seeing a refusal that was given to
+ * them too. Whatever edits this declaration must carry the leaving site's
+ * refusals onto the sites that stay — there is no console editor for it yet,
+ * and that is the rule the first one has to keep.
  *
  * ## VISIBILITY IS A SEPARATE AXIS
  *
@@ -248,6 +259,25 @@ export function consentGroupForHost(
     }
   }
   return soloConsentGroup(hostId)
+}
+
+/**
+ * The sites whose OPT-OUTS answer for mail sent by `group.hostId`, the
+ * sending site first.
+ *
+ * Every site the group names, because a refusal filed against any of them is
+ * a refusal of the sender — see "OPT-OUT runs the other way" above. The
+ * sending site leads so a reader that treats its own record differently from
+ * a sibling's (a pending confirmation is the sending site's own concern) can
+ * tell them apart by position. A group of one is the site alone.
+ */
+export function consentGroupOptOutHosts(
+  group: Pick<ConsentGroup, 'hostId' | 'hostIds'>,
+): string[] {
+  const siblings = (group.hostIds ?? []).filter(
+    (id) => typeof id === 'string' && id && id !== group.hostId,
+  )
+  return [group.hostId, ...new Set(siblings)]
 }
 
 /**

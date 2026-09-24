@@ -24,6 +24,7 @@ import {
 import * as CommerceModel from '../model'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
+  consentGroupForHost,
   EMAIL_TOPIC_NEWSLETTER,
   hostPublicOrigin,
   type PluginApiHandler,
@@ -116,9 +117,14 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
       ].slice(0, 200)
       // White-label sender identity (White-Label Phase 3): the store's brand
       // via the one shared resolver, from the owning org doc.
-      const branding = resolveBrandingProfile(
-        (await getOrgForHost(hostId).catch(() => null))?.org as never,
-      )
+      const owner = await getOrgForHost(hostId).catch(() => null)
+      const branding = resolveBrandingProfile(owner?.org as never)
+      // The site's consent group, off the same org read: a member who left
+      // any site the org declared one sender with this one is not mailed.
+      const consentHostIds = consentGroupForHost(
+        (owner?.org as Record<string, unknown> | undefined) ?? null,
+        hostId,
+      ).hostIds
       // The site's own origin, for the unsubscribe link the gate mints. Read
       // from the host document already in hand rather than assembled from an
       // apex: a post is mailed and read later, and a wrong origin sends a
@@ -166,6 +172,7 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
             hostId,
             siteBase,
             topicId: EMAIL_TOPIC_NEWSLETTER,
+            consentHostIds,
           },
         })
         // The cost meter counts messages that LEFT. A suppressed or capped

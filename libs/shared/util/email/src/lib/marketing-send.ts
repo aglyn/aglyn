@@ -162,6 +162,22 @@ export interface MarketingSendContext {
    * checks, at the one chokepoint every marketing message crosses.
    */
   topicId?: string
+  /**
+   * Every site in the sending site's CONSENT GROUP, the sending site included
+   * — `consentGroupForHost(org, hostId).hostIds`, from the org the caller
+   * already holds. `[hostId]` for a site in no declared group.
+   *
+   * An org may declare several sites one sender, and a person who left one
+   * of them left the sender: the gate withholds this message on an
+   * unsubscribe, a stream left, or a pace asked for on ANY of these sites.
+   *
+   * Required, and resolved by the caller rather than by the gate, for two
+   * reasons that agree. The gate would otherwise spend an org read on every
+   * marketing message to learn what every caller here has already read; and
+   * a sender that could leave it out would leave it out, which silently
+   * mails somebody who unsubscribed from the site next door.
+   */
+  consentHostIds: readonly string[]
 }
 
 /** What the gate is asked, once per marketing message. */
@@ -180,6 +196,12 @@ export interface MarketingSendGateRequest {
   topicId?: string
   /** Whether a frequency cap may refuse — see {@link MarketingSendContext}. */
   capped: boolean
+  /**
+   * The sender's consent group — see
+   * {@link MarketingSendContext.consentHostIds}. Absent, or a list that does
+   * not name `hostId`, is the site alone.
+   */
+  consentHostIds?: readonly string[]
 }
 
 /** Why a marketing message was not sent, or `null` when it may go. */

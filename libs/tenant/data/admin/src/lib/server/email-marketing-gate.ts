@@ -119,6 +119,7 @@
  */
 
 import {
+  DEFAULT_MARKETING_CADENCE,
   getMarketingSendGate,
   marketingCadenceVerdict,
   marketingFrequencyVerdict,
@@ -130,12 +131,15 @@ import {
   type MarketingSendGateRequest,
   type MarketingSendGateVerdict,
 } from '@aglyn/shared-util-email'
+import type { ConsentGroup } from '@aglyn/aglyn/app-utils/consent-groups'
 import firebaseAdmin from './firebase-admin'
 import { readPersonEngagement } from './email-delivery-log'
 import {
   emailSuppressionKey,
   filterSendableForHost,
   filterTopicSendable,
+  getAllAcrossSites,
+  optOutHostIds,
 } from './email-suppression'
 import { buildUnsubscribeUrl } from './email-unsubscribe-link'
 
@@ -284,6 +288,56 @@ function stateFromSnapshot(snapshot: any): MarketingFrequencyState {
         : null,
     cadence: normalizeMarketingCadence(snapshot.get('cadence')),
   }
+}
+
+/** What the recipient's own pace decides on: their choice and the last send. */
+interface MarketingPace {
+  cadence: MarketingCadence
+  lastSentAtMs: number | null
+}
+
+/**
+ * The pace a person asked a CONSENT GROUP for, and when the group last mailed
+ * them, from the counter documents of the sites in it that hold one.
+ *
+ * Each site's preference page writes its own counter, and to the person every
+ * one of those pages was the same sender's — so the choice made MOST
+ * RECENTLY, on whichever site, is the one in force, and a later "as they
+ * come" undoes an earlier "monthly" exactly as it would on one site. The last
+ * send is the newest across the group, because one a week from a sender is
+ * one a week whichever of its sites sent it.
+ *
+ * Only the pace is pooled. The frequency ceiling and the sunset stay each
+ * site's own: they are controls this platform keeps over a sender's volume,
+ * not a request the person made.
+ *
+ * `snapshots` are documents that exist, the sending site's first, and it
+ * keeps a tie. A single snapshot answers exactly what `stateFromSnapshot`
+ * answers for it, which is what lets a site alone run through here unchanged.
+ */
+function groupPace(snapshots: readonly any[]): MarketingPace {
+  let cadence: MarketingCadence = DEFAULT_MARKETING_CADENCE
+  let chosenAtMs = Number.NEGATIVE_INFINITY
+  let lastSentAtMs: number | null = null
+  for (const snapshot of snapshots) {
+    const state = stateFromSnapshot(snapshot)
+    if (
+      state.lastSentAtMs !== null &&
+      (lastSentAtMs === null || state.lastSentAtMs > lastSentAtMs)
+    ) {
+      lastSentAtMs = state.lastSentAtMs
+    }
+    // A counter the sends wrote carries no choice; it is not a vote for
+    // "as they come", it is no vote at all.
+    if (snapshot.get('cadence') == null) continue
+    const setAtMs = Number(snapshot.get('cadenceSetAtMs'))
+    const atMs = Number.isFinite(setAtMs) ? setAtMs : 0
+    if (atMs > chosenAtMs) {
+      chosenAtMs = atMs
+      cadence = state.cadence
+    }
+  }
+  return { cadence, lastSentAtMs }
 }
 
 function frequencyDoc(
@@ -478,6 +532,13 @@ export async function recordMarketingSends(
  * Keyed and read with one `getAll`, matching its three neighbors: one round
  * trip bounded by the size of the send, and no composite index to go missing.
  *
+ * ## "This site" means its consent group
+ *
+ * `group` is the sending site's consent group, and the pace is the one the
+ * person asked THE GROUP for — see {@link groupPace}. Omitted, the site alone,
+ * which is also the whole answer for an org that declared no group: one
+ * `getAll` over the same documents it always read.
+ *
  * ## Fails OPEN, like the topic filter beside it
  *
  * A cadence is a PACE, not a stop. Guessing wrong on an unreadable counter
@@ -489,9 +550,14 @@ export async function recordMarketingSends(
 export async function filterCadenceSendable(
   hostId: string,
   emails: readonly string[],
-  options?: { nowMs?: number; firestore?: any },
+  options?: {
+    nowMs?: number
+    firestore?: any
+    group?: Pick<ConsentGroup, 'hostId' | 'hostIds'> | null
+  },
 ): Promise<string[]> {
   if (!emails.length || !hostId) return [...emails]
+  const hostIds = optOutHostIds(hostId, options?.group)
   const nowMs = options?.nowMs ?? Date.now()
   // An unkeyable address carries no counter, so it has expressed no pace. It
   // is dropped from the LOOKUP and kept in the answer, exactly as the topic
@@ -504,26 +570,27 @@ export async function filterCadenceSendable(
   if (!lookups.length) return [...emails]
   try {
     const db = options?.firestore ?? defaultFirestore()
-    const counters = db
-      .collection('hosts')
-      .doc(hostId)
-      .collection(EMAIL_FREQUENCY_SUBCOLLECTION)
-    const snapshots = await db.getAll(
-      ...lookups.map((entry) => counters.doc(entry.key)),
+    const bySite = await getAllAcrossSites(
+      db,
+      hostIds,
+      EMAIL_FREQUENCY_SUBCOLLECTION,
+      lookups.map((entry) => entry.key),
     )
     const holding = new Set<string>()
     lookups.forEach((entry, index) => {
-      const snapshot = snapshots[index]
-      if (!snapshot?.exists) return
+      const held = bySite
+        .map((snapshots) => snapshots[index])
+        .filter((snapshot) => snapshot?.exists)
+      if (!held.length) return
       // The same decoder the per-message path uses, so the two cannot
-      // disagree about one document. The sunset's `firstSentAtMs` comes back
-      // with it and is deliberately unused: a campaign is exempt from that
-      // refusal, so subtracting on it here would remove people from a count
-      // the gate is going to mail anyway.
-      const state = stateFromSnapshot(snapshot)
+      // disagree about one document. The sunset's `firstSentAtMs` is
+      // deliberately not consulted: a campaign is exempt from that refusal,
+      // so subtracting on it here would remove people from a count the gate
+      // is going to mail anyway.
+      const pace = groupPace(held)
       const verdict = marketingCadenceVerdict(
-        state.cadence,
-        state.lastSentAtMs,
+        pace.cadence,
+        pace.lastSentAtMs,
         nowMs,
       )
       if (!verdict.allowed) holding.add(entry.email)
@@ -539,12 +606,81 @@ export async function filterCadenceSendable(
 }
 
 /**
+ * The consent group a gate request was made by, or `null` for the site alone.
+ *
+ * The sender resolved it — `MarketingSendContext.consentHostIds`, from the org
+ * it already held — so the gate spends no org read on it. A list that does
+ * not name the sending site is not a group resolved for it, and reads as the
+ * site alone: the gate must never throw, because `sendEmail` answers a gate
+ * that throws by sending ungated.
+ */
+function requestConsentGroup(
+  request: MarketingSendGateRequest,
+): Pick<ConsentGroup, 'hostId' | 'hostIds'> | null {
+  const hostIds = request.consentHostIds
+  if (!Array.isArray(hostIds) || !hostIds.includes(request.hostId)) return null
+  return {
+    hostId: request.hostId,
+    hostIds: hostIds.filter((id) => typeof id === 'string' && id),
+  }
+}
+
+/**
+ * The sending site's counter, and the pace its consent group was asked for.
+ *
+ * A site alone is {@link readMarketingFrequencyState}, the one `get` it has
+ * always been. A group reads every member's counter in one `getAll`: the
+ * sending site's supplies the window and the first send, which stay its own,
+ * and all of them together supply the pace — see {@link groupPace}.
+ *
+ * Fails OPEN, for the reason {@link readMarketingFrequencyState} gives.
+ */
+async function readGroupFrequency(
+  hostIds: readonly string[],
+  email: string,
+  firestore?: any,
+): Promise<{ state: MarketingFrequencyState; pace: MarketingPace }> {
+  if (hostIds.length === 1) {
+    const state = await readMarketingFrequencyState(hostIds[0], email, firestore)
+    return {
+      state,
+      pace: { cadence: state.cadence, lastSentAtMs: state.lastSentAtMs },
+    }
+  }
+  const unread = {
+    state: { ...NO_RECORD },
+    pace: { cadence: NO_RECORD.cadence, lastSentAtMs: null },
+  }
+  const key = emailSuppressionKey(email)
+  if (!key) return unread
+  try {
+    const db = firestore ?? defaultFirestore()
+    const snapshots = await db.getAll(
+      ...hostIds.map((id) => frequencyDoc(id, key, db)),
+    )
+    const own = snapshots[0]
+    return {
+      state: own?.exists ? stateFromSnapshot(own) : { ...NO_RECORD },
+      pace: groupPace(snapshots.filter((snapshot: any) => snapshot?.exists)),
+    }
+  } catch (error) {
+    console.error('[email-marketing] frequency read failed; allowing', error)
+    return unread
+  }
+}
+
+/**
  * The gate itself, exported so it can be exercised without installing it.
  *
  * ORDER MATTERS. The suppression check is first because its answer is
  * permanent and the frequency record must not count a message that was never
  * going to leave — a suppressed address whose window kept growing would stay
  * capped for a day after being released.
+ *
+ * Every opt-out below is read across the sender's consent group
+ * (`request.consentHostIds`) — the suppression list, the stream, and the
+ * pace — because a person who left one site of a declared group left the
+ * sender. The frequency ceiling and the sunset stay the sending site's own.
  */
 export async function marketingSendVerdict(
   request: MarketingSendGateRequest,
@@ -554,10 +690,12 @@ export async function marketingSendVerdict(
   const email = String(request.email ?? '')
     .trim()
     .toLowerCase()
+  const group = requestConsentGroup(request)
   const sendable = await filterSendableForHost(
     request.hostId,
     [email],
     options?.firestore,
+    group,
   )
   if (!sendable.length) {
     return {
@@ -635,6 +773,7 @@ export async function marketingSendVerdict(
       topicId,
       [email],
       options?.firestore,
+      group,
     )
     if (!onTopic.length) {
       /*
@@ -660,8 +799,10 @@ export async function marketingSendVerdict(
   // ONE read, and every refusal below is answered from it — except the
   // sunset's engagement half, which is a different document and is fetched
   // only when a window is configured and nothing above has already refused.
-  const state = await readMarketingFrequencyState(
-    request.hostId,
+  // For a consent group it is one `getAll`, and only the pace is pooled.
+  const hostIds = optOutHostIds(request.hostId, group)
+  const { state, pace } = await readGroupFrequency(
+    hostIds,
     email,
     options?.firestore,
   )
@@ -697,8 +838,8 @@ export async function marketingSendVerdict(
    * asked as a filter so the recipient count reflects it before Send.
    */
   const cadence = marketingCadenceVerdict(
-    state.cadence,
-    state.lastSentAtMs,
+    pace.cadence,
+    pace.lastSentAtMs,
     nowMs,
   )
   if (!cadence.allowed) {
@@ -715,8 +856,10 @@ export async function marketingSendVerdict(
       allowed: false,
       refusal: 'cadence-limited',
       detail:
-        `This address asked this site for no more than one marketing ` +
-        `message ${CADENCE_PHRASES[state.cadence]}. The next one may go on ` +
+        `This address asked ${
+          hostIds.length > 1 ? 'this site’s consent group' : 'this site'
+        } for no more than one marketing ` +
+        `message ${CADENCE_PHRASES[pace.cadence]}. The next one may go on ` +
         `${new Date(cadence.nextAllowedAtMs).toISOString()}.`,
       unsubscribeUrl,
       oneClickUrl,

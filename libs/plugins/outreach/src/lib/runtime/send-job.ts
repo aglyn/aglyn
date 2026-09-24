@@ -310,7 +310,8 @@ async function runMailbox(
   }
   const siteNames = new Map<string, string>()
   for (const [hostId, enrollments] of byHost) {
-    const contactGroupId = consentGroupForHost(org, hostId).groupId
+    const consentGroup = consentGroupForHost(org, hostId)
+    const contactGroupId = consentGroup.groupId
     // Each by the record it names — the contact, or the lead while the
     // person is one (AGL-3234) — keyed by that record's id.
     const [candidatesRead, lookupsRead, host] = await Promise.all([
@@ -323,6 +324,7 @@ async function runMailbox(
       readOutreachGateLookups(firestore, {
         orgId,
         hostId,
+        consentHostIds: consentGroup.hostIds,
         people: enrollments.map((enrollment) => {
           const person = outreachEnrollmentPerson(enrollment)
           return {

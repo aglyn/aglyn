@@ -19,6 +19,7 @@ import {
   ACTION_MAX_EVENT_DEPTH,
   ACTION_MAX_STEPS,
   checkEntitlement,
+  consentGroupForHost,
   planLabelGrantingFeature,
   checkQuota,
   type HostWebhook,
@@ -931,7 +932,18 @@ async function runServerStep(
         ...(enrollmentRef ? { priority: 'bulk' as const } : {}),
         // `topicId` is `''` for a step that belongs to no stream, which
         // every reader of it treats as absent — see `flowEmailTopicId`.
-        marketing: { hostId, siteBase, topicId },
+        // The consent group comes off the org the run already holds, so the
+        // gate honors an unsubscribe from any site of a declared group —
+        // the sender this site mails as — at no extra read.
+        marketing: {
+          hostId,
+          siteBase,
+          topicId,
+          consentHostIds: consentGroupForHost(
+            (env.org as Record<string, unknown> | null) ?? null,
+            hostId,
+          ).hostIds,
+        },
       })
       /*
        * DEFERRED IS NOT FAILED, and it is not SENT either.

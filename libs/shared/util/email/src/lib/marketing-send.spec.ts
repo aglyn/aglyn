@@ -344,7 +344,11 @@ describe('sendEmail with a marketing context', () => {
     return fetchMock
   }
 
-  const marketing = { hostId: 'host-1', siteBase: 'https://shop.example.com' }
+  const marketing = {
+    hostId: 'host-1',
+    siteBase: 'https://shop.example.com',
+    consentHostIds: ['host-1'],
+  }
 
   beforeEach(() => {
     jest.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -420,8 +424,34 @@ describe('sendEmail with a marketing context', () => {
           email: 'A@B.co',
           context: 'campaign',
           capped: false,
+          consentHostIds: ['host-1'],
         },
       ])
+    })
+  })
+
+  it('tells the gate the whole consent group the sender belongs to', () => {
+    /*
+     * An org may declare several sites one sender, and the gate reads an
+     * unsubscribe on any of them as an unsubscribe from this one. It can only
+     * do that if it is told which sites those are, verbatim — a list trimmed
+     * to the sending site is exactly the read that mails somebody who left
+     * the site next door.
+     */
+    installGate({ allowed: true, unsubscribeUrl: URL })
+    mockFetch()
+    return sendEmail({
+      to: 'a@b.co',
+      subject: 'News',
+      text: 'Hello',
+      context: 'restock alert',
+      marketing: { ...marketing, consentHostIds: ['host-1', 'host-2'] },
+    }).then(() => {
+      expect(asked).toHaveLength(1)
+      expect(asked[0]).toMatchObject({
+        hostId: 'host-1',
+        consentHostIds: ['host-1', 'host-2'],
+      })
     })
   })
 
@@ -630,7 +660,7 @@ describe('sendEmail with a marketing context', () => {
       subject: 'News',
       text: 'Hello',
       context: 'member post',
-      marketing: { hostId: 'host-1', siteBase: '' },
+      marketing: { hostId: 'host-1', siteBase: '', consentHostIds: ['host-1'] },
     })
 
     expect(result.sent).toBe(true)
@@ -783,7 +813,11 @@ describe('a sunset refusal is terminal, not deferrable', () => {
       subject: 'News',
       text: 'Hello',
       context: 'member post',
-      marketing: { hostId: 'host-1', siteBase: 'https://shop.example.com' },
+      marketing: {
+        hostId: 'host-1',
+        siteBase: 'https://shop.example.com',
+        consentHostIds: ['host-1'],
+      },
     })
 
     expect(result).toMatchObject({ sent: false, reason: 'unengaged' })

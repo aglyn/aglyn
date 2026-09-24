@@ -244,6 +244,9 @@ const fakeFirestore = {
 /** Null models a host with no owning org, which must still render a page. */
 let orgIdForHost: string | null = 'org-1'
 
+/** The owning org's `consentGroups` declaration, when a case makes one. */
+let mockOrgDeclaration: Record<string, unknown> = {}
+
 /** Forced failure for the next cadence write, to model an outage. */
 let cadenceWriteFails = false
 
@@ -275,18 +278,14 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // and every one of those comparisons would silently stop matching.
   UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
   /*
-   * The real resolution's shape: an org that declared no pooling resolves
-   * every site to a group of ONE. Faked rather than imported because this
-   * file mocks the whole module — but faked to the NARROW answer, which is
-   * the direction a wrong group may fail in.
+   * The REAL resolution, over the org this file declares — which declares
+   * nothing unless a case says so, so every site is a group of one, the
+   * NARROW answer, by default.
    */
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
-  }),
+  consentGroupForSite: async (hostId: string) =>
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/consent-groups')
+      .consentGroupForHost(mockOrgDeclaration, hostId),
   __esModule: true,
   firebaseAdmin: { app: () => ({ firestore: () => fakeFirestore }) },
   resolveOrgIdForHost: async () => orgIdForHost,
@@ -450,6 +449,7 @@ beforeEach(() => {
   confirmCalls = []
   mockMirrorCalls.length = 0
   orgIdForHost = 'org-1'
+  mockOrgDeclaration = {}
   process.env.EMAIL_UNSUBSCRIBE_SECRET = SECRET
 })
 
@@ -1514,5 +1514,185 @@ describe('rejoinStreamForAccount — one stream back, the rest stay left (AGL-33
     collection.mockRestore()
     expect(docs.get(SUPPRESSION_PATH)).toEqual({ email: RECIPIENT, reason: 'unsubscribe' })
     expect(docs.has(OPT_OUT_PATH)).toBe(false)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 6. A declared consent group is ONE sender on every page (AGL-3310)
+// ---------------------------------------------------------------------------
+
+/**
+ * An org may declare several sites one sender, and every capture form in the
+ * group named it as one. The send paths read an opt-out on any of its sites
+ * as a refusal of all of them; these pages have to agree with that, in all
+ * three directions a page acts in:
+ *
+ *  - what it SHOWS is the group's state, or a person unsubscribed on the
+ *    sibling is told they are subscribed to a sender that will not mail them;
+ *  - what it LIFTS is the group's records, or "You're resubscribed" is a page
+ *    telling somebody a thing the send path does not believe;
+ *  - what it WRITES stays on the site the link names — the read reaches the
+ *    rest, and a site that joins the group later.
+ *
+ * And what it SAYS names the group, because that is the sender the person
+ * knows. The control at the end is an org that declared nothing, whose sites
+ * keep their records their own.
+ */
+describe('a declared consent group is one sender on every page', () => {
+  const SIBLING = 'host-2'
+  const SIBLING_SUPPRESSION = `hosts/${SIBLING}/suppressions/${KEY}`
+  const SIBLING_OPT_OUT = `hosts/${SIBLING}/topicOptOuts/${KEY}`
+  const REQUEST = { hostId: HOST, email: RECIPIENT, topicId: 'product-updates' }
+  const declare = () => {
+    mockOrgDeclaration = {
+      consentGroups: { acme: { name: 'Acme Goods', hostIds: [HOST, SIBLING] } },
+    }
+  }
+  const everyTopic = () =>
+    Object.fromEntries(DEFAULT_EMAIL_TOPICS.map((topic) => [`topic:${topic.id}`, 'on']))
+  const leftNewsletter = () => ({
+    email: RECIPIENT,
+    topics: { newsletter: { optedOutAt: 't0', resubscribedAt: null } },
+  })
+
+  it('names the group on the unsubscribe page, and says it covers every site', async () => {
+    declare()
+    const reply = await call({
+      method: 'GET',
+      route: 'email/unsubscribe',
+      query: legacyQuery(),
+    })
+    expect(reply.body).toContain('should stop receiving emails from')
+    expect(reply.body).toContain('Acme Goods')
+    expect(reply.body).toMatch(/Acme Goods sends from 2 sites/)
+    // Still a page and not an act.
+    expect(docs.size).toBe(0)
+  })
+
+  it('files the unsubscribe on the site the link names, and names the group it reaches', async () => {
+    declare()
+    const reply = await call({
+      method: 'POST',
+      route: 'email/unsubscribe',
+      query: legacyQuery(),
+    })
+    expect(reply.status).toBe(200)
+    expect(docs.get(SUPPRESSION_PATH)).toMatchObject({ reason: 'unsubscribe' })
+    // Read by the sibling's sends, never copied onto its list.
+    expect(docs.has(SIBLING_SUPPRESSION)).toBe(false)
+    expect(reply.body).toContain("You won't receive further emails from Acme Goods.")
+    expect(reply.body).toMatch(/this covers all of them/)
+  })
+
+  it('shows somebody who unsubscribed on the sibling as unsubscribed here', async () => {
+    declare()
+    docs.set(SIBLING_SUPPRESSION, { email: RECIPIENT, reason: 'unsubscribe' })
+    const reply = await call({ method: 'GET', query: topicQuery() })
+    expect(reply.body).toContain('You are currently unsubscribed from everything')
+    expect(checkedTopics(reply.body)).toEqual([])
+    expect(reply.body).toContain('keep receiving from <strong')
+    expect(reply.body).toContain('Acme Goods')
+  })
+
+  it('shows a stream left on the sibling as left here', async () => {
+    declare()
+    docs.set(SIBLING_OPT_OUT, leftNewsletter())
+    const reply = await call({ method: 'GET', query: topicQuery() })
+    expect(checkedTopics(reply.body)).not.toContain('newsletter')
+    expect(checkedTopics(reply.body)).toContain('marketing')
+  })
+
+  it('shows the pace chosen most recently on any of the group’s pages', async () => {
+    declare()
+    docs.set(`hosts/${SIBLING}/emailFrequency/${KEY}`, {
+      email: RECIPIENT,
+      cadence: 'weekly',
+      cadenceSetAtMs: 5,
+    })
+    const reply = await call({ method: 'GET', query: topicQuery() })
+    expect(reply.body).toContain('value="weekly" checked')
+  })
+
+  it('resubscribes them to the whole group, lifting the sibling’s unsubscribe too', async () => {
+    declare()
+    docs.set(SIBLING_SUPPRESSION, { email: RECIPIENT, reason: 'unsubscribe' })
+    const reply = await call({
+      method: 'POST',
+      route: 'email/resubscribe',
+      query: legacyQuery(),
+    })
+    expect(reply.body).toContain("You're resubscribed")
+    expect(reply.body).toContain("You'll receive emails from Acme Goods again.")
+    expect(docs.has(SIBLING_SUPPRESSION)).toBe(false)
+  })
+
+  it('lifts nothing while the sibling holds a bounce — the group is still held', async () => {
+    declare()
+    docs.set(SUPPRESSION_PATH, { email: RECIPIENT, reason: 'unsubscribe' })
+    docs.set(SIBLING_SUPPRESSION, { email: RECIPIENT, reason: 'bounce' })
+    const reply = await call({
+      method: 'POST',
+      route: 'email/resubscribe',
+      query: legacyQuery(),
+    })
+    expect(reply.body).toContain("Can't resubscribe this address")
+    // All or nothing: lifting this site's unsubscribe beside a standing
+    // bounce would change nothing the person could see.
+    expect(docs.get(SUPPRESSION_PATH)).toMatchObject({ reason: 'unsubscribe' })
+    expect(docs.get(SIBLING_SUPPRESSION)).toMatchObject({ reason: 'bounce' })
+  })
+
+  it('reopens a stream across the group when its box is ticked, keeping the evidence', async () => {
+    declare()
+    docs.set(SIBLING_OPT_OUT, leftNewsletter())
+    const reply = await call({ method: 'POST', query: topicQuery(), body: everyTopic() })
+    expect(reply.status).toBe(200)
+    const sibling = docs.get(SIBLING_OPT_OUT) as any
+    // The moment they left stays; the moment they came back is added.
+    expect(sibling.topics.newsletter.optedOutAt).toBe('t0')
+    expect(sibling.topics.newsletter.resubscribedAt).toBeTruthy()
+  })
+
+  it('files a stream left here on this site alone', async () => {
+    declare()
+    const kept = everyTopic()
+    delete kept['topic:newsletter']
+    await call({ method: 'POST', query: topicQuery(), body: kept })
+    expect((docs.get(OPT_OUT_PATH) as any).topics.newsletter.optedOutAt).toBeTruthy()
+    expect(docs.has(SIBLING_OPT_OUT)).toBe(false)
+  })
+
+  it('rejoins an account’s stream from the whole group', async () => {
+    declare()
+    docs.set(SIBLING_SUPPRESSION, { email: RECIPIENT, reason: 'unsubscribe' })
+    await expect(rejoinStreamForAccount(REQUEST, fakeFirestore)).resolves.toMatchObject({
+      status: 'rejoined',
+      releasedSuppression: true,
+    })
+    expect(docs.has(SIBLING_SUPPRESSION)).toBe(false)
+  })
+
+  it('holds an account’s stream while the sibling holds a complaint, and says why', async () => {
+    declare()
+    docs.set(SIBLING_SUPPRESSION, { email: RECIPIENT, reason: 'complaint' })
+    await expect(rejoinStreamForAccount(REQUEST, fakeFirestore)).resolves.toEqual({
+      status: 'held',
+      reason: 'complaint',
+    })
+    expect(docs.get(SIBLING_SUPPRESSION)).toMatchObject({ reason: 'complaint' })
+  })
+
+  it('CONTROL: an org that declared nothing keeps every site’s records its own', async () => {
+    docs.set(SIBLING_SUPPRESSION, { email: RECIPIENT, reason: 'unsubscribe' })
+    docs.set(SIBLING_OPT_OUT, leftNewsletter())
+
+    const page = await call({ method: 'GET', query: topicQuery() })
+    expect(page.body).not.toContain('currently unsubscribed')
+    expect(checkedTopics(page.body)).toEqual(DEFAULT_EMAIL_TOPICS.map((topic) => topic.id))
+    expect(page.body).not.toMatch(/sends from \d+ sites/)
+
+    // A resubscribe here is about this site, and lifts nothing of the other.
+    await call({ method: 'POST', route: 'email/resubscribe', query: legacyQuery() })
+    expect(docs.get(SIBLING_SUPPRESSION)).toMatchObject({ reason: 'unsubscribe' })
   })
 })

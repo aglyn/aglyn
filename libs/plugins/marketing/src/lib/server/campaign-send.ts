@@ -1652,11 +1652,17 @@ export async function performCampaignSend(
    * is a keyed lookup per address, so its cost is the size of what is being
    * mailed, and asking about people this send will not reach would buy a
    * larger read for a number nobody acts on.
+   *
+   * All three per-site filters below read across `consentGroup` — the same
+   * controller the consent join above was read for. A person who left one
+   * site of a declared group left the sender, and the send is the sender's.
+   * A group of one reads exactly what the site alone always read.
    */
   const notSuppressed = await filterSendableForHost(
     hostId,
     recipients,
     firestore,
+    consentGroup,
   )
   /*
    * The THIRD list, and the narrowest: who has left THIS stream.
@@ -1672,6 +1678,7 @@ export async function performCampaignSend(
     topicId,
     notSuppressed,
     firestore,
+    consentGroup,
   )
   /*
    * THE FOURTH FILTER: how often the recipient asked to hear from this site.
@@ -1697,7 +1704,10 @@ export async function performCampaignSend(
    * pace is not a stop, and the two suppression lists above have already
    * removed everybody who asked us to stop entirely.
    */
-  const sendable = await filterCadenceSendable(hostId, onTopic, { firestore })
+  const sendable = await filterCadenceSendable(hostId, onTopic, {
+    firestore,
+    group: consentGroup,
+  })
   /*
    * NOBODY IN THIS BATCH, BUT SOMEBODY AFTER IT.
    *

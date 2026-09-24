@@ -188,13 +188,15 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // The minted reference: a fixed id, so the tags and the row can be
   // matched against it.
   newCrmActivityRef: () => ({ id: 'act-new', path: 'orgs/org-1/crmActivities/act-new' }),
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
-  }),
+  // The REAL resolution over the org the route read, so a declaration in a
+  // fixture is the declaration the route acts on.
+  consentGroupForSite: async (
+    hostId: string,
+    org?: Record<string, unknown> | null,
+  ) =>
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/consent-groups')
+      .consentGroupForHost(org ?? null, hostId),
   orgDataCollectionForHost: async (_hostId: string, name: string) =>
     collectionHandle(`orgs/org-1/${name}`),
 }))
@@ -853,7 +855,34 @@ describe('the other gates, each before the provider', () => {
     const { status, body } = await call(MESSAGE)
     expect(status).toBe(409)
     expect(body).toMatchObject({ error: CRM_EMAIL_SUPPRESSED_MESSAGE, reason: 'suppressed' })
-    expect(filterSendableForHost).toHaveBeenCalledWith(HOST_ID, ['ada@example.com'])
+    expect(filterSendableForHost).toHaveBeenCalledWith(
+      HOST_ID,
+      ['ada@example.com'],
+      undefined,
+      expect.objectContaining({ hostId: HOST_ID, hostIds: [HOST_ID] }),
+    )
+    expectNothingSent()
+  })
+
+  it('asks the lists of every site in the sender’s consent group (AGL-3310)', async () => {
+    // Declared one sender with a sibling: somebody who unsubscribed from the
+    // sibling left this sender too, so the question covers both lists. Which
+    // entries withhold is `consent-group-opt-outs.spec.ts`'s to prove; this
+    // route's part is to ask it of the group and stop on the answer.
+    getOrgForHost.mockResolvedValue({
+      orgId: ORG_ID,
+      org: {
+        plan: PLAN,
+        consentGroups: { acme: { name: 'Acme', hostIds: [HOST_ID, 'site-sibling'] } },
+      },
+    })
+    filterSendableForHost.mockResolvedValue([])
+    const { status, body } = await call(MESSAGE)
+    expect(status).toBe(409)
+    expect(body).toMatchObject({ reason: 'suppressed' })
+    const group = filterSendableForHost.mock.calls[0][3]
+    expect(group).toMatchObject({ hostId: HOST_ID, declared: true })
+    expect(group.hostIds).toEqual([HOST_ID, 'site-sibling'].sort())
     expectNothingSent()
   })
 
@@ -1014,7 +1043,12 @@ describe('at the organization level', () => {
     expect(getOrgForHost).not.toHaveBeenCalled()
     // Everything a site owns is the sending site's.
     expect(hostSendingIdentity).toHaveBeenCalledWith('site-2')
-    expect(filterSendableForHost).toHaveBeenCalledWith('site-2', ['ada@example.com'])
+    expect(filterSendableForHost).toHaveBeenCalledWith(
+      'site-2',
+      ['ada@example.com'],
+      undefined,
+      expect.objectContaining({ hostId: 'site-2' }),
+    )
     expect(sendEmail.mock.calls[0][0].tags).toEqual(
       expect.arrayContaining([
         { name: 'hostId', value: 'site-2' },

@@ -44,6 +44,10 @@
 
 const platformSuppressed = new Set<string>()
 const hostSuppressed = new Set<string>()
+/** The consent group each site-list question was asked for, in order. */
+const mockSuppressionGroups: unknown[] = []
+/** The owning org's `consentGroups` declaration, when a case makes one. */
+let mockOrgDeclaration: Record<string, unknown> = {}
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -203,18 +207,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // and every one of those comparisons would silently stop matching.
   UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
   /*
-   * The real resolution's shape: an org that declared no pooling resolves
-   * every site to a group of ONE. Faked rather than imported because this
-   * file mocks the whole module — but faked to the NARROW answer, which is
-   * the direction a wrong group may fail in.
+   * The REAL resolution, over an org that declares no pooling unless a case
+   * says so — every site a group of ONE, the NARROW answer, by default.
    */
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
-  }),
+  consentGroupForSite: async (hostId: string) =>
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/consent-groups')
+      .consentGroupForHost(mockOrgDeclaration, hostId),
   __esModule: true,
   collectDynamicListCandidates: async (options: Record<string, unknown>) => {
     mockScanCalls.push(options)
@@ -233,10 +232,17 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ).enrollListMember,
   // BOTH lists, as the real pair does, off one set of facts so the two halves
   // cannot disagree about who is suppressed for reasons of the double's own.
-  filterSendableForHost: async (_hostId: string, emails: string[]) =>
-    emails.filter(
+  filterSendableForHost: async (
+    _hostId: string,
+    emails: string[],
+    _firestore?: unknown,
+    group?: unknown,
+  ) => {
+    mockSuppressionGroups.push(group ?? null)
+    return emails.filter(
       (email) => !platformSuppressed.has(email) && !hostSuppressed.has(email),
-    ),
+    )
+  },
   filterSuppressedEmails: async (emails: string[]) =>
     emails.filter((email) => !platformSuppressed.has(email)),
   getOrgForHost: async () => ({ orgId: ORG_ID, org: {} }),
@@ -324,6 +330,8 @@ beforeEach(() => {
   contactsUnreadable = false
   platformSuppressed.clear()
   hostSuppressed.clear()
+  mockSuppressionGroups.length = 0
+  mockOrgDeclaration = {}
   decodedToken = { uid: 'editor-uid' }
   membership = { orgId: ORG_ID, member: { role: 'editor', allHosts: true } }
   store[`hosts/${HOST_ID}`] = {
@@ -529,6 +537,34 @@ describe('a suppressed address', () => {
     const out = await preview({ email: OPTED_IN })
     expect(out.body.verdicts[0].refusal).toBe('suppressed-host')
     expect(out.body.verdicts[0].summary).toContain('unsubscribed')
+  })
+
+  /*
+   * An org may declare several sites one sender (AGL-3310), and the send
+   * reads a suppression on any of them as this site's. The enrollment asks
+   * the same question of the same group, or it would put somebody on a list
+   * whose campaigns will never reach them. Which entries withhold is the
+   * real helper's to prove; this file certifies the question is the group's.
+   */
+  it('asks every site of this site’s consent group, as the send will', async () => {
+    mockOrgDeclaration = {
+      consentGroups: { acme: { name: 'Acme', hostIds: [HOST_ID, 'site-sibling'] } },
+    }
+    await preview({ email: OPTED_IN })
+    expect(mockSuppressionGroups.at(-1)).toMatchObject({
+      hostId: HOST_ID,
+      declared: true,
+      hostIds: [HOST_ID, 'site-sibling'].sort(),
+    })
+  })
+
+  it('CONTROL: asks the site alone in an org that declared no group', async () => {
+    await preview({ email: OPTED_IN })
+    expect(mockSuppressionGroups.at(-1)).toMatchObject({
+      hostId: HOST_ID,
+      declared: false,
+      hostIds: [HOST_ID],
+    })
   })
 
   /*

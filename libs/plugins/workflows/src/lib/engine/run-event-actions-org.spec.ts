@@ -334,6 +334,28 @@ describe('an org automation runs on the sites it is placed on', () => {
     expect(siteActivity(SIBLING)).toEqual([])
   })
 
+  it('mails as the event site’s consent group, so a sibling’s opt-out holds it (AGL-3310)', async () => {
+    // Declared one sender: the gate reads an unsubscribe on either site as a
+    // refusal of both, and it can only if the step names both.
+    mockOrg = {
+      plan: 'pro',
+      consentGroups: { acme: { name: 'Acme', hostIds: [SITE, SIBLING] } },
+    }
+    seedOrgAutomation('org-auto-1')
+
+    await runEventActions(SITE, 'formSubmission', { email: 'a@b.co' })
+
+    expect(mockSent[0]?.marketing?.consentHostIds).toEqual([SITE, SIBLING].sort())
+  })
+
+  it('CONTROL: mails as the site alone in an org that declared no group', async () => {
+    seedOrgAutomation('org-auto-1')
+
+    await runEventActions(SITE, 'formSubmission', { email: 'a@b.co' })
+
+    expect(mockSent[0]?.marketing?.consentHostIds).toEqual([SITE])
+  })
+
   it('placed on this site by name, it runs; placed only on a sibling, it does not', async () => {
     seedOrgAutomation('mine', { visibleTo: [`host:${SITE}`] })
     seedOrgAutomation('theirs', {
@@ -539,6 +561,9 @@ describe('waiting inside an org automation', () => {
     expect(ending).toBe('ran')
     expect(mockSent.map((message) => message.subject)).toEqual(['Day two'])
     expect(enrollmentsOf(SITE)).toEqual([])
+    // The resumed step names its sender from the organization it resumed
+    // against, as the first run did.
+    expect(mockSent[0]?.marketing?.consentHostIds).toEqual([SITE])
     // Counted on the site's meter: the first run and the resume.
     expect(actionRuns(SITE)).toBe(2)
   })
