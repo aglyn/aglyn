@@ -16,6 +16,7 @@
  */
 
 import { EMAIL_TOPIC_SALES } from '@aglyn/aglyn/app-utils/email-topics'
+import { resolveMx } from 'node:dns/promises'
 import { checkEntitlement } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import { isPluginEnabled } from '@aglyn/aglyn/plugin-manager/enabled-plugins'
 import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
@@ -90,6 +91,8 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
     random: Math.random,
     campaignCredit: platformOutreachCampaignCredit(firestore),
     openMailbox: (mailboxId) => openOutreachMailboxClient(firestore(), { mailboxId }),
+    // The domain's MX (AGL-3326), from the console's own resolver.
+    resolveMx: (domain) => resolveMx(domain),
     async orgRefusal(orgId, org) {
       if (!isPluginEnabled(org as { enabledPlugins?: string[] }, OUTREACH_PLUGIN_ID)) return 'plugin-disabled'
       if (!checkEntitlement(org, 'outreach')) return 'not-entitled'

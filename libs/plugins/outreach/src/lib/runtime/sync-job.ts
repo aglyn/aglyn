@@ -50,6 +50,7 @@ import type { GmailClient } from '../transport/gmail-client'
 import { GmailTransportError, isReconnectRequired } from '../transport/gmail-errors'
 import { creditOutreachReply } from './campaign-credit'
 import { applyOutreachEvent, recordOutreachOptOut } from './enrollment-events'
+import { creditOutreachGatewayDeliveries, recordOutreachGatewayBlock } from './gateway-ledger'
 import {
   applyOutreachMailboxHealth,
   emptyOutreachHealthDelta,
@@ -80,7 +81,14 @@ import { outreachUnsubscribeMailbox } from './unsubscribe-link'
  *   suppression list and the do-not-contact list — and, when its diagnostic
  *   reads as the domain's mail gateway refusing the sender rather than one
  *   address being unknown (`engine/gateway-block`, AGL-3244), files the
- *   DOMAIN on the do-not-contact list too, and says so on the enrollment.
+ *   DOMAIN on the do-not-contact list too, and says so on the enrollment —
+ *   and counts the block on the gateway ledger (AGL-3326), under the
+ *   gateway the bounce's `Remote-MTA` names.
+ *
+ * And once the mail is read, every email step of a watched enrollment that
+ * is a day old with no bounce against it is credited to the ledger as
+ * delivered (`./gateway-ledger`): the silence that says a gateway let the
+ * sender through.
  *
  * Every verdict a list takes is said on the record the person is as well
  * (AGL-3245): the lead and the contact carry `emailState` through the
@@ -133,6 +141,8 @@ export interface OutreachSyncReport {
   bounces: number
   /** Hard bounces that read as a gateway block, each filing its domain (AGL-3244). */
   gatewayBlocks: number
+  /** Email steps a day old with no bounce, credited to the gateway ledger (AGL-3326). */
+  deliveries: number
   postponed: number
   paused: number
 }
@@ -164,6 +174,7 @@ export async function runOutreachSyncJob(
     optOuts: 0,
     bounces: 0,
     gatewayBlocks: 0,
+    deliveries: 0,
     postponed: 0,
     paused: 0,
   }
@@ -263,9 +274,11 @@ async function syncMailbox(
     .get()
   const byThread = new Map<string, OutreachEnrollment>()
   const byAddress = new Map<string, OutreachEnrollment>()
+  const watchedEnrollments: OutreachEnrollment[] = []
   for (const doc of watched.docs) {
     const enrollment = readStoredOutreachEnrollment(doc.id, doc.data())
     if (!enrollment) continue
+    watchedEnrollments.push(enrollment)
     for (const threadId of enrollment.gmailThreadIds) byThread.set(threadId, enrollment)
     const known = byAddress.get(enrollment.email)
     if (!known || (enrollment.lastSentAtMs ?? 0) > (known.lastSentAtMs ?? 0)) byAddress.set(enrollment.email, enrollment)
@@ -343,6 +356,19 @@ async function syncMailbox(
       if (enrollment) await applyMessages(context, enrollment, [message])
       markHandled(stub.id)
     }
+  }
+
+  // 5. What went through: a day of silence after a send is a delivery
+  //    (AGL-3326), judged on the enrollments as this run left them.
+  try {
+    report.deliveries += await creditOutreachGatewayDeliveries(firestore, {
+      orgId,
+      enrollments: watchedEnrollments,
+      resolveMx: deps.resolveMx,
+      nowMs,
+    })
+  } catch (error) {
+    console.error('[outreach] the gateway ledger could not credit deliveries', error)
   }
 
   const paused = await applyOutreachMailboxHealth(deps, { orgId, mailboxId: mailbox.id, delta: context.delta })
@@ -523,6 +549,18 @@ async function applyMessages(
         })
         detail = outreachGatewayBlockDetail(domain, diagnostic)
         report.gatewayBlocks += 1
+      }
+      // The ledger learns the refusal (AGL-3326), whichever domain it was
+      // at: a public provider refusing on policy is still that provider's
+      // verdict on the sender, even though its domain is never listed.
+      if (gateway) {
+        await recordOutreachGatewayBlock(firestore, {
+          orgId: context.orgId,
+          email: enrollment.email,
+          remoteMta: decidedBy?.bounce?.remoteMta ?? null,
+          resolveMx: deps.resolveMx,
+          nowMs,
+        })
       }
       const bouncedAtMs = decidedBy?.atMs || nowMs
       // The record the person is says so too (AGL-3245): the verdict on the

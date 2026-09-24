@@ -47,6 +47,17 @@
  * refuses — with a sentence that says the check could not be made rather
  * than one that accuses the address of something. A person who asked not to
  * be emailed must not be emailed because a read timed out.
+ *
+ * ## A block and a hold
+ *
+ * Every gate above REFUSES: the person is not enrolled, or the enrollment
+ * is stopped. The mail gateway (AGL-3326) adds one verdict of a different
+ * weight. A domain with no MX cannot receive mail and blocks like the rest;
+ * a gateway that refused this organization's sender twice in the last
+ * thirty days without delivering once HOLDS the send — the enrollment is
+ * allowed, and pauses at the send with `gateway_blocked_here` until a
+ * member resumes it — because the founder decides, and the decision is
+ * shown to them in Check people before they tick the person.
  *==========================================*/
 
 import {
@@ -70,6 +81,11 @@ import {
   type OutreachEnrollmentStatus,
   type OutreachSequenceSettings,
 } from '../model/outreach.types'
+import {
+  type OutreachGatewayStanding,
+  outreachGatewayHoldReason,
+  outreachGatewayHolds,
+} from './mail-gateway'
 import {
   type OutreachRecipientCountry,
   outreachCountryName,
@@ -146,6 +162,13 @@ export interface OutreachGateLookups {
    * the rules stricter.
    */
   hasInboundEmail: boolean | null
+  /**
+   * The mail gateway in front of the address's domain (AGL-3326), as its MX
+   * names it — `outreachDomainIntel/{domain}` — and what that gateway did
+   * with this organization's mail lately, from `outreachGatewayStats`.
+   * `none` blocks; a gateway that holds is answered in `hold`.
+   */
+  gateway: OutreachGatewayStanding | null
 }
 
 export interface OutreachGateInput {
@@ -164,6 +187,12 @@ export interface OutreachGateInput {
   attestations: OutreachAttestations | null | undefined
   /** The enrollment being re-checked before a send, so it does not count as another. */
   enrollmentId?: string | null
+  /**
+   * A member already released the gateway hold on this enrollment
+   * (AGL-3326) — resumed it, or ticked the person past the red chip — so
+   * the gateway's history does not hold it again.
+   */
+  gatewayHoldReleased?: boolean
   lookups: OutreachGateLookups
 }
 
@@ -180,6 +209,7 @@ export type OutreachGateCode =
   | 'sales_opted_out'
   | 'do_not_contact'
   | 'do_not_contact_domain'
+  | 'no_mx'
   | 'workspace_member'
   | 'customer'
   | 'already_enrolled'
@@ -193,6 +223,14 @@ export interface OutreachGateBlock {
   reason: string
 }
 
+/** The one verdict that holds a send rather than refusing it — see the module note. */
+export interface OutreachGateHold {
+  code: 'gateway_blocked_here'
+  gateway: OutreachGatewayStanding['gateway']
+  /** A sentence the enrollment row shows. */
+  reason: string
+}
+
 export interface OutreachGateResult {
   allowed: boolean
   /** The address, normalized, or `null` when it is not one. */
@@ -201,6 +239,12 @@ export interface OutreachGateResult {
   country: OutreachRecipientCountry
   /** Every gate that refuses, in gate order. */
   blocks: OutreachGateBlock[]
+  /**
+   * The gateway hold (AGL-3326), when the address's gateway refused this
+   * organization twice lately and nobody released it; `null` otherwise. An
+   * allowed result can carry one: the send waits for a member.
+   */
+  hold: OutreachGateHold | null
   /** The attestations a cold contact still needs, in the order they are asked. */
   missingAttestations: OutreachAttestationKind[]
 }
@@ -293,6 +337,7 @@ export function evaluateOutreachGates(input: OutreachGateInput): OutreachGateRes
     cold,
     country: { country: null, source: null },
     blocks,
+    hold: null,
     missingAttestations: [],
   })
 
@@ -410,6 +455,23 @@ export function evaluateOutreachGates(input: OutreachGateInput): OutreachGateRes
     )
   }
 
+  // 4b. The mail gateway in front of the domain (AGL-3326): no MX means no
+  //     mail; a gateway that refused us twice lately holds, below.
+  const gateway = lookups?.gateway ?? null
+  if (!gateway) {
+    block('no_mx', `We couldn't look up the mail server for ${domain}. ${COULD_NOT_CHECK}`)
+  } else if (gateway.gateway === 'none') {
+    block('no_mx', `${domain} has no MX record, so ${email} cannot receive mail.`)
+  }
+  const hold: OutreachGateHold | null =
+    gateway && input.gatewayHoldReleased !== true && outreachGatewayHolds(gateway)
+      ? {
+          code: 'gateway_blocked_here',
+          gateway: gateway.gateway,
+          reason: outreachGatewayHoldReason(gateway.gateway, gateway.blocked30),
+        }
+      : null
+
   // 5. Not one of the workspace's own people.
   const members = lookups?.workspaceMembers
   if (!Array.isArray(members)) {
@@ -479,6 +541,8 @@ export function evaluateOutreachGates(input: OutreachGateInput): OutreachGateRes
     cold,
     country,
     blocks,
+    hold,
     missingAttestations,
   }
 }
+

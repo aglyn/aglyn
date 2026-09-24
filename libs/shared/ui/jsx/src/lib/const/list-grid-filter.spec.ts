@@ -103,3 +103,31 @@ describe('listFilterGridColumns', () => {
     expect(count.filterable).toBe(false)
   })
 })
+
+describe('a column made a select keeps what it drew (AGL-3321)', () => {
+  const fields = [inMemoryListField('actorId', 'select'), inMemoryListField('status', 'select')]
+  const options = {
+    actorId: [{ value: 'uid-1', label: 'ann@example.test' }],
+    status: [{ value: 'open', label: 'Open' }],
+  }
+
+  it('draws a label its valueGetter returned, which matches no option value', () => {
+    const [actor] = listFilterGridColumns(
+      [{ field: 'actorId', valueGetter: () => 'ann@example.test' }],
+      fields,
+      options,
+    )
+    expect((actor.renderCell as any)({ value: 'ann@example.test' })).toBe('ann@example.test')
+  })
+
+  it('draws the option label for a raw stored value, and leaves its own renderCell alone', () => {
+    const own = () => 'chip'
+    const [status, custom] = listFilterGridColumns(
+      [{ field: 'status' }, { field: 'actorId', renderCell: own }],
+      fields,
+      options,
+    )
+    expect((status.renderCell as any)({ value: 'open' })).toBe('Open')
+    expect(custom.renderCell).toBe(own)
+  })
+})

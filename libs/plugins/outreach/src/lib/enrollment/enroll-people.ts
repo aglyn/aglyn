@@ -56,6 +56,7 @@ import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-emai
 import {
   evaluateOutreachGates,
   type OutreachGateBlock,
+  type OutreachGateHold,
   type OutreachGateLookups,
 } from '../engine/gates'
 import { outreachAttestationsFrom } from '../engine/enrollment-state'
@@ -67,6 +68,7 @@ import {
 } from '../model/outreach.types'
 import type {
   OutreachEnrollBlock,
+  OutreachEnrollGateway,
   OutreachEnrollPreviewPerson,
   OutreachPersonRef,
 } from '../model/outreach-api'
@@ -325,6 +327,15 @@ export interface OutreachGateQuestion {
   contactGroupId: string
 }
 
+/**
+ * The gateway as the dialog shows it (AGL-3326): the standing the lookups
+ * read, and whether the gates would hold a send into it.
+ */
+function gatewayOf(question: OutreachGateQuestion, hold: OutreachGateHold | null): OutreachEnrollGateway | null {
+  const standing = question.lookups?.gateway
+  return standing ? { ...standing, hold: hold !== null } : null
+}
+
 /** Where one person stands before the rep confirms anything — see the module note. */
 export function previewOutreachPerson(
   question: OutreachGateQuestion,
@@ -345,6 +356,7 @@ export function previewOutreachPerson(
       status: 'blocked',
       blocks: early,
       requires: { personalLine: false, attestations: [] },
+      gateway: null,
     }
   }
   const ask = (personalLine: string, attestations: OutreachAttestations) =>
@@ -359,7 +371,7 @@ export function previewOutreachPerson(
       lookups: question.lookups,
     })
   const asIs = ask('', {})
-  const known = { cold: asIs.cold, country: asIs.country.country }
+  const known = { cold: asIs.cold, country: asIs.country.country, gateway: gatewayOf(question, asIs.hold) }
   if (asIs.allowed) {
     return {
       ...person,
@@ -405,6 +417,11 @@ export interface OutreachEnrollDecision {
   email: string | null
   /** What the rep confirmed, stamped with who and when. */
   attestations: OutreachAttestations
+  /**
+   * The gateway hold the gates would put on the send (AGL-3326), which the
+   * member enrolling past the red chip releases; `null` when none applies.
+   */
+  hold: OutreachGateHold | null
 }
 
 /** Confirm's answer for one person, with what the rep supplied — see the module note. */
@@ -421,7 +438,7 @@ export function decideOutreachEnrollment(
   const attestations = outreachAttestationsFrom(supplied.attestations, supplied.uid, supplied.nowMs)
   const early = outreachCandidateBlocks(question.candidate, facts)
   if (early.length) {
-    return { allowed: false, blocks: early, cold: false, email: question.candidate.email, attestations }
+    return { allowed: false, blocks: early, cold: false, email: question.candidate.email, attestations, hold: null }
   }
   const result = evaluateOutreachGates({
     email: question.candidate.email ?? '',
@@ -439,5 +456,6 @@ export function decideOutreachEnrollment(
     cold: result.cold,
     email: result.email,
     attestations,
+    hold: result.hold,
   }
 }

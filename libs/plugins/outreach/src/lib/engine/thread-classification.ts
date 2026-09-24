@@ -68,6 +68,8 @@ export interface OutreachBounceDetail {
   recipients: string[]
   status: string | null
   diagnostic: string | null
+  /** The receiving server the report names, when it does (AGL-3326). */
+  remoteMta: string | null
 }
 
 export interface OutreachMessageClassification {
@@ -172,6 +174,7 @@ export function classifyOutreachMessage(
         recipients: report.failedAddresses,
         status: report.status,
         diagnostic: report.diagnostic,
+        remoteMta: report.remoteMta,
       },
       evidence: report.status ? `Status: ${report.status}` : 'delivery report',
     }

@@ -98,6 +98,7 @@ export const OUTREACH_STOP_REASON_LABELS: Record<OutreachStopReason, string> = {
   do_not_contact: 'On the do-not-contact list',
   gate: 'No longer eligible',
   manual: 'By a member',
+  gateway_blocked_here: 'Held — gateway refused this sender twice',
   sequence_archived: 'The sequence was archived',
   send_failed: "An email couldn't be sent",
 }

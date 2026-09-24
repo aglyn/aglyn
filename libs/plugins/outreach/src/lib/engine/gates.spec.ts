@@ -63,6 +63,7 @@ const cleanLookups = (overrides: Partial<OutreachGateLookups> = {}): OutreachGat
   workspaceMembers: [{ email: 'avery@example.org', verifiedAliases: ['avery@example.net'] }],
   openEnrollments: [],
   hasInboundEmail: false,
+  gateway: { gateway: 'google', blocked7: 0, delivered7: 0, blocked30: 0, delivered30: 0 },
   ...overrides,
 })
 
@@ -90,6 +91,7 @@ describe('evaluateOutreachGates: a person who may be emailed', () => {
       cold: true,
       country: { country: 'US', source: 'contact' },
       blocks: [],
+      hold: null,
       missingAttestations: [],
     })
   })
@@ -349,6 +351,56 @@ describe('gate 4: every list that says not to', () => {
 
   it('lets a pending sales-topic confirmation through: a sales email does not rest on a subscription', () => {
     expect(codesOf({ lookups: cleanLookups({ salesTopicState: 'pending' }) })).toEqual([])
+  })
+})
+
+describe('gate 4b: the mail gateway in front of the domain (AGL-3326)', () => {
+  const standing = (overrides: Partial<NonNullable<OutreachGateLookups['gateway']>> = {}) =>
+    cleanLookups({
+      gateway: { gateway: 'barracuda', blocked7: 0, delivered7: 0, blocked30: 0, delivered30: 0, ...overrides },
+    })
+
+  it('blocks a domain with no MX record, naming it', () => {
+    const result = evaluateOutreachGates(input({ lookups: standing({ gateway: 'none' }) }))
+    expect(result.allowed).toBe(false)
+    expect(result.blocks).toEqual([
+      { code: 'no_mx', reason: 'example.com has no MX record, so casey@example.com cannot receive mail.' },
+    ])
+  })
+
+  it('refuses when the gateway could not be looked up, and says so', () => {
+    const result = evaluateOutreachGates(input({ lookups: cleanLookups({ gateway: null }) }))
+    expect(result.blocks).toEqual([
+      { code: 'no_mx', reason: "We couldn't look up the mail server for example.com. Try again in a moment." },
+    ])
+    expect(result.hold).toBeNull()
+  })
+
+  it('holds — allows, with a hold — a gateway that refused twice in thirty days and delivered nothing', () => {
+    const result = evaluateOutreachGates(input({ lookups: standing({ blocked30: 2 }) }))
+    expect(result.allowed).toBe(true)
+    expect(result.blocks).toEqual([])
+    expect(result.hold).toEqual({
+      code: 'gateway_blocked_here',
+      gateway: 'barracuda',
+      reason:
+        'Barracuda refused this sender twice in the last 30 days and delivered nothing, so this email is held. Resume the enrollment to send it anyway.',
+    })
+    expect(evaluateOutreachGates(input({ lookups: standing({ blocked30: 3 }) })).hold?.reason).toMatch(
+      /^Barracuda refused this sender 3 times/,
+    )
+  })
+
+  it('does not hold on one refusal, on a refusal beside a delivery, or on an unrecognized exchange', () => {
+    expect(evaluateOutreachGates(input({ lookups: standing({ blocked30: 1 }) })).hold).toBeNull()
+    expect(evaluateOutreachGates(input({ lookups: standing({ blocked30: 2, delivered30: 1 }) })).hold).toBeNull()
+    expect(evaluateOutreachGates(input({ lookups: standing({ gateway: 'other', blocked30: 5 }) })).hold).toBeNull()
+  })
+
+  it('does not hold an enrollment whose hold a member already released', () => {
+    expect(
+      evaluateOutreachGates(input({ lookups: standing({ blocked30: 2 }), gatewayHoldReleased: true })).hold,
+    ).toBeNull()
   })
 })
 

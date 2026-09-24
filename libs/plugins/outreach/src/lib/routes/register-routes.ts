@@ -19,6 +19,7 @@ import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-r
 import { pluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { resolveMx } from 'node:dns/promises'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
 import { openOutreachMailboxClient } from '../mailboxes/mailbox-transport'
 import { outreachOrgSubject } from '../mailboxes/register-mailbox-routes'
@@ -88,6 +89,8 @@ export function defaultOutreachRouteDeps(): OutreachEnrollRouteDeps {
     // runtime resolves it: the CRM registers at boot, and a request that
     // arrives before it did files nothing rather than caching a `null`.
     timeline: () => pluginRecordTimelineWriter()?.writer ?? null,
+    // The domain's MX (AGL-3326), from the console's own resolver.
+    resolveMx: (domain) => resolveMx(domain),
     // The workspace's text generator (AGL-3324), resolved per call the same
     // way: the AI plugin registers at boot, and a request before it did is
     // told drafting is unavailable rather than caching a `null`.

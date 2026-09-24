@@ -59,6 +59,12 @@ export interface OutreachDeliveryRecipient {
   status: string | null
   /** `Diagnostic-Code`, without its type prefix. */
   diagnostic: string | null
+  /**
+   * `Remote-MTA`, without its type prefix and lowercased: the receiving
+   * server that answered — which names the gateway in front of the domain
+   * when it is one (AGL-3326).
+   */
+  remoteMta: string | null
   /** `hard`, `soft`, or `null` for a block that reports no failure. */
   kind: OutreachBounceKind | null
 }
@@ -77,6 +83,8 @@ export interface OutreachDeliveryReport {
   status: string | null
   /** The diagnostic of the worst failure, when one was given. */
   diagnostic: string | null
+  /** The `Remote-MTA` of the worst failure, when the report named one. */
+  remoteMta: string | null
 }
 
 const DAEMON_LOCAL_PART = /^(mailer-daemon|postmaster|mail-daemon|maildaemon)$/i
@@ -207,11 +215,16 @@ export function readOutreachDeliveryReport(
       const diagnostic = block['diagnostic-code']
         ? block['diagnostic-code'].replace(/^[a-z0-9-]+\s*;\s*/i, '')
         : null
+      // `dns; mx.example.com. (192.0.2.10, ...)` → the host alone.
+      const remoteMta = block['remote-mta']
+        ? block['remote-mta'].replace(/^[a-z0-9-]+\s*;\s*/i, '').trim().split(/\s+/)[0].toLowerCase().replace(/\.$/, '') || null
+        : null
       return {
         address: typedAddress(block['final-recipient']) ?? typedAddress(block['original-recipient']),
         action,
         status,
         diagnostic,
+        remoteMta,
         kind: kindFor(action, status),
       }
     })
@@ -240,6 +253,7 @@ export function readOutreachDeliveryReport(
       failedAddresses: failedRecipientsHeader(message),
       status: code ? code[0] : null,
       diagnostic: null,
+      remoteMta: null,
     }
   }
 
@@ -257,5 +271,6 @@ export function readOutreachDeliveryReport(
       failedAddresses.length || !worst ? failedAddresses : failedRecipientsHeader(message),
     status: worst?.status ?? null,
     diagnostic: worst?.diagnostic ?? null,
+    remoteMta: worst?.remoteMta ?? null,
   }
 }

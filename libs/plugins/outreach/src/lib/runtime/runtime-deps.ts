@@ -19,6 +19,7 @@ import type { EmailState } from '@aglyn/aglyn/app-utils/email-state'
 import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
 import type { OutreachMailboxNotice } from '../engine/mailbox-notice'
 import type { OpenedOutreachMailbox } from '../mailboxes/mailbox-transport'
+import type { OutreachResolveMx } from '../storage/domain-intel-store'
 import type { OutreachUnsubscribeTarget } from './unsubscribe-link'
 
 /**
@@ -132,6 +133,11 @@ export interface OutreachRuntimeDeps {
   random(): number
   /** Opens a mailbox's Gmail client from its sealed grant. */
   openMailbox(mailboxId: string): Promise<OpenedOutreachMailbox>
+  /**
+   * The MX resolver a domain's mail gateway is classified with (AGL-3326)
+   * — Node's `dns.promises.resolveMx` on the platform, a table in a spec.
+   */
+  resolveMx: OutreachResolveMx
   /**
    * Why Outreach may not act for this workspace now, or `null` when it may:
    * the plugin switched on and entitled, and its release flag on for the

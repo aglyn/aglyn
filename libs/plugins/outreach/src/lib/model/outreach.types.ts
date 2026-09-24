@@ -36,10 +36,12 @@
  * `nextDueAtMs` has to be compared in.
  */
 
+import type { OutreachGatewayDayCounts, OutreachMailGateway } from '../engine/mail-gateway'
+
 /**
  * Where Outreach keeps its records.
  *
- * Six collections under the organization, and two at the top level. The
+ * Eight collections under the organization, and two at the top level. The
  * org-scoped ones are erased with the org, whose erasure deletes the whole
  * `orgs/{orgId}` tree. The top-level ones — credentials, and the short
  * tracking links (AGL-3297) — are keyed by an `orgId` FIELD that a
@@ -73,6 +75,21 @@ export const OUTREACH_COLLECTIONS = {
    * domain itself: a domain names a company, not a person.
    */
   doNotContactDomains: 'outreachDoNotContactDomains',
+  /**
+   * `orgs/{orgId}/outreachDomainIntel/{domain}` — what the organization has
+   * learned about a recipient domain (AGL-3326): its MX records, the mail
+   * gateway they name, and what that gateway did with the organization's
+   * mail. Written by the enroll routes and the sending runtime, read by
+   * the gates before every enrollment and every send.
+   */
+  domainIntel: 'outreachDomainIntel',
+  /**
+   * `orgs/{orgId}/outreachGatewayStats/{gateway}` — the organization's
+   * ledger per mail gateway (AGL-3326): sends, deliveries and blocks, in
+   * total and by UTC day, which is what holds a send into a gateway that
+   * refused the sender twice.
+   */
+  gatewayStats: 'outreachGatewayStats',
   /**
    * `outreachMailboxCredentials/{mailboxId}` — the provider grant behind a
    * mailbox. TOP-LEVEL and closed to every client, staff included, so the
@@ -207,7 +224,12 @@ export interface OutreachRecentSend {
 
 /** Why a mailbox paused itself (AGL-2981): the engine's health decision, kept. */
 export interface OutreachMailboxAutoPause {
-  reason: 'bounces_today' | 'bounce_rate' | 'complaint'
+  /**
+   * `bounce_rate` is what the window rule wrote before AGL-3326 changed it
+   * from a percentage to a count; a stored pause keeps the reason it was
+   * written with, and the card shows `message` either way.
+   */
+  reason: 'bounces_today' | 'bounces_in_window' | 'bounce_rate' | 'complaint'
   /** The sentence the mailbox's card shows. */
   message: string
   atMs: number
@@ -601,6 +623,12 @@ export const OUTREACH_STOP_REASONS = [
   'gate',
   /** A member paused or stopped it. */
   'manual',
+  /**
+   * The engine held the next send (AGL-3326): the recipient's mail gateway
+   * refused this organization's sender twice in the last thirty days and
+   * delivered nothing. A member resumes it to send anyway.
+   */
+  'gateway_blocked_here',
   /** The sequence was archived with the person still in it. */
   'sequence_archived',
   /** The provider refused the send for good, or the email could not be composed. */
@@ -615,7 +643,7 @@ export const OUTREACH_STOP_REASONS_BY_STATUS: Readonly<
     readonly OutreachStopReason[]
   >
 > = {
-  paused: ['manual'],
+  paused: ['manual', 'gateway_blocked_here'],
   replied: ['reply'],
   bounced: ['hard_bounce'],
   opted_out: ['opt_out_reply', 'unsubscribe', 'do_not_contact'],
@@ -815,6 +843,64 @@ export interface OutreachEnrollment extends OutreachTimestamps {
    * written; a step without an entry sends the same.
    */
   stepOverrides?: OutreachStepOverrides
+  /**
+   * The gateway hold (AGL-3326), once one applied: which gateway, when the
+   * engine held the send, and the member who released it — by resuming the
+   * held enrollment, or by ticking the person past the red chip when they
+   * enrolled them. A released hold is not taken again; a send that the
+   * engine held and nobody released waits.
+   */
+  gatewayHold?: OutreachGatewayHold | null
+  /**
+   * How many of this enrollment's email steps the sync has credited to the
+   * gateway ledger as delivered (AGL-3326): a send with no bounce a day
+   * later. The sync credits the next ones from here.
+   */
+  gatewayDeliveredSteps?: number
+}
+
+/** A gateway hold on one enrollment (AGL-3326) — see {@link OutreachEnrollment.gatewayHold}. */
+export interface OutreachGatewayHold {
+  gateway: OutreachMailGateway
+  /** When the engine held a send; `null` when a member released it before one was. */
+  heldAtMs: number | null
+  releasedByUid: string | null
+  releasedAtMs: number | null
+}
+
+/**
+ * What the organization knows about one recipient domain
+ * (`orgs/{orgId}/outreachDomainIntel/{domain}`, AGL-3326).
+ */
+export interface OutreachDomainIntel {
+  domain: string
+  /** The MX exchanges, lowest preference first; empty for a domain with none. */
+  mx: string[]
+  gateway: OutreachMailGateway
+  /** When the MX was last looked up; trusted for `OUTREACH_DOMAIN_INTEL_TTL_MS`. */
+  resolvedAtMs: number
+  /** What this organization's mail met at the domain, in total. */
+  sent: number
+  delivered: number
+  blocked: number
+  lastBlockedAtMs: number | null
+  updatedAtMs: number
+}
+
+/**
+ * The organization's ledger for one mail gateway
+ * (`orgs/{orgId}/outreachGatewayStats/{gateway}`, AGL-3326): totals, and
+ * the same counts by UTC day for the windows the hold and the chip read.
+ */
+export interface OutreachGatewayStats {
+  gateway: OutreachMailGateway
+  sent: number
+  delivered: number
+  blocked: number
+  lastBlockedAtMs: number | null
+  /** `YYYY-MM-DD` (UTC) → that day's counts, the last thirty days kept. */
+  days: Record<string, OutreachGatewayDayCounts>
+  updatedAtMs: number
 }
 
 /** A sending run's claim on one enrollment's step (AGL-2981). */
