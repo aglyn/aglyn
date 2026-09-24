@@ -33,7 +33,7 @@
  * "buy it again".
  */
 
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import OrgLicencesPanel from './org-licences-panel.component'
 
 interface FakeRead {
@@ -50,7 +50,8 @@ const EMPTY_LOADED: FakeRead = {
 
 /**
  * Queried in declaration order: org licences, then the buyer's own, then the
- * catalogue used for display names.
+ * catalogue used for display names — on every render, so a re-render reads
+ * the same three again.
  */
 const mockReads: FakeRead[] = []
 let mockCall = 0
@@ -59,7 +60,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'u1' } }),
   useFirestoreCollection: () =>
-    mockReads[mockCall++] ?? { data: [], status: 'success', serverDenied: false },
+    mockReads[mockCall++ % 3] ?? { data: [], status: 'success', serverDenied: false },
 }))
 
 const renderPanel = (orgRead: FakeRead, mineRead: FakeRead) => {
@@ -204,5 +205,24 @@ describe('OrgLicencesPanel presents its empty tab like the rest of the console',
     // Which workspace each purchase licensed, and the one that names none.
     expect(within(mine).getByText('This workspace')).toBeTruthy()
     expect(within(mine).getByText('Every workspace you belong to')).toBeTruthy()
+  })
+
+  it('filters each list through its own grid search, over every row it holds (AGL-3317)', async () => {
+    renderPanel(
+      {
+        data: [
+          { $id: 'p1', listingId: 'l1', buyerUid: 'u1', buyerOrgId: 'org1', amountCents: 2500 },
+          { $id: 'p3', listingId: 'l3', buyerUid: 'u2', buyerOrgId: 'org1', amountCents: 700 },
+        ],
+        status: 'success',
+        serverDenied: false,
+      },
+      EMPTY_LOADED,
+    )
+    const held = screen.getByRole('grid', { name: 'Licenses this workspace holds' })
+    expect(held.textContent).toContain('l3')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'l1' } })
+    await waitFor(() => expect(held.textContent).not.toContain('l3'))
+    expect(held.textContent).toContain('l1')
   })
 })
