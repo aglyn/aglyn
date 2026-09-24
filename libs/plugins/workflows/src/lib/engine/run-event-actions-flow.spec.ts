@@ -523,6 +523,37 @@ describe('an email sent from a flow is still marketing mail', () => {
     expect(sent[0].priority).toBe('bulk')
   })
 
+  it('names the site alone as the sender when the org declared no group', async () => {
+    await resumeOnce()
+
+    expect(sent[0].marketing.consentHostIds).toEqual([HOST_ID])
+  })
+
+  it('names every site of a declared consent group as the sender (AGL-3310)', async () => {
+    /*
+     * The gate reads an unsubscribe, a stream left and a pace asked for on ANY
+     * of these sites as a refusal of this one — `consent-group-opt-outs
+     * .spec.ts` proves it does. This step's part is to hand it the group, off
+     * the org the run already holds, and to hand the flow gate that org so
+     * the consent and topic questions are asked of the same sender.
+     */
+    mockOrg = {
+      plan: 'pro',
+      consentGroups: {
+        acme: { name: 'Acme', hostIds: [HOST_ID, 'site-sibling'] },
+      },
+    }
+
+    await resumeOnce()
+
+    expect(sent[0].marketing.consentHostIds).toEqual(
+      [HOST_ID, 'site-sibling'].sort(),
+    )
+    expect(flowGateCalls.at(-1)?.['org']).toMatchObject({
+      consentGroups: { acme: { hostIds: [HOST_ID, 'site-sibling'] } },
+    })
+  })
+
   it('names the STREAM it belongs to, so the opt-out link can', async () => {
     /*
      * The gate mints the recipient's opt-out link, and it points at the

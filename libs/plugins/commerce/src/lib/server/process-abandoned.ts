@@ -101,6 +101,12 @@ export async function scanAbandonedCheckouts(
   >()
   /** Each site's public origin, for the unsubscribe link on the reminder. */
   const siteBaseByHost = new Map<string, string>()
+  /**
+   * Each site's consent group, off the same org read as its entitlement, so
+   * the gate honors an unsubscribe from any site the org declared one sender
+   * with this one.
+   */
+  const consentHostIdsByHost = new Map<string, readonly string[]>()
   // Resolve each host's designed template once per run (AGL-770).
   const templateCache = new Map<string, LoadedHostEmail | null>()
   let skippedLocked = 0
@@ -138,6 +144,13 @@ export async function scanAbandonedCheckouts(
         Aglyn.checkEntitlement(org?.org as any, 'abandonedCart'),
       )
       brandingByHost.set(hostId, Aglyn.resolveBrandingProfile(org?.org as any))
+      consentHostIdsByHost.set(
+        hostId,
+        Aglyn.consentGroupForHost(
+          (org?.org as Record<string, unknown> | undefined) ?? null,
+          hostId,
+        ).hostIds,
+      )
       // The site's own origin, for the unsubscribe link. Resolved once per
       // host for the same reason the branding beside it is: this sweep is a
       // `collectionGroup` over every site's checkouts, and a read per
@@ -206,6 +219,7 @@ export async function scanAbandonedCheckouts(
         hostId,
         siteBase: siteBaseByHost.get(hostId) ?? '',
         topicId: Aglyn.EMAIL_TOPIC_MARKETING,
+        consentHostIds: consentHostIdsByHost.get(hostId) ?? [hostId],
       },
     })
     /*

@@ -653,8 +653,15 @@ export const crmEmailSendHandler: PluginApiHandler = async (req, res) => {
       return answer(res, refuse(409, CRM_ACTIVITY_LOG_FULL_MESSAGE, { reason: 'ceiling' }))
     }
 
-    // Both suppression lists, then the person's own refusal.
-    const sendable = await filterSendableForHost(hostId, [recipient.email])
+    // Both suppression lists, then the person's own refusal — each read
+    // across the sending site's consent group, so leaving one site of a
+    // declared group stops this one writing too.
+    const sendable = await filterSendableForHost(
+      hostId,
+      [recipient.email],
+      undefined,
+      group,
+    )
     if (!sendable.length) {
       return answer(res, refuse(409, CRM_EMAIL_SUPPRESSED_MESSAGE, { reason: 'suppressed' }))
     }

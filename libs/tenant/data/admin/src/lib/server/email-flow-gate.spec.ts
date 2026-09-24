@@ -31,6 +31,11 @@ let lead: Record<string, any> | null = null
 let silosRead: string[] = []
 /** Topics this address has left, by topic id. */
 let topicsLeft: Record<string, any> = {}
+/**
+ * The same record per SITE, for the consent-group cases. Empty means every
+ * site's lookup answers `topicsLeft`, which is all a single-site case needs.
+ */
+let topicsLeftBySite: Record<string, Record<string, any>> = {}
 /** Make the topic lookup throw, for the fail-open case. */
 let topicLookupThrows = false
 /** `orgs/{org}/emailIndex/{personKey}` → `{ email, contactId }` (AGL-2625). */
@@ -102,20 +107,25 @@ const contactsRef: any = {
 
 const firestore: any = {
   collection: (name: string) => ({
-    doc: () => ({
+    doc: (site?: string) => ({
       collection: (sub: string) =>
         sub === 'leads'
           ? singleDocQuery(lead, 'leads')
-          : { doc: (id: string) => ({ path: `${name}/${sub}/${id}` }) },
+          : { doc: (id: string) => ({ path: `${name}/${site}/${sub}/${id}` }) },
     }),
   }),
   getAll: async (...refs: any[]) => {
     if (topicLookupThrows) throw new Error('topic lookup unavailable')
-    return refs.map(() =>
-      Object.keys(topicsLeft).length
-        ? { exists: true, get: (field: string) => topicsLeft[field] }
-        : { exists: false, get: () => undefined },
-    )
+    return refs.map((ref) => {
+      const record = Object.keys(topicsLeftBySite).length
+        ? topicsLeftBySite[String(ref.path).split('/')[1]]
+        : Object.keys(topicsLeft).length
+          ? topicsLeft
+          : undefined
+      return record
+        ? { exists: true, get: (field: string) => record[field] }
+        : { exists: false, get: () => undefined }
+    })
   },
 }
 
@@ -139,7 +149,10 @@ jest.mock('./organizations', () => ({
 }))
 
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
-import { marketingConsentFieldsForHost } from '@aglyn/aglyn/server'
+import {
+  declineMarketingConsentFields,
+  marketingConsentFieldsForHost,
+} from '@aglyn/aglyn/server'
 import { flowEmailRefusal } from './email-flow-gate'
 
 const HOST = 'site-1'
@@ -167,6 +180,7 @@ beforeEach(() => {
   lead = null
   silosRead = []
   topicsLeft = {}
+  topicsLeftBySite = {}
   topicLookupThrows = false
   emailIndex = {}
 })
@@ -521,6 +535,96 @@ describe('the topic filter, after the consent split', () => {
     // error — and both suppression lists have already run one layer down.
     contact = { email: EMAIL, ...grantedTo(HOST) }
     topicLookupThrows = true
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        topicId: 'promotions',
+        org: {},
+        firestore,
+      }),
+    ).toBeNull()
+  })
+})
+
+/**
+ * A DECLARED CONSENT GROUP IS ONE SENDER (AGL-3310).
+ *
+ * An automation on site A mails as the sender site A belongs to. When the org
+ * declared A and B one sender, a stream the person left on B is a stream they
+ * left from A — the same answer a campaign from A gives — and the consent half
+ * of this gate already read a refusal that way. The control is the org that
+ * declared nothing: B is then another brand, and its records are its own.
+ */
+describe('a declared consent group, at the automation gate', () => {
+  const SIBLING = 'site-2'
+  const DECLARED = {
+    consentGroups: { acme: { name: 'Acme', hostIds: [HOST, SIBLING] } },
+  }
+  const leftOnSibling = () => {
+    topicsLeftBySite = {
+      [SIBLING]: { topics: { promotions: { optedOutAt: 1 } } },
+    }
+  }
+
+  it('REFUSES a scheduled step to somebody who left the stream on the sibling site', async () => {
+    contact = { email: EMAIL, ...grantedTo(HOST) }
+    leftOnSibling()
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        topicId: 'promotions',
+        org: DECLARED,
+        firestore,
+      }),
+    ).toBe('topic-unsubscribed')
+  })
+
+  it('REFUSES an immediate reply on a stream the step named, too', async () => {
+    contact = { email: EMAIL, ...grantedTo(HOST) }
+    leftOnSibling()
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        topicId: 'promotions',
+        org: DECLARED,
+        firestore,
+        scope: 'immediate',
+      }),
+    ).toBe('topic-unsubscribed')
+  })
+
+  it('REFUSES somebody who declined on the sibling site — the consent half agrees', async () => {
+    contact = {
+      email: EMAIL,
+      ...grantedTo(HOST),
+      marketingConsentByHost: {
+        ...(grantedTo(HOST)['marketingConsentByHost'] as Record<string, unknown>),
+        ...(declineMarketingConsentFields(SIBLING, Date.now())[
+          'marketingConsentByHost'
+        ] as Record<string, unknown>),
+      },
+    }
+
+    expect(
+      await flowEmailRefusal({
+        hostId: HOST,
+        email: EMAIL,
+        org: DECLARED,
+        firestore,
+        scope: 'immediate',
+      }),
+    ).toBe('consent-withheld')
+  })
+
+  it('CONTROL: mails them when the org never declared the two sites one sender', async () => {
+    contact = { email: EMAIL, ...grantedTo(HOST) }
+    leftOnSibling()
 
     expect(
       await flowEmailRefusal({

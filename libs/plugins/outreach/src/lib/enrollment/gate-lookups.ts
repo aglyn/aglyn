@@ -81,6 +81,14 @@ export interface ReadOutreachGateLookupsInput {
   orgId: string
   /** The sequence's site: whose suppression list and topic opt-outs apply. */
   hostId: string
+  /**
+   * Every site in the sequence site's consent group, the site included —
+   * `consentGroupForHost(org, hostId).hostIds`. An org that declared several
+   * sites one sender is one sender to the person who unsubscribed from any of
+   * them, so the site suppression list and the sales opt-outs are read on
+   * each. Omitted, the site alone.
+   */
+  consentHostIds?: readonly string[]
   people: readonly OutreachGateLookupPerson[]
 }
 
@@ -134,13 +142,50 @@ async function keyedLookup<T>(
   return answers
 }
 
+/**
+ * The same keyed lookup on every site of a consent group, folded into one
+ * answer per person by `fold`. A read that failed anywhere is `null` for the
+ * people it covered, so a sibling's unreadable list refuses as the site's own
+ * would. A group of one is one lookup, exactly as the site alone.
+ */
+async function keyedGroupLookup<T>(
+  firestore: Firestore,
+  people: readonly OutreachGateLookupPerson[],
+  hostIds: readonly string[],
+  collection: (host: FirebaseFirestore.DocumentReference, key: string) => FirebaseFirestore.DocumentReference,
+  answer: (snapshot: FirebaseFirestore.DocumentSnapshot) => T,
+  fold: (answers: readonly T[]) => T,
+  label: string,
+): Promise<Map<string, T | null>> {
+  const bySite = await Promise.all(
+    hostIds.map((id) => {
+      const host = firestore.collection('hosts').doc(id)
+      return keyedLookup(firestore, people, (key) => collection(host, key), answer, label)
+    }),
+  )
+  if (bySite.length === 1) return bySite[0]
+  const folded = new Map<string, T | null>()
+  for (const person of people) {
+    const answers = bySite.map((site) => site.get(person.personId) ?? null)
+    folded.set(
+      person.personId,
+      answers.some((answer) => answer === null) ? null : fold(answers as T[]),
+    )
+  }
+  return folded
+}
+
 /** Every lookup the gates take, for each person, keyed by person id. */
 export async function readOutreachGateLookups(
   firestore: Firestore,
   input: ReadOutreachGateLookupsInput,
 ): Promise<Map<string, OutreachGateLookups>> {
   const { orgId, hostId, people } = input
-  const host = firestore.collection('hosts').doc(hostId)
+  // The sequence's site first, then the rest of its consent group.
+  const hostIds = [
+    hostId,
+    ...new Set((input.consentHostIds ?? []).filter((id) => id && id !== hostId)),
+  ]
   const enrollments = outreachOrgCollection(firestore, orgId, 'enrollments')
   const activities = firestore.collection('orgs').doc(orgId).collection(CRM_COLLECTIONS.activities)
 
@@ -153,21 +198,28 @@ export async function readOutreachGateLookups(
       (snapshot) => snapshot.exists && !snapshot.get('releasedAt'),
       'platform suppression',
     ),
-    keyedLookup(
+    keyedGroupLookup(
       firestore,
       people,
-      (key) => host.collection(HOST_SUPPRESSIONS_SUBCOLLECTION).doc(key),
+      hostIds,
+      (host, key) => host.collection(HOST_SUPPRESSIONS_SUBCOLLECTION).doc(key),
       (snapshot) => snapshot.exists,
+      // An entry on any site of the group suppresses.
+      (answers) => answers.some(Boolean),
       'site suppression',
     ),
-    keyedLookup<TopicSubscriptionState>(
+    keyedGroupLookup<TopicSubscriptionState>(
       firestore,
       people,
-      (key) => host.collection(TOPIC_OPT_OUTS_SUBCOLLECTION).doc(key),
+      hostIds,
+      (host, key) => host.collection(TOPIC_OPT_OUTS_SUBCOLLECTION).doc(key),
       (snapshot) =>
         readTopicSubscriptionState(
           ((snapshot.exists ? snapshot.get('topics') : null) ?? {})[EMAIL_TOPIC_SALES],
         ),
+      // The sequence site's own standing, unless a sibling holds a refusal:
+      // leaving the sales stream anywhere in the group is leaving the sender.
+      ([own, ...siblings]) => (siblings.includes('opted-out') ? 'opted-out' : own),
       'sales topic',
     ),
     lookupOutreachDoNotContact(

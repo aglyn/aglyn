@@ -93,6 +93,10 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 // spec's `jest.mock` happens to contain, and this module's neighbours are
 // mocked in nearly every spec that touches them.
 import {
+  consentGroupOptOutHosts,
+  type ConsentGroup,
+} from '@aglyn/aglyn/app-utils/consent-groups'
+import {
   readTopicSubscriptionState,
   TOPIC_OPT_OUTS_SUBCOLLECTION,
 } from '@aglyn/aglyn/app-utils/email-topics'
@@ -540,6 +544,87 @@ export async function filterSuppressedEmails(
   return candidates.filter((_email, index) => !verdicts[index])
 }
 
+/*==========================================
+ * THE SENDER A PERSON LEAVES IS THE CONSENT GROUP, NOT THE SITE.
+ *
+ * `consent-groups.ts` lets an org declare several sites ONE sender — a shop,
+ * a booking page and a blog under one name, disclosed as one on every
+ * capture form. To the person on the other end those are one sender, so
+ * leaving any of them is leaving it: an unsubscribe filed by site A has to
+ * withhold site B's mail too, or the recipient is made to unsubscribe once
+ * per site of a sender they only ever knew as one.
+ *
+ * Every opt-out is written against the ONE site the person acted on and read
+ * across the sending site's CURRENT group. Reading rather than copying on
+ * write is what makes a site that joins a group inherit every refusal already
+ * standing against its siblings, and it reaches every row already stored and
+ * every link already sitting in an inbox — none of which a write-time fan-out
+ * could.
+ *
+ * All three per-site facts are read this way: the site suppression list (an
+ * unsubscribe, a hand-added opt-out, an erasure, and the bounces and
+ * complaints the platform list already carries), the topic opt-outs, and the
+ * recipient's cadence. The group of one — every site of an org that declared
+ * nothing — reads exactly the documents these filters always read, in the
+ * same round trips.
+ *=========================================*/
+
+/**
+ * The sites whose opt-out lists answer for a send made BY `hostId`, the
+ * sending site first.
+ *
+ * The sending site's consent group: every site it names, because a refusal
+ * standing on any of them is a refusal of the sender. Absent, or a group of
+ * one, is the site alone.
+ *
+ * The group is the one `consentGroupForHost` resolved — never a set a caller
+ * built from `org.hosts` or a shared domain, which would be inferring a
+ * controller (see `consent-groups.ts`).
+ *
+ * Throws on a group resolved for a DIFFERENT site. That is a wiring defect no
+ * runtime value produces, and the failure it would hide is one site's send
+ * decided against another site's lists — the same refusal
+ * `splitByMarketingConsent` makes over a consent map read for the wrong host.
+ */
+export function optOutHostIds(
+  hostId: string,
+  group?: Pick<ConsentGroup, 'hostId' | 'hostIds'> | null,
+): string[] {
+  if (!group) return [hostId]
+  if (group.hostId !== hostId) {
+    throw new Error(
+      `[email-suppression] a consent group resolved for ${group.hostId} ` +
+        `cannot decide a send from ${hostId}`,
+    )
+  }
+  return consentGroupOptOutHosts(group)
+}
+
+/**
+ * One keyed `getAll` per site in `hostIds`, positionally aligned with `keys`.
+ *
+ * Per site rather than one call over every (site, address) pair, so each
+ * round trip is exactly the size the single-site read always was — a batch
+ * of a campaign — and a group multiplies the number of calls, run in
+ * parallel, rather than the size of one. A group of one is one call, over
+ * the same references in the same order.
+ *
+ * Rejects when any read does; each caller keeps its own posture on that.
+ */
+export async function getAllAcrossSites(
+  db: any,
+  hostIds: readonly string[],
+  subcollection: string,
+  keys: readonly string[],
+): Promise<any[][]> {
+  return Promise.all(
+    hostIds.map((id) => {
+      const list = db.collection('hosts').doc(id).collection(subcollection)
+      return db.getAll(...keys.map((key) => list.doc(key)))
+    }),
+  )
+}
+
 /**
  * The sendable subset for a send made in ONE SITE's name — BOTH lists.
  *
@@ -557,6 +642,16 @@ export async function filterSuppressedEmails(
  * live there, and a second copy of them is a second set of rules for two
  * senders to disagree about.
  *
+ * ## "This site" means its consent group
+ *
+ * `group` is the sending site's consent group, and an entry on ANY of its
+ * sites' lists withholds — see the section above. Every entry counts, whatever
+ * its reason: an unsubscribe and a hand-added opt-out are the person leaving
+ * the sender, an erasure is already written on every site of the workspace,
+ * and a bounce or a complaint is on the platform list besides. Omitted, the
+ * site alone, which is also the whole answer for an org that declared no
+ * group.
+ *
  * ## Both halves fail CLOSED
  *
  * A read that throws answers "suppressed". The platform half already does; the
@@ -567,17 +662,19 @@ export async function filterSuppressedEmails(
  * ## One `getAll`, keyed, rather than a scan of the collection
  *
  * The per-site half looks up exactly the addresses being mailed, by document
- * id, in one round trip. Reading the whole collection instead — which is what
- * the campaign sender did — is bounded by however large the collection has
- * grown, so a site with more suppressions than the read window fails OPEN on
- * the remainder: the people most certain not to want the mail are the ones a
- * truncated read drops.
+ * id, in one round trip per site. Reading the whole collection instead —
+ * which is what the campaign sender did — is bounded by however large the
+ * collection has grown, so a site with more suppressions than the read window
+ * fails OPEN on the remainder: the people most certain not to want the mail
+ * are the ones a truncated read drops.
  */
 export async function filterSendableForHost(
   hostId: string,
   emails: readonly string[],
   injectedFirestore?: any,
+  group?: Pick<ConsentGroup, 'hostId' | 'hostIds'> | null,
 ): Promise<string[]> {
+  const hostIds = optOutHostIds(hostId, group)
   const platformSendable = await filterSuppressedEmails(
     emails,
     injectedFirestore,
@@ -585,10 +682,6 @@ export async function filterSendableForHost(
   // `getAll` rejects an empty reference list, and there is nothing to ask.
   if (!platformSendable.length) return []
   const db = injectedFirestore ?? defaultFirestore()
-  const hostList = db
-    .collection('hosts')
-    .doc(hostId)
-    .collection(HOST_SUPPRESSIONS_SUBCOLLECTION)
   // Every survivor of the platform half is keyable — `isEmailSuppressed`
   // answers `true` for an address it cannot key — so this narrows the type
   // rather than dropping anybody.
@@ -599,11 +692,17 @@ export async function filterSendableForHost(
   }
   if (!keyed.length) return []
   try {
-    const snapshots = await db.getAll(
-      ...keyed.map((entry) => hostList.doc(entry.key)),
+    const bySite = await getAllAcrossSites(
+      db,
+      hostIds,
+      HOST_SUPPRESSIONS_SUBCOLLECTION,
+      keyed.map((entry) => entry.key),
     )
     return keyed
-      .filter((_entry, index) => !snapshots[index]?.exists)
+      .filter(
+        (_entry, index) =>
+          !bySite.some((snapshots) => snapshots[index]?.exists),
+      )
       .map((entry) => entry.email)
   } catch (error) {
     console.error(
@@ -654,13 +753,25 @@ export async function filterSendableForHost(
  * An empty `topicId` is a campaign from before topics existed, or one whose
  * topic was never resolved. It filters nobody: there is no stream to have
  * left.
+ *
+ * ## Leaving a stream is leaving it for the whole consent group
+ *
+ * The topic catalog is the org's, so "Newsletter" on one site of a declared
+ * group is the same stream on its siblings, and a person who left it on one
+ * has left it from the sender. `group` extends the read to every site in it,
+ * exactly as {@link filterSendableForHost} does for the suppression list.
+ *
+ * Only a sibling's REFUSAL is read there. A pending confirmation stays the
+ * concern of the site whose form asked for it, as it always was.
  */
 export async function filterTopicSendable(
   hostId: string,
   topicId: string | null | undefined,
   emails: readonly string[],
   injectedFirestore?: any,
+  group?: Pick<ConsentGroup, 'hostId' | 'hostIds'> | null,
 ): Promise<string[]> {
+  const hostIds = optOutHostIds(hostId, group)
   const topic = String(topicId ?? '').trim()
   if (!topic || !emails.length) return [...emails]
   // An unkeyable address cannot carry an opt-out record, so it cannot have
@@ -675,28 +786,31 @@ export async function filterTopicSendable(
   if (!lookups.length) return [...emails]
   try {
     const db = injectedFirestore ?? defaultFirestore()
-    const optOuts = db
-      .collection('hosts')
-      .doc(hostId)
-      .collection(TOPIC_OPT_OUTS_SUBCOLLECTION)
-    const snapshots = await db.getAll(
-      ...lookups.map((entry) => optOuts.doc(entry.key)),
+    const [own, ...siblings] = await getAllAcrossSites(
+      db,
+      hostIds,
+      TOPIC_OPT_OUTS_SUBCOLLECTION,
+      lookups.map((entry) => entry.key),
     )
+    /*
+     * The shared state reader, never a field test written out here.
+     *
+     * An entry means one of three things and only that function knows all
+     * three. The shorthand this replaced — "an entry with no
+     * `resubscribedAt` is a live opt-out" — reads a CONFIRMED double
+     * opt-in, which carries `pendingAt` and `confirmedAt` and no
+     * `resubscribedAt`, as somebody who left.
+     */
+    const stateIn = (snapshot: any) =>
+      snapshot?.exists
+        ? readTopicSubscriptionState((snapshot.get('topics') ?? {})[topic])
+        : 'subscribed'
     const gone = new Set<string>()
     lookups.forEach((entry, index) => {
-      const snapshot = snapshots[index]
-      if (!snapshot?.exists) return
-      /*
-       * The shared state reader, never a field test written out here.
-       *
-       * An entry means one of three things and only that function knows all
-       * three. The shorthand this replaced — "an entry with no
-       * `resubscribedAt` is a live opt-out" — reads a CONFIRMED double
-       * opt-in, which carries `pendingAt` and `confirmedAt` and no
-       * `resubscribedAt`, as somebody who left.
-       */
-      const record = (snapshot.get('topics') ?? {})[topic]
-      if (readTopicSubscriptionState(record) !== 'subscribed') {
+      if (
+        stateIn(own[index]) !== 'subscribed' ||
+        siblings.some((snapshots) => stateIn(snapshots[index]) === 'opted-out')
+      ) {
         gone.add(entry.email)
       }
     })

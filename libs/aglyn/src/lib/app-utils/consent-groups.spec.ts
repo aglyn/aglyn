@@ -29,6 +29,7 @@ import {
   CONSENT_GROUPS_FIELD,
   consentGroupDisclosure,
   consentGroupForHost,
+  consentGroupOptOutHosts,
   consentGroupScope,
   MAX_CONSENT_GROUP_HOSTS,
   readConsentGroups,
@@ -193,5 +194,22 @@ describe('what a group hands the surfaces that use it', () => {
     expect(
       consentGroupDisclosure(consentGroupForHost(org({ nw: GROUP }), 'site-a')),
     ).toContain('Northwind Group')
+  })
+
+  /**
+   * Opt-out runs against the group (AGL-3310): the lists a send reads are
+   * every site's in it, the sending site first so a reader can tell its own
+   * record from a sibling's. A group of one is the site alone — the read every
+   * org that declared nothing keeps.
+   */
+  it('names the sites whose opt-outs answer for a send, the sender first', () => {
+    expect(consentGroupOptOutHosts(soloConsentGroup('site-a'))).toEqual(['site-a'])
+    expect(
+      consentGroupOptOutHosts(consentGroupForHost(org({ nw: GROUP }), 'site-b')),
+    ).toEqual(['site-b', 'site-a'])
+    // A site the declaration does not name reads its own lists alone.
+    expect(
+      consentGroupOptOutHosts(consentGroupForHost(org({ nw: GROUP }), 'site-c')),
+    ).toEqual(['site-c'])
   })
 })
