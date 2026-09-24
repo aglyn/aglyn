@@ -16,12 +16,14 @@
  */
 
 import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import { pluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
 import { openOutreachMailboxClient } from '../mailboxes/mailbox-transport'
 import { outreachOrgSubject } from '../mailboxes/register-mailbox-routes'
 import { outreachShortLinkUrl } from '../runtime/click-link'
+import { createOutreachCurateRoutes } from './curate-routes'
 import { createOutreachDoNotContactDomainsRoute } from './do-not-contact-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
@@ -86,6 +88,10 @@ export function defaultOutreachRouteDeps(): OutreachEnrollRouteDeps {
     // runtime resolves it: the CRM registers at boot, and a request that
     // arrives before it did files nothing rather than caching a `null`.
     timeline: () => pluginRecordTimelineWriter()?.writer ?? null,
+    // The workspace's text generator (AGL-3324), resolved per call the same
+    // way: the AI plugin registers at boot, and a request before it did is
+    // told drafting is unavailable rather than caching a `null`.
+    textGenerator: () => pluginTextGenerator()?.generator ?? null,
   }
 }
 
@@ -127,6 +133,7 @@ export function registerOutreachRoutes(
 ): void {
   const sequences = createOutreachSequenceRoutes(deps)
   const enroll = createOutreachEnrollRoutes(deps)
+  const curate = createOutreachCurateRoutes(deps)
   const orgSubject = { subject: outreachOrgSubject }
   registerPluginApiRoute(OUTREACH_API_ROUTES.settings, { web: createOutreachSettingsRoute(deps) }, orgSubject)
   registerPluginApiRoute(OUTREACH_API_ROUTES.sequencesSave, { web: sequences.save }, orgSubject)
@@ -140,6 +147,8 @@ export function registerOutreachRoutes(
     orgSubject,
   )
   registerPluginApiRoute(OUTREACH_API_ROUTES.preview, { web: createOutreachPreviewRoute(deps) }, orgSubject)
+  registerPluginApiRoute(OUTREACH_API_ROUTES.curateDraft, { web: curate.draft }, orgSubject)
+  registerPluginApiRoute(OUTREACH_API_ROUTES.curateSave, { web: curate.save }, orgSubject)
   registerPluginApiRoute(
     OUTREACH_API_ROUTES.stepTest,
     { web: createOutreachStepTestRoute(deps, defaultOutreachStepTestDeps()) },

@@ -37,7 +37,8 @@ const SAMPLE_CONSOLE_ORIGIN: string =
 /**
  * Mirrors `PLATFORM_SUPPORT_URL`'s precedence, including the step that makes
  * the operator identity sufficient on its own: a configured support URL, else
- * the operator's support mailbox as a `mailto:`, else ours.
+ * the operator's support mailbox as a `mailto:`, else the console's own
+ * support page.
  *
  * The last step is built from `SAMPLE_CONSOLE_ORIGIN` rather than written out
  * (AGL-3262). The support entry point is a CONSOLE route — `/support`

@@ -86,6 +86,14 @@ export const OUTREACH_API_ROUTES = {
    * on nothing but the mailbox's test tally.
    */
   stepTest: 'outreach/steps/test',
+  /**
+   * `POST` — one person's own copies of a sequence's email steps, drafted by
+   * the workspace's AI (AGL-3324): for a person about to be enrolled, or for
+   * the next step of an enrollment. Nothing is stored.
+   */
+  curateDraft: 'outreach/curate/draft',
+  /** `POST` — stores a member's confirmed copy of one step on an enrollment, or clears it. */
+  curateSave: 'outreach/curate/save',
   // The one route a RECIPIENT reaches (AGL-2981): no session, a signed
   // token instead, and registered as a recipient link so it answers whether
   // or not Outreach is released for the organization now.

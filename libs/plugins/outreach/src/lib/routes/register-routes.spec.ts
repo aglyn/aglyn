@@ -56,6 +56,8 @@ const ROUTES: ReadonlyArray<readonly [string, 'GET' | 'POST']> = [
   [OUTREACH_API_ROUTES.enrollmentsAction, 'POST'],
   [OUTREACH_API_ROUTES.preview, 'POST'],
   [OUTREACH_API_ROUTES.stepTest, 'POST'],
+  [OUTREACH_API_ROUTES.curateDraft, 'POST'],
+  [OUTREACH_API_ROUTES.curateSave, 'POST'],
   [OUTREACH_API_ROUTES.doNotContactDomains, 'GET'],
   [OUTREACH_API_ROUTES.doNotContactDomains, 'POST'],
 ]
@@ -92,6 +94,7 @@ function deps(): OutreachEnrollRouteDeps {
     stampRecordEmailState: unused,
     creditCampaign: unused,
     timeline: unused,
+    textGenerator: unused,
     gate: {
       verifyIdToken: async () =>
         ({ uid: 'member-1', email: 'casey.morgan@example.com', email_verified: true }) as never,

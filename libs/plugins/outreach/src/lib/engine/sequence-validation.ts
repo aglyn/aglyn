@@ -54,6 +54,7 @@ import {
   type OutreachSequenceSettings,
   type OutreachSequenceStep,
 } from '../model/outreach.types'
+import { outreachBodyLinks } from './click-tracking'
 
 /** The merge field the rep's signal sentence is written into a step with. */
 export const OUTREACH_PERSONAL_LINE_FIELD = 'enrollment.personalLine'
@@ -110,6 +111,9 @@ export type OutreachValidationCode =
   | 'country_invalid'
   | 'legal_name_required'
   | 'postal_address_required'
+  | 'too_many_links'
+  | 'discount_language'
+  | 'not_plain_text'
 
 export interface OutreachValidationIssue {
   /** The field, dotted: `name`, `steps.2.subject`, `settings.window`, `orgSettings.postalAddress`. */
@@ -488,6 +492,113 @@ export function validateOutreachSequence(
   }
   issues.push(...validateOutreachSteps(steps))
   issues.push(...validateOutreachSequenceSettings(sequence?.settings))
+  return issues
+}
+
+/*==========================================
+ * A CURATED STEP (AGL-3324).
+ *
+ * One person's own copy of a step is held to everything a step is held to —
+ * a subject where the email starts a thread, a body, the lengths, the merge
+ * fields — and to the outbound playbook's rules the sequence editor trusts
+ * its author with but an AI draft cannot be trusted with: one link at most,
+ * list price only, plain text. Each is an ERROR: a draft that breaks one is
+ * refused rather than stored, whoever wrote it.
+ *==========================================*/
+
+/**
+ * Words the playbook keeps out of every message: a discount, a coupon, a
+ * cohort, a slot count, a deadline. Matched on word boundaries, so "count"
+ * and "expired domain" pass and "coupon" and "20% off" do not.
+ */
+const DISCOUNT_LANGUAGE =
+  /\b(discounts?|discounted|coupons?|promo(?:tional)?\s+codes?|promo\b|vouchers?|\d+\s*%\s*off|percent\s+off|money\s+off|special\s+offer|limited[-\s]time|expires?\s+(?:on|at|in|soon|today|tomorrow)|deadline|(?:only|last|first)\s+\d+\s+(?:spots?|slots?|seats?|places?)|cohorts?)\b/i
+
+/** Markup a plain-text email would show as typed: bold stars, a markdown link, a heading line. */
+const MARKDOWN = /\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^)\s]+\)|^#{1,6}\s|<\/?[a-z][^>]*>/im
+
+export interface OutreachCuratedStepInput {
+  /** The subject, when the copy carries one. Read only where the email starts a thread. */
+  subject?: string | null
+  body?: string | null
+  /** Whether the email this copy is for starts a thread — `!isInThreadEmailStep`. */
+  startsThread: boolean
+}
+
+/** Everything one person's copy of a step has to be before it may be stored — see the section note. */
+export function validateOutreachCuratedStep(
+  input: OutreachCuratedStepInput,
+  path = 'override',
+): OutreachValidationIssue[] {
+  const issues: OutreachValidationIssue[] = []
+  const subject = asText(input.subject)
+  if (input.startsThread && input.subject !== undefined && input.subject !== null) {
+    if (!subject.trim()) {
+      issues.push(error(`${path}.subject`, 'subject_required', 'This email starts a thread, so it needs a subject.'))
+    } else if (outreachSubjectHasReplyPrefix(subject)) {
+      issues.push(
+        error(
+          `${path}.subject`,
+          'subject_reply_prefix',
+          'Remove the "Re:" or "Fwd:" — this email starts a conversation, it doesn\'t answer one.',
+        ),
+      )
+    }
+    if (subject.length > CRM_EMAIL_SUBJECT_MAX) {
+      issues.push(
+        error(`${path}.subject`, 'subject_too_long', `Keep the subject under ${CRM_EMAIL_SUBJECT_MAX} characters.`),
+      )
+    }
+    if (DISCOUNT_LANGUAGE.test(subject)) {
+      issues.push(
+        error(`${path}.subject`, 'discount_language', 'The subject offers a discount or a deadline. List price only.'),
+      )
+    }
+    issues.push(...mergeFieldWarnings(subject, `${path}.subject`))
+  }
+  const body = asText(input.body)
+  if (!body.trim()) {
+    issues.push(error(`${path}.body`, 'body_required', 'Write the email.'))
+    return issues
+  }
+  if (body.length > CRM_EMAIL_BODY_MAX) {
+    issues.push(
+      error(
+        `${path}.body`,
+        'body_too_long',
+        `Keep the email under ${CRM_EMAIL_BODY_MAX.toLocaleString('en-US')} characters.`,
+      ),
+    )
+  }
+  const links = outreachBodyLinks(body)
+  if (links.length > 1) {
+    issues.push(
+      error(
+        `${path}.body`,
+        'too_many_links',
+        `This email carries ${links.length} links. A sequence email carries one at most.`,
+      ),
+    )
+  }
+  if (DISCOUNT_LANGUAGE.test(body)) {
+    issues.push(
+      error(
+        `${path}.body`,
+        'discount_language',
+        'This email offers a discount, a coupon, a cohort, a slot count or a deadline. List price only.',
+      ),
+    )
+  }
+  if (MARKDOWN.test(body)) {
+    issues.push(
+      error(
+        `${path}.body`,
+        'not_plain_text',
+        'This email carries markup — bold stars, a markdown link or a heading — which a plain-text email shows as typed.',
+      ),
+    )
+  }
+  issues.push(...mergeFieldWarnings(body, `${path}.body`))
   return issues
 }
 

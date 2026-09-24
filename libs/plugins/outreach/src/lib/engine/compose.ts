@@ -50,6 +50,15 @@
  * `{{enrollment.personalLine}}` through the resolver's `extra` fields.
  * Fields that render empty are returned beside the message, for the
  * runtime to decide whether "Hi ," is worth sending.
+ *
+ * ## A curated step
+ *
+ * An enrollment may carry its own copy of a step (AGL-3324): a subject and
+ * a body drafted for that one person. The composer reads the copy in place
+ * of the step's subject and body — and of the template the step names —
+ * and then does everything it does to a step: the merge, the threading, the
+ * click tracking, the footer. A curated in-thread email still goes out as
+ * `Re:` the thread's subject, since it answers the same thread.
  *==========================================*/
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
@@ -63,6 +72,7 @@ import type {
   OutreachEnrollment,
   OutreachOrgSettings,
   OutreachSequence,
+  OutreachStepOverride,
 } from '../model/outreach.types'
 import { rewriteOutreachBodyLinks } from './click-tracking'
 import { normalizeOutreachPersonalLine } from './gates'
@@ -136,7 +146,8 @@ export interface ComposeOutreachEmailInput {
   enrollment: Pick<
     OutreachEnrollment,
     'email' | 'stepIndex' | 'personalLine' | 'threadSubject' | 'messageIds' | 'gmailThreadId'
-  >
+  > &
+    Partial<Pick<OutreachEnrollment, 'stepOverrides'>>
   orgSettings: Pick<OutreachOrgSettings, 'legalName' | 'brandName' | 'postalAddress'> | null | undefined
   /**
    * What the CRM resolver reads: the contact, the sending site's group id,
@@ -172,6 +183,26 @@ export interface OutreachComposeResult {
   error: OutreachComposeError | null
   /** Merge fields that rendered empty, unique, in order of appearance. */
   unresolvedFields: string[]
+  /**
+   * The person's own copy of the step the email was written from
+   * (AGL-3324), or `null` when the step was sent as the sequence wrote it.
+   */
+  override: OutreachStepOverride | null
+}
+
+/**
+ * The enrollment's own copy of the step at `stepIndex` (AGL-3324), or
+ * `null`. A copy with neither a subject nor a body is no copy.
+ */
+export function outreachStepOverrideFor(
+  enrollment: Partial<Pick<OutreachEnrollment, 'stepOverrides'>> | null | undefined,
+  stepIndex: number,
+): OutreachStepOverride | null {
+  const override = enrollment?.stepOverrides?.[String(stepIndex)]
+  if (!override || typeof override !== 'object') return null
+  const hasSubject = typeof override.subject === 'string'
+  const hasBody = typeof override.body === 'string'
+  return hasSubject || hasBody ? override : null
 }
 
 const oneLine = (value: unknown): string =>
@@ -258,12 +289,12 @@ function unsubscribeMailto(value: unknown): string | null | undefined {
 const refuse = (
   code: OutreachComposeErrorCode,
   message: string,
-): OutreachComposeResult => ({ email: null, error: { code, message }, unresolvedFields: [] })
+): OutreachComposeResult => ({ email: null, error: { code, message }, unresolvedFields: [], override: null })
 
 /** The email one step sends to one person — see the module note. */
 export function composeOutreachEmail(input: ComposeOutreachEmailInput): OutreachComposeResult {
   const { footer, error } = composeOutreachFooter(input.orgSettings)
-  if (error) return { email: null, error, unresolvedFields: [] }
+  if (error) return { email: null, error, unresolvedFields: [], override: null }
 
   const steps = input.sequence?.steps ?? []
   const stepIndex = input.enrollment?.stepIndex
@@ -290,6 +321,10 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
     return result.text
   }
 
+  // This person's own copy of the step (AGL-3324), read in place of the
+  // step's own words — and of its template — from here on.
+  const override = outreachStepOverrideFor(input.enrollment, stepIndex)
+
   const email: ComposedOutreachEmail = { to, subject: '', text: '', trackedLinks: [] }
   if (isInThreadEmailStep(steps, stepIndex)) {
     const threadSubject = crmThreadSubject(input.enrollment.threadSubject)
@@ -308,7 +343,7 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
     email.inReplyTo = messageIds[messageIds.length - 1]
     email.references = messageIds.join(' ')
   } else {
-    const subject = oneLine(render(String(step.subject ?? '')))
+    const subject = oneLine(render(String(override?.subject ?? step.subject ?? '')))
     if (!subject) return refuse('missing_subject', 'This email has no subject.')
     if (outreachSubjectHasReplyPrefix(subject)) {
       return refuse(
@@ -319,7 +354,12 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
     email.subject = subject.slice(0, CRM_EMAIL_SUBJECT_MAX)
   }
 
-  const source = step.templateId ? String(input.templateBody ?? '') : String(step.body ?? '')
+  const source =
+    typeof override?.body === 'string'
+      ? override.body
+      : step.templateId
+        ? String(input.templateBody ?? '')
+        : String(step.body ?? '')
   const body = render(source)
     .replace(/\r\n?/g, '\n')
     .split('\n')
@@ -351,5 +391,5 @@ export function composeOutreachEmail(input: ComposeOutreachEmailInput): Outreach
   }
   if (mailto) email.listUnsubscribeMailto = mailto
 
-  return { email, error: null, unresolvedFields: unresolved }
+  return { email, error: null, unresolvedFields: unresolved, override }
 }

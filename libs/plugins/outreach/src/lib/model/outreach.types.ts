@@ -663,6 +663,51 @@ export type OutreachAttestations = Partial<
 /** The longest personal line an enrollment keeps: one sentence, not a letter. */
 export const OUTREACH_PERSONAL_LINE_MAX = 300
 
+/*==========================================
+ * CURATED STEPS (AGL-3324).
+ *
+ * A step is one template for everyone, plus the personal line. Curating
+ * rewrites ONE person's copy of a step — drafted by the workspace's AI from
+ * their record and the step's own body as the skeleton, or written by the
+ * member — and keeps it on the enrollment, never on the sequence. The send
+ * job reads the override in place of the step's subject and body; the
+ * tokens, the footer, the click tracking and the plain-text rules still
+ * apply to it exactly as they apply to the step.
+ *
+ * Nothing is stored that a member has not read: a draft lands on the
+ * enrollment only when the member confirms it, with who and when.
+ *==========================================*/
+
+/** Who wrote the override: the AI, or the member by hand. */
+export const OUTREACH_STEP_OVERRIDE_SOURCES = ['ai', 'member'] as const
+export type OutreachStepOverrideSource = (typeof OUTREACH_STEP_OVERRIDE_SOURCES)[number]
+
+/** One person's own copy of one step. */
+export interface OutreachStepOverride {
+  /** The subject, merge fields allowed; absent keeps the step's own. Not read on an in-thread email. */
+  subject?: string
+  /** The plain-text body, merge fields allowed; absent keeps the step's own (or its template's). */
+  body?: string
+  source: OutreachStepOverrideSource
+  /** When the member confirmed it — the moment it was stored, never before. */
+  draftedAtMs: number
+  /** The member who confirmed it. */
+  draftedByUid?: string
+  /** An AI draft the member changed before confirming it. */
+  edited?: boolean
+  /** The prompt the AI was given, for the audit log; absent on a member's own words. */
+  prompt?: string
+  /** The model that drafted it, for the audit log. */
+  model?: string
+}
+
+/** The overrides an enrollment carries, keyed by the step's index as text. */
+export type OutreachStepOverrides = Record<string, OutreachStepOverride>
+
+/** The sentence a member ticks before a curated draft is stored — a fourth attestation. */
+export const OUTREACH_CURATION_CONFIRMATION_LABEL =
+  "I've read this draft, and it goes out to this person as written"
+
 /**
  * Which CRM record an enrollment names (AGL-3234). A person is a LEAD until
  * somebody qualifies them and a CONTACT after, and a sequence works either:
@@ -764,6 +809,12 @@ export interface OutreachEnrollment extends OutreachTimestamps {
    * in it, and one it leaves keeps what it was credited with.
    */
   campaignIds?: string[]
+  /**
+   * This person's own copies of steps (AGL-3324), by step index. Absent on
+   * an enrollment nobody curated, which sends the sequence's steps as
+   * written; a step without an entry sends the same.
+   */
+  stepOverrides?: OutreachStepOverrides
 }
 
 /** A sending run's claim on one enrollment's step (AGL-2981). */
@@ -806,6 +857,11 @@ export interface OutreachStepRecord {
    * read afterwards for what it actually offered them.
    */
   links?: string[]
+  /**
+   * The email went out as this person's curated copy (AGL-3324), and who
+   * wrote it. Absent on a step sent as the sequence wrote it.
+   */
+  curated?: OutreachStepOverrideSource
 }
 
 /*==========================================

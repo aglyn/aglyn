@@ -22,6 +22,10 @@ import { useCallback, useMemo } from 'react'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
 import type { OutreachComplianceIssue } from '../model/compliance-settings'
 import type {
+  OutreachCurateDraftRequest,
+  OutreachCurateDraftResponse,
+  OutreachCurateSaveRequest,
+  OutreachCurateSaveResponse,
   OutreachDoNotContactDomainRequest,
   OutreachDoNotContactDomainResponse,
   OutreachDoNotContactDomainsResponse,
@@ -129,6 +133,19 @@ export interface OutreachApi {
   sendStepTest(
     input: Omit<OutreachStepTestRequest, 'orgId'>,
   ): Promise<OutreachStepTestResponse & { unresolvedFields?: string[] }>
+  /**
+   * One person's own copies of the sequence's email steps, drafted by the
+   * workspace's AI (AGL-3324); nothing is stored until the member confirms.
+   */
+  curateDrafts(
+    input: Omit<OutreachCurateDraftRequest, 'orgId'>,
+  ): Promise<OutreachCurateDraftResponse>
+  /** Stores a confirmed copy of one step on an enrollment, or clears it with `null`. */
+  saveCuratedStep(
+    enrollmentId: string,
+    stepIndex: number,
+    override: OutreachCurateSaveRequest['override'],
+  ): Promise<OutreachCurateSaveResponse>
   /** The domains on the do-not-contact list (AGL-3244). */
   readDoNotContactDomains(): Promise<OutreachDoNotContactDomainsResponse>
   /** Puts a domain on the list, or takes one off. */
@@ -257,6 +274,16 @@ export function useOutreachApi(orgId: string | null): OutreachApi {
         call(OUTREACH_API_ROUTES.stepTest, {
           method: 'POST',
           body: { ...input },
+        }),
+      curateDrafts: (input) =>
+        call(OUTREACH_API_ROUTES.curateDraft, {
+          method: 'POST',
+          body: { ...input },
+        }),
+      saveCuratedStep: (enrollmentId, stepIndex, override) =>
+        call(OUTREACH_API_ROUTES.curateSave, {
+          method: 'POST',
+          body: { enrollmentId, stepIndex, override },
         }),
       readDoNotContactDomains: () =>
         call(OUTREACH_API_ROUTES.doNotContactDomains, { method: 'GET' }),

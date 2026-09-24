@@ -108,7 +108,7 @@ const loaded = (
   ...extra,
 })
 
-let api: jest.Mocked<Pick<OutreachApi, 'actOnEnrollment'>>
+let api: jest.Mocked<Pick<OutreachApi, 'actOnEnrollment' | 'curateDrafts' | 'saveCuratedStep'>>
 
 const renderTable = (enrollments: OutreachEnrollmentsLoad) =>
   render(
@@ -135,6 +135,8 @@ beforeEach(() => {
       stoppedOthers: 0,
       enrollment: {},
     }),
+    curateDrafts: jest.fn(),
+    saveCuratedStep: jest.fn().mockResolvedValue({ ok: true, enrollment: {} }),
   }
 })
 
@@ -336,5 +338,54 @@ describe('the enrollments table: what a member can do (AGL-2980)', () => {
         { variant: 'error', allowDuplicate: true },
       ),
     )
+  })
+})
+
+describe('curating the next step (AGL-3324)', () => {
+  const open = (name: string) =>
+    fireEvent.click(within(rowOf(name)).getByRole('button', { name: /More actions|Actions/ }))
+
+  it('drafts the next email that has not gone out, and stores it only on Use this', async () => {
+    api.curateDrafts.mockResolvedValue({
+      ok: true,
+      prompt: 'the prompt',
+      model: 'test-model',
+      drafts: [{ stepIndex: 2, subject: null, body: 'Casey — one thing I would do next.', issues: [] }],
+    })
+    renderTable(loaded([enrollment({})]))
+    open('Casey Morgan')
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Curate next step' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Curate the next email for Casey Morgan' })
+    await waitFor(() =>
+      expect(api.curateDrafts).toHaveBeenCalledWith({ enrollmentId: 'seq-1_c-1', stepIndexes: [2] }),
+    )
+    const draft = await within(dialog).findByLabelText('Email 2 · step 3 — draft')
+    expect(within(draft).queryByLabelText('Subject')).toBeNull()
+    expect(api.saveCuratedStep).not.toHaveBeenCalled()
+    fireEvent.click(within(draft).getByLabelText(/I've read this draft/))
+    fireEvent.click(within(draft).getByRole('button', { name: 'Use this' }))
+    await waitFor(() =>
+      expect(api.saveCuratedStep).toHaveBeenCalledWith('seq-1_c-1', 2, {
+        body: 'Casey — one thing I would do next.',
+        source: 'ai',
+        prompt: 'the prompt',
+        model: 'test-model',
+      }),
+    )
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith('Curated step 3. It goes out as written.', { variant: 'success' }),
+    )
+  })
+
+  it('marks a row whose current step has its own copy, and offers no curating once every email went out', () => {
+    renderTable(
+      loaded([
+        enrollment({ stepIndex: 2, stepOverrides: { '2': { body: 'Own copy', source: 'ai', draftedAtMs: 1 } } }),
+        enrollment({ id: 'seq-1_c-2', contactId: 'c-2', contactName: 'Jordan Lee', email: 'jordan@example.com', status: 'finished', stepIndex: 3 }),
+      ]),
+    )
+    expect(within(rowOf('Casey Morgan')).getByText('Curated')).toBeTruthy()
+    open('Jordan Lee')
+    expect(screen.queryByRole('menuitem', { name: 'Curate next step' })).toBeNull()
   })
 })

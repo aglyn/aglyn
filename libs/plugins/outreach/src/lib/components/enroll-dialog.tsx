@@ -61,7 +61,16 @@ import {
   OUTREACH_PERSONAL_LINE_MAX,
   type OutreachAttestationKind,
   type OutreachSequence,
+  type OutreachSequenceStep,
 } from '../model/outreach.types'
+import { outreachEmailStepLabel } from './curate-step-dialog'
+import {
+  OutreachCuratedStepEditor,
+  outreachDraftState,
+  outreachDraftToOverride,
+  outreachMemberDraftStates,
+  type OutreachCuratedDraftState,
+} from './curated-step-editor'
 import { OutreachLoading, OutreachLoadProblem } from './outreach-ui'
 import type { OutreachApi } from './use-outreach-api'
 import {
@@ -94,11 +103,33 @@ const STATUS_COLORS: Record<OutreachEnrollPreviewStatus, ChipProps['color']> = {
   blocked: 'default',
 }
 
+/** Where one person's curated drafts stand (AGL-3324). */
+type Curation =
+  | { status: 'idle' }
+  | { status: 'drafting' }
+  | { status: 'failed'; message: string }
+  | { status: 'ready' }
+
 /** What the rep has supplied for one person. */
 interface Supplied {
   include: boolean
   personalLine: string
   attestations: OutreachAttestationKind[]
+  /** The email steps drafted for this person, by step index; absent until they curate. */
+  drafts?: Record<number, OutreachCuratedDraftState>
+  curation?: Curation
+}
+
+/** The drafts the rep used, as the enroll and the preview carry them. */
+function usedOverrides(supplied: Supplied | undefined) {
+  return Object.values(supplied?.drafts ?? {})
+    .map(outreachDraftToOverride)
+    .filter((override): override is NonNullable<typeof override> => override !== null)
+}
+
+/** Whether a drafted step is still waiting on the rep to use it or keep the template. */
+function hasOpenDrafts(supplied: Supplied | undefined): boolean {
+  return Object.values(supplied?.drafts ?? {}).some((draft) => draft.decision === 'pending')
 }
 
 /** Where one person's test send stands (AGL-3325). */
@@ -122,6 +153,9 @@ export function outreachPersonReady(
   if (person.status === 'blocked' || !supplied?.include) return false
   const line = supplied.personalLine.trim()
   if (line.length > OUTREACH_PERSONAL_LINE_MAX) return false
+  // A draft the rep has read but neither used nor kept holds them back
+  // (AGL-3324): nothing is enrolled with a decision still open.
+  if (hasOpenDrafts(supplied)) return false
   if (person.status === 'eligible') return true
   if (person.requires.personalLine && !line) return false
   return person.requires.attestations.every((kind) =>
@@ -238,7 +272,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
   const waiting = answer
     ? answer.people.filter(
         (person) =>
-          person.status === 'needs_confirmation' &&
+          person.status !== 'blocked' &&
           supplied[person.personId]?.include &&
           !outreachPersonReady(person, supplied[person.personId]),
       ).length
@@ -258,6 +292,10 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
             : { contactId: person.contactId }),
           personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
           attestations: supplied[person.personId]?.attestations ?? [],
+          // The steps they curated and confirmed (AGL-3324); nothing else.
+          ...(usedOverrides(supplied[person.personId]).length
+            ? { stepOverrides: usedOverrides(supplied[person.personId]) }
+            : {}),
         })),
       )
       setStage({
@@ -283,12 +321,15 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
       [person.personId]: { status: 'loading' },
     }))
     try {
+      const overrides = usedOverrides(supplied[person.personId])
       const result = await api.previewEmail({
         sequenceId: sequence.id,
         ...(person.target === 'lead' && person.leadId
           ? { leadId: person.leadId }
           : { contactId: person.contactId }),
         personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
+        // The preview shows the curated version (AGL-3324).
+        ...(overrides.length ? { stepOverrides: overrides } : {}),
       })
       setEmailPreview((previous) => ({
         ...previous,
@@ -306,19 +347,63 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
   }
 
   /**
+   * Curate for this person (AGL-3324): every email step drafted from their
+   * record, the sequence's steps and the personal line as written so far,
+   * shown under them for the rep to edit and confirm. Nothing is stored
+   * until Enroll carries the drafts they used.
+   */
+  const curate = async (person: OutreachEnrollPreviewPerson) => {
+    supply(person.personId, { curation: { status: 'drafting' } })
+    try {
+      const answer = await api.curateDrafts({
+        sequenceId: sequence.id,
+        ...(person.target === 'lead' && person.leadId
+          ? { leadId: person.leadId }
+          : { contactId: person.contactId }),
+        personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
+      })
+      const audit = { prompt: answer.prompt, model: answer.model }
+      supply(person.personId, {
+        curation: { status: 'ready' },
+        drafts: Object.fromEntries(
+          answer.drafts.map((draft) => [draft.stepIndex, outreachDraftState(draft, sequence.steps, 'ai', audit)]),
+        ),
+      })
+    } catch (error) {
+      supply(person.personId, { curation: { status: 'failed', message: (error as Error).message } })
+    }
+  }
+
+  /** The rep's own words for every email step, when the AI cannot draft. */
+  const writeThemselves = (person: OutreachEnrollPreviewPerson) => {
+    const stepIndexes = sequence.steps
+      .map((step, index) => (step.kind === 'email' ? index : -1))
+      .filter((index) => index >= 0)
+    supply(person.personId, {
+      curation: { status: 'ready' },
+      drafts: Object.fromEntries(
+        outreachMemberDraftStates(sequence.steps, stepIndexes).map((draft) => [draft.stepIndex, draft]),
+      ),
+    })
+  }
+
+  /**
    * This person's first email, sent to the member as a test (AGL-3325):
-   * their record and the personal line as written so far fill the tokens,
-   * and nothing is enrolled or stored for them.
+   * their record, the personal line as written so far and the curated copy
+   * they used (AGL-3324) fill it, and nothing is enrolled or stored for
+   * them.
    */
   const sendTest = async (person: OutreachEnrollPreviewPerson) => {
     setStepTests((previous) => ({ ...previous, [person.personId]: { status: 'sending' } }))
     try {
+      const overrides = usedOverrides(supplied[person.personId])
       const answer = await api.sendStepTest({
         sequenceId: sequence.id,
         ...(person.target === 'lead' && person.leadId
           ? { leadId: person.leadId }
           : { contactId: person.contactId }),
         personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
+        ...(overrides.length ? { stepOverrides: overrides } : {}),
       })
       setStepTests((previous) => ({ ...previous, [person.personId]: { status: 'sent', answer } }))
     } catch (error) {
@@ -600,19 +685,22 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                   <PersonRow
                     key={person.personId}
                     person={person}
+                    steps={sequence.steps}
                     supplied={supplied[person.personId]}
                     onSupply={(next) => supply(person.personId, next)}
                     emailPreview={emailPreview[person.personId]}
                     onPreviewEmail={() => void previewEmail(person)}
                     stepTest={stepTests[person.personId]}
                     onSendTest={() => void sendTest(person)}
+                    onCurate={() => void curate(person)}
+                    onWriteThemselves={() => writeThemselves(person)}
                     disabled={stage.kind === 'enrolling'}
                   />
                 ))}
               </Stack>
               {waiting ? (
                 <Typography variant="body2" color="text.secondary">
-                  {`${waiting} ${waiting === 1 ? 'person still needs' : 'people still need'} a personal line or a confirmation, and won't be enrolled until they have one.`}
+                  {`${waiting} ${waiting === 1 ? 'person still needs' : 'people still need'} a personal line or a confirmation, or a decision on a draft, and won't be enrolled until they have one.`}
                 </Typography>
               ) : null}
             </Stack>
@@ -682,6 +770,7 @@ function summary(answer: OutreachEnrollPreviewResponse): string {
 
 function PersonRow(props: {
   person: OutreachEnrollPreviewPerson
+  steps: readonly OutreachSequenceStep[]
   supplied: Supplied | undefined
   onSupply(next: Partial<Supplied>): void
   emailPreview:
@@ -692,12 +781,17 @@ function PersonRow(props: {
   onPreviewEmail(): void
   stepTest: StepTest | undefined
   onSendTest(): void
+  onCurate(): void
+  onWriteThemselves(): void
   disabled: boolean
 }) {
   const { person, supplied, disabled } = props
   const name = person.name || person.email || person.personId
   const line = supplied?.personalLine ?? ''
   const tooLong = line.trim().length > OUTREACH_PERSONAL_LINE_MAX
+  const curation = supplied?.curation ?? { status: 'idle' }
+  const drafts = Object.values(supplied?.drafts ?? {}).sort((a, b) => a.stepIndex - b.stepIndex)
+  const usedCount = drafts.filter((draft) => draft.decision === 'use').length
   return (
     <Paper component="li" variant="outlined" sx={{ p: 1.5 }} aria-label={name}>
       <Stack spacing={1}>
@@ -821,6 +915,13 @@ function PersonRow(props: {
                   >
                     {props.stepTest?.status === 'sending' ? 'Sending…' : 'Send me this as a test'}
                   </Button>
+                  <Button
+                    size="small"
+                    onClick={props.onCurate}
+                    disabled={disabled || curation.status === 'drafting'}
+                  >
+                    {drafts.length ? 'Curate again' : 'Curate for this person'}
+                  </Button>
                 </Stack>
                 {props.stepTest?.status === 'failed' ? (
                   <Alert severity="error">{props.stepTest.message}</Alert>
@@ -829,6 +930,39 @@ function PersonRow(props: {
                   <Alert severity="success">
                     {`Sent to ${props.stepTest.answer.sentTo} as “${props.stepTest.answer.subject}”. ${name} was not enrolled.`}
                   </Alert>
+                ) : null}
+                {curation.status === 'drafting' ? (
+                  <OutreachLoading label="Drafting their emails…" />
+                ) : null}
+                {curation.status === 'failed' ? (
+                  <Stack spacing={1}>
+                    <Alert severity="warning">{curation.message}</Alert>
+                    <Stack direction="row">
+                      <Button size="small" onClick={props.onWriteThemselves} disabled={disabled}>
+                        Write them yourself
+                      </Button>
+                    </Stack>
+                  </Stack>
+                ) : null}
+                {drafts.length ? (
+                  <Stack spacing={1} aria-label={`Curated emails for ${name}`}>
+                    <Typography variant="caption" color="text.secondary">
+                      {usedCount
+                        ? `${usedCount} of ${drafts.length} ${drafts.length === 1 ? 'email' : 'emails'} curated for ${name}. Nothing is sent that you haven't confirmed.`
+                        : `Their emails, rewritten for them. Read each one, edit it, and use it or keep the template.`}
+                    </Typography>
+                    {drafts.map((draft) => (
+                      <OutreachCuratedStepEditor
+                        key={draft.stepIndex}
+                        draft={draft}
+                        label={outreachEmailStepLabel(props.steps, draft.stepIndex)}
+                        onChange={(next) =>
+                          props.onSupply({ drafts: { ...(supplied?.drafts ?? {}), [next.stepIndex]: next } })
+                        }
+                        disabled={disabled}
+                      />
+                    ))}
+                  </Stack>
                 ) : null}
                 {props.emailPreview?.status === 'loading' ? (
                   <OutreachLoading label="Writing the email…" />

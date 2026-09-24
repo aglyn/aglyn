@@ -257,6 +257,11 @@ const AI_DOORS: Record<string, { step: AiStepKind; caches: boolean; why: string 
     caches: false,
     why: 'one short rule block; the brief is the whole request',
   },
+  'server/plugin-text-generation.ts': {
+    step: 'job.text',
+    caches: false,
+    why: "the core's text-generation seam (AGL-3324): the CALLER's standing block, sent as one prefix with a breakpoint, so a caller whose block clears the balanced tier's minimum would cache and one under it does not. The seam holds no prompt of its own to measure here; its one caller today, Sequences' curation, sends a rule block of a few hundred tokens, far under the minimum, and the person's record and the steps are the request",
+  },
   'server/ai-assist.ts': {
     step: 'copy.element',
     caches: false,

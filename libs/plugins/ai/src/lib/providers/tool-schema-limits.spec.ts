@@ -178,6 +178,9 @@ const TOOL_SETS: Record<string, Readonly<Record<string, () => AiTool[]>>> = {
     explain: () => [aiExperimentExplainTool()],
   },
   'jobs/ai-job-text-step.ts': { text: () => [] },
+  // The text-generation seam (AGL-3324) sends a caller's prompt and no tool:
+  // its answer is prose the caller parses, held to the caller's own rules.
+  'server/plugin-text-generation.ts': { generate: () => [] },
   'server/ai-assist.ts': { element: () => [], blog: () => [], section: () => [assistSectionTool()] },
   'server/assist-chat.ts': {
     chat: () => [],
