@@ -38,7 +38,7 @@ import {
 } from 'react'
 import { isAuthFailure } from '../utils/auth-failure'
 import { currentWorkspaceSlug } from '../constants/workspace-domain'
-import { resolveNavSection } from './nav-section'
+import { consolePathFor, hostOrgSlugFor, resolveNavSection } from './nav-section'
 import { useAuthRecovery } from './use-auth-recovery'
 import { MAX_RETRIES, retryDelayMs } from './use-host-resolution'
 
@@ -70,6 +70,15 @@ export interface OrgScopeContextValue {
   selectOrg: (orgId: string) => void
   /** The workspace slug the page was opened under, when subdomain-scoped. */
   orgSlug: string | null
+  /**
+   * The workspace the HOST names, whichever kind of host it is (AGL-3314):
+   * the subdomain's slug, or on a custom console domain the `[orgSlug]` the
+   * middleware rewrote the path into. The address bar then omits it —
+   * `/hosts`, not `/{slug}/hosts` — so anything that parses the visible path
+   * reads it through `consolePathFor(pathname, hostOrgSlug)` (the
+   * `useConsolePath()` hook). `null` on the apex, where the path carries it.
+   */
+  hostOrgSlug: string | null
   /**
    * The org slug in the URL path (`/[orgSlug]/…`), the source of truth for
    * the active workspace on org-scoped routes (AGL-621); null off them.
@@ -123,6 +132,7 @@ const OrgScopeContext = createContext<OrgScopeContextValue>({
   currentOrg: null,
   selectOrg: () => undefined,
   orgSlug: null,
+  hostOrgSlug: null,
   pathOrgSlug: null,
   loading: true,
   confirmed: false,
@@ -174,9 +184,26 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
    * mistyped path) simply misses here as it always did, and the fallbacks
    * still catch it.
    */
+  const paramOrgSlug = typeof params?.orgSlug === 'string' ? params.orgSlug : null
+  // The workspace the HOST names, by the middleware's own rule (AGL-3295):
+  // only a subdomain of the configured workspace domain names one.
+  const orgSlug = useMemo(currentWorkspaceSlug, [])
+  /*
+   * ...or a custom console domain, which the client cannot recognize by name
+   * but whose rewrite it can see (AGL-3314): the matched route carries an
+   * `[orgSlug]` the address bar does not start with. On the apex the two
+   * agree, so nothing is implied there.
+   */
+  const hostOrgSlug = hostOrgSlugFor({
+    subdomainSlug: orgSlug,
+    paramOrgSlug,
+    pathname,
+  })
   const pathOrgSlug =
-    (typeof params?.orgSlug === 'string' ? params.orgSlug : null) ??
-    resolveNavSection(pathname).orgSlug ??
+    paramOrgSlug ??
+    // The visible path as the routes see it: on a workspace host `/hosts` is
+    // `/{slug}/hosts`, and its first segment names no workspace (AGL-3314).
+    resolveNavSection(consolePathFor(pathname, hostOrgSlug)).orgSlug ??
     null
   const [orgs, setOrgs] = useState<UserOrgMembership[]>([])
   const [loading, setLoading] = useState(true)
@@ -214,10 +241,6 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
     key: string
     org: UserOrgMembership | null
   } | null>(null)
-  // The workspace the HOST names, by the middleware's own rule (AGL-3295):
-  // only a subdomain of the configured workspace domain names one.
-  const orgSlug = useMemo(currentWorkspaceSlug, [])
-
   useEffect(() => {
     if (!user?.uid) {
       setOrgs([])
@@ -469,6 +492,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       currentOrg,
       selectOrg,
       orgSlug,
+      hostOrgSlug,
       pathOrgSlug,
       loading,
       confirmed,
@@ -484,6 +508,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
       currentOrg,
       selectOrg,
       orgSlug,
+      hostOrgSlug,
       pathOrgSlug,
       loading,
       confirmed,

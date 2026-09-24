@@ -39,7 +39,11 @@ import { render, screen } from '@testing-library/react'
 const mockPathname = jest.fn<string, []>()
 const scope: {
   currentOrg: { $id: string; slug?: string; orgName?: string } | null
-} = { currentOrg: null }
+  /** The subdomain's workspace (`useOrgScope().orgSlug`). */
+  orgSlug: string | null
+  /** The workspace the host names, subdomain or custom domain (AGL-3314). */
+  hostOrgSlug: string | null
+} = { currentOrg: null, orgSlug: null, hostOrgSlug: null }
 
 jest.mock('next/navigation', () => ({
   usePathname: () => mockPathname(),
@@ -56,7 +60,8 @@ jest.mock('../hooks/use-org-scope', () => ({
       { $id: 'org_sale', slug: 'sale-test', orgName: 'Sale Test' },
     ],
     currentOrg: scope.currentOrg,
-    orgSlug: null,
+    orgSlug: scope.orgSlug,
+    hostOrgSlug: scope.hostOrgSlug,
     hasMoreOrgs: false,
     loadMoreOrgs: jest.fn(),
   }),
@@ -75,9 +80,12 @@ jest.mock('../components/create-org-dialog.component', () => ({
 async function openAt(
   route: string,
   currentOrg: { $id: string; slug?: string; orgName?: string } | null,
+  host: { orgSlug?: string | null; hostOrgSlug?: string | null } = {},
 ) {
   mockPathname.mockReturnValue(route)
   scope.currentOrg = currentOrg
+  scope.orgSlug = host.orgSlug ?? null
+  scope.hostOrgSlug = host.hostOrgSlug ?? null
   const { OrgSwitcherNav } = await import(
     '../components/org-switcher-nav.component'
   )
@@ -119,5 +127,39 @@ describe('what the workspace switcher claims (AGL-2486)', () => {
     await openAt('/aglyn-org/hosts/aglyn-marketing', AGLYN)
     expect(screen.getByLabelText('Workspace: Aglyn LLC')).toBeTruthy()
     expect(screen.getByText('Free')).toBeTruthy()
+  })
+})
+
+describe('on a host that names the workspace (AGL-3314)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  // `aglyn-org.aglyn.com/hosts`: the address bar omits the workspace, and the
+  // switcher said "Choose a workspace" for the one the host plainly named.
+  const SUBDOMAIN = { orgSlug: 'aglyn-org', hostOrgSlug: 'aglyn-org' }
+
+  it('names the workspace on its own subdomain, at the site list', async () => {
+    await openAt('/hosts', AGLYN, SUBDOMAIN)
+    expect(screen.getByLabelText('Workspace: Aglyn LLC')).toBeTruthy()
+    expect(screen.queryByLabelText('Choose a workspace')).toBeNull()
+  })
+
+  it('names it inside a site too', async () => {
+    await openAt('/hosts/aglyn-marketing/screens', AGLYN, SUBDOMAIN)
+    expect(screen.getByLabelText('Workspace: Aglyn LLC')).toBeTruthy()
+  })
+
+  it('names it on a custom console domain, which only the rewrite reveals', async () => {
+    // No subdomain to read: the host is the customer's own domain, and the
+    // scope learns the workspace from the route the middleware rewrote into.
+    await openAt('/hosts', AGLYN, { orgSlug: null, hostOrgSlug: 'aglyn-org' })
+    expect(screen.getByLabelText('Workspace: Aglyn LLC')).toBeTruthy()
+  })
+
+  it('still refuses a workspace the host contradicts', async () => {
+    // The guard keeps its teeth: a scope that fell through to another
+    // workspace is not named on this host either.
+    await openAt('/hosts', SALE, SUBDOMAIN)
+    expect(screen.queryByText('Sale Test')).toBeNull()
+    expect(screen.getByLabelText('Choose a workspace')).toBeTruthy()
   })
 })

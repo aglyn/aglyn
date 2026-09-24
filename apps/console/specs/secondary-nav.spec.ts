@@ -30,6 +30,8 @@ import {
   resolveNavSection,
   urlNamesOrg,
 } from '../hooks/use-secondary-nav'
+import { consolePathFor } from '../hooks/use-url-names-org'
+import { orgScopedPathname } from '../constants/console-routes'
 
 /**
  * The secondary app bar is mounted once in the `(app)` layout and derives its
@@ -363,5 +365,77 @@ describe('plugin nav tabs point at the landing section (AGL-2501)', () => {
       navItems: [{ label: 'flat', href: '/redirects', Component: Page }],
     })
     expect(tabFor('flat')?.href).toBe(`${BASE}/redirects`)
+  })
+})
+
+describe('on a host that names the workspace (AGL-3314)', () => {
+  /*
+   * `acme.<workspace domain>/hosts` is served from `/acme/hosts`, and the
+   * address bar keeps `/hosts`. Every parser above reads the canonical path,
+   * so the path it is handed has to be the one the middleware rewrote to —
+   * with the middleware's own rule, or the two drift.
+   */
+  it('shares the rewrite rule with the middleware, exemptions and all', () => {
+    expect(orgScopedPathname('/hosts', ORG)).toBe(`/${ORG}/hosts`)
+    expect(orgScopedPathname('/', ORG)).toBe(`/${ORG}`)
+    expect(orgScopedPathname('/support', ORG)).toBe(`/${ORG}/support`)
+    // Already canonical, or an apex route on every host: nothing to rewrite.
+    for (const path of [
+      `/${ORG}/hosts`,
+      '/manage/user',
+      '/admin/overview',
+      '/signin',
+      '/auth/handoff/start',
+    ]) {
+      expect(orgScopedPathname(path, ORG)).toBeNull()
+    }
+  })
+
+  it('reads the address bar the way the routes do', () => {
+    expect(consolePathFor('/hosts', ORG)).toBe(`/${ORG}/hosts`)
+    expect(consolePathFor('/', ORG)).toBe(`/${ORG}`)
+    expect(consolePathFor(null, ORG)).toBe(`/${ORG}`)
+    expect(consolePathFor('/manage/user', ORG)).toBe('/manage/user')
+    expect(consolePathFor(`/${ORG}/team`, ORG)).toBe(`/${ORG}/team`)
+    // The apex: the path already carries the workspace, and nothing is added.
+    expect(consolePathFor('/hosts', null)).toBe('/hosts')
+  })
+
+  it('names the workspace, not one called "hosts"', () => {
+    // The bug, as the parser saw it.
+    expect(resolveNavSection('/hosts').orgSlug).toBe('hosts')
+    expect(resolveNavSection(consolePathFor('/hosts', ORG))).toEqual({
+      kind: 'org',
+      base: `/${ORG}`,
+      orgSlug: ORG,
+    })
+  })
+
+  it('reads a site from a subdomain path, so the site strip appears', () => {
+    expect(resolveNavSection(consolePathFor(`/hosts/${HOST}`, ORG))).toEqual({
+      kind: 'host',
+      base: `/${ORG}/hosts/${HOST}`,
+      orgSlug: ORG,
+      host: HOST,
+    })
+  })
+
+  it('selects the tab the page is on', () => {
+    expect(
+      resolveActiveTab(consolePathFor('/hosts', ORG), `/${ORG}`, orgNavTabItems(ORG)),
+    ).toBe(buildRoute(Route.HOST_LIST, { orgSlug: ORG }))
+    const hostBase = `/${ORG}/hosts/${HOST}`
+    expect(
+      resolveActiveTab(
+        consolePathFor(`/hosts/${HOST}/screens/seed-home`, ORG),
+        hostBase,
+        hostNavTabItems(ORG, HOST),
+      ),
+    ).toBe(buildRoute(Route.HOST_SCREENS, { orgSlug: ORG, host: HOST }))
+  })
+
+  it('keeps the staff console and Manage Account org-less on a workspace host', () => {
+    expect(resolveNavSection(consolePathFor('/admin/overview', ORG)).kind).toBe('admin')
+    expect(resolveNavSection(consolePathFor('/manage/user', ORG)).kind).toBe('manage')
   })
 })

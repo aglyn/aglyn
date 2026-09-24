@@ -17,7 +17,6 @@
 'use client'
 
 import { listConsoleStaffPages } from '@aglyn/aglyn'
-import { usePathname } from 'next/navigation'
 import { useMemo, useSyncExternalStore } from 'react'
 import { useEnabledPluginIds } from '../components/console-plugins-gate.component'
 import {
@@ -44,6 +43,7 @@ import {
   segmentsOf,
   urlNamesOrg,
   useUrlNamesOrg,
+  useConsolePath,
 } from './use-url-names-org'
 
 /**
@@ -149,7 +149,10 @@ export function useSecondaryNav(): {
   activeTab: string | undefined
   section: NavSection
 } {
-  const pathname = usePathname()
+  // The path as the routes see it (AGL-3314): on a workspace host the address
+  // bar's `/hosts` is `/{slug}/hosts`, and both the strip and its active tab
+  // are read against that.
+  const pathname = useConsolePath()
   const section = useMemo(() => resolveNavSection(pathname), [pathname])
   // Hooks can't be called conditionally, so the org strip is always built;
   // it is only handed out on org routes.
