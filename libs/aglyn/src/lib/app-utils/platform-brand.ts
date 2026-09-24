@@ -113,19 +113,24 @@ export const PLATFORM_BRAND_LEGAL_NAME =
  * exists — it is the one support address that needs nothing interpolated
  * into it, which is exactly what this constant is.
  *
- * ⚠️ The residual, stated rather than hidden: on a SELF-HOSTED install that
- * configured neither variable above, this now points a stranger's customers
- * at our console, where they have no account. That was already true of the
- * old value and is not made worse by fixing it — and the step above is the
- * real answer, which is why it is the operator's support MAILBOX rather than
- * a second URL variable they would have to discover.
+ * The console is THIS install's (AGL-3322). `/support` is a console route, so
+ * every console serves its own, and `NEXT_PUBLIC_CONSOLE_URL` is required of
+ * every self-hosted install — so one that configured neither variable above
+ * sends its customers to its own support page rather than to ours, where they
+ * have no account. The line is in the footer of every system email the
+ * platform sends. `app.aglyn.com` is left only for a build that names no
+ * console at all.
  */
 export const PLATFORM_SUPPORT_URL: string = (() => {
   const configured = clean(process.env.NEXT_PUBLIC_PLATFORM_SUPPORT_URL)
   if (configured) return configured
   const operatorEmail = clean(process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL)
   if (operatorEmail) return `mailto:${operatorEmail}`
-  return 'https://app.aglyn.com/support'
+  const consoleOrigin = clean(process.env.NEXT_PUBLIC_CONSOLE_URL)?.replace(
+    /\/+$/,
+    '',
+  )
+  return `${consoleOrigin || 'https://app.aglyn.com'}/support`
 })()
 
 /** True when this deployment still answers to Aglyn's own brand. */

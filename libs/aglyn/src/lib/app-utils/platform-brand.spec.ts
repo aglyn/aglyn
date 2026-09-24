@@ -31,6 +31,7 @@ const ENV_KEYS = [
   'NEXT_PUBLIC_PLATFORM_BRAND_LEGAL_NAME',
   'NEXT_PUBLIC_PLATFORM_SUPPORT_URL',
   'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL',
+  'NEXT_PUBLIC_CONSOLE_URL',
   'NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL',
   'NEXT_PUBLIC_PLATFORM_POSTAL_ADDRESS',
 ] as const
@@ -129,6 +130,23 @@ describe('PLATFORM_SUPPORT_URL falls through the operator before us', () => {
     })
     expect(brand.PLATFORM_SUPPORT_URL).toBe('mailto:ops@example.com')
     expect(brand.PLATFORM_SUPPORT_URL).not.toContain('aglyn.com')
+  })
+
+  it('SELF-HOST shape: with neither, is the install’s own console support page', () => {
+    // Every self-hosted install sets its console origin, and `/support` is a
+    // console route, so its own console serves the page. The line sits in the
+    // footer of every system email it sends (AGL-3322): ours there would send
+    // its customers to a console they have no account on, and name the vendor.
+    const brand = loadWith({
+      NEXT_PUBLIC_PLATFORM_BRAND_NAME: 'Northwind',
+      NEXT_PUBLIC_CONSOLE_URL: 'https://console.northwind.example/',
+    })
+    expect(brand.PLATFORM_SUPPORT_URL).toBe(
+      'https://console.northwind.example/support',
+    )
+    expect(brand.PLATFORM_BRANDING_PROFILE.supportUrl).toBe(
+      'https://console.northwind.example/support',
+    )
   })
 
   it('AGLYN-OPERATED shape: wholly unconfigured is our support page', () => {

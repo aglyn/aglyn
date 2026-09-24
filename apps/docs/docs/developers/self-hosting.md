@@ -351,7 +351,7 @@ publish. Unset, it is `Aglyn`.
 | --- | --- |
 | `NEXT_PUBLIC_PLATFORM_BRAND_NAME` | `Aglyn` |
 | `NEXT_PUBLIC_PLATFORM_BRAND_LEGAL_NAME` | `<brand> LLC` — a US company form, so set it if you are not one |
-| `NEXT_PUBLIC_PLATFORM_SUPPORT_URL` | Falls back to `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` as a `mailto:` before it ever falls back to Aglyn's support page |
+| `NEXT_PUBLIC_PLATFORM_SUPPORT_URL` | Falls back to `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` as a `mailto:`, then to your console's own support page, `NEXT_PUBLIC_CONSOLE_URL` + `/support`; never to Aglyn's |
 | `NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL` | Renamed, the header of your system email is your product name in bold — never Aglyn's logo. Takes an absolute `https://` URL only |
 | `NEXT_PUBLIC_PLATFORM_POSTAL_ADDRESS` | Renamed, your system email's footer prints your legal name alone — never Aglyn's address |
 
