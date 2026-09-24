@@ -945,7 +945,12 @@ async function advanceOnce(
   }
   const unit = unitsOf(job).find((candidate) => !job.units[candidate.key]?.done)
   if (!unit) return { job: await nextStep(ctx, job.orgId, jobRef, job, owner), idle: false }
-  return { job: await runUnit(ctx, jobRef, job, owner, unit, deadlineMs), idle: false }
+  const before = job.units[unit.key]?.cursor ?? null
+  const after = await runUnit(ctx, jobRef, job, owner, unit, deadlineMs)
+  const state = after.units[unit.key]
+  // A participant that stopped where it started — out of time before its
+  // first page — has nothing more to give this invocation.
+  return { job: after, idle: unit.kind === 'participant' && !state?.done && (state?.cursor ?? null) === before }
 }
 
 /** Claims the lease, or answers why not. `null` for a job that does not exist. */

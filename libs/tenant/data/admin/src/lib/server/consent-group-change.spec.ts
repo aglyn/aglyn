@@ -452,6 +452,39 @@ describe('running a change', () => {
     expect(firestore.read(`hosts/${R}/suppressions/k-x`)).toBeDefined()
   })
 
+  it('yields when a participant makes no progress, rather than spinning on it', async () => {
+    const firestore = world()
+    let calls = 0
+    registerPluginConsentGroupParticipant(
+      {
+        preview: async () => [],
+        // Out of time before its first page, every time it is asked.
+        run: async () => {
+          calls += 1
+          return { done: false, cursor: null, counts: {} }
+        },
+      },
+      { pluginId: 'records' },
+    )
+    const { changeId } = (await startConsentGroupChange({
+      orgId: ORG,
+      actor: ACTOR,
+      ...LEAVE,
+      ...ctx(firestore),
+    })) as { changeId: string }
+    const result = await advanceConsentGroupChange({
+      orgId: ORG,
+      changeId,
+      deadlineMs: clock + 60_000,
+      ...ctx(firestore),
+    })
+    expect(calls).toBe(1)
+    expect(result).toMatchObject({
+      status: { progress: { step: 'carry', failures: 0, leaseUntilMs: null } },
+    })
+    expect(firestore.read(`orgs/${ORG}`)?.['consentGroups']).toEqual(GROUP)
+  })
+
   it('stops at the deadline and resumes where it stopped', async () => {
     const firestore = world()
     const { changeId } = (await startConsentGroupChange({
