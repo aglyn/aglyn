@@ -23,9 +23,12 @@ import { emitHostEvent } from '@aglyn/tenant-runtime'
 import { hashMemberPassword } from './membership'
 import { membershipLoginHandler } from './membership-login'
 
-// The member lookup is the only Firestore surface the suspension gate
-// touches; a chainable stub keeps the spec at the handler contract.
+// The member lookup and the member's credential document (AGL-3308) are the
+// only Firestore surfaces sign-in touches; a chainable stub keeps the spec at
+// the handler contract. `null` is a member with no credential document — the
+// shape of every member until the migration moves the legacy hash.
 const mockMemberFields: Record<string, unknown> = {}
+let mockCredentialFields: Record<string, unknown> | null = null
 jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
    * The real resolution's shape: an org that declared no pooling resolves
@@ -45,20 +48,31 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       firestore: () => ({
         collection: () => ({
           doc: () => ({
-            collection: () => ({
-              where: () => ({
-                limit: () => ({
-                  get: async () => ({
-                    docs: [
-                      {
-                        id: 'member-1',
-                        get: (field: string) => mockMemberFields[field],
-                      },
-                    ],
-                  }),
-                }),
-              }),
-            }),
+            collection: (name: string) =>
+              name === 'siteMemberCredentials'
+                ? {
+                    doc: (memberId: string) => ({
+                      get: async () => ({
+                        id: memberId,
+                        exists: mockCredentialFields !== null,
+                        get: (field: string) => mockCredentialFields?.[field],
+                      }),
+                    }),
+                  }
+                : {
+                    where: () => ({
+                      limit: () => ({
+                        get: async () => ({
+                          docs: [
+                            {
+                              id: 'member-1',
+                              get: (field: string) => mockMemberFields[field],
+                            },
+                          ],
+                        }),
+                      }),
+                    }),
+                  },
           }),
         }),
       }),
@@ -128,6 +142,7 @@ describe('membership login suspension gate (AGL-546)', () => {
     jest.clearAllMocks()
     mockMemberFields['passwordScrypt'] = hashMemberPassword(PASSWORD)
     delete mockMemberFields['suspended']
+    mockCredentialFields = null
   })
 
   it('rejects a suspended member with 401 and a clear message', async () => {
@@ -162,5 +177,57 @@ describe('membership login suspension gate (AGL-546)', () => {
     await membershipLoginHandler(req, res)
     expect(result.status).toBe(401)
     expect(String(result.body?.error)).toBe('Wrong email or password')
+  })
+})
+
+describe('which hash sign-in checks (AGL-3308)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    for (const key of Object.keys(mockMemberFields)) delete mockMemberFields[key]
+    mockCredentialFields = null
+  })
+
+  const signIn = async (ip: string, password = PASSWORD) => {
+    const { res, result } = makeResponse()
+    const req = makeRequest(ip)
+    req.body = { ...req.body, password }
+    await membershipLoginHandler(req, res)
+    return result
+  }
+
+  it('signs a member in against their credential document', async () => {
+    // The shape sign-up writes now: no hash on the profile at all.
+    mockCredentialFields = { passwordScrypt: hashMemberPassword(PASSWORD) }
+    const result = await signIn('10.0.1.1')
+    expect(result.status).toBe(200)
+    expect(String(result.headers['Set-Cookie'])).toContain('aglyn_member_host-1=')
+  })
+
+  it('refuses a wrong password against the credential document', async () => {
+    mockCredentialFields = { passwordScrypt: hashMemberPassword(PASSWORD) }
+    const result = await signIn('10.0.1.2', 'not the password')
+    expect(result.status).toBe(401)
+    expect(result.body).toEqual({ error: 'Wrong email or password' })
+  })
+
+  it('falls back to the legacy hash on the profile until the migration moves it', async () => {
+    mockMemberFields['passwordScrypt'] = hashMemberPassword(PASSWORD)
+    const result = await signIn('10.0.1.3')
+    expect(result.status).toBe(200)
+  })
+
+  it('ignores the legacy hash once a credential document carries one', async () => {
+    // A stale copy left on the profile — or one planted there — must not open
+    // an account whose password has moved.
+    mockMemberFields['passwordScrypt'] = hashMemberPassword(PASSWORD)
+    mockCredentialFields = { passwordScrypt: hashMemberPassword('the new password') }
+    expect((await signIn('10.0.1.4')).status).toBe(401)
+    expect((await signIn('10.0.1.5', 'the new password')).status).toBe(200)
+  })
+
+  it('refuses a member with no hash anywhere', async () => {
+    const result = await signIn('10.0.1.6')
+    expect(result.status).toBe(401)
+    expect(result.body).toEqual({ error: 'Wrong email or password' })
   })
 })

@@ -38,6 +38,8 @@ const mockFirestore = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
   useFirestore: () => mockFirestore,
+  // The signed-in account a member removal is authorized as (AGL-3308).
+  useUser: () => ({ data: null }),
   // The org the card is handed wins; a site resolves to its org.
   useOrgDataScope: ({
     hostId,

@@ -31,13 +31,30 @@ import { membershipRecoverHandler } from './membership-recover'
 import { membershipResetHandler } from './membership-reset'
 
 // One configurable member + host pair behind chainable stubs, following
-// membership-login.spec.ts: the handlers only touch the host doc, the
-// email lookup, and the member doc get/set.
+// membership-login.spec.ts: the handlers only touch the host doc, the email
+// lookup, the member doc, and the member's credential document (AGL-3308) —
+// `null` for a member who has none yet, which is every member until the
+// migration moves the legacy hash off the profile.
 const mockHostFields: Record<string, unknown> = {}
 const mockMemberFields: Record<string, unknown> = {}
+let mockCredentialFields: Record<string, unknown> | null = null
 let mockHostExists = true
 let mockMemberExists = true
-const memberSetCalls: Array<Record<string, unknown>> = []
+/** Every credential-document write the reset made, in order. */
+const credentialSetCalls: Array<Record<string, unknown>> = []
+/** Every profile update the reset made, in order. */
+const memberUpdateCalls: Array<Record<string, unknown>> = []
+
+const mockMemberSnapshot = (memberId: string) => ({
+  id: memberId,
+  exists: mockMemberExists && memberId === 'member-1',
+  get: (field: string) => mockMemberFields[field],
+})
+const mockCredentialSnapshot = (memberId: string) => ({
+  id: memberId,
+  exists: mockCredentialFields !== null && memberId === 'member-1',
+  get: (field: string) => mockCredentialFields?.[field],
+})
 
 /**
  * AGL-1966 abuse-control seams.
@@ -131,41 +148,61 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
               exists: mockHostExists,
               get: (field: string) => mockHostFields[field],
             }),
-            collection: () => ({
-              where: () => ({
-                limit: () => ({
-                  get: async () => ({
-                    docs: mockMemberExists
-                      ? [
-                          {
-                            id: 'member-1',
-                            get: (field: string) => mockMemberFields[field],
-                          },
-                        ]
-                      : [],
-                  }),
-                }),
-              }),
-              doc: (memberId: string) => ({
-                get: async () => ({
-                  exists: mockMemberExists && memberId === 'member-1',
-                  get: (field: string) => mockMemberFields[field],
-                }),
-                set: async (data: Record<string, unknown>) => {
-                  memberSetCalls.push(data)
-                  // Reflect the write so a reused token sees the NEW hash.
-                  if (typeof data['passwordScrypt'] === 'string') {
-                    mockMemberFields['passwordScrypt'] =
-                      data['passwordScrypt']
+            collection: (name: string) =>
+              name === 'siteMemberCredentials'
+                ? {
+                    doc: (memberId: string) => ({
+                      kind: 'credential',
+                      id: memberId,
+                      get: async () => mockCredentialSnapshot(memberId),
+                    }),
                   }
-                },
-              }),
-            }),
+                : {
+                    where: () => ({
+                      limit: () => ({
+                        get: async () => ({
+                          docs: mockMemberExists
+                            ? [mockMemberSnapshot('member-1')]
+                            : [],
+                        }),
+                      }),
+                    }),
+                    doc: (memberId: string) => ({
+                      kind: 'member',
+                      id: memberId,
+                      get: async () => mockMemberSnapshot(memberId),
+                    }),
+                  },
           }),
         }),
+        // The reset's one transaction. Writes are reflected into the fixture
+        // so a reused token sees the NEW hash, the way a real re-read would.
+        runTransaction: async (body: (tx: any) => Promise<unknown>) =>
+          body({
+            getAll: async (...refs: Array<{ get: () => Promise<unknown> }>) =>
+              Promise.all(refs.map((ref) => ref.get())),
+            set: (ref: { kind: string }, data: Record<string, unknown>) => {
+              if (ref.kind !== 'credential') throw new Error('unexpected set')
+              credentialSetCalls.push(data)
+              mockCredentialFields = { ...(mockCredentialFields ?? {}), ...data }
+            },
+            update: (ref: { kind: string }, data: Record<string, unknown>) => {
+              if (ref.kind !== 'member') throw new Error('unexpected update')
+              memberUpdateCalls.push(data)
+              for (const [field, value] of Object.entries(data)) {
+                if (value === 'field-deleted') delete mockMemberFields[field]
+                else mockMemberFields[field] = value
+              }
+            },
+          }),
       }),
     }),
-    firestore: { FieldValue: { serverTimestamp: () => 'server-time' } },
+    firestore: {
+      FieldValue: {
+        serverTimestamp: () => 'server-time',
+        delete: () => 'field-deleted',
+      },
+    },
   },
   // White-Label Phase 3: the recover handler resolves the owning org's brand
   // for the sender from-name; a bare stub keeps it on the Aglyn defaults here.
@@ -234,9 +271,12 @@ beforeEach(() => {
   mockHostFields['displayName'] = 'Northwind'
   mockMemberFields['passwordScrypt'] = hashMemberPassword(PASSWORD)
   delete mockMemberFields['suspended']
+  delete mockMemberFields['passwordResetAt']
+  mockCredentialFields = null
   // Old enough to be a real member, not a register-then-recover row.
   mockMemberFields['createdAt'] = timestamp(Date.now() - 24 * 60 * 60 * 1000)
-  memberSetCalls.length = 0
+  credentialSetCalls.length = 0
+  memberUpdateCalls.length = 0
   mockConsumeAttempt.mockClear()
   mockConsumeSend.mockClear()
   mockIsEmailSuppressed.mockClear()
@@ -554,13 +594,20 @@ describe('membership reset handler (AGL-552)', () => {
     )
     expect(result.status).toBe(200)
     expect(result.body).toEqual({ ok: true })
-    expect(memberSetCalls).toHaveLength(1)
+    expect(credentialSetCalls).toHaveLength(1)
     expect(
       verifyMemberPassword(
         'a whole new password',
-        memberSetCalls[0]['passwordScrypt'] as string,
+        credentialSetCalls[0]['passwordScrypt'] as string,
       ),
     ).toBe(true)
+    // The new hash lands on the credential document (AGL-3308), and the
+    // legacy copy leaves the profile in the same transaction.
+    expect(credentialSetCalls[0]['passwordResetAt']).toBe('server-time')
+    expect(memberUpdateCalls).toEqual([
+      { passwordScrypt: 'field-deleted', passwordResetAt: 'field-deleted' },
+    ])
+    expect(mockMemberFields).not.toHaveProperty('passwordScrypt')
   })
 
   it('rejects a token reused after a completed reset', async () => {
@@ -590,7 +637,7 @@ describe('membership reset handler (AGL-552)', () => {
       second.res,
     )
     expect(second.result.status).toBe(400)
-    expect(memberSetCalls).toHaveLength(1)
+    expect(credentialSetCalls).toHaveLength(1)
   })
 
   it('rejects expired, tampered, and wrong-host tokens', async () => {
@@ -626,7 +673,7 @@ describe('membership reset handler (AGL-552)', () => {
       res,
     )
     expect(result.status).toBe(400)
-    expect(memberSetCalls).toHaveLength(0)
+    expect(credentialSetCalls).toHaveLength(0)
   })
 
   it('rejects a suspended member even with a valid token (AGL-550)', async () => {
@@ -650,7 +697,7 @@ describe('membership reset handler (AGL-552)', () => {
     )
     expect(result.status).toBe(403)
     expect(String(result.body?.error)).toMatch(/suspended/i)
-    expect(memberSetCalls).toHaveLength(0)
+    expect(credentialSetCalls).toHaveLength(0)
   })
 
   it('rejects short passwords before touching the token', async () => {
@@ -665,5 +712,113 @@ describe('membership reset handler (AGL-552)', () => {
     )
     expect(result.status).toBe(400)
     expect(String(result.body?.error)).toMatch(/8 characters/)
+  })
+})
+
+describe('the credential document is the hash recovery binds to (AGL-3308)', () => {
+  it('mails a link bound to the credential document, not a stale legacy copy', async () => {
+    mockCredentialFields = { passwordScrypt: hashMemberPassword('the moved password') }
+    const { res } = makeResponse()
+    await membershipRecoverHandler(
+      makeRequest('10.4.0.1', { hostId: HOST_ID, email: 'user@example.com' }),
+      res,
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }]
+    const token = decodeURIComponent(
+      String(JSON.parse(init.body).text).match(/token=([^\s]+)/)![1],
+    )
+    expect(
+      verifyPasswordResetToken(
+        HOST_ID,
+        token,
+        mockCredentialFields['passwordScrypt'] as string,
+      ),
+    ).toBe(true)
+    expect(
+      verifyPasswordResetToken(
+        HOST_ID,
+        token,
+        mockMemberFields['passwordScrypt'] as string,
+      ),
+    ).toBe(false)
+  })
+
+  it('resets a member whose hash already lives on the credential document', async () => {
+    const moved = hashMemberPassword(PASSWORD)
+    delete mockMemberFields['passwordScrypt']
+    mockCredentialFields = { passwordScrypt: moved }
+    const token = mintPasswordResetToken(HOST_ID, 'member-1', moved)
+    const { res, result } = makeResponse()
+    await membershipResetHandler(
+      makeRequest('10.4.0.2', {
+        hostId: HOST_ID,
+        token,
+        password: 'a whole new password',
+      }),
+      res,
+    )
+    expect(result.status).toBe(200)
+    expect(
+      verifyMemberPassword(
+        'a whole new password',
+        mockCredentialFields['passwordScrypt'] as string,
+      ),
+    ).toBe(true)
+  })
+
+  it('refuses a link bound to a legacy hash the credential document replaced', async () => {
+    // Minted before the move, from the copy on the profile. The member has
+    // since set a password that lives on the credential document, so the
+    // link is stale — exactly as if the reset had happened on the profile.
+    const legacy = mockMemberFields['passwordScrypt'] as string
+    const token = mintPasswordResetToken(HOST_ID, 'member-1', legacy)
+    mockCredentialFields = { passwordScrypt: hashMemberPassword('set since') }
+    const { res, result } = makeResponse()
+    await membershipResetHandler(
+      makeRequest('10.4.0.3', {
+        hostId: HOST_ID,
+        token,
+        password: 'a whole new password',
+      }),
+      res,
+    )
+    expect(result.status).toBe(400)
+    expect(credentialSetCalls).toHaveLength(0)
+  })
+
+  it('keeps a link minted before the migration working after it', async () => {
+    // The migration moves the hash VERBATIM, so the token's fingerprint of it
+    // still matches: a member mid-reset is not stranded by the move.
+    const legacy = mockMemberFields['passwordScrypt'] as string
+    const token = mintPasswordResetToken(HOST_ID, 'member-1', legacy)
+    mockCredentialFields = { passwordScrypt: legacy }
+    delete mockMemberFields['passwordScrypt']
+    const { res, result } = makeResponse()
+    await membershipResetHandler(
+      makeRequest('10.4.0.4', {
+        hostId: HOST_ID,
+        token,
+        password: 'a whole new password',
+      }),
+      res,
+    )
+    expect(result.status).toBe(200)
+  })
+
+  it('refuses a token naming a nested document path', async () => {
+    const legacy = mockMemberFields['passwordScrypt'] as string
+    const token = mintPasswordResetToken(HOST_ID, 'member-1/nested/doc', legacy)
+    const { res, result } = makeResponse()
+    await membershipResetHandler(
+      makeRequest('10.4.0.5', {
+        hostId: HOST_ID,
+        token,
+        password: 'a whole new password',
+      }),
+      res,
+    )
+    expect(result.status).toBe(400)
+    expect(credentialSetCalls).toHaveLength(0)
   })
 })

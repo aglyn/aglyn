@@ -414,8 +414,12 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
   subscriptions:
     'Site membership subscriptions, adjusted from the site member drawer.',
   siteMembers:
-    'Site member profiles, edited from the site member drawer and accounts ' +
-    'card. Distinct from `members`, the ORG-facing roster AGL-1367 denied.',
+    'Site member profiles, listed by the accounts card and the Inbox. All ' +
+    'three lists exclude the name (AGL-3308) and the dedicated block ' +
+    're-grants the site member drawer\'s `suspended` switch and nothing else, ' +
+    'plus a delete only while the member has no credential document — the ' +
+    'password hash lives in `siteMemberCredentials`, which no client reaches. ' +
+    'Distinct from `members`, the ORG-facing roster AGL-1367 denied.',
   services: 'Bookable services, authored in the bookings console page.',
   bookings: 'Booking records, rescheduled and cancelled in the same page.',
   events: 'Calendar events, authored in the events console page.',

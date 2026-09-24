@@ -101,9 +101,10 @@ export interface SiteMemberDrawerProps {
  * Site member detail drawer (AGL-546): profile, order history (the
  * payment records — Stripe intent id and refunds included), storefront
  * subscriptions, and the lifetime purchase total computed from the order
- * docs — plus suspend/reactivate, written via the client SDK (the rules'
- * host catch-all lets admins/editors update `siteMembers`; the tenant
- * membership APIs enforce the flag at sign-in and account load).
+ * docs — plus suspend/reactivate, written via the client SDK (the
+ * `siteMembers` rules block lets a site content writer change `suspended`
+ * and no other field, AGL-3308; the tenant membership APIs enforce the flag
+ * at sign-in and account load).
  *
  * Orders match by email (mirrors membership-account, AGL-294) and sort
  * client-side. The QUERY orders on the document name: `orderBy('createdAt')`

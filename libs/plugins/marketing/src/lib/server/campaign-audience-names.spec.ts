@@ -289,12 +289,12 @@ beforeEach(() => {
 describe('the members audience personalizes off the field members actually have', () => {
   it('resolves {{name}} from `displayName`', async () => {
     // EXACTLY what `membership-register` writes for a member who ticked the
-    // opt-in box: `email`, `displayName`, `passwordScrypt`, `createdAt` and
-    // the consent pair. No `name` — because production has none.
+    // opt-in box: `email`, `displayName`, `createdAt` and the consent pair —
+    // the password hash has its own document (AGL-3308). No `name` — because
+    // production has none.
     mockState.store['hosts/host-1/siteMembers/m-1'] = {
       email: 'dana@example.com',
       displayName: 'Dana Reed',
-      passwordScrypt: 'scrypt$x',
       ...CONSENT_GRANTED,
     }
 
