@@ -1073,7 +1073,7 @@ function AdminMediaQuarantine() {
 
             <CardDisplay
               header={'The whole deny list'}
-              help={docsHelp('lockdown', { anchor: '#quarantine-keys' })}
+              help={docsHelp('lockdown', { anchor: '#deny-list' })}
               contentGutterX
               contentGutterY
             >

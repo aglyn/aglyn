@@ -275,6 +275,11 @@ export const emailListMembersAddHandler: PluginApiHandler = async (
         // made by hand is not a rule match that lapsed.
         via: 'manual',
         consent: decision,
+        // A pass-through carries the person's grants as their record holds
+        // them (AGL-3320); an attestation carries none and is this site's.
+        ...(decision.basis === 'contact-opt-in'
+          ? { grantEntries: resolution.grants.get(verdict.email) ?? {} }
+          : {}),
       })
       if (enrollment.enrolled === false) {
         /*

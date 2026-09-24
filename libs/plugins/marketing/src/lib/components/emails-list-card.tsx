@@ -89,8 +89,18 @@ import {
 /** How many messages one read of this list covers. */
 const EMAIL_CEILING = 30
 
-/** How many campaigns the create drawer offers to file a new email under. */
+/**
+ * How many campaigns the Campaign filter and the create drawer offer — the
+ * same read serves both.
+ */
 const CONTAINER_CEILING = 50
+
+/**
+ * The Campaign filter's value for an email filed under no campaign. An empty
+ * value reads as "no value" to the filter, so a clause on it would never
+ * apply; a sentinel is a value like any campaign id.
+ */
+const SINGLE_SEND_FILTER_VALUE = '__single__'
 
 /**
  * Why discard is refused, keyed by the state that refuses it.
@@ -136,7 +146,9 @@ const STATE_COLOR: Partial<
 const EMAIL_FILTER_FIELDS = [
   EMAIL_SUBJECT_FILTER_FIELD,
   EMAIL_STATE_FILTER_FIELD,
-  inMemoryListField('emailCampaignId', 'select'),
+  // Matched on a derived key, so the row's own container field stays what
+  // was stored for the row menu that reads it.
+  inMemoryListField('emailCampaignId', 'select', 'campaignFilterKey'),
   inMemoryListField('site', 'text', 'siteName'),
 ]
 const EMAIL_FILTER_HEADERS: Readonly<Record<string, string>> = {
@@ -466,22 +478,16 @@ export function EmailsListCard(props: EmailsListCardProps) {
   const askSite = !hostId && orgSites.length > 1
 
   /*
-   * The campaigns a new email may be filed under, read only while the drawer
-   * is OPEN.
-   *
-   * A null query opens no listener, so the list costs what it always did until
-   * somebody asks to write something. Mounting this unconditionally would put
-   * a second collection read on every reader who came to look at the table,
-   * which is the cost the whole surface is routed to avoid.
+   * The campaigns, read while the list is shown: the Campaign filter offers
+   * them by name, and the create drawer offers them to file a new email
+   * under. One capped read of the containers serves both.
    */
   const { data: campaignDocs } = useFirestoreCollection<any>(
     () => {
-      const containers = createOpen
-        ? campaignContainersQuery(firestore, orgId, hostId)
-        : null
+      const containers = campaignContainersQuery(firestore, orgId, hostId)
       return containers ? collectionCeiling(containers, CONTAINER_CEILING) : null
     },
-    [firestore, orgId, hostId, createOpen],
+    [firestore, orgId, hostId],
     { idField: '$id' },
   )
   const campaignOptions = useMemo(
@@ -500,7 +506,9 @@ export function EmailsListCard(props: EmailsListCardProps) {
       emails.map((email: any) => ({
         ...email,
         ...emailFilterValues(email),
-        emailCampaignId: email.emailCampaignId ? String(email.emailCampaignId) : '',
+        campaignFilterKey: email.emailCampaignId
+          ? String(email.emailCampaignId)
+          : SINGLE_SEND_FILTER_VALUE,
         siteName: orgMount && email?.hostId ? orgSiteName(orgMount, email.hostId) : '',
       })),
     [emails, orgMount],
@@ -516,7 +524,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
     () => ({
       state: EMAIL_STATE_OPTIONS,
       emailCampaignId: [
-        { value: '', label: 'Single send' },
+        { value: SINGLE_SEND_FILTER_VALUE, label: 'Single send' },
         ...campaignOptions,
       ],
     }),

@@ -22,8 +22,10 @@ many pages, you want a [layout](../screens-and-layouts/layouts.md).
 
 **Filters** in the library's toolbar narrows it by **Kind** (page, component, or
 layout), **Source** (marketplace, starter, or saved here), name, description, or date,
-and **Search** matches any word of the name or description. Filters look at every
-template the library read, and each one in force shows as a chip above the table.
+and **Search** matches any word of the name, description or template ID. Filters look
+at every template the library read — its first 200 — not only the page on screen, and
+each one in force shows as a chip above the table. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## The three kinds
 

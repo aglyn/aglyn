@@ -48,6 +48,8 @@ jest.mock('./firebase-admin', () => ({
 
 /** Every `consentGroupForSite` call the sweep made — a rule's opt-in org read. */
 let groupLookups: string[] = []
+/** The site's org document, as `getOrgForHost` answers it. */
+let mockOrg: Record<string, unknown> | null = {}
 /** The group this site's contacts were captured under, for the facet reads. */
 const GROUP_ID = 'group-acme'
 
@@ -57,6 +59,7 @@ jest.mock('./organizations', () => ({
   // Identity: what `scopedToHost` narrows is asserted by its own suite, and a
   // fake filter here would only assert the fake.
   scopedToHost: (ref: unknown) => ref,
+  getOrgForHost: async () => (mockOrg ? { orgId: 'org-1', org: mockOrg } : null),
   // A DECLARED group rather than the solo one, so a facet read keyed by the
   // host id instead of the group id fails here rather than passing by
   // coincidence — the two are the same string for an undeclared site.
@@ -172,6 +175,7 @@ const memberEmails = () =>
 beforeEach(() => {
   for (const key of Object.keys(store)) delete store[key]
   groupLookups = []
+  mockOrg = {}
   store['hosts/host-1'] = { subdomain: 'acme' }
   store[LIST] = { name: 'VIPs', kind: 'dynamic' }
 })
@@ -1051,5 +1055,72 @@ describe('a CRM field is an audience', () => {
       })
       expect(groupLookups).toEqual(['host-1'])
     }
+  })
+})
+
+/*==========================================
+ * A CONSENT GROUP CHANGE MOVES THE FACETS A RULE READS (AGL-3320).
+ *
+ * After the declaration flips, the executor re-homes each contact's facet
+ * from the old group's key to the new one, and until it finishes a record may
+ * still sit under the old key. A rule reading the NEW key would find nothing
+ * there and take the absence for a non-match — a removal. So while the change
+ * names this site after its flip, a rule that reads the facet reads nothing,
+ * reports itself incomplete, and removes nobody.
+ *=========================================*/
+describe('a consent group change in flight', () => {
+  const MARKER = {
+    changeId: 'change-1',
+    phase: 'rehome',
+    hostIds: ['host-1', 'host-2'],
+    startedAtMs: 1,
+    declaredAtMs: 2,
+  }
+  const OWNER_RULE = { sources: ['contacts'], ownerUids: ['uid-a'] }
+
+  function seedOwnedContact() {
+    store['orgs/org-1/contacts/c1'] = {
+      email: 'mine@example.com',
+      facets: { [GROUP_ID]: { sources: { form: true }, ownerUid: 'uid-a' } },
+    }
+  }
+
+  it('reads no facet and removes nobody while this site’s records are re-homed', async () => {
+    // A member the rule enrolled, whose record has not reached the new key yet.
+    store[`${LIST}/members/${personKey('moving@example.com')}`] = {
+      email: 'moving@example.com',
+      via: 'rule',
+    }
+    seedOwnedContact()
+    for (const phase of ['rehome', 'sweep']) {
+      mockOrg = { consentGroupsChange: { ...MARKER, phase } }
+      const result = await materializeDynamicList({
+        listRef: listRef(),
+        hostId: 'host-1',
+        rule: OWNER_RULE,
+      })
+      expect(result).toMatchObject({ matched: 0, enrolled: 0, removed: 0, complete: false })
+      expect(memberEmails()).toEqual(['moving@example.com'])
+      expect(store[LIST]).not.toHaveProperty('memberCount')
+    }
+    expect(groupLookups).toEqual([])
+  })
+
+  it('scans as always before the flip, for a site the change does not name, and for a rule that reads no facet', async () => {
+    seedOwnedContact()
+    mockOrg = { consentGroupsChange: { ...MARKER, phase: 'carry' } }
+    expect(
+      await materializeDynamicList({ listRef: listRef(), hostId: 'host-1', rule: OWNER_RULE }),
+    ).toMatchObject({ matched: 1, complete: true })
+
+    mockOrg = { consentGroupsChange: MARKER }
+    expect(
+      await materializeDynamicList({ listRef: listRef(), hostId: 'host-3', rule: OWNER_RULE }),
+    ).toMatchObject({ complete: true })
+
+    seedMatchingContacts(2)
+    expect(
+      await materializeDynamicList({ listRef: listRef(), hostId: 'host-1', rule: VIP_RULE }),
+    ).toMatchObject({ matched: 2, complete: true })
   })
 })

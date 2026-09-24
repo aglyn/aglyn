@@ -83,6 +83,9 @@ jest.mock('@aglyn/shared-ui-jsx/components/row-actions-menu.component', () => ({
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The viewer's reach, which `useCrmScope` reads only for a site in a
+  // declared consent group (AGL-3320); an org-wide member here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useUser: () => ({ data: { uid: 'uid-1' } }),

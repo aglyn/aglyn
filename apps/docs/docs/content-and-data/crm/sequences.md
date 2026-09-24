@@ -254,7 +254,8 @@ Domains of public mailbox providers are never added automatically.
 
 The listed domains are a table. Its toolbar's **Filters** narrows them by
 **Why** they are listed, the domain or the bounce detail, and **Search** finds
-a domain by any part of it. Both look at every listed domain.
+a domain or its detail by any part of it. Both look at every listed domain; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Sequences {#sequences}
 
@@ -265,10 +266,13 @@ replied, bounced or opted out.
 
 The table's toolbar filters the list. **Filters** narrows it by **Status**
 (pick one or several), name or mailbox, and **Search** matches any word of a
-sequence's name or mailbox. Both look at every sequence, not only the page on
-screen, and each filter in force shows as a chip above the table; remove a
-chip to drop its filter. The **Filters** panel edits one filter at a time,
-and filters on different columns add up.
+sequence's name or mailbox. Both look at every sequence the list read — the
+200 newest, which for nearly every organization is all of them, and a note under
+the table says when there are older ones — not only the page on screen, and each
+filter in force shows as a chip above the table;
+remove a chip to drop its filter. The **Filters** panel edits one filter at a
+time, and filters on different columns add up; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Build a sequence {#build-a-sequence}
 
@@ -322,6 +326,36 @@ out, and it is on every email either way. See [Unsubscribe](#unsubscribe).
 The **Preview** beside the editor shows each email as it would reach a sample
 contact, with the real footer, and the editor lists anything that stops the
 sequence from being saved beside the field it is about.
+
+### Send yourself a test of a step {#send-a-test}
+
+**Send a test** on any email step of a saved sequence sends that step to
+your own inbox through the sequence's mailbox, so you read it as a recipient
+would — the merge fields filled, the footer on, the links as they will be
+sent, and a later step's "Re:" subject. The subject starts with `[Test]`, so
+it never reads as real mail.
+
+In the dialog, pick who fills the merge fields — the sample person the
+preview uses, or an open lead or contact of the sequence's site — and write
+the personal line the way you would when enrolling them. The test goes to
+your own address unless you type another, such as an outside mailbox you can
+read. The person whose record filled the tokens is not enrolled, and nothing
+is stored on them.
+
+The test sends the step as it was last saved, so save your edits first. When
+the sequence counts link clicks, the links in the test are the tracking links
+a recipient gets, but your clicks on them are never counted. A test counts
+toward none of the sequence's numbers, the mailbox's daily cap or its sent
+counters, and files nothing on anyone's record; the Mailboxes card shows how
+many tests the mailbox sent today. It is a real send from your Google
+account, so it spends Google's own limits, and a mailbox that is paused or
+needs reconnecting refuses it and says why. A mailbox can send 20 tests an
+hour. Only the member who connected the mailbox, or an organization owner or
+admin, can send one from it.
+
+In the enroll dialog, **Send me this as a test** beside a person sends their
+first email — their record and the personal line you wrote — to you the same
+way, before you enroll them.
 
 ### Activate, pause and archive {#sequence-status}
 
@@ -380,6 +414,11 @@ Before anything is enrolled, each person is marked:
   customer, unless the sequence includes customers; already in a sequence; or
   a lead that converted, is already a contact, or was closed as unqualified.
 
+Beside each person, **Preview the first email** shows the email they would
+get with your personal line in it, and **Send me this as a test** sends that
+email to your own inbox first — see
+[Send yourself a test of a step](#send-a-test).
+
 ### Cold contacts {#cold-contacts}
 
 A contact is **cold** when nothing on your site shows they came to you: no
@@ -427,8 +466,9 @@ marked **Lead** until the lead converts. For each one you can:
 The tab's toolbar filters the people in it. **Filters** narrows them by
 **Status**, **Enrolled as** (contact or lead), name, email or stop reason, and
 **Search** matches any word of a name, address, step or stop reason. The
-filters look at the enrollments read so far; on a sequence with more than
-fit in one read, the table says so, and paging forward reads the next batch.
+filters look at the enrollments read so far, 200 at a time; on a sequence with
+more than that, the table says so, and paging forward reads the next 200. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Curate a send for one person {#curate}
 

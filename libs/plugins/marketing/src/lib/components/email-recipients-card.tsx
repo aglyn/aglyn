@@ -345,6 +345,8 @@ export function EmailRecipientsCard(props: EmailRecipientsCardProps) {
           clauses={gridFilter.clauses}
           onChange={gridFilter.setClauses}
           options={RECIPIENT_FILTER_OPTIONS}
+          // The route answers Engagement across the whole log.
+          servedField="engagement"
         />
 
         {failure ? <Alert severity="warning">{failure}</Alert> : null}

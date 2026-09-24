@@ -20,6 +20,7 @@ import {
   mdiArrowDown,
   mdiArrowUp,
   mdiCodeBraces,
+  mdiEmailFastOutline,
   mdiTrashCanOutline,
 } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
@@ -71,6 +72,13 @@ export interface OutreachStepCardProps {
   onChange(step: OutreachSequenceStep): void
   onMove(direction: -1 | 1): void
   onRemove(): void
+  /**
+   * Opens the test-send dialog for this email step (AGL-3325). Absent for a
+   * step that cannot be tested — a task, or an archived sequence.
+   */
+  onSendTest?(): void
+  /** Why the test cannot be sent yet, shown on the disabled button; `null` when it can. */
+  sendTestDisabledReason?: string | null
 }
 
 /** The merge fields, grouped the way the picker heads them. */
@@ -317,7 +325,7 @@ function EmailStepFields(
           fullWidth
         />
       )}
-      <Stack direction="row" spacing={1}>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
         <Button
           size="small"
           variant="outlined"
@@ -328,6 +336,22 @@ function EmailStepFields(
         >
           Insert field
         </Button>
+        {props.onSendTest ? (
+          <Tooltip title={props.sendTestDisabledReason ?? ''}>
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<MdiIcon path={mdiEmailFastOutline.path} fontSize="small" />}
+                onClick={props.onSendTest}
+                disabled={Boolean(props.sendTestDisabledReason)}
+                aria-label={`Send a test of step ${props.index + 1}`}
+              >
+                Send a test
+              </Button>
+            </span>
+          </Tooltip>
+        ) : null}
       </Stack>
       <Menu
         anchorEl={fieldsAnchor}

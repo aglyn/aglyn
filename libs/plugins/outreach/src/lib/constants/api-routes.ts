@@ -80,6 +80,13 @@ export const OUTREACH_API_ROUTES = {
   /** `POST` — one email of a saved sequence, for a contact or a sample person. */
   preview: 'outreach/preview',
   /**
+   * `POST` — one step of a saved sequence, rendered as the preview renders
+   * it and sent through the sequence's mailbox to the member (AGL-3325):
+   * `[Test]` in the subject, its links minted as test links, and counted
+   * on nothing but the mailbox's test tally.
+   */
+  stepTest: 'outreach/steps/test',
+  /**
    * `POST` — one person's own copies of a sequence's email steps, drafted by
    * the workspace's AI (AGL-3324): for a person about to be enrolled, or for
    * the next step of an enrollment. Nothing is stored.

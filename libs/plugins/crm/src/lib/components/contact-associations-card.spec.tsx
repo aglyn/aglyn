@@ -44,6 +44,9 @@ jest.mock('firebase/firestore', () => ({
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The viewer's reach, which `useCrmScope` reads only for a site in a
+  // declared consent group (AGL-3320); an org-wide member here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   // The lead collection is the org's now (AGL-3275), so the surface resolves
   // its org through the shared scope hook.
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),

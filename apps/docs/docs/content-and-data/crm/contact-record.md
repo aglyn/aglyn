@@ -161,8 +161,36 @@ again.
 A contact document is shared by every site in your workspace — one human who
 touched two of your sites is one row. Almost nothing *on* it is shared: the
 notes, tags, timeline, phone, title, company, address, owner and stage are one
-site's knowledge of the person and are never shown to another site's console.
-The email and the name the person gave are the only shared identity.
+sender's knowledge of the person and are never shown to another sender's
+console. A sender is one site, or, where your organization has declared several
+sites [one sender](../../marketing-and-automation/email-campaigns/overview.md#consent-groups),
+the whole group, which keeps one record for everyone its sites have met. The
+email and the name the person gave are the only shared identity.
+
+### When sites join or leave a group {#when-sites-join-or-leave-a-group}
+
+Changing a consent group moves these records with it, once the new group has
+taken effect:
+
+- **Sites that join** have their records of the same person **combined** into
+  one. Where two records disagree about a single value — the owner, the stage,
+  the company — the group's is kept, or, for a new group, the one from the site
+  that met the person first. Tags and other lists are combined, notes are kept
+  end to end, the earliest and latest dates are kept, and figures such as order
+  totals are added together.
+- **A site that leaves** gets a **copy** of the group's record for each person
+  it met itself, with the timeline entries from that site. The group keeps its
+  record. The copy carries the person's order totals only when the leaving site
+  is the only one that captured them; otherwise the totals stay with the group.
+- **Dissolving a group** gives each site a copy on the same terms. Order totals
+  for someone who bought on more than one of the group's sites can't be split,
+  so they are removed.
+- Company links, and each company's count of contacts, are recalculated as
+  records move.
+
+The review before the change counts how many people each of these affects.
+While the change is being applied, a person can briefly appear under their old
+group; the list settles when the change finishes.
 
 ## Merging two records
 
@@ -291,8 +319,9 @@ routing has no lead, and the link is simply not there.
 
 ## Finding a contact
 
-The list's search and column filters reach every contact in the workspace by
-name and email. The console's **search** (the magnifying glass in the top bar)
+The list's filters reach every contact by name or email, one served filter at
+a time, and its search box narrows the thousand contacts the list read — see
+[Filters on the Contacts list](./views.md#filters-on-the-contacts-list). The console's **search** (the magnifying glass in the top bar)
 finds contacts too — by name, email, phone number or company name — and opens
 the person's page. Contacts appear in that search only for members who can
 manage data on the site, and only while the CRM is available to them.

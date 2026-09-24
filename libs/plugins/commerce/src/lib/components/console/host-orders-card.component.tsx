@@ -654,7 +654,7 @@ export function HostOrdersCard(props: HostOrdersCardProps) {
     <CardDisplay
       header={'Orders'}
       help={pluginDocsHelp('commerce', {
-        anchor: '#orders',
+        anchor: '#orders-screen',
         excerpt:
           'Every order with its channel, status and net total. A refunded ' +
           'order shows what is left, with the gross beneath it.',

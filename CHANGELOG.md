@@ -9,6 +9,58 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.197 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.196...v1.0.0-beta.197)
+
+### Added
+
+- **console:** both audit logs filter and search through the grid toolbar ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **aglyn:** consent groups gain a disclosure key and refuse a site's id ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **outreach:** send a test of any sequence step from the editor and the enroll dialog ([AGL-3325](https://linear.app/aglyn/issue/AGL-3325))
+- **crm:** carry refusals and re-home records in a consent group change ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **email:** declare, edit and dissolve consent groups from the emails hub ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **console:** add the consent group change route and its cron ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **tenant:** run a consent group change without losing an opt-out ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **aglyn:** plan a consent group change and let plugins take part ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+
+### Fixed
+
+- **tools:** clean-next reads a multi-line command as one process, not a pid-less one ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** the collaborators footer counts the owner row it pins ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **outreach:** the Sequences list says when older sequences are not listed ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** a filtered activity feed pages forward instead of reloading page 1 ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **marketing:** the Emails Campaign filter offers campaigns and finds single sends ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **workflows:** an automation's run history reads its newest entries ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** each list's help link opens its filter section in the docs ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **email:** the editor lists a stale declaration against the org's own sites ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **email:** the consent group editor reads the route's own types ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **aglyn:** a contact merge keeps a per-site refusal over the survivor's grant ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **crm:** a site-scoped member lists a grouped site's crm with the sites they hold ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **hosts:** refuse deleting a site its consent group still needs ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **consent:** a grant pools only on the disclosure its capture surface showed ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **tenant:** hold dynamic lists that read facets while a consent group change moves them ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **cloud:** let a custom role that runs a consent group change read its job ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+
+### Documentation
+
+- re-shoot the Users and survey Data guide images, add the site collaborators table ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- the activity log and staff audit log say what they filter and search ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- one filter-and-search explainer, linked from every console list ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **docs:** document the consent group participant seam and the site-delete hold ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **docs:** document consent groups, their editor and the api opt-in ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+
+<details>
+<summary>Also in this release: 3 test, 2 chore</summary>
+
+- **tools:** retire the converged entry sort-key backfill ([AGL-3323](https://linear.app/aglyn/issue/AGL-3323))
+- **console:** import the emulator spec's libraries statically ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **console:** run a consent group change end to end on the emulator ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+- **tools:** the Linear ceiling floor reads AGL-3325 from the workspace ([AGL-3325](https://linear.app/aglyn/issue/AGL-3325))
+- **tenant:** pin what a consent group change must carry ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+
+</details>
+
 ## v1.0.0-beta.196 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.195...v1.0.0-beta.196)

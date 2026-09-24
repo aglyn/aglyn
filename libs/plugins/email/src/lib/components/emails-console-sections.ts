@@ -23,6 +23,7 @@ export type EmailsConsoleSectionId =
   | 'audiences'
   | 'topics'
   | 'sending'
+  | 'consent-groups'
   | 'suppressions'
 
 /**
@@ -51,7 +52,7 @@ export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
    * the record rather than for the surface holding it. The shell prints the
    * surface and the section together — in the header, in the breadcrumb and
    * in the browser tab — so a section whose name repeats its surface's says
-   * nothing about which of the six is open, which is the one job a section
+   * nothing about which section is open, which is the one job a section
    * name has. `messages` is also the word the rest of this surface already
    * uses for the record: a message's own page, a template's sends table and
    * the campaign detail all call it that.
@@ -92,6 +93,17 @@ export const EMAILS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
    * unverified identity, so it has to be a route of its own.
    */
   { id: 'sending', label: 'Sending' },
+  /*
+   * WHICH SITES ARE ONE SENDER (AGL-3320).
+   *
+   * After Sending, because it answers the question beside it: Sending says
+   * what the `From:` line shows, this says which sites a signup, an
+   * unsubscribe and a CRM record are shared across. Before Suppressions,
+   * whose lists it decides the reach of — an address on one site's list is
+   * skipped by every site in that site's group. The organization declares
+   * the groups here; a site's own page says which one it is in.
+   */
+  { id: 'consent-groups', label: 'Consent groups' },
   // Beside the audiences rather than inside them (AGL-2410): a suppression is
   // not a list you build, it is the reason a list you built did not all get
   // mailed.

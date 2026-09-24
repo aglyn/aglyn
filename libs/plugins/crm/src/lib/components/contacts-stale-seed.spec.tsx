@@ -89,6 +89,9 @@ jest.mock('./recent-activity-feed', () => ({
 // (AGL-2662) sets state from such an effect, so the page never settles.
 const mockFirestore = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The viewer's reach, which `useCrmScope` reads only for a site in a
+  // declared consent group (AGL-3320); an org-wide member here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => mockFirestore,
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1' }),
   // The company picker's listen (AGL-2613); no company is what this file

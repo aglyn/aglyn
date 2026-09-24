@@ -95,6 +95,21 @@
  * {@link MarketingConsentRecord.otherGrant} as `'unscoped'` so a console can
  * say why somebody stopped being mailable, and so
  * `tools/scripts/backfill-consent-host.mjs` can find them.
+ *
+ * ## A grant is recorded ONCE, where it was given, and never re-derived
+ *
+ * A grant covers the sites the person was TOLD about, and the only moment
+ * that is known is the capture: the form, the checkbox, the sentence beside
+ * it. So the grant helper runs there and nowhere else, over the group the
+ * capture surface proved it disclosed (`consentGroupForGrant`) — the site
+ * alone when it proved nothing. A door that hands an existing basis to
+ * another record — a list enrollment passing somebody's opt-in through, a
+ * lead becoming a contact — carries the grant as it was recorded
+ * ({@link grantEntriesAsRecorded}), or re-records it for the one site whose
+ * grant it holds. It never runs the helper again over the group as it
+ * stands now: the group as it stands now is not what that person was told,
+ * and a group that has grown since would reach them through the back door
+ * that forward-only pooling closed at the front.
  */
 
 import {
@@ -773,6 +788,12 @@ export function marketingConsentHostIds(
  * the object literals these doors already build, and cannot create the
  * document when it is new.
  *
+ * ⚠️ `group` is the group the CAPTURE disclosed, not the site's group: a door
+ * passes `consentGroupForGrant(siteGroup, keyTheSurfaceSentBack)`, which is
+ * the site alone unless the surface rendered the group's current disclosure.
+ * Handing it the site's resolved group directly pools a grant on a sentence
+ * nobody may have read — see "A grant is recorded ONCE" in the module note.
+ *
  * @param atMs when the person gave it. Defaulted by the caller, not here: a
  *             clock read hidden in a helper is one a test cannot pin.
  */
@@ -873,6 +894,86 @@ export function declineMarketingConsentFields(
       },
     },
   }
+}
+
+/**
+ * The grants `record` holds for the sites of `group`, AS THEY WERE RECORDED —
+ * how a basis travels from one person record to another without being
+ * re-derived.
+ *
+ * `{ [hostId]: entry }` for every site of the group whose entry is a grant,
+ * each carrying exactly what the capture wrote about the grant itself: that
+ * it was given, when, and the disclosure it was given under
+ * ({@link CONSENT_GROUP_ID_FIELD} and {@link CONSENT_GROUP_NAME_FIELD}, only
+ * where the capture stamped them). A grant somebody gave one site before the
+ * group existed stays one site's; a grant given under the group's sentence
+ * reaches every site that sentence named, and no site that joined after.
+ *
+ * Attribution is not carried. Who recorded the source's basis, and how,
+ * belongs to the source; the receiving record states its own — a list
+ * membership records a pass-through as the person's own opt-in, which is
+ * what it has always recorded.
+ *
+ * Empty when the record gives `group.hostId` no basis at all — no grant of
+ * its own, or a refusal anywhere in the group or unscoped, which
+ * {@link readMarketingBasis} reads as declined. A pass-through carries a
+ * usable basis or nothing: the sibling grants of a person the asking site
+ * may not mail are not the asking site's to hand on.
+ */
+export function grantEntriesAsRecorded(
+  record: Record<string, unknown> | null | undefined,
+  group: ConsentGroup,
+): Record<string, Record<string, unknown>> {
+  if (!record || readMarketingBasis(record, group).basis !== 'granted') {
+    return {}
+  }
+  const byHost = readConsentByHost(record)
+  const entries: Record<string, Record<string, unknown>> = {}
+  for (const hostId of group.hostIds) {
+    const entry = byHost[hostId]
+    if (entry?.[MARKETING_CONSENT_FIELD] !== true) continue
+    const atMs = timestampMs(entry['marketingConsentAtMs'])
+    entries[hostId] = {
+      [MARKETING_CONSENT_FIELD]: true,
+      ...(atMs !== null ? { marketingConsentAtMs: atMs } : {}),
+      ...(typeof entry[CONSENT_GROUP_ID_FIELD] === 'string'
+        ? { [CONSENT_GROUP_ID_FIELD]: entry[CONSENT_GROUP_ID_FIELD] }
+        : {}),
+      ...(typeof entry[CONSENT_GROUP_NAME_FIELD] === 'string'
+        ? { [CONSENT_GROUP_NAME_FIELD]: entry[CONSENT_GROUP_NAME_FIELD] }
+        : {}),
+    }
+  }
+  return entries
+}
+
+/**
+ * Whether `record` holds, for EVERY site `group` names, a grant given under
+ * this group's disclosure — its id and its name, as they stand.
+ *
+ * The test a door applies before it re-records somebody's basis pooled: a
+ * lead's grant becomes a contact's, and the contact's may reach the whole
+ * group only when the lead's already did. A grant given to one site before
+ * the group existed, a group that has since gained a site, and a group
+ * renamed since the person read its name all answer `false`, and the door
+ * records the site alone. A group of one answers `false` too — there is no
+ * disclosure to have been given under.
+ */
+export function grantedUnderConsentGroup(
+  record: Record<string, unknown> | null | undefined,
+  group: ConsentGroup,
+): boolean {
+  if (!record || !group.declared || !group.name) return false
+  if (readMarketingBasis(record, group).basis !== 'granted') return false
+  const byHost = readConsentByHost(record)
+  return group.hostIds.every((hostId) => {
+    const entry = byHost[hostId]
+    return (
+      entry?.[MARKETING_CONSENT_FIELD] === true &&
+      entry[CONSENT_GROUP_ID_FIELD] === group.groupId &&
+      entry[CONSENT_GROUP_NAME_FIELD] === group.name
+    )
+  })
 }
 
 /**

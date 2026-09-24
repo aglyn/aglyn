@@ -52,6 +52,18 @@
  * in a nameless group rather than pooling silently. That refusal is the whole
  * mechanism by which "declared" is stronger than "configured".
  *
+ * ## …and a grant pools only where the name was actually SHOWN
+ *
+ * Disclosable is not disclosed. A form rendered before the group existed, a
+ * checkout that has never displayed the sentence, and a page cached across a
+ * rename all capture under a declaration their visitor never read. So a
+ * capture surface that renders {@link consentGroupDisclosure} sends back the
+ * {@link consentGroupDisclosureKey} of what it rendered, and
+ * {@link consentGroupForGrant} pools the grant only when that key matches the
+ * group as it stands. Anything else — no key, a stale key, a surface that
+ * never renders the sentence — records the capturing site alone. Visibility
+ * is not narrowed with it: that axis follows the group, see below.
+ *
  * ## Pooling applies FORWARD only
  *
  * A grant records the group AS DISCLOSED at the moment it was given, in the
@@ -59,7 +71,9 @@
  * group therefore reaches captures made after the change and none made
  * before. An org-level switch that widened existing grants would be the leak
  * wearing a different hat: the people already on the list were told a
- * different thing.
+ * different thing. The same holds for a grant carried from one record to
+ * another — a list enrollment, a lead becoming a contact: it is copied as it
+ * was recorded, never re-derived from the group as it stands now.
  *
  * OPT-OUT runs the other way — read against the CURRENT group, so a site
  * joining a group inherits every refusal already standing against it. The
@@ -87,12 +101,25 @@
  * Off is the default and the absence, and an org that never set it reads
  * exactly the documents it read before the field existed.
  *
- * ⚠️ The one change that runs AGAINST reading is a site LEAVING a group. A
- * refusal is stored on the site the person acted on, so once that site is no
- * longer named, its former siblings stop seeing a refusal that was given to
- * them too. Whatever edits this declaration must carry the leaving site's
- * refusals onto the sites that stay — there is no console editor for it yet,
- * and that is the rule the first one has to keep.
+ * ⚠️ The one change that runs AGAINST reading is sites SEPARATING — a site
+ * leaving a group, moving to another, or a group dissolving. A refusal is
+ * stored on the site the person acted on, so once two sites stop being one
+ * sender, each stops seeing the refusals filed against the other, and every
+ * one of them was a refusal of the sender both sites were at the time. So a
+ * change to this declaration carries them BOTH WAYS before it takes effect:
+ * the sites that stay keep every opt-out filed on the site that leaves, and
+ * the site that leaves keeps every opt-out filed on the sites it leaves —
+ * the preference page promised the person that an opt-out from the group
+ * covers all of it, and separating the sites must not quietly break that.
+ * The consent group change (the pure plan in `consent-group-change.ts`, run
+ * by the executor in `@aglyn/tenant-data-admin`, started from the Emails
+ * hub's Consent groups section through `POST /api/orgs/consent-groups`) is
+ * the one writer of this field, and it carries the site suppression rows,
+ * the topic opt-outs, the pace and a contact's per-site refusal before it
+ * flips the declaration.
+ * A site that is in a group, or in a change still running, cannot be
+ * deleted until it is out: deletion would destroy refusals a sibling still
+ * reads.
  *
  * ## VISIBILITY IS A SEPARATE AXIS
  *
@@ -227,12 +254,19 @@ export function consentGroupsAwaitConfirmation(
  * value of this field is that pooling is deliberate, and a corrupt value must
  * not be a way to reach an audience nobody declared.
  *
- * The four refusals, each of which would otherwise pool without a disclosure:
+ * The five refusals, each of which would otherwise pool without a disclosure
+ * or file one sender's records under another's key:
  *
  *  - **no usable name** — cannot be shown on a form, so cannot be disclosed;
  *  - **fewer than two sites** — not a pooling declaration, and a group of one
  *    is what an undeclared site already gets;
  *  - **over {@link MAX_CONSENT_GROUP_HOSTS}** — see that constant;
+ *  - **an id that is a site's id** — a site that declared nothing uses its
+ *    own id as its group id, so a group spelled the same way would share
+ *    that site's key: its grant stamps, its opt-out lookups and the records
+ *    the CRM files under the group id would read as the lone site's, and the
+ *    lone site's as the group's. Checked against every site the org holds
+ *    and every site any entry names, usable or not;
  *  - **a site claimed by two groups** — two controllers claiming one site is
  *    a contradiction, not a wider group, so BOTH claims are dropped and the
  *    site falls back to being alone.
@@ -242,9 +276,11 @@ export function readConsentGroups(
 ): Record<string, StoredConsentGroup> {
   const raw = (org ?? {})[CONSENT_GROUPS_FIELD]
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const siteIds = consentGroupSiteIds(org, raw as Record<string, unknown>)
   const usable: Record<string, StoredConsentGroup> = {}
   for (const [groupId, value] of Object.entries(raw as Record<string, unknown>)) {
     if (!groupId || !value || typeof value !== 'object') continue
+    if (siteIds.has(groupId)) continue
     const group = value as Record<string, unknown>
     const name = typeof group['name'] === 'string' ? group['name'].trim() : ''
     if (!name) continue
@@ -284,6 +320,38 @@ export function readConsentGroups(
 }
 
 /**
+ * Every id that names a site as far as the declaration can tell: the org's
+ * own `hosts` and every site any raw entry names, including the entries the
+ * other refusals will drop.
+ *
+ * Wider than the usable set on purpose. A group id that collides with a
+ * site the org has not linked yet, or with a site named only by a broken
+ * entry, is the same collision one edit later, and refusing it now costs a
+ * declaration nothing a valid one would have.
+ */
+function consentGroupSiteIds(
+  org: Record<string, unknown> | null | undefined,
+  raw: Record<string, unknown>,
+): Set<string> {
+  const ids = new Set<string>()
+  const hosts = (org ?? {})['hosts']
+  if (Array.isArray(hosts)) {
+    for (const id of hosts) if (typeof id === 'string' && id) ids.add(id)
+  } else if (hosts && typeof hosts === 'object') {
+    for (const id of Object.keys(hosts)) if (id) ids.add(id)
+  }
+  for (const value of Object.values(raw)) {
+    const hostIds = (value as { hostIds?: unknown } | null)?.hostIds
+    if (!Array.isArray(hostIds)) continue
+    for (const id of hostIds) {
+      const trimmed = String(id ?? '').trim()
+      if (trimmed) ids.add(trimmed)
+    }
+  }
+  return ids
+}
+
+/**
  * The group `hostId` belongs to — the declared one, or the group of one.
  *
  * The ONLY way any caller learns what a site's consent covers. A caller that
@@ -310,6 +378,52 @@ export function consentGroupForHost(
     }
   }
   return soloConsentGroup(hostId)
+}
+
+/**
+ * The org field a running consent group change marks itself with:
+ * `{ changeId, phase, hostIds, … }`, present from the moment the change
+ * starts until it has finished. Only its `hostIds` is read here.
+ */
+const CONSENT_GROUP_CHANGE_MARKER_FIELD = 'consentGroupsChange'
+
+/** Why a site may not be deleted yet — see {@link consentGroupSiteHold}. */
+export type ConsentGroupSiteHold =
+  /** The site is one sender with other sites, under this group. */
+  | { reason: 'grouped'; groupId: string; name: string }
+  /** A consent group change naming the site has not finished. */
+  | { reason: 'changing' }
+
+/**
+ * Whether deleting `hostId` would take refusals its consent group still
+ * needs, and why — or `null` when the site may go (AGL-3320).
+ *
+ * A site's opt-outs are stored on the site and read across its group, so
+ * erasing a grouped site erases refusals its siblings honor today, and
+ * leaves the declaration naming a site that no longer exists. A site named
+ * by a change still in progress is the same hazard in motion: the change
+ * may be copying its opt-outs out, or relying on them being there. So the
+ * site leaves its group first — which carries its refusals to the sites
+ * that stay — and is deleted after.
+ *
+ * Deleting the whole organization is the one exception, and is the caller's
+ * to make: nothing is left to read the refusals.
+ */
+export function consentGroupSiteHold(
+  org: Record<string, unknown> | null | undefined,
+  hostId: string,
+): ConsentGroupSiteHold | null {
+  if (!hostId) return null
+  const group = consentGroupForHost(org, hostId)
+  if (group.declared) {
+    return { reason: 'grouped', groupId: group.groupId, name: group.name ?? '' }
+  }
+  const marker = (org ?? {})[CONSENT_GROUP_CHANGE_MARKER_FIELD]
+  const changing = (marker as { hostIds?: unknown } | null | undefined)?.hostIds
+  if (Array.isArray(changing) && changing.includes(hostId)) {
+    return { reason: 'changing' }
+  }
+  return null
 }
 
 /**
@@ -380,4 +494,64 @@ export function consentGroupScope(group: ConsentGroup): ScopeToken[] {
 export function consentGroupDisclosure(group: ConsentGroup): string | null {
   if (!group.declared || !group.name) return null
   return `You'll receive marketing email from ${group.name}, which covers ${group.hostIds.length} sites.`
+}
+
+/**
+ * A short fingerprint of the disclosure a capture surface rendered, or
+ * `null` when {@link consentGroupDisclosure} has nothing to render.
+ *
+ * The surface sends it back with the submission, and
+ * {@link consentGroupForGrant} pools only when it still matches: a form
+ * rendered before a rename, before a site joined, or before the group
+ * existed at all carries a key that no longer does, and its grant narrows to
+ * the site the person was on rather than reaching sites they were never told
+ * about.
+ *
+ * Over the three things the sentence and the grant stand for — the group's
+ * id, its name and its sites, sorted — serialized as JSON so no name can
+ * run into an id. FNV-1a over the UTF-16 code units, which keeps it
+ * synchronous and identical in the browser and on the server with nothing
+ * to import. It is not a secret and proves no identity: it answers "was it
+ * THIS disclosure", and a caller willing to lie could as easily lie about
+ * the checkbox.
+ */
+export function consentGroupDisclosureKey(
+  group: ConsentGroup,
+): string | null {
+  if (!consentGroupDisclosure(group)) return null
+  const text = JSON.stringify([
+    group.groupId,
+    group.name,
+    [...group.hostIds].sort(),
+  ])
+  let hash = 0x811c9dc5
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+/**
+ * The group a GRANT is recorded for: `group` itself only when it is declared
+ * and `disclosureKey` is exactly its current {@link consentGroupDisclosureKey};
+ * otherwise the capturing site alone.
+ *
+ * Called by every door that records a grant, with whatever key the capture
+ * surface sent back — none, for every surface that does not render the
+ * disclosure. Narrow is the failure direction on purpose: a grant that should
+ * have pooled and did not withholds mail from a sibling site, where one that
+ * pooled on a sentence nobody saw sends it.
+ *
+ * Only the grant narrows. The same capture still stamps `visibleTo` from the
+ * whole group, and still reads refusals across it: who may SEE a person and
+ * who may MAIL them are separate questions — see the module note.
+ */
+export function consentGroupForGrant(
+  group: ConsentGroup,
+  disclosureKey: string | null | undefined,
+): ConsentGroup {
+  const expected = consentGroupDisclosureKey(group)
+  if (expected !== null && disclosureKey === expected) return group
+  return soloConsentGroup(group.hostId)
 }

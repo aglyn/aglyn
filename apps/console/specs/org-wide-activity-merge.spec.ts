@@ -48,8 +48,12 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }): any => ({
     orderBy: () => activityQuery(state),
     select: () => activityQuery(state),
-    where: (_field: string, _op: string, value: { toMillis: () => number }) =>
-      activityQuery({ ...state, before: value.toMillis() / 1000 }),
+    // The cursor's bound: every entry strictly before the second AFTER the
+    // boundary, so the boundary second is read again in full.
+    where: (_field: string, op: string, value: { toMillis: () => number }) => {
+      if (op !== '<') throw new Error(`unexpected cursor bound ${op}`)
+      return activityQuery({ ...state, before: value.toMillis() / 1000 })
+    },
     limit: (value: number) => {
       mockLimits.push(value)
       return activityQuery({ ...state, limit: value })
@@ -58,7 +62,7 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       const docs = mockCorpus
         .filter((entry) => entry.parent === state.parent)
         .filter((entry) =>
-          state.before === undefined ? true : entry.seconds <= state.before,
+          state.before === undefined ? true : entry.seconds < state.before,
         )
         .sort((a, b) => b.seconds - a.seconds)
         .slice(0, state.limit)

@@ -16,7 +16,7 @@ page (next to Media in the organization tabs), or from any site's Data page; bot
 the same data. Dataset limits, storage, and add-ons are billed at the organization
 level.
 
-![The Data page in the Aglyn console: an organization-shared dataset with its records table, filter and sort inputs, and Import/CSV/JSON actions](/img/datasets/data-page.png)
+![The Data page in the Aglyn console: an organization-shared dataset's records table under the grid's Columns, Filters, Export and Search controls, below the Add record, Schema, Import, CSV and JSON actions](/img/datasets/data-page.png)
 
 ```mermaid
 flowchart LR
@@ -50,7 +50,9 @@ where every field of the dataset's model is a column, and **Search** finds recor
 words in their text. A field with a fixed list of options, and a true/false field, are
 picked from a list; numbers and dates take a value; reference, map, bytes, coordinates
 and null fields are not filterable. Each filter shows as a chip above the table, and
-removing the chip removes the filter.
+removing the chip removes the filter. The panel and chips work as on every console
+list — see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search); what differs here is how far a filter
+reaches.
 
 **One condition reaches every record.** A single filter or a single search word is
 answered across the whole dataset and paged like the unfiltered table, when it is:

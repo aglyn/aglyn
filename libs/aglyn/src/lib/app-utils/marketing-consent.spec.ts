@@ -35,6 +35,8 @@ import {
   OPERATOR_ATTESTED_CONSENT_KIND,
   OPERATOR_BACKFILL_CONSENT_KIND,
   declineMarketingConsentFields,
+  grantEntriesAsRecorded,
+  grantedUnderConsentGroup,
   marketingConsentDecision,
   marketingConsentFieldsForGroup,
   marketingConsentHostIds,
@@ -1024,5 +1026,150 @@ describe('a declared group is ONE sender', () => {
         GROUP,
       ),
     ).toThrow(/cannot decide a send from/)
+  })
+})
+
+/**
+ * A basis handed from one record to another is carried AS RECORDED: the
+ * sites the capture's disclosure named, and the disclosure it named them
+ * under. Re-running the grant helper over the group as it stands now would
+ * widen a grant somebody gave one site before the group existed.
+ */
+describe('a grant carried to another record is never re-derived', () => {
+  const POOLED = {
+    hostId: HOST,
+    groupId: 'northwind',
+    name: 'Northwind Group',
+    hostIds: [HOST, OTHER],
+    declared: true,
+    awaitsConfirmation: false,
+  }
+  const THIRD = 'host-third'
+  const GROWN = { ...POOLED, hostIds: [HOST, OTHER, THIRD] }
+  const now = 5_000
+
+  it('carries a solo grant from before the group as one site’s', () => {
+    const soloBefore = marketingConsentFieldsForGroup(soloConsentGroup(HOST), now)
+    expect(grantEntriesAsRecorded(soloBefore, POOLED)).toEqual({
+      [HOST]: { marketingConsent: true, marketingConsentAtMs: now },
+    })
+  })
+
+  it('carries a pooled grant to exactly the sites it named, stamps and all', () => {
+    const pooled = marketingConsentFieldsForGroup(POOLED, now)
+    const entry = {
+      marketingConsent: true,
+      marketingConsentAtMs: now,
+      consentGroupId: 'northwind',
+      consentGroupName: 'Northwind Group',
+    }
+    expect(grantEntriesAsRecorded(pooled, POOLED)).toEqual({
+      [HOST]: entry,
+      [OTHER]: entry,
+    })
+    // A site that joined afterwards is not reached by a grant it was never
+    // named in.
+    expect(grantEntriesAsRecorded(pooled, GROWN)).toEqual({
+      [HOST]: entry,
+      [OTHER]: entry,
+    })
+  })
+
+  it('leaves attribution with the source record', () => {
+    const attested = {
+      [MARKETING_CONSENT_BY_HOST_FIELD]: {
+        [HOST]: {
+          marketingConsent: true,
+          marketingConsentAtMs: now,
+          [MARKETING_CONSENT_SOURCE_FIELD]: {
+            kind: OPERATOR_BACKFILL_CONSENT_KIND,
+            by: 'ops@example.com',
+            atMs: now,
+            reason: 'seed',
+          },
+          [MARKETING_CONSENT_BASIS_FIELD]: OPERATOR_ATTESTED_CONSENT_BASIS,
+          marketingConsentByUid: 'uid-1',
+        },
+      },
+    }
+    expect(grantEntriesAsRecorded(attested, GROUP)).toEqual({
+      [HOST]: { marketingConsent: true, marketingConsentAtMs: now },
+    })
+  })
+
+  it('reads a Timestamp-shaped moment as millis, and omits a missing one', () => {
+    const stamped = {
+      [MARKETING_CONSENT_BY_HOST_FIELD]: {
+        [HOST]: { marketingConsent: true, marketingConsentAtMs: { toMillis: () => now } },
+        [OTHER]: { marketingConsent: true },
+      },
+    }
+    expect(grantEntriesAsRecorded(stamped, POOLED)).toEqual({
+      [HOST]: { marketingConsent: true, marketingConsentAtMs: now },
+      [OTHER]: { marketingConsent: true },
+    })
+  })
+
+  it('carries nothing when the asking site has no basis to pass on', () => {
+    // No grant of its own: a sibling's grant is not the asking site's to
+    // hand on.
+    const siblingOnly = marketingConsentFieldsForGroup(soloConsentGroup(OTHER), now)
+    expect(grantEntriesAsRecorded(siblingOnly, POOLED)).toEqual({})
+    // A refusal anywhere in the group, or unscoped, is a decline.
+    const refusedSibling = {
+      [MARKETING_CONSENT_BY_HOST_FIELD]: {
+        ...(marketingConsentFieldsForGroup(POOLED, now) as any)[
+          MARKETING_CONSENT_BY_HOST_FIELD
+        ],
+        [OTHER]: { marketingConsent: false, marketingConsentAtMs: now },
+      },
+    }
+    expect(grantEntriesAsRecorded(refusedSibling, POOLED)).toEqual({})
+    expect(
+      grantEntriesAsRecorded(
+        { ...marketingConsentFieldsForGroup(GROUP, now), marketingConsent: false },
+        GROUP,
+      ),
+    ).toEqual({})
+    expect(grantEntriesAsRecorded(null, GROUP)).toEqual({})
+  })
+
+  it('knows a grant given under the group’s current disclosure, at every site', () => {
+    expect(
+      grantedUnderConsentGroup(marketingConsentFieldsForGroup(POOLED, now), POOLED),
+    ).toBe(true)
+    // …read from either member.
+    expect(
+      grantedUnderConsentGroup(marketingConsentFieldsForGroup(POOLED, now), {
+        ...POOLED,
+        hostId: OTHER,
+      }),
+    ).toBe(true)
+  })
+
+  it('refuses one site’s grant, a grown group, a renamed one, and a group of one', () => {
+    const pooled = marketingConsentFieldsForGroup(POOLED, now)
+    expect(
+      grantedUnderConsentGroup(
+        marketingConsentFieldsForGroup(soloConsentGroup(HOST), now),
+        POOLED,
+      ),
+    ).toBe(false)
+    expect(grantedUnderConsentGroup(pooled, GROWN)).toBe(false)
+    expect(
+      grantedUnderConsentGroup(pooled, { ...POOLED, name: 'Northwind Brands' }),
+    ).toBe(false)
+    expect(grantedUnderConsentGroup(pooled, { ...POOLED, groupId: 'other' })).toBe(
+      false,
+    )
+    expect(grantedUnderConsentGroup(pooled, GROUP)).toBe(false)
+    expect(grantedUnderConsentGroup(null, POOLED)).toBe(false)
+  })
+
+  it('THE CONTROL: a group that has lost a site is still covered', () => {
+    const pooledThree = marketingConsentFieldsForGroup(GROWN, now)
+    expect(grantedUnderConsentGroup(pooledThree, { ...GROWN, hostIds: [HOST, OTHER] })).toBe(
+      true,
+    )
   })
 })

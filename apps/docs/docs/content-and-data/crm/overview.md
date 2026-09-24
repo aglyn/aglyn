@@ -121,8 +121,10 @@ API refuse another entry on that record with a message saying so.
 The **Contacts** section is the list the rest of the CRM is built on. It lets
 you:
 
-- Browse the **list**, with Owner and Stage columns, a stage filter, an
-  **Assigned to me** toggle, and one optional column per custom field.
+- Browse the **list**, with Owner and Stage columns and one optional column
+  per custom field, and narrow it by stage, owner (**Me** included) and the
+  rest through the table's **Filters** — see
+  [Filters on the Contacts list](./views.md#filters-on-the-contacts-list).
 - Add a contact **by hand** with **New contact** — see
   [The contact record](./contact-record.md).
 - Open a contact's **own page** to edit their profile, see where they came
@@ -272,6 +274,20 @@ organization when the organization has chosen to share its data. A collaborator
 scoped to one site sees that site's people, deals and tasks and no others. The
 rule is the same in every section, so no section can show a record the reader
 could not open as a contact.
+
+### One sender, one CRM {#one-sender-one-crm}
+
+Sites your organization has declared [one
+sender](../../marketing-and-automation/email-campaigns/overview.md#consent-groups) share
+one CRM: a person they have both met is one record, with one owner, one stage, one
+timeline and one set of notes, and everyone who works on any of those sites sees it. A
+collaborator who can open only some of a group's sites keeps seeing only the people
+those sites met.
+
+When a group changes, the records move with it — combined when sites join, copied when
+a site leaves, with order totals following the site that clearly earned them. [The
+contact record](./contact-record.md#when-sites-join-or-leave-a-group) says exactly how,
+and the review before any change counts how many people it affects.
 
 ## Related
 

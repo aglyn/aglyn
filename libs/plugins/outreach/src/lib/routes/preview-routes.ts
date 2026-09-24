@@ -25,10 +25,12 @@ import { firstEmailStepIndex } from '../engine/sequence-validation'
 import { leadAsContact } from '../enrollment/enroll-people'
 import { outreachStepOverridesRefused, readOutreachStepOverrideRequests } from '../enrollment/step-overrides'
 import type { OutreachPreviewResponse } from '../model/outreach-api'
+import type { OutreachEmailStep, OutreachMailbox, OutreachSequence } from '../model/outreach.types'
 import {
   OUTREACH_SAMPLE_PERSON,
   outreachSampleMergeContext,
   previewOutreachStep,
+  type OutreachStepPreviewInput,
 } from '../model/step-preview'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
 import {
@@ -38,7 +40,7 @@ import {
 } from '../storage/outreach-records'
 import { OUTREACH_READS_PEOPLE } from './enroll-routes'
 import type { OutreachRouteDeps } from './route-deps'
-import { outreachRouteGate } from './route-gate'
+import { outreachRouteGate, type OutreachRouteCaller } from './route-gate'
 import {
   outreachMethodNotAllowed,
   outreachOk,
@@ -60,105 +62,134 @@ import {
  *
  * A real contact is read from the CRM, so naming one asks for `data.manage`
  * as enrolling does; the sample person asks for nothing more.
+ *
+ * The reading is {@link readOutreachStepRender}, shared with the test send
+ * (`step-test-routes.ts`, AGL-3325): a test is the preview's own email,
+ * sent — so both routes read the same records through the same gate, and
+ * what a member reads on screen is what arrives in their inbox.
  */
 
-export function createOutreachPreviewRoute(deps: OutreachRouteDeps): PluginWebApiHandler {
-  return async (request) => {
-    if (request.method !== 'POST') return outreachMethodNotAllowed('POST')
-    const body = await readOutreachJsonBody(request)
-    const contactId = body['contactId'] === undefined ? null : readOutreachDocumentId(body['contactId'])
-    if (body['contactId'] !== undefined && !contactId) {
-      return outreachRefusal(400, 'invalid-request', 'Name the contact to preview for.')
-    }
-    // A lead the sequence's site holds (AGL-3234), previewed as the contact it would be.
-    const leadId = body['leadId'] === undefined ? null : readOutreachDocumentId(body['leadId'])
-    if (body['leadId'] !== undefined && !leadId) {
-      return outreachRefusal(400, 'invalid-request', 'Name the lead to preview for.')
-    }
-    const caller = await outreachRouteGate(
-      request,
-      body['orgId'],
-      deps.gate,
-      contactId || leadId ? [OUTREACH_READS_PEOPLE] : [],
-    )
-    if (caller instanceof Response) return caller
-    const sequenceId = readOutreachDocumentId(body['sequenceId'])
-    if (!sequenceId) return outreachRefusal(400, 'invalid-request', 'Name the sequence to preview.')
-    const firestore = deps.firestore()
-    const org = firestore.collection('orgs').doc(caller.orgId)
-    const snapshot = await outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(sequenceId).get()
-    const sequence = readStoredOutreachSequence(sequenceId, snapshot.exists ? snapshot.data() : undefined)
-    if (!sequence) return outreachRefusal(404, 'sequence-not-found', 'That sequence no longer exists.')
+/** What a preview and a test both read before the composer runs. */
+export interface OutreachStepRender {
+  caller: OutreachRouteCaller
+  sequence: OutreachSequence
+  stepIndex: number
+  step: OutreachEmailStep
+  /** The sequence's mailbox as stored, or `null` when it names none or the mailbox is gone. */
+  mailbox: OutreachMailbox | null
+  /** The composer's input: the person, the line, the footer, the template. */
+  input: OutreachStepPreviewInput
+}
 
-    const requested = body['stepIndex']
-    const stepIndex = typeof requested === 'number' ? requested : firstEmailStepIndex(sequence.steps)
-    const step = sequence.steps[stepIndex]
-    if (step?.kind !== 'email') {
-      return outreachRefusal(400, 'invalid-request', 'That step does not send an email.')
-    }
-    // The person's copies of steps as the dialog holds them (AGL-3324): the
-    // preview shows the curated version, held to the rules a stored one is.
-    const overrides = readOutreachStepOverrideRequests(body['stepOverrides'], sequence.steps, {
-      uid: caller.uid,
-      nowMs: deps.now(),
-    })
-    if (outreachStepOverridesRefused(overrides)) {
-      return outreachRefusal(
-        400,
-        'invalid-override',
-        overrides.refusal ?? 'A curated step breaks a rule every sequence email keeps.',
-        { issues: overrides.issues },
-      )
-    }
+/**
+ * The gate, then the sequence, the step and everything the step is rendered
+ * from — as the request body names them — or the refusal that stops it.
+ */
+export async function readOutreachStepRender(
+  deps: OutreachRouteDeps,
+  request: Request,
+  body: Record<string, unknown>,
+): Promise<Response | OutreachStepRender> {
+  const contactId = body['contactId'] === undefined ? null : readOutreachDocumentId(body['contactId'])
+  if (body['contactId'] !== undefined && !contactId) {
+    return outreachRefusal(400, 'invalid-request', 'Name the contact to preview for.')
+  }
+  // A lead the sequence's site holds (AGL-3234), previewed as the contact it would be.
+  const leadId = body['leadId'] === undefined ? null : readOutreachDocumentId(body['leadId'])
+  if (body['leadId'] !== undefined && !leadId) {
+    return outreachRefusal(400, 'invalid-request', 'Name the lead to preview for.')
+  }
+  const caller = await outreachRouteGate(
+    request,
+    body['orgId'],
+    deps.gate,
+    contactId || leadId ? [OUTREACH_READS_PEOPLE] : [],
+  )
+  if (caller instanceof Response) return caller
+  const sequenceId = readOutreachDocumentId(body['sequenceId'])
+  if (!sequenceId) return outreachRefusal(400, 'invalid-request', 'Name the sequence to preview.')
+  const firestore = deps.firestore()
+  const org = firestore.collection('orgs').doc(caller.orgId)
+  const snapshot = await outreachOrgCollection(firestore, caller.orgId, 'sequences').doc(sequenceId).get()
+  const sequence = readStoredOutreachSequence(sequenceId, snapshot.exists ? snapshot.data() : undefined)
+  if (!sequence) return outreachRefusal(404, 'sequence-not-found', 'That sequence no longer exists.')
 
-    const [orgSettings, mailboxSnapshot, host, template, contact, lead] = await Promise.all([
-      readOutreachComplianceSettingsDoc(firestore, caller.orgId),
-      sequence.mailboxId ? outreachOrgCollection(firestore, caller.orgId, 'mailboxes').doc(sequence.mailboxId).get() : null,
-      sequence.hostId ? firestore.collection('hosts').doc(sequence.hostId).get() : null,
-      step.templateId ? org.collection(CRM_COLLECTIONS.emailTemplates).doc(step.templateId).get() : null,
-      contactId ? org.collection('contacts').doc(contactId).get() : null,
-      // One org row (AGL-3275); the site is still required because a lead
-      // preview is rendered in a site's context.
-      leadId && sequence.hostId ? org.collection('leads').doc(leadId).get() : null,
-    ])
-    const leadData = lead?.exists ? (lead.data() as Record<string, unknown>) : null
-    if (leadId && !leadData) {
-      return outreachRefusal(404, 'contact-not-found', "That lead isn't in this sequence's site's CRM.")
-    }
-    const contactGroupId = consentGroupForHost(caller.org, sequence.hostId).groupId
-    const contactData = contact?.exists
-      ? (contact.data() as Record<string, unknown>)
-      : leadData
-        ? leadAsContact(leadData, contactGroupId)
-        : null
-    if (
-      contactId &&
-      (!contactData || !visibleToHost(contactData['visibleTo'] as string[] | undefined, sequence.hostId))
-    ) {
-      return outreachRefusal(404, 'contact-not-found', "That contact isn't in this sequence's site's CRM.")
-    }
-    const mailbox = readStoredOutreachMailbox(
-      sequence.mailboxId,
-      mailboxSnapshot?.exists ? mailboxSnapshot.data() : undefined,
+  const requested = body['stepIndex']
+  const stepIndex = typeof requested === 'number' ? requested : firstEmailStepIndex(sequence.steps)
+  const step = sequence.steps[stepIndex]
+  if (step?.kind !== 'email') {
+    return outreachRefusal(400, 'invalid-request', 'That step does not send an email.')
+  }
+  // The person's copies of steps as the dialog holds them (AGL-3324): the
+  // preview shows the curated version, held to the rules a stored one is —
+  // and a test send (AGL-3325) sends it.
+  const overrides = readOutreachStepOverrideRequests(body['stepOverrides'], sequence.steps, {
+    uid: caller.uid,
+    nowMs: deps.now(),
+  })
+  if (outreachStepOverridesRefused(overrides)) {
+    return outreachRefusal(
+      400,
+      'invalid-override',
+      overrides.refusal ?? 'A curated step breaks a rule every sequence email keeps.',
+      { issues: overrides.issues },
     )
-    const sender = mailbox ? { name: mailbox.displayName, email: mailbox.sendAs || mailbox.email } : null
-    const siteName = host?.exists ? String(host.get('name') ?? '') : ''
-    const merge = contactData
-      ? {
-          contact: contactData,
-          contactGroupId,
-          lead: leadData,
-          sender,
-          site: { name: siteName },
-        }
-      : outreachSampleMergeContext({ sender, siteName })
-    const personalLine =
-      typeof body['personalLine'] === 'string'
-        ? body['personalLine']
-        : contactData
-          ? ''
-          : OUTREACH_SAMPLE_PERSON.personalLine
-    const result = previewOutreachStep({
+  }
+
+  const [orgSettings, mailboxSnapshot, host, template, contact, lead] = await Promise.all([
+    readOutreachComplianceSettingsDoc(firestore, caller.orgId),
+    sequence.mailboxId ? outreachOrgCollection(firestore, caller.orgId, 'mailboxes').doc(sequence.mailboxId).get() : null,
+    sequence.hostId ? firestore.collection('hosts').doc(sequence.hostId).get() : null,
+    step.templateId ? org.collection(CRM_COLLECTIONS.emailTemplates).doc(step.templateId).get() : null,
+    contactId ? org.collection('contacts').doc(contactId).get() : null,
+    // One org row (AGL-3275); the site is still required because a lead
+    // preview is rendered in a site's context.
+    leadId && sequence.hostId ? org.collection('leads').doc(leadId).get() : null,
+  ])
+  const leadData = lead?.exists ? (lead.data() as Record<string, unknown>) : null
+  if (leadId && !leadData) {
+    return outreachRefusal(404, 'contact-not-found', "That lead isn't in this sequence's site's CRM.")
+  }
+  const contactGroupId = consentGroupForHost(caller.org, sequence.hostId).groupId
+  const contactData = contact?.exists
+    ? (contact.data() as Record<string, unknown>)
+    : leadData
+      ? leadAsContact(leadData, contactGroupId)
+      : null
+  if (
+    contactId &&
+    (!contactData || !visibleToHost(contactData['visibleTo'] as string[] | undefined, sequence.hostId))
+  ) {
+    return outreachRefusal(404, 'contact-not-found', "That contact isn't in this sequence's site's CRM.")
+  }
+  const mailbox = readStoredOutreachMailbox(
+    sequence.mailboxId,
+    mailboxSnapshot?.exists ? mailboxSnapshot.data() : undefined,
+  )
+  const sender = mailbox ? { name: mailbox.displayName, email: mailbox.sendAs || mailbox.email } : null
+  const siteName = host?.exists ? String(host.get('name') ?? '') : ''
+  const merge = contactData
+    ? {
+        contact: contactData,
+        contactGroupId,
+        lead: leadData,
+        sender,
+        site: { name: siteName },
+      }
+    : outreachSampleMergeContext({ sender, siteName })
+  const personalLine =
+    typeof body['personalLine'] === 'string'
+      ? body['personalLine']
+      : contactData
+        ? ''
+        : OUTREACH_SAMPLE_PERSON.personalLine
+  return {
+    caller,
+    sequence,
+    stepIndex,
+    step,
+    mailbox,
+    input: {
       steps: sequence.steps,
       stepIndex,
       orgSettings,
@@ -169,10 +200,20 @@ export function createOutreachPreviewRoute(deps: OutreachRouteDeps): PluginWebAp
         ? normalizeCrmEmailTemplate(template.data() as Record<string, unknown>).body
         : null,
       stepOverrides: overrides.overrides,
-    })
+    },
+  }
+}
+
+export function createOutreachPreviewRoute(deps: OutreachRouteDeps): PluginWebApiHandler {
+  return async (request) => {
+    if (request.method !== 'POST') return outreachMethodNotAllowed('POST')
+    const body = await readOutreachJsonBody(request)
+    const loaded = await readOutreachStepRender(deps, request, body)
+    if (loaded instanceof Response) return loaded
+    const result = previewOutreachStep(loaded.input)
     return outreachOk({
       ok: true,
-      stepIndex,
+      stepIndex: loaded.stepIndex,
       subject: result.email?.subject ?? '',
       text: result.email?.text ?? '',
       unresolvedFields: result.unresolvedFields,

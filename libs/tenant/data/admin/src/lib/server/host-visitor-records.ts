@@ -51,6 +51,9 @@ import {
 } from './organizations'
 import { crmReadTokens, crmScopeTokens } from '@aglyn/aglyn/server'
 import type { ConsentGroup, ScopeToken } from '@aglyn/aglyn/server'
+// The module path rather than the barrel, as `upsert-contact.ts` does: a spec
+// that substitutes the barrel keeps the real rule for which group a grant is.
+import { consentGroupForGrant } from '@aglyn/aglyn/app-utils/consent-groups'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -291,6 +294,13 @@ export interface HostLeadInput {
    * checkbox.
    */
   marketingConsent?: boolean
+  /**
+   * The `consentGroupDisclosureKey` the capture surface rendered beside that
+   * checkbox (AGL-3320). The grant pools across the site's consent group only
+   * when it is the group's current key, and is this site's alone otherwise —
+   * the same rule `upsertHostContact` applies.
+   */
+  disclosedConsentGroup?: string | null
 }
 
 /**
@@ -482,8 +492,11 @@ export async function addHostLead(options: {
        * multi-brand org holding a lead its sibling brand can SEE but may not
        * MAIL — a narrower basis than the one `consentGroupDisclosure` named
        * beside the checkbox this person ticked. Pooling here records what
-       * they were actually told; an undeclared group is still a group of one,
-       * so an agency is unchanged and configures nothing.
+       * they were actually told, and only that: the grant reaches the group
+       * when the capture surface sent back the group's current disclosure
+       * key (AGL-3320), and this site alone otherwise. An undeclared group is
+       * still a group of one, so an agency is unchanged and configures
+       * nothing.
        *
        * Resolved above the transaction — see `group`'s declaration.
        */
@@ -535,7 +548,10 @@ export async function addHostLead(options: {
            * the shape is a reader that can be told the wrong one.
            */
           ...(lead.marketingConsent
-            ? marketingConsentFieldsForGroup(group, consentAtMs)
+            ? marketingConsentFieldsForGroup(
+                consentGroupForGrant(group, lead.disclosedConsentGroup),
+                consentAtMs,
+              )
             : {}),
         },
         { merge: true },

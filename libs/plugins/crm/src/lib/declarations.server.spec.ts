@@ -29,6 +29,10 @@
  */
 
 import {
+  listPluginConsentGroupParticipants,
+  resetPluginConsentGroupParticipantsForTests,
+} from '@aglyn/aglyn/plugin-manager/plugin-consent-group-change'
+import {
   pluginContactCaptureWriter,
   registerPluginContactCaptureWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
@@ -64,6 +68,20 @@ describe('what the CRM declares at boot', () => {
   beforeEach(() => {
     resetPluginServicesForTests()
     resetPluginLeadConversionListenersForTests()
+    resetPluginConsentGroupParticipantsForTests()
+  })
+
+  it('registers its share of a consent group change under this plugin, loaded when a change runs (AGL-3320)', () => {
+    registerCrmServerDeclarations()
+    const participants = listPluginConsentGroupParticipants()
+    expect(participants.map((entry) => entry.pluginId)).toEqual(['crm'])
+    // The summary answers synchronously from plain words; the passes are the
+    // plugin's own module, deferred like the capture.
+    expect(participants[0].participant.summarize?.({ combined: 3, copied: 1 })).toBe(
+      '3 CRM records combined, 1 copied',
+    )
+    expect(deferredImports).toContain('./server/consent-group-participant')
+    expect(staticImports).not.toContain('./server/consent-group-participant')
   })
 
   it('registers its share of a lead conversion — the campaigns the lead carries — under this plugin (AGL-3254)', () => {

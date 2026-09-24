@@ -70,6 +70,9 @@ const COMPANY_ROWS = [
   { $id: 'c-globex', name: 'Globex', nameLower: 'globex' },
 ]
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The viewer's reach, which `useCrmScope` reads only for a site in a
+  // declared consent group (AGL-3320); an org-wide member here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestoreCollection: (build: () => { path?: string } | null) => {

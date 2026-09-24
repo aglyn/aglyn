@@ -411,8 +411,8 @@ generic package glyph.
 **Filters** in the Components table's toolbar narrows the list by name, **Used in**
 (page or email), ID, description, or date, and **Search** matches any word of the name,
 ID, or description. Each filter in force shows as a chip above the table. The list pages
-as you go, so a filter looks through the components read so far and reads further as you
-page on.
+as you go, so the first filter or search reads 100 components and matches over them, and
+paging past the last match reads further. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Duplicate
 

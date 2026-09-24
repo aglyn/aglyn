@@ -1181,11 +1181,30 @@ export interface AglynOrgBilling extends AglynDocument {
    *
    * SERVER-OWNED: denied to the client SDK, because `consentGroupForHost`
    * reads it in `app-utils` and decides who a marketing basis covers and whose
-   * opt-outs hold a send. No console screen writes it; a declaration is made
-   * by an Admin-SDK writer that must carry a leaving site's refusals onto the
-   * sites that stay (see that module).
+   * opt-outs hold a send. The Emails hub's consent group editor changes it
+   * through `/api/orgs/consent-groups`, and the one write is the executor's
+   * declare step, taken only after every separating site's refusals have
+   * been carried both ways (`consent-group-change.ts`).
    */
   consentGroups?: Record<string, { name: string; hostIds: string[] }>
+  /**
+   * A consent group change in flight (AGL-3320): `{ changeId, phase,
+   * hostIds, startedAtMs, declaredAtMs? }`, present exactly while one runs
+   * and cleared when it finishes or is canceled. The job it names is
+   * `orgs/{orgId}/consentGroupChanges/{changeId}`.
+   *
+   * SERVER-OWNED: written only by the executor, which relies on it as the
+   * lock — a second change, and a deletion of a site it names, are refused
+   * while it stands — so a client able to clear it could run two changes at
+   * once, and one able to set it could block every change after it.
+   */
+  consentGroupsChange?: {
+    changeId: string
+    phase: 'carry' | 'rehome' | 'sweep'
+    hostIds: string[]
+    startedAtMs: number
+    declaredAtMs?: number
+  }
   /**
    * Whether a declared group's sites wait for each other's confirmation click
    * (AGL-3316). Absent or `false` is off: a pending confirmation holds only

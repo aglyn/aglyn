@@ -390,7 +390,7 @@ export default function StaffEmailSuppressionsCard() {
     <CardDisplay
       header={'Platform suppressions'}
       help={docsHelp('staffConsole', {
-        anchor: '#system-emails',
+        anchor: '#platform-suppressions',
         excerpt:
           'Addresses no Aglyn mail reaches, learned from a permanent bounce ' +
           'or a spam report anywhere in the product.',

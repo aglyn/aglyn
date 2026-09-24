@@ -51,7 +51,9 @@ text in the field **Search in** names — **Name**, **SKU (whole)** or
 screen. **Filters** offers **Status** (Active, Draft, Archived); on its own it
 also reaches the whole catalog, and beside a search it narrows that search's
 matches. Each filter in force shows as a chip above the table; remove the chip
-to clear it.
+to clear it. A search reads up to 500 matching products and uses the first word
+you type, matched on the start of a word. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Inventory
 
@@ -101,8 +103,9 @@ Restock, Correction, Damaged, Order canceled — and the **source** that wrote
 it.
 
 The table's toolbar narrows it: **Filters** offers **Product**, **Reason** and
-**When**, and **Search** finds a product name, variant, order or location. Each
-filter in force shows as a chip above the table.
+**When**, and **Search** finds a product name, or a variant, order or location by
+its id. Each filter in force shows as a chip above the table; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 The list holds the most recent 100 movements. Filtering and search happen
 inside that window, so a product with no recent movement will not appear in
@@ -204,11 +207,12 @@ and offers **Draft order**, so you can invoice a customer you already have. The
 table and **Export CSV** appear once there are rows to filter.
 
 The table filters through its own toolbar. **Search** finds an order number, a
-buyer's email or a product name. **Filters** offers:
+buyer's email or the name of the order's first product. **Filters** offers:
 
 | Filter | Choices |
 | --- | --- |
-| **Product** | One or more products — matched against the order's line items, so carts, POS and draft orders are found too. |
+| **Order** | The order number, typed. |
+| **Product** | One or more products — matched against the order's line items, so carts, POS and draft orders are found too. The list offers your first 100 products. |
 | **Date** | On, before or after a day — the order date. |
 | **Status** | One or more of the seven below. |
 | **Channel** | One or more of the four below. |
@@ -216,7 +220,9 @@ buyer's email or a product name. **Filters** offers:
 | **Disputes** | **Open dispute** or **Charged back**. |
 
 Each filter in force shows as a chip above the table; remove the chip to clear
-it. Beside the table, **Export CSV** writes the rows the filters leave, and
+it. The table reads the 200 most recent orders, and the filters and the search
+look through those, not only the page on screen; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search). Beside the table, **Export CSV** writes the rows the filters leave, and
 **Draft order** builds an order by hand and sends the buyer a payment link.
 
 **Disputes is its own filter, not a status.** An open dispute sits on an order that is

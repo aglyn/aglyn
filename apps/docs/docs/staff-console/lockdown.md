@@ -858,7 +858,8 @@ table. Reading it is open to every staff role; releasing from it needs
 
 The table's toolbar filters and searches the whole list before it is paged:
 **Reason**, **State** (*enforcing*, *expired*, *unreadable*) and **Key kind** are
-pickers, and the key and note filter as typed values. The Library picker and the id
+pickers, and the key and note filter as typed values; the search matches the key,
+reason, note or origin. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search). The Library picker and the id
 fields above belong to the per-file lookup, not to this table.
 
 ### From a terminal {#quarantine-curl}

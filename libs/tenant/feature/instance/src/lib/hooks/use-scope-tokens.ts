@@ -24,7 +24,7 @@ import {
   type AglynOrgMember,
 } from '@aglyn/aglyn'
 import { doc, getDoc } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from './firebase/firebase-services'
 
 export interface ScopeTokensState {
@@ -53,22 +53,38 @@ export interface ScopeTokensState {
  * Defaults to org-wide while loading: the rules are the enforcement point,
  * and guessing "scoped" before the member doc arrives would flash an empty
  * library at people who can see everything.
+ *
+ * `loaded` answers for the member and org ASKED ABOUT NOW. A caller whose org
+ * id arrives after its first render — resolved from a site through the host
+ * index — would otherwise read the previous pass's answer, org-wide and
+ * loaded, while the member document it actually needs is still in flight,
+ * and send the one unfiltered query this hook exists to prevent.
  */
 export function useScopeTokens(orgId: string | undefined): ScopeTokensState {
   const { data: user } = useUser()
   const firestore = useFirestore()
-  const [state, setState] = useState<ScopeTokensState>({
+  const signedIn = (user as { uid?: string } | undefined)?.uid
+  /** Whose reach the state holds: `uid/orgId`, or `null` for no org. */
+  const asked = signedIn && orgId ? `${signedIn}/${orgId}` : null
+  const [state, setState] = useState<ScopeTokensState & { for: string | null }>({
     tokens: [ORG_SCOPE_TOKEN],
     orgWide: true,
     loaded: false,
+    for: null,
   })
 
   useEffect(() => {
     const uid = (user as { uid?: string } | undefined)?.uid
     if (!uid || !orgId) {
-      setState({ tokens: [ORG_SCOPE_TOKEN], orgWide: true, loaded: Boolean(uid) })
+      setState({
+        tokens: [ORG_SCOPE_TOKEN],
+        orgWide: true,
+        loaded: Boolean(uid),
+        for: null,
+      })
       return
     }
+    const key = `${uid}/${orgId}`
     let cancelled = false
     getDoc(doc(firestore, 'orgs', orgId, 'members', uid))
       .then((snapshot) => {
@@ -84,11 +100,17 @@ export function useScopeTokens(orgId: string | undefined): ScopeTokensState {
           tokens: memberScopeTokens(member),
           orgWide: isOrgWideMember(member),
           loaded: true,
+          for: key,
         })
       })
       .catch(() => {
         if (!cancelled) {
-          setState({ tokens: [ORG_SCOPE_TOKEN], orgWide: true, loaded: true })
+          setState({
+            tokens: [ORG_SCOPE_TOKEN],
+            orgWide: true,
+            loaded: true,
+            for: key,
+          })
         }
       })
     return () => {
@@ -96,7 +118,11 @@ export function useScopeTokens(orgId: string | undefined): ScopeTokensState {
     }
   }, [firestore, orgId, user])
 
-  return state
+  const loaded = state.loaded && state.for === asked
+  return useMemo(
+    () => ({ tokens: state.tokens, orgWide: state.orgWide, loaded }),
+    [state.tokens, state.orgWide, loaded],
+  )
 }
 
 export default useScopeTokens

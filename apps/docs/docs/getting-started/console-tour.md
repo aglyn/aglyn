@@ -57,6 +57,43 @@ attribute panels. Hover one for a one- or two-line explanation, and click it
 (or the **Open documentation** link in the tooltip) to jump straight to the
 matching section of these docs in a new tab.
 
+## Filter and search a list {#filter-and-search}
+
+Most lists in the console are tables with the same toolbar above them:
+**Columns** shows and hides columns, **Filters** narrows the rows, **Export**
+downloads the table, and **Search** finds rows by their words. They work the
+same way on every list.
+
+- **Filters** opens a panel that edits one filter at a time: pick a column, an
+  operator and a value. Pick another column and set it too, and both apply —
+  filters on different columns add up, and each column holds one filter.
+  Clearing the value, or deleting the panel's row, drops that column's filter.
+- **Chips** above the table show every filter in force, each read as a sentence
+  such as "Status is Live". The panel shows one filter at a time; the chips show
+  them all. Remove a chip to drop its filter.
+- **Search** matches words. Type several and a row is kept when every word
+  appears, in any order and either case, in one of the things that list
+  searches — each list's page names them. Search adds to the filters, and an
+  empty box shows the list unfiltered again.
+- The **pager** at the foot of the table then turns through the matches, not
+  the whole list.
+
+How far a filter or a search reaches depends on how the list reads its rows,
+and each list's page says which:
+
+- **The whole list.** A list that reads every row at once, or whose query
+  applies the filter itself, answers across all of it — not only the page on
+  screen.
+- **The rows read.** A long list reads a window of its rows instead: its
+  newest rows up to a cap its page names, or, on a list that reads a page at a
+  time, 100 rows as soon as the first filter or search word is set, and one
+  page more each time you turn past the last match. A filter there looks
+  through what has been read, and the table says when there is more.
+- **One served filter.** Some lists hand one filter to the server, which looks
+  through every record, and apply the rest to the rows it returned. The served
+  filter's chip is filled in; hover a chip to see which kind it is. On such a
+  list a new served filter replaces the previous one.
+
 ## Primary navigation
 
 The tabs across the top of a site are its **sections**. Some are always present; the rest
@@ -121,6 +158,7 @@ last updated. **Search** matches any word of the name, the slug, or either domai
 filter in force shows as a chip above the table; remove a chip to drop it. The list holds
 every site you have in the workspace, so a filter or a search looks through all of them,
 not only the page on screen. The site count beside the heading always counts every site.
+See [Filter and search a list](#filter-and-search).
 
 ### The status pill {#the-status-pill}
 
@@ -227,10 +265,11 @@ first, with **Mark all read** above it. The feed's **Filters** narrows it by
 **Type** (one type, or several) and by **Status** (**New** or **Read**), and
 both can stand together. Each filter in force shows as a chip above the feed;
 remove the chip to drop it. The filters apply to the whole feed, not just the
-page on screen, and the pager then turns through the matches. There is no
-search box, because a notification's words are not indexed:
+page on screen, and the pager then turns through the matches; see
+[Filter and search a list](#filter-and-search). There is no search box, because a
+notification's words are not indexed:
 
-![The Notifications page: a Navigation rail listing All notifications and Settings, beside Mark all read and the feed as a table of notification, type, workspace, time and status, with the table's Columns and Export controls](/img/getting-started/notifications-page.png)
+![The Notifications page: a Navigation rail listing All notifications and Settings, beside Mark all read and the feed as a table of notification, type, workspace, time and status, under the table's Columns, Filters and Export controls](/img/getting-started/notifications-page.png)
 
 ### Notification settings
 

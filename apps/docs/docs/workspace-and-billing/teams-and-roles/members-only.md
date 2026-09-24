@@ -71,9 +71,10 @@ link on the sign-in form (or by visiting `/recover` directly):
 ## Manage your members
 
 The site's **Users** page lists everyone who signed up on your published site —
-searchable and paged, newest first. **Filters** in the table's toolbar narrows the
-list by email, name, join date or **Status** (Active or Suspended), across every
-member rather than the page on screen. Click a member to open their detail drawer:
+paged, newest first. **Filters** in the table's toolbar narrows the list by email, name
+or join date, one at a time, and by **Status** (Active or Suspended) beside any one of
+them, across every member rather than the page on screen; the table has no search box.
+See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). Click a member to open their detail drawer:
 
 - **Profile** — email, display name, join date, and saved addresses.
 - **Order history** — the member's payment records, newest first: order number,

@@ -92,6 +92,7 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
     'audiences',
     'topics',
     'sending',
+    'consent-groups',
     'suppressions',
   ],
   // One table for both levels of the Marketing hub, which declare the same
@@ -134,6 +135,9 @@ export const PLUGIN_SECTION_TITLES: Readonly<Record<string, string>> = {
   // The org hub's own section: "Automations" under a surface already called
   // Automation would say the same word twice (AGL-3302).
   'automation/automations': 'Org automations',
+  // Sentence case, as every rail label is; Title Case would capitalize both
+  // words (AGL-3320).
+  'emails/consent-groups': 'Consent groups',
 }
 
 /**

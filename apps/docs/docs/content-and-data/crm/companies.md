@@ -28,7 +28,10 @@ earliest open task against it is due. The table's **Search** box, or
 **Filters** › **Company**, finds a company by the start of its name — the
 search reaches every company, not only the page on screen — **Filters** ›
 **Owner** shows one teammate's accounts, and **Next activity** › **is
-empty** keeps only the companies with nothing scheduled. Clicking a row opens the company's
+empty** keeps only the companies with nothing scheduled. Company and Owner are
+answered by the query, one at a time — a new one replaces the other — while
+**Next activity** narrows the page already loaded and stays beside either; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search). Clicking a row opens the company's
 page.
 
 The **Contacts** column is a count kept on the company and moved with every

@@ -46,8 +46,9 @@ two are treated differently.
 A campaign lives under **Marketing** because that is what it is: a window of dates, a
 set of lists, a topic and the revenue it earned, which happens to reach people by
 email. The individual **messages** it sent, the **templates** they are built from, the
-**audiences**, the **topics**, the **sending domains** and the **suppression list** are
-all on the **Emails** page, and each message links back to the campaign it belongs to.
+**audiences**, the **topics**, the **sending domains**, the **consent groups** and the
+**suppression list** are all on the **Emails** page, and each message links back to the
+campaign it belongs to.
 
 ### Campaigns belong to your organization {#campaigns-belong-to-the-organization}
 
@@ -72,7 +73,7 @@ and the leads they produce.
 ### Your organization's Emails page {#organization-emails-page}
 
 Your organization has its own **Emails** page beside CRM and Marketing, with the same
-six sections a site's has, each answering for every site at once:
+seven sections a site's has, each answering for every site at once:
 
 - **Messages** — every site's emails in one list, each with the site it is sent as.
   Writing one asks which site it is sent as, unless you have one site.
@@ -82,12 +83,15 @@ six sections a site's has, each answering for every site at once:
 - **Audiences** and **Topics** — your organization's own, the same lists and topics every
   site sees. On a list's page, **Enroll as** picks the site people are added as, and the
   **Consent** column reads what they agreed to with that site. On its edit page, **Site**
-  picks whose people its filters read. **Topics** also holds the switch that decides
-  whether a consent group's sites [wait for each other's confirmation
-  click](#consent-group-confirmation).
+  picks whose people its filters read.
 - **Sending** — what each site sends as right now and its default sender, and the domains
   your organization has proved, with the sites sending as each. Sending a site's email as
   a domain asks which site.
+- **Consent groups** — the sites your organization declares [one
+  sender](#consent-groups), where you create, change and dissolve them, and under them
+  the switch that decides whether a group's sites [wait for each other's confirmation
+  click](#consent-group-confirmation). A site's own **Consent groups** section says which
+  group it is in and links here.
 - **Suppressions** — each site's list counted by reason. Every site keeps its own list, so
   open a site's row to see who is on it, or to add or remove an address.
 
@@ -119,19 +123,26 @@ and the unsubscribe links in mail already delivered are untouched.
 
 The campaigns list, the Emails list and a campaign's own emails each filter
 through their table's toolbar. **Filters** narrows the list by a column, and
-**Search** matches any word of a name or subject:
+**Search** matches any word of a name or subject, and on the organization's
+page a site name too:
 
-- **Campaigns:** Window (no dates, upcoming, running, ended), Lists, Kind
-  (campaign or single send) and, on the organization's page, Sites.
-- **Emails:** State (draft, scheduled, sending, sent, stopped), Campaign
-  (or single send) and, on the organization's page, Site. State is what the
-  email is doing, so an email part way through a large audience is
+- **Campaigns:** the campaign's name, Window (no dates, upcoming, running,
+  ended), Lists, Kind (campaign or single send) and, on the organization's
+  page, Sites.
+- **Emails:** the subject, State (draft, scheduled, sending, sent, stopped),
+  Campaign (one of up to 50 campaigns by name, or **Single send** for the
+  emails filed under none) and, on the organization's page, Site. State is
+  what the email is doing, so an email part way through a large audience is
   **Sending**, not **Scheduled**.
+- **A campaign's emails:** the subject and State.
 
 The filters look at every campaign or email the list read, not only the page
-on screen. Each filter in force shows as a chip above the table; remove a
+on screen. The campaigns list reads up to 50 campaigns and 30 sends, the
+Emails list 30 emails, and a campaign's own table 50; each says so when there
+are more. Each filter in force shows as a chip above the table; remove a
 chip to drop it. The **Filters** panel edits one filter at a time, and
-filters on different columns add up.
+filters on different columns add up; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### What belongs to a campaign {#what-belongs-to-a-campaign}
 
@@ -575,7 +586,8 @@ kinds, chosen when you create it.
 The lists table filters through its toolbar: **Filters** narrows it by name or by
 **Membership** (manual or rule), and **Search** matches any word of a list's name. The
 table is paged, so the first filter reads the first 100 lists and matches over them;
-the table says when there are more, and paging forward reads the next page.
+the table says when there are more, and paging forward reads the next page. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Manual lists
 
@@ -597,7 +609,7 @@ leaves when they stop matching; a person who was added stays.
 The membership table filters through its toolbar by address, name, **How** (rule or
 added) and **Consent** (each of the kinds below), and **Search** matches an address,
 name or source. Like the lists table, it filters over the first 100 members it read
-and says when there are more. The address and name boxes above the table add people;
+and says when there are more; see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The address and name boxes above the table add people;
 they are not filters.
 
 **Consent** is the basis the membership carries, read for the site you are on — or, on
@@ -763,9 +775,11 @@ Two ways to finish a test without watching it:
   winner is picked every later send uses the winning copy.
 
 The Experiments table filters through its toolbar by name, what it tests
-(screen, section or email) and status. The list is paged, so the first
-filter reads the first 100 experiments and matches over them; the table says
-when there are more, and paging forward reads the next page.
+(screen, section or email) and status, and **Search** matches any word of an
+experiment's name. The list is paged, so the first filter or search reads the
+first 100 experiments and matches over them; the table says when there are
+more, and paging forward reads the next page. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Across your organization's sites {#experiments-across-sites}
 
@@ -841,8 +855,9 @@ never yours, and account mail — receipts, confirmations — is not listed at a
 An email's **Recipients** table lists everyone it was sent to. To see only
 the people who opened it, or only those who clicked something, choose
 **Engagement** in the table's **Filters** panel. That filter reaches the
-whole delivery log, one page at a time. The table has no search box, because
-the delivery log can only be narrowed by engagement.
+whole delivery log, one page at a time, and a new choice replaces the last.
+The table has no search box, because the delivery log can only be narrowed by
+engagement. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Which links were clicked
 
@@ -989,11 +1004,138 @@ when the address was suppressed by a bounce or a spam complaint. Those protect
 your sending reputation rather than expressing a preference, so no link can
 clear them.
 
-Where your organization has declared several sites one sender — a consent group,
-the name every one of their signup forms shows — the page speaks for that sender.
+Where your organization has declared several sites one sender — a [consent
+group](#consent-groups), the name every one of their signup forms shows — the page
+speaks for that sender.
 It names the group, it shows what the person has left on any of its sites, and
 whatever they choose on it applies to every one of them: unsubscribing, leaving a
 topic, asking for less, and coming back.
+
+### Sites that send as one {#consent-groups}
+
+Every site is its own sender until you say otherwise: someone who signs up on one site
+hears only from that site, and an unsubscribe applies to that site alone. That is right
+for an agency, whose sites belong to different businesses, and wrong for one business
+that runs a shop, a booking page and a blog under one name.
+
+A **consent group** is how you say several sites are one sender. You declare it on your
+[organization's Emails page](#organization-emails-page) under **Consent groups**, and it
+does four things:
+
+- **Signup forms name it.** Under the marketing consent field, a form on any of its sites
+  says *"You'll receive marketing email from \{name\}, which covers \{n\} sites."*, so the
+  person knows who they are agreeing to hear from.
+- **A signup on one of those forms reaches every site in the group** — a signup made
+  after the group exists, on a form that showed its name. Nobody who signed up before is
+  shared, and consent given anywhere that does not show the name, such as at checkout,
+  is recorded for the one site it was given on.
+- **An opt-out on any of its sites stops marketing email from all of them**: an
+  unsubscribe, a topic left on the [preference page](#preference-page), a slower pace
+  someone asked for, or a refusal recorded on their contact.
+- **The CRM keeps one record per person for the whole group**, which everyone who works
+  on any of its sites sees. See [what each site keeps to
+  itself](../../content-and-data/crm/contact-record.md#what-each-site-keeps-to-itself).
+
+A site can be in only one group; a group needs at least two sites and can include up to
+30. Changing groups needs both the **Organization settings** and **Manage data**
+permissions — by default, owners and admins — and each change is recorded in your
+organization's activity. A site's own **Emails → Consent groups** says which group it is
+in and links to your organization's page.
+
+#### Create a group {#consent-group-create}
+
+**New group**, at the top of the **Consent groups** card, opens a dialog in two steps:
+
+1. **Name and sites.** Signup forms show the name, so use the one people know you by.
+   **What signup forms will say** shows the sentence as you type. Tick at least two
+   sites; one already in another group says **In** that group, and **Moves from** it once
+   ticked — see [adding or moving a site](#consent-group-join).
+2. **Review.** Before anything is written, the review counts what the change does: what
+   signup forms will say, how many opt-outs start applying across the group, what
+   happens to CRM records, and roughly how long it will take. Nothing changes until you
+   press **Create group**.
+
+When sites are combined:
+
+- Opt-outs already given on any of them apply to all of them straight away.
+- People who signed up before are not shared: each keeps hearing only from the sites
+  they agreed to.
+- The CRM records the sites keep about the same person become one record. Where two
+  records disagree about one value, such as the owner or the stage, the record of the
+  site that met the person first is kept; lists such as tags are combined, notes are
+  kept end to end, and figures such as order totals are added together.
+- With [Wait for confirmation across a consent group](#consent-group-confirmation) on, a
+  confirmation one site is waiting for holds the others' email on that topic too.
+
+#### Add or move a site {#consent-group-join}
+
+**Edit group**, in a group's menu, opens the same dialog with its sites ticked. Adding a
+site works like creating a group, except that where two records disagree, the group's is
+kept.
+
+A site can be in only one group, so ticking a site from another group moves it. The
+review says what that costs the group it leaves: the moving site and that group's other
+sites [keep each other's opt-outs](#consent-group-leave), and a group left with one site
+is dissolved. Moving every site of one group into another merges the two.
+
+#### Remove a site or dissolve a group {#consent-group-leave}
+
+Untick a site in **Edit group** to remove it, or choose **Dissolve group** from the menu
+to separate every site at once. A group needs at least two sites, so unticking all but
+one dissolves it, and the dialog says so before you review.
+
+Separating sites never lets anyone be emailed who opted out:
+
+- **Opt-outs are copied both ways.** Everyone who opted out on any of the group's sites
+  stays opted out on the site that leaves, and everyone who opted out on the site that
+  leaves stays opted out on the rest. That covers unsubscribes, topics left on the
+  preference page, the pace someone asked for, and a refusal recorded on a contact. A
+  copied unsubscribe keeps its reason and date, so the person can still lift it from the
+  preference page like any other.
+- **Consent already given stays.** A site that leaves can still email the people who
+  signed up to the group while it was part of it — they agreed to hear from it by name.
+  Its signup forms stop naming the group from then on.
+- **Each site keeps a copy of the CRM record for the people it met itself.** The group
+  keeps its records. Order totals move with a site only when that site is clearly where
+  the person bought; when a group is dissolved and someone bought on more than one of its
+  sites, those totals can't be split and are removed, and the review says for how many
+  people.
+- **Pending confirmations don't follow.** Someone waiting to confirm on one site stops
+  holding the other sites' email on that topic, and the other way around.
+- **Who can see a record doesn't change.** A site keeps seeing the people it saw, without
+  the CRM details of people it only met through the group's other sites.
+
+A site that is in a group, or that a change is working on, can't be deleted: remove it
+from the group first.
+
+#### Rename a group {#consent-group-rename}
+
+Change the name in **Edit group**. Signup forms and preference pages show the new name
+from then on. People who already signed up saw the old one, and their records keep it,
+because that is what they agreed to.
+
+#### While a change runs {#consent-group-progress}
+
+A change takes from a moment to a while, depending on how many contacts and opt-outs it
+moves. It runs in steps, and the card shows which:
+
+1. **Copying opt-outs — nothing has changed yet.** Opt-outs are copied first, while your
+   groups still work as they did. **Stop before it takes effect** is offered only in
+   this step; opt-outs already copied stay, which never lets anyone be emailed who
+   couldn't be before.
+2. **In effect — combining CRM records.** Every send now follows the new groups. CRM
+   records are being combined or copied, so some may show under their old group for a
+   little while, and a [list built from a rule](#lists-built-from-a-rule) that reads them
+   waits until this step is over before it removes anybody.
+3. **Finishing up.** A last pass, a few minutes later, for anything written while the
+   change ran.
+
+You can leave the page: a change finishes on its own, and keeping the page open only
+makes it go faster. One change runs at a time, so the controls say **Finishing the last
+change** until it's done. If a change keeps failing, the card shows the error and **Retry
+now**, and the change keeps retrying on its own every 15 minutes. If somebody else
+changed your consent groups while you were editing, the dialog says so and shows what
+they saved, so you can check your change against it.
 
 ### Letting someone ask for less, instead of none {#frequency-opt-down}
 
@@ -1039,14 +1181,14 @@ asking them again.
 
 #### When the site asking is part of a consent group {#consent-group-confirmation}
 
-Where your organization has declared several sites one sender — a consent group,
-named on every signup form — a confirmation belongs to the site whose form asked
-for it. Until the person clicks, that site sends them nothing on the topic, and
-by default the group's other sites carry on as before.
+Where your organization has declared several sites one sender — a [consent
+group](#consent-groups), named on every signup form — a confirmation belongs to the
+site whose form asked for it. Until the person clicks, that site sends them nothing
+on the topic, and by default the group's other sites carry on as before.
 
 **Wait for confirmation across a consent group**, on your
-[organization's Emails page](#organization-emails-page) under **Topics**, changes
-that. With it on, when one site in a group asks someone to confirm, every other
+[organization's Emails page](#organization-emails-page) under **Consent groups**,
+below the groups themselves, changes that. With it on, when one site in a group asks someone to confirm, every other
 site in the group waits for the click too: nothing on that topic reaches them from
 any of the group's sites until they confirm. That includes somebody the other sites
 were already mailing, so expect those messages to pause until the click.
@@ -1127,13 +1269,20 @@ a list is going stale.
 The table filters through its toolbar by address and by **Reason**, and **Search**
 matches any part of an address. It is paged newest first, so the first filter reads
 the 100 most recent entries and matches over them; the table says when there are
-more, and paging forward reads the next page.
+more, and paging forward reads the next page. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 Each site keeps its own list: somebody who unsubscribed from one site can still
 be emailed by another — unless your organization has declared the two sites one
-sender (a consent group, named on every signup form), in which case an address on
-either site's list is skipped by both. Your [organization's Emails page](#organization-emails-page)
-counts every site's list by reason, and opens a site's list from its row.
+sender (a [consent group](#consent-groups), named on every signup form), in which
+case an address on either site's list is skipped by both. Your [organization's
+Emails page](#organization-emails-page) counts every site's list by reason, and
+opens a site's list from its row.
+
+When sites stop being one sender — a site [leaves a group](#consent-group-leave), or a
+group is dissolved — each copies the other's entries onto its own list, so nobody who
+was skipped starts getting mail. A copied entry keeps its reason and date and is marked
+**Copied**, with the site it came from on hover; remove it like any other.
 
 An unsubscribe now records **which campaign** the link was in, so the campaign
 report can show an unsubscribe rate for that send. Links in mail sent before

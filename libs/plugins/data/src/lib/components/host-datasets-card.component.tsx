@@ -1488,7 +1488,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
   return (
     <CardDisplay
       header={'Data'}
-      help={pluginDocsHelp('datasets', { anchor: '#model-builder' })}
+      help={pluginDocsHelp('datasets', { anchor: '#filter-records' })}
       contentGutterX
       contentGutterY
       contentBordered="all"
