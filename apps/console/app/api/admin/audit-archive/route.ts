@@ -233,8 +233,9 @@ async function handler(request: Request): Promise<Response> {
         'These organizations are past their GDPR erasure hold. Run ' +
         'tools/scripts/erase-tenant.mjs to hard-delete. No copy is kept:\n\n' +
         orgsList
-      // One send per run, so resolving the staff-designed template here is a
-      // single Firestore read (AGL-768); null keeps the built-in copy.
+      // One send per run, so resolving the template here is a single
+      // Firestore read (AGL-768): the staff design, else the catalog's
+      // built-in copy (AGL-3322), with this copy as the last resort.
       const designed = await renderSystemEmail('erasure-hold-alert', {
         count: String(due.length),
         'orgs.list': orgsList,

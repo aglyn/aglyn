@@ -315,7 +315,7 @@ async function handler(request: Request): Promise<Response> {
           const designed = await renderSystemEmail(
             'erasure-confirmation',
             { ...brandMergeTokens(branding), 'org.name': String(orgName) },
-            { brandLogoUrl: branding.emailLogoUrl },
+            { brandLogoUrl: branding.emailLogoUrl, brandHomeUrl: branding.homeUrl },
           )
           await sendEmail({
             to: ownerEmail,

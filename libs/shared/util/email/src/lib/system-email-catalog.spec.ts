@@ -105,6 +105,51 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
     })
   })
 
+  /**
+   * The footer's reason line (AGL-3322). It is drawn under the built-in copy
+   * of every email the platform sends, for every brand it is sent under, so
+   * it is held to the body's rules: declared tokens only, and the product
+   * named by token, never by name.
+   */
+  describe('footerReason (AGL-3322)', () => {
+    const editable = SYSTEM_EMAIL_TEMPLATES.filter(isSystemEmailEditable)
+
+    it('gives every Resend-delivered email a reason, and nothing else one', () => {
+      // Premise: the catalog's Resend emails, all of them.
+      expect(editable.length).toBe(13)
+      for (const entry of SYSTEM_EMAIL_TEMPLATES) {
+        if (isSystemEmailEditable(entry)) {
+          expect(entry.footerReason?.startsWith('You’re receiving this')).toBe(true)
+        } else {
+          expect(entry.footerReason).toBeUndefined()
+        }
+      }
+    })
+
+    it('only uses tokens the email declares', () => {
+      for (const entry of editable) {
+        const declared = new Set(entry.mergeTokens.map((token) => token.name))
+        const used = [...entry.footerReason!.matchAll(/\{\{([^}]+)\}\}/g)].map(
+          (match) => match[1].trim(),
+        )
+        for (const token of used) {
+          // Undeclared means unsupplied, and an unsupplied token is blanked:
+          // "…invited you to join  on Aglyn."
+          expect(`${entry.key}: ${token}`).toBe(
+            `${entry.key}: ${declared.has(token) ? token : '(undeclared)'}`,
+          )
+        }
+      }
+    })
+
+    it('names the product by token, so a white-label or renamed sender reads as itself', () => {
+      for (const entry of editable) {
+        expect(entry.footerReason).toContain('{{brand.productName}}')
+        expect(entry.footerReason).not.toMatch(/aglyn/i)
+      }
+    })
+  })
+
   describe('delivery ownership', () => {
     it('sends the auth emails itself — nothing is left to Firebase', () => {
       // Inverted by AGL-1112. These two were the last Firebase-delivered

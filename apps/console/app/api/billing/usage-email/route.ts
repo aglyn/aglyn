@@ -134,8 +134,9 @@ async function handler(request: Request): Promise<Response> {
       USAGE_EMAIL_CHUNK_SIZE,
     )
 
-    // Resolve the staff-designed template ONCE for the whole batch (AGL-768),
-    // not once per recipient; null keeps every org's built-in summary copy.
+    // Resolve the template ONCE for the whole batch (AGL-768), not once per
+    // recipient: the staff design when one is published, else the catalog's
+    // built-in copy (AGL-3322).
     const template = await loadSystemEmail('usage-summary')
 
     const results: Record<string, any> = {}
@@ -258,8 +259,9 @@ async function handler(request: Request): Promise<Response> {
         `Here is your ${branding.productName} usage summary for ${month}.\n\n` +
         `${usageSummary}${brandSupportLine(branding)}`
       const orgName = orgDoc.get('name') ?? 'your organization'
-      // Render the batch-resolved template for this org's values (AGL-768);
-      // null falls back to the built-in copy above.
+      // Render the batch-resolved template for this org's values and in its
+      // header and footer (AGL-768, AGL-3322); the copy above is the last
+      // resort behind it.
       const designed = template
         ? renderLoadedSystemEmail(
             template,
@@ -273,7 +275,7 @@ async function handler(request: Request): Promise<Response> {
               'org.name': String(orgName),
               'usage.summary': usageSummary,
             },
-            { brandLogoUrl: branding.emailLogoUrl },
+            { brandLogoUrl: branding.emailLogoUrl, brandHomeUrl: branding.homeUrl },
           )
         : null
       const result = await sendEmail({

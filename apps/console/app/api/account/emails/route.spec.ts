@@ -68,9 +68,12 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   setPrimaryAccountEmail: async () => ({ ok: true }),
 }))
 
+/** What the `email-verification` template renders; null unless a test says. */
+const mockRender = jest.fn(async (): Promise<Record<string, string> | null> => null)
+
 jest.mock('../../_lib/render-system-email', () => ({
   __esModule: true,
-  renderSystemEmail: async () => null,
+  renderSystemEmail: () => mockRender(),
 }))
 
 import { POST } from './route'
@@ -95,6 +98,8 @@ const linkInLastMail = () =>
 
 beforeEach(() => {
   mockSent.length = 0
+  mockRender.mockReset()
+  mockRender.mockResolvedValue(null)
   delete process.env['NEXT_PUBLIC_CONSOLE_URL']
   delete process.env['AUTH_ACTION_ALLOWED_ORIGINS']
 })
@@ -110,5 +115,46 @@ describe('POST /api/account/emails — the confirmation link’s host (AGL-2983)
     process.env['AUTH_ACTION_ALLOWED_ORIGINS'] = 'https://preview.aglyn.example'
     await add('https://preview.aglyn.example')
     expect(linkInLastMail()).toBe('https://preview.aglyn.example/manage/user?confirmEmail=tokenid.secret')
+  })
+})
+
+/**
+ * Which copy confirms an ADDED address (AGL-3322).
+ *
+ * This mail shares the sign-up confirmation's template, and that template's
+ * built-in copy is written for sign-up: "finish setting up your account", "if
+ * you did not create an account", a footer saying the address was used to
+ * sign up. None of it is true here, so only a published design replaces the
+ * route's own copy — and the built-in one, which is what the template renders
+ * while nothing is published, never does.
+ */
+describe('POST /api/account/emails — the confirmation’s copy (AGL-3322)', () => {
+  const lastMail = () => mockSent[mockSent.length - 1] ?? {}
+
+  it('keeps its own copy over the template’s built-in sign-up copy', async () => {
+    mockRender.mockResolvedValue({
+      subject: 'Confirm your email address',
+      html: '<p>Confirm this address to finish setting up your account</p>',
+      text: 'Confirm this address to finish setting up your account',
+      source: 'default',
+    })
+    await add('https://app.aglyn.com')
+    expect(mockRender).toHaveBeenCalledTimes(1)
+    expect(lastMail()['text']).toContain('If you did not ask to add this address')
+    expect(lastMail()['text']).not.toContain('finish setting up')
+    expect(lastMail()['html']).toBeUndefined()
+  })
+
+  it('sends a design staff published, which is the one copy that replaces it', async () => {
+    mockRender.mockResolvedValue({
+      subject: 'Designed subject',
+      html: '<p>Designed body</p>',
+      text: 'Designed body',
+      source: 'designed',
+    })
+    await add('https://app.aglyn.com')
+    expect(lastMail()['subject']).toBe('Designed subject')
+    expect(lastMail()['text']).toBe('Designed body')
+    expect(lastMail()['html']).toBe('<p>Designed body</p>')
   })
 })

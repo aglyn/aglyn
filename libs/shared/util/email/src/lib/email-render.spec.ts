@@ -331,6 +331,237 @@ describe('brand logo header (AGL-2139)', () => {
 })
 
 /**
+ * The header and footer a sender's mail is drawn inside (AGL-3322).
+ *
+ * The renderer only draws; which brand it draws is the caller's decision, so
+ * every case here hands it a chrome and checks the markup and the plain-text
+ * part. Each "nothing to draw" case is paired with a control that draws, so a
+ * renderer that ignored `chrome` altogether could not pass them.
+ */
+describe('chrome (AGL-3322)', () => {
+  const BODY = {
+    root: { componentId: 'div', nodes: ['t'] },
+    t: { componentId: 'emailText', props: { children: 'hello' } },
+  } as any
+  const LOGO = 'https://cdn.example.test/brand/wordmark.png'
+  const render = (options: Partial<Parameters<typeof renderEmailHtml>[0]>) =>
+    renderEmailHtml({ sanitize: SANITIZE, nodes: BODY, ...options })
+  const count = (haystack: string, needle: string) =>
+    haystack.split(needle).length - 1
+
+  describe('header', () => {
+    it('draws the logo above the body, linked to the sender', () => {
+      const { html } = render({
+        chrome: {
+          header: { logoUrl: LOGO, logoAlt: 'Northwind', href: 'https://northwind.test' },
+        },
+      })
+      expect(html).toContain(`src="${LOGO}"`)
+      expect(html).toContain('alt="Northwind"')
+      // Capped, not stretched: a wordmark and a square mark both fit.
+      expect(html).toContain('max-height:40px;max-width:200px;')
+      expect(html).toMatch(
+        new RegExp(`<a href="https://northwind\\.test" target="_blank"[^>]*><img src="${LOGO}"`),
+      )
+      expect(html.indexOf(LOGO)).toBeLessThan(html.indexOf('hello'))
+    })
+
+    it('draws the logo unlinked when no href is given', () => {
+      const { html } = render({
+        chrome: { header: { logoUrl: LOGO, logoAlt: 'Northwind' } },
+      })
+      expect(html).toContain(`src="${LOGO}"`)
+      expect(html).not.toContain('<a ')
+    })
+
+    it('draws the name in bold when there is no logo', () => {
+      const { html } = render({
+        chrome: { header: { logoAlt: 'Northwind', href: 'https://northwind.test' } },
+      })
+      expect(html).not.toContain('<img')
+      expect(html).toMatch(/font-weight:700[^>]*><a href="https:\/\/northwind\.test"[^>]*>Northwind<\/a>/)
+      expect(html.indexOf('Northwind')).toBeLessThan(html.indexOf('hello'))
+    })
+
+    it('draws the name, never a broken image, when the logo cannot be fetched', () => {
+      // A stored media reference with no origin to resolve it against, and a
+      // scheme no inbox should fetch: both would be a broken-image box.
+      for (const logoUrl of ['media:h1/med9', 'javascript:alert(1)', '/api/media/cdn/h1/med9']) {
+        const { html } = render({
+          chrome: { header: { logoUrl, logoAlt: 'Northwind' } },
+        })
+        expect(html).not.toContain('<img')
+        expect(html).not.toContain(logoUrl)
+        expect(html).toContain('>Northwind</div>')
+      }
+    })
+
+    it('resolves a stored logo against the media origin, like every other image', () => {
+      const { html } = render({
+        mediaOrigin: 'https://console.example.test',
+        chrome: { header: { logoUrl: 'media:h1/med9', logoAlt: 'Northwind' } },
+      })
+      expect(html).toContain('src="https://console.example.test/api/media/cdn/h1/med9"')
+    })
+
+    it('drops a refused link and keeps the header', () => {
+      const { html } = render({
+        chrome: { header: { logoUrl: LOGO, logoAlt: 'Northwind', href: 'javascript:alert(1)' } },
+      })
+      expect(html).toContain(`src="${LOGO}"`)
+      expect(html).not.toContain('javascript:')
+      expect(html).not.toContain('<a ')
+    })
+
+    it('escapes the name, which is merge data', () => {
+      const { html } = render({
+        merge: { 'brand.productName': 'A<b>"C"' },
+        chrome: { header: { logoAlt: '{{brand.productName}}' } },
+      })
+      expect(html).toContain('A&lt;b&gt;&quot;C&quot;')
+      expect(html).not.toContain('<b>')
+    })
+
+    it('draws nothing when there is neither a logo nor a name', () => {
+      const { html } = render({ chrome: { header: { logoAlt: '  ' } } })
+      expect(html).not.toContain('<img')
+      expect(html).not.toContain('font-weight:700')
+      expect(html).toContain('hello')
+    })
+  })
+
+  describe('the white-label logo row it replaces', () => {
+    it('keeps brandLogoUrl exactly as it was when there is no chrome', () => {
+      const legacy = render({
+        brandLogoUrl: 'https://cdn.example.test/acme.png',
+        merge: { 'brand.productName': 'Acme' },
+      })
+      expect(legacy.html).toContain('src="https://cdn.example.test/acme.png" alt="Acme"')
+      expect(legacy.html).toContain('max-height:48px;max-width:200px;')
+      // The same document whether `chrome` is absent or explicitly undefined,
+      // and with no footer anywhere in it.
+      expect(
+        render({
+          brandLogoUrl: 'https://cdn.example.test/acme.png',
+          merge: { 'brand.productName': 'Acme' },
+          chrome: undefined,
+        }),
+      ).toEqual(legacy)
+      expect(legacy.html).not.toContain('#F8F9FA')
+    })
+
+    it('keeps brandLogoUrl when the chrome carries only a footer', () => {
+      const { html } = render({
+        brandLogoUrl: 'https://cdn.example.test/acme.png',
+        chrome: { footer: { reason: 'Why you got this.' } },
+      })
+      expect(html).toContain('src="https://cdn.example.test/acme.png"')
+      expect(html).toContain('Why you got this.')
+    })
+
+    it('is superseded by a chrome header, so the mail carries ONE logo', () => {
+      const { html } = render({
+        brandLogoUrl: 'https://cdn.example.test/acme.png',
+        chrome: { header: { logoUrl: LOGO, logoAlt: 'Acme' } },
+      })
+      expect(count(html, '<img')).toBe(1)
+      expect(html).toContain(`src="${LOGO}"`)
+      expect(html).not.toContain('acme.png')
+    })
+
+    it('is superseded even by a header that draws only a name', () => {
+      const { html } = render({
+        brandLogoUrl: 'https://cdn.example.test/acme.png',
+        chrome: { header: { logoAlt: 'Acme' } },
+      })
+      expect(html).not.toContain('<img')
+      expect(html).toContain('>Acme</div>')
+    })
+  })
+
+  describe('footer', () => {
+    const FOOTER = {
+      reason: 'You’re receiving this because you signed up.',
+      support: { label: 'Get help', href: 'https://help.example.test/support' },
+      legal: '© 2026 Example LLC · 100 Example Street, Springfield',
+    }
+
+    it('draws its lines under the body, in order, in the footer block’s look', () => {
+      const { html } = render({ chrome: { footer: FOOTER } })
+      const at = (text: string) => html.indexOf(text)
+      expect(at('hello')).toBeLessThan(at('You’re receiving this'))
+      expect(at('You’re receiving this')).toBeLessThan(at('>Get help</a>'))
+      expect(at('>Get help</a>')).toBeLessThan(at('© 2026 Example LLC'))
+      expect(html).toContain('padding:24px;text-align:center;background-color:#F8F9FA;')
+      expect(html).toContain('font-size:12px;font-weight:400;line-height:1.4;color:#757575;')
+      expect(html).toContain(
+        '<a href="https://help.example.test/support" target="_blank" style="color:#757575;text-decoration:underline;">Get help</a>',
+      )
+    })
+
+    it('substitutes merge tokens the way the body does, and escapes them', () => {
+      const { html, text } = render({
+        merge: { 'org.name': 'Acme & <Co>', 'brand.productName': 'Northwind' },
+        chrome: {
+          footer: {
+            reason: 'You were added to {{org.name}} on {{brand.productName}}.',
+            legal: '© 2026 {{brand.productName}}',
+          },
+        },
+      })
+      expect(html).toContain('You were added to Acme &amp; &lt;Co&gt; on Northwind.')
+      expect(html).toContain('© 2026 Northwind')
+      expect(html).not.toContain('<Co>')
+      expect(text).toContain('You were added to Acme & <Co> on Northwind.')
+    })
+
+    it('appends the lines to the plain-text part, the support link as a bare URL', () => {
+      const { text } = render({ chrome: { footer: FOOTER } })
+      expect(text).toBe(
+        'hello\n\n' +
+          'You’re receiving this because you signed up.\n' +
+          'Get help: https://help.example.test/support\n' +
+          '© 2026 Example LLC · 100 Example Street, Springfield',
+      )
+    })
+
+    it('writes a mailto support link as the mailbox alone', () => {
+      const { html, text } = render({
+        chrome: {
+          footer: { support: { label: 'help@example.test', href: 'mailto:help@example.test' } },
+        },
+      })
+      expect(html).toContain('<a href="mailto:help@example.test"')
+      expect(text.endsWith('\n\nhelp@example.test')).toBe(true)
+      expect(text).not.toContain('mailto:')
+    })
+
+    it('drops a support line whose link is refused, and keeps the rest', () => {
+      const { html, text } = render({
+        chrome: {
+          footer: { ...FOOTER, support: { label: 'Get help', href: 'javascript:alert(1)' } },
+        },
+      })
+      expect(html).not.toContain('javascript:')
+      expect(html).not.toContain('Get help')
+      expect(text).not.toContain('Get help')
+      expect(html).toContain('You’re receiving this because you signed up.')
+      expect(html).toContain('© 2026 Example LLC')
+    })
+
+    it('leaves out a line that resolves to nothing, and draws nothing for an empty footer', () => {
+      const partial = render({ chrome: { footer: { legal: '© 2026 Example LLC' } } })
+      expect(partial.html).toContain('© 2026 Example LLC')
+      expect(count(partial.html, 'color:#757575;')).toBe(1)
+
+      const empty = render({ chrome: { footer: { reason: '  ', legal: '' } } })
+      expect(empty.html).not.toContain('#F8F9FA')
+      expect(empty.text).toBe('hello')
+    })
+  })
+})
+
+/**
  * The two properties that keep the mailed copy and the console's copy of the
  * SAME nodes in agreement: block HTML passes a policy, and every URL passes a
  * scheme check.

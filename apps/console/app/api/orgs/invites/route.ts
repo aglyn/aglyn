@@ -319,8 +319,9 @@ async function handler(request: Request): Promise<Response> {
         `You've been invited to join ${orgName} as ${role}.\n\n` +
         `Sign in at ${origin} with this email address and accept ` +
         'the invite from your dashboard.'
-      // Staff-designed template when one is published (AGL-750); null
-      // whenever it is missing or unusable, so this copy still goes out.
+      // The staff design when one is published (AGL-750), else the catalog's
+      // built-in copy, in this org's header and footer (AGL-3322). The copy
+      // here is the last resort behind both.
       const designed = await renderSystemEmail(
         'org-invite',
         {
@@ -333,7 +334,7 @@ async function handler(request: Request): Promise<Response> {
           'invite.role': role,
           signInUrl: origin,
         },
-        { brandLogoUrl: branding.emailLogoUrl },
+        { brandLogoUrl: branding.emailLogoUrl, brandHomeUrl: branding.homeUrl },
       )
       const result = await sendEmail({
         to: email,

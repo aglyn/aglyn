@@ -219,8 +219,9 @@ export interface NewDeviceAlertDetails {
 }
 
 /**
- * Sends the new-device security alert. Designed template first, hard-coded
- * fallback otherwise — the standard system-email send shape.
+ * Sends the new-device security alert. The rendered template first — the
+ * staff design, else the catalog's built-in copy — and the hard-coded copy
+ * below as the last resort: the standard system-email send shape.
  */
 export async function sendNewDeviceAlert(
   details: NewDeviceAlertDetails,
@@ -233,7 +234,8 @@ export async function sendNewDeviceAlert(
     'device.time': details.time,
     accountSecurityUrl: securityUrl,
   }
-  // Mirrors the catalog's defaultBody, so designed and undesigned agree.
+  // Mirrors the catalog's defaultBody, which is what an undesigned send
+  // renders; this copy stands in only when nothing rendered.
   const fallbackText =
     `Your ${PLATFORM_BRAND_NAME} account was just signed in to from a device ` +
     'it has not used before.\n\n' +

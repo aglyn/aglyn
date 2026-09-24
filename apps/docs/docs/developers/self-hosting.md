@@ -352,11 +352,14 @@ publish. Unset, it is `Aglyn`.
 | `NEXT_PUBLIC_PLATFORM_BRAND_NAME` | `Aglyn` |
 | `NEXT_PUBLIC_PLATFORM_BRAND_LEGAL_NAME` | `<brand> LLC` — a US company form, so set it if you are not one |
 | `NEXT_PUBLIC_PLATFORM_SUPPORT_URL` | Falls back to `NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL` as a `mailto:` before it ever falls back to Aglyn's support page |
+| `NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL` | Renamed, the header of your system email is your product name in bold — never Aglyn's logo. Takes an absolute `https://` URL only |
+| `NEXT_PUBLIC_PLATFORM_POSTAL_ADDRESS` | Renamed, your system email's footer prints your legal name alone — never Aglyn's address |
 
-Brand **images** are not environment variables and are not meant to be: the
-favicon, app icons and social card are files under
+Brand **images** your own apps serve are not environment variables and are not
+meant to be: the favicon, app icons and social card are files under
 `apps/console/public/_static/images/brand` and the matching tenant path.
-Replace them in your Docker build context.
+Replace them in your Docker build context. The email logo is the exception,
+because a mail client fetches it by URL rather than from your app.
 
 :::caution `NEXT_PUBLIC_*` is baked in at build time
 Every variable on this page whose name starts with `NEXT_PUBLIC_` is compiled

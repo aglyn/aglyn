@@ -132,8 +132,68 @@ export interface EmailRenderOptions {
    * with a gap where a logo should be reads as broken; one without a logo
    * reads as plain, which is the correct appearance for an org that has not
    * set one.
+   *
+   * Ignored when {@link EmailRenderOptions.chrome} carries a header: that
+   * header is the logo row, and a caller that has one passes the org's logo
+   * through it, so a message never opens with two.
    */
   brandLogoUrl?: string
+  /**
+   * The sender's header and footer, drawn around the body (AGL-3322). See
+   * {@link EmailChrome}. Absent draws neither.
+   */
+  chrome?: EmailChrome
+}
+
+/**
+ * The row above the body that says who sent the mail.
+ *
+ * `logoAlt` is required because it does two jobs. It is the logo's `alt`,
+ * which is what most inboxes show, since they block images by default. And
+ * it is the header itself when there is no logo to draw — none was given, or
+ * the one given cannot be fetched from an inbox — so the sender is named in
+ * bold text rather than by a broken-image box.
+ */
+export interface EmailChromeHeader {
+  /** The logo. Resolved and scheme-checked like every other image here. */
+  logoUrl?: string
+  /** The sender's name: the logo's alt text, or the header when no logo draws. */
+  logoAlt: string
+  /** Where the logo or name links. A refused scheme drops the link, not the header. */
+  href?: string
+}
+
+/**
+ * The rows under the body, in the order they draw. Each is optional, and a
+ * footer with none of them draws nothing.
+ */
+export interface EmailChromeFooter {
+  /** Why the recipient is getting this mail. */
+  reason?: string
+  /** Where to get help. Drawn as a link; dropped whole when the href is refused. */
+  support?: { label: string; href: string }
+  /** Who sent it, and from where: a copyright and postal line. */
+  legal?: string
+}
+
+/**
+ * A sender's header and footer, drawn by the renderer rather than placed by a
+ * designer (AGL-3322).
+ *
+ * For mail whose body carries no header or footer of its own: a system
+ * email's built-in copy, or a design sent under a brand whose own blocks it
+ * may not carry. The caller decides WHICH brand; this only draws.
+ *
+ * Every string goes through the same merge substitution as the body, so
+ * `{{org.name}}` in a footer line reads as the organization it names, and is
+ * escaped like body text. Every URL goes through the same scheme checks as a
+ * body link or image. The footer lines are appended to the plain-text part
+ * too, the support link as its bare address, because a reader of that part is
+ * owed the same reason and the same way to get help.
+ */
+export interface EmailChrome {
+  header?: EmailChromeHeader
+  footer?: EmailChromeFooter
 }
 
 export interface RenderedEmail {
@@ -142,6 +202,26 @@ export interface RenderedEmail {
 }
 
 const FONT = 'Helvetica, Arial, sans-serif'
+
+/**
+ * The colours the chrome is drawn in (AGL-3322), named once.
+ *
+ * Literal because this is email HTML: mail clients strip `<style>` and read no
+ * CSS variables, so no theme token reaches the wire. They are the values
+ * already in the mail, not new ones — the ink and card of a default body
+ * block, and the band and caption grey of the email footer block the
+ * platform's own mail wears — so the chrome and the body it frames agree.
+ */
+const CHROME_PALETTE = {
+  /** The sender's name in the header: body text's ink. */
+  ink: '#1a1a1a',
+  /** The header band: a default section's card. */
+  card: '#ffffff',
+  /** The footer band. */
+  band: '#F8F9FA',
+  /** Footer lines and the support link. */
+  caption: '#757575',
+} as const
 
 export function escapeEmailHtml(value: string): string {
   return value
@@ -195,6 +275,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     mediaOrigin,
     mediaHostId,
     brandLogoUrl,
+    chrome,
   } = options
 
   const textParts: string[] = []
@@ -312,16 +393,23 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
           ? Number(props.padding)
           : 24
         const align = props.align || 'left'
-        return (
+        // A ROW, like every other block, with the band's table inside its
+        // cell. Whatever encloses a section is a table — the 600px column, or
+        // another section's inner table — and a `<table>` placed straight into
+        // a table's rows is not a child an HTML parser keeps there: it closes
+        // the enclosing table and lands after it. Emitted bare, a section would
+        // draw outside the column, as wide as the viewport rather than the
+        // 600px the editor shows, and take every row after it out too.
+        return row(
           `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ` +
-          `style="background-color:${background};">` +
-          row(
-            `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">` +
-              renderChildren(node.nodes) +
-              `</table>`,
-            `padding:${padding}px;text-align:${align};`,
-          ) +
-          `</table>`
+            `style="background-color:${background};">` +
+            row(
+              `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">` +
+                renderChildren(node.nodes) +
+                `</table>`,
+              `padding:${padding}px;text-align:${align};`,
+            ) +
+            `</table>`,
         )
       }
       case 'emailText': {
@@ -492,6 +580,103 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
       )
     : ''
 
+  /**
+   * The chrome header row, or '' when it has nothing to draw.
+   *
+   * Same placement and the same `imageSrc` as the logo row above, which it
+   * replaces. Height is capped at 40px rather than set, so a wordmark and a
+   * square mark both land at a sane size; the `height` attribute is for the
+   * desktop clients that ignore CSS `max-height` and would otherwise draw the
+   * file at its own size. A logo that cannot be fetched from an inbox falls
+   * back to the name in bold, never to an `<img>` that draws a broken box.
+   * White, so the header and a default body read as one card.
+   */
+  const renderChromeHeader = (header: EmailChromeHeader): string => {
+    const logo = imageSrc(String(header.logoUrl ?? '').trim())
+    const name = sub(header.logoAlt).trim()
+    const href = linkHref(header.href)
+    const link = (inner: string, style: string): string =>
+      href
+        ? `<a href="${escapeEmailHtml(href)}" target="_blank" style="${style}">${inner}</a>`
+        : inner
+    let mark: string
+    if (logo) {
+      mark = link(
+        `<img src="${escapeEmailHtml(logo)}" alt="${escapeEmailHtml(name)}" height="40" ` +
+          `style="display:block;margin:0 auto;border:0;height:auto;width:auto;max-height:40px;max-width:200px;" />`,
+        'text-decoration:none;',
+      )
+    } else if (name) {
+      mark =
+        `<div style="font-family:${FONT};font-size:20px;font-weight:700;line-height:1.3;color:${CHROME_PALETTE.ink};text-align:center;">` +
+        link(escapeEmailHtml(name), `color:${CHROME_PALETTE.ink};text-decoration:none;`) +
+        `</div>`
+    } else {
+      return ''
+    }
+    return row(
+      mark,
+      `padding:24px 24px 0;text-align:center;background-color:${CHROME_PALETTE.card};`,
+    )
+  }
+
+  const headerHtml = chrome?.header
+    ? renderChromeHeader(chrome.header)
+    : brandLogoHtml
+
+  /**
+   * The chrome footer: rows under the body in the look of the email footer
+   * block the platform's own mail wears (a `#F8F9FA` section, padded 24,
+   * centered captions), and the same lines appended to the plain-text part.
+   *
+   * Rendered AFTER the body on purpose: the body's blocks push their text as
+   * they draw, and the footer's lines belong after all of it. A line that
+   * resolves to nothing is left out rather than drawn as an empty row.
+   */
+  const renderChromeFooter = (footer: EmailChromeFooter): string => {
+    const htmlLines: string[] = []
+    const textLines: string[] = []
+    const reason = sub(footer.reason).trim()
+    if (reason) {
+      htmlLines.push(escapeEmailHtml(reason))
+      textLines.push(reason)
+    }
+    const supportLabel = sub(footer.support?.label).trim()
+    const supportHref = linkHref(footer.support?.href)
+    if (supportLabel && supportHref) {
+      htmlLines.push(
+        `<a href="${escapeEmailHtml(supportHref)}" target="_blank" ` +
+          `style="color:${CHROME_PALETTE.caption};text-decoration:underline;">${escapeEmailHtml(supportLabel)}</a>`,
+      )
+      // A plain-text reader gets the address itself, bare: a mailto's
+      // mailbox, or the URL. "Get help: https://…" names where it goes; a
+      // label that already IS the mailbox is not repeated.
+      const bare = /^mailto:/i.test(supportHref)
+        ? supportHref.slice('mailto:'.length).split('?')[0]
+        : supportHref
+      textLines.push(supportLabel === bare ? bare : `${supportLabel}: ${bare}`)
+    }
+    const legal = sub(footer.legal).trim()
+    if (legal) {
+      htmlLines.push(escapeEmailHtml(legal))
+      textLines.push(legal)
+    }
+    if (!htmlLines.length) return ''
+    textParts.push(textLines.join('\n'))
+    return row(
+      htmlLines
+        .map(
+          (line, index) =>
+            `<div style="font-family:${FONT};font-size:12px;font-weight:400;line-height:1.4;color:${CHROME_PALETTE.caption};` +
+            `${index ? 'margin-top:8px;' : ''}">${line.replace(/\n/g, '<br />')}</div>`,
+        )
+        .join(''),
+      `padding:24px;text-align:center;background-color:${CHROME_PALETTE.band};`,
+    )
+  }
+
+  const footerHtml = chrome?.footer ? renderChromeFooter(chrome.footer) : ''
+
   const html =
     `<!DOCTYPE html><html><head><meta charset="utf-8" />` +
     `<meta name="viewport" content="width=device-width, initial-scale=1" />` +
@@ -501,8 +686,9 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;">` +
     row(
       `<table role="presentation" width="600" cellpadding="0" cellspacing="0" align="center" style="max-width:600px;width:100%;margin:0 auto;">` +
-        brandLogoHtml +
+        headerHtml +
         body +
+        footerHtml +
         `</table>`,
       'padding:24px 8px;',
     ) +

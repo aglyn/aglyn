@@ -465,14 +465,24 @@ system emails that exist — adding one is a code change. Password reset and ema
 verification are Aglyn's own and are fully editable. Billing emails — receipts, failed
 payments, refunds — are sent by Stripe from its Dashboard and are listed read-only.
 
+The built-in copy goes out with a header and footer of its own: the Aglyn wordmark,
+linked to aglyn.com, above it, and below it a line saying why the recipient is getting
+the mail, a link to support, and the copyright line with Aglyn's postal address. A
+designed template that places none of the marketing site's email blocks goes out in the
+same header and footer. The editor's canvas doesn't draw them, because they are added
+when the mail is sent; a test send shows them.
+
 The editor also offers the platform marketing site's email blocks, such as its header
 and footer, under **Your email blocks**, and draws them where you place them. They come
 from the site that `PLATFORM_MARKETING_HOST_ID` names; without one, the drawer offers
 none. Blocks are made and changed on that site, so **Save as reusable component** isn't
-offered here. Mail sent under the Aglyn brand carries them. Mail to the people of a
-white-label organization leaves them out, so the organization's own email logo is the
-only header it has. On the marketing site, a block's **Used by** lists the system
-emails that place it.
+offered here. Mail sent under the Aglyn brand carries them, and a design that places
+them uses them **instead of** the built-in header and footer — nothing is added around
+them. Mail to the people of a white-label organization leaves them out and never
+carries Aglyn's header or footer: it gets the organization's own email logo, or its
+product name, and a footer with the reason and the organization's support link, if it
+set one. On the marketing site, a block's **Used by** lists the system emails that place
+it.
 
 #### Platform send rate {#platform-send-rate}
 

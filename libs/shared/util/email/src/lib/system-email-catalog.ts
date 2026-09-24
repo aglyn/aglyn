@@ -133,6 +133,19 @@ export interface SystemEmailTemplateDefinition {
    */
   defaultBody?: readonly SystemEmailDefaultBlock[]
   /**
+   * The footer's "why am I getting this" line (AGL-3322), drawn under the
+   * built-in copy, and under any design sent without the platform's own
+   * email blocks.
+   *
+   * Written against the merge tokens, never a product name: on a white-label
+   * send `{{brand.productName}}` is the agency's, and on a renamed deployment
+   * it is the operator's, so one sentence is right for every sender. Like the
+   * body, it may only use tokens the email declares — a token the send does
+   * not supply is blanked, and leaves a hole in the sentence. Every `resend`
+   * template carries one; the others are never rendered here.
+   */
+  footerReason?: string
+  /**
    * Where the fallback copy lives, for staff wondering what recipients get
    * today. Informational — nothing reads it at runtime.
    */
@@ -239,6 +252,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
         { block: 'button', label: 'Sign in', href: '{{signInUrl}}' },
       ],
+      footerReason:
+        'You’re receiving this because someone invited you to join ' +
+        '{{org.name}} on {{brand.productName}}.',
       source: 'apps/console/app/api/orgs/invites/route.ts',
     },
     {
@@ -276,6 +292,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
         { block: 'text', text: '{{usage.summary}}', variant: 'body' },
       ],
+      footerReason:
+        'You’re receiving this monthly summary because you manage ' +
+        '{{org.name}} on {{brand.productName}}.',
       source: 'apps/console/app/api/billing/usage-email/route.ts',
     },
     {
@@ -309,6 +328,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
         { block: 'text', text: '{{orgs.list}}', variant: 'body' },
       ],
+      footerReason:
+        'You’re receiving this because this address gets ' +
+        '{{brand.productName}}’s staff alerts.',
       source: 'apps/console/app/api/admin/audit-archive/route.ts',
     },
     {
@@ -355,6 +377,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
         { block: 'button', label: 'Open your dashboard', href: '{{consoleUrl}}' },
       ],
+      footerReason:
+        'You’re receiving this because you created an organization on ' +
+        '{{brand.productName}}.',
       source: 'apps/console/app/api/orgs/create/route.ts',
     },
     {
@@ -397,6 +422,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         },
         { block: 'button', label: 'Open {{brand.productName}}', href: '{{signInUrl}}' },
       ],
+      footerReason:
+        'You’re receiving this because you were added to {{org.name}} ' +
+        'on {{brand.productName}}.',
       source: 'apps/console/app/api/orgs/members/route.ts',
     },
     {
@@ -430,6 +458,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           variant: 'body',
         },
       ],
+      footerReason:
+        'You’re receiving this because you asked {{brand.productName}} ' +
+        'to erase {{org.name}}’s data.',
       source: 'apps/console/app/api/admin/run-erasures/route.ts',
     },
     {
@@ -465,6 +496,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           variant: 'body',
         },
       ],
+      footerReason:
+        'You’re receiving this because you own {{org.name}} on ' +
+        '{{brand.productName}}.',
       source: 'apps/console/app/api/admin/erasure-request/route.ts',
     },
     // Admin-initiated password mail (AGL-910). Unlike the self-serve
@@ -511,6 +545,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           variant: 'caption',
         },
       ],
+      footerReason:
+        'You’re receiving this because an administrator started a ' +
+        'password reset for your {{brand.productName}} account.',
       source: 'apps/console/app/api/_lib/password-admin.ts',
     },
     {
@@ -554,6 +591,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           variant: 'caption',
         },
       ],
+      footerReason:
+        'You’re receiving this because an administrator changed the ' +
+        'password on your {{brand.productName}} account.',
       source: 'apps/console/app/api/_lib/password-admin.ts',
     },
     // Security alerts (AGL-665). Factual and actionable: what happened, from
@@ -632,6 +672,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           variant: 'caption',
         },
       ],
+      footerReason:
+        'You’re receiving this because your {{brand.productName}} ' +
+        'account signed in from a new device.',
       source: 'apps/console/app/api/_lib/security-alerts.ts',
     },
     {
@@ -684,6 +727,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           variant: 'caption',
         },
       ],
+      footerReason:
+        'You’re receiving this because a passkey was added to your ' +
+        '{{brand.productName}} account.',
       source: 'apps/console/app/api/_lib/security-alerts.ts',
     },
     // Aglyn composes and sends both of these now (AGL-1112). They were
@@ -731,6 +777,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           variant: 'caption',
         },
       ],
+      footerReason:
+        'You’re receiving this because someone asked to reset the ' +
+        'password on your {{brand.productName}} account.',
       source: 'apps/console/app/api/auth/send-password-reset/route.ts',
     },
     {
@@ -765,6 +814,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
           variant: 'caption',
         },
       ],
+      footerReason:
+        'You’re receiving this because this address was used to sign ' +
+        'up for {{brand.productName}}.',
       source: 'apps/console/app/api/auth/send-verification/route.ts',
     },
     // Stripe-delivered billing email (AGL-767). Aglyn never composes these —

@@ -31,6 +31,8 @@ const ENV_KEYS = [
   'NEXT_PUBLIC_PLATFORM_BRAND_LEGAL_NAME',
   'NEXT_PUBLIC_PLATFORM_SUPPORT_URL',
   'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL',
+  'NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL',
+  'NEXT_PUBLIC_PLATFORM_POSTAL_ADDRESS',
 ] as const
 
 const ORIGINAL = Object.fromEntries(
@@ -154,6 +156,79 @@ describe('PLATFORM_SUPPORT_URL falls through the operator before us', () => {
     // half of the claim.
     expect(Route.SUPPORT_ENTRY).toBe('/support')
     expect(url.origin).toBe('https://app.aglyn.com')
+  })
+})
+
+/**
+ * What the platform's own system email is drawn with (AGL-3322). Both default
+ * only while this is the Aglyn-operated brand: a renamed deployment's mail
+ * must never open with our logo or close with our address.
+ */
+describe('PLATFORM_EMAIL_LOGO_URL', () => {
+  it('AGLYN-OPERATED shape: unset is our wordmark, at an absolute https URL', () => {
+    const logo = loadWith({}).PLATFORM_EMAIL_LOGO_URL
+    // An inbox has no origin to resolve a relative path against.
+    expect(logo).toMatch(/^https:\/\/aglyn\.com\/api\/media\/cdn\//)
+  })
+
+  it('SELF-HOST shape: renamed and unset is null, never ours', () => {
+    expect(
+      loadWith({ NEXT_PUBLIC_PLATFORM_BRAND_NAME: 'Northwind' })
+        .PLATFORM_EMAIL_LOGO_URL,
+    ).toBeNull()
+  })
+
+  it('takes a configured https URL on either brand', () => {
+    const logo = 'https://cdn.northwind.test/wordmark.png'
+    expect(
+      loadWith({
+        NEXT_PUBLIC_PLATFORM_BRAND_NAME: 'Northwind',
+        NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL: logo,
+      }).PLATFORM_EMAIL_LOGO_URL,
+    ).toBe(logo)
+    expect(
+      loadWith({ NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL: logo })
+        .PLATFORM_EMAIL_LOGO_URL,
+    ).toBe(logo)
+  })
+
+  it('ignores a value that is not an absolute https URL', () => {
+    for (const value of ['/_static/logo.png', 'http://cdn.northwind.test/a.png', '   ']) {
+      expect(
+        loadWith({
+          NEXT_PUBLIC_PLATFORM_BRAND_NAME: 'Northwind',
+          NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL: value,
+        }).PLATFORM_EMAIL_LOGO_URL,
+      ).toBeNull()
+    }
+  })
+
+  it('is not the platform profile’s email logo, which a white-label org would inherit', () => {
+    expect(loadWith({}).PLATFORM_BRANDING_PROFILE.emailLogoUrl).toBeNull()
+  })
+})
+
+describe('PLATFORM_POSTAL_ADDRESS', () => {
+  it('AGLYN-OPERATED shape: unset is the registered agent’s address', () => {
+    expect(loadWith({}).PLATFORM_POSTAL_ADDRESS).toBe(
+      'c/o Northwest Registered Agent, LLC, 5900 Balcones Drive STE 100, Austin, TX 78731',
+    )
+  })
+
+  it('SELF-HOST shape: renamed and unset is null, never ours', () => {
+    expect(
+      loadWith({ NEXT_PUBLIC_PLATFORM_BRAND_NAME: 'Northwind' })
+        .PLATFORM_POSTAL_ADDRESS,
+    ).toBeNull()
+  })
+
+  it('takes a configured address, its line breaks folded onto one line', () => {
+    expect(
+      loadWith({
+        NEXT_PUBLIC_PLATFORM_BRAND_NAME: 'Northwind',
+        NEXT_PUBLIC_PLATFORM_POSTAL_ADDRESS: ' 100 Example Ave\nSuite 200 \n\n Springfield, IL 62701 ',
+      }).PLATFORM_POSTAL_ADDRESS,
+    ).toBe('100 Example Ave, Suite 200, Springfield, IL 62701')
   })
 })
 
