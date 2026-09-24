@@ -40,8 +40,18 @@ import { readUsageCandidates } from '../../../../utils/server/read-usage-candida
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 export interface WhereUsedDependent {
-  /** Resource collection the dependent lives in. */
-  type: 'screen' | 'layout' | 'workflow' | 'variable' | 'component' | 'collection'
+  /**
+   * Resource collection the dependent lives in. `emailTemplate` is one of the
+   * site's transactional emails, keyed by its catalog key (AGL-3287).
+   */
+  type:
+    | 'screen'
+    | 'layout'
+    | 'workflow'
+    | 'variable'
+    | 'component'
+    | 'collection'
+    | 'emailTemplate'
   id: string
   name: string
   /** 'id' = rename-safe reference; 'name' = legacy token, breaks on rename. */
@@ -80,10 +90,12 @@ const SCANNABLE_KINDS = [
  * The two AGL-703 kinds follow the runtime's own reference model:
  *
  * - A COMPONENT is referenced by an instance node (`reusableInstance` with
- *   `props.refId`). Those live in screens, in layouts, AND in other
- *   component definitions — `composeReusableComponentNodes` expands nested
- *   instances — so all three are scanned. Skipping definitions would report
- *   "used nowhere" for a component used only inside another one.
+ *   `props.refId`). Those live in screens (campaign email designs among
+ *   them), in layouts, in other component definitions —
+ *   `composeReusableComponentNodes` expands nested instances — and in the
+ *   site's transactional emails, which graft a placed header or footer at
+ *   send time (AGL-3287). All four are scanned. Skipping definitions would
+ *   report "used nowhere" for a component used only inside another one.
  * - A LAYOUT is referenced by a `layoutId` pointer — on screens bound to it,
  *   and on layouts NESTED inside it, which AGL-703 made possible. Both are
  *   scanned: a nested layout is a real dependent, because deleting the outer
@@ -245,7 +257,7 @@ async function handler(request: Request): Promise<Response> {
        * I break", not "which caches must be dropped".
        */
       const readCandidates = async (
-        collectionName: 'screens' | 'layouts' | 'components',
+        collectionName: 'screens' | 'layouts' | 'components' | 'emailTemplates',
         withNodes: boolean,
       ): Promise<UsageCandidate[]> => {
         const read = await readUsageCandidates(hostRef, collectionName, {
@@ -330,13 +342,23 @@ async function handler(request: Request): Promise<Response> {
           ...scanCollectionUsage(refId, { screens, layouts, components }),
         )
       } else {
-        const [screens, layouts, components] = await Promise.all([
-          readCandidates('screens', true),
-          readCandidates('layouts', true),
-          readCandidates('components', true),
-        ])
+        const [screens, layouts, components, emailTemplates] =
+          await Promise.all([
+            readCandidates('screens', true),
+            readCandidates('layouts', true),
+            readCandidates('components', true),
+            // The site's own transactional emails, on their published
+            // versions: a header or footer placed there is grafted into every
+            // one sent (AGL-3287).
+            readCandidates('emailTemplates', true),
+          ])
         dependents.push(
-          ...scanComponentUsage(refId, { screens, layouts, components }),
+          ...scanComponentUsage(refId, {
+            screens,
+            layouts,
+            components,
+            emailTemplates,
+          }),
         )
       }
     }

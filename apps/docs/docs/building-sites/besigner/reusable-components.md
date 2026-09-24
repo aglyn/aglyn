@@ -378,12 +378,14 @@ updates every open canvas that shows it, however deeply it is nested.
 A component's detail page has a **Used by** card listing everything that places an instance
 of it, so deleting one is not a guess.
 
-Three places are searched, which is everywhere the renderer expands an instance:
+Everywhere the renderer expands an instance is searched:
 
-- the **published version** of every screen,
+- the **published version** of every screen, the emails you design for campaigns included,
 - the **published version** of every layout,
-- and **other reusable components** — a component can be placed inside another one, so one
-  used nowhere else can still be very much in use.
+- **other reusable components** — a component can be placed inside another one, so one
+  used nowhere else can still be very much in use,
+- and the **site's own emails** — a header or footer placed in a booking confirmation or an
+  order receipt goes out in every one sent.
 
 Unpublished drafts and templates in your library are not searched. If the check fails — a
 dropped connection, say — the card says so and shows a **Try again** button. It never
