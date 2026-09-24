@@ -86,6 +86,9 @@ const USER = { uid: 'uid-1', getIdToken: async () => 'token' }
 const DATA_SCOPE = { scope: ['orgs', 'org-1'] as const, orgId: 'org-1', ready: true }
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The viewer's reach, which `useCrmScope` reads only for a site in a
+  // declared consent group (AGL-3320); an org-wide member here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => DATA_SCOPE,
   useUser: () => ({ data: USER }),

@@ -44,6 +44,9 @@ jest.mock('firebase/firestore', () => ({
 
 const USER = { uid: 'uid-me', getIdToken: async () => 'token' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The viewer's reach, which `useCrmScope` reads only for a site in a
+  // declared consent group (AGL-3320); an org-wide member here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => ({}),
   useUser: () => ({ data: USER }),
   writeGuardedBySeed: async (_seed: unknown, write: () => Promise<void>) => {
