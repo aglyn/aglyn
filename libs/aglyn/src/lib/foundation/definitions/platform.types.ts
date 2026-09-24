@@ -1317,6 +1317,18 @@ export interface ReusableComponentIcon {
 }
 
 /**
+ * Where a reusable component is placed (AGL-3287): on the site's pages, or in
+ * the emails the site sends.
+ *
+ * The two are built from different elements — an email is made of the email
+ * plugin's mail-safe blocks, a page of everything else — and neither renders
+ * the other's, so a component belongs to exactly one. Absent on every
+ * component made before emails could reuse one, which is why absent means
+ * `site` and is never backfilled.
+ */
+export type ReusableComponentKind = 'site' | 'email'
+
+/**
  * Reusable component definition: a node subtree promoted from a screen,
  * inserted anywhere as an instance node (`componentId: 'reusableInstance'`,
  * `props.refId`) and grafted at render time (see
@@ -1329,6 +1341,17 @@ export interface AglynHostComponent<N = AglynNodeSchema>
   hostId?: HostUid
   displayName?: string
   description?: string
+  /**
+   * Where this component is placed (AGL-3287): `email` for a block reused
+   * across emails — a header, a footer — and absent (or `site`) for one
+   * placed on pages. It decides which drawer offers the component: an email
+   * offers email blocks alone, and a page never offers one.
+   *
+   * Set when the component is created and carried by every copy made of it
+   * — a duplicate, a template, a marketplace install — so a copy lands in
+   * the same drawer as its source.
+   */
+  kind?: ReusableComponentKind
   /**
    * Icon shown wherever an instance of this component is represented in the
    * besigner (AGL-1193) — the hierarchy row, the canvas badge, the element
@@ -1509,6 +1532,13 @@ export interface AglynTemplate<N = AglynNodeSchema> extends AglynDocument {
    * every `{{prop.*}}` in the tree renders raw.
    */
   props?: ReusableComponentProp[]
+  /**
+   * A `component` template's {@link AglynHostComponent.kind} (AGL-3287), so
+   * the component made from it is offered where its source was: an email
+   * block saved as a template makes an email block again. Named apart from
+   * {@link kind}, which says what the template makes.
+   */
+  componentKind?: ReusableComponentKind
   /** Suggested slug — `page` kind; de-conflicted against the host on use. */
   slug?: string
   /** Mirrors AglynScreen.seo — carried through to the created page. */

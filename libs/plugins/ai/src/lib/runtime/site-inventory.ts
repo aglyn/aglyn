@@ -24,6 +24,10 @@ import {
   resolveSiteTheme,
   type ThemeHostDocument,
 } from '@aglyn/aglyn/app-utils/marketplace-theme'
+import {
+  REUSABLE_COMPONENT_KIND_EMAIL,
+  reusableComponentKindOf,
+} from '@aglyn/aglyn/app-utils/reusable-component-kind'
 import { SCREEN_KIND_TEMPLATE } from '@aglyn/aglyn/app-utils/screen-route'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import {
@@ -179,11 +183,15 @@ export async function readSiteInventory(
     await Promise.all([
       readWindow<AiInventoryComponent>(
         host.collection('components'),
-        ['displayName', 'props', 'rootId', 'versionId', 'deletedAt'],
+        ['displayName', 'props', 'rootId', 'versionId', 'deletedAt', 'kind'],
         cap,
         (id, data) => {
           // Soft-deleted, or never published: an instance of either renders nothing.
           if (data['deletedAt'] || !(data['rootId'] || data['versionId'])) return null
+          // An email block (AGL-3287) is built from email elements and placed
+          // in emails alone: no page, layout or component a job builds can
+          // render one, and the email a job builds places no instances.
+          if (reusableComponentKindOf(data) === REUSABLE_COMPONENT_KIND_EMAIL) return null
           const props: AiComponentPropTypes = {}
           const bracketedDefaults: Record<string, string[]> = {}
           for (const prop of Array.isArray(data['props']) ? (data['props'] as Data[]) : []) {

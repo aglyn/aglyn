@@ -50,7 +50,8 @@ that use it — open the layout to promote from there.
 ## Insert instances
 
 Insert instances from **Your components** in the element drawer, on any screen, layout,
-template or other component.
+template or other component. Emails have their own: see
+[Reusable email blocks](#reusable-email-blocks).
 
 On the canvas an instance **renders its actual content**, not a placeholder — what you see
 is what the page will render, with properties already resolved. The rendered elements are
@@ -415,6 +416,61 @@ The copy carries the definition, its properties and the latest saved version,
 under the name you give it. It has no instances: every screen keeps pointing
 at the original, and you place the copy where you want it. Duplicating needs
 the same plan as creating a component.
+
+## Reusable email blocks (header and footer) {#reusable-email-blocks}
+
+Most emails a site sends start and end the same way: your logo at the top, your address
+at the bottom. Build those once as **email blocks** and add them to any email. Change the
+block, and every email using it changes too.
+
+An email block is a reusable component made for emails. It is built from the email
+elements — email text, email image, email button and the rest — because mail apps can't
+show the elements your pages use. So each kind stays in its own place:
+
+- In an email, the element drawer lists your email blocks under **Your email blocks**, and
+  never your page components.
+- On a page, you only see **Your components**, never an email block.
+
+The Components page marks each row **Email** or **Page**, so you can tell them apart.
+
+### Make a header or footer
+
+1. Open **Components** and choose **Create Component**.
+2. Give it a name, and under **Where will you use it?** choose **In emails**.
+3. Under **Start with**, pick one:
+   - **Header** — a spot for your logo, with your company name under it.
+   - **Footer** — your company name and address, and a line telling readers why they get
+     your emails.
+   - **Blank** — an empty block.
+4. Choose **Next**, then open the block in the Besigner and replace the sample words with
+   your own. Pick your logo from the media library: until you do, the header's picture
+   shows nothing in a sent email.
+5. **Save & publish**. Emails use the published version of the block.
+
+You don't need an unsubscribe link in your footer. Campaign emails add one for you.
+
+The same **Header** and **Footer** are in every email's element drawer too, under
+**Sections & Blocks**. Drop one into an email to use it in that email only.
+
+You can also turn part of an email into a block: select it and choose **Save as reusable
+component** in the **Attributes** panel. Saved from an email, it becomes an email block.
+
+### Add one to an email
+
+Open any email — a campaign email, or one of the emails your site sends on its own, like
+an order receipt — and drag the block in from **Your email blocks**. The canvas draws the
+block in place.
+
+### Change a block in one email only {#change-a-block-in-one-email}
+
+Select the block in an email and open the **Attributes** tab. Under **Change it in this
+email only**, pick a part with **Which part?** and change its settings: a different color,
+a different link. Changes here affect this email only. The block itself, and every other
+email using it, stay the same.
+
+The **Styles** tab has nothing to change on a block in an email. Mail apps only read each
+element's own settings, so change a block's look with its settings in the **Attributes**
+tab. If the block has [properties](#properties), fill them in there too, just like on a page.
 
 ## Copy & paste vs. reusable components
 

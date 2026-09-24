@@ -55,6 +55,7 @@ import {
   useState,
 } from 'react'
 import { ComponentPromotionContext } from '../contexts/component-promotion-context'
+import useAglynBesignerFlag from '../hooks/use-aglyn-besigner-flag'
 import { useDebouncedCommit } from '../hooks/use-debounced-commit'
 import { besignerDocsUrl } from '../utils/docs-help'
 import {
@@ -66,6 +67,7 @@ import {
   type PartNode,
   type PlacementCopy,
   placementCopy,
+  placementKindFor,
   propDefaultsOf,
 } from '../utils/placement-override-copy'
 import {
@@ -289,7 +291,11 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
   )
   const isPlacedForm = isPlacedFormNode(node)
   const placedFormResolves = isPlacedForm && Boolean(definition)
-  const kind = isPlacedForm ? 'form' : 'component'
+  // A reusable block placed in an email is the same placement, worded for
+  // the email it is in (AGL-3287). Its settings are changed here, because the
+  // email is built from them — the Styles tab offers it nothing to change.
+  const [viewType] = useAglynBesignerFlag('viewType')
+  const kind = placementKindFor(isPlacedForm, viewType)
   const copy = placementCopy(kind)
 
   // The SAME target list the Styles panel offers, from the same walker, so
@@ -423,10 +429,17 @@ export const InstanceAttrOverrides = observer(function InstanceAttrOverrides({
         changeCount={changeCount}
         onResetAll={handleResetAll}
         helpExcerpt={copy.helpExcerpt}
-        helpHref={besignerDocsUrl(
-          'reusableComponents',
-          '#override-an-attribute-on-one-instance',
-        )}
+        helpHref={
+          kind === 'email'
+            ? besignerDocsUrl(
+                'reusableComponents',
+                '#change-a-block-in-one-email',
+              )
+            : besignerDocsUrl(
+                'reusableComponents',
+                '#override-an-attribute-on-one-instance',
+              )
+        }
       />
       {attrFields.length ? (
         <FormRenderer

@@ -45,6 +45,7 @@ import {
   logHostActivity,
 } from '@aglyn/tenant-data-admin'
 import { isDuplicableHostResourceKind } from '@aglyn/aglyn/app-utils/duplicate-resource'
+import { isReusableComponentKind } from '@aglyn/aglyn/app-utils/reusable-component-kind'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
@@ -192,6 +193,9 @@ const RESOURCES: Record<string, {
       'props',
       'slug',
       'seo',
+      // A component template's own kind — pages or emails (AGL-3287) —
+      // checked below like the component's.
+      'componentKind',
     ],
   },
   // `versions` used to sit here: an array the layouts page seeded alongside
@@ -360,8 +364,9 @@ const RESOURCES: Record<string, {
     activity: { type: 'component', noun: 'reusable component' },
     // `props` is sent by Use template, whose tree binds to the properties it
     // carries (AGL-2932); a component made in the besigner declares them by
-    // update instead.
-    fields: ['displayName', 'description', 'rootId', 'nodes', 'props'],
+    // update instead. `kind` is sent for a reusable email block (AGL-3287) by
+    // every creator that can make one, and is checked below.
+    fields: ['displayName', 'description', 'rootId', 'nodes', 'props', 'kind'],
   },
   /*
    * The form entity (`docs/specs/reusable-forms.md` §2b):
@@ -756,6 +761,39 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 403 })
     }
 
+    /*
+     * WHERE A COMPONENT IS PLACED (AGL-3287): on pages, or in emails.
+     *
+     * Refused rather than dropped, unlike an unknown KEY below. A value the
+     * drawers do not know files the component under neither of them, so
+     * storing it makes a component nobody can place — and dropping it would
+     * quietly turn an email block into a page component, which is the one
+     * outcome the field exists to prevent. A template carries the same value
+     * for the component it makes.
+     */
+    const componentKindField =
+      resourceKey === 'reusableComponent'
+        ? 'kind'
+        : resourceKey === 'template'
+          ? 'componentKind'
+          : null
+    const requestedComponentKind = componentKindField
+      ? (data as Record<string, unknown>)[componentKindField]
+      : undefined
+    if (
+      requestedComponentKind !== undefined &&
+      !isReusableComponentKind(requestedComponentKind)
+    ) {
+      return Response.json(
+        {
+          error:
+            'A component is placed on pages or in emails — ' +
+            `'${String(requestedComponentKind)}' is neither`,
+        },
+        { status: 400 },
+      )
+    }
+
     /**
      * The collection the create is addressed to (AGL-2266).
      *
@@ -809,6 +847,12 @@ async function handler(request: Request): Promise<Response> {
     // nobody allowed is not.
     if (doc['props'] !== undefined) {
       doc['props'] = withMatchableConditions(doc['props'])
+    }
+    // Only a component template makes a component, so only one says which
+    // kind (AGL-3287); on a page or layout template the value would describe
+    // nothing it makes.
+    if (resourceKey === 'template' && doc['kind'] !== 'component') {
+      delete doc['componentKind']
     }
     /*
      * COMPRESSED AT REST (AGL-1151).

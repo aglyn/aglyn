@@ -54,6 +54,14 @@ export enum ComponentCategory {
  */
 export const REUSABLE_COMPONENT_CATEGORY = 'Your components'
 
+/**
+ * The same group in an email's drawer (AGL-3287): the host's reusable email
+ * blocks, which an email offers in place of the page components it cannot
+ * render. A label of its own because the email designer's author thinks in
+ * blocks — every element that drawer offers is one.
+ */
+export const REUSABLE_EMAIL_BLOCK_CATEGORY = 'Your email blocks'
+
 export const COMPONENT_CATEGORY_ORDER: readonly string[] = [
   ComponentCategory.BLOCKS,
   ComponentCategory.LAYOUT,

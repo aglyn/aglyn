@@ -123,3 +123,47 @@ export function canvasTreeToDefinition(nodes: Nodes | undefined): {
   }
   return { rootId, nodes: stripped, ambiguousRoot: false }
 }
+
+/** One element of a nested tree, as an element preset's `data` holds it. */
+interface NestedNode {
+  $id?: string | null
+  nodes?: NestedNode[]
+  [key: string]: unknown
+}
+
+/**
+ * A nested tree — an element preset's `data` — as a definition: a node map
+ * keyed by fresh ids, with `rootId` naming the outermost element (AGL-3287).
+ *
+ * What a new component is seeded with when it starts from a preset, such as
+ * a Header email block starting from the email plugin's Header. The canvas
+ * mints ids the same way when the preset is dropped into a document, so a
+ * component started from a preset and one promoted from a dropped copy of it
+ * hold the same tree.
+ *
+ * Values are copied, never shared: a registered preset is a live object the
+ * drawer keeps reading, and a definition that aliased its props would carry
+ * every later edit back into the preset.
+ */
+export function nestedToDefinition(
+  nested: NestedNode,
+  createId: () => string,
+): { rootId: string; nodes: Nodes } {
+  const nodes: Nodes = {}
+  const visit = (node: NestedNode, parentId: string | null): string => {
+    const { $id: _presetId, nodes: children, ...fields } = node
+    const id = createId()
+    const entry: Nodes[string] = {
+      ...(JSON.parse(JSON.stringify(fields)) as Record<string, unknown>),
+      $id: id,
+      parentId,
+    }
+    nodes[id] = entry
+    if (Array.isArray(children) && children.length) {
+      entry.nodes = children.map((child) => visit(child, id))
+    }
+    return id
+  }
+  const rootId = visit(nested ?? {}, null)
+  return { rootId, nodes }
+}

@@ -228,6 +228,12 @@ jest.mock('../components/binding-picker-provider.component', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
+// The site's reusable email blocks (AGL-3287) — their own suite covers them;
+// this one is about what the properties drawer writes.
+jest.mock('../components/reusable-components-provider.component', () => ({
+  __esModule: true,
+  default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}))
 jest.mock('../components/besigner-media-picker-provider.component', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,

@@ -107,3 +107,33 @@ describe('using a template whose tree binds to properties (AGL-2932)', () => {
     expect(mockCreateHostResource.mock.calls[0][0].data).not.toHaveProperty('props')
   })
 })
+
+/**
+ * A template saved from an email block makes an email block (AGL-3287), so
+ * the component lands in the drawer its source was offered in.
+ */
+describe('using a component template saved from an email block (AGL-3287)', () => {
+  beforeEach(() => {
+    mockCreateHostResource.mockReset().mockResolvedValue({ id: 'new-1' })
+  })
+
+  it('makes an email block from an email block template', async () => {
+    await use({
+      kind: 'component',
+      displayName: 'Footer',
+      rootId: 'root',
+      nodes: NODES,
+      componentKind: 'email',
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Create component' }))
+    await waitFor(() => expect(mockCreateHostResource).toHaveBeenCalledTimes(1))
+    expect(mockCreateHostResource.mock.calls[0][0].data.kind).toBe('email')
+  })
+
+  it('makes a page component, sending no kind, from any other template', async () => {
+    await use({ kind: 'component', displayName: 'Hero', rootId: 'root', nodes: NODES })
+    fireEvent.click(screen.getByRole('button', { name: 'Create component' }))
+    await waitFor(() => expect(mockCreateHostResource).toHaveBeenCalledTimes(1))
+    expect(mockCreateHostResource.mock.calls[0][0].data).not.toHaveProperty('kind')
+  })
+})
