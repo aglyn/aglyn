@@ -314,10 +314,12 @@ export function CommerceGlanceCard(props: { hostId: string }) {
                   }}
                 >
                   <Typography variant="body2" noWrap sx={{ minWidth: 0 }}>
-                    {order.orderNumber
-                      ? formatOrderNumber(order.orderNumber)
+                    {/* `HostOrder`'s own fields. An order with no number yet
+                        (a checkout still settling) falls back to its id. */}
+                    {order.number != null
+                      ? formatOrderNumber(order)
                       : order.$id.slice(0, 8)}
-                    {order.email ? ` · ${order.email}` : ''}
+                    {order.customerEmail ? ` · ${order.customerEmail}` : ''}
                   </Typography>
                   <Stack
                     direction="row"
