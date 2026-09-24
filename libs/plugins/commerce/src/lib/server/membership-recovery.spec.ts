@@ -32,9 +32,8 @@ import { membershipResetHandler } from './membership-reset'
 
 // One configurable member + host pair behind chainable stubs, following
 // membership-login.spec.ts: the handlers only touch the host doc, the email
-// lookup, the member doc, and the member's credential document (AGL-3308) —
-// `null` for a member who has none yet, which is every member until the
-// migration moves the legacy hash off the profile.
+// lookup, the member doc, and the member's credential document (AGL-3308),
+// where the member's hash lives — `null` for a member with no password.
 const mockHostFields: Record<string, unknown> = {}
 const mockMemberFields: Record<string, unknown> = {}
 let mockCredentialFields: Record<string, unknown> | null = null
@@ -55,6 +54,8 @@ const mockCredentialSnapshot = (memberId: string) => ({
   exists: mockCredentialFields !== null && memberId === 'member-1',
   get: (field: string) => mockCredentialFields?.[field],
 })
+/** The member's current hash: the credential document's. */
+const currentHash = () => mockCredentialFields?.['passwordScrypt'] as string
 
 /**
  * AGL-1966 abuse-control seams.
@@ -269,10 +270,10 @@ beforeEach(() => {
   mockHostFields['subdomain'] = 'shop'
   delete mockHostFields['cname']
   mockHostFields['displayName'] = 'Northwind'
-  mockMemberFields['passwordScrypt'] = hashMemberPassword(PASSWORD)
+  delete mockMemberFields['passwordScrypt']
   delete mockMemberFields['suspended']
   delete mockMemberFields['passwordResetAt']
-  mockCredentialFields = null
+  mockCredentialFields = { passwordScrypt: hashMemberPassword(PASSWORD) }
   // Old enough to be a real member, not a register-then-recover row.
   mockMemberFields['createdAt'] = timestamp(Date.now() - 24 * 60 * 60 * 1000)
   credentialSetCalls.length = 0
@@ -368,7 +369,7 @@ describe('membership recover handler (AGL-552)', () => {
       verifyPasswordResetToken(
         HOST_ID,
         token,
-        mockMemberFields['passwordScrypt'] as string,
+        currentHash(),
       ),
     ).toBe(true)
   })
@@ -581,7 +582,7 @@ describe('membership reset handler (AGL-552)', () => {
     const token = mintPasswordResetToken(
       HOST_ID,
       'member-1',
-      mockMemberFields['passwordScrypt'] as string,
+      currentHash(),
     )
     const { res, result } = makeResponse()
     await membershipResetHandler(
@@ -614,7 +615,7 @@ describe('membership reset handler (AGL-552)', () => {
     const token = mintPasswordResetToken(
       HOST_ID,
       'member-1',
-      mockMemberFields['passwordScrypt'] as string,
+      currentHash(),
     )
     const first = makeResponse()
     await membershipResetHandler(
@@ -641,7 +642,7 @@ describe('membership reset handler (AGL-552)', () => {
   })
 
   it('rejects expired, tampered, and wrong-host tokens', async () => {
-    const hash = mockMemberFields['passwordScrypt'] as string
+    const hash = currentHash()
     const token = mintPasswordResetToken(HOST_ID, 'member-1', hash)
     const wrongHost = mintPasswordResetToken('host-2', 'member-1', hash)
     const tampered =
@@ -683,7 +684,7 @@ describe('membership reset handler (AGL-552)', () => {
     const token = mintPasswordResetToken(
       HOST_ID,
       'member-1',
-      mockMemberFields['passwordScrypt'] as string,
+      currentHash(),
     )
     mockMemberFields['suspended'] = true
     const { res, result } = makeResponse()
@@ -715,9 +716,9 @@ describe('membership reset handler (AGL-552)', () => {
   })
 })
 
-describe('the credential document is the hash recovery binds to (AGL-3308)', () => {
-  it('mails a link bound to the credential document, not a stale legacy copy', async () => {
-    mockCredentialFields = { passwordScrypt: hashMemberPassword('the moved password') }
+describe('the credential document is the only hash recovery reads (AGL-3308)', () => {
+  it('mails a link bound to the credential document, never to a hash on the profile', async () => {
+    mockMemberFields['passwordScrypt'] = hashMemberPassword('a copy on the profile')
     const { res } = makeResponse()
     await membershipRecoverHandler(
       makeRequest('10.4.0.1', { hostId: HOST_ID, email: 'user@example.com' }),
@@ -728,13 +729,7 @@ describe('the credential document is the hash recovery binds to (AGL-3308)', () 
     const token = decodeURIComponent(
       String(JSON.parse(init.body).text).match(/token=([^\s]+)/)![1],
     )
-    expect(
-      verifyPasswordResetToken(
-        HOST_ID,
-        token,
-        mockCredentialFields['passwordScrypt'] as string,
-      ),
-    ).toBe(true)
+    expect(verifyPasswordResetToken(HOST_ID, token, currentHash())).toBe(true)
     expect(
       verifyPasswordResetToken(
         HOST_ID,
@@ -744,71 +739,31 @@ describe('the credential document is the hash recovery binds to (AGL-3308)', () 
     ).toBe(false)
   })
 
-  it('resets a member whose hash already lives on the credential document', async () => {
-    const moved = hashMemberPassword(PASSWORD)
-    delete mockMemberFields['passwordScrypt']
-    mockCredentialFields = { passwordScrypt: moved }
-    const token = mintPasswordResetToken(HOST_ID, 'member-1', moved)
-    const { res, result } = makeResponse()
-    await membershipResetHandler(
-      makeRequest('10.4.0.2', {
-        hostId: HOST_ID,
-        token,
-        password: 'a whole new password',
-      }),
-      res,
-    )
-    expect(result.status).toBe(200)
-    expect(
-      verifyMemberPassword(
-        'a whole new password',
-        mockCredentialFields['passwordScrypt'] as string,
-      ),
-    ).toBe(true)
-  })
-
-  it('refuses a link bound to a legacy hash the credential document replaced', async () => {
-    // Minted before the move, from the copy on the profile. The member has
-    // since set a password that lives on the credential document, so the
-    // link is stale — exactly as if the reset had happened on the profile.
-    const legacy = mockMemberFields['passwordScrypt'] as string
-    const token = mintPasswordResetToken(HOST_ID, 'member-1', legacy)
-    mockCredentialFields = { passwordScrypt: hashMemberPassword('set since') }
-    const { res, result } = makeResponse()
-    await membershipResetHandler(
-      makeRequest('10.4.0.3', {
-        hostId: HOST_ID,
-        token,
-        password: 'a whole new password',
-      }),
-      res,
-    )
-    expect(result.status).toBe(400)
+  it('refuses a link bound to a hash on the profile', async () => {
+    // Where the hash lived before AGL-3308. A copy there now — planted, or
+    // left by a stale script — is not the member's password, so a link bound
+    // to it opens nothing, beside a credential document or without one.
+    const planted = hashMemberPassword('a copy on the profile')
+    mockMemberFields['passwordScrypt'] = planted
+    const token = mintPasswordResetToken(HOST_ID, 'member-1', planted)
+    for (const credential of [mockCredentialFields, null]) {
+      mockCredentialFields = credential
+      const { res, result } = makeResponse()
+      await membershipResetHandler(
+        makeRequest('10.4.0.3', {
+          hostId: HOST_ID,
+          token,
+          password: 'a whole new password',
+        }),
+        res,
+      )
+      expect(result.status).toBe(400)
+    }
     expect(credentialSetCalls).toHaveLength(0)
   })
 
-  it('keeps a link minted before the migration working after it', async () => {
-    // The migration moves the hash VERBATIM, so the token's fingerprint of it
-    // still matches: a member mid-reset is not stranded by the move.
-    const legacy = mockMemberFields['passwordScrypt'] as string
-    const token = mintPasswordResetToken(HOST_ID, 'member-1', legacy)
-    mockCredentialFields = { passwordScrypt: legacy }
-    delete mockMemberFields['passwordScrypt']
-    const { res, result } = makeResponse()
-    await membershipResetHandler(
-      makeRequest('10.4.0.4', {
-        hostId: HOST_ID,
-        token,
-        password: 'a whole new password',
-      }),
-      res,
-    )
-    expect(result.status).toBe(200)
-  })
-
   it('refuses a token naming a nested document path', async () => {
-    const legacy = mockMemberFields['passwordScrypt'] as string
-    const token = mintPasswordResetToken(HOST_ID, 'member-1/nested/doc', legacy)
+    const token = mintPasswordResetToken(HOST_ID, 'member-1/nested/doc', currentHash())
     const { res, result } = makeResponse()
     await membershipResetHandler(
       makeRequest('10.4.0.5', {

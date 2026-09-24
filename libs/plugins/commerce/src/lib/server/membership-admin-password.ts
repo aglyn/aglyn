@@ -58,8 +58,8 @@ import {
  * console route, so it is registered on the console's API surface.
  *
  * The hash is written to the member's credential document (AGL-3308), which
- * no client can read, and the legacy copy on the profile goes in the same
- * batch.
+ * no client can read, and any credential field on the profile is deleted in
+ * the same batch.
  */
 export const membershipAdminPasswordHandler: PluginApiHandler = async (
   req,

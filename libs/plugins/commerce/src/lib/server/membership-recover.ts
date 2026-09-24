@@ -183,8 +183,7 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
       console.error('membership/recover: email is not configured')
       return res.status(200).json({ ok: true })
     }
-    // Bound to the hash sign-in checks: the credential document's, else the
-    // legacy copy on the profile (AGL-3308).
+    // Bound to the hash sign-in checks, the credential document's (AGL-3308).
     const token = mintPasswordResetToken(
       hostId,
       memberDoc.id,

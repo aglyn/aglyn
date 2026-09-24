@@ -18,10 +18,9 @@
 /**
  * Which hash answers for a site member (AGL-3308).
  *
- * The credential document is authoritative once it carries a hash; the copy
- * on the profile answers only for a member the migration has not reached.
- * Every password check and every reset-token binding goes through
- * `storedPasswordHash`, so these cases are the whole precedence rule.
+ * The credential document's, and nothing else: a hash on the profile answers
+ * for nothing. Every password check and every reset-token binding goes
+ * through `storedPasswordHash`, so these cases are the whole rule.
  */
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -54,46 +53,22 @@ const LEGACY = `${'c'.repeat(32)}:${'d'.repeat(128)}`
 
 describe('storedPasswordHash', () => {
   it('answers with the credential document once it carries a hash', () => {
-    expect(
-      storedPasswordHash(
-        snapshot({ passwordScrypt: MOVED }),
-        snapshot({ passwordScrypt: LEGACY }),
-      ),
-    ).toBe(MOVED)
+    expect(storedPasswordHash(snapshot({ passwordScrypt: MOVED }))).toBe(MOVED)
   })
 
-  it('falls back to the legacy copy for a member with no credential document', () => {
-    expect(
-      storedPasswordHash(snapshot(null), snapshot({ passwordScrypt: LEGACY })),
-    ).toBe(LEGACY)
-  })
-
-  it('falls back when the credential document holds no usable hash', () => {
-    // A document the migration wrote for `passwordResetAt` alone, or one
-    // carrying junk, does not blank a member whose hash is still legacy.
+  it('answers nothing when the credential document holds no usable hash', () => {
     for (const credential of [
       snapshot({ passwordResetAt: 'yesterday' }),
       snapshot({ passwordScrypt: '' }),
       snapshot({ passwordScrypt: 42 }),
     ]) {
-      expect(
-        storedPasswordHash(credential, snapshot({ passwordScrypt: LEGACY })),
-      ).toBe(LEGACY)
+      expect(storedPasswordHash(credential)).toBeUndefined()
     }
   })
 
-  it('answers nothing for a member with no hash anywhere', () => {
-    expect(storedPasswordHash(snapshot(null), snapshot({}))).toBeUndefined()
-    expect(storedPasswordHash(null, null)).toBeUndefined()
-    expect(
-      storedPasswordHash(snapshot(null), snapshot({ passwordScrypt: 7 })),
-    ).toBeUndefined()
-  })
-
-  it('never reads the profile of a member that does not exist', () => {
-    expect(
-      storedPasswordHash(snapshot(null), snapshot(null)),
-    ).toBeUndefined()
+  it('answers nothing for a member with no credential document', () => {
+    expect(storedPasswordHash(snapshot(null))).toBeUndefined()
+    expect(storedPasswordHash(null)).toBeUndefined()
   })
 })
 
@@ -112,6 +87,17 @@ describe('readMemberPasswordHash', () => {
       readMemberPasswordHash(hostRef, snapshot({ passwordScrypt: LEGACY }, 'member-7')),
     ).resolves.toBe(MOVED)
     expect(paths).toEqual(['siteMemberCredentials/member-7'])
+  })
+
+  it('never answers with a hash written onto the profile', async () => {
+    // The pre-AGL-3308 shape, or a copy staff wrote there since: the member
+    // has no credential document, so they have no password.
+    const hostRef = {
+      collection: () => ({ doc: (id: string) => ({ get: async () => snapshot(null, id) }) }),
+    } as unknown as FirebaseFirestore.DocumentReference
+    await expect(
+      readMemberPasswordHash(hostRef, snapshot({ passwordScrypt: LEGACY }, 'member-7')),
+    ).resolves.toBeUndefined()
   })
 
   it('addresses the same document the writers do', () => {

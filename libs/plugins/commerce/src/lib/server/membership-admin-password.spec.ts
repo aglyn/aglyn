@@ -65,8 +65,8 @@ let mockMemberVanishesAfterRead = false
 /** Profile updates, as committed. */
 const mockMemberUpdates: Array<Record<string, unknown>> = []
 /**
- * The member's credential document (AGL-3308): `null` when there is none,
- * which is every member until the migration moves the legacy hash.
+ * The member's credential document (AGL-3308), where their hash lives:
+ * `null` for a member with no password.
  */
 let mockCredentialFields: Record<string, unknown> | null = null
 /** Credential-document writes, as committed. */
@@ -267,7 +267,7 @@ beforeEach(() => {
   mockMetered.length = 0
   mockMemberUpdates.length = 0
   mockCredentialSets.length = 0
-  mockCredentialFields = null
+  mockCredentialFields = { passwordScrypt: 'salt:hash' }
   mockMemberExists = true
   mockMemberVanishesAfterRead = false
   mockDecodedToken = { uid: ADMIN_UID, email_verified: true }
@@ -282,7 +282,6 @@ beforeEach(() => {
   })
   Object.assign(mockMemberFields, {
     email: 'visitor@example.com',
-    passwordScrypt: 'salt:hash',
   })
 })
 
@@ -349,7 +348,7 @@ describe('membershipAdminPasswordHandler', () => {
     )
     expect(result.status).toBe(200)
     // On the credential document (AGL-3308), never the profile the console
-    // lists — and the legacy copy leaves the profile in the same batch.
+    // lists, and the same batch deletes any credential field from the profile.
     expect(mockCredentialSets).toHaveLength(1)
     const written = mockCredentialSets[0]
     expect(verifyMemberPassword(password, written['passwordScrypt'] as string)).toBe(
@@ -538,10 +537,11 @@ describe('route registration', () => {
   })
 })
 
-describe('the credential document is the hash a mailed reset binds to (AGL-3308)', () => {
-  it('binds the link to the credential document once the hash has moved', async () => {
+describe('the credential document is the only hash a mailed reset binds to (AGL-3308)', () => {
+  it('binds the link to the credential document, never to a hash on the profile', async () => {
     const moved = hashMemberPassword('the moved password')
     mockCredentialFields = { passwordScrypt: moved }
+    mockMemberFields['passwordScrypt'] = hashMemberPassword('a copy on the profile')
     const { res, result } = makeResponse()
     await membershipAdminPasswordHandler(
       makeRequest({
@@ -555,15 +555,18 @@ describe('the credential document is the hash a mailed reset binds to (AGL-3308)
     const sent = (sendEmailMock.mock.calls[0] as any[])[0]
     const token = decodeURIComponent(String(sent.text).match(/token=([^\s]+)/)![1])
     expect(verifyPasswordResetToken(HOST_ID, token, moved)).toBe(true)
-    // Not to the stale copy still on the profile.
+    // Not to the copy on the profile.
     expect(
       verifyPasswordResetToken(HOST_ID, token, mockMemberFields['passwordScrypt'] as string),
     ).toBe(false)
   })
 
-  it('binds it to the legacy copy for a member the migration has not reached', async () => {
-    const legacy = hashMemberPassword('the legacy password')
-    mockMemberFields['passwordScrypt'] = legacy
+  it('binds nothing to a hash on the profile of a member with no credential document', async () => {
+    // Such a member has no password: the link lets them set one, and a copy on
+    // the profile — planted, or left by a stale script — plays no part in it.
+    const planted = hashMemberPassword('a copy on the profile')
+    mockCredentialFields = null
+    mockMemberFields['passwordScrypt'] = planted
     const { res } = makeResponse()
     await membershipAdminPasswordHandler(
       makeRequest({
@@ -575,7 +578,8 @@ describe('the credential document is the hash a mailed reset binds to (AGL-3308)
     )
     const sent = (sendEmailMock.mock.calls[0] as any[])[0]
     const token = decodeURIComponent(String(sent.text).match(/token=([^\s]+)/)![1])
-    expect(verifyPasswordResetToken(HOST_ID, token, legacy)).toBe(true)
+    expect(verifyPasswordResetToken(HOST_ID, token, undefined)).toBe(true)
+    expect(verifyPasswordResetToken(HOST_ID, token, planted)).toBe(false)
   })
 })
 

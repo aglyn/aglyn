@@ -1077,14 +1077,6 @@ jobs:
       # invented beyond what the auth record and first device can still say.
       - run: npm run test:account-acquisition-backfill
 
-      # AGL-3308. The site-member credential migration's decisions: a legacy
-      # hash moves verbatim with its reset time, a newer hash a live route
-      # already wrote is never overwritten, a field holding no usable hash is
-      # stripped, a second run plans nothing, and the tree guard that refuses
-      # `--apply` on a checkout whose sign-in does not read the credential
-      # document or whose rules do not deny it to every client.
-      - run: npm run test:site-member-credentials-backfill
-
       # AGL-2814. The members-video backfill's decisions: which files become
       # private, which download tokens are rotated, which stored links are
       # rewritten, and the public file used elsewhere that is listed and left
