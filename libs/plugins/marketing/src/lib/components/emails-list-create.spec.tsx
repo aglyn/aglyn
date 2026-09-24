@@ -39,7 +39,7 @@
  *     form, wherever on it the form sits.
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
 const FIRESTORE = {}
@@ -374,19 +374,23 @@ describe('the list page never carries the composer', () => {
   })
 })
 
-describe('the list costs what it always did until somebody asks to write', () => {
-  it('reads no campaigns until the drawer is opened', async () => {
+describe('the list reads the campaigns its Campaign filter offers (AGL-3321)', () => {
+  it('reads the sends and the campaigns while the list is shown, drawer closed', async () => {
     await mount()
 
-    expect(listened).toEqual(['orgs/org-1/campaigns'])
-    expect(listened).not.toContain('orgs/org-1/emailCampaigns')
+    expect(screen.queryByText('Submit email')).toBeNull()
+    expect(listened).toEqual(
+      expect.arrayContaining(['orgs/org-1/campaigns', 'orgs/org-1/emailCampaigns']),
+    )
   })
 
-  it('reads them once it is', async () => {
+  it('reads nothing else once the drawer opens', async () => {
     await mount()
     await openDrawer()
 
-    expect(listened).toContain('orgs/org-1/emailCampaigns')
+    expect(new Set(listened)).toEqual(
+      new Set(['orgs/org-1/campaigns', 'orgs/org-1/emailCampaigns']),
+    )
   })
 
   it('posts nothing until the drawer submits', async () => {
@@ -489,6 +493,44 @@ describe('writing an email from the org hub', () => {
   it('reads every site’s messages, unfiltered', async () => {
     await mount({ orgHosts: TWO_SITES })
 
-    expect(listened).toEqual(['orgs/org-1/campaigns'])
+    // The sends, and the campaigns the Campaign filter offers.
+    expect(listened).toEqual(['orgs/org-1/campaigns', 'orgs/org-1/emailCampaigns'])
+  })
+})
+
+describe('the Campaign filter (AGL-3321)', () => {
+  const FILED = {
+    ...SEND,
+    $id: 'msg_2',
+    subject: 'Winter preview',
+    emailCampaignId: 'camp_2',
+  }
+  const shownIds = () =>
+    Array.from(document.querySelectorAll('[role="row"][data-id]')).map((row) =>
+      row.getAttribute('data-id'),
+    )
+  const pickCampaign = async (label: string) => {
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Column' }))
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('option', { name: 'Campaign' }))
+    })
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Value' }))
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('option', { name: label }))
+    })
+  }
+
+  it('offers the campaigns by name without the drawer ever opening', async () => {
+    await mount({ sends: [SEND, FILED] })
+    await pickCampaign('Winter clearance')
+    await waitFor(() => expect(shownIds()).toEqual(['msg_2']))
+  })
+
+  it('"Single send" keeps the emails filed under no campaign', async () => {
+    await mount({ sends: [SEND, FILED] })
+    await waitFor(() => expect(shownIds().sort()).toEqual(['msg_1', 'msg_2']))
+    await pickCampaign('Single send')
+    await waitFor(() => expect(shownIds()).toEqual(['msg_1']))
   })
 })

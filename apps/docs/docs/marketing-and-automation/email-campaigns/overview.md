@@ -130,7 +130,8 @@ page a site name too:
   ended), Lists, Kind (campaign or single send) and, on the organization's
   page, Sites.
 - **Emails:** the subject, State (draft, scheduled, sending, sent, stopped),
-  Campaign (or single send) and, on the organization's page, Site. State is
+  Campaign (one of up to 50 campaigns by name, or **Single send** for the
+  emails filed under none) and, on the organization's page, Site. State is
   what the email is doing, so an email part way through a large audience is
   **Sending**, not **Scheduled**.
 - **A campaign's emails:** the subject and State.
