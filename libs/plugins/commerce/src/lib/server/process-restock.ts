@@ -37,6 +37,7 @@ import {
   type PluginJobHostGate,
   pluginJobHostGate,
 } from '@aglyn/aglyn/server'
+import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 
 export interface RestockScanResult {
   scanned: number
@@ -147,7 +148,11 @@ export async function scanRestockAlerts(
     const productUrl = `/products/${product.slug}`
     let loaded = templateCache.get(hostRef.id)
     if (loaded === undefined) {
-      loaded = await loadHostEmail(firestore, hostRef.id, 'back-in-stock')
+      loaded = await loadHostEmail(firestore, hostRef.id, 'back-in-stock', {
+        // The site's header and footer blocks, grafted once per site for the
+        // whole sweep (AGL-3287).
+        compose: composeHostComponentNodes,
+      })
       templateCache.set(hostRef.id, loaded)
       brandingByHost.set(
         hostRef.id,

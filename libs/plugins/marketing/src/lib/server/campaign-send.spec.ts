@@ -644,6 +644,186 @@ describe('a designed campaign whose version is stored compressed (AGL-1394)', ()
 })
 
 /**
+ * A SITE'S REUSABLE HEADER AND FOOTER, IN THE MAIL (AGL-3287).
+ *
+ * A block the author placed from the site's components is a `reusableInstance`
+ * node naming a component document, and the mail renderer draws a node it does
+ * not know as nothing. So a campaign whose canvas showed a header and a footer
+ * went out with neither — and, as with the product blocks above, the first
+ * people to notice would be the recipients.
+ *
+ * Asserted on the delivered payload, like everything in this file: the header
+ * text, the placement's own property value, an attribute override changing the
+ * text the component wrote, and a product block that exists only inside the
+ * footer — which the product scan can find only once the footer is grafted.
+ */
+describe('reusable blocks placed in a designed campaign (AGL-3287)', () => {
+  /** The site's header: one section, its text bound to the `title` property. */
+  const HEADER = {
+    rootId: 'hdrSec',
+    props: [{ name: 'title', type: 'text', defaultValue: 'Acme news' }],
+    nodes: {
+      hdrSec: {
+        $id: 'hdrSec',
+        componentId: 'emailSection',
+        pluginId: 'email',
+        nodes: ['hdrText'],
+      },
+      hdrText: {
+        $id: 'hdrText',
+        componentId: 'emailText',
+        pluginId: 'email',
+        parentId: 'hdrSec',
+        props: { children: 'Acme header: {{prop.title}}' },
+      },
+    },
+  }
+  /** The site's footer: a product card and a line of text. */
+  const FOOTER = {
+    rootId: 'ftrSec',
+    nodes: {
+      ftrSec: {
+        $id: 'ftrSec',
+        componentId: 'emailSection',
+        pluginId: 'email',
+        nodes: ['ftrProd', 'ftrText'],
+      },
+      ftrProd: {
+        $id: 'ftrProd',
+        componentId: 'emailProduct',
+        pluginId: 'email',
+        parentId: 'ftrSec',
+        props: { productId: 'prod-1', buttonLabel: 'Shop the chair' },
+      },
+      ftrText: {
+        $id: 'ftrText',
+        componentId: 'emailText',
+        pluginId: 'email',
+        parentId: 'ftrSec',
+        props: { children: 'Acme footer for {{contact.firstName}}' },
+      },
+    },
+  }
+
+  /** The campaign: the header placed above its own copy, the footer below. */
+  const placed = (header: Record<string, unknown> = {}) => ({
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['hdr', 'sec', 'ftr'] },
+    hdr: {
+      $id: 'hdr',
+      componentId: 'reusableInstance',
+      pluginId: 'mui',
+      parentId: ROOT,
+      props: { refId: 'header-1', propValues: { title: 'Spring sale edition' } },
+      nodes: [],
+      ...header,
+    },
+    sec: {
+      $id: 'sec',
+      componentId: 'emailSection',
+      pluginId: 'email',
+      parentId: ROOT,
+      nodes: ['txt'],
+    },
+    txt: {
+      $id: 'txt',
+      componentId: 'emailText',
+      parentId: 'sec',
+      props: { children: 'Hi {{contact.firstName}}, the sale is on.' },
+    },
+    ftr: {
+      $id: 'ftr',
+      componentId: 'reusableInstance',
+      pluginId: 'mui',
+      parentId: ROOT,
+      props: { refId: 'footer-1' },
+      nodes: [],
+    },
+  })
+
+  /** Seeds the campaign, and the two components on the site that sends it. */
+  function seedPlaced(nodes: unknown) {
+    seed(pooledBuffer(nodes))
+    // One definition compressed and one plain: both stored forms are live.
+    mockState.store['hosts/host-1/components/header-1'] = {
+      ...HEADER,
+      nodes: pooledBuffer(HEADER.nodes),
+    }
+    mockState.store['hosts/host-1/components/footer-1'] = FOOTER
+  }
+
+  it('mails the header with the placement’s own property value', async () => {
+    seedPlaced(placed())
+    await expect(send()).resolves.toMatchObject({ sent: 1 })
+
+    const [message] = mockState.sent
+    expect(message['html']).toContain('Acme header: Spring sale edition')
+    // The campaign's own copy, between the two, is untouched.
+    expect(message['html']).toContain('Hi Dana, the sale is on.')
+    // Merge tokens inside a component resolve per recipient like any other.
+    expect(message['html']).toContain('Acme footer for Dana')
+    expect(message['text']).toContain('Acme header: Spring sale edition')
+  })
+
+  it('applies an attribute override the placement made to the header’s text', async () => {
+    seedPlaced(
+      placed({
+        attrOverrides: {
+          hdrText: { children: 'Acme header, this week: {{prop.title}}' },
+        },
+      }),
+    )
+    await send()
+
+    const [message] = mockState.sent
+    expect(message['html']).toContain(
+      'Acme header, this week: Spring sale edition',
+    )
+    expect(message['html']).not.toContain('Acme header: Spring')
+  })
+
+  it('finds a product block that lives inside the footer', async () => {
+    seedPlaced(placed())
+    await send()
+
+    const [message] = mockState.sent
+    expect(message['html']).toContain('Aeron Chair')
+    expect(message['html']).toContain('$995')
+    expect(message['html']).toContain(
+      'https://acme.aglyn.app/products/aeron-chair',
+    )
+    expect(message['text']).toContain('Aeron Chair — $995')
+  })
+
+  /**
+   * THE CONTROL. The same campaign on a site whose header was deleted: the
+   * placement renders nothing, as it does on a page, and the send still goes.
+   */
+  it('sends without a deleted component rather than refusing the campaign', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      seedPlaced(placed())
+      mockState.store['hosts/host-1/components/header-1'] = {
+        ...HEADER,
+        deletedAt: 'yesterday',
+      }
+      await expect(send()).resolves.toMatchObject({ sent: 1 })
+
+      const [message] = mockState.sent
+      expect(message['html']).not.toContain('Acme header')
+      expect(message['html']).toContain('Acme footer for Dana')
+      // And the log says which component went missing, on which site.
+      expect(
+        warn.mock.calls.some(([line]) =>
+          /components-skipped.*host-1.*header-1.*deleted/.test(String(line)),
+        ),
+      ).toBe(true)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})
+
+/**
  * The two meters (AGL-1438).
  *
  * This sender is the only one a quota may refuse, and it is also the one that

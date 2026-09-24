@@ -16,6 +16,10 @@
  */
 
 import * as Aglyn from '@aglyn/aglyn/server'
+import {
+  readStoredComponentTree,
+  type StoredComponentDocument,
+} from '@aglyn/aglyn/app-utils/load-referenced-components'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
   PUBLISHED_SITE_DATA_TTL_SECONDS,
@@ -52,42 +56,24 @@ async function readComponents(hostId: Aglyn.HostUid) {
     .get()
     .then((res) => {
       for (const docSnapshot of res.docs) {
-        const value = docSnapshot.data() as Aglyn.AglynHostComponent
-        if (value?.deletedAt || !value?.nodes || !value?.rootId) continue
         /*
-         * BOTH STORED FORMS, on the hot path (AGL-1151).
+         * BOTH STORED FORMS, on the hot path (AGL-1151) — decoded by
+         * `readStoredComponentTree`, the one reading of a component document
+         * the on-demand email loader shares (AGL-3287), so a page and a mail
+         * cannot disagree about what a component publishes.
          *
-         * A published definition is msgpack for anything promoted since
-         * components were compressed and a plain map for everything older,
-         * and nothing migrates them — `decodeStoredNodes` returns a map
-         * unchanged, so one call serves both forever.
-         *
-         * It has to be here rather than at the caller because the failure is
-         * silent and cached: `composeReusableComponentNodes` looks up
-         * `nodes[rootId]` on the value below, finds nothing in a `Buffer`,
-         * and grafts an empty wrapper — so every instance of the component
-         * disappears from every page of the site, and the result is stored
-         * under the render cache for the rest of its TTL.
-         *
-         * The decode costs no new dependency: this module already imports
-         * `@aglyn/aglyn/server`, and the tenant's published-page CLIENT
-         * bundle never reaches this file.
+         * It has to happen here rather than at the caller because the failure
+         * is silent and cached: `composeReusableComponentNodes` looks up
+         * `nodes[rootId]`, finds nothing in a `Buffer`, and grafts an empty
+         * wrapper — so every instance of the component disappears from every
+         * page of the site, and the result is stored under the render cache
+         * for the rest of its TTL. Deleted, never-published and undecodable
+         * definitions are skipped, exactly as before.
          */
-        const nodes = Aglyn.decodeStoredNodes<
-          Aglyn.ReusableComponentTree['nodes']
-        >(value.nodes)
-        // An undecodable definition is skipped rather than grafted empty. It
-        // is the same outcome for the page either way, but `decodeStoredNodes`
-        // logs the reason, and a definition that silently became `{}` would
-        // not say why the component vanished.
-        if (!nodes) continue
-        data.definitions[docSnapshot.id] = {
-          rootId: value.rootId,
-          nodes,
-          // Declared props (AGL-1247): without these the graft leaves every
-          // `{{prop.*}}` token unresolved on the published page.
-          ...(value.props?.length && { props: value.props }),
-        }
+        const read = readStoredComponentTree(
+          docSnapshot.data() as StoredComponentDocument | undefined,
+        )
+        if (read.ok) data.definitions[docSnapshot.id] = read.tree
       }
     })
     .catch((error) => {

@@ -20,6 +20,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 jest.mock('./firebase-admin', () => ({ firebaseAdmin: {} }))
 
+import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 import { renderHostEmail } from '@aglyn/shared-util-email'
 import { renderHostEmailWithTokens } from './host-email-tokens'
 
@@ -139,6 +140,23 @@ describe('renderHostEmailWithTokens (AGL-1022)', () => {
     // And it is a real policy: asserting the shape alone passes on `(h) => h`,
     // which is exactly the thing a required sanitizer is there to prevent.
     expect(options.sanitize?.('<p onclick="x()">hi</p>')).toBe('<p>hi</p>')
+  })
+
+  /**
+   * The component graft joins here on the same argument as the policy
+   * (AGL-3287): a header or footer the site owner placed is a reference the
+   * shared renderer cannot resolve, and none of the senders behind this
+   * function knows to ask. `host-email-tokens-blocks.spec.ts` renders it for
+   * real; this pins that it is the core's composer that arrives.
+   */
+  it('supplies the component graft every sender behind it depends on', async () => {
+    await renderHostEmailWithTokens(
+      firestoreWith(site),
+      'host-1',
+      'booking-confirmed',
+    )
+    const options = renderMock.mock.calls[0][4] as { compose?: unknown }
+    expect(options.compose).toBe(composeHostComponentNodes)
   })
 
   it('keeps the caller origin alongside the policy rather than replacing it', async () => {
