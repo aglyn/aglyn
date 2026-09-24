@@ -18,7 +18,9 @@
 import {
   assignExperimentVariant,
   compareVariants,
+  describeVariantComparison,
   evaluateAutoWinner,
+  experimentResultRows,
   summarizeVariantStats,
   validateExperiment,
   type HostExperiment,
@@ -233,5 +235,54 @@ describe('evaluateAutoWinner (AGL-273)', () => {
       }),
     ).toContain('confidence')
     expect(validateExperiment(base)).toBeNull()
+  })
+})
+
+describe('the results table (AGL-265)', () => {
+  const threeArms: Pick<HostExperiment, 'variants' | 'winnerVariantId'> = {
+    variants: [
+      { id: 'a', name: 'Control' },
+      { id: 'b', name: 'Challenger' },
+      { id: 'c', name: 'Unseen' },
+    ],
+  }
+
+  it('compares every variant but the first against the first', () => {
+    const rows = experimentResultRows(threeArms, {
+      a: { exposures: 100, conversions: 10 },
+      b: { exposures: 100, conversions: 20 },
+    })
+    expect(rows.map((row) => row.variant.id)).toEqual(['a', 'b', 'c'])
+    expect(rows[0].comparison).toBeNull()
+    expect(rows[1].comparison).toEqual(
+      compareVariants({ exposures: 100, conversions: 10 }, { exposures: 100, conversions: 20 }),
+    )
+    expect(rows[1].summary).toEqual(summarizeVariantStats({ exposures: 100, conversions: 20 }))
+  })
+
+  it('leads with the best rate among variants anybody has seen', () => {
+    const rows = experimentResultRows(threeArms, {
+      a: { exposures: 100, conversions: 10 },
+      b: { exposures: 100, conversions: 20 },
+    })
+    expect(rows.map((row) => row.leader)).toEqual([false, true, false])
+  })
+
+  it('marks the variant the test finished on', () => {
+    const rows = experimentResultRows({ ...threeArms, winnerVariantId: 'a' }, {})
+    expect(rows.map((row) => row.winner)).toEqual([true, false, false])
+  })
+
+  it('prints a comparison the way the table reads it', () => {
+    expect(describeVariantComparison(null)).toBe('control')
+    expect(describeVariantComparison({ lift: 0.5, confidence: 0.961 })).toBe(
+      '+50% · 96% conf.',
+    )
+    expect(describeVariantComparison({ lift: -0.2, confidence: null })).toBe(
+      '-20% · needs data',
+    )
+    expect(describeVariantComparison({ lift: null, confidence: null })).toBe(
+      '— · needs data',
+    )
   })
 })

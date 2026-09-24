@@ -94,15 +94,14 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
     'sending',
     'suppressions',
   ],
-  // One table for both levels of the Marketing hub: the site rail's sections,
-  // and `emails`, which only the organization's hub declares.
+  // One table for both levels of the Marketing hub, which declare the same
+  // sections.
   marketing: [
     'overview',
     'campaigns',
     'conversions',
     'overlays',
     'experiments',
-    'emails',
   ],
   automation: ['workflows', 'actions', 'webhooks'],
   inbox: ['submissions', 'contacts', 'campaigns'],

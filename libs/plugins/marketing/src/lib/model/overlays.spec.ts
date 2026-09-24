@@ -16,9 +16,11 @@
  */
 
 import {
+  compareOverlayPrecedence,
   overlayActiveAt,
   overlayMatchesPath,
   overlayPatternMatches,
+  overlayStatus,
   resolveActiveOverlays,
   type HostOverlay,
 } from './overlays'
@@ -90,5 +92,25 @@ describe('marketing overlays (AGL-251)', () => {
       nowMs: 1,
     })
     expect(pricing.popup?.$id).toBe('pricing-popup')
+  })
+
+  it('names an overlay off, scheduled outside its window, or live', () => {
+    expect(overlayStatus({ enabled: false }, 5)).toBe('off')
+    expect(overlayStatus({ enabled: false, startAtMs: 1 }, 5)).toBe('off')
+    expect(overlayStatus({ startAtMs: 10 }, 5)).toBe('scheduled')
+    expect(overlayStatus({ endAtMs: 1 }, 5)).toBe('scheduled')
+    // An overlay nobody switched either way is on: `enabled` defaults true.
+    expect(overlayStatus({}, 5)).toBe('live')
+  })
+
+  it('orders by `order`, then by name — the precedence a page applies', () => {
+    const rows = [
+      { name: 'Gamma' },
+      { name: 'Alpha' },
+      { name: 'Beta', order: -1 },
+    ]
+    expect([...rows].sort(compareOverlayPrecedence).map((row) => row.name)).toEqual(
+      ['Beta', 'Alpha', 'Gamma'],
+    )
   })
 })

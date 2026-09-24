@@ -103,9 +103,36 @@ export function overlayActiveAt(
 }
 
 /**
+ * Whether an overlay is switched off, switched on but outside its window, or
+ * showing now — the status every overlay list draws as a chip.
+ */
+export function overlayStatus(
+  overlay: Pick<HostOverlay, 'enabled' | 'startAtMs' | 'endAtMs'>,
+  nowMs: number,
+): 'off' | 'scheduled' | 'live' {
+  if (overlay.enabled === false) return 'off'
+  return overlayActiveAt(overlay, nowMs) ? 'live' : 'scheduled'
+}
+
+/**
+ * The precedence overlays take when several match a page: `order`, then
+ * name. Only the console's reorder arrows ever write `order`, so most
+ * overlays share its default of 0 and fall through to their names.
+ */
+export function compareOverlayPrecedence(
+  a: Pick<HostOverlay, 'order' | 'name'>,
+  b: Pick<HostOverlay, 'order' | 'name'>,
+): number {
+  return (
+    (a.order ?? 0) - (b.order ?? 0) ||
+    String(a.name ?? '').localeCompare(String(b.name ?? ''))
+  )
+}
+
+/**
  * Picks the overlays to render for a page: enabled, inside their window,
- * targeting the path — sorted by `order` then name, first of each kind
- * wins (one bar + one popup per page render).
+ * targeting the path — sorted by {@link compareOverlayPrecedence}, first of
+ * each kind wins (one bar + one popup per page render).
  */
 export function resolveActiveOverlays(
   overlays: Array<HostOverlay & { $id?: string }>,
@@ -122,11 +149,7 @@ export function resolveActiveOverlays(
         overlayActiveAt(overlay, nowMs) &&
         overlayMatchesPath(overlay, context.path),
     )
-    .sort(
-      (a, b) =>
-        (a.order ?? 0) - (b.order ?? 0) ||
-        String(a.name ?? '').localeCompare(String(b.name ?? '')),
-    )
+    .sort(compareOverlayPrecedence)
   return {
     bar: active.find((overlay) => overlay.kind === 'bar' && overlay.bar) ?? null,
     popup:

@@ -24,7 +24,7 @@ import {
   pluginDocsHelp,
   SITE_EVENT_TYPES,
 } from '@aglyn/aglyn'
-import { compareVariants, summarizeVariantStats, validateExperiment, type ExperimentTarget, type ExperimentVariant, type HostExperiment } from '../model'
+import { describeVariantComparison, experimentResultRows, validateExperiment, type ExperimentTarget, type ExperimentVariant, type HostExperiment } from '../model'
 import {
   mdiChartBar,
   mdiDeleteOutline,
@@ -97,13 +97,16 @@ export interface HostExperimentsCardProps {
 
 type ExperimentDraft = HostExperiment & { $id?: string }
 
-const STATUS_COLORS: Record<string, 'default' | 'success' | 'info' | 'warning'> =
-  {
-    draft: 'default',
-    running: 'success',
-    paused: 'warning',
-    done: 'info',
-  }
+/** An experiment's status as a chip color, in every list of experiments. */
+export const EXPERIMENT_STATUS_COLORS: Record<
+  string,
+  'default' | 'success' | 'info' | 'warning'
+> = {
+  draft: 'default',
+  running: 'success',
+  paused: 'warning',
+  done: 'info',
+}
 
 /**
  * Experiments manager (AGL-252): create screen/section/email A/B tests
@@ -175,9 +178,20 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
   const experiments: ExperimentDraft[] = experimentRows.filter(
     (experiment: any) => !experiment.deletedAt,
   )
+  const [editor, setEditor] = useState<ExperimentDraft | null>(null)
+  /*
+   * The screens and their versions fill the EDITOR's pickers and nothing
+   * else on the card, so they are read while the editor is open and not
+   * before: a reader who came to see which tests are running pays for the
+   * experiments list alone, not for a hundred screens they never pick from.
+   */
+  const editorOpen = editor !== null
   const { data: screenDocs } = useFirestoreCollection<any>(
-    () => query(collection(firestore, 'hosts', hostId, 'screens'), limit(100)),
-    [firestore, hostId],
+    () =>
+      editorOpen
+        ? query(collection(firestore, 'hosts', hostId, 'screens'), limit(100))
+        : null,
+    [firestore, hostId, editorOpen],
     { idField: '$id' },
   )
   const screenOptions = [...(screenDocs ?? [])]
@@ -188,21 +202,22 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
 
-  const [editor, setEditor] = useState<ExperimentDraft | null>(null)
   // Versions of the screen under test (AGL-253): variants pin one each.
   const { data: versionDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(
-          firestore,
-          'hosts',
-          hostId,
-          'screens',
-          editor?.screenId ?? '-none-',
-          'versions',
-        ),
-        limit(50),
-      ),
+      editor?.screenId
+        ? query(
+            collection(
+              firestore,
+              'hosts',
+              hostId,
+              'screens',
+              editor.screenId,
+              'versions',
+            ),
+            limit(50),
+          )
+        : null,
     [firestore, hostId, editor?.screenId],
     { idField: '$id' },
   )
@@ -481,7 +496,7 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
       renderCell: ({ row: experiment }) => (
         <Chip
           size="small"
-          color={STATUS_COLORS[experiment.status] ?? 'default'}
+          color={EXPERIMENT_STATUS_COLORS[experiment.status] ?? 'default'}
           label={experiment.status}
         />
       ),
@@ -854,77 +869,37 @@ export function HostExperimentsCard(props: HostExperimentsCardProps) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(results?.experiment.variants ?? []).map((variant, index) => {
-                const summary = summarizeVariantStats(
-                  results?.stats[variant.id] ?? {},
-                )
-                // Lift + z-test confidence vs the first variant (AGL-265).
-                const control = results?.experiment.variants[0]
-                const comparison =
-                  index > 0 && control
-                    ? compareVariants(
-                        results?.stats[control.id] ?? {},
-                        results?.stats[variant.id] ?? {},
-                      )
-                    : null
-                const leader =
-                  summary.exposures > 0 &&
-                  (results?.experiment.variants ?? []).every((other) => {
-                    const otherSummary = summarizeVariantStats(
-                      results?.stats[other.id] ?? {},
-                    )
-                    return summary.rate >= otherSummary.rate
-                  })
-                return (
-                  <TableRow key={variant.id} selected={leader}>
-                    <TableCell>
-                      {variant.name ?? variant.id.toUpperCase()}
-                      {results?.experiment.winnerVariantId === variant.id
-                        ? ' 🏆'
-                        : leader
-                          ? ' ▲'
-                          : ''}
-                    </TableCell>
-                    <TableCell>{summary.exposures}</TableCell>
-                    <TableCell>{summary.conversions}</TableCell>
-                    <TableCell>
-                      {`${(summary.rate * 100).toFixed(1)}%`}
-                    </TableCell>
-                    <TableCell>
-                      {comparison
-                        ? `${
-                            comparison.lift != null
-                              ? `${comparison.lift >= 0 ? '+' : ''}${(comparison.lift * 100).toFixed(0)}%`
-                              : '—'
-                          }${
-                            comparison.confidence != null
-                              ? ` · ${(comparison.confidence * 100).toFixed(0)}% conf.`
-                              : ' · needs data'
-                          }`
-                        : 'control'}
-                    </TableCell>
-                    <TableCell align="right">
-                      {results?.experiment.status !== 'done' ? (
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            if (results) {
-                              void setStatus(
-                                results.experiment,
-                                'done',
-                                variant.id,
-                              )
-                              setResults(null)
-                            }
-                          }}
-                        >
-                          {'Pick winner'}
-                        </Button>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
+              {/* Lift + z-test confidence vs the first variant (AGL-265). */}
+              {(results
+                ? experimentResultRows(results.experiment, results.stats)
+                : []
+              ).map(({ variant, summary, comparison, leader, winner }) => (
+                <TableRow key={variant.id} selected={leader}>
+                  <TableCell>
+                    {variant.name ?? variant.id.toUpperCase()}
+                    {winner ? ' 🏆' : leader ? ' ▲' : ''}
+                  </TableCell>
+                  <TableCell>{summary.exposures}</TableCell>
+                  <TableCell>{summary.conversions}</TableCell>
+                  <TableCell>{`${(summary.rate * 100).toFixed(1)}%`}</TableCell>
+                  <TableCell>{describeVariantComparison(comparison)}</TableCell>
+                  <TableCell align="right">
+                    {results?.experiment.status !== 'done' ? (
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          if (results) {
+                            void setStatus(results.experiment, 'done', variant.id)
+                            setResults(null)
+                          }
+                        }}
+                      >
+                        {'Pick winner'}
+                      </Button>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </ScrollTable>
           {/*

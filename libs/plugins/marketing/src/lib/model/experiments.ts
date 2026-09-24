@@ -239,6 +239,78 @@ export function compareVariants(
   return { lift, confidence: normalCdf(z) }
 }
 
+/** Per-variant counters, keyed by variant id, as `experiments/{id}/stats` holds them. */
+export type ExperimentStatsByVariant = Record<
+  string,
+  { exposures?: number; conversions?: number } | undefined
+>
+
+/** One variant's line in the results table. */
+export interface ExperimentResultRow {
+  variant: ExperimentVariant
+  summary: { exposures: number; conversions: number; rate: number }
+  /**
+   * Lift and confidence against the control — the FIRST variant, which is
+   * compared against nothing and so carries `null` here.
+   */
+  comparison: VariantComparison | null
+  /** It has exposures and no variant converts at a higher rate. Ties all lead. */
+  leader: boolean
+  /** The variant the experiment finished on. */
+  winner: boolean
+}
+
+/**
+ * The results table's rows, in variant order: each variant's figures, its
+ * comparison with the control (AGL-265), and whether it leads or won.
+ */
+export function experimentResultRows(
+  experiment: Pick<HostExperiment, 'variants' | 'winnerVariantId'>,
+  stats: ExperimentStatsByVariant,
+): ExperimentResultRow[] {
+  const variants = experiment.variants ?? []
+  const summaries = variants.map((variant) =>
+    summarizeVariantStats(stats[variant.id] ?? {}),
+  )
+  const control = variants[0]
+  return variants.map((variant, index) => {
+    const summary = summaries[index]
+    return {
+      variant,
+      summary,
+      comparison:
+        index > 0 && control
+          ? compareVariants(stats[control.id] ?? {}, stats[variant.id] ?? {})
+          : null,
+      leader:
+        summary.exposures > 0 &&
+        summaries.every((other) => summary.rate >= other.rate),
+      winner: experiment.winnerVariantId === variant.id,
+    }
+  })
+}
+
+/**
+ * A comparison as the results table prints it: `+12% · 97% conf.`, a dash
+ * for a lift the control's zero rate cannot express, `needs data` until the
+ * z-test has something to test, and `control` for the variant everything is
+ * measured against.
+ */
+export function describeVariantComparison(
+  comparison: VariantComparison | null,
+): string {
+  if (!comparison) return 'control'
+  const lift =
+    comparison.lift != null
+      ? `${comparison.lift >= 0 ? '+' : ''}${(comparison.lift * 100).toFixed(0)}%`
+      : '—'
+  const confidence =
+    comparison.confidence != null
+      ? ` · ${(comparison.confidence * 100).toFixed(0)}% conf.`
+      : ' · needs data'
+  return `${lift}${confidence}`
+}
+
 /**
  * Auto-winner evaluation (AGL-273): decides a running experiment from
  * per-variant stats once thresholds are met. The first variant is the
