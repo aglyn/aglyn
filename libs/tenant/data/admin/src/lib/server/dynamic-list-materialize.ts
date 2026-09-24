@@ -84,11 +84,13 @@ import {
   type DynamicListSource,
   type ResolvedSegmentFilters,
 } from '@aglyn/aglyn/server'
+import { consentGroupHoldersInMotion } from '@aglyn/aglyn/app-utils/consent-group-change'
 import { firebaseAdmin } from './firebase-admin'
 import { readPersonEngagementByKeys } from './email-delivery-log'
 import { enrollListMember } from './list-members'
 import {
   consentGroupForSite,
+  getOrgForHost,
   orgDataCollectionForHost,
   scopedToHost,
 } from './organizations'
@@ -577,9 +579,31 @@ export async function collectDynamicListCandidates(options: {
    * pays no org read at all, which is the shape the engagement and list
    * lookups already take.
    */
-  const facetGroupId = dynamicListRuleNeedsContactFacet(planning)
-    ? (await consentGroupForSite(options.hostId)).groupId
-    : null
+  let facetGroupId: string | null = null
+  if (dynamicListRuleNeedsContactFacet(planning)) {
+    const found = await getOrgForHost(options.hostId).catch(() => null)
+    const org = (found?.org as Record<string, unknown> | undefined) ?? null
+    /*
+     * NOT WHILE THE FACETS MOVE (AGL-3320). A consent group change re-homes
+     * this site's facets after its declaration flips, and until it finishes a
+     * person's record may still sit under the old key — where this read,
+     * keyed by the new group, finds nothing. A rule reads that absence as a
+     * non-match, and a non-match is a removal. So the scan reports itself
+     * incomplete and reads nothing: the materializer's own rule for a partial
+     * view then enrolls nobody new and removes nobody, and the first sweep
+     * after the change finishes reads every record where it landed.
+     */
+    if (consentGroupHoldersInMotion(org, options.hostId)) {
+      return {
+        candidates: [],
+        complete: false,
+        cursor: options.resume ?? null,
+        empty: false,
+        read: 0,
+      }
+    }
+    facetGroupId = (await consentGroupForSite(options.hostId, org)).groupId
+  }
 
   /** Matched people, de-duplicated across silos by their person key. */
   const matches = new Map<string, DynamicListCandidate>()
