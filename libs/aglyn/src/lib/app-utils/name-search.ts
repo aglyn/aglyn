@@ -156,6 +156,41 @@ export function nameSearchFields(name: string): {
 }
 
 /**
+ * The search fields a document NAMED BY `displayName` carries (AGL-3321):
+ * the site artifacts (screens of every kind, layouts, reusable components,
+ * templates) and the marketplace listings.
+ *
+ * `nameSearchFields` is for documents whose name IS `name`. These documents
+ * name themselves `displayName`, and have since before search existed, so
+ * the keys ride beside it under the same three names every list declares —
+ * `lowerPath: 'nameLower'`, `tokensPath: 'nameTokens'`,
+ * `reversedPath: 'nameReversed'` — and one list query grammar reads them all.
+ *
+ * `displayName` is NOT returned. A create that carries no name must not gain
+ * an empty one: readers fall back with `displayName ?? id`, which an empty
+ * string defeats. But the KEYS are always returned, empty for a missing name,
+ * so a create stamps them unconditionally — an `orderBy('nameLower')` drops
+ * any document that lacks the field, and a document created without a name
+ * is still one a list must reach.
+ *
+ * ⚠️ Spread at every write that sets `displayName`, and at every create —
+ * and nowhere else: a partial update that stamped keys for a name it did not
+ * write would make the document unfindable by the name it still shows.
+ */
+export function displayNameSearchFields(displayName: unknown): {
+  nameLower: string
+  nameTokens: string[]
+  nameReversed: string
+} {
+  const name = typeof displayName === 'string' ? displayName : ''
+  return {
+    nameLower: nameSearchKey(name),
+    nameTokens: nameSearchTokens(name),
+    nameReversed: nameSearchReversed(name),
+  }
+}
+
+/**
  * The normalizers a list query plan (`planListQuery` in
  * `@aglyn/shared-ui-jsx/const/list-query-plan`) turns typed values into keys
  * with: the same functions the writers stamp `nameLower`, `nameTokens` and
