@@ -84,6 +84,32 @@ describe('asking for a confirmation', () => {
     expect(entry(firestore).pendingAt).toBe(NOW - 1000)
   })
 
+  /**
+   * Past the window the old request can no longer be confirmed, so a new
+   * signup asks again from now. Keeping the old moment would sign the new link
+   * with an expiry that has already passed.
+   */
+  it('asks again from now once the pending request has expired', async () => {
+    const expiredAt = NOW - DOUBLE_OPT_IN_EXPIRY_MS - 1
+    const firestore = seeded({
+      [TOPIC]: { pendingAt: expiredAt, confirmedAt: null },
+    })
+    const again = await recordPendingTopicConfirmation(HOST, ADDRESS, TOPIC, {
+      nowMs: NOW,
+      firestore,
+    })
+    expect(again).toEqual({ result: 'pending', pendingAtMs: NOW })
+    expect(entry(firestore).pendingAt).toBe(NOW)
+    expect(readTopicSubscriptionState(entry(firestore))).toBe('pending')
+    // The link minted from the new moment acts.
+    await expect(
+      confirmTopicSubscription(HOST, ADDRESS, TOPIC, {
+        nowMs: NOW + 1000,
+        firestore,
+      }),
+    ).resolves.toBe('confirmed')
+  })
+
   it('says nothing needs confirming for somebody already confirmed', async () => {
     const firestore = seeded({
       [TOPIC]: { pendingAt: NOW - 1000, confirmedAt: NOW - 500 },
