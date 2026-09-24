@@ -586,9 +586,25 @@ fully read, and export the working papers for the Webfile session.
 
 ### Audit log viewer {#audit-log}
 
-A record of staff actions. The **Action** menu groups the page's entries by their
-namespace, with every AI-related entry — the customer overage controls, the free-spend
-pause, and the AI actions themselves — under one **AI** group.
+A record of staff actions, newest first. Click an entry to read its reason, note and
+before/after below the list.
+
+The list filters through its table's toolbar, across the whole log rather than the page on
+screen:
+
+- **Action** (typed as it is recorded, such as `org.override`), **Who (uid)** and **Target**
+  are answered by the log's query, one at a time, and **When** (before or after a date) goes
+  alongside any of them.
+- **Action group** groups entries by their namespace, with every AI-related entry — the
+  customer overage controls, the free-spend pause, and the AI actions themselves — under one
+  **AI** group. **Scope** picks the lockdown, quarantine or report scope an entry was written
+  with. The pickers offer the groups and scopes of the entries read so far.
+- **Search** matches the actor's uid and address, the action, scope, target, reason and note.
+
+Action group, Scope and the search are matched as the log is read: each page looks through up
+to 500 entries, so a page can come back short, and **Next** carries on from where it stopped.
+**Export CSV** exports what the filters and search match, from up to 5,000 entries. See
+[Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ### Coupons {#coupons}
 
