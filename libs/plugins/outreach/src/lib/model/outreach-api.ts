@@ -62,6 +62,8 @@ export type OutreachRouteRefusalReason =
   | 'view-unsupported'
   | 'contact-not-found'
   | 'link-domain-refused'
+  | 'rate-limited'
+  | 'google-unavailable'
 
 /** A refusal, in the one shape every route answers with. */
 export interface OutreachRouteRefusal {
@@ -387,4 +389,30 @@ export interface OutreachPreviewResponse {
   unresolvedFields: string[]
   /** Why it could not be written, when it could not. */
   error: OutreachComposeError | null
+}
+
+/*==========================================
+ * A TEST OF ONE STEP (AGL-3325)
+ *==========================================*/
+
+/**
+ * `POST outreach/steps/test` — one step of a saved sequence, rendered
+ * exactly as `outreach/preview` renders it (the same person, personal
+ * line and step) and sent through the sequence's mailbox to the member.
+ */
+export interface OutreachStepTestRequest extends OutreachPreviewRequest {
+  /** Where the test goes; the member's own address when absent or empty. */
+  to?: string
+}
+
+export interface OutreachStepTestResponse {
+  ok: true
+  stepIndex: number
+  /** The address the test went to. */
+  sentTo: string
+  /** The subject as sent, `[Test]` prefix included. */
+  subject: string
+  sentAtMs: number
+  /** How many tests the mailbox has sent on its local day, this one included. */
+  testsToday: number
 }

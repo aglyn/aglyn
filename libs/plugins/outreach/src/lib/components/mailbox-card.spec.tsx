@@ -135,6 +135,7 @@ describe('MailboxCard — status and health (AGL-2978)', () => {
     for (const label of ['Sent', 'Bounces', 'Replies']) {
       expect(screen.getByLabelText(`${label} in the last 7 days`).textContent).toBe(`0${label}`)
     }
+    expect(screen.getByLabelText('Tests today').textContent).toBe('Tests today: 0')
     expect(button(MAILBOX_ACTION_LABELS.pause)).toBeTruthy()
     expect(button(MAILBOX_ACTION_LABELS.test)).toBeTruthy()
     expect(button(MAILBOX_ACTION_LABELS.disconnect)).toBeTruthy()
@@ -147,8 +148,8 @@ describe('MailboxCard — status and health (AGL-2978)', () => {
           ...base.health,
           lastSentAtMs: NOW - DAY,
           daily: {
-            '2026-09-15': { sent: 7, bounces: 1, replies: 2 },
-            '2026-09-12': { sent: 5, bounces: 0, replies: 1 },
+            '2026-09-15': { sent: 7, bounces: 1, replies: 2, tests: 3 },
+            '2026-09-12': { sent: 5, bounces: 0, replies: 1, tests: 1 },
             '2026-08-01': { sent: 40, bounces: 4, replies: 4 },
           },
         },
@@ -158,6 +159,8 @@ describe('MailboxCard — status and health (AGL-2978)', () => {
     expect(screen.getByLabelText('Sent in the last 7 days').textContent).toBe('12Sent')
     expect(screen.getByLabelText('Bounces in the last 7 days').textContent).toBe('1Bounces')
     expect(screen.getByLabelText('Replies in the last 7 days').textContent).toBe('3Replies')
+    // Tests are today's alone (AGL-3325), and never among the sends.
+    expect(screen.getByLabelText('Tests today').textContent).toBe('Tests today: 3')
   })
 
   it('shows a paused mailbox with Resume, and resumes it', async () => {

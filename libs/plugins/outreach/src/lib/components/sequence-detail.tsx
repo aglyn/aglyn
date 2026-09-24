@@ -423,6 +423,7 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
         <OutreachSequenceEditor
           orgId={orgId}
           orgMount={props.orgMount}
+          org={props.org}
           sequence={sequence}
           settings={props.settings}
           mailboxes={props.mailboxes}

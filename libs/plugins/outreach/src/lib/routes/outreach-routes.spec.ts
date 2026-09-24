@@ -24,7 +24,9 @@ import type { PluginRecordActivityRequest } from '@aglyn/aglyn/plugin-manager/pl
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
+import { outreachLocalDay } from '../mailboxes/mailbox-settings'
 import type { OutreachEmailStep, OutreachTaskStep } from '../model/outreach.types'
+import { FakeGmail } from '../runtime/fixtures/fake-gmail'
 import type { OutreachRecordEmailStamp } from '../runtime/runtime-deps'
 import { createOutreachDoNotContactDomainsRoute, OUTREACH_DO_NOT_CONTACT_DOMAIN_ACTIVITY } from './do-not-contact-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
@@ -39,6 +41,7 @@ import { createOutreachPreviewRoute } from './preview-routes'
 import { OUTREACH_SEQUENCE_ACTIVITY_TARGET } from './route-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
 import { createOutreachSequenceRoutes, OUTREACH_SEQUENCE_ACTIVITY } from './sequence-routes'
+import { createOutreachStepTestRoute, type OutreachStepTestDeps } from './step-test-routes'
 
 /**
  * The sequence, enroll, enrollment and preview routes (AGL-2980), end to end
@@ -200,6 +203,8 @@ function fakeFirestore(docs: Docs) {
       const writes: Array<() => void> = []
       return {
         update: (ref: { path: string }, data: Data) => void writes.push(() => write.update(ref.path, data)),
+        create: (ref: { path: string }, data: Data) => void writes.push(() => write.create(ref.path, data)),
+        set: (ref: { path: string }, data: Data) => void writes.push(() => write.set(ref.path, data)),
         commit: async () => writes.forEach((apply) => apply()),
       }
     },
@@ -1254,6 +1259,150 @@ describe('outreach/preview (AGL-2980)', () => {
     expect((await post(preview(), 'uid-reader', { sequenceId, contactId: 'c-1' })).status).toBe(403)
     contact('c-hidden', { name: 'Hidden', email: 'hidden@example.com', visibleTo: [`host:${OTHER_HOST}`] })
     expect((await post(preview(), REP, { sequenceId, contactId: 'c-hidden' })).body.reason).toBe('contact-not-found')
+  })
+})
+
+// ── A test of one step (AGL-3325) ───────────────────────────────────────────
+
+describe('outreach/steps/test (AGL-3325)', () => {
+  let gmail: FakeGmail
+  let limited: boolean
+  const testDeps = (): OutreachStepTestDeps => ({
+    openMailbox: async () => ({ ok: true, client: gmail, credential: {} as never }),
+    consumeRateLimit: async () => ({ allowed: !limited }),
+    clickLinkUrl: (linkId, trackingOrigin) =>
+      `${trackingOrigin ?? 'https://console.example.com/api/outreach/l'}/${linkId}`,
+    clickLinkOrigin: async () => 'https://links.example.com',
+  })
+  const test = (overrides: Partial<OutreachStepTestDeps> = {}) =>
+    createOutreachStepTestRoute(deps(), { ...testDeps(), ...overrides })
+  const header = (name: string) =>
+    gmail.sent[0]?.headers.find((entry) => entry.name.toLowerCase() === name.toLowerCase())?.value ?? ''
+  /** The sent body, its quoted-printable soft breaks removed. */
+  const sentBody = () => gmail.sent[0].body.replace(/=\r\n/g, '')
+  const storedLinks = () => [...docs.entries()].filter(([key]) => key.startsWith('outreachLinks/'))
+  const setMailboxStatus = (status: string) =>
+    docs.set(org(`outreachMailboxes/${MAILBOX}`), { ...(docs.get(org(`outreachMailboxes/${MAILBOX}`)) as Data), status })
+
+  beforeEach(() => {
+    gmail = new FakeGmail({ self: ['rep@example.com'] })
+    limited = false
+  })
+
+  it('sends the step to the member as the preview writes it, [Test] in front, its links as test links', async () => {
+    const saved = await post(sequences().save, REP, {
+      sequence: draft({
+        steps: [{ ...firstEmail, body: `${firstEmail.body}\n\nBook a time: https://example.com/book` }, call, followUp],
+        settings: { ...draft().settings, trackClicks: true },
+      }),
+    })
+    const sequenceId = saved.body.sequence.id as string
+    const { status, body } = await post(test(), REP, { sequenceId })
+    expect(status).toBe(200)
+    expect(body).toMatchObject({
+      ok: true,
+      stepIndex: 0,
+      sentTo: 'uid-rep@example.com',
+      subject: '[Test] Your second location, Casey',
+      sentAtMs: AT,
+      testsToday: 1,
+      unresolvedFields: [],
+    })
+    expect(gmail.sent).toHaveLength(1)
+    expect(header('To')).toContain('uid-rep@example.com')
+    expect(header('From')).toContain('rep@example.com')
+    expect(header('Subject')).toBe('[Test] Your second location, Casey')
+    expect(gmail.sent[0].threadId).toBeNull()
+    const text = sentBody()
+    expect(text).toContain('I saw Example Co just opened its second location.')
+    expect(text).toContain('Example Shop LLC')
+    // The link a recipient would get, stored as a test's: followed, never counted.
+    expect(text).not.toContain('https://example.com/book')
+    expect(text).toMatch(/https:\/\/links\.example\.com\/[A-Za-z0-9]{10}/)
+    const links = storedLinks()
+    expect(links).toHaveLength(1)
+    expect(links[0][1]).toMatchObject({
+      v: 1,
+      test: true,
+      enrollmentId: 'test',
+      sequenceId,
+      stepIndex: 0,
+      linkIndex: 0,
+      url: 'https://example.com/book',
+    })
+    // Counted on the mailbox's tests, and nowhere else.
+    const day = outreachLocalDay(AT, 'America/Chicago')
+    const mailbox = docs.get(org(`outreachMailboxes/${MAILBOX}`))
+    expect(fieldOf(mailbox, `health.daily.${day}`)).toEqual({ sent: 0, bounces: 0, replies: 0, tests: 1 })
+    expect(fieldOf(mailbox, 'health.sentToday')).toBeUndefined()
+    expect(Number(fieldOf(docs.get(org(`outreachSequences/${sequenceId}`)), 'stats.sent') ?? 0)).toBe(0)
+    expect([...docs.keys()].some((key) => key.includes('outreachEnrollments'))).toBe(false)
+    expect(filed).toEqual([])
+    expect(activity).toHaveLength(1)
+    expect((await post(test(), REP, { sequenceId })).body.testsToday).toBe(2)
+  })
+
+  it('sends a later email as the reply it would be, with no thread to answer, to an address the member types', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { body } = await post(test(), REP, {
+      sequenceId: saved.body.sequence.id,
+      contactId: 'c-warm',
+      personalLine: 'Loved the new storefront.',
+      stepIndex: 2,
+      to: ' Zach@Example.org ',
+    })
+    expect(body).toMatchObject({ sentTo: 'zach@example.org', subject: '[Test] Re: Your second location, Casey' })
+    expect(header('To')).toContain('zach@example.org')
+    expect(header('To')).not.toContain('casey.morgan@example.com')
+    expect(header('In-Reply-To')).toBe('')
+    expect(header('References')).toBe('')
+    expect(header('List-Unsubscribe')).toBe('')
+    expect(gmail.sent[0].threadId).toBeNull()
+    expect(sentBody()).toContain('Following up, Casey.')
+    expect([...docs.keys()].some((key) => key.includes('outreachEnrollments'))).toBe(false)
+  })
+
+  it('refuses while the mailbox is paused or needs reconnecting, an address that is not one, and a step that is not an email', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    const sequenceId = saved.body.sequence.id
+    setMailboxStatus('paused')
+    const paused = await post(test(), REP, { sequenceId })
+    expect(paused.status).toBe(409)
+    expect(paused.body).toMatchObject({ reason: 'mailbox-unavailable', error: expect.stringContaining('paused') })
+    setMailboxStatus('reconnect_required')
+    expect((await post(test(), REP, { sequenceId })).body.error).toContain('connected again')
+    setMailboxStatus('connected')
+    expect((await post(test(), REP, { sequenceId, to: 'not an address' })).body.reason).toBe('invalid-request')
+    expect((await post(test(), REP, { sequenceId, stepIndex: 1 })).body.error).toBe('That step does not send an email.')
+    expect(gmail.sent).toHaveLength(0)
+  })
+
+  it('keeps the test to the mailbox’s member or an owner, and to the hourly limit', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    const sequenceId = saved.body.sequence.id
+    const reader = await post(test(), 'uid-reader', { sequenceId })
+    expect(reader.status).toBe(403)
+    expect(reader.body.reason).toBe('permission')
+    expect((await post(test(), OWNER, { sequenceId })).status).toBe(200)
+    limited = true
+    const refused = await post(test(), REP, { sequenceId })
+    expect(refused.status).toBe(429)
+    expect(refused.body.reason).toBe('rate-limited')
+    expect(gmail.sent).toHaveLength(1)
+  })
+
+  it('says why the mailbox cannot be opened, and marks it for reconnecting', async () => {
+    const saved = await post(sequences().save, REP, { sequence: draft() })
+    const { status, body } = await post(
+      test({ openMailbox: async () => ({ ok: false, reason: 'sealed-token-unreadable' }) }),
+      REP,
+      { sequenceId: saved.body.sequence.id },
+    )
+    expect(status).toBe(409)
+    expect(body.reason).toBe('mailbox-unavailable')
+    expect(fieldOf(docs.get(org(`outreachMailboxes/${MAILBOX}`)), 'status')).toBe('reconnect_required')
+    expect(gmail.sent).toHaveLength(0)
   })
 })
 

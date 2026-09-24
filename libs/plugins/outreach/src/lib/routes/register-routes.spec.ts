@@ -55,6 +55,7 @@ const ROUTES: ReadonlyArray<readonly [string, 'GET' | 'POST']> = [
   [OUTREACH_API_ROUTES.enroll, 'POST'],
   [OUTREACH_API_ROUTES.enrollmentsAction, 'POST'],
   [OUTREACH_API_ROUTES.preview, 'POST'],
+  [OUTREACH_API_ROUTES.stepTest, 'POST'],
   [OUTREACH_API_ROUTES.doNotContactDomains, 'GET'],
   [OUTREACH_API_ROUTES.doNotContactDomains, 'POST'],
 ]

@@ -79,6 +79,13 @@ export const OUTREACH_API_ROUTES = {
   linkDomains: 'outreach/link-domains',
   /** `POST` — one email of a saved sequence, for a contact or a sample person. */
   preview: 'outreach/preview',
+  /**
+   * `POST` — one step of a saved sequence, rendered as the preview renders
+   * it and sent through the sequence's mailbox to the member (AGL-3325):
+   * `[Test]` in the subject, its links minted as test links, and counted
+   * on nothing but the mailbox's test tally.
+   */
+  stepTest: 'outreach/steps/test',
   // The one route a RECIPIENT reaches (AGL-2981): no session, a signed
   // token instead, and registered as a recipient link so it answers whether
   // or not Outreach is released for the organization now.

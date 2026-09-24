@@ -94,7 +94,17 @@ export interface OutreachClickTarget {
   linkIndex: number
   /** Where the recipient asked to go. */
   url: string
+  /**
+   * A link in a TEST of a step (AGL-3325), sent to a member and never to a
+   * person: it is followed exactly as any other and recorded nowhere, so
+   * the member's own click never moves a sequence's `clicks` or
+   * `machineClicks`. Its `enrollmentId` is {@link OUTREACH_TEST_LINK_ENROLLMENT}.
+   */
+  test?: boolean
 }
+
+/** The enrollment a test link names, since a test enrolls nobody. */
+export const OUTREACH_TEST_LINK_ENROLLMENT = 'test'
 
 /** A document id as a token may carry one. */
 const DOCUMENT_ID = /^[A-Za-z0-9_-]{1,160}$/
@@ -255,6 +265,8 @@ export function newOutreachLinkId(random: (size: number) => Uint8Array = randomB
 export interface OutreachStoredLink extends OutreachClickTarget {
   v: 1
   createdAtMs: number
+  /** Which sequence a TEST link's step belongs to (AGL-3325); a real send names its enrollment instead. */
+  sequenceId?: string
 }
 
 /**
@@ -274,6 +286,7 @@ export function outreachStoredLink(target: OutreachClickTarget, nowMs: number): 
     linkIndex: target.linkIndex,
     url,
     createdAtMs: nowMs,
+    ...(target.test ? { test: true } : {}),
   }
 }
 
@@ -298,6 +311,7 @@ export function readOutreachStoredLink(data: unknown): OutreachClickTarget | nul
     stepIndex: body['stepIndex'] as number,
     linkIndex: body['linkIndex'] as number,
     url,
+    ...(body['test'] === true ? { test: true } : {}),
   }
 }
 

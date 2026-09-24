@@ -117,7 +117,7 @@ const PREVIEW: OutreachEnrollPreviewResponse = {
 }
 
 let api: jest.Mocked<
-  Pick<OutreachApi, 'previewEnrollment' | 'enroll' | 'previewEmail'>
+  Pick<OutreachApi, 'previewEnrollment' | 'enroll' | 'previewEmail' | 'sendStepTest'>
 >
 
 const renderDialog = () => {
@@ -146,6 +146,7 @@ beforeEach(() => {
     previewEnrollment: jest.fn().mockResolvedValue(PREVIEW),
     enroll: jest.fn(),
     previewEmail: jest.fn(),
+    sendStepTest: jest.fn(),
   }
 })
 
@@ -420,6 +421,32 @@ describe('enrolling: the gate preview and Confirm (AGL-2980)', () => {
       contactId: 'c-cold',
       personalLine: 'Saw the new storefront.',
     })
+  })
+
+  it('sends a person’s first email to the rep as a test, with their line, and enrolls nobody (AGL-3325)', async () => {
+    api.sendStepTest.mockResolvedValue({
+      ok: true,
+      stepIndex: 0,
+      sentTo: 'rep@example.com',
+      subject: '[Test] Your second location, Avery',
+      sentAtMs: 1,
+      testsToday: 1,
+    })
+    await toPreview()
+    const cold = row('Avery Quinn')
+    fireEvent.change(within(cold).getByLabelText(/Personal line/), {
+      target: { value: 'Saw the new storefront.' },
+    })
+    fireEvent.click(within(cold).getByRole('button', { name: 'Send me this as a test' }))
+    expect((await within(cold).findByRole('alert')).textContent).toBe(
+      'Sent to rep@example.com as “[Test] Your second location, Avery”. Avery Quinn was not enrolled.',
+    )
+    expect(api.sendStepTest).toHaveBeenCalledWith({
+      sequenceId: 'seq-1',
+      contactId: 'c-cold',
+      personalLine: 'Saw the new storefront.',
+    })
+    expect(api.enroll).not.toHaveBeenCalled()
   })
 })
 

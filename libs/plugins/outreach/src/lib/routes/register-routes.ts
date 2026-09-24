@@ -19,7 +19,9 @@ import { pluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plugin-r
 import { registerPluginApiRoute } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { OUTREACH_API_ROUTES } from '../constants/api-routes'
+import { openOutreachMailboxClient } from '../mailboxes/mailbox-transport'
 import { outreachOrgSubject } from '../mailboxes/register-mailbox-routes'
+import { outreachShortLinkUrl } from '../runtime/click-link'
 import { createOutreachDoNotContactDomainsRoute } from './do-not-contact-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
@@ -29,6 +31,7 @@ import { createOutreachPreviewRoute } from './preview-routes'
 import type { OutreachRouteGateDeps } from './route-gate'
 import { createOutreachSequenceRoutes } from './sequence-routes'
 import { createOutreachSettingsRoute } from './settings-routes'
+import { createOutreachStepTestRoute, type OutreachStepTestDeps } from './step-test-routes'
 
 /**
  * Wires the settings, sequence and enrollment routes into the console
@@ -102,6 +105,23 @@ export function defaultOutreachLinkDomainDeps(): OutreachLinkDomainRouteDeps {
   }
 }
 
+/**
+ * The test send's reach (AGL-3325): the mailbox's Gmail through the same
+ * door the runtime and the Mailboxes test use, the platform's rate limit,
+ * and the short links a real send would mint.
+ */
+export function defaultOutreachStepTestDeps(): OutreachStepTestDeps {
+  return {
+    openMailbox: (mailboxId) => openOutreachMailboxClient(firebaseAdmin.app().firestore(), { mailboxId }),
+    consumeRateLimit: async (key, options) =>
+      (await import('@aglyn/tenant-data-admin/server/rate-limit-store')).consumeRateLimit(key, options),
+    clickLinkUrl: (linkId, trackingOrigin) =>
+      outreachShortLinkUrl({ origin: canonicalConsoleOrigin(), linkId, trackingOrigin }),
+    clickLinkOrigin: async ({ orgId, senderAddress }) =>
+      (await platform()).resolveTrackingLinkOrigin(firebaseAdmin.app().firestore(), orgId, senderAddress),
+  }
+}
+
 export function registerOutreachRoutes(
   deps: OutreachEnrollRouteDeps = defaultOutreachRouteDeps(),
 ): void {
@@ -120,6 +140,11 @@ export function registerOutreachRoutes(
     orgSubject,
   )
   registerPluginApiRoute(OUTREACH_API_ROUTES.preview, { web: createOutreachPreviewRoute(deps) }, orgSubject)
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.stepTest,
+    { web: createOutreachStepTestRoute(deps, defaultOutreachStepTestDeps()) },
+    orgSubject,
+  )
   registerPluginApiRoute(
     OUTREACH_API_ROUTES.doNotContactDomains,
     { web: createOutreachDoNotContactDomainsRoute(deps) },

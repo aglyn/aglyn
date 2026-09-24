@@ -109,6 +109,9 @@ async function followOutreachClick(
     status: 302,
     headers: { ...REDIRECT_HEADERS, Location: target.url },
   })
+  // A link in a test of a step (AGL-3325) is followed and never counted:
+  // the member clicking their own test is not a recipient acting.
+  if (target.test) return redirect
   try {
     const outcome = await recordOutreachClick(deps, {
       target,

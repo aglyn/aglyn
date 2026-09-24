@@ -54,6 +54,7 @@ import {
   type OutreachEnrollPreviewStatus,
   type OutreachEnrollSource,
   type OutreachPreviewResponse,
+  type OutreachStepTestResponse,
 } from '../model/outreach-api'
 import {
   OUTREACH_ATTESTATION_LABELS,
@@ -99,6 +100,12 @@ interface Supplied {
   personalLine: string
   attestations: OutreachAttestationKind[]
 }
+
+/** Where one person's test send stands (AGL-3325). */
+type StepTest =
+  | { status: 'sending' }
+  | { status: 'sent'; answer: OutreachStepTestResponse }
+  | { status: 'failed'; message: string }
 
 type Stage =
   | { kind: 'source' }
@@ -159,6 +166,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
       | { status: 'failed'; message: string }
     >
   >({})
+  const [stepTests, setStepTests] = useState<Record<string, StepTest>>({})
 
   const views = useOutreachSavedViews(props.open ? orgId : null, props.uid)
   const search = useOutreachContactSearch({
@@ -180,6 +188,7 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
     setProblem(null)
     setSupplied({})
     setEmailPreview({})
+    setStepTests({})
   }
   const close = () => {
     reset()
@@ -292,6 +301,30 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
           status: 'failed',
           message: (error as Error).message,
         },
+      }))
+    }
+  }
+
+  /**
+   * This person's first email, sent to the member as a test (AGL-3325):
+   * their record and the personal line as written so far fill the tokens,
+   * and nothing is enrolled or stored for them.
+   */
+  const sendTest = async (person: OutreachEnrollPreviewPerson) => {
+    setStepTests((previous) => ({ ...previous, [person.personId]: { status: 'sending' } }))
+    try {
+      const answer = await api.sendStepTest({
+        sequenceId: sequence.id,
+        ...(person.target === 'lead' && person.leadId
+          ? { leadId: person.leadId }
+          : { contactId: person.contactId }),
+        personalLine: supplied[person.personId]?.personalLine.trim() ?? '',
+      })
+      setStepTests((previous) => ({ ...previous, [person.personId]: { status: 'sent', answer } }))
+    } catch (error) {
+      setStepTests((previous) => ({
+        ...previous,
+        [person.personId]: { status: 'failed', message: (error as Error).message },
       }))
     }
   }
@@ -571,6 +604,8 @@ export function OutreachEnrollDialog(props: OutreachEnrollDialogProps) {
                     onSupply={(next) => supply(person.personId, next)}
                     emailPreview={emailPreview[person.personId]}
                     onPreviewEmail={() => void previewEmail(person)}
+                    stepTest={stepTests[person.personId]}
+                    onSendTest={() => void sendTest(person)}
                     disabled={stage.kind === 'enrolling'}
                   />
                 ))}
@@ -655,6 +690,8 @@ function PersonRow(props: {
     | { status: 'failed'; message: string }
     | undefined
   onPreviewEmail(): void
+  stepTest: StepTest | undefined
+  onSendTest(): void
   disabled: boolean
 }) {
   const { person, supplied, disabled } = props
@@ -769,7 +806,7 @@ function PersonRow(props: {
                     ))}
                   </FormGroup>
                 ) : null}
-                <Stack direction="row">
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
                   <Button
                     size="small"
                     onClick={props.onPreviewEmail}
@@ -777,7 +814,22 @@ function PersonRow(props: {
                   >
                     Preview the first email
                   </Button>
+                  <Button
+                    size="small"
+                    onClick={props.onSendTest}
+                    disabled={disabled || props.stepTest?.status === 'sending'}
+                  >
+                    {props.stepTest?.status === 'sending' ? 'Sending…' : 'Send me this as a test'}
+                  </Button>
                 </Stack>
+                {props.stepTest?.status === 'failed' ? (
+                  <Alert severity="error">{props.stepTest.message}</Alert>
+                ) : null}
+                {props.stepTest?.status === 'sent' ? (
+                  <Alert severity="success">
+                    {`Sent to ${props.stepTest.answer.sentTo} as “${props.stepTest.answer.subject}”. ${name} was not enrolled.`}
+                  </Alert>
+                ) : null}
                 {props.emailPreview?.status === 'loading' ? (
                   <OutreachLoading label="Writing the email…" />
                 ) : null}
