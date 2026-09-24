@@ -36,7 +36,7 @@ Two rules decide everything that follows:
 | Route — `POST /api/orgs/consent-groups` | `apps/console/app/api/orgs/consent-groups/route.ts` |
 | Cron backstop | `apps/console/app/api/admin/consent-group-changes/route.ts` |
 | Console editor | `libs/plugins/email/src/lib/components/consent-groups-card.tsx`, `consent-group-dialog.tsx`, `consent-group-change-progress.tsx`, `site-consent-group-card.tsx` |
-| The editor's copy of the wire contract | `libs/plugins/email/src/lib/components/consent-groups-api.ts` |
+| The editor's client of the route (the planner's types, imported as types) | `libs/plugins/email/src/lib/components/consent-groups-api.ts` |
 | User docs | `apps/docs/docs/marketing-and-automation/email-campaigns/overview.md#consent-groups` |
 
 ## Inventory: what a change has to look after
@@ -49,7 +49,7 @@ Two rules decide everything that follows:
 | R2 | Live topic opt-outs | `hosts/{h}/topicOptOuts/{key}.topics.{t}` | **C2** — where the other site's state for the topic is not `opted-out`, set `optedOutAt` from the source, `resubscribedAt: null`, `carriedFromHostId`. |
 | R3 | Pace (cadence) | `hosts/{h}/emailFrequency/{key}` | **C3** — the most recent choice wins (`cadenceSetAtMs`), `lastSentAtMs` takes the max, `cadenceCarriedFromHostId` records it. `sentAtMs` / `firstSentAtMs` are never touched. |
 | R4 | Per-site marketing refusal on a contact | `orgs/{o}/contacts/{id}.marketingConsentByHost.{h}` with `marketingConsent === false` | **C4** (CRM participant) — a dotted-path write of the refusal onto the other site, with `carriedFromHostId`, `carriedByChangeId` and the entry it replaced as `supersededEntry`. |
-| R5 | Pending confirmation (double opt-in) | `topics.{t}.pendingAt` without `confirmedAt` | **Not carried.** The confirm link confirms only the site that asked; the preview counts the holds that end. |
+| R5 | Pending confirmation (double opt-in) | `topics.{t}.pendingAt` without `confirmedAt` | **Not carried.** The confirm link confirms only the site that asked; the preview counts the holds that end, on the built-in topic streams. |
 | R6 | Unscoped refusal `contacts.marketingConsent === false` | contact top level | Unaffected — it already stands against every site. |
 
 Carries run for every pair `(a, b)` that is together before and apart after, **in both
@@ -87,8 +87,9 @@ the change lines, per-step cursors and counts, the lease, failures and the last 
 
 1. **Start** (one org-document transaction): the stored raw declaration equals the
    `expected` the editor sent, and no marker exists. Set the marker at `phase: 'carry'`,
-   create the job, log "Started a consent group change". A rename-only change skips to
-   step 4.
+   create the job, log "Started a consent group change". A rename-only change goes
+   straight to step 4, which finishes it in the same transaction: there is nothing to
+   carry or move, so there is no sweep.
 2. **Carry**: C1–C3 for every `(a ← b)`, then every participant's `carry` (C4).
 3. **Pre-flip catch-up**: C1–C3 again for rows written since the carry began (by
    `suppressedAt`, `updatedAt`, `cadenceSetAtMs`, from five minutes before), and C4 in
@@ -120,10 +121,12 @@ of a site named in `marker.hostIds` returns incomplete and removes nobody.
   groups, `ConsentGroupChangeProgress` listens to the job document and posts `continue`
   whenever no runner holds the lease (a 50 s budget per call, at least 3 s apart, and not
   before the sweep may run).
-- **The cron**, every 15 minutes: `/api/admin/consent-group-changes` (240 s budget),
-  guarded by `isCronAuthorized` / `isCronDryRun`, dispatched with the other fast console
-  crons and listed in the health report's scheduled jobs. It queries orgs whose marker
-  is in a running phase.
+- **The cron**, every 15 minutes: `/api/admin/consent-group-changes` (a 200 s budget,
+  so it answers inside the scheduler's 240 s wait), guarded by `isCronAuthorized` /
+  `isCronDryRun`, run by the `consoleFastCrons` function and listed in the health
+  report's scheduled jobs. It queries orgs whose marker is in a running phase. It skips
+  a change while the org, or the member who started it, is locked down, and clears a
+  marker whose job document is gone, since nothing could ever finish it.
 
 Closing the page never strands a change; it only slows it to the cron's pace.
 
@@ -158,12 +161,14 @@ registerPluginConsentGroupParticipant(
     run({ orgId, changeId, plan, phase, cursor, deadlineMs, dryRun }) {
       /* → { done, cursor, counts } */
     },
+    summarize(counts) { /* → its clause of the "Finished…" line, or null */ },
   },
   { pluginId: '<bundle id>' },
 )
 ```
 
-- **`preview` writes nothing** and counts with aggregations. Its lines are printed in the
+- **`preview` writes nothing** and counts with aggregations. It is isolated: one that
+  throws shows as `null` lines, and the review says part of the change was not counted. Its lines are printed in the
   review as written, so write them for an admin, in American English, with no brand
   name; namespace the ids (`crm.combine`). The editor folds the CRM's six line ids into
   its own sentences and prints every other line as-is.
@@ -206,5 +211,6 @@ changes for an organization that declares no group.
   against. A `409` with `current` means somebody else changed it; the dialog reloads and
   asks again. The review's sentences come from `consent-group-review.ts`, with every
   number taken from the preview.
-- The editor's request and response types in `consent-groups-api.ts` are a copy of the
-  route's contract. Change both together.
+- The editor's request and response types in `consent-groups-api.ts` are the planner's
+  own, imported as types, so a field renamed in the route's contract fails the email
+  plugin's type check.

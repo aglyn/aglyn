@@ -112,9 +112,11 @@
  * the preference page promised the person that an opt-out from the group
  * covers all of it, and separating the sites must not quietly break that.
  * The consent group change (the pure plan in `consent-group-change.ts`, run
- * by the executor in `@aglyn/tenant-data-admin`) is the one writer of this
- * field, and it carries the site suppression rows, the topic opt-outs, the
- * pace and a contact's per-site refusal before it flips the declaration.
+ * by the executor in `@aglyn/tenant-data-admin`, started from the Emails
+ * hub's Consent groups section through `POST /api/orgs/consent-groups`) is
+ * the one writer of this field, and it carries the site suppression rows,
+ * the topic opt-outs, the pace and a contact's per-site refusal before it
+ * flips the declaration.
  * A site that is in a group, or in a change still running, cannot be
  * deleted until it is out: deletion would destroy refusals a sibling still
  * reads.
