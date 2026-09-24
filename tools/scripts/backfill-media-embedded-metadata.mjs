@@ -93,7 +93,7 @@ const appUtils = '../../libs/aglyn/src/lib/app-utils'
 const { readMediaEmbeddedMetadata } = jiti(
   `${appUtils}/media-embedded-metadata/index.ts`,
 )
-const { embeddedMetadataReadable, MEDIA_EMBEDDED_METADATA_VERSION } = jiti(
+const { embeddedMetadataIsCurrent, embeddedMetadataReadable } = jiti(
   `${appUtils}/media-embedded-fields.ts`,
 )
 
@@ -122,12 +122,8 @@ for (const doc of snapshot.docs) {
   const data = doc.data()
   if (data.deletedAt) { skippedDeleted++; continue }
   if (!embeddedMetadataReadable(data.contentType)) { skippedNoReader++; continue }
-  const stored = data.embeddedMetadata
-  if (
-    stored?.version === MEDIA_EMBEDDED_METADATA_VERSION &&
-    (typeof data.contentSha256 !== 'string' ||
-      stored.contentSha256 === data.contentSha256)
-  ) {
+  // The drawer's and the API's own test, so all three agree on "current".
+  if (embeddedMetadataIsCurrent(data.embeddedMetadata, data.contentSha256)) {
     skippedCurrent++
     continue
   }

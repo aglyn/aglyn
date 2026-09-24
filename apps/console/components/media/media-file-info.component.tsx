@@ -19,11 +19,11 @@ import {
   embeddedFieldDisplay,
   embeddedFieldKind,
   embeddedFieldLabel,
+  embeddedMetadataIsCurrent,
   embeddedMetadataReadable,
   embeddedWritableKeys,
   MEDIA_EMBEDDED_CATALOG,
   MEDIA_EMBEDDED_GROUP_LABELS,
-  MEDIA_EMBEDDED_METADATA_VERSION,
   type MediaEmbeddedCanonicalKey,
   type MediaEmbeddedField,
   type MediaEmbeddedMetadata,
@@ -69,17 +69,6 @@ export interface MediaFileInfoProps {
   onFileChanged?: (update: Record<string, unknown>) => void
 }
 
-/** Whether a stored record describes the bytes the document names. */
-const isCurrent = (record: unknown, sha: unknown) => {
-  const value = record as Partial<MediaEmbeddedMetadata> | undefined
-  return Boolean(
-    value &&
-      value.version === MEDIA_EMBEDDED_METADATA_VERSION &&
-      Array.isArray(value.fields) &&
-      (typeof sha !== 'string' || value.contentSha256 === sha),
-  )
-}
-
 const FactRow = ({ label, children }: { label: string; children: string }) => (
   <>
     <Typography variant="caption" color="text.secondary" sx={{ pt: '2px' }}>
@@ -122,7 +111,7 @@ export function MediaFileInfo(props: MediaFileInfoProps) {
   const [sha, setSha] = useState<string | undefined>(media?.['contentSha256'])
   const [record, setRecord] = useState<MediaEmbeddedMetadata | null | undefined>(
     () =>
-      isCurrent(media?.['embeddedMetadata'], media?.['contentSha256'])
+      embeddedMetadataIsCurrent(media?.['embeddedMetadata'], media?.['contentSha256'])
         ? (media['embeddedMetadata'] as MediaEmbeddedMetadata)
         : readable
           ? undefined

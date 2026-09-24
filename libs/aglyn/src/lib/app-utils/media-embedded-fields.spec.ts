@@ -20,11 +20,15 @@ import {
   embeddedFieldGroup,
   embeddedFieldLabel,
   embeddedKeyWritable,
+  embeddedMetadataIsCurrent,
   embeddedMetadataReadable,
   embeddedWritableKeys,
   MEDIA_EMBEDDED_CATALOG,
   MEDIA_EMBEDDED_GROUP_ORDER,
   MEDIA_EMBEDDED_MAX_LIST_ITEMS,
+  MEDIA_EMBEDDED_METADATA_VERSION,
+  mediaEmbeddedPublicView,
+  mediaEmbeddedSearchText,
   otherEmbeddedKey,
   parseOtherEmbeddedKey,
   sanitizeEmbeddedPatch,
@@ -191,5 +195,90 @@ describe('embeddedMetadataReadable', () => {
     expect(embeddedMetadataReadable('text/csv')).toBe(false)
     expect(embeddedMetadataReadable('application/zip')).toBe(false)
     expect(embeddedMetadataReadable(undefined)).toBe(false)
+  })
+})
+
+const storedRecord = (overrides: Record<string, unknown> = {}) => ({
+  version: MEDIA_EMBEDDED_METADATA_VERSION,
+  format: 'jpeg',
+  writable: true,
+  contentSha256: 'sha-1',
+  fields: [
+    { key: 'description', label: 'Description', group: 'description', value: 'Boats at dusk', sources: ['xmp'], editable: true },
+    { key: 'gps', label: 'GPS position', group: 'location', value: '37.7,-122.4', sources: ['exif'], editable: true },
+    { key: 'keywords', label: 'Keywords', group: 'description', values: ['harbor', 'sunset'], sources: ['xmp', 'iptc'], editable: true },
+    { key: 'make', label: 'Camera make', group: 'capture', value: 'Canon', sources: ['exif'], editable: true },
+    { key: 'title', label: 'Title', group: 'description', value: 'Harbor', sources: ['xmp'], editable: true },
+    { key: 'city', label: 'City', group: 'location', value: 'Sausalito', sources: ['xmp'], editable: true },
+  ],
+  ...overrides,
+})
+
+describe('embeddedMetadataIsCurrent (AGL-3331)', () => {
+  it('holds for a record read from these bytes', () => {
+    expect(embeddedMetadataIsCurrent(storedRecord(), 'sha-1')).toBe(true)
+    // An asset too large for a strong digest has none to compare.
+    expect(embeddedMetadataIsCurrent(storedRecord(), undefined)).toBe(true)
+  })
+
+  it('refuses a record from replaced bytes, an old shape, or none', () => {
+    expect(embeddedMetadataIsCurrent(storedRecord(), 'sha-2')).toBe(false)
+    expect(embeddedMetadataIsCurrent(storedRecord({ version: 0 }), 'sha-1')).toBe(false)
+    expect(embeddedMetadataIsCurrent(storedRecord({ fields: null }), 'sha-1')).toBe(false)
+    expect(embeddedMetadataIsCurrent(undefined, 'sha-1')).toBe(false)
+  })
+})
+
+describe('mediaEmbeddedSearchText (AGL-3339)', () => {
+  it('spends the budget on what people search by, most telling first', () => {
+    expect(mediaEmbeddedSearchText(storedRecord())).toBe(
+      'Harbor harbor sunset Sausalito Boats at dusk',
+    )
+  })
+
+  it('never offers a position or a camera to search by', () => {
+    const text = mediaEmbeddedSearchText(storedRecord())
+    expect(text).not.toContain('37.7')
+    expect(text).not.toContain('Canon')
+  })
+
+  it('is empty for anything that is not a record', () => {
+    expect(mediaEmbeddedSearchText(undefined)).toBe('')
+    expect(mediaEmbeddedSearchText({ fields: 'nope' })).toBe('')
+    expect(mediaEmbeddedSearchText(storedRecord({ fields: [] }))).toBe('')
+  })
+})
+
+describe('mediaEmbeddedPublicView (AGL-3339)', () => {
+  it('publishes a value or a list, never both, and nothing the API cannot act on', () => {
+    const view = mediaEmbeddedPublicView(storedRecord(), 'sha-1')
+    expect(view?.format).toBe('jpeg')
+    expect(view?.truncated).toBe(false)
+    expect(view?.fields.find((field) => field.key === 'title')).toEqual({
+      key: 'title',
+      label: 'Title',
+      group: 'description',
+      value: 'Harbor',
+      values: null,
+    })
+    expect(view?.fields.find((field) => field.key === 'keywords')).toEqual({
+      key: 'keywords',
+      label: 'Keywords',
+      group: 'description',
+      value: null,
+      values: ['harbor', 'sunset'],
+    })
+    expect(JSON.stringify(view)).not.toMatch(/sources|editable|contentSha256/)
+  })
+
+  it('is null rather than the previous file\'s details', () => {
+    expect(mediaEmbeddedPublicView(storedRecord(), 'sha-2')).toBeNull()
+    expect(mediaEmbeddedPublicView(undefined, 'sha-1')).toBeNull()
+  })
+
+  it('says when fields were dropped to fit', () => {
+    expect(
+      mediaEmbeddedPublicView(storedRecord({ truncated: true }), 'sha-1')?.truncated,
+    ).toBe(true)
   })
 })
