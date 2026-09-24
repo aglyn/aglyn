@@ -1196,6 +1196,19 @@ export interface AglynOrgBilling extends AglynDocument {
    * into every group a send path reads.
    */
   consentGroupsAwaitConfirmation?: boolean
+  /**
+   * How marketing sends treat a recipient with no recorded basis
+   * (`marketing-consent.ts`): `strict` withholds every one, `forward`
+   * grandfathers records captured before `enforceFromMs`. Absent is the
+   * strict default.
+   *
+   * SERVER-OWNED: denied to the client SDK, because
+   * `resolveMarketingConsentPolicy` reads it in `app-utils` on every campaign
+   * and flow send, and a client-set `forward` with a late cutoff would
+   * grandfather an audience that never gave a basis. No console screen
+   * writes it.
+   */
+  marketingConsentPolicy?: { mode?: 'strict' | 'forward'; enforceFromMs?: number }
   /** The workspace URL segment, reserved through `orgSlugs/{slug}`. */
   slug?: string
   /**

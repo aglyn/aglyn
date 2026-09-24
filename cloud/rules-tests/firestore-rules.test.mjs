@@ -5652,7 +5652,7 @@ describe('acquisition is the platform\'s to write, never a client\'s (AGL-3289)'
  * The manager's ordinary writes still land, asserted beside the refusals, so
  * the guard cannot be satisfied by closing the document.
  */
-describe('consent groups and their confirmation switch are server-owned (AGL-3316)', () => {
+describe('consent groups, their confirmation switch and the consent policy are server-owned (AGL-3316)', () => {
   const DECLARATION = { acme: { name: 'Acme', hostIds: [HOST, 'host-b'] } }
 
   it('refuses a manager setting either field from the client', async () => {
@@ -5715,6 +5715,24 @@ describe('consent groups and their confirmation switch are server-owned (AGL-331
       await mustDeny(
         `${staffRole} staff turning the confirmation switch on`,
         updateDoc(doc(staffDb, 'orgs', ORG), { consentGroupsAwaitConfirmation: true }),
+      )
+    }
+  })
+
+  it('refuses anybody setting the marketing consent policy from the client', async () => {
+    // `forward` with a late cutoff grandfathers everyone captured before it,
+    // so a client able to write this could widen who a campaign reaches.
+    const LAX = { mode: 'forward', enforceFromMs: Date.UTC(2099, 0, 1) }
+    await mustDeny(
+      'the owner loosening the consent policy',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { marketingConsentPolicy: LAX }),
+    )
+    for (const staffRole of ['super', 'billing']) {
+      await mustDeny(
+        `${staffRole} staff loosening the consent policy`,
+        updateDoc(doc(authed(STAFF, { staff: true, staffRole }), 'orgs', ORG), {
+          marketingConsentPolicy: LAX,
+        }),
       )
     }
   })
