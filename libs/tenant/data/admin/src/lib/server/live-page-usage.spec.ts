@@ -26,7 +26,11 @@
  */
 
 import { compress } from '@aglyn/aglyn/app-utils/compress'
-import { readUsageCandidates, scanComponentUsage } from './live-page-usage'
+import {
+  readUsageCandidates,
+  scanComponentUsage,
+  screenIdsUsingComponentDeep,
+} from './live-page-usage'
 
 const PLACES_HEADER = {
   '_@_': { $id: '_@_', componentId: 'div', nodes: ['hdr'] },
@@ -133,5 +137,67 @@ describe('readUsageCandidates over the site’s emails (AGL-3287)', () => {
         versionId: 'v1',
       },
     ])
+  })
+})
+
+/**
+ * A campaign's email is a `kind: 'email'` screen document that is never a page
+ * (AGL-3287). Reported as a `screen`, the "Used by" card sent the reader to the
+ * page settings — a slug, SEO and a Publish that would route the email — and
+ * the publish-time cache drop went looking for a page it could not have.
+ */
+describe('a campaign email design is an email, not a page (AGL-3287)', () => {
+  const hostRef = hostRefOver({
+    'hosts/h1/screens/launch': {
+      displayName: 'Launch email',
+      kind: 'email',
+      versionId: 'v2',
+    },
+    'hosts/h1/screens/launch/versions/v2': {
+      nodes: Buffer.from(compress(PLACES_HEADER)),
+    },
+    'hosts/h1/screens/home': { displayName: 'Home', versionId: 'v9' },
+    'hosts/h1/screens/home/versions/v9': {
+      nodes: Buffer.from(compress(PLACES_HEADER)),
+    },
+  })
+
+  it('reads a screen’s kind, and only when it has one', async () => {
+    const { candidates } = await readUsageCandidates(hostRef, 'screens', {
+      withNodes: true,
+      limit: 200,
+    })
+    expect(candidates.find((entry) => entry.id === 'launch')).toMatchObject({
+      kind: 'email',
+    })
+    expect(candidates.find((entry) => entry.id === 'home')).not.toHaveProperty(
+      'kind',
+    )
+  })
+
+  it('reports the email design as one, beside the page that places the same block', async () => {
+    const { candidates } = await readUsageCandidates(hostRef, 'screens', {
+      withNodes: true,
+      limit: 200,
+    })
+    const sources = { screens: candidates, layouts: [], components: [] }
+    expect(scanComponentUsage('header-1', sources)).toEqual([
+      {
+        type: 'screen',
+        id: 'home',
+        name: 'Home',
+        via: ['id'],
+        versionId: 'v9',
+      },
+      {
+        type: 'emailDesign',
+        id: 'launch',
+        name: 'Launch email',
+        via: ['id'],
+        versionId: 'v2',
+      },
+    ])
+    // Only the page has a cache to drop when the block is published.
+    expect(screenIdsUsingComponentDeep('header-1', sources)).toEqual(['home'])
   })
 })
