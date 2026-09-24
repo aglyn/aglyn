@@ -25,7 +25,7 @@ flowchart LR
   N --> L[Lost]
 ```
 
-![The Deals section of the CRM: the pipeline board with Inquiry, Demo booked, Proposal and Negotiation columns, the open, pipeline and weighted totals above, and Won and Lost beside the Board and Table toggle](/img/contacts/crm-deals-board.png)
+![The Deals section of the CRM: the pipeline board with Qualified, Contact made, Proposal sent and Negotiation columns, the open deals, pipeline value and weighted value above them, and the Pipeline picker beside the Board and Table toggle](/img/contacts/crm-deals-board.png)
 
 ## Pipelines
 

@@ -14,11 +14,11 @@ record, and one button — there's no multi-step wizard.
 Starter plan — see Billing to upgrade."*
 :::
 
-![Connecting a custom domain](/img/custom-domains/setup-domains.png)
+![The Custom domain card in the site's Admin area, with the CNAME, ALIAS and A records, the Domain field and Verify & connect](/img/custom-domains/setup-domains.png)
 
 ## Steps
 
-1. In the site's **Admin** page, open the **Custom Domain** tab. The card explains:
+1. In the site's **Admin** page, choose **Custom Domain** in its navigation. The card explains:
    *"Point your domain at Aglyn, then verify. A subdomain like www uses a CNAME. A bare
    apex cannot carry a CNAME, so point it at the same hostname with an ALIAS — or use the
    A record if your registrar has no ALIAS. Any one of these verifies"*, and lists the

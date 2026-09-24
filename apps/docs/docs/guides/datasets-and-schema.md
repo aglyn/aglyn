@@ -162,7 +162,7 @@ The canvas doesn't expand rows while designing — it shows a repeat notice on
 the container ("children render once per record on the live site") so you
 design a single template. Up to 100 records render per repeatable.
 
-![A Stack selected in the Besigner with its Repeat over dataset, Repeat limit, and Repeat filter properties shown in the inspector](/img/guides/datasets-repeat-binding.png)
+![A Stack selected in the Besigner: its canvas badge names the Survey responses dataset and the record count, and the inspector's Repeat over dataset field is set to Survey responses, with Repeat limit, filter and sort below it](/img/guides/datasets-repeat-binding.png)
 
 ## Everything that writes records
 

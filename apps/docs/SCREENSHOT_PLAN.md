@@ -7,9 +7,10 @@ form `<!-- screenshot: {filename} per SCREENSHOT_PLAN.md -->` at the exact inser
 spot — replace each comment with a standard image reference using the alt text below.
 
 Conventions (per `CONTRIBUTING.md`): 1440×900 window, light scheme, seeded emulator
-stack via `tools/e2e/capture-docs-screenshots.mjs` where possible (add shot specs
-there rather than capturing by hand), crop tightly to the named element, save under
-`static/img/<area>/`, optimize to <300 KB. Component-level crops are preferred over
+stack via `npm run docs:screenshots`, which runs `tools/e2e/capture-docs-screenshots.mjs`
+and its guide sibling (every image has a shot spec; add one rather than capturing
+by hand), crop tightly to the named element, save under `static/img/<area>/`. The
+harness optimizes each capture under 300 KB. Component-level crops are preferred over
 full pages throughout — a shot spec's `clipTo: { locator, include }` crops to what
 the element measures at capture time, which is what a card whose neighbours keep
 growing needs.

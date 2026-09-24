@@ -475,6 +475,35 @@ stale one keeps a whole `node_modules` and `.next` on disk.
 
 ## Docs screenshots
 
+Every docs image, and the root README's, comes from one command against the
+seeded stack (AGL-3319):
+
+```bash
+# emulators + seed:e2e, then serve:console:emulated and, for the guide walks,
+# REVALIDATE_SECRET=local npm run serve:tenant:emulated (port 4500)
+E2E_BASE_URL=http://localhost:4200 npm run docs:screenshots
+```
+
+It runs four steps in order and stops at the first that fails:
+`tools/e2e/seed-docs-fixtures.mjs` (the docs-only fixtures: ordinary invented
+names, CRM addresses on the reserved `.example` TLD, sixty days of traffic,
+the plugins the guides need), `capture-docs-shots.mjs`,
+`capture-docs-screenshots.mjs`, and `render-readme-composites.mjs`, which
+builds the README banner, the GitHub social preview and the example plugin's
+image from the fresh captures. Each capture is optimized as it is written and
+refused over 300 KB, and a shot that fails leaves a picture of the page in
+`tmp/e2e-artifacts/docs-*.png`. `npm run check:docs-screenshots` then checks
+every referenced image decodes, sits under the ceiling, and that nothing
+under `static/img` is unreferenced.
+
+The guide harness drops the tenant's cached host after seeding through
+`/api/revalidate`, which is why the tenant runs with `REVALIDATE_SECRET=local`
+(or pass the secret you chose as `E2E_REVALIDATE_SECRET`). Without it a screen
+the seed just wrote is a 404 on the published site for an hour.
+
+The social preview is uploaded to the GitHub repository settings by hand; a
+new render is not live there until somebody uploads it.
+
 `tools/e2e/capture-docs-screenshots.mjs` reuses the same stack to capture
 the docs site's console screenshots (1440×900 PNGs straight into
 `apps/docs/static/img/…`), stripping the emulator banner and dev overlay.

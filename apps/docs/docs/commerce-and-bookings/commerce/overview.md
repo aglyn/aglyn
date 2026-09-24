@@ -315,7 +315,7 @@ payouts to reconcile; use the tiles to see which way the last month went.
 Worth knowing before it happens, because it is money leaving an account you
 already received it into:
 
-![An order showing Charged back status with the reversed amount, distinct from a refund, and the Disputes filter on the orders list](/img/commerce/order-charged-back.png)
+![The Orders card with an order marked Charged back beside its Refunded status, its total reduced to $0.00 less refunds, and the table's own Filters and Search controls above the list](/img/commerce/order-charged-back.png)
 
 The order keeps its **Refunded** status and gains a **Charged back** badge beside
 it — the pair is deliberate. The money did leave, so the order is refunded; the

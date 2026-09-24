@@ -30,7 +30,11 @@ so you keep everything you paid for until it runs out. There is no proration
 credit on a downgrade because there is nothing to credit — nothing changes
 today.
 
-![The Show lower plans control expanded, with a help tooltip explaining that a downgrade takes effect at the end of the paid period](/img/billing-and-plans/lower-tiers-expanded-tip.png)
+Billing opens on your current plan and the next one up. To see the plans below
+yours, choose **Compare all plans**, then **Looking for something smaller?** —
+the help tip beside it says when a downgrade takes effect.
+
+![The lower plans shown under Compare all plans, with the Hide lower plans control and a help tooltip explaining that a downgrade takes effect at the end of the paid period](/img/billing-and-plans/lower-tiers-expanded-tip.png)
 
 ## Downgrading to a lower plan
 

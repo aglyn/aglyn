@@ -21,7 +21,8 @@ It renders your screen under the real site theme, so what you see matches what p
    of components you can add.
 4. **Canvas** — your screen rendering live under the real site theme;
    select, drag, and edit text inline.
-5. **Inspector** — info, attributes, and styles for the selected element.
+5. **Inspector** — the **Attributes**, **Styles** and **Interactions** tabs for the
+   selected element.
 
 ## Preview vs. canvas
 

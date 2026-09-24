@@ -4,7 +4,7 @@ A live **"sale ends in…"** countdown banner you can drop onto any tenant site.
 It's a complete, self-contained example marketplace plugin — everything you need
 to publish is in this folder.
 
-![slot: page element + hostActivity widget](.)
+![The Promo Countdown element rendered by its bundle in the light and dark schemes: a Spring sale title, days, hours, minutes and seconds counting down, and a Shop now button](./promo-countdown.png)
 
 ## What it demonstrates
 
