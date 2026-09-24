@@ -22,12 +22,17 @@ import {
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { listPluginActivityFilters } from '@aglyn/aglyn'
 import { type HelpTipContent } from '@aglyn/shared-ui-jsx'
+import { type ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
-  gridFilterRequest,
-  listFilterColumn,
-  type ListFilterRequest,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
-import { ACTIVITY_LIST_FILTER_FIELDS } from '../utils/list-filters'
+  type ListFilterClause,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ACTIVITY_LIST_FILTER_FIELDS,
+  ACTIVITY_LIST_FILTER_HEADERS,
+} from '../utils/list-filters'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -159,6 +164,35 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
     [endpoint, pageSize],
   )
 
+  /*
+   * The grid's Filters panel, bound to the ONE clause the route serves
+   * (`single`): a clause set in the panel replaces the last, and each change
+   * restarts the feed at page 0 under it.
+   *
+   * `action` stays a typed field, not a select. Most actions are the prose
+   * sentence their writer stored, so there is no catalog to pick from; the
+   * group chips above are the named slices that DO have one.
+   *
+   * No quick search: the route answers no free-text term, and a search over
+   * the page on screen would call one page the whole feed.
+   */
+  const [clauses, setClauses] = useState<ListFilterClause[]>([])
+  const onClausesChange = useCallback((next: ListFilterClause[]) => {
+    setClauses(next)
+    gridFilterRef.current = next[0] ?? null
+    // A clause from the panel is the reader choosing; it takes over from
+    // the chip rather than being silently ignored under it.
+    setGroupOnly(null)
+    filterRef.current = gridFilterRef.current
+    setCursors([null])
+    void loadPage(0, null)
+  }, [loadPage])
+  const gridFilter = useListGridFilter({
+    single: true,
+    clauses,
+    onChange: onClausesChange,
+  })
+
   useEffect(() => {
     if (!uid) return
     setCursors([null])
@@ -175,13 +209,12 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
 
   /* One row grammar, the console's (AGL-2501) — the same table, no row click. */
   const activityColumns: GridColDef[] = useMemo(
-    () => [
+    () => listFilterGridColumns([
       {
         field: 'action',
         headerName: 'Action',
         flex: 1.2,
         minWidth: 180,
-        ...listFilterColumn(ACTIVITY_LIST_FILTER_FIELDS, 'action'),
         // The STORED action stays the cell's value — it is what the route's
         // equality filter compares — and the label is only what is drawn,
         // so an AI code reads as a sentence without breaking the filter.
@@ -221,14 +254,13 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
         // `type: 'date'` is what gives the panel a date PICKER rather than a
         // free-text box for a value the route parses as a day.
         type: 'date',
-        ...listFilterColumn(ACTIVITY_LIST_FILTER_FIELDS, 'createdAt'),
         // Sorted on the instant the wire carried, rendered as a local
         // string: a grid sorting the rendered text orders it alphabetically.
         valueGetter: (_value, row: ActorActivityEntry) =>
           row.createdAt?.seconds ? new Date(row.createdAt.seconds * 1000) : null,
         renderCell: ({ row }: any) => formatWireTimestamp(row.createdAt),
       },
-    ],
+    ], ACTIVITY_LIST_FILTER_FIELDS),
     // `scopeLabel` closes over `scopeNames`, which is the only thing that
     // moves it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,6 +292,19 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
           }}
         />
       ))}
+      filterChips={
+        <ListFilterChips
+          fields={ACTIVITY_LIST_FILTER_FIELDS}
+          headers={ACTIVITY_LIST_FILTER_HEADERS}
+          clauses={gridFilter.clauses}
+          onChange={gridFilter.setClauses}
+          // A group chip replaces the panel's clause while it is on and
+          // hands it back when it is off, so the clause is shown, dimmed,
+          // as the one that is waiting rather than the one in force.
+          disabled={groupOnly !== null}
+        />
+      }
+      filtering={clauses.length > 0 || groupOnly !== null}
       columns={activityColumns}
       rows={rows}
       getRowId={(row: any) => `${row.scopeId}:${row.$id}`}
@@ -272,15 +317,8 @@ export function ActorActivityTable(props: ActorActivityTableProps) {
        * everything that is not on this page. Passing a handler is what puts
        * the grid in server-filter mode.
        */
-      onFilterModelChange={(model) => {
-        gridFilterRef.current = gridFilterRequest(model)
-        // A clause from the panel is the reader choosing; it takes over
-        // from the chip rather than being silently ignored under it.
-        setGroupOnly(null)
-        filterRef.current = gridFilterRef.current
-        setCursors([null])
-        void loadPage(0, null)
-      }}
+      filterModel={gridFilter.filterModel}
+      onFilterModelChange={gridFilter.onFilterModelChange}
       page={page}
       pageSize={pageSize}
       hasMore={Boolean(nextCursor)}
