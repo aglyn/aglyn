@@ -37,6 +37,7 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
+import { CrmListActions } from './crm-list-toolbar'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import { NoNextActivityToggle, nextActivityColumn } from './crm-next-activity-column'
 import CrmViewsControl from './crm-views-control'
@@ -414,8 +415,44 @@ export function DealsSection(props: ConsolePluginPageProps) {
       <CardDisplay
         header={'Deals'}
         help={pluginDocsHelp('deals', { anchor: '#the-board-and-the-table' })}
-        actions={
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        contentGutterX
+        contentGutterY
+        HeaderProps={{
+          // The record actions, top right and never clipped (AGL-3311).
+          action: (
+            <CrmListActions>
+              <Button
+                size="small"
+                startIcon={<MdiIcon path={mdiCogOutline.path} size={0.8} />}
+                disabled={!scope.orgId || pipelineState.status === 'loading'}
+                onClick={() => setManagingPipelines(true)}
+              >
+                {'Pipelines'}
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+                disabled={!pipeline || !scope.orgId}
+                onClick={() => setCreating(true)}
+              >
+                {'New deal'}
+              </Button>
+            </CrmListActions>
+          ),
+        }}
+      >
+        <Stack spacing={2}>
+          <Stack
+            direction="row"
+            spacing={3}
+            sx={{ alignItems: 'flex-end', flexWrap: 'wrap', rowGap: 1 }}
+          >
+            <Figure label="Open deals" value={summary.openCount.toLocaleString()} />
+            <Figure label="Pipeline value" value={formatAmountByCurrency(summary.valueByCurrency)} />
+            <Figure label="Weighted value" value={formatAmountByCurrency(summary.weightedByCurrency)} />
+            <Stack sx={{ flex: 1 }} />
+            {/* Which pipeline the board and table show, above them rather than under (AGL-3311). */}
             {activePipelines.length > 1 ? (
               <TextField
                 select
@@ -433,38 +470,6 @@ export function DealsSection(props: ConsolePluginPageProps) {
                 ))}
               </TextField>
             ) : null}
-            <Button
-              size="small"
-              startIcon={<MdiIcon path={mdiCogOutline.path} size={0.8} />}
-              disabled={!scope.orgId || pipelineState.status === 'loading'}
-              onClick={() => setManagingPipelines(true)}
-            >
-              {'Pipelines'}
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
-              disabled={!pipeline || !scope.orgId}
-              onClick={() => setCreating(true)}
-            >
-              {'New deal'}
-            </Button>
-          </Stack>
-        }
-        contentGutterX
-        contentGutterY
-      >
-        <Stack spacing={2}>
-          <Stack
-            direction="row"
-            spacing={3}
-            sx={{ alignItems: 'flex-end', flexWrap: 'wrap', rowGap: 1 }}
-          >
-            <Figure label="Open deals" value={summary.openCount.toLocaleString()} />
-            <Figure label="Pipeline value" value={formatAmountByCurrency(summary.valueByCurrency)} />
-            <Figure label="Weighted value" value={formatAmountByCurrency(summary.weightedByCurrency)} />
-            <Stack sx={{ flex: 1 }} />
             <ToggleButtonGroup
               exclusive
               size="small"

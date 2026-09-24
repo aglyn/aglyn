@@ -574,6 +574,7 @@ members are one label deeper so each one signs for itself.
 | `RESEND_API_KEY` | Feature | Runtime | `re_…`. Without it every outbound send — invites, receipts, password resets, campaigns, security alerts — is an inert no-op. Nothing errors; mail simply does not arrive. |
 | `USAGE_EMAIL_FROM` | Feature | Runtime | The verified sender identity for **your install's own** mail — invites, billing, security alerts, console password resets — and the address the "is email configured" check every sender consults reads. A bare address or `Bramble <billing@example.com>`, on a domain you verified in Resend. **A published site never sends from it, under any configuration**: a tenant's list quality must not be charged against the domain your own account mail depends on, so tenant mail resolves its own identity and refuses rather than borrowing this one. Unset, every platform sender no-ops or answers `501` with an actionable message; nothing throws. |
 | `EMAIL_PROVIDER_REQUESTS_PER_SECOND` | Optional | Runtime | How many API requests a second your mail provider accepts, as a whole number. Default **10**, which is Resend's published per-team limit — counted across every key on the account, not per key and not per domain. A campaign sends one request per recipient, so a batch of five hundred is the only thing this deployment does that can approach it; the batch paces itself to one request less than this number, leaving the remainder for transactional mail that lands in the same second. Raise it if Resend has raised your account's limit; a value that is blank, negative or unparsable falls back to the default rather than removing the pace, and `1` paces at one request a second. `0` turns pacing off entirely — set it only when something in front of this process already limits the rate, since without it a large batch earns `429`s. Refused requests are never lost either way: a `429` defers the rest of the batch to the next run rather than dropping those recipients. |
+| `EMAIL_LIST_UNSUBSCRIBE_BULK_THRESHOLD` | Optional | Runtime, console only | The bulk-sender line for campaigns whose **mail-client unsubscribe button** (the `List-Unsubscribe` / `List-Unsubscribe-Post` header pair) has been turned off. A whole number; default **5,000**, the figure Gmail and Yahoo publish for their bulk-sender rules, which require one-click unsubscribe. A campaign email whose organization would reach this many campaign messages in 24 hours — counted as what it sent today and yesterday (UTC), plus everyone the email is about to address — carries the header anyway, and the campaign page says it was turned back on and why. Blank, unparsable, zero or negative falls back to the default: there is no value that switches the guard off. It works the same whatever provider sends your mail, because the header is two ordinary headers on the message. Campaigns that leave the setting on, and all transactional mail, are unaffected. |
 | `RESEND_WEBHOOK_SECRET` | Optional | Runtime | Svix signing secret (`whsec_…`) verifying Resend's delivery, open, click, bounce and complaint webhooks. Unset, that endpoint answers `501` and nothing is recorded: no open/click statistics, no bounce suppressions, no per-recipient delivery history on the staff user page, and `/api/health/auth-doors` reports its verification-delivery arm as having no opinion — with nothing recording deliveries, an empty log says nothing about whether mail went out. |
 | `RESEND_READ_API_KEY` | Optional | Runtime | A **full-access** Resend key, used only by the staff *Import delivery history* action to read already-sent mail into the per-recipient delivery log. Deliberately separate from `RESEND_API_KEY`, which is sending-scoped and answers every read with `401 restricted_api_key` — a leaked sending key must not be able to enumerate everyone you have ever emailed. Unset, the import answers `501` and says so; the live webhook feed is unaffected. |
 | `CRM_INBOUND_DOMAIN` | `in.aglyn.com` | Runtime, console only | The domain the CRM's email capture address is minted under: `crm+<token>@<domain>`. Set it to a receiving domain YOU own at Resend (with its MX record published) — the default is Aglyn's, and mail to it never reaches a self-hosted install. A value that is not a bare hostname falls back to the default. |
@@ -642,6 +643,52 @@ power to send mail as every rep who connected a mailbox.
 | `GOOGLE_OUTREACH_CLIENT_ID` | Feature | Runtime, **console only** | The OAuth client id, `…apps.googleusercontent.com`. Unset — or with either variable below unset — **Sequences → Mailboxes** says connecting a Google mailbox is not configured on this deployment, and every mailbox route answers `503` with reason `not-configured`. Mailboxes already connected stop being able to send, because no token can be refreshed. |
 | `GOOGLE_OUTREACH_CLIENT_SECRET` | Feature | Runtime, **console only** | That client's secret. Used to redeem the authorization code at connect, to refresh each mailbox's access token before a Gmail call, and to revoke a grant when a mailbox is disconnected or its organization is erased. A secret Google refuses surfaces as `client_misconfigured` on every send rather than as a disconnected mailbox. |
 | `OUTREACH_TOKEN_KEY` | Feature | Runtime, **console only** | **32 random bytes, base64** — `openssl rand -base64 32`. Seals every stored refresh token with AES-256-GCM; nothing else is encrypted with it. A value that is not exactly 32 bytes counts as unset. **To rotate**, put the new key first and keep the old one after a comma (`NEW,OLD`): the first key seals, every key listed opens, and a token opened under an old key is sealed again under the new one the next time its mailbox is used. Each credential records the id of the key that sealed it in `tokenKeyId`, so drop the old key once no credential names its id. **Losing the key loses every connected mailbox**: a token that no listed key opens cannot be recovered, and its mailbox moves to *Reconnect required* until the rep connects it again. |
+
+#### Link domains {#sequences-link-domains}
+
+With **Count link clicks** on, every link in a sequence email is a short link,
+`{NEXT_PUBLIC_CONSOLE_URL}/api/outreach/l/<id>`. An organization can move those
+links onto its own domain in **Sequences → Mailboxes → Link domains**: mail sent
+as `rep@example.com` then carries `https://links.example.com/<id>`, the same
+`links.` host a sending domain's campaign click tracking uses. Nothing needs
+configuring for the default to work, and an install that never sets one up keeps
+the console address.
+
+How the host reaches your console is the [domain driver's](./domain-providers.md)
+job, scope `console`, like a workspace subdomain:
+
+- **`vercel`** attaches `links.<domain>` to `VERCEL_CONSOLE_PROJECT_ID` when a
+  member selects **Set up**, and Vercel issues its certificate.
+- **`webhook`** sends your endpoint an `attach` for it, scope `console`.
+- **`wildcard`** and **`none`** register nothing: point `links.<domain>` at the
+  console yourself — a DNS record, and a proxy route that terminates TLS with a
+  certificate for the name and passes the `Host` header through. A wildcard
+  certificate on your own workspace domain does not cover a customer's domain.
+
+The console answers the host by its `Host` header, on any deployment: the
+middleware rewrites `/<id>` to the short-link route, answers
+`/_aglyn/link-host` with `{"service":"aglyn-link-host","host":…}`, and 404s
+every other path. **Check** fetches that probe over HTTPS from the console
+itself, so the host verifies only once DNS, the certificate and the routing all
+work — and links move onto it only then.
+
+**Bot protection.** Mail clients, link previews and corporate link scanners open
+these links without running JavaScript. A proxy or WAF that challenges
+non-browser clients must let `links.*` hosts through on `/<id>` and
+`/_aglyn/link-host` (and `/api/outreach/l/*` on the console), or scanners are
+answered with a challenge instead of the redirect and the probe cannot verify.
+Aglyn's own Vercel firewall carries this as the `Click-tracking link bypass`
+rule (`tools/scripts/lib/firewall-posture.mjs`).
+
+| Variable | Need | When | Value |
+| --- | --- | --- | --- |
+| `AGLYN_LINK_HOST_TARGET` | Optional | Runtime, console | The CNAME target the Link domains card tells a member to point `links.<domain>` at — your proxy's hostname. Unset, the `vercel` driver's `cname.vercel-dns.com`, and no target at all under any other driver, where the card says to point the name at the console instead. |
+| `AGLYN_LINK_HOST_CA` | Optional | Runtime, console | The certificate authority named in the card's optional CAA row, which only matters to a domain that already publishes CAA records. Default `letsencrypt.org`. |
+
+A `links.` host under your own `NEXT_PUBLIC_WORKSPACE_DOMAIN` is never answered
+as a link domain — the workspace router owns every name there — and a domain
+whose campaign email already has a provider tracking host on `links.` cannot be
+set up, because both would need the same name.
 
 ---
 

@@ -33,6 +33,7 @@
  *==========================================*/
 
 import { CRM_EMAIL_BODY_MAX, CRM_EMAIL_SUBJECT_MAX } from '@aglyn/aglyn/app-utils/crm'
+import { readListUnsubscribeSetting } from '@aglyn/shared-util-email/list-unsubscribe'
 import {
   CRM_MERGE_FIELDS,
   type CrmMergeFieldGroup,
@@ -250,7 +251,9 @@ export function readOutreachSequenceSettings(
     trackClicks: data['trackClicks'] === true,
     // Absent is off (AGL-3296): a sequence is one-to-one mail, and every
     // sequence written before the setting existed reads as headerless.
-    listUnsubscribe: data['listUnsubscribe'] === true,
+    // Read by the shared reader campaigns use too (AGL-3307), with the
+    // sequence's own default.
+    listUnsubscribe: readListUnsubscribeSetting(data['listUnsubscribe'], false),
   }
 }
 

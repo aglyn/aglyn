@@ -23,14 +23,19 @@ import {
   Alert,
   Button,
   Chip,
+  FormControlLabel,
   IconButton,
   MenuItem,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
 import { useEffect, useState } from 'react'
-import { campaignSiteIds } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
+import {
+  campaignListUnsubscribe,
+  campaignSiteIds,
+} from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
 
 /** One option in the list or topic picker. */
 export interface CampaignEditOption {
@@ -45,6 +50,8 @@ export interface CampaignEditValues {
   endAtMs: number | null
   listIds: string[]
   topicId: string
+  /** Whether its emails carry the mail-client unsubscribe button (AGL-3307). */
+  listUnsubscribe: boolean
   /**
    * The sites it is placed on — `null` for every site. Present only when the
    * drawer was handed `sites`, which only the org hub does (a site hub never
@@ -64,6 +71,7 @@ export interface CampaignEditDrawerProps {
     listIds?: string[]
     topicId?: string
     visibleTo?: string[]
+    listUnsubscribe?: boolean
   } | null
   /** The org's email lists, which this campaign may be aimed at. */
   lists: CampaignEditOption[]
@@ -133,6 +141,7 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
   const [endAt, setEndAt] = useState('')
   const [listIds, setListIds] = useState<string[]>([])
   const [topicId, setTopicId] = useState('')
+  const [listUnsubscribe, setListUnsubscribe] = useState(true)
   /** The chosen sites; empty is every site, as the create drawer reads it. */
   const [siteIds, setSiteIds] = useState<string[]>([])
   /*
@@ -155,6 +164,7 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
     setEndAt(dayInputValue(campaign?.endAtMs))
     setListIds((campaign?.listIds ?? []).map(String))
     setTopicId(String(campaign?.topicId ?? ''))
+    setListUnsubscribe(campaignListUnsubscribe(campaign))
     setSiteIds(campaignSiteIds(campaign) ?? [])
     setSitesTouched(false)
   }, [open, campaign])
@@ -287,6 +297,40 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
               </MenuItem>
             ))}
           </TextField>
+          {/*
+            The mail-client unsubscribe button (AGL-3307), the setting a
+            sequence carries too with the same label. ON for a campaign,
+            because campaigns are bulk mail. Off warns, and the send path
+            turns it back on for any email that would make the organization
+            a bulk sender — the page says so when it does.
+           */}
+          <Stack spacing={0}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={listUnsubscribe}
+                  onChange={(event) => setListUnsubscribe(event.target.checked)}
+                />
+              }
+              label="Add a mail-client unsubscribe button"
+            />
+            <Typography variant="caption" color="text.secondary">
+              Adds the List-Unsubscribe header, so the recipient’s mail app
+              shows its own Unsubscribe button. It’s the easiest way out for
+              them, and Gmail and Yahoo require it from bulk senders. The
+              unsubscribe link in the footer is always there, either way.
+            </Typography>
+          </Stack>
+          {!listUnsubscribe ? (
+            <Alert severity="warning">
+              {'Without it, Gmail and Yahoo can reject or spam-folder these ' +
+                'emails once your organization sends in bulk, and more ' +
+                'people mark you as spam when their mail app offers no ' +
+                'unsubscribe button. It is turned back on automatically for ' +
+                'any email that would make your organization a bulk sender, ' +
+                'and the campaign page says so when it is.'}
+            </Alert>
+          ) : null}
           {sites ? (
             <TextField
               select
@@ -352,6 +396,7 @@ export function CampaignEditDrawer(props: CampaignEditDrawerProps) {
                 endAtMs,
                 listIds,
                 topicId,
+                listUnsubscribe,
                 ...(sites && sitesTouched
                   ? { siteIds: siteIds.length ? siteIds : null }
                   : {}),

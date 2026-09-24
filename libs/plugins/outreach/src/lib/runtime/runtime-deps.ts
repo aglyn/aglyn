@@ -174,8 +174,9 @@ export interface OutreachRuntimeDeps {
   /** The signed one-click link for an enrollment, or `null` when none can be minted. */
   unsubscribeUrl(target: OutreachUnsubscribeTarget): string | null
   /**
-   * The short tracking link for a stored link's id (AGL-3239, AGL-3297), or
-   * `null` when none can be made — no HTTPS console origin. The sending
+   * The short tracking link for a stored link's id (AGL-3239, AGL-3297) —
+   * on `trackingOrigin` when one is given (AGL-3306) — or `null` when none
+   * can be made: no HTTPS origin. The sending
    * runtime writes the `outreachLinks` document the id names before the
    * email leaves.
    *
@@ -183,5 +184,13 @@ export interface OutreachRuntimeDeps {
    * that click is not counted. An email whose links do not work is worse
    * than an email we cannot measure.
    */
-  clickLinkUrl(linkId: string): string | null
+  clickLinkUrl(linkId: string, trackingOrigin?: string | null): string | null
+  /**
+   * The click-tracking origin for mail sent as `senderAddress` —
+   * `https://links.<its domain>` once the organization has verified that
+   * host (AGL-3306) — or `null` for the console's own address. Asked once
+   * per mailbox per run; a failure reads as `null`, never as a held send.
+   * Absent means no deployment-level hosts at all.
+   */
+  clickLinkOrigin?(input: { orgId: string; senderAddress: string }): Promise<string | null>
 }

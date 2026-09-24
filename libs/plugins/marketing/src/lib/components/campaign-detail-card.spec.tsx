@@ -781,6 +781,88 @@ describe('editing a campaign', () => {
  * says what is KEPT and what is not stopped, posts rather than writing, and
  * leaves the page it has just removed.
  *=========================================*/
+describe('the mail-client unsubscribe button (AGL-3307)', () => {
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+  const openEditor = async () => {
+    await mount('camp-1')
+    fireEvent.click(
+      screen.getByRole('button', { name: 'More actions for Spring sale' }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit campaign' }))
+    await settle()
+  }
+  const toggle = () =>
+    screen.getByRole('switch', {
+      name: 'Add a mail-client unsubscribe button',
+    }) as HTMLInputElement
+
+  it('is ON for a campaign that never stored it, and says so on the page', async () => {
+    await openEditor()
+    expect(toggle().checked).toBe(true)
+    expect(screen.getByText('Mail-client unsubscribe button: on')).toBeTruthy()
+    expect(screen.queryByText(/Without it, Gmail and Yahoo/)).toBeNull()
+  })
+
+  it('warns when it is turned off, and saves the choice on the container', async () => {
+    await openEditor()
+    fireEvent.click(toggle())
+    expect(screen.getByText(/Without it, Gmail and Yahoo/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save campaign' }))
+    await settle()
+
+    expect(writes[0][0]).toBe('orgs/org-1/emailCampaigns/camp-1')
+    expect(writes[0][1].listUnsubscribe).toBe(false)
+  })
+
+  it('opens on OFF for a campaign that stored it off', async () => {
+    containers['camp-1'] = { ...containers['camp-1'], listUnsubscribe: false }
+    await openEditor()
+    expect(toggle().checked).toBe(false)
+    expect(
+      screen.getByText(/Mail-client unsubscribe button: off/),
+    ).toBeTruthy()
+  })
+
+  it('says which email the bulk guard turned it back on for, and why', async () => {
+    containers['camp-1'] = { ...containers['camp-1'], listUnsubscribe: false }
+    sends = [
+      {
+        $id: 'send-1',
+        subject: 'Big mailing',
+        status: 'sent',
+        stats: { sent: 6000 },
+        listUnsubscribe: {
+          requested: false,
+          on: true,
+          forced: true,
+          reason: 'bulk-volume',
+          detail:
+            'Turned back on because this email took your organization to ' +
+            '6,000 campaign emails in 24 hours, at or over the 5,000 at ' +
+            'which Gmail and Yahoo require a one-click unsubscribe.',
+        },
+      },
+      {
+        $id: 'send-2',
+        subject: 'Small mailing',
+        status: 'sent',
+        stats: { sent: 10 },
+        listUnsubscribe: { requested: false, on: false, forced: false },
+      },
+    ]
+    await mount('camp-1')
+
+    const alert = screen.getByText(/was turned back on for one email/)
+    expect(alert.textContent).toContain('Big mailing')
+    expect(alert.textContent).toContain('6,000 campaign emails in 24 hours')
+    expect(alert.textContent).not.toContain('Small mailing')
+  })
+})
+
 describe('deleting a campaign', () => {
   const settle = async () => {
     await act(async () => {

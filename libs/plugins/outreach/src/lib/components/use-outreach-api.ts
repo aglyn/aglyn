@@ -31,6 +31,9 @@ import type {
   OutreachEnrollPreviewResponse,
   OutreachEnrollResponse,
   OutreachEnrollSource,
+  OutreachLinkDomainRequest,
+  OutreachLinkDomainResponse,
+  OutreachLinkDomainsResponse,
   OutreachPreviewRequest,
   OutreachPreviewResponse,
   OutreachRouteRefusal,
@@ -125,6 +128,13 @@ export interface OutreachApi {
     domain: string,
     detail?: string,
   ): Promise<OutreachDoNotContactDomainResponse>
+  /** Each mailbox domain's click-tracking host (AGL-3306). */
+  readLinkDomains(): Promise<OutreachLinkDomainsResponse>
+  /** Sets a link domain up, checks it, or removes it. */
+  changeLinkDomain(
+    action: OutreachLinkDomainRequest['action'],
+    domain: string,
+  ): Promise<OutreachLinkDomainResponse>
 }
 
 /**
@@ -240,6 +250,12 @@ export function useOutreachApi(orgId: string | null): OutreachApi {
         call(OUTREACH_API_ROUTES.doNotContactDomains, {
           method: 'POST',
           body: { action, domain, ...(detail ? { detail } : {}) },
+        }),
+      readLinkDomains: () => call(OUTREACH_API_ROUTES.linkDomains, { method: 'GET' }),
+      changeLinkDomain: (action, domain) =>
+        call(OUTREACH_API_ROUTES.linkDomains, {
+          method: 'POST',
+          body: { action, domain },
         }),
     }),
     [call],

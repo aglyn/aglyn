@@ -39,6 +39,7 @@ import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import { NoNextActivityToggle, nextActivityColumn } from './crm-next-activity-column'
 import CrmViewsControl from './crm-views-control'
+import { CrmListActions } from './crm-list-toolbar'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   listFilterConstraints,
@@ -417,11 +418,11 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       contentBordered="all"
       HeaderProps={{
         action: (
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <CrmListActions>
             <CrmViewsControl controller={views} allLabel="All companies" />
             <NoNextActivityToggle filters={viewFilters} onChange={views.setFilters} />
             {newCompanyButton}
-          </Stack>
+          </CrmListActions>
         ),
       }}
     >

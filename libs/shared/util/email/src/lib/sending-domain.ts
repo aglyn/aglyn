@@ -423,6 +423,24 @@ export function sendingReturnPathHost(): string {
 export const SENDING_TRACKING_SUBDOMAIN = 'links'
 
 /**
+ * The click-tracking host of a sending domain — `links.<domain>` — or `''`
+ * for a value that is not a domain.
+ *
+ * ONE spelling of the name, because three things have to agree on it: the
+ * CNAME a customer is shown, the CAA walk that starts from it, and the host a
+ * redirector answers on. Marketing mail's host is served by the mail provider
+ * (`links.<domain>` CNAMEd to it); a sequence's, which leaves through the
+ * member's own mailbox, is served by this deployment (`tracking-host.ts`).
+ * Same label, same name, two servers — never both on one domain.
+ */
+export function sendingTrackingHost(domain: string): string {
+  const normalized = normalizeSendingDomain(domain)
+  return normalized && DOMAIN_PATTERN.test(normalized)
+    ? `${SENDING_TRACKING_SUBDOMAIN}.${normalized}`
+    : ''
+}
+
+/**
  * The certificate authority the tracking host's TLS certificate comes from.
  *
  * Only ever consulted to build a CAA record, and only matters for a domain
@@ -592,19 +610,22 @@ export function sendingDnsRecords(
  * @returns nothing at all until the provider has issued a tracking target.
  *          A CNAME with no value is a record that says nothing while looking
  *          published, the same rule the DKIM row follows.
+ * @param authority The CA that issues the host's certificate. The mail
+ *          provider's by default; a host this deployment serves itself
+ *          passes its own (`trackingHostCertAuthority`).
  */
-function trackingRecords(
+export function trackingRecords(
   domain: string,
   trackingTarget: string | null | undefined,
+  authority: string = sendingTrackingCertAuthority(),
 ): SendingDnsRecord[] {
   const target = String(trackingTarget ?? '').trim()
   if (!domain || !target) return []
-  const authority = sendingTrackingCertAuthority()
 
   return [
     {
       type: 'CNAME',
-      name: `${SENDING_TRACKING_SUBDOMAIN}.${domain}`,
+      name: sendingTrackingHost(domain),
       value: target,
       purpose: 'tracking',
       required: false,

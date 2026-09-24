@@ -39,7 +39,7 @@
  */
 
 import { CONTACT_ERASURE_REQUESTED_FIELD } from '@aglyn/aglyn'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { CrmLeadsSection } from './leads-section'
 
@@ -224,10 +224,21 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
-  CardDisplay: ({ children, actions }: { children: ReactNode; actions?: ReactNode }) => (
+  // The header's action slot and the footer are kept apart, so where a
+  // control lands is something a test can read (AGL-3311).
+  CardDisplay: ({
+    children,
+    actions,
+    HeaderProps,
+  }: {
+    children: ReactNode
+    actions?: ReactNode
+    HeaderProps?: { action?: ReactNode }
+  }) => (
     <div>
-      {actions}
+      <div data-slot="header-action">{HeaderProps?.action}</div>
       {children}
+      {actions ? <div data-slot="footer">{actions}</div> : null}
     </div>
   ),
   MdiIcon: () => null,
@@ -315,6 +326,28 @@ describe('New lead on the Leads list (AGL-3231)', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'New lead' }))
     expect(screen.getByRole('dialog').textContent).toBe('New lead drawer')
+  })
+})
+
+describe('the Leads card layout (AGL-3311)', () => {
+  it('puts Import CSV and New lead in the header and the filters in a toolbar above the grid', () => {
+    const { container } = renderSite()
+    const header = container.querySelector('[data-slot="header-action"]') as HTMLElement
+    expect(within(header).getByRole('button', { name: 'New lead' })).toBeTruthy()
+    expect(within(header).getByRole('button', { name: 'Import CSV' })).toBeTruthy()
+
+    const toolbar = screen.getByRole('toolbar', { name: 'Lead filters' })
+    for (const name of ['Show', 'Email', 'Campaign', 'Lead source']) {
+      expect(within(toolbar).getByRole('combobox', { name })).toBeTruthy()
+    }
+    expect(within(toolbar).getByRole('searchbox', { name: 'Search leads' })).toBeTruthy()
+    // Above the rows it narrows, not under them.
+    const grid = screen.getByText('maya@example.com')
+    expect(
+      toolbar.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    // Nothing is left in the card's footer, where the row once overflowed.
+    expect(container.querySelector('[data-slot="footer"]')).toBeNull()
   })
 })
 

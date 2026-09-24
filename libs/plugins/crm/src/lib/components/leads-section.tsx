@@ -47,6 +47,7 @@ import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import { useOrgLeads } from '../hooks/use-org-leads'
 import CrmViewsControl from './crm-views-control'
+import { CrmListActions, CrmListToolbar } from './crm-list-toolbar'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
@@ -799,8 +800,36 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
         help={Aglyn.pluginDocsHelp('contacts', {
           anchor: '#whats-in-the-crm-area',
         })}
-        actions={
-          <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+        contentGutterX
+        contentGutterY
+        HeaderProps={{
+          // The record actions, top right and never clipped (AGL-3311).
+          action: (
+            <CrmListActions>
+              <LeadImportButton hostId={hostId} orgId={orgId} />
+              <Button size="small" onClick={handleExport} disabled={!rows.length}>
+                {'Export CSV'}
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => setCreateOpen(true)}
+              >
+                {'New lead'}
+              </Button>
+            </CrmListActions>
+          ),
+        }}
+      >
+        <Stack spacing={2}>
+          {/* Which surfaces file a lead, by name (AGL-2612) — under a site its own, at the org level every site's (AGL-2638). */}
+          {hostId ? (
+            <LeadSurfacesNote hostId={hostId} />
+          ) : (
+            <OrgLeadSurfacesNote />
+          )}
+          {/* The filters sit above the grid they narrow, wrapping when narrow (AGL-3311). */}
+          <CrmListToolbar label="Lead filters">
             {/* The saved view this list is showing, beside the status it narrows to (AGL-2617). */}
             <CrmViewsControl controller={views} allLabel="All leads" />
             <FormControl size="small" sx={{ minWidth: 160 }}>
@@ -913,29 +942,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
               }}
               sx={{ minWidth: 200 }}
             />
-            <LeadImportButton hostId={hostId} orgId={orgId} />
-            <Button size="small" onClick={handleExport} disabled={!rows.length}>
-              {'Export CSV'}
-            </Button>
-            <Button
-              size="small"
-              variant="contained"
-              onClick={() => setCreateOpen(true)}
-            >
-              {'New lead'}
-            </Button>
-          </Stack>
-        }
-        contentGutterX
-        contentGutterY
-      >
-        <Stack spacing={2}>
-          {/* Which surfaces file a lead, by name (AGL-2612) — under a site its own, at the org level every site's (AGL-2638). */}
-          {hostId ? (
-            <LeadSurfacesNote hostId={hostId} />
-          ) : (
-            <OrgLeadSurfacesNote />
-          )}
+          </CrmListToolbar>
           {status === 'success' && window.length === 0 ? (
             <EmptyStateComponent
               label={'No leads yet'}

@@ -54,6 +54,9 @@ jest.mock('./mailbox-card', () => ({
     </article>
   ),
 }))
+jest.mock('./link-domains-card', () => ({
+  OutreachLinkDomainsCard: () => <section aria-label="Link domains" />,
+}))
 // ONE account object for every render, as the real hook holds the signed-in
 // user in state. A fresh object per call would re-run every effect keyed on
 // the account and hang the suite rather than fail it.

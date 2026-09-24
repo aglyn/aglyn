@@ -17,10 +17,10 @@
 
 import type { ComposedOutreachEmail } from '../engine/compose'
 import type { GmailClient } from './gmail-client'
+import { listUnsubscribeHeaders } from '@aglyn/shared-util-email/list-unsubscribe'
 import {
   buildRfc5322Message,
   encodeGmailRawMessage,
-  LIST_UNSUBSCRIBE_ONE_CLICK,
   type OutreachComposedMessage,
   type OutreachMailAddress,
 } from './rfc5322'
@@ -103,10 +103,12 @@ export function sendComposedOutreachEmail(
   sender: OutreachMailAddress,
   options: Omit<SendOutreachMessageOptions, 'threadId'> = {},
 ): Promise<OutreachSentMessage> {
-  const unsubscribe = [email.listUnsubscribeUrl, email.listUnsubscribeMailto]
-    .filter((uri): uri is string => Boolean(uri))
-    .map((uri) => `<${uri}>`)
-    .join(', ')
+  // The pair campaigns write too (AGL-3307): both URIs in one
+  // `List-Unsubscribe`, and the one-click `Post` only beside the URL.
+  const unsubscribe = listUnsubscribeHeaders({
+    url: email.listUnsubscribeUrl,
+    mailto: email.listUnsubscribeMailto,
+  })
   return sendOutreachMessage(
     client,
     {
@@ -117,8 +119,8 @@ export function sendComposedOutreachEmail(
       headers: {
         'In-Reply-To': email.inReplyTo,
         References: email.references,
-        'List-Unsubscribe': unsubscribe || null,
-        'List-Unsubscribe-Post': email.listUnsubscribeUrl ? LIST_UNSUBSCRIBE_ONE_CLICK : null,
+        'List-Unsubscribe': unsubscribe['List-Unsubscribe'] ?? null,
+        'List-Unsubscribe-Post': unsubscribe['List-Unsubscribe-Post'] ?? null,
       },
     },
     { ...options, threadId: email.threadId ?? null },

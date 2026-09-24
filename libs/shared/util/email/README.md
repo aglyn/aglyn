@@ -76,6 +76,35 @@ this point, so ordinary senders never meet the guard — it is there because
 `RESEND_SEND_ENDPOINT` is exported and a module that fetches it directly
 bypasses every check `sendEmail()` owns.
 
+### The List-Unsubscribe setting
+
+`list-unsubscribe.ts` is the one place the `List-Unsubscribe` /
+`List-Unsubscribe-Post` (RFC 8058) pair is modeled, for every sender that makes
+it a setting — an outreach sequence (default off) and a marketing campaign
+(default on):
+
+```typescript
+import {
+  decideListUnsubscribe,
+  listUnsubscribeHeaders,
+  readListUnsubscribeSetting,
+} from '@aglyn/shared-util-email/list-unsubscribe'
+
+const requested = readListUnsubscribeSetting(stored.listUnsubscribe, true)
+const decision = decideListUnsubscribe({
+  requested,
+  recentVolume, // the organization's campaign messages in the last day
+  sendVolume, // everyone this email will address
+})
+const headers = decision.on ? listUnsubscribeHeaders({ url: oneClickUrl }) : {}
+```
+
+`decideListUnsubscribe` is the bulk-sender guard: with the setting off, a send
+that takes the organization to `EMAIL_LIST_UNSUBSCRIBE_BULK_THRESHOLD` messages
+(default 5,000, Gmail's and Yahoo's line) carries the pair anyway, and the
+decision says it was forced and why. The headers are plain headers, so any
+provider behind `sendEmail` delivers them.
+
 ## Checking configuration
 
 ```typescript

@@ -177,7 +177,7 @@ Measured 2026-09-10.
 | --- | --- | --- |
 | `aglyn-tenant` | every customer site on `*.aglyn.app` + custom domains | ✅ protected — challenge, 10 scoped bypass rules |
 | `aglyn-docs` | `docs.aglyn.com` | ✅ protected — challenge, 4 scoped bypass rules |
-| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces | ✅ protected — challenge, 7 scoped bypass rules |
+| `aglyn-console` | `app.aglyn.com` — sign-in, billing, staff surfaces, and every Sequences link domain | ✅ protected — challenge, 8 scoped bypass rules |
 | `aglyn-plugins` | `plugins.aglyn.com` — plugin loader origin | ⚠️ **no WAF config** — reviewed, deliberate |
 
 ### How the console was closed, and why the order mattered
@@ -314,6 +314,46 @@ doing real work. They need Google's checker IP ranges allowlisted
 Because `pre` is a prefix, this rule stays exactly as narrow as the
 `/api/health` namespace is kept: any privileged route added under it would be
 unchallenged from the day it shipped.
+
+### How tracked sequence links were unblocked (AGL-3306)
+
+A tracked sequence link is opened by the recipient's mail client, by link
+previews and by corporate link scanners before any person clicks it — none of
+which runs JavaScript. Measured 2026-09-23, before the rule:
+
+```text
+curl -sI https://app.aglyn.com/api/outreach/l/<id>   429  x-vercel-challenge-token
+```
+
+So a scanner met a challenge page where a redirect belonged, which to a
+security gateway reads as a broken link in a suspicious email. The route
+already handles scanners itself — it redirects them exactly as it redirects a
+person and counts them apart — so the challenge protected nothing.
+
+`Click-tracking link bypass`, inserted with `PATCH rules.insert` on 2026-09-23,
+has three groups:
+
+| Group | Admits |
+| --- | --- |
+| `host pre links.` **and** `path re ^/([A-Za-z0-9]{6,32}\|_aglyn/link-host)$` | a link id, and the verification probe, on any Sequences link domain attached to the console |
+| `path pre /api/outreach/l/` | the same short links on the console's own address |
+| `path eq /api/outreach/click` | the signed links sent before AGL-3297 |
+
+Both conditions in the first group are load-bearing: host-only would lift the
+challenge from every console route reached through a link domain. The
+middleware already 404s those, but a hole in the WAF should not rely on the
+layer behind it. The probe path is in it because **Check** fetches the probe
+from the console's own function, which cannot solve a challenge either.
+
+Both directions, the minute it went in:
+
+```text
+anonymous curl  /api/outreach/l/AAAAAAAAAA   400  "This link doesn't work" page (unknown id, reached the app)
+anonymous curl  /signin                      429  the page challenge still stands
+```
+
+A self-hosted proxy with bot rules of its own owes the same exemption; see
+[Environment variables → Link domains](../developers/self-hosting-environment.md#sequences-link-domains).
 
 ### The remaining gap: `aglyn-plugins` — reviewed, and deliberately open
 

@@ -906,3 +906,170 @@ describe('transactional mail', () => {
     })
   })
 })
+
+/*==========================================
+ * THE MAIL-CLIENT UNSUBSCRIBE BUTTON, AS A CAMPAIGN SETTING (AGL-3307).
+ *
+ * Here rather than in `campaign-send.spec` because the guard reads the
+ * workspace's sending volume off the reputation counters, and this is the
+ * harness where those run for real: a guard that could only ever see a
+ * degraded window would force the header on every time and prove nothing
+ * about the setting being honored.
+ *=========================================*/
+describe('the List-Unsubscribe setting on a campaign (AGL-3307)', () => {
+  const CAMPAIGN = 'camp-1'
+  const THRESHOLD_ENV = 'EMAIL_LIST_UNSUBSCRIBE_BULK_THRESHOLD'
+  const dayKey = () => new Date(nowMs).toISOString().slice(0, 10)
+
+  function seedCampaign(fields: Record<string, unknown>) {
+    store.set(`orgs/org-1/emailCampaigns/${CAMPAIGN}`, {
+      name: 'Spring',
+      visibleTo: ['org'],
+      ...fields,
+    })
+  }
+  /** Campaign mail the workspace has already sent today. */
+  function seedSentToday(accepted: number) {
+    store.set(`rateLimits/emailRep_${dayKey()}_org-1`, {
+      accepted,
+      complained: 0,
+      bounced: 0,
+      orgId: 'org-1',
+      dayKey: dayKey(),
+    })
+  }
+  const inCampaign = () => firstSend({ emailCampaignId: CAMPAIGN })
+  const headersOf = (message: Record<string, any>) =>
+    (message['headers'] ?? {}) as Record<string, string>
+
+  afterEach(() => {
+    delete process.env[THRESHOLD_ENV]
+  })
+
+  it('is ON for a campaign that never set it, which is every existing one', async () => {
+    seedLeads(3)
+    seedCampaign({})
+    await inCampaign()
+
+    expect(sent).toHaveLength(3)
+    for (const message of sent) {
+      expect(headersOf(message)['List-Unsubscribe']).toMatch(/^<https:\/\/[^>]+>$/)
+      expect(headersOf(message)['List-Unsubscribe-Post']).toBe(
+        'List-Unsubscribe=One-Click',
+      )
+    }
+    expect(sendDoc()['listUnsubscribe']).toMatchObject({
+      requested: true,
+      on: true,
+      forced: false,
+    })
+  })
+
+  it('is ON for an email sent outside any campaign', async () => {
+    seedLeads(2)
+    await firstSend()
+    expect(headersOf(sent[0])['List-Unsubscribe-Post']).toBe(
+      'List-Unsubscribe=One-Click',
+    )
+  })
+
+  it('OFF under the threshold: no List-Unsubscribe header, and the footer link is still there', async () => {
+    seedLeads(3)
+    seedCampaign({ listUnsubscribe: false })
+    seedSentToday(100)
+    await inCampaign()
+
+    expect(sent).toHaveLength(3)
+    for (const message of sent) {
+      expect(headersOf(message)).not.toHaveProperty('List-Unsubscribe')
+      expect(headersOf(message)).not.toHaveProperty('List-Unsubscribe-Post')
+      // The visible way out is not part of the setting.
+      expect(String(message['text'])).toMatch(
+        /Choose which emails you get, or unsubscribe: https:\/\/\S+\/api\/email\/preferences\?/,
+      )
+      expect(String(message['html'])).toContain('/api/email/preferences?')
+    }
+    expect(sendDoc()['listUnsubscribe']).toMatchObject({
+      requested: false,
+      on: false,
+      forced: false,
+      volume: 103,
+      threshold: 5_000,
+    })
+  })
+
+  it('OFF over the threshold: forced back on, and the email records why', async () => {
+    seedLeads(3)
+    seedCampaign({ listUnsubscribe: false })
+    seedSentToday(4_998)
+    const result = await inCampaign()
+
+    for (const message of sent) {
+      expect(headersOf(message)['List-Unsubscribe-Post']).toBe(
+        'List-Unsubscribe=One-Click',
+      )
+    }
+    expect(result.listUnsubscribe).toEqual({
+      on: true,
+      forced: true,
+      reason: 'bulk-volume',
+    })
+    const record = sendDoc()['listUnsubscribe']
+    expect(record).toMatchObject({
+      requested: false,
+      on: true,
+      forced: true,
+      reason: 'bulk-volume',
+      volume: 5_001,
+      threshold: 5_000,
+    })
+    expect(record['detail']).toContain('5,001 campaign emails in 24 hours')
+  })
+
+  it('counts yesterday too, so the trailing day is never under-counted', async () => {
+    seedLeads(3)
+    seedCampaign({ listUnsubscribe: false })
+    const yesterday = new Date(nowMs - 86_400_000).toISOString().slice(0, 10)
+    store.set(`rateLimits/emailRep_${yesterday}_org-1`, {
+      accepted: 5_000,
+      orgId: 'org-1',
+      dayKey: yesterday,
+    })
+    await inCampaign()
+    expect(sendDoc()['listUnsubscribe']).toMatchObject({ forced: true })
+  })
+
+  it('judges the whole email, so a batched send carries it from its first message', async () => {
+    // A deployment that draws the line at 2,000, and a 3,000-person email
+    // whose first batch of 500 is under it on its own.
+    process.env[THRESHOLD_ENV] = '2000'
+    seedLeads(3000)
+    seedCampaign({ listUnsubscribe: false })
+
+    await inCampaign()
+    expect(sent).toHaveLength(EMAIL_MAX_RECIPIENTS_PER_SEND)
+    expect(sendDoc()['listUnsubscribe']).toMatchObject({
+      forced: true,
+      reason: 'bulk-volume',
+      threshold: 2_000,
+    })
+
+    // Raising the line mid-send does not take the button off the rest of
+    // the same email.
+    process.env[THRESHOLD_ENV] = '1000000'
+    await drainScheduled()
+
+    expect(sent).toHaveLength(3000)
+    expect(
+      sent.filter((message) => !headersOf(message)['List-Unsubscribe']),
+    ).toHaveLength(0)
+  })
+
+  it('honors turning it back ON with no volume at all', async () => {
+    seedLeads(1)
+    seedCampaign({ listUnsubscribe: true })
+    await inCampaign()
+    expect(headersOf(sent[0])['List-Unsubscribe']).toBeTruthy()
+    expect(sendDoc()['listUnsubscribe']).toMatchObject({ forced: false })
+  })
+})

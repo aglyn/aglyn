@@ -75,6 +75,7 @@
  */
 import { escapeEmailHtml } from './email-render'
 import { resolveSendPriority, type EmailSendPriority } from './send-rate'
+import { listUnsubscribeHeaders } from './list-unsubscribe'
 
 /** What a marketing send declares about itself. */
 export interface MarketingSendContext {
@@ -657,10 +658,7 @@ export function unsubscribeHeaders(
   unsubscribeUrl: string,
 ): Record<string, string> {
   if (!unsubscribeUrl) return {}
-  return {
-    'List-Unsubscribe': `<${unsubscribeUrl}>`,
-    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-  }
+  return listUnsubscribeHeaders({ url: unsubscribeUrl })
 }
 
 /**

@@ -219,6 +219,17 @@ export interface SenderReputationWindow extends EmailReputationCounts {
    * questions about the same workspace is a round trip nobody has to pay.
    */
   claimedToday: number
+  /**
+   * Campaign messages accepted TODAY and YESTERDAY (UTC), summed.
+   *
+   * What the List-Unsubscribe bulk guard counts as "the last 24 hours"
+   * (AGL-3307). The counters are per calendar day, so a rolling 24 hours is
+   * not available — and two days is a superset of it: it never counts fewer
+   * messages than the trailing 24 hours held, so the guard can only err
+   * toward carrying the header. Read off the window's own documents, at no
+   * extra cost.
+   */
+  acceptedLastTwoDays: number
   /** Days the window covers. */
   windowDays: number
   /** True when the window could not be read and everything below is zero. */
@@ -248,6 +259,7 @@ export async function readSenderReputationWindow(options: {
     bounced: 0,
     complained: 0,
     claimedToday: 0,
+    acceptedLastTwoDays: 0,
     windowDays,
     degraded: false,
   }
@@ -258,6 +270,7 @@ export async function readSenderReputationWindow(options: {
     const firestore = options.firestore ?? firebaseAdmin.app().firestore()
     const dayKeys = reputationWindowDayKeys(now, windowDays)
     const today = reputationDayKey(now)
+    const yesterday = reputationDayKey(now - DAY_MS)
     const snapshots = await firestore.getAll(
       ...dayKeys.map((dayKey) => reputationRef(firestore, dayKey, orgId)),
     )
@@ -271,6 +284,10 @@ export async function readSenderReputationWindow(options: {
           dayKeys[index] === today
             ? totals.claimedToday + storedCount(snapshot, 'claimed')
             : totals.claimedToday,
+        acceptedLastTwoDays:
+          dayKeys[index] === today || dayKeys[index] === yesterday
+            ? totals.acceptedLastTwoDays + storedCount(snapshot, 'accepted')
+            : totals.acceptedLastTwoDays,
       }),
       empty,
     )

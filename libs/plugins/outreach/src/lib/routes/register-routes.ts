@@ -23,6 +23,8 @@ import { outreachOrgSubject } from '../mailboxes/register-mailbox-routes'
 import { createOutreachDoNotContactDomainsRoute } from './do-not-contact-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
+import { canonicalConsoleOrigin } from '../mailboxes/oauth-redirect'
+import { createOutreachLinkDomainsRoute, type OutreachLinkDomainRouteDeps } from './link-domain-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
 import type { OutreachRouteGateDeps } from './route-gate'
 import { createOutreachSequenceRoutes } from './sequence-routes'
@@ -84,6 +86,22 @@ export function defaultOutreachRouteDeps(): OutreachEnrollRouteDeps {
   }
 }
 
+/** The link domains route's reach (AGL-3306): the tracking-host store, loaded on first use. */
+export function defaultOutreachLinkDomainDeps(): OutreachLinkDomainRouteDeps {
+  return {
+    hosts: async () => {
+      const loaded = await platform()
+      return {
+        list: loaded.listTrackingHosts,
+        setUp: loaded.setUpTrackingHost,
+        verify: loaded.verifyTrackingHost,
+        remove: loaded.removeTrackingHost,
+      }
+    },
+    consoleOrigin: canonicalConsoleOrigin,
+  }
+}
+
 export function registerOutreachRoutes(
   deps: OutreachEnrollRouteDeps = defaultOutreachRouteDeps(),
 ): void {
@@ -105,6 +123,11 @@ export function registerOutreachRoutes(
   registerPluginApiRoute(
     OUTREACH_API_ROUTES.doNotContactDomains,
     { web: createOutreachDoNotContactDomainsRoute(deps) },
+    orgSubject,
+  )
+  registerPluginApiRoute(
+    OUTREACH_API_ROUTES.linkDomains,
+    { web: createOutreachLinkDomainsRoute(deps, defaultOutreachLinkDomainDeps()) },
     orgSubject,
   )
 }

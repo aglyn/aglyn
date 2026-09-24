@@ -2206,6 +2206,9 @@ export function CampaignComposer(props: CampaignComposerProps) {
             : {}),
           ...(sentPlainText ? { plainText: sentPlainText } : {}),
           ...(sendingIdentity ? { sendingIdentity } : {}),
+          // The campaign, so the proof carries the unsubscribe header its
+          // setting asks for (AGL-3307).
+          ...(emailCampaignId ? { emailCampaignId } : {}),
         }}
       />
     </Stack>

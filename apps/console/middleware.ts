@@ -35,6 +35,11 @@ import {
 import { readCookie } from './app/api/auth/read-cookie'
 import { parseSignedOut } from './app/api/auth/session/session-tombstone'
 import { enforceSanctionsGeo } from './constants/sanctions-geo'
+import {
+  isTrackingHostName,
+  trackingHostPath,
+  trackingHostProbeBody,
+} from '@aglyn/shared-util-email/tracking-host'
 // One source of truth for the frame-ancestors allowlist, shared with
 // `with-aglyn.nextjs.config.js` so the two cannot drift (AGL-523).
 //
@@ -170,6 +175,20 @@ const EDIT_ACCESS_PATH = '/edit-access'
 function refuseNotFound(): NextResponse {
   const refusal = notFoundRefusal()
   return new NextResponse(refusal.body, refusal)
+}
+
+/** What a click-tracking host answers (AGL-3306) — see the branch in `middleware`. */
+function answerTrackingHost(request: NextRequest, host: string): NextResponse {
+  const route = trackingHostPath(request.nextUrl.pathname)
+  if (route.kind === 'link') {
+    return NextResponse.rewrite(new URL(route.rewrite, request.url))
+  }
+  if (route.kind === 'probe') {
+    return NextResponse.json(trackingHostProbeBody(host), {
+      headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' },
+    })
+  }
+  return refuseNotFound()
 }
 
 /**
@@ -396,6 +415,30 @@ export async function middleware(request: NextRequest) {
   // The conversion is lossless — body, status and headers all carry.
   const refused = enforceSanctionsGeo(request.headers, 'page')
   if (refused) return new NextResponse(refused.body, refused)
+
+  // A CLICK-TRACKING HOST (AGL-3306) serves links and nothing else.
+  //
+  // `links.<a sending domain>`, attached to this deployment by the domain
+  // driver (or pointed at it by an operator's own DNS and proxy), answers a
+  // link id by rewriting to the short-link redirector, answers its
+  // verification probe, and 404s every other path — no console page, no API
+  // route. It is decided here, by host, so it holds on any deployment rather
+  // than only on one vendor's edge config; the matcher below admits `/api` and
+  // `/__` on a `links.` host for exactly this branch.
+  //
+  // After the geo refusal, which decides whether to serve at all; ahead of
+  // everything that decides WHAT, none of which applies to a host that is not
+  // a console. The console's own hostname and the workspace domain's hosts
+  // are never tracking hosts — `links.<workspace domain>` is campaign mail's,
+  // served by the mail provider.
+  const requestHost = hostnameOf(request.headers.get('host'))
+  if (
+    isTrackingHostName(requestHost) &&
+    requestHost !== CONSOLE_HOSTNAME &&
+    !isWorkspaceDomainHost(requestHost)
+  ) {
+    return answerTrackingHost(request, requestHost)
+  }
 
   // The reserved discovery namespace, SECOND — after the geo refusal, which
   // decides whether to serve at all, and before everything that decides what.
@@ -790,7 +833,15 @@ export const config = {
   // reachability the static file had, and nothing more — it is a literal
   // path, not a prefix, so it widens the public surface by one document that
   // contains a product name and a list of icon URLs.
+  //
+  // The two host-conditioned entries admit `/api` and `/__` on a
+  // click-tracking host (AGL-3306) and nowhere else, so that host 404s them
+  // instead of reaching a console route. The label is spelled literally
+  // because Next reads this object statically; `middleware.spec.ts` holds it
+  // to `SENDING_TRACKING_SUBDOMAIN`.
   matcher: [
     '/((?!api|__|_next/static|_next/image|favicon.ico|_static|sw.js|manifest.webmanifest).*)',
+    { source: '/api/:path*', has: [{ type: 'host', value: 'links\\..+' }] },
+    { source: '/__/:path*', has: [{ type: 'host', value: 'links\\..+' }] },
   ],
 }

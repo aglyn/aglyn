@@ -155,6 +155,41 @@ organization is deleted, Google is asked to revoke the access of every mailbox
 in it. Access another connected mailbox still uses is left in place for that
 mailbox, as with a disconnect.
 
+### Link domains {#link-domains}
+
+With **Count link clicks** on, every link in a sequence email is a short
+link that counts the click and then takes the reader where you meant. By
+default it starts with this app's own address. **Link domains**, under your
+mailboxes, puts it on your own domain instead: mail sent as
+`you@yourcompany.com` carries links that read
+`https://links.yourcompany.com/…`, like the rest of the email.
+
+It is the same `links.` host your campaign email's click tracking uses on a
+[sending domain](../../marketing-and-automation/email-campaigns/overview.md#sending-domains),
+set up the same way — one DNS record, then a check:
+
+1. An owner or admin selects **Set up** beside the domain. The app adds
+   `links.yourcompany.com` to itself.
+2. Publish the record the card shows — a **CNAME** from
+   `links.yourcompany.com` to the address it names — at whoever hosts your
+   domain's DNS. The **CAA** row matters only if your domain already
+   publishes CAA records; if so, add it beside them.
+3. Select **Check**. Once the link domain answers over HTTPS with a valid
+   certificate it reads **Verified**, and from the next email on, links use
+   it. Until then they keep the app's address, so nothing breaks while DNS
+   spreads.
+
+Links already sent keep working either way: an email sent before the link
+domain was verified still carries the app's address, and that address keeps
+answering every link. **Remove** stops serving the link domain — links already
+sent on it stop working — so remove one only when nobody will click those
+emails again.
+
+A domain whose campaign email already tracks clicks on `links.` through the
+mail provider cannot also be a sequence link domain; its sequence links keep
+the app's address. Mailbox providers' own domains, such as `gmail.com`, are
+never offered.
+
 ## Compliance settings {#compliance-settings}
 
 Every email a sequence sends ends with a footer saying who sent it, where they
@@ -453,7 +488,8 @@ The setting is off by default, because the header is what makes mail apps
 present an email as coming from a mailing list. Gmail and Yahoo require it of
 bulk senders — 5,000 or more emails a day — which a mailbox sending a
 sequence is not. With it on, an email whose link cannot be made waits rather
-than going out without it.
+than going out without it. [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md#list-unsubscribe)
+carry the same setting, on by default there because a campaign is bulk mail.
 
 Either one stops the person's sequences, puts the address on your
 do-not-contact list and unsubscribes it from the site's **Sales outreach**

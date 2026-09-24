@@ -31,6 +31,7 @@ import { getLockdownVerdict } from '@aglyn/tenant-data-admin/server/lockdown'
 import { sendOrgMemberNotice } from '@aglyn/tenant-data-admin/server/org-member-notice'
 import { logOrgActivity } from '@aglyn/tenant-data-admin/server/organizations'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
+import { resolveTrackingLinkOrigin } from '@aglyn/tenant-data-admin/server/tracking-hosts'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { OUTREACH_PLUGIN_ID } from '../constants/bundle-common'
 import { composeOutreachMailboxNotice } from '../engine/mailbox-notice'
@@ -132,7 +133,16 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
       if (!result.sent) console.warn(`[outreach] the mailbox owner was not emailed: ${result.reason}`)
     },
     unsubscribeUrl: (target) => outreachUnsubscribeUrl({ origin: canonicalConsoleOrigin(), target }),
-    clickLinkUrl: (linkId) => outreachShortLinkUrl({ origin: canonicalConsoleOrigin(), linkId }),
+    clickLinkUrl: (linkId, trackingOrigin) =>
+      outreachShortLinkUrl({ origin: canonicalConsoleOrigin(), linkId, trackingOrigin }),
+    // The sending domain's own `links.` host once the organization has
+    // verified it (AGL-3306). A static import like every other
+    // `tenant-data-admin` module here: a dynamic one marks the whole library
+    // lazy-loaded, and `@nx/enforce-module-boundaries` then refuses every
+    // static import of it across the plugin and the console.
+    clickLinkOrigin({ orgId, senderAddress }) {
+      return resolveTrackingLinkOrigin(firestore(), orgId, senderAddress)
+    },
   }
 }
 
