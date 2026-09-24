@@ -46,6 +46,15 @@ let mockRecordThrows = false
 let mockReadThrows = false
 let mockReachArgs: Array<Record<string, unknown>> = []
 let mockHold: Record<string, unknown> | null = null
+let mockDeclared = 0
+
+// The app's generated manifest names every plugin; what matters here is that
+// a verified Yes has the declarations run before the list is reopened.
+jest.mock('../constants/plugins.declarations.server.generated', () => ({
+  registerPluginServerDeclarations: async () => {
+    mockDeclared += 1
+  },
+}))
 const mockDecodedToken: Record<string, unknown> = {}
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -141,6 +150,7 @@ beforeEach(() => {
   mockReadThrows = false
   mockReachArgs = []
   mockHold = null
+  mockDeclared = 0
   for (const key of Object.keys(mockDecodedToken)) delete mockDecodedToken[key]
   Object.assign(mockDecodedToken, {
     uid: 'caller-uid',
@@ -350,6 +360,9 @@ describe('AGL-3305 · a Yes reopens the list only for a verified address', () =>
     expect(response.status).toBe(200)
     expect((await response.json()).stream).toBe('rejoined')
     expect(mockRecorded[0]).toMatchObject({ mailboxVerified: true })
+    // The slot the reopen goes through is filled by the plugins' declarations,
+    // run here for a process whose boot did not.
+    expect(mockDeclared).toBe(1)
   })
 
   it('records an unverified Yes but reopens nothing', async () => {
@@ -361,6 +374,7 @@ describe('AGL-3305 · a Yes reopens the list only for a verified address', () =>
     expect(response.status).toBe(200)
     expect((await response.json()).stream).toBe('unverified')
     expect(mockRecorded[0]).toMatchObject({ decision: 'granted', mailboxVerified: false })
+    expect(mockDeclared).toBe(0)
   })
 
   it('says nothing about a list on a No', async () => {

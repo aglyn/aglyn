@@ -32,6 +32,7 @@ import {
   recordPlatformMarketingConsent,
   snoozePlatformMarketingPrompt,
 } from '@aglyn/tenant-data-admin'
+import { registerPluginServerDeclarations } from '../../../../constants/plugins.declarations.server.generated'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 // lockdown-423: exempt — records the caller's OWN decision about the platform's
@@ -73,6 +74,22 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 const UNAUTHENTICATED = () =>
   Response.json({ error: 'Unauthenticated' }, { status: 401 })
+
+/**
+ * The plugins' declarations, for a process whose boot did not run them
+ * (AGL-3305). A verified Yes asks the plugin that keeps the marketing site's
+ * preferences to reopen the list, through a slot its console declarations
+ * fill; without them the answer is still recorded, and the list stays shut
+ * while the card offers Resume. Memoized by the manifest, so this costs one
+ * attempt per process, and a failure is logged rather than refusing the Yes.
+ */
+async function ensurePluginDeclarations(): Promise<void> {
+  try {
+    await registerPluginServerDeclarations()
+  } catch (error) {
+    console.error('[auth/marketing-consent] plugin declarations failed', error)
+  }
+}
 
 /**
  * The verified caller, or the response that refuses them.
@@ -183,6 +200,8 @@ async function handler(request: Request): Promise<Response> {
   }
 
   try {
+    const mailboxVerified = isEmailVerified(decoded as never)
+    if (decision === 'granted' && mailboxVerified) await ensurePluginDeclarations()
     const result = await recordPlatformMarketingConsent({
       uid: decoded.uid,
       email: typeof decoded['email'] === 'string' ? decoded['email'] : null,
@@ -193,7 +212,7 @@ async function handler(request: Request): Promise<Response> {
       decision,
       source,
       textVersion: PLATFORM_MARKETING_CONSENT_TEXT_VERSION,
-      mailboxVerified: isEmailVerified(decoded as never),
+      mailboxVerified,
     })
     return Response.json(
       {
