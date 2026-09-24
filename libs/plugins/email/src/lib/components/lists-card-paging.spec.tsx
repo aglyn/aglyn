@@ -94,6 +94,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     const built = build(windowSize + 1)
     const answered = firestoreAnswer(listDocs, built?.constraints ?? [])
     return {
+      data: answered,
       rows: answered.slice(page * pageSize, windowSize),
       hasMore: answered.length > windowSize,
       page,
@@ -312,5 +313,11 @@ describe('the email-list table walks the collection (AGL-2501)', () => {
     expect(firestoreAnswer(missingField, [{ orderBy: 'name' }])).toHaveLength(
       TOTAL,
     )
+  })
+
+  it('searches every list its window read, not only the page on screen (AGL-3317)', async () => {
+    await mountCard()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'List 37' } })
+    await waitFor(() => expect(renderedNames()).toEqual(['List 37']))
   })
 })

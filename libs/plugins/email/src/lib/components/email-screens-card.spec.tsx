@@ -36,7 +36,7 @@
  * read the real shared component rather than a stub.
  */
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { EmailScreensCard } from './email-screens-card'
 
@@ -319,5 +319,16 @@ describe('the template row’s actions are in the shared overflow menu', () => {
     await mountCard()
     fireEvent.click(rowFor('Welcome').querySelector('[data-field="actions"]') as HTMLElement)
     expect(mockPush).not.toHaveBeenCalled()
+  })
+})
+
+describe('the templates list filters through the grid toolbar (AGL-3317)', () => {
+  it('searches every template the card read', async () => {
+    await mountCard()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'promo' } })
+    await waitFor(() => {
+      expect(rowFor('Promo')).toBeTruthy()
+      expect(rowFor('Welcome')).toBeUndefined()
+    })
   })
 })

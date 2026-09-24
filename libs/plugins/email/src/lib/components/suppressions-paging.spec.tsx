@@ -177,6 +177,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     const built = build(windowSize + 1)
     const answered = firestoreAnswer(rows, built?.constraints ?? [])
     return {
+      data: answered,
       rows: answered.slice(page * pageSize, windowSize),
       hasMore: answered.length > windowSize,
       page,
@@ -392,5 +393,13 @@ describe('the breakdown counts the COLLECTION, not the page (AGL-2501)', () => {
     } finally {
       firestore.getAggregateFromServer = original
     }
+  })
+})
+
+describe('the suppression list filters through the grid toolbar (AGL-3317)', () => {
+  it('searches every entry its window read, not only the page on screen', async () => {
+    await mountCard()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'person37' } })
+    await waitFor(() => expect(renderedAddresses()).toEqual(['person37@example.test']))
   })
 })
