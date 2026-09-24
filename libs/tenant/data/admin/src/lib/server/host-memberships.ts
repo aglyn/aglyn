@@ -35,6 +35,26 @@
  * change re-syncs THAT member across the org's hosts; a host change re-syncs
  * THAT host across members. Kept in sync at the same points as `memberRoles`
  * (see `syncHostMemberRoles` callers) plus the erase/displayName gaps (AGL-855).
+ *
+ * ## The Sites list is a query over these rows (AGL-3321)
+ *
+ * The organization's Sites list pages, filters and searches THIS collection —
+ * `where(orgId ==)`, plus the reader's clauses, ordered by `nameLower` or
+ * `createdAt` — and joins each row to the host document by id for display.
+ * It cannot query `hosts` itself: the rules serve a non-staff LIST of `hosts`
+ * only under a `memberRoles.{uid}` clause, a composite on that per-user map
+ * path can exist for no order but the document id, and a predicated listen
+ * over the mutable `memberRoles`/`orgId` is what tombstoned host documents
+ * for every other reader (AGL-1190, `useOrgHosts`).
+ *
+ * So a row carries what that list asks of a site: `searchTokens` (the quick
+ * search, over the name, the platform subdomain and the custom domain) and
+ * the host's `createdAt` (immutable, set once at create). Every field is
+ * derived from the host document in `membershipRow`, so a re-sync from any
+ * writer re-derives all of them; the writers of their source fields — create,
+ * the owner and staff renames, the Setup name save, the domain attach and
+ * detach — each re-sync. Rows written before AGL-3321 are stamped by
+ * `tools/scripts/backfill-host-memberships-list-fields.mjs`.
  */
 
 import {
@@ -44,6 +64,7 @@ import {
   type AglynOrganization,
   type AglynOrgMember,
 } from '@aglyn/aglyn/server'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
 
@@ -56,6 +77,10 @@ interface HostMeta {
   displayName?: string
   subdomain?: string
   favicon?: string
+  /** The custom domain, which the Sites list's search finds a site by. */
+  cname?: string
+  /** When the site was created: set once, by `claimHostForOrg`, and never moved. */
+  createdAt?: unknown
 }
 
 const orgHostIds = async (
@@ -85,6 +110,8 @@ const readHostMeta = async (
         // The switcher renders from the projection, not the host doc, so the
         // favicon has to travel with it (AGL-1071).
         favicon: snap.get('seo')?.favicon,
+        cname: snap.get('cname'),
+        createdAt: snap.get('createdAt'),
       },
     ]),
   )
@@ -108,6 +135,58 @@ const membershipRef = (
   hostId: string,
 ) => db.collection('users').doc(uid).collection('hostMemberships').doc(hostId)
 
+/** A tail of a word begins after any character that is not a letter or a digit. */
+const WORD_SEPARATOR = /[^\p{L}\p{N}]/u
+
+/**
+ * A word, and every tail of it that begins after a separator:
+ * `shop.harbor-bakery.com` is itself, `harbor-bakery.com`, `bakery.com` and
+ * `com`. Walked by codepoint, so a tail never starts inside a surrogate pair.
+ */
+const wordTails = (word: string): string[] => {
+  const chars = [...word]
+  const tails = [word]
+  for (let at = 1; at < chars.length; at += 1) {
+    if (WORD_SEPARATOR.test(chars[at - 1]) && !WORD_SEPARATOR.test(chars[at])) {
+      tails.push(chars.slice(at).join(''))
+    }
+  }
+  return tails
+}
+
+/**
+ * The words a site is FOUND by in the Sites list's quick search (AGL-3321):
+ * its name, its platform subdomain and its custom domain, as the word-prefix
+ * tokens `nameSearchTokens` writes, which the list's query asks for with one
+ * `array-contains` on the first typed word (`nameSearchNormalizers.token`).
+ *
+ * A subdomain or a domain is one "word" to `nameSearchTokens`, so the prefixes
+ * of `harbor-bakery` alone would find it by `harbor` and never by `bakery`.
+ * Every tail that begins after a separator is tokenized too, which is what
+ * lets `bakery`, `bakery.com` and `shop.harbor` all find
+ * `shop.harbor-bakery.com` — the words a reader remembers of an address.
+ *
+ * The platform apex is not a word here: it is the same on every site, so it
+ * narrows nothing, and the subdomain in front of it is.
+ *
+ * ⚠️ KEEP IN SYNC with `hostMembershipSearchTokens` in
+ * `tools/scripts/backfill-host-memberships-list-fields.mjs`; both answer
+ * `tools/scripts/lib/host-membership-search-tokens.fixtures.json`.
+ */
+export function hostMembershipSearchTokens(
+  meta: Pick<HostMeta, 'displayName' | 'subdomain' | 'cname'> | undefined,
+): string[] {
+  const words = [meta?.displayName, meta?.subdomain, meta?.cname]
+    .map((value) => nameSearchKey(typeof value === 'string' ? value : ''))
+    .flatMap((key) => (key ? key.split(' ') : []))
+    .flatMap(wordTails)
+  return nameSearchTokens(words.join(' '))
+}
+
+/** A Firestore timestamp, as opposed to a legacy number or string. */
+const isTimestamp = (value: unknown): boolean =>
+  typeof (value as { toMillis?: unknown } | null | undefined)?.toMillis === 'function'
+
 /**
  * Shape one projection row. Exported for tests: the favicon rule below is a
  * delete-vs-omit decision that is invisible in review and silent in
@@ -124,6 +203,14 @@ export const membershipRow = (
     ...(meta?.subdomain ? { subdomain: meta.subdomain } : {}),
     displayName,
     nameLower: nameSearchKey(displayName),
+    // What the Sites list searches (AGL-3321). Re-derived on every sync, so a
+    // rename, a domain attach or a domain release moves it with the host.
+    searchTokens: hostMembershipSearchTokens(meta),
+    // What the Sites list's Created filter and order read. NULL rather than
+    // absent for a site that never recorded one: `orderBy('createdAt')` drops
+    // a document MISSING the field, and a site must not vanish from the list
+    // because it is sorted by a date it does not have.
+    createdAt: isTimestamp(meta?.createdAt) ? meta?.createdAt : null,
     // DELETE rather than omit when the site has no favicon (AGL-1071). These
     // rows are written with `{ merge: true }`, so omitting the key leaves
     // whatever was there — clearing a favicon would keep showing the old one

@@ -47,20 +47,21 @@ const hostAddress = (
 import { Container } from '@aglyn/shared-ui-jsx'
 import { AppLink } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import ListTable, {
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import {
-  inMemoryListField,
-  type ListFilterOption,
-} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
-import { liveCustomDomain } from '@aglyn/aglyn/app-utils/host-naming'
+import { listFilterOperatorLabel } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { Box, Button, Chip, Stack, Tooltip, Typography } from '@mui/material'
-import type { GridColDef } from '@mui/x-data-grid'
-import { useMemo, useState } from 'react'
+import type { GridColDef, GridSortModel } from '@mui/x-data-grid'
+import { collection, type Firestore } from 'firebase/firestore'
+import { useCallback, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import CreateHostDialog from '../../../../components/create-host-dialog.component'
 import EmptyState from '../../../../components/empty-state.component'
 import HostIcon from '../../../../components/host-icon.component'
@@ -81,110 +82,306 @@ import { readOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 import {
   describeHostStatus,
   describeSiteAllowance,
-  HOST_STATUS_LABELS,
   type HostStatus,
 } from '../../../../utils/host-status'
+import {
+  SITE_FILTER_FIELDS,
+  SITE_LIST_DECLARATION,
+  siteListBase,
+} from '../../../../utils/site-list-query'
 import { useOrgScope, useOrgSlug } from '../../../../hooks/use-org-scope'
 import useOrgPermissions from '../../../../hooks/use-org-permissions'
 import { usePendingInvites } from '../../../../hooks/use-pending-invites'
 
-/** A site as the list reads it: its document, plus what its row derives. */
+/** A site as the list draws it: its host document, plus what its row derives. */
 interface SiteRow extends OrgHost {
   status: HostStatus
-  /** `status.key`, where the Status filter reads it. */
-  statusKey: HostStatus['key']
   /** The platform address, `name.<apex>`, which every site has. */
   platformDomain: string
-  /** Whether the custom domain serves, is claimed but not serving, or is unset. */
-  customDomainState: CustomDomainState
 }
 
-/**
- * A custom domain's state, from the fields the domain routes write:
- * `connected` is a domain `liveCustomDomain` would send visitors to;
- * `pending` is a `cname` held while its attach or release is unfinished;
- * `none` is no `cname` at all.
- */
-type CustomDomainState = 'connected' | 'pending' | 'none'
-const CUSTOM_DOMAIN_STATE_LABELS: Readonly<Record<CustomDomainState, string>> = {
-  connected: 'Connected',
-  pending: 'Pending',
-  none: 'None',
-}
-
-const customDomainState = (host: OrgHost): CustomDomainState =>
-  liveCustomDomain({
-    cname: host.cname,
-    cnameAttachmentPending: host.cnameAttachmentPending,
-    cnameDetachmentPending: host.cnameDetachmentPending,
-  })
-    ? 'connected'
-    : host.cname
-      ? 'pending'
-      : 'none'
-
-/*
- * What the Sites grid's Filters panel and quick search offer. The page holds
- * EVERY site the reader has in this workspace — `useOrgHosts` reads each one
- * by id from the membership mirror, with no query over `hosts` to narrow and
- * no page to stop at — so every filter and the search are answered over the
- * whole list, not a window of it.
- *
- * Only what a host document stores, or derives from what it stores: the plan
- * belongs to the organization rather than the site, and nothing records who
- * created a site or which template it began from, so none of those is
- * offered.
- */
-const SITE_FILTER_FIELDS = [
-  inMemoryListField('displayName', 'text'),
-  inMemoryListField('status', 'select', 'statusKey'),
-  inMemoryListField('platformDomain', 'text'),
-  inMemoryListField('cname', 'text'),
-  inMemoryListField('customDomainState', 'select'),
-  inMemoryListField('createdAt', 'date'),
-  inMemoryListField('updatedAt', 'date'),
-]
-/** The chips' names for each field; the platform domain's carries the brand. */
-const siteFilterHeaders = (
-  productName: string,
-): Readonly<Record<string, string>> => ({
-  displayName: 'Site',
-  status: 'Status',
-  platformDomain: `${productName} domain`,
-  cname: 'Custom domain',
-  customDomainState: 'Custom domain status',
-  createdAt: 'Created',
-  updatedAt: 'Updated',
+const siteRow = (host: OrgHost): SiteRow => ({
+  ...host,
+  status: describeHostStatus(host as never),
+  platformDomain: hostPlatformDomain(hostAddress(host)) ?? '',
 })
-const SITE_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption[]>> = {
-  status: Object.entries(HOST_STATUS_LABELS).map(([value, label]) => ({
-    value,
-    label,
-  })),
-  customDomainState: Object.entries(CUSTOM_DOMAIN_STATE_LABELS).map(
-    ([value, label]) => ({ value, label }),
-  ),
+
+/** The chips' and the notices' names for each filterable field. */
+const SITE_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  displayName: 'Site',
+  createdAt: 'Created',
 }
-/** The grid's own columns; every other field is a panel-only column. */
-const SITE_COLUMNS = [
-  'displayName',
-  'status',
-  'platformDomain',
-  'cname',
-  'createdAt',
-  'updatedAt',
-]
-/** Name, both addresses, and the slug the platform address is built from. */
-const SITE_SEARCH_FIELDS = [
-  'displayName',
-  'subdomain',
-  'platformDomain',
-  'cname',
-] as const
 
 /** A Firestore timestamp as the grid's date column takes it. */
 const timestampDate = (value: { toDate?: () => Date } | null | undefined) =>
   value?.toDate?.() ?? null
+
+interface SitesTableProps {
+  firestore: Firestore
+  uid: string | undefined
+  /** The workspace, or null for an account with none, as `useOrgHosts` took it. */
+  orgId: string | null
+  /** Every site the page read, by id — what each listed row is drawn from. */
+  hostsById: ReadonlyMap<string, OrgHost>
+  orgSlug: string
+  productName: string
+}
+
+/**
+ * THE SITES GRID, PAGED AND FILTERED BY ITS QUERY (AGL-3321).
+ *
+ * Every clause the Filters panel accepts and the quick search's word are on
+ * ONE Firestore query over the reader's `users/{uid}/hostMemberships` rows,
+ * scoped to the workspace and ordered by the name or the creation date, and
+ * each page is that query's page — see `utils/site-list-query.ts` for what it
+ * offers and why the rest is not offered. The query names WHICH sites; the
+ * host documents the page already holds (`useOrgHosts`) are what each row
+ * DRAWS, joined by id and never used to narrow anything.
+ *
+ * A membership row whose host the page could not read — a stale row, a site
+ * whose read was refused — has nothing to draw and is left out of its page,
+ * which then shows one row fewer than it fetched; the pager still turns, since
+ * whether a further page exists is the query's answer, not the join's.
+ */
+function SitesTable(props: SitesTableProps) {
+  const { firestore, uid, orgId, hostsById, orgSlug, productName } = props
+  const gridFilter = useListGridFilter()
+  const [sort, setSort] = useState<ListQuerySort | null>(null)
+  const memberships = useMemo(
+    () => (uid ? collection(firestore, 'users', uid, 'hostMemberships') : null),
+    [firestore, uid],
+  )
+  const listed = useListQuery<{ $id: string }>({
+    collection: memberships,
+    declaration: SITE_LIST_DECLARATION,
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      sort,
+      base: siteListBase(orgId),
+    },
+    deps: [firestore, uid],
+    idField: '$id',
+  })
+  const { plan } = listed
+  const rows = useMemo(
+    () =>
+      listed.rows.flatMap((membership) => {
+        const host = hostsById.get(membership.$id)
+        return host ? [siteRow(host)] : []
+      }),
+    [listed.rows, hostsById],
+  )
+  const loading = listed.status === 'loading'
+
+  /*
+   * The grid sorts by what the QUERY is ordered by — the reader's pick among
+   * the declared orders, or the order a range imposes — and a header click
+   * asks for another declared order. Every other column is unsortable: an
+   * order the query does not hold would sort one page and call it the list.
+   */
+  const sortModel = useMemo<GridSortModel>(() => {
+    const shown = SITE_LIST_DECLARATION.sorts.find(
+      (entry) =>
+        entry.path === plan.orderBy.path &&
+        entry.direction === plan.orderBy.direction,
+    )
+    return shown?.column
+      ? [{ field: shown.column, sort: shown.direction }]
+      : []
+  }, [plan.orderBy])
+  const onSortModelChange = useCallback((model: GridSortModel) => {
+    const [asked] = model
+    setSort(
+      SITE_LIST_DECLARATION.sorts.find((entry) => entry.column === asked?.field) ??
+        null,
+    )
+  }, [])
+
+  const refused = useMemo(
+    () =>
+      plan.refused.map((entry) => ({
+        label:
+          entry.clause === 'search'
+            ? 'Search'
+            : `${SITE_FILTER_HEADERS[entry.clause.field] ?? entry.clause.field} ${listFilterOperatorLabel(entry.clause.op)}`,
+        reason: entry.reason,
+      })),
+    [plan.refused],
+  )
+
+  const columns = useMemo<GridColDef[]>(
+    () =>
+      listFilterGridColumns(
+        [
+          {
+            field: 'displayName',
+            headerName: 'Site',
+            flex: 1.4,
+            minWidth: 220,
+            // The query's own order: by name, A to Z.
+            sortingOrder: ['asc'],
+            renderCell: ({ row }: { row: SiteRow }) => (
+              <Stack
+                direction="row"
+                spacing={1.5}
+                sx={{ alignItems: 'center', minWidth: 0, py: 1 }}
+              >
+                {/* The site's own favicon when it has one (AGL-647), falling
+                    back to the generic glyph. */}
+                <HostIcon host={row} size={28} fontSize="large" color="primary" />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="subtitle2" noWrap>
+                    {row.displayName}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    component="div"
+                    noWrap
+                  >
+                    {hostDisplayDomain(hostAddress(row))}
+                  </Typography>
+                </Box>
+              </Stack>
+            ),
+          },
+          {
+            field: 'status',
+            headerName: 'Status',
+            width: 140,
+            sortable: false,
+            // Exported as the key; drawn as the pill.
+            valueGetter: (_value: unknown, row: SiteRow) => row.status.key,
+            renderCell: ({ row }: { row: SiteRow }) => (
+              <Tooltip title={row.status.detail}>
+                <Chip
+                  size="small"
+                  label={row.status.label}
+                  color={row.status.color}
+                  variant={row.status.color === 'default' ? 'outlined' : 'filled'}
+                />
+              </Tooltip>
+            ),
+          },
+          {
+            field: 'platformDomain',
+            headerName: `${productName} domain`,
+            flex: 1,
+            minWidth: 180,
+            sortable: false,
+          },
+          {
+            field: 'cname',
+            headerName: 'Custom domain',
+            flex: 1,
+            minWidth: 160,
+            sortable: false,
+            valueFormatter: (value: unknown) => (value as string) || 'None',
+          },
+          {
+            field: 'createdAt',
+            headerName: 'Created',
+            minWidth: 170,
+            type: 'date',
+            // The query's other order: newest first.
+            sortingOrder: ['desc'],
+            valueGetter: timestampDate,
+            valueFormatter: (value: Date | null) => value?.toLocaleString() || '--',
+          },
+          {
+            field: 'updatedAt',
+            headerName: 'Updated',
+            minWidth: 170,
+            type: 'date',
+            sortable: false,
+            valueGetter: timestampDate,
+            valueFormatter: (value: Date | null) => value?.toLocaleString() || '--',
+          },
+          listActionsColumn(
+            (row: SiteRow) => (
+              <Stack direction="row" spacing={0.5}>
+                <AppLink
+                  componentVariant="button"
+                  // `?aglyn-edit` arms the admin bar without the chord
+                  // (AGL-1842): on a foreign CUSTOM domain no hint can exist by
+                  // construction, so the console's own visit link is the
+                  // chord-free path there. hostDisplayDomain rather than a
+                  // re-derived apex (AGL-2172), so a self-hosted deployment links
+                  // its sites at its own domain.
+                  href={`https://${hostDisplayDomain(hostAddress(row))}/?aglyn-edit`}
+                  target={'_blank'}
+                  rel={'nofollow'}
+                >
+                  {'Visit'}
+                </AppLink>
+                <AppLink
+                  componentVariant="button"
+                  href={buildRoute(Route.HOST_DASHBOARD, {
+                    orgSlug,
+                    host: row.subdomain,
+                  })}
+                >
+                  {'Manage'}
+                </AppLink>
+              </Stack>
+            ),
+            { width: 190 },
+          ),
+        ],
+        SITE_FILTER_FIELDS,
+        {},
+        SITE_FILTER_HEADERS,
+      ),
+    [productName, orgSlug],
+  )
+
+  return (
+    <>
+      <ListFilterChips
+        fields={SITE_FILTER_FIELDS}
+        headers={SITE_FILTER_HEADERS}
+        clauses={gridFilter.clauses}
+        onChange={gridFilter.setClauses}
+      />
+      <ListQueryNotices refused={refused} notices={plan.notices} />
+      <ListTable
+        aria-label="Sites"
+        rows={rows}
+        columns={columns}
+        loading={loading}
+        // Two lines: the name over the address a visitor types.
+        getRowHeight={() => 'auto'}
+        // The pager below owns the page: each is a page of the query.
+        hideFooter
+        // The panel and the search are the grid's; the QUERY answers both.
+        filterMode="server"
+        filterModel={gridFilter.filterModel}
+        onFilterModelChange={gridFilter.onFilterModelChange}
+        quickFilter
+        sortingMode="server"
+        sortModel={sortModel}
+        onSortModelChange={onSortModelChange}
+        noRowsLabel={
+          listed.status === 'error'
+            ? 'These sites could not be loaded'
+            : 'No sites match these filters'
+        }
+      />
+      <ListPagination
+        page={listed.page}
+        pageSize={listed.pageSize}
+        rowCount={rows.length}
+        hasMore={listed.hasMore}
+        disabled={loading}
+        onPageChange={(next) => {
+          if (next !== listed.page) listed.setPage(next)
+        }}
+        onPageSizeChange={listed.setPageSize}
+      />
+    </>
+  )
+}
 
 function HostsContent() {
   const { data: user } = useUser()
@@ -270,143 +467,12 @@ function HostsContent() {
     [orgId, orgSlug, data, hostsReady],
   )
 
-  const siteRows = useMemo<SiteRow[]>(
-    () =>
-      (data ?? []).map((host) => {
-        const status = describeHostStatus(host as never)
-        return {
-          ...host,
-          status,
-          statusKey: status.key,
-          platformDomain: hostPlatformDomain(hostAddress(host)) ?? '',
-          customDomainState: customDomainState(host),
-        }
-      }),
+  // The sites the list's rows are drawn from, by id. The meter, the dashboard
+  // row and the plugin slot above count `data` itself — every site, whatever
+  // the grid is filtered to.
+  const hostsById = useMemo(
+    () => new Map((data ?? []).map((host) => [host.$id, host])),
     [data],
-  )
-  // Filters the rows the grid draws, never `data`: the site meter, the
-  // dashboard row and the plugin slot above count every site, filtered or not.
-  const siteHeaders = useMemo(
-    () => siteFilterHeaders(branding.productName),
-    [branding.productName],
-  )
-  const siteFilter = useListRowsFilter({
-    rows: siteRows,
-    fields: SITE_FILTER_FIELDS,
-    options: SITE_FILTER_OPTIONS,
-    headers: siteHeaders,
-    search: SITE_SEARCH_FIELDS,
-  })
-  const siteColumns = useMemo<GridColDef[]>(
-    () => [
-      {
-        field: 'displayName',
-        headerName: 'Site',
-        flex: 1.4,
-        minWidth: 220,
-        renderCell: ({ row }: { row: SiteRow }) => (
-          <Stack
-            direction="row"
-            spacing={1.5}
-            sx={{ alignItems: 'center', minWidth: 0, py: 1 }}
-          >
-            {/* The site's own favicon when it has one (AGL-647), falling
-                back to the generic glyph. */}
-            <HostIcon host={row} size={28} fontSize="large" color="primary" />
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="subtitle2" noWrap>
-                {row.displayName}
-              </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                component="div"
-                noWrap
-              >
-                {hostDisplayDomain(hostAddress(row))}
-              </Typography>
-            </Box>
-          </Stack>
-        ),
-      },
-      {
-        field: 'status',
-        headerName: 'Status',
-        width: 140,
-        // Sorted and filtered by the key; drawn as the pill.
-        valueGetter: (_value: unknown, row: SiteRow) => row.statusKey,
-        renderCell: ({ row }: { row: SiteRow }) => (
-          <Tooltip title={row.status.detail}>
-            <Chip
-              size="small"
-              label={row.status.label}
-              color={row.status.color}
-              variant={row.status.color === 'default' ? 'outlined' : 'filled'}
-            />
-          </Tooltip>
-        ),
-      },
-      {
-        field: 'platformDomain',
-        headerName: siteHeaders.platformDomain,
-        flex: 1,
-        minWidth: 180,
-      },
-      {
-        field: 'cname',
-        headerName: 'Custom domain',
-        flex: 1,
-        minWidth: 160,
-        valueFormatter: (value: unknown) => (value as string) || 'None',
-      },
-      {
-        field: 'createdAt',
-        headerName: 'Created',
-        minWidth: 170,
-        type: 'date',
-        valueGetter: timestampDate,
-        valueFormatter: (value: Date | null) => value?.toLocaleString() || '--',
-      },
-      {
-        field: 'updatedAt',
-        headerName: 'Updated',
-        minWidth: 170,
-        type: 'date',
-        valueGetter: timestampDate,
-        valueFormatter: (value: Date | null) => value?.toLocaleString() || '--',
-      },
-      listActionsColumn(
-        (row: SiteRow) => (
-          <Stack direction="row" spacing={0.5}>
-            <AppLink
-              componentVariant="button"
-              // `?aglyn-edit` arms the admin bar without the chord
-              // (AGL-1842): on a foreign CUSTOM domain no hint can exist by
-              // construction, so the console's own visit link is the
-              // chord-free path there. hostDisplayDomain rather than a
-              // re-derived apex (AGL-2172), so a self-hosted deployment links
-              // its sites at its own domain.
-              href={`https://${hostDisplayDomain(hostAddress(row))}/?aglyn-edit`}
-              target={'_blank'}
-              rel={'nofollow'}
-            >
-              {'Visit'}
-            </AppLink>
-            <AppLink
-              componentVariant="button"
-              href={buildRoute(Route.HOST_DASHBOARD, {
-                orgSlug,
-                host: row.subdomain,
-              })}
-            >
-              {'Manage'}
-            </AppLink>
-          </Stack>
-        ),
-        { width: 190 },
-      ),
-    ],
-    [siteHeaders, orgSlug],
   )
 
   return (
@@ -501,26 +567,13 @@ function HostsContent() {
               basePath={buildRoute(Route.HOST_LIST, { orgSlug })}
             />
           )}
-        <ListFilterChips {...siteFilter.chipsProps} />
-        <ListTable
-          aria-label="Sites"
-          rows={siteFilter.rows}
-          columns={siteFilter.filterColumns(siteColumns)}
-          // Two lines: the name over the address a visitor types.
-          getRowHeight={() => 'auto'}
-          // The panel and the search are the grid's; the page answers them
-          // over every site it read, and the grid's own footer pages what
-          // matches.
-          {...siteFilter.gridProps}
-          noRowsLabel="No sites match these filters"
-          initialState={{
-            columns: {
-              columnVisibilityModel: hiddenFilterVisibility(
-                SITE_FILTER_FIELDS,
-                SITE_COLUMNS,
-              ),
-            },
-          }}
+        <SitesTable
+          firestore={firestore}
+          uid={user?.uid}
+          orgId={currentOrg?.$id ?? null}
+          hostsById={hostsById}
+          orgSlug={orgSlug}
+          productName={branding.productName}
         />
         </>
         )}

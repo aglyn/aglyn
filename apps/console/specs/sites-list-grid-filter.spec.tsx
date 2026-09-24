@@ -21,18 +21,25 @@
  */
 
 /**
- * The Sites list filters through the grid's own toolbar (AGL-3321), over
- * EVERY site it read rather than the page on screen.
+ * The Sites list filters, searches, sorts and pages through ITS QUERY
+ * (AGL-3321), and draws each page from the site documents the page holds.
  *
- * The page holds the whole workspace's sites (`useOrgHosts` reads each by id,
- * with no query to narrow and no page to stop at), so a site past the grid's
- * first page must still be found by a filter or a search. Each case below
- * aims at such a site: the fourteenth of fifteen, which the unfiltered grid
- * does not draw.
+ * Before, the page matched the panel and the search over every site it had
+ * read. Now every clause and the search's word are on one query over the
+ * reader's membership rows (`utils/site-list-query.ts`), whose page is what
+ * the grid draws — each row joined by id to its host document. The query is
+ * stood in for here by its plan: `useListQuery` is replaced with the real
+ * `planListQuery` over the request the page makes, answered with the rows a
+ * test names, so each case asserts both what the page ASKED and what it DREW.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
+import {
+  type ListQueryPlan,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 const mockUseOrgHosts = jest.fn()
 jest.mock('../hooks/use-org-hosts', () => ({
@@ -45,6 +52,43 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useUser: () => ({ data: { uid: 'u1' } }),
 }))
+
+/** The collection the page names, as its path, since the query never runs. */
+jest.mock('firebase/firestore', () => ({
+  ...jest.requireActual('firebase/firestore'),
+  collection: (_firestore: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
+}))
+
+/** What the "server" answers: the membership ids of the page, for a plan. */
+const mockAnswer: jest.Mock<{ ids: string[]; status?: string; hasMore?: boolean }> = jest.fn()
+/** Every call the page made, newest last. */
+const mockCalls: Array<{ options: any; plan: ListQueryPlan }> = []
+const mockSetPage = jest.fn()
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  __esModule: true,
+  useListQuery: (options: any) => {
+    const plan = mockPlan(options)
+    mockCalls.push({ options, plan })
+    const answer = mockAnswer(plan)
+    const rows = answer.ids.map(($id) => ({ $id }))
+    return {
+      rows,
+      data: rows,
+      status: answer.status ?? 'success',
+      error: undefined,
+      fromCache: false,
+      serverDenied: false,
+      hasMore: answer.hasMore ?? false,
+      page: 0,
+      setPage: mockSetPage,
+      pageSize: 10,
+      setPageSize: jest.fn(),
+      plan,
+    }
+  },
+}))
+const mockPlan = (options: any) =>
+  planListQuery(options.declaration, options.request, nameSearchNormalizers)
 
 const ORG = { $id: 'org-1', slug: 'acme', name: 'Acme', plan: 'enterprise' }
 
@@ -124,7 +168,7 @@ const stamp = (iso: string) => {
   return { seconds: at.getTime() / 1000, toDate: () => at }
 }
 
-/** Fifteen published sites; the fourteenth is the one every case looks for. */
+/** Fifteen published sites; the fourteenth is the one the cases look for. */
 const SITES = Array.from({ length: 15 }, (_, index) => {
   const n = index + 1
   return {
@@ -145,7 +189,9 @@ const TARGET = {
   suspendedAt: 1,
 }
 const HOSTS = [...SITES.slice(0, 13), TARGET, SITES[14]]
+const FIRST_PAGE = HOSTS.slice(0, 10).map((host) => host.$id)
 
+const lastCall = () => mockCalls[mockCalls.length - 1]
 const setFilterModel = (model: Record<string, unknown>) =>
   act(() => {
     mockGrid.props?.onFilterModelChange(model)
@@ -153,92 +199,104 @@ const setFilterModel = (model: Record<string, unknown>) =>
 
 beforeEach(() => {
   mockGrid.props = undefined
+  mockCalls.length = 0
+  mockSetPage.mockReset()
   mockUseOrgHosts.mockReturnValue({
     hosts: HOSTS,
     ready: true,
     error: false,
     retry: jest.fn(),
   })
+  // Unfiltered, the query's first page; the search or a filter, the target.
+  mockAnswer.mockImplementation((plan) =>
+    plan.served.length || plan.searched ? { ids: ['host-14'] } : { ids: FIRST_PAGE, hasMore: true },
+  )
 })
 
-describe('the Sites list filters through the grid (AGL-3321)', () => {
-  it('is the shared grid, with Filters and Search, and its first page leaves the target undrawn', () => {
+describe('the Sites list is served by its query (AGL-3321)', () => {
+  it('asks for the workspace\'s membership rows, by name, and draws the page it gets', () => {
     render(<HostsPage />)
     expect(screen.getByRole('grid', { name: 'Sites' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
     expect(screen.getByRole('searchbox')).toBeTruthy()
+    const { options, plan } = lastCall()
+    expect(options.collection).toEqual({ path: 'users/u1/hostMemberships' })
+    expect(plan.filters).toEqual([{ path: 'orgId', op: '==', value: 'org-1' }])
+    expect(plan.orderBy).toMatchObject({ path: 'nameLower', direction: 'asc' })
     expect(screen.getByText('Site 01')).toBeTruthy()
-    // The control for both cases below: unfiltered, the target sits past the
-    // first page, so finding it proves the list, not the page, answered.
+    // The control for every case below: the target is not on this page.
     expect(screen.queryByText('Harbor Bakery')).toBeNull()
-    // Every row keeps its two actions under their own names.
     expect(screen.getAllByText('Manage')).toHaveLength(10)
     expect(screen.getAllByText('Visit')).toHaveLength(10)
-    // A panel-only field is a hidden column, not a column of its own.
-    expect(
-      screen.queryByRole('columnheader', { name: /Custom domain status/ }),
-    ).toBeNull()
   })
 
-  it('finds a site past the first page by its slug through the quick search', async () => {
-    render(<HostsPage />)
-    fireEvent.change(screen.getByRole('searchbox'), {
-      target: { value: 'harbor-bakery' },
-    })
-    await waitFor(() => expect(screen.getByText('Harbor Bakery')).toBeTruthy())
-    expect(screen.queryByText('Site 01')).toBeNull()
-  })
-
-  it('searches the custom domain too', async () => {
+  it('puts the search\'s word on the query, and draws what it answers', async () => {
     render(<HostsPage />)
     fireEvent.change(screen.getByRole('searchbox'), {
       target: { value: 'shop.harbor' },
     })
     await waitFor(() => expect(screen.getByText('Harbor Bakery')).toBeTruthy())
-    expect(screen.queryByText('Site 15')).toBeNull()
-  })
-
-  it('narrows to a Status past the first page, with a chip naming it', async () => {
-    render(<HostsPage />)
-    setFilterModel({
-      items: [{ id: 1, field: 'status', operator: 'is', value: 'suspended' }],
+    expect(lastCall().plan.filters).toContainEqual({
+      path: 'searchTokens',
+      op: 'array-contains',
+      value: 'shop.harbor',
     })
-    await waitFor(() => expect(screen.getByText('Harbor Bakery')).toBeTruthy())
     expect(screen.queryByText('Site 01')).toBeNull()
-    expect(mockGrid.props?.rows.map((row: { $id: string }) => row.$id)).toEqual([
-      'host-14',
-    ])
-    const chips = screen.getByRole('list', { name: 'Filters' })
-    expect(chips.textContent).toContain('Status')
-    expect(chips.textContent).toContain('Suspended')
   })
 
-  it('narrows by whether a custom domain is set', async () => {
+  it('puts a Site filter on the query, with a chip naming it', async () => {
     render(<HostsPage />)
     setFilterModel({
-      items: [
-        { id: 1, field: 'customDomainState', operator: 'not', value: 'none' },
-      ],
+      items: [{ id: 1, field: 'displayName', operator: 'startsWith', value: 'Harbor' }],
     })
     await waitFor(() => expect(screen.getByText('Harbor Bakery')).toBeTruthy())
-    expect(mockGrid.props?.rows).toHaveLength(1)
+    expect(lastCall().plan.served).toEqual([
+      { field: 'displayName', op: 'startsWith', value: 'Harbor' },
+    ])
+    expect(lastCall().plan.filters).toContainEqual({ path: 'nameLower', op: '>=', value: 'harbor' })
+    const chips = screen.getByRole('list', { name: 'Filters' })
+    expect(chips.textContent).toContain('Site')
+    expect(chips.textContent).toContain('Harbor')
   })
 
-  it('offers the Status choices the pill can show, and no others', () => {
+  it('offers only what the query can answer: Site and Created', () => {
     render(<HostsPage />)
-    const status = mockGrid.props?.columns.find(
-      (column: { field: string }) => column.field === 'status',
+    const filterable = (mockGrid.props?.columns ?? [])
+      .filter((column: { filterable?: boolean }) => column.filterable !== false)
+      .map((column: { field: string }) => column.field)
+    expect(filterable.sort()).toEqual(['createdAt', 'displayName'])
+    const sortable = (mockGrid.props?.columns ?? [])
+      .filter((column: { sortable?: boolean }) => column.sortable !== false)
+      .map((column: { field: string }) => column.field)
+    expect(sortable.sort()).toEqual(['createdAt', 'displayName'])
+    expect(mockGrid.props?.filterMode).toBe('server')
+    expect(mockGrid.props?.sortingMode).toBe('server')
+  })
+
+  it('orders by Created on the query when the header asks, and says so on the grid', async () => {
+    render(<HostsPage />)
+    act(() => {
+      mockGrid.props?.onSortModelChange([{ field: 'createdAt', sort: 'desc' }])
+    })
+    await waitFor(() =>
+      expect(lastCall().plan.orderBy).toMatchObject({ path: 'createdAt', direction: 'desc' }),
     )
-    expect(status.type).toBe('singleSelect')
-    expect(status.valueOptions.map((option: { value: string }) => option.value)).toEqual([
-      'suspended',
-      'maintenance',
-      'live',
-      'draft',
+    expect(mockGrid.props?.sortModel).toEqual([{ field: 'createdAt', sort: 'desc' }])
+  })
+
+  it('leaves out a membership row whose site the page could not read', () => {
+    mockAnswer.mockReturnValue({ ids: ['host-1', 'host-gone', 'host-2'] })
+    render(<HostsPage />)
+    expect(mockGrid.props?.rows.map((row: { $id: string }) => row.$id)).toEqual([
+      'host-1',
+      'host-2',
     ])
   })
 
   it('says a filter matched nothing, and still counts every site in the meter', async () => {
+    mockAnswer.mockImplementation((plan) =>
+      plan.searched ? { ids: [] } : { ids: FIRST_PAGE, hasMore: true },
+    )
     render(<HostsPage />)
     fireEvent.change(screen.getByRole('searchbox'), {
       target: { value: 'no-such-site' },
@@ -247,5 +305,12 @@ describe('the Sites list filters through the grid (AGL-3321)', () => {
       expect(screen.getByText('No sites match these filters')).toBeTruthy(),
     )
     expect(screen.getByTestId('header-right').textContent).toContain('15')
+  })
+
+  it('says the page could not be read rather than that nothing matched', () => {
+    mockAnswer.mockReturnValue({ ids: [], status: 'error' })
+    render(<HostsPage />)
+    expect(screen.getByText('These sites could not be loaded')).toBeTruthy()
+    expect(screen.queryByText('No sites match these filters')).toBeNull()
   })
 })
