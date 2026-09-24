@@ -168,6 +168,12 @@ export interface OutreachMailboxDailyHealth {
   sent: number
   bounces: number
   replies: number
+  /**
+   * Tests of a sequence step sent to a member (AGL-3325). Counted apart from
+   * `sent`: a test is a real Gmail send, so it spends the account's own
+   * limits, but it is not a person emailed and never moves the daily cap.
+   */
+  tests?: number
 }
 
 /**

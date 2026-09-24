@@ -123,7 +123,7 @@ const PREVIEW: OutreachEnrollPreviewResponse = {
 }
 
 let api: jest.Mocked<
-  Pick<OutreachApi, 'previewEnrollment' | 'enroll' | 'previewEmail' | 'curateDrafts'>
+  Pick<OutreachApi, 'previewEnrollment' | 'enroll' | 'previewEmail' | 'sendStepTest' | 'curateDrafts'>
 >
 
 const renderDialog = () => {
@@ -152,6 +152,7 @@ beforeEach(() => {
     previewEnrollment: jest.fn().mockResolvedValue(PREVIEW),
     enroll: jest.fn(),
     previewEmail: jest.fn(),
+    sendStepTest: jest.fn(),
     curateDrafts: jest.fn(),
   }
 })
@@ -489,6 +490,32 @@ describe('enrolling: the gate preview and Confirm (AGL-2980)', () => {
       personalLine: 'Saw the new storefront.',
     })
   })
+
+  it('sends a person’s first email to the rep as a test, with their line, and enrolls nobody (AGL-3325)', async () => {
+    api.sendStepTest.mockResolvedValue({
+      ok: true,
+      stepIndex: 0,
+      sentTo: 'rep@example.com',
+      subject: '[Test] Your second location, Avery',
+      sentAtMs: 1,
+      testsToday: 1,
+    })
+    await toPreview()
+    const cold = row('Avery Quinn')
+    fireEvent.change(within(cold).getByLabelText(/Personal line/), {
+      target: { value: 'Saw the new storefront.' },
+    })
+    fireEvent.click(within(cold).getByRole('button', { name: 'Send me this as a test' }))
+    expect((await within(cold).findByRole('alert')).textContent).toBe(
+      'Sent to rep@example.com as “[Test] Your second location, Avery”. Avery Quinn was not enrolled.',
+    )
+    expect(api.sendStepTest).toHaveBeenCalledWith({
+      sequenceId: 'seq-1',
+      contactId: 'c-cold',
+      personalLine: 'Saw the new storefront.',
+    })
+    expect(api.enroll).not.toHaveBeenCalled()
+  })
 })
 
 describe('outreachPersonReady (AGL-2980)', () => {
@@ -577,6 +604,43 @@ describe('curating for one person (AGL-3324)', () => {
         ],
       },
     ])
+  })
+
+  it('sends the curated copy to the rep as a test once they use it (AGL-3325)', async () => {
+    api.curateDrafts.mockResolvedValue(DRAFTS)
+    api.sendStepTest.mockResolvedValue({
+      ok: true,
+      stepIndex: 0,
+      sentTo: 'rep@example.com',
+      subject: '[Test] Casey, your second location',
+      sentAtMs: 1,
+      testsToday: 1,
+    })
+    await toPreview()
+    const casey = row('Casey Morgan')
+    fireEvent.click(within(casey).getByRole('button', { name: 'Curate for this person' }))
+    const drafts = await within(casey).findByLabelText('Curated emails for Casey Morgan')
+    const first = within(drafts).getByLabelText('Email 1 · step 1 — draft')
+    fireEvent.click(within(first).getByLabelText("I've read this draft, and it goes out to this person as written"))
+    fireEvent.click(within(first).getByRole('button', { name: 'Use this' }))
+    fireEvent.click(within(casey).getByRole('button', { name: 'Send me this as a test' }))
+    await waitFor(() => expect(api.sendStepTest).toHaveBeenCalled())
+    expect(api.sendStepTest).toHaveBeenCalledWith({
+      sequenceId: 'seq-1',
+      contactId: 'c-warm',
+      personalLine: '',
+      stepOverrides: [
+        {
+          stepIndex: 0,
+          subject: 'Casey, your second location',
+          body: 'Hi Casey,\n\nSaw the second location.',
+          source: 'ai',
+          prompt: 'the prompt',
+          model: 'test-model',
+        },
+      ],
+    })
+    expect(api.enroll).not.toHaveBeenCalled()
   })
 
   it('refuses to use a draft that breaks a rule, and previews the curated version', async () => {

@@ -105,6 +105,11 @@ export async function recordOutreachClick(
 ): Promise<OutreachClickOutcome> {
   const firestore = deps.firestore()
   const { orgId, enrollmentId, stepIndex, url } = input.target
+  // A test link (AGL-3325) names no enrollment and counts on nothing —
+  // held here too, so no caller can record one by reaching past the route.
+  if (input.target.test) {
+    return { human: false, machineReason: null, first: false, enrollment: null }
+  }
   const nowMs = deps.now()
   const ref = outreachOrgCollection(firestore, orgId, 'enrollments').doc(enrollmentId)
 

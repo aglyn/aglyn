@@ -42,7 +42,7 @@ import type { OutreachSettingsLoad } from './use-outreach-settings'
  * any request, or by the route, whose issues land in the same places.
  */
 
-const mockApi = { saveSequence: jest.fn() }
+const mockApi = { saveSequence: jest.fn(), sendStepTest: jest.fn() }
 const mockMailboxApi = {
   availability: jest.fn(async () => ({ configured: true, canManageAll: false })),
 }
@@ -58,12 +58,15 @@ jest.mock('./use-outreach-mailbox-api', () => ({
 }))
 jest.mock('./use-outreach-crm', () => ({
   useOutreachEmailTemplates: () => ({ status: 'ready', data: mockTemplates }),
+  // The test dialog's person picker (AGL-3325): nobody found, nothing asked.
+  useOutreachContactSearch: () => ({ status: 'ready', data: [], idle: true }),
+  useOutreachLeadSearch: () => ({ status: 'ready', data: [], idle: true }),
 }))
 /** The org's campaigns the picker offers (AGL-3254), and whose they were. */
 let mockCampaigns: Array<{ value: string; label: string }>
 const mockCampaignReads: Array<{ orgId: unknown; enabled: unknown }> = []
 jest.mock('@aglyn/tenant-feature-instance', () => ({
-  useUser: () => ({ data: { uid: 'uid-rep' } }),
+  useUser: () => ({ data: { uid: 'uid-rep', email: 'avery@example.com' } }),
   useOrgCampaigns: (orgId: unknown, options?: { enabled?: boolean }) => {
     mockCampaignReads.push({ orgId, enabled: options?.enabled })
     return { options: mockCampaigns, truncated: false, ready: true }
@@ -451,5 +454,44 @@ describe('the sequence editor: a stored sequence (AGL-2980)', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Email 2 · step 2' }))
     expect(preview().textContent).toContain('Subject: Re: Your second location')
     expect(preview().textContent).toContain('Following up.')
+  })
+
+  it('sends a test of a step from the stored sequence, to the member or an address they type (AGL-3325)', async () => {
+    mockApi.sendStepTest.mockResolvedValue({
+      ok: true,
+      stepIndex: 1,
+      sentTo: 'outside@example.org',
+      subject: '[Test] Re: Your second location',
+      sentAtMs: 1,
+      testsToday: 1,
+      unresolvedFields: [],
+    })
+    renderEditor({ sequence: stored() })
+    fireEvent.click(screen.getByRole('button', { name: 'Send a test of step 2' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Send a test of step 2' })
+    // The sample person and their line are in place; the test goes to the member unless they say where.
+    expect(within(dialog).getByText(/Leave empty to send it to yourself \(avery@example.com\)/)).toBeTruthy()
+    fireEvent.change(within(dialog).getByLabelText('Send to'), {
+      target: { value: 'outside@example.org' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send the test' }))
+    await waitFor(() =>
+      expect(mockApi.sendStepTest).toHaveBeenCalledWith({
+        sequenceId: 'seq-1',
+        stepIndex: 1,
+        personalLine: 'I saw Example Co just opened its second location.',
+        to: 'outside@example.org',
+      }),
+    )
+    expect((await within(dialog).findByRole('alert')).textContent).toContain(
+      'Sent to outside@example.org as “[Test] Re: Your second location”',
+    )
+  })
+
+  it('offers a test only once the sequence exists to send it from (AGL-3325)', () => {
+    renderEditor()
+    const button = screen.getByRole('button', { name: 'Send a test of step 1' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(mockApi.sendStepTest).not.toHaveBeenCalled()
   })
 })

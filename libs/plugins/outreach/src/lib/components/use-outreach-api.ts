@@ -48,6 +48,8 @@ import type {
   OutreachSettingsResponse,
   OutreachSettingsSaveRequest,
   OutreachSettingsSaveResponse,
+  OutreachStepTestRequest,
+  OutreachStepTestResponse,
 } from '../model/outreach-api'
 import type {
   OutreachSequenceDraft,
@@ -124,6 +126,13 @@ export interface OutreachApi {
   previewEmail(
     input: Omit<OutreachPreviewRequest, 'orgId'>,
   ): Promise<OutreachPreviewResponse>
+  /**
+   * Sends one step of a saved sequence to the member as a test (AGL-3325):
+   * the preview's email, through the sequence's mailbox, `[Test]` in front.
+   */
+  sendStepTest(
+    input: Omit<OutreachStepTestRequest, 'orgId'>,
+  ): Promise<OutreachStepTestResponse & { unresolvedFields?: string[] }>
   /**
    * One person's own copies of the sequence's email steps, drafted by the
    * workspace's AI (AGL-3324); nothing is stored until the member confirms.
@@ -258,6 +267,11 @@ export function useOutreachApi(orgId: string | null): OutreachApi {
         }),
       previewEmail: (input) =>
         call(OUTREACH_API_ROUTES.preview, {
+          method: 'POST',
+          body: { ...input },
+        }),
+      sendStepTest: (input) =>
+        call(OUTREACH_API_ROUTES.stepTest, {
           method: 'POST',
           body: { ...input },
         }),

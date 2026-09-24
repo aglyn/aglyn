@@ -17,6 +17,7 @@
 'use client'
 
 import { pluginDocsHelp, type ConsolePluginOrgMount } from '@aglyn/aglyn'
+import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
 import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import CampaignPicker from '@aglyn/shared-ui-email-campaigns/components/campaign-picker.component'
@@ -65,6 +66,7 @@ import { OutreachSendWindowFields } from './send-window-fields'
 import { OutreachSequenceMailboxPicker } from './sequence-mailbox-picker'
 import { OutreachSequencePreview } from './sequence-preview'
 import { OutreachStepCard } from './sequence-step-card'
+import { OutreachStepTestDialog } from './step-test-dialog'
 import { OutreachRouteError, useOutreachApi } from './use-outreach-api'
 import { useOutreachEmailTemplates } from './use-outreach-crm'
 import type { OutreachMailboxesResult } from './use-outreach-mailboxes'
@@ -73,6 +75,8 @@ import type { OutreachSettingsLoad } from './use-outreach-settings'
 export interface OutreachSequenceEditorProps {
   orgId: string
   orgMount?: ConsolePluginOrgMount
+  /** The organization document, for the consent group a test send's person picker searches (AGL-3325). */
+  org?: Record<string, unknown> | null
   /** The stored sequence, or `null` for a new one. */
   sequence: OutreachSequence | null
   /** The organization's compliance settings: its countries, and the preview's footer. */
@@ -129,6 +133,8 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
   const [serverIssues, setServerIssues] = useState<OutreachSequenceIssue[]>([])
   const [saving, setSaving] = useState(false)
   const [taskAnchor, setTaskAnchor] = useState<HTMLElement | null>(null)
+  // The step whose test-send dialog is open (AGL-3325), by index.
+  const [testing, setTesting] = useState<number | null>(null)
 
   // A stored sequence the listener updated (a save, a status change) is the
   // new starting point.
@@ -271,6 +277,20 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
   const countryOptions = [
     ...new Set([...orgCountries, ...draft.settings.allowedCountries]),
   ]
+  /*
+   * A test sends the step as STORED (AGL-3325): the route reads the saved
+   * sequence, so a new one has nothing to send yet and an edited one sends
+   * its last save — said on the button and in the dialog rather than found
+   * out in the inbox.
+   */
+  const unsaved =
+    sequence !== null &&
+    JSON.stringify(draft) !== JSON.stringify(outreachSequenceDraftOf(sequence))
+  const sendTestDisabledReason = !sequence
+    ? 'Create the sequence to send a test of it.'
+    : !draft.mailboxId
+      ? 'Choose a mailbox to send the test from.'
+      : null
 
   return (
     <Grid container spacing={2}>
@@ -380,6 +400,12 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
                   ),
                 })
               }
+              onSendTest={
+                step.kind === 'email' && !archived
+                  ? () => setTesting(index)
+                  : undefined
+              }
+              sendTestDisabledReason={sendTestDisabledReason}
             />
           ))}
           <Stack
@@ -606,6 +632,23 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
           )}
         </Stack>
       </Grid>
+      {sequence && testing !== null ? (
+        <OutreachStepTestDialog
+          open
+          onClose={() => setTesting(null)}
+          orgId={orgId}
+          sequence={sequence}
+          stepIndex={testing}
+          contactGroupId={
+            sequence.hostId
+              ? consentGroupForHost(props.org ?? null, sequence.hostId).groupId
+              : ''
+          }
+          selfEmail={user?.email ?? null}
+          unsaved={unsaved}
+          api={api}
+        />
+      ) : null}
       <Grid size={{ xs: 12, md: 5 }}>
         <Box sx={{ position: { md: 'sticky' }, top: { md: 16 } }}>
           <OutreachSequencePreview
