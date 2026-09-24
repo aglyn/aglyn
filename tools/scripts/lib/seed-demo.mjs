@@ -313,6 +313,9 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
   for (const member of brand.siteMembers ?? []) {
     const { id, ...fields } = member
     await put(hostRef.collection('siteMembers').doc(id), {
+      // Every member carries the boolean, as sign-up writes it; the console's
+      // Status filter cannot find a member without it.
+      suspended: false,
       ...fields,
       createdAt: now,
     })

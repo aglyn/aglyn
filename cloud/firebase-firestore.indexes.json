@@ -2801,6 +2801,94 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "siteMembers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "siteMembers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "siteMembers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "email",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "siteMembers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "displayNameLower",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "siteMembers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "displayName",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "siteMembers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "displayNameTokens",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "suspended",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "displayNameLower",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

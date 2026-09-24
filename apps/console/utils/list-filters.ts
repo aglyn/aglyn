@@ -276,10 +276,12 @@ export const ACTIVITY_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
  * cookie, which is why this list is a plain collection query while the staff
  * account list has to walk Auth pools.
  *
- * ⛔ `suspended` is not filterable. It is written only when a member IS
- * suspended, so `is false` would return nothing rather than everyone else — a
- * filter that lies in exactly one direction. Offering it needs the writers to
- * store `false` explicitly, and a backfill for the documents that predate it.
+ * `suspended` is a boolean every member carries (AGL-3321): sign-up stores
+ * `false`, the drawer's Suspend and Reactivate store `true` and `false`, and
+ * `tools/scripts/backfill-site-account-suspended.mjs` stamps `false` on the
+ * members that predate it — a query cannot find a document that LACKS a
+ * field, so `is Active` needs every active member to say so. It is the one
+ * clause that stands BESIDE another: see `siteAccountQueryConstraints`.
  */
 export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   {
@@ -304,6 +306,7 @@ export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     path: 'createdAt',
     presence: 'always',
   },
+  { column: 'suspended', kind: 'boolean', path: 'suspended', operators: ['equals'] },
 ]
 
 /** Headers for member fields that are filterable without being columns. */
@@ -311,7 +314,19 @@ export const SITE_MEMBER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> =
   {
     displayName: 'Name',
     createdAt: 'Joined',
+    suspended: 'Status',
   }
+
+/**
+ * The Status filter's choices: the stored boolean, by the words the column
+ * draws for it.
+ */
+export const SITE_MEMBER_LIST_FILTER_OPTIONS = {
+  suspended: [
+    { value: 'false', label: 'Active' },
+    { value: 'true', label: 'Suspended' },
+  ],
+}
 
 /*
  * Content entries (`hosts/{hostId}/collections/{collectionId}/entries`).

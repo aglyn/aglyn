@@ -137,6 +137,13 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
         email,
         ...(displayName ? memberNameSearchFields(displayName) : {}),
         /*
+         * Stored `false`, not left out: the console's Status filter asks
+         * `suspended == false` for the active members, and a query cannot
+         * find a document that lacks the field. The drawer's Suspend and
+         * Reactivate write `true` and `false` over it.
+         */
+        suspended: false,
+        /*
          * The checkbox is PERSISTED on the member, not only forwarded.
          *
          * It reached the lead and the contact from the two lines below and
