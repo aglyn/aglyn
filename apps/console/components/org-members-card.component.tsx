@@ -23,6 +23,7 @@ import {
   consoleUserType,
   countManagerSeats,
   ORG_PERMISSIONS,
+  ORG_ROLES,
   resolveOrgPermissions,
   type AglynOrgCustomRole,
   type AglynOrgMember,
@@ -34,7 +35,10 @@ import {
   CardDisplay,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListTable from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Box,
@@ -48,20 +52,11 @@ import {
   FormControlLabel,
   MenuItem,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Tooltip,
   Typography,
-  TablePagination,
 } from '@mui/material'
-import {
-  TABLE_PAGE_SIZE_DEFAULT,
-  TABLE_PAGE_SIZE_OPTIONS,
-  TABLE_ROWS_PER_PAGE_LABEL,
-} from '../constants/shared'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -74,8 +69,10 @@ import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
 import MemberAvatar from './member-avatar.component'
 import {
-  PluginListColumnCells,
-  PluginListColumnHeaders,
+  pluginGridColumns,
+  useStablePluginColumns,
+} from './plugin-grid-columns.component'
+import {
   usePluginColumnSort,
   usePluginListColumns,
 } from './plugin-list-columns.component'
@@ -107,6 +104,45 @@ const HOST_ROLE_HINTS: Record<HostAccessRole | 'none', string> = {
   editor: 'Can edit content and publish it',
   admin: 'Full control of the site, including its people',
 }
+
+/*
+ * What the roster grid's Filters panel and quick search offer (AGL-3317).
+ * The card holds every member (`/api/orgs/members` answers the whole roster,
+ * which the seat counts above the grid need anyway), so both are answered
+ * over all of them. Role and access are matched on the values the row is
+ * READ as (`roleKey`, `accessKey`): a member stored with no role is a
+ * viewer, and access is the kind of user their reach makes them.
+ */
+const MEMBER_FILTER_FIELDS = [
+  inMemoryListField('member', 'text', 'name'),
+  inMemoryListField('role', 'select', 'roleKey'),
+  inMemoryListField('access', 'select', 'accessKey'),
+]
+const MEMBER_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  member: 'Member',
+  role: 'Role',
+  access: 'Access',
+}
+const MEMBER_FILTER_OPTIONS = {
+  role: ORG_ROLES.map((value) => ({ value, label: value })),
+  // An org member is one or the other; a site member is never on this roster.
+  access: (['manager', 'collaborator'] as const).map((value) => ({
+    value,
+    label: CONSOLE_USER_TYPE_LABELS[value],
+  })),
+}
+const MEMBER_SEARCH_FIELDS = ['name', 'email', 'title'] as const
+
+/** A roster row, with the values the Filters panel matches. */
+type MemberRow = AglynOrgMember & {
+  name: string
+  roleKey: string
+  accessKey: string
+}
+
+/** Keeps a cell's own keystrokes from moving the grid's focus. */
+const stopGridKeys = (event: { stopPropagation: () => void }) =>
+  event.stopPropagation()
 
 interface AccessDraft {
   uid: string
@@ -161,46 +197,38 @@ export function OrgMembersCard() {
   const managerSeatsUsed = useMemo(() => countManagerSeats(members), [members])
 
   /**
-   * Pagination for the roster (AGL-2501).
-   *
-   * An unbounded roster is fine at three members and is a page that never ends
-   * at two hundred — and this is the one list in the console whose row count is
-   * set by the customer's headcount rather than by what they built.
-   *
-   * Local slicing, not a paged read: `members` is already fully in memory (the
-   * seat counts and the manager-seat gate above both count across ALL of them),
-   * so paging the query would mean two different populations answering two
-   * questions on one card.
-   */
-  const [page, setPage] = useState(0)
-  const [rowsPerPage, setRowsPerPage] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  /**
    * The roster in the order a plugin column asked for (AGL-2939), otherwise
    * the order the API hands it. A column that sorts by values only its
    * plugin reads — members' AI credits this month — hands the table a
    * comparator through its header.
+   *
+   * Paged by the grid's own footer (AGL-2501): `members` is already fully in
+   * memory — the seat counts and the manager-seat gate above both count
+   * across ALL of them — so paging the query would mean two different
+   * populations answering two questions on one card.
    */
   const {
     rows: sortedMembers,
     sortedBy: pluginSortedBy,
     onSort: onPluginSort,
   } = usePluginColumnSort(members)
-  const pagedMembers = useMemo(
+  const memberRows = useMemo<MemberRow[]>(
     () =>
-      sortedMembers.length <= rowsPerPage
-        ? sortedMembers
-        : sortedMembers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
-    [sortedMembers, page, rowsPerPage],
+      sortedMembers.map((member) => ({
+        ...member,
+        name: member.displayName || member.email || member.$id,
+        roleKey: member.role ?? 'viewer',
+        accessKey: consoleUserType(member),
+      })),
+    [sortedMembers],
   )
-  /*
-    Removing the last member on a page would otherwise strand the reader on an
-    empty one with no way back. Clamped rather than reset, so removing someone
-    from page 3 keeps them on page 3.
-  */
-  useEffect(() => {
-    const lastPage = Math.max(0, Math.ceil(members.length / rowsPerPage) - 1)
-    if (page > lastPage) setPage(lastPage)
-  }, [page, members.length, rowsPerPage])
+  const memberFilter = useListRowsFilter({
+    rows: memberRows,
+    fields: MEMBER_FILTER_FIELDS,
+    options: MEMBER_FILTER_OPTIONS,
+    headers: MEMBER_FILTER_HEADERS,
+    search: MEMBER_SEARCH_FIELDS,
+  })
   const seatQuota = checkOrgSeatQuota(org, 'managers', managerSeatsUsed)
   // An org admin sees every org host via the memberRoles projection, so
   // this doubles as the org host directory for the access editor.
@@ -350,7 +378,332 @@ export function OrgMembersCard() {
     refresh,
   ])
 
+  /*
+    Columns a plugin contributes to this table (AGL-2940), as grid columns.
+    Each cell is handed its member beside the zone's props, and a column that
+    sorts hands the roster a comparator through its own header (AGL-2939).
+  */
+  const stablePluginColumns = useStablePluginColumns(pluginColumns)
+  const pluginMemberColumns = useMemo(
+    () =>
+      pluginGridColumns<AglynOrgMember>(stablePluginColumns, {
+        slotProps: { orgId, canManage },
+        sortedBy: pluginSortedBy,
+        onSort: onPluginSort,
+        rowProps: (member) => ({ member }),
+      }),
+    [stablePluginColumns, orgId, canManage, pluginSortedBy, onPluginSort],
+  )
+
   if (!currentOrg) return null
+
+  /*
+    The roster's columns. The editors inside a row are its own: the grid only
+    draws them, and a row click opens nothing, so a select or a button in a
+    cell is never mistaken for the row.
+  */
+  const memberColumns: GridColDef[] = [
+    {
+      field: 'member',
+      headerName: 'Member',
+      flex: 1.2,
+      minWidth: 220,
+      valueGetter: (_value, row: MemberRow) => row.name,
+      renderCell: ({ row: member }: { row: MemberRow }) => (
+        <Box sx={{ py: 0.75 }}>
+          {/* The roster row had no avatar at all (AGL-1126) — a
+              table of people with no faces in it. */}
+          <Stack
+            direction="row"
+            spacing={1.25}
+            sx={{ alignItems: 'center' }}
+          >
+            <MemberAvatar
+              photoURL={member.photoURL}
+              email={member.email}
+              name={member.displayName}
+            />
+            <Box sx={{ minWidth: 0 }}>
+              {/* Member detail page (AGL-364). */}
+              <AppLink
+                href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug,
+                  uid: member.$id,
+                })}
+                color="inherit"
+                underline="hover"
+              >
+                {member.displayName || member.email || member.$id}
+              </AppLink>
+              {member.title ? (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  component="div"
+                >
+                  {member.title}
+                </Typography>
+              ) : null}
+            </Box>
+          </Stack>
+        </Box>
+      ),
+    },
+    {
+      /*
+       * One column per QUESTION (AGL-1125). Role and Custom role
+       * used to sit side by side as two dropdowns, which reads as
+       * "which of these two is in effect?" — they are not
+       * alternatives; a custom role LAYERS on the base role
+       * (AGL-243). They are one cell now.
+       *
+       * Type (AGL-1114) is gone as a column because it was never an
+       * independent fact: `consoleUserType` is
+       * `isOrgWideMember(member) ? manager : collaborator`, derived
+       * from exactly the access this next column shows. It moves
+       * INTO Access, which is what decides it — and which is what
+       * decides the seat it consumes.
+       */
+      field: 'role',
+      headerName: 'Role',
+      flex: 1,
+      minWidth: 200,
+      valueGetter: (_value, row: MemberRow) => row.roleKey,
+      /*
+       * AGL-2334: this said a custom role "adds permissions on top
+       * of the base role — it does not replace it", and that is
+       * not what the code does. `resolveOrgPermissions` merges
+       * key-by-key and honours an explicit `false` at both the
+       * custom-role and member-override layers, so a custom role
+       * can take a permission AWAY as readily as grant one.
+       *
+       * The sentence was not merely inaccurate, it discouraged the
+       * exact use `run-an-agency-workspace.md` recommends —
+       * "custom roles if you want something narrower than the
+       * built-ins". Anyone who believed the tooltip would conclude
+       * narrowing was impossible and stop looking.
+       */
+      renderHeader: () => (
+        <Tooltip title="A custom role LAYERS on the base role, key by key — it can grant a permission the role lacks, or take one away.">
+          <span>{'Role'}</span>
+        </Tooltip>
+      ),
+      renderCell: ({ row: member }: { row: MemberRow }) => (
+        <Box sx={{ py: 0.75 }} onKeyDown={stopGridKeys}>
+          <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
+            {canManage && member.role !== 'owner' ? (
+              <TextField
+                size="small"
+                select
+                value={member.role ?? 'viewer'}
+                onChange={(event) =>
+                  void request('/api/orgs/members', 'POST', {
+                    orgId,
+                    action: 'upsert',
+                    uid: member.$id,
+                    role: event.target.value,
+                    allHosts: member.allHosts === true,
+                    hostAccess: member.hostAccess ?? {},
+                  }).then((ok) => ok && refresh())
+                }
+                sx={{ width: 110 }}
+              >
+                {ASSIGNABLE_ROLES.map((value) => (
+                  <MenuItem key={value} value={value}>
+                    {value}
+                  </MenuItem>
+                ))}
+              </TextField>
+            ) : (
+              <Chip label={member.role ?? 'viewer'} size="small" />
+            )}
+            {/* Only when the org HAS custom roles, or this member is
+                on one. An always-rendered select whose only option
+                was "—" is what made an ordinary member look
+                misconfigured: a blank box beside a filled one reads
+                as unset, not as "nothing extra". */}
+            {roles.length || (member as any).roleId
+              ? (canManage && member.role !== 'owner' ? (
+                  <TextField
+                    size="small"
+                    select
+                    variant="standard"
+                    value={(member as any).roleId ?? ''}
+                    onChange={(event) =>
+                      void request('/api/orgs/members', 'POST', {
+                        orgId,
+                        action: 'upsert',
+                        uid: member.$id,
+                        role: member.role ?? 'viewer',
+                        allHosts: member.allHosts === true,
+                        hostAccess: member.hostAccess ?? {},
+                        roleId: event.target.value || null,
+                      }).then((ok) => ok && refresh())
+                    }
+                    // A Typography child inside the value slot
+                    // collapses to nothing — the label has to be a
+                    // plain string for the Select to render it.
+                    sx={{
+                      width: 170,
+                      '& .MuiSelect-select': {
+                        fontSize: 12,
+                        color: (member as any).roleId
+                          ? 'text.primary'
+                          : 'text.secondary',
+                      },
+                    }}
+                    slotProps={{
+                      // Without displayEmpty a Select renders NOTHING
+                      // for an empty value — no placeholder, no
+                      // label, just the arrow. That is half of why
+                      // the old custom-role column read as a broken
+                      // blank box: its "—" option was there and
+                      // simply never drawn.
+                      select: { displayEmpty: true },
+                      input: { disableUnderline: true },
+                      htmlInput: { 'aria-label': 'Extra permissions' },
+                    }}
+                  >
+                    <MenuItem value="">
+                      {'No extra permissions'}
+                    </MenuItem>
+                    {roles.map((customRole) => (
+                      <MenuItem key={customRole.$id} value={customRole.$id}>
+                        {`+ ${customRole.name ?? customRole.$id}`}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : (member as any).roleId ? (
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={`+ ${
+                      roles.find(
+                        (customRole) =>
+                          customRole.$id === (member as any).roleId,
+                      )?.name ?? 'custom'
+                    }`}
+                  />
+                ) : null)
+              : null}
+          </Stack>
+        </Box>
+      ),
+    },
+    {
+      field: 'access',
+      headerName: 'Access',
+      flex: 0.9,
+      minWidth: 160,
+      valueGetter: (_value, row: MemberRow) => row.accessKey,
+      renderCell: ({ row: member }: { row: MemberRow }) => (
+        <Box sx={{ py: 0.75 }} onKeyDown={stopGridKeys}>
+          {/* Access, with the kind of user it MAKES them underneath
+              (AGL-1114 lives here now, AGL-1125). The seat a member
+              consumes follows from their reach, so the two belong in
+              one cell: change the access and the type changes with
+              it, which two separate columns never showed. */}
+          <Stack spacing={0.25} sx={{ alignItems: 'flex-start' }}>
+            {member.role === 'owner' || member.role === 'admin' ? (
+              <Typography variant="body2">{'All sites'}</Typography>
+            ) : canManage ? (
+              <Button
+                size="small"
+                sx={{ minWidth: 0, px: 0.5 }}
+                onClick={() =>
+                  setAccessDraft({
+                    uid: member.$id,
+                    label:
+                      member.displayName || member.email || member.$id,
+                    role: (member.role ?? 'viewer') as OrgRole,
+                    allHosts: member.allHosts === true,
+                    hostAccess: { ...(member.hostAccess ?? {}) },
+                  })
+                }
+              >
+                {member.allHosts
+                  ? 'All sites'
+                  : `${Object.keys(member.hostAccess ?? {}).length} site(s)`}
+              </Button>
+            ) : (
+              <Typography variant="body2">
+                {member.allHosts
+                  ? 'All sites'
+                  : `${Object.keys(member.hostAccess ?? {}).length} site(s)`}
+              </Typography>
+            )}
+            {(() => {
+              const kind = consoleUserType(member)
+              return (
+                <Tooltip title={CONSOLE_USER_TYPE_HINTS[kind]}>
+                  <Typography
+                    variant="caption"
+                    color={
+                      kind === 'manager' ? 'primary.main' : 'text.secondary'
+                    }
+                  >
+                    {CONSOLE_USER_TYPE_LABELS[kind]}
+                  </Typography>
+                </Tooltip>
+              )
+            })()}
+          </Stack>
+        </Box>
+      ),
+    },
+    // Columns a plugin contributes, between Access and the actions (AGL-2940).
+    ...pluginMemberColumns,
+    {
+      field: 'actions',
+      headerName: '',
+      minWidth: 190,
+      align: 'right',
+      sortable: false,
+      filterable: false,
+      hideable: false,
+      disableColumnMenu: true,
+      renderCell: ({ row: member }: { row: MemberRow }) => (
+        <Box onKeyDown={stopGridKeys}>
+          <Button
+            size="small"
+            onClick={() => setPermissionsFor(member)}
+          >
+            {'Permissions'}
+          </Button>
+          {canManage && member.role !== 'owner' ? (
+            <Button
+              size="small"
+              color="error"
+              onClick={() =>
+                void confirm({
+                  title: 'Remove member?',
+                  description: `${member.email ?? member.$id} loses access to every site in this organization.`,
+                })
+                  // confirm() resolves on accept and REJECTS on
+                  // cancel — the catch is the cancel path.
+                  .then(async () => {
+                    const ok = await request(
+                      '/api/orgs/members',
+                      'POST',
+                      {
+                        orgId,
+                        action: 'remove',
+                        uid: member.$id,
+                      },
+                    )
+                    if (ok) await refresh()
+                  })
+                  .catch(() => {
+                    // Cancelled — nothing to do.
+                  })
+              }
+            >
+              {'Remove'}
+            </Button>
+          ) : null}
+        </Box>
+      ),
+    },
+  ]
 
   return (
     <CardDisplay
@@ -458,302 +811,23 @@ export function OrgMembersCard() {
             </Typography>
           </Stack>
         ) : null}
-        <ScrollTable size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{'Member'}</TableCell>
-              {/* One column per QUESTION (AGL-1125). Role and Custom role
-                  used to sit side by side as two dropdowns, which reads as
-                  "which of these two is in effect?" — they are not
-                  alternatives; a custom role LAYERS on the base role
-                  (AGL-243). They are one cell now.
-
-                  Type (AGL-1114) is gone as a column because it was never an
-                  independent fact: `consoleUserType` is
-                  `isOrgWideMember(member) ? manager : collaborator`, derived
-                  from exactly the access this next column shows. It moves
-                  INTO Access, which is what decides it — and which is what
-                  decides the seat it consumes. */}
-              <TableCell>
-                {/* AGL-2334: this said a custom role "adds permissions on top
-                    of the base role — it does not replace it", and that is
-                    not what the code does. `resolveOrgPermissions` merges
-                    key-by-key and honours an explicit `false` at both the
-                    custom-role and member-override layers, so a custom role
-                    can take a permission AWAY as readily as grant one.
-
-                    The sentence was not merely inaccurate, it discouraged the
-                    exact use `run-an-agency-workspace.md` recommends —
-                    "custom roles if you want something narrower than the
-                    built-ins". Anyone who believed the tooltip would conclude
-                    narrowing was impossible and stop looking. */}
-                <Tooltip title="A custom role LAYERS on the base role, key by key — it can grant a permission the role lacks, or take one away.">
-                  <span>{'Role'}</span>
-                </Tooltip>
-              </TableCell>
-              <TableCell>{'Access'}</TableCell>
-              <PluginListColumnHeaders
-                columns={pluginColumns}
-                onSort={onPluginSort}
-                sortedBy={pluginSortedBy}
-                orgId={orgId}
-                canManage={canManage}
-              />
-              <TableCell align="right" />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {pagedMembers.map((member) => (
-              <TableRow key={member.$id}>
-                <TableCell>
-                  {/* The roster row had no avatar at all (AGL-1126) — a
-                      table of people with no faces in it. */}
-                  <Stack
-                    direction="row"
-                    spacing={1.25}
-                    sx={{ alignItems: 'center' }}
-                  >
-                    <MemberAvatar
-                      photoURL={member.photoURL}
-                      email={member.email}
-                      name={member.displayName}
-                    />
-                    <Box sx={{ minWidth: 0 }}>
-                      {/* Member detail page (AGL-364). */}
-                      <AppLink
-                        href={buildRoute(Route.MANAGE_TEAM_MEMBER, { orgSlug,
-                          uid: member.$id,
-                        })}
-                        color="inherit"
-                        underline="hover"
-                      >
-                        {member.displayName || member.email || member.$id}
-                      </AppLink>
-                      {member.title ? (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          component="div"
-                        >
-                          {member.title}
-                        </Typography>
-                      ) : null}
-                    </Box>
-                  </Stack>
-                </TableCell>
-                {/* Base role and the custom layer, in one cell (AGL-1125). */}
-                <TableCell>
-                  <Stack spacing={0.5} sx={{ alignItems: 'flex-start' }}>
-                    {canManage && member.role !== 'owner' ? (
-                      <TextField
-                        size="small"
-                        select
-                        value={member.role ?? 'viewer'}
-                        onChange={(event) =>
-                          void request('/api/orgs/members', 'POST', {
-                            orgId,
-                            action: 'upsert',
-                            uid: member.$id,
-                            role: event.target.value,
-                            allHosts: member.allHosts === true,
-                            hostAccess: member.hostAccess ?? {},
-                          }).then((ok) => ok && refresh())
-                        }
-                        sx={{ width: 110 }}
-                      >
-                        {ASSIGNABLE_ROLES.map((value) => (
-                          <MenuItem key={value} value={value}>
-                            {value}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-                    ) : (
-                      <Chip label={member.role ?? 'viewer'} size="small" />
-                    )}
-                    {/* Only when the org HAS custom roles, or this member is
-                        on one. An always-rendered select whose only option
-                        was "—" is what made an ordinary member look
-                        misconfigured: a blank box beside a filled one reads
-                        as unset, not as "nothing extra". */}
-                    {roles.length || (member as any).roleId
-                      ? (canManage && member.role !== 'owner' ? (
-                          <TextField
-                            size="small"
-                            select
-                            variant="standard"
-                            value={(member as any).roleId ?? ''}
-                            onChange={(event) =>
-                              void request('/api/orgs/members', 'POST', {
-                                orgId,
-                                action: 'upsert',
-                                uid: member.$id,
-                                role: member.role ?? 'viewer',
-                                allHosts: member.allHosts === true,
-                                hostAccess: member.hostAccess ?? {},
-                                roleId: event.target.value || null,
-                              }).then((ok) => ok && refresh())
-                            }
-                            // A Typography child inside the value slot
-                            // collapses to nothing — the label has to be a
-                            // plain string for the Select to render it.
-                            sx={{
-                              width: 170,
-                              '& .MuiSelect-select': {
-                                fontSize: 12,
-                                color: (member as any).roleId
-                                  ? 'text.primary'
-                                  : 'text.secondary',
-                              },
-                            }}
-                            slotProps={{
-                              // Without displayEmpty a Select renders NOTHING
-                              // for an empty value — no placeholder, no
-                              // label, just the arrow. That is half of why
-                              // the old custom-role column read as a broken
-                              // blank box: its "—" option was there and
-                              // simply never drawn.
-                              select: { displayEmpty: true },
-                              input: { disableUnderline: true },
-                              htmlInput: { 'aria-label': 'Extra permissions' },
-                            }}
-                          >
-                            <MenuItem value="">
-                              {'No extra permissions'}
-                            </MenuItem>
-                            {roles.map((customRole) => (
-                              <MenuItem key={customRole.$id} value={customRole.$id}>
-                                {`+ ${customRole.name ?? customRole.$id}`}
-                              </MenuItem>
-                            ))}
-                          </TextField>
-                        ) : (member as any).roleId ? (
-                          <Chip
-                            size="small"
-                            variant="outlined"
-                            label={`+ ${
-                              roles.find(
-                                (customRole) =>
-                                  customRole.$id === (member as any).roleId,
-                              )?.name ?? 'custom'
-                            }`}
-                          />
-                        ) : null)
-                      : null}
-                  </Stack>
-                </TableCell>
-                <TableCell>
-                  {/* Access, with the kind of user it MAKES them underneath
-                      (AGL-1114 lives here now, AGL-1125). The seat a member
-                      consumes follows from their reach, so the two belong in
-                      one cell: change the access and the type changes with
-                      it, which two separate columns never showed. */}
-                  <Stack spacing={0.25} sx={{ alignItems: 'flex-start' }}>
-                    {member.role === 'owner' || member.role === 'admin' ? (
-                      <Typography variant="body2">{'All sites'}</Typography>
-                    ) : canManage ? (
-                      <Button
-                        size="small"
-                        sx={{ minWidth: 0, px: 0.5 }}
-                        onClick={() =>
-                          setAccessDraft({
-                            uid: member.$id,
-                            label:
-                              member.displayName || member.email || member.$id,
-                            role: (member.role ?? 'viewer') as OrgRole,
-                            allHosts: member.allHosts === true,
-                            hostAccess: { ...(member.hostAccess ?? {}) },
-                          })
-                        }
-                      >
-                        {member.allHosts
-                          ? 'All sites'
-                          : `${Object.keys(member.hostAccess ?? {}).length} site(s)`}
-                      </Button>
-                    ) : (
-                      <Typography variant="body2">
-                        {member.allHosts
-                          ? 'All sites'
-                          : `${Object.keys(member.hostAccess ?? {}).length} site(s)`}
-                      </Typography>
-                    )}
-                    {(() => {
-                      const kind = consoleUserType(member)
-                      return (
-                        <Tooltip title={CONSOLE_USER_TYPE_HINTS[kind]}>
-                          <Typography
-                            variant="caption"
-                            color={
-                              kind === 'manager' ? 'primary.main' : 'text.secondary'
-                            }
-                          >
-                            {CONSOLE_USER_TYPE_LABELS[kind]}
-                          </Typography>
-                        </Tooltip>
-                      )
-                    })()}
-                  </Stack>
-                </TableCell>
-                <PluginListColumnCells
-                  columns={pluginColumns}
-                  member={member}
-                  orgId={orgId}
-                  canManage={canManage}
-                />
-                <TableCell align="right">
-                  <Button
-                    size="small"
-                    onClick={() => setPermissionsFor(member)}
-                  >
-                    {'Permissions'}
-                  </Button>
-                  {canManage && member.role !== 'owner' ? (
-                    <Button
-                      size="small"
-                      color="error"
-                      onClick={() =>
-                        void confirm({
-                          title: 'Remove member?',
-                          description: `${member.email ?? member.$id} loses access to every site in this organization.`,
-                        })
-                          // confirm() resolves on accept and REJECTS on
-                          // cancel — the catch is the cancel path.
-                          .then(async () => {
-                            const ok = await request(
-                              '/api/orgs/members',
-                              'POST',
-                              {
-                                orgId,
-                                action: 'remove',
-                                uid: member.$id,
-                              },
-                            )
-                            if (ok) await refresh()
-                          })
-                          .catch(() => {
-                            // Cancelled — nothing to do.
-                          })
-                      }
-                    >
-                      {'Remove'}
-                    </Button>
-                  ) : null}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </ScrollTable>
-        <TablePagination
-          component="div"
-          count={members.length}
-          page={page}
-          onPageChange={(_event, next) => setPage(next)}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={(event) => {
-            setRowsPerPage(Number(event.target.value))
-            setPage(0)
-          }}
-          rowsPerPageOptions={TABLE_PAGE_SIZE_OPTIONS}
-          labelRowsPerPage={TABLE_ROWS_PER_PAGE_LABEL}
+        <ListFilterChips {...memberFilter.chipsProps} />
+        <ListTable
+          aria-label="Organization members"
+          rows={memberFilter.rows}
+          columns={memberFilter.filterColumns(memberColumns)}
+          // A row holds a role picker over a custom-role picker, so it is as
+          // tall as what it holds.
+          getRowHeight={() => 'auto'}
+          // The rows arrive in the roster's order, or a plugin column's; the
+          // grid's own sort would be a second order fighting the first.
+          disableColumnSorting
+          // The panel and the search are the grid's; the card answers them
+          // over the whole roster (AGL-3317).
+          {...memberFilter.gridProps}
+          noRowsLabel={
+            members.length ? 'No members match these filters' : 'No members yet'
+          }
         />
         {canManage && invites.length > 0 ? (
           <Stack spacing={1}>

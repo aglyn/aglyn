@@ -189,6 +189,13 @@ export interface NotificationsTableProps {
  * grid, so the grid's own footer is off, and so are its search box and
  * filter panel, which could only narrow the page on screen and would call
  * that the whole feed.
+ *
+ * Nor can the feed's query serve them in their place. It is ordered
+ * `createdAt` DESC and its cursor is a document in that order, so a type
+ * filter is an equality beneath that sort, which needs a `type ASC,
+ * createdAt DESC` index the notifications collection does not have. New
+ * versus read cannot be asked at all: `readAt` is written only when a row is
+ * read, and a query cannot find documents that LACK a field.
  */
 export function NotificationsTable(props: NotificationsTableProps) {
   const {
