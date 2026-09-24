@@ -79,10 +79,17 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({
     children,
     header,
+    HeaderProps,
   }: {
     children: ReactNode
     header: ReactNode
-  }) => <section aria-label={String(header)}>{children}</section>,
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <section aria-label={String(header)}>
+      {HeaderProps?.action}
+      {children}
+    </section>
+  ),
   MdiIcon: () => null,
 }))
 jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => undefined }))

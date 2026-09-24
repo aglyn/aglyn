@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/shared-ui-next",
-  "version": "1.0.0-beta.197",
+  "version": "1.0.0-beta.198",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,11 +25,11 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/shared-data-enums": "1.0.0-beta.197",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.197",
-    "@aglyn/shared-ui-theme": "1.0.0-beta.197",
-    "@aglyn/shared-util-dom": "1.0.0-beta.197",
-    "@aglyn/shared-util-tools": "1.0.0-beta.197",
+    "@aglyn/shared-data-enums": "1.0.0-beta.198",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.198",
+    "@aglyn/shared-ui-theme": "1.0.0-beta.198",
+    "@aglyn/shared-util-dom": "1.0.0-beta.198",
+    "@aglyn/shared-util-tools": "1.0.0-beta.198",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {

@@ -458,11 +458,28 @@ were sent with rather than this form's id, so they stay in the Inbox under **All
 
 ## Find a form in the list {#find-a-form}
 
-The **Forms** table filters through its toolbar by display name, slug and **Status**
-(active or retired), and **Search** matches a name or slug. Retired forms stay out of
-the list until you ask for them: choose **Status** in the **Filters** panel and pick
-**Retired** to find one and restore it. The list is paged, so the first filter reads
-the first 100 forms and matches over them; the table says when there are more, and
+The **Forms** table filters through its toolbar by every column it shows:
+
+- **Display name** and **Slug**, as text.
+- **Submissions** and **Leads**, as numbers: equal to, over, under, or empty. A form
+  that doesn't route to leads never counts any, so its **Leads** shows a dash. **Leads**
+  *is empty* finds those forms, and **Leads** = 0 finds a lead-routed form that hasn't
+  produced one yet.
+- **Last submission** and **Updated**, as days: on, after or before a date, or empty.
+
+The **Filters** panel also offers four columns the table keeps hidden:
+
+- **Created**, a day. Show it from **Columns** to see each form's date.
+- **Status**, active or retired.
+- **Lead routing**, on or off. This is the lead switch on the form's **CRM routing**
+  card.
+- **Campaign**, the campaigns a form is filed under. It's offered once a form in the list
+  is filed under one.
+
+**Search** matches a form's name, slug or ID. Retired forms stay out of the list until
+you ask for them: choose **Status** in the **Filters** panel and pick **Retired** to find
+one and restore it. The list is paged, so the first filter reads the first 100 forms and
+matches over them, counts and dates included. The table says when there are more, and
 paging forward reads the next page. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Duplicate a form
