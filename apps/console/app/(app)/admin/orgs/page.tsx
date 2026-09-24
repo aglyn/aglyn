@@ -100,17 +100,22 @@ import { useStaffListPagination } from '../../../../hooks/use-staff-list-paginat
  */
 const ORG_FILTER_COLUMNS = ['name', 'plan', 'subscription', 'createdAt']
 
-/** Every status a Stripe subscription can be in, as the billing mirror stores it. */
-const SUBSCRIPTION_STATUSES = [
-  'incomplete',
-  'incomplete_expired',
-  'trialing',
-  'active',
-  'past_due',
-  'canceled',
-  'unpaid',
-  'paused',
-] as const
+/**
+ * Every status a Stripe subscription can be in, as the billing mirror stores
+ * it, each with the word the filter shows. A map rather than a list: a list
+ * holding the live statuses would be a second declaration of the
+ * live-subscription set (AGL-1715), and this is only the vocabulary.
+ */
+const SUBSCRIPTION_STATUS_LABELS: Readonly<Record<string, string>> = {
+  incomplete: 'Incomplete',
+  incomplete_expired: 'Incomplete (expired)',
+  trialing: 'Trialing',
+  active: 'Active',
+  past_due: 'Past due',
+  canceled: 'Canceled',
+  unpaid: 'Unpaid',
+  paused: 'Paused',
+}
 
 /**
  * The org fields picked rather than typed, shown in the panel as selects:
@@ -121,7 +126,10 @@ const ORG_LIST_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption
     value: plan,
     label: PLAN_LABELS[plan],
   })),
-  subscription: SUBSCRIPTION_STATUSES.map((status) => ({ value: status, label: status })),
+  subscription: Object.entries(SUBSCRIPTION_STATUS_LABELS).map(([value, label]) => ({
+    value,
+    label,
+  })),
 }
 const ORG_SELECT_FIELDS = Object.keys(ORG_LIST_FILTER_OPTIONS)
 
