@@ -76,12 +76,18 @@ function failed<T>(data: T, error: unknown, what: string): OutreachLoad<T> {
 /** The most sequences the list reads. */
 export const OUTREACH_SEQUENCES_LIMIT = 200
 
+/** The sequences read, and whether the organization holds older ones. */
+export interface OutreachSequencesLoad extends OutreachLoad<OutreachSequence[]> {
+  /** True when there are sequences older than the `OUTREACH_SEQUENCES_LIMIT` read. */
+  truncated?: boolean
+}
+
 /** The organization's sequences, newest first. */
 export function useOutreachSequences(
   orgId: string | null,
-): OutreachLoad<OutreachSequence[]> {
+): OutreachSequencesLoad {
   const firestore = useFirestore()
-  const [result, setResult] = useState<OutreachLoad<OutreachSequence[]>>({
+  const [result, setResult] = useState<OutreachSequencesLoad>({
     status: 'loading',
     data: [],
   })
@@ -94,14 +100,21 @@ export function useOutreachSequences(
         // Ordered, so the cap keeps the newest rather than an arbitrary set;
         // every sequence carries `createdAtMs`, stamped by the save route.
         orderBy('createdAtMs', 'desc'),
-        limit(OUTREACH_SEQUENCES_LIMIT),
+        // One past the cap: the extra document says there are older
+        // sequences, and is never listed.
+        limit(OUTREACH_SEQUENCES_LIMIT + 1),
       ),
       (snapshot) => {
         const sequences = snapshot.docs
+          .slice(0, OUTREACH_SEQUENCES_LIMIT)
           .map((entry) => readStoredOutreachSequence(entry.id, entry.data()))
           .filter((sequence): sequence is OutreachSequence => sequence !== null)
           .sort((a, b) => b.createdAtMs - a.createdAtMs)
-        setResult({ status: 'ready', data: sequences })
+        setResult({
+          status: 'ready',
+          data: sequences,
+          truncated: snapshot.docs.length > OUTREACH_SEQUENCES_LIMIT,
+        })
       },
       (error) => setResult(failed([], error, 'sequences')),
     )

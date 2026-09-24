@@ -267,8 +267,9 @@ replied, bounced or opted out.
 The table's toolbar filters the list. **Filters** narrows it by **Status**
 (pick one or several), name or mailbox, and **Search** matches any word of a
 sequence's name or mailbox. Both look at every sequence the list read — the
-200 newest, which for nearly every organization is all of them — not only the
-page on screen, and each filter in force shows as a chip above the table;
+200 newest, which for nearly every organization is all of them, and a note under
+the table says when there are older ones — not only the page on screen, and each
+filter in force shows as a chip above the table;
 remove a chip to drop its filter. The **Filters** panel edits one filter at a
 time, and filters on different columns add up; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).

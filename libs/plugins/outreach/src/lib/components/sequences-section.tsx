@@ -34,6 +34,7 @@ import {
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import {
+  Alert,
   Button,
   Card,
   CardContent,
@@ -272,6 +273,18 @@ export function OutreachSequenceList(props: {
     key: keyof OutreachSequenceCounts,
   ) => (counts[sequence.id] ? String(counts[sequence.id][key]) : '—')
 
+  /*
+   * The read stops at `OUTREACH_SEQUENCES_LIMIT`, newest first, and probes one
+   * past it, so this shows only when older sequences really exist.
+   */
+  const truncatedNotice = sequences.truncated ? (
+    <Alert severity="info">
+      {`Showing the ${sequences.data.length.toLocaleString()} newest sequences. ` +
+        'The filters and the search narrow these only; older sequences are ' +
+        'not listed here.'}
+    </Alert>
+  ) : null
+
   const chips = (
     <ListFilterChips
       fields={SEQUENCE_FILTER_FIELDS}
@@ -346,6 +359,7 @@ export function OutreachSequenceList(props: {
           ))}
         </Stack>
         {footer}
+        {truncatedNotice}
       </Stack>
     )
   } else {
@@ -396,6 +410,7 @@ export function OutreachSequenceList(props: {
           hideFooter
         />
         {footer}
+        {truncatedNotice}
       </Stack>
     )
   }
