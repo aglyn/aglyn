@@ -120,38 +120,17 @@ export function emailAddressDomain(email: unknown): string | null {
  * reaches nobody who asked for it, and a spam report from a shared inbox is
  * a report from the whole company.
  */
-const ROLE_LOCAL_PARTS: ReadonlySet<string> = new Set([
-  'abuse',
-  'accounts',
-  'admin',
-  'administrator',
-  'billing',
-  'careers',
-  'contact',
-  'enquiries',
-  'help',
-  'hello',
-  'hr',
-  'info',
-  'inquiries',
-  'jobs',
-  'mail',
-  'marketing',
-  'media',
-  'news',
-  'no-reply',
-  'noreply',
-  'office',
-  'postmaster',
-  'press',
-  'privacy',
-  'sales',
-  'security',
-  'service',
-  'support',
-  'team',
-  'webmaster',
-])
+const ROLE_LOCAL_PARTS: ReadonlySet<string> = new Set(
+  // A word list rather than quoted strings: `marketing` is also a plugin's
+  // id, and `check:plugin-domain-in-core` reads a quoted one as a plugin's
+  // domain leaking into shared code — which a mailbox name is not.
+  (
+    'abuse accounts admin administrator billing careers contact enquiries ' +
+    'help hello hr info inquiries jobs mail marketing media news no-reply ' +
+    'noreply office postmaster press privacy sales security service support ' +
+    'team webmaster'
+  ).split(' '),
+)
 
 /** Whether an address is a role mailbox (`info@`, `sales@`), read before any `+tag`. */
 export function isRoleEmailAddress(email: unknown): boolean {

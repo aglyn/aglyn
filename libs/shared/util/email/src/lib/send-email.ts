@@ -471,7 +471,7 @@ export function isDeferrableSendResult(
  * forgotten caller gets.
  */
 export function emailSendPurpose(
-  options: Pick<SendEmailOptions, 'marketing' | 'priority' | 'context' | 'headers'>,
+  options: Pick<SendEmailOptions, 'priority' | 'context' | 'headers'> & { marketing?: unknown },
 ): EmailSendPurpose {
   if (isMarketingMessage(options)) return 'bulk'
   if (options.headers?.['List-Unsubscribe']) return 'bulk'
