@@ -139,6 +139,7 @@ describe('composeOutreachEmail: the first email', () => {
       },
       error: null,
       unresolvedFields: [],
+      override: null,
     })
   })
 
@@ -148,6 +149,7 @@ describe('composeOutreachEmail: the first email', () => {
       email: null,
       error: expect.objectContaining({ code: 'missing_postal_address' }),
       unresolvedFields: [],
+      override: null,
     })
   })
 
@@ -365,5 +367,81 @@ describe('click tracking (AGL-3239)', () => {
       'https://console.example.com/api/outreach/unsubscribe?t=abc.def',
     )
     expect(result.email?.text).not.toContain('outreach/unsubscribe')
+  })
+})
+
+describe('a curated step (AGL-3324)', () => {
+  const curated = (stepOverrides: ComposeOutreachEmailInput['enrollment']['stepOverrides']) =>
+    ({ ...input().enrollment, stepOverrides }) as ComposeOutreachEmailInput['enrollment']
+
+  it('sends the person’s own subject and body in place of the step’s, still merged and footed', () => {
+    const override = {
+      subject: 'Casey — {{contact.company}} and its twelve sites',
+      body: 'Hi {{contact.firstName}},\n\nSaw the portfolio launch. Twelve sites is the shape we built for.\n\n{{sender.firstName}}',
+      source: 'ai' as const,
+      draftedAtMs: 1,
+      draftedByUid: 'uid-rep',
+    }
+    const result = composeOutreachEmail(input({ enrollment: curated({ '0': override }) }))
+    expect(result.error).toBeNull()
+    expect(result.email?.subject).toBe('Casey — Example Agency and its twelve sites')
+    expect(result.email?.text).toBe(
+      'Hi Casey,\n\nSaw the portfolio launch. Twelve sites is the shape we built for.\n\nAvery\n\n' + FOOTER,
+    )
+    expect(result.override).toBe(override)
+  })
+
+  it('reads the copy for THIS step only, and reports none when the step was sent as written', () => {
+    const result = composeOutreachEmail(
+      input({ enrollment: curated({ '1': { body: 'Not this step', source: 'member', draftedAtMs: 1 } }) }),
+    )
+    expect(result.email?.text.startsWith('Hi Casey,')).toBe(true)
+    expect(result.override).toBeNull()
+    expect(composeOutreachEmail(input()).override).toBeNull()
+  })
+
+  it('keeps the thread on an in-thread email: Re: the thread subject, whatever the copy’s subject says', () => {
+    const result = composeOutreachEmail(
+      input({
+        enrollment: {
+          ...inThread,
+          stepOverrides: { '1': { subject: 'A new subject', body: 'Casey — quick follow-up.', source: 'ai', draftedAtMs: 1 } },
+        },
+      }),
+    )
+    expect(result.email?.subject).toBe("Re: Example Agency's client sites")
+    expect(result.email?.inReplyTo).toBe('<step-1@example.org>')
+    expect(result.email?.text.startsWith('Casey — quick follow-up.')).toBe(true)
+  })
+
+  it('replaces a template’s body too, and is tracked like any step', () => {
+    const wrap = (link: { url: string; index: number }) => `https://console.example.com/api/outreach/click?t=${link.index}`
+    const result = composeOutreachEmail(
+      input({
+        enrollment: {
+          ...inThread,
+          stepIndex: 3,
+          stepOverrides: { '3': { body: 'Read https://aglyn.com/pricing, Casey.', source: 'member', draftedAtMs: 1 } },
+        },
+        templateBody: 'The template body.',
+        rewriteLink: wrap,
+      }),
+    )
+    expect(result.email?.text).not.toContain('The template body.')
+    expect(result.email?.text).toContain('click?t=0')
+    expect(result.email?.trackedLinks).toEqual(['https://aglyn.com/pricing'])
+    expect(result.email?.text.endsWith(FOOTER)).toBe(true)
+  })
+
+  it('keeps the step’s own words for a copy with only a subject, and refuses an empty copy', () => {
+    const subjectOnly = composeOutreachEmail(
+      input({ enrollment: curated({ '0': { subject: 'Just a subject', source: 'ai', draftedAtMs: 1 } }) }),
+    )
+    expect(subjectOnly.email?.subject).toBe('Just a subject')
+    expect(subjectOnly.email?.text.startsWith('Hi Casey,')).toBe(true)
+    const empty = composeOutreachEmail(
+      input({ enrollment: curated({ '0': { body: '   ', source: 'ai', draftedAtMs: 1 } }) }),
+    )
+    expect(empty.error?.code).toBe('missing_body')
   })
 })

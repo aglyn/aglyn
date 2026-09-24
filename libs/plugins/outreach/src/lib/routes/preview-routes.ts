@@ -23,6 +23,7 @@ import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { firstEmailStepIndex } from '../engine/sequence-validation'
 import { leadAsContact } from '../enrollment/enroll-people'
+import { outreachStepOverridesRefused, readOutreachStepOverrideRequests } from '../enrollment/step-overrides'
 import type { OutreachPreviewResponse } from '../model/outreach-api'
 import {
   OUTREACH_SAMPLE_PERSON,
@@ -95,6 +96,20 @@ export function createOutreachPreviewRoute(deps: OutreachRouteDeps): PluginWebAp
     if (step?.kind !== 'email') {
       return outreachRefusal(400, 'invalid-request', 'That step does not send an email.')
     }
+    // The person's copies of steps as the dialog holds them (AGL-3324): the
+    // preview shows the curated version, held to the rules a stored one is.
+    const overrides = readOutreachStepOverrideRequests(body['stepOverrides'], sequence.steps, {
+      uid: caller.uid,
+      nowMs: deps.now(),
+    })
+    if (outreachStepOverridesRefused(overrides)) {
+      return outreachRefusal(
+        400,
+        'invalid-override',
+        overrides.refusal ?? 'A curated step breaks a rule every sequence email keeps.',
+        { issues: overrides.issues },
+      )
+    }
 
     const [orgSettings, mailboxSnapshot, host, template, contact, lead] = await Promise.all([
       readOutreachComplianceSettingsDoc(firestore, caller.orgId),
@@ -153,6 +168,7 @@ export function createOutreachPreviewRoute(deps: OutreachRouteDeps): PluginWebAp
       templateBody: template?.exists
         ? normalizeCrmEmailTemplate(template.data() as Record<string, unknown>).body
         : null,
+      stepOverrides: overrides.overrides,
     })
     return outreachOk({
       ok: true,
