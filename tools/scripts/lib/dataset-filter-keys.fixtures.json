@@ -1,5 +1,5 @@
 {
-  "note": "Worked examples for the dataset filter-token builder (AGL-3321). Asserted by libs/aglyn/src/lib/app-utils/dataset-filter-keys.spec.ts against datasetFilterKeys in dataset-models.ts, and by tools/scripts/backfill-dataset-filter-keys.mjs --self-test against its copy in tools/scripts/lib/dataset-filter-keys.mjs. Regenerate only from the library, never by hand.",
+  "note": "Worked examples for the dataset filter-token builder (AGL-3321). Asserted by libs/aglyn/src/lib/app-utils/dataset-filter-keys.spec.ts against datasetFilterKeys in dataset-models.ts, and by tools/scripts/backfill-dataset-filter-keys.mjs --self-test against its own copy. Regenerate only from the library, never by hand.",
   "model": {
     "order": [
       "title",

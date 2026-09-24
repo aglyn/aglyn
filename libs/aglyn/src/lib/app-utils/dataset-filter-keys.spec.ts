@@ -225,7 +225,7 @@ describe('the integrity writers carry the tokens', () => {
   })
 
   it('answers the worked examples the backfill\'s copy is held to', () => {
-    // `tools/scripts/lib/dataset-filter-keys.mjs` restates this builder for
+    // `tools/scripts/backfill-dataset-filter-keys.mjs` restates this builder for
     // the backfill; its --self-test asserts the same file, so the two
     // cannot drift apart without one of them going red.
     const fixtures = JSON.parse(
