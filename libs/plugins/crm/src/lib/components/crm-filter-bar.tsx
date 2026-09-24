@@ -61,7 +61,7 @@ const dayLabel = (raw: string): string => {
  * AGL-3313).
  *
  * The clauses are ADDED through the grid's own Filters panel; this bar is
- * what shows the SET. The community grid's panel holds one item at a time
+ * what shows the SET. The free DataGrid's panel holds one item at a time
  * and a saved view holds several, so without it a view narrowed by lead
  * source and status would show one of the two and hide the other. Each
  * chip reads as a sentence — "Owner is Dana", "Created on or after 1 Jan"

@@ -65,7 +65,7 @@ export interface CrmGridFilter {
  *
  * ## One field, one clause; the panel edits one at a time
  *
- * The community data grid's panel holds a single item, while a saved view
+ * The free DataGrid's panel holds a single item, while a saved view
  * holds several clauses. So each FIELD holds one clause, and the panel is a
  * window onto whichever field was last filtered: setting a value writes
  * that field's clause, clearing it or deleting the row removes it, and
