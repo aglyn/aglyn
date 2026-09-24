@@ -487,6 +487,51 @@ await put(firestore.collection('hosts').doc(hostId), {
   enabledPlugins: FieldValue.arrayUnion('accounts'),
 })
 
+// The CRM book's one product has no photo, and the storefront grid drew it as
+// an empty tile beside three pictured ones.
+await put(
+  firestore.collection('hosts').doc(hostId).collection('products').doc('seed-crm-product-house-blend'),
+  {
+    imageUrl: 'https://picsum.photos/id/766/600/600',
+    mediaUrls: ['https://picsum.photos/id/766/600/600'],
+  },
+)
+
+// ── Inbox (AGL-3319) ──────────────────────────────────────────────────────
+// Contact-form submissions in the shape the tenant's submit route writes
+// (`apps/tenant/app/api/forms/submit/route.ts`), so the Inbox shows people
+// writing in, not only the guide's anonymous survey.
+console.log('Inbox:')
+const submissionsRef = firestore.collection('hosts').doc(hostId).collection('formSubmissions')
+const submissions = [
+  ['docs-submission-cake', 2, false, {
+    name: 'Hannah Ortiz',
+    email: 'hannah.ortiz@example.com',
+    message: 'Do you take orders for a three-tier wedding cake in early June? Around 120 guests.',
+  }],
+  ['docs-submission-wholesale', 20, false, {
+    name: 'Marco Bellini',
+    email: 'marco@bellinideli.example',
+    message: 'We run a deli two streets over and would like a standing weekly order of baguettes.',
+  }],
+  ['docs-submission-allergy', 30, true, {
+    name: 'Leah Park',
+    email: 'leah.park@example.com',
+    message: 'Is the sourdough made in a nut-free kitchen? Asking for my son.',
+  }],
+]
+for (const [id, hoursAgo, read, fields] of submissions) {
+  await put(submissionsRef.doc(id), {
+    orgId,
+    hostId,
+    formName: 'Contact us',
+    path: '/contact',
+    fields,
+    read,
+    createdAt: Timestamp.fromMillis(now.toMillis() - hoursAgo * 60 * 60 * 1000),
+  })
+}
+
 // ── The product-updates prompt (AGL-3319) ─────────────────────────────────
 // The console asks every account that has not answered whether it wants
 // product email, in a banner above the Sites page. A dismissal (not an
@@ -564,12 +609,14 @@ const ORG_NAMES = {
   'E2E Studio': 'Northside Studio',
   'E2E Client Co': 'Lakeview Florist',
   'E2E Unverified Co': 'Copper Kettle Cafe',
+  'E2E Corner Cafe': 'Corner Cafe',
 }
 const PERSON_NAMES = {
   'E2E Owner': 'Sam Rivera',
   'E2E Teammate': 'Priya Shah',
   'E2E Org Owner': 'Jordan Blake',
   'E2E Unverified Owner': 'Casey Morgan',
+  'E2E Free Owner': 'Dana Whitfield',
 }
 for (const doc of (await firestore.collection('orgs').get()).docs) {
   const renamed = ORG_NAMES[doc.get('name')]
@@ -583,6 +630,13 @@ for (const doc of (await firestore.collectionGroup('orgs').get()).docs) {
 for (const doc of (await firestore.collectionGroup('members').get()).docs) {
   const renamed = PERSON_NAMES[doc.get('displayName')]
   if (renamed) await put(doc.ref, { displayName: renamed })
+}
+// The CRM timeline stamps who logged each call or note by name.
+for (const doc of (
+  await firestore.collection('orgs').doc(orgId).collection('crmActivities').get()
+).docs) {
+  const renamed = PERSON_NAMES[doc.get('byName')]
+  if (renamed) await put(doc.ref, { byName: renamed })
 }
 for (const doc of (await firestore.collection('users').get()).docs) {
   const renamed = PERSON_NAMES[doc.get('displayName')]

@@ -151,6 +151,13 @@ async function seedGuideFixtures() {
   for (const record of staleRecords.docs) {
     if (!record.id.startsWith('seed-guide-')) await record.ref.delete()
   }
+  // …and the inbox rows the same walks left, one per run, so the Inbox shot
+  // shows one survey submission rather than a stack of identical ones.
+  const staleSubmissions = await hostRef
+    .collection('formSubmissions')
+    .where('formName', '==', 'Visitor survey')
+    .get()
+  for (const submission of staleSubmissions.docs) await submission.ref.delete()
   const surveyRows = [
     [5, 'Weekly', 'Products', 'Great pastries, friendly staff.'],
     [4, 'First time', 'Products, Pricing', 'Found you through the market.'],
@@ -405,7 +412,9 @@ async function seedGuideFixtures() {
 
   // Products across the three billing modes (AGL-545). Variants carry the
   // canonical prices; the flat priceUsd/inventory/imageUrl legacy fields
-  // stay denormalized like the product editor writes them.
+  // stay denormalized like the product editor writes them. Photos are fixed
+  // picsum ids chosen to fit a bakery (a pour-over, a poured jar, a tray of
+  // bakes); a `seed/<word>` URL is a random landscape.
   const products = [
     {
       id: 'seed-guide-candle',
@@ -419,10 +428,10 @@ async function seedGuideFixtures() {
         variants: [
           { id: 'default', priceUsd: 24, compareAtPriceUsd: 32, inventory: 12 },
         ],
-        mediaUrls: ['https://picsum.photos/seed/candle/600/600'],
+        mediaUrls: ['https://picsum.photos/id/312/600/600'],
         priceUsd: 24,
         inventory: 12,
-        imageUrl: 'https://picsum.photos/seed/candle/600/600',
+        imageUrl: 'https://picsum.photos/id/312/600/600',
       },
     },
     {
@@ -437,13 +446,13 @@ async function seedGuideFixtures() {
         subscription: { interval: 'month', trialDays: 14 },
         digitalFiles: [
           {
-            url: 'https://picsum.photos/seed/course/600/400',
+            url: 'https://picsum.photos/id/835/600/400',
             fileName: 'starter-guide.pdf',
           },
         ],
-        mediaUrls: ['https://picsum.photos/seed/course/600/400'],
+        mediaUrls: ['https://picsum.photos/id/835/600/400'],
         priceUsd: 12,
-        imageUrl: 'https://picsum.photos/seed/course/600/400',
+        imageUrl: 'https://picsum.photos/id/835/600/400',
       },
     },
     {
@@ -457,9 +466,9 @@ async function seedGuideFixtures() {
         variants: [{ id: 'default', priceUsd: 18, inventory: null }],
         subscription: { interval: 'month' },
         subscriptionOptional: true,
-        mediaUrls: ['https://picsum.photos/seed/coffeeclub/600/600'],
+        mediaUrls: ['https://picsum.photos/id/1060/600/600'],
         priceUsd: 18,
-        imageUrl: 'https://picsum.photos/seed/coffeeclub/600/600',
+        imageUrl: 'https://picsum.photos/id/1060/600/600',
       },
     },
   ]
@@ -479,7 +488,7 @@ async function seedGuideFixtures() {
   const memberPassword = 'Maya-Demo-Pass-1'
   await put(hostRef.collection('siteMembers').doc('seed-guide-member'), {
     email: memberEmail,
-    displayName: 'Maya Member',
+    displayName: 'Maya Chen',
     createdAt: Timestamp.now(),
   })
   await put(hostRef.collection('siteMemberCredentials').doc('seed-guide-member'), {
@@ -495,7 +504,7 @@ async function seedGuideFixtures() {
         status: 'paid',
         channel: 'online',
         customerEmail: memberEmail,
-        customerName: 'Maya Member',
+        customerName: 'Maya Chen',
         lineItems: [
           {
             productId: 'seed-guide-candle',
@@ -527,7 +536,7 @@ async function seedGuideFixtures() {
         status: 'fulfilled',
         channel: 'online',
         customerEmail: memberEmail,
-        customerName: 'Maya Member',
+        customerName: 'Maya Chen',
         lineItems: [
           {
             productId: 'seed-guide-candle',
@@ -571,7 +580,7 @@ async function seedGuideFixtures() {
   await put(hostRef.collection('subscriptions').doc('seed-guide-sub-1'), {
     productId: 'seed-guide-course',
     customerEmail: memberEmail,
-    customerName: 'Maya Member',
+    customerName: 'Maya Chen',
     status: 'active',
     currentPeriodEndMs: Date.now() + 30 * dayMs,
     createdAtMs: Date.now() - 5 * dayMs,
@@ -1079,11 +1088,12 @@ await shot({
     { click: 'text=Container', optional: true, settleMs: 1000 },
     { click: 'text=Stack', settleMs: 1500 },
     // The Repeat section closes the Attributes panel (AGL-3111): bring its
-    // last field into view so Repeat over dataset, limit and filter sit in
-    // frame above it. Not optional — without it the frame shows the Stack's
-    // layout fields and none of what the caption names.
+    // first field into view so Repeat over dataset, the scope, limit and
+    // filter sit in frame below it. Not optional — without it the frame
+    // shows the Stack's layout fields and none of what the caption names.
     { click: 'role=tab[name="Attributes"]', settleMs: 800 },
-    { scroll: 'text=Repeat sort', settleMs: 1200 },
+    { scroll: 'text=Repeat sort', settleMs: 600 },
+    { scroll: 'text=Repeat over dataset', settleMs: 1200 },
   ],
 })
 
@@ -1183,7 +1193,9 @@ await shot({
   waitFor: 'Coffee club',
   actions: [
     {
-      click: 'tr:has-text("Coffee club") button:has-text("Edit")',
+      // `role=row` rather than `tr`: the products list is a data grid now
+      // (AGL-3317), whose rows are not table rows.
+      click: '[role="row"]:has-text("Coffee club") button:has-text("Edit")',
       waitFor: 'Save product',
       settleMs: 1200,
     },

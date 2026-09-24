@@ -85,6 +85,10 @@ const TIMEOUT_MS = Number(process.env.E2E_TIMEOUT_MS ?? 60_000)
  * A step may carry only `settleMs`, which is how a shot waits for the
  * canvas to finish laying out before its first click.
  *
+ * `skipWhen: { text, reason }` names what the page shows when the capture
+ * stack cannot reach the shot's state at all. The shot is reported SKIP, the
+ * published image is kept, and the run does not fail on it.
+ *
  * Run a subset with `--only=<out-substring>[,<out-substring>…]`.
  */
 const shots = [
@@ -92,6 +96,11 @@ const shots = [
     out: 'getting-started/console-dashboard.png',
     path: `/${HOST_BASE}`,
     waitFor: 'Demo Bakery',
+    // The Traffic card alone fills a 900px window; the page is about the
+    // cards the dashboard gathers, so the frame is tall enough for all of
+    // them, Recent Activity at the bottom included.
+    viewport: { width: 1440, height: 2600 },
+    settleMs: 3000,
   },
   {
     out: 'getting-started/console-chrome-annotated.png',
@@ -130,9 +139,13 @@ const shots = [
     waitFor: 'Grace Whitaker',
   },
   {
+    // The Overlays section of the Marketing hub: the page this image
+    // illustrates is about overlays, and the hub's Overview holds only the
+    // at-a-glance rollup now.
     out: 'marketing-overlays/marketing-page.png',
-    path: `/${HOST_BASE}/marketing`,
-    waitFor: 'At a glance',
+    path: `/${HOST_BASE}/marketing/overlays`,
+    waitFor: 'Welcome bar',
+    settleMs: 2000,
   },
   {
     out: 'workflows-and-actions/workflows-page.png',
@@ -145,9 +158,17 @@ const shots = [
     waitFor: 'Reference health',
   },
   {
+    // The Plan section's rail and Current plan card. The cards beside it
+    // (Outstanding, Plan add-ons) say billing is not configured, which is
+    // true of the emulated console and of no customer's.
     out: 'billing-and-plans/billing-page.png',
     path: `/${ORG_SLUG}/billing`,
     waitFor: 'Manage payment methods',
+    settleMs: 2000,
+    clipTo: {
+      locator: '.MuiCard-root:has-text("Current plan")',
+      include: ['.MuiCard-root:has-text("Navigation")'],
+    },
   },
   {
     out: 'forms/inbox-page.png',
@@ -178,6 +199,11 @@ const shots = [
     waitFor: 'Send password reset email',
     // The card sits below the member form, off a 900px viewport.
     actions: [{ scroll: 'text=Signs the account out everywhere' }],
+    // The Password card alone: the page around it is an account's identity,
+    // which is not what the section describes.
+    clipTo: {
+      locator: '.MuiCard-root:has-text("Send password reset email")',
+    },
   },
   {
     out: 'getting-started/org-settings-page.png',
@@ -394,6 +420,11 @@ const shots = [
     path: `/admin/users/${NON_STAFF_UID}`,
     waitFor: 'Send password reset email',
     actions: [{ scroll: 'text=Signs the account out everywhere' }],
+    // The Password card alone: the page around it is an account's identity,
+    // which is not what the section describes.
+    clipTo: {
+      locator: '.MuiCard-root:has-text("Send password reset email")',
+    },
   },
   {
     out: 'plugins/plugin-reviews.png',
@@ -845,6 +876,16 @@ const shots = [
       locator: '[role="dialog"]',
       include: ['text=Selling is not enabled'],
     },
+    // Every commerce door asks whether Stripe is configured BEFORE it asks
+    // about the plan, and the emulated console holds no Stripe key by design
+    // (AGL-2828). Against that server the refusal this shot is about never
+    // arrives; the harness says so and keeps the published image rather than
+    // failing the run or photographing the wrong refusal. A console served
+    // with a Stripe TEST key captures it.
+    skipWhen: {
+      text: 'Payments are not configured',
+      reason: 'the console under capture has no Stripe key, so the plan gate is never reached',
+    },
   },
   {
     // A16. The help tip is `Help: Moving to a lower plan takes effect
@@ -944,7 +985,9 @@ const shots = [
     out: 'contacts/crm-contacts.png',
     path: `/${HOST_BASE}/crm/contacts`,
     waitFor: 'Maya Delgado',
-    viewport: { width: 1440, height: 1100 },
+    // Tall enough for every seeded row: a clip is clamped to the viewport,
+    // and the first run lost one of the two ticked rows below it.
+    viewport: { width: 1440, height: 1500 },
     settleMs: 1500,
     actions: [
       // Two people ticked, so the bulk bar the caption names is up.
@@ -1294,6 +1337,7 @@ async function applyOrgReleaseFlags(flags) {
 }
 
 let failures = 0
+const skipped = []
 /**
  * Removes what the docs must never show: the auth-emulator warning banner,
  * Next's dev indicator, and — as a backstop to the seeded dismissal above —
@@ -1315,10 +1359,14 @@ async function stripChrome(page) {
       document.querySelectorAll(selector).forEach((el) => el.remove())
     }
     // The emulated server holds no Stripe key by design (AGL-2828), so the
-    // console says payments are not configured on this deployment. That is
-    // a fact about the capture stack, not the product a reader runs.
+    // console says payments are not configured on this deployment, in an
+    // alert and in a toast. That is a fact about the capture stack, not the
+    // product a reader runs.
     for (const alert of document.querySelectorAll('.MuiAlert-root')) {
       if (/Payments are not configured/.test(alert.textContent ?? '')) alert.remove()
+    }
+    for (const toast of document.querySelectorAll('[class*="SnackbarItem-"], .notistack-Snackbar')) {
+      if (/not configured/.test(toast.textContent ?? '')) toast.remove()
     }
     // AGL-663 notification pre-permission modal overlays the page — drop
     // it (and its backdrop) so shots capture the content beneath.
@@ -1457,6 +1505,16 @@ for (const shot of selected) {
       await page.waitForTimeout(action.settleMs ?? 800)
     }
     await page.waitForTimeout(shot.settleMs ?? 1500)
+    // Read before the chrome is stripped: the sign a shot cannot be staged
+    // here may be one of the emulator notices the strip removes.
+    if (
+      shot.skipWhen &&
+      (await page.locator(`text=${shot.skipWhen.text}`).filter({ visible: true }).count())
+    ) {
+      skipped.push(shot.out)
+      console.log(`SKIP  ${shot.out}: ${shot.skipWhen.reason} (kept the published image)`)
+      continue
+    }
     // The notification modal can drift back in during the settle above.
     await stripChrome(page)
     // Last gate before the shutter: nothing only staff can see (AGL-1600).
@@ -1514,5 +1572,10 @@ for (const shot of selected) {
 }
 
 await browser.close()
-console.log(failures ? `\n${failures} shots failed` : `\nAll ${selected.length} shots captured`)
+console.log(
+  failures
+    ? `\n${failures} shots failed`
+    : `\nAll ${selected.length - skipped.length} shots captured` +
+        (skipped.length ? `, ${skipped.length} skipped: ${skipped.join(', ')}` : ''),
+)
 process.exit(failures ? 1 : 0)
