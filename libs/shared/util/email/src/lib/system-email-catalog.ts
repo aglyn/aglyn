@@ -819,6 +819,52 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
         'up for {{brand.productName}}.',
       source: 'apps/console/app/api/auth/send-verification/route.ts',
     },
+    // Its own entry rather than a second use of the one above, because every
+    // line of that one is about signing up: "finish setting up your account",
+    // "if you did not create an account", a footer saying the address was
+    // used to sign up. This mail goes to an address someone is ADDING to an
+    // account that already exists, and the one thing its reader needs to hear
+    // is that ignoring it changes nothing.
+    {
+      key: 'email-address-confirmation',
+      name: 'Confirm added email',
+      description:
+        'Confirmation link, sent when someone adds another email address to ' +
+        'their account under Manage Account → Email addresses.',
+      deliveredBy: 'resend',
+      defaultSubject: 'Confirm your email address',
+      mergeTokens: [
+        {
+          name: 'confirmUrl',
+          description: 'One-time link that adds the address to the account',
+          sample: `${SAMPLE_CONSOLE_ORIGIN}/manage/user?confirmEmail=…`,
+        },
+      ],
+      // Mirrors the fallbackText in the route.
+      defaultBody: [
+        { block: 'text', text: 'Confirm this email address', variant: 'heading' },
+        {
+          block: 'text',
+          text:
+            'Confirm this address so you can use it with your ' +
+            '{{brand.productName}} account:',
+          variant: 'body',
+        },
+        { block: 'button', label: 'Confirm email address', href: '{{confirmUrl}}' },
+        {
+          block: 'text',
+          text:
+            'If you did not ask to add this address, you can ignore this ' +
+            'email — nothing has changed and the address has not been added ' +
+            'to any account.',
+          variant: 'caption',
+        },
+      ],
+      footerReason:
+        'You’re receiving this because someone asked to add this address ' +
+        'to a {{brand.productName}} account.',
+      source: 'apps/console/app/api/account/emails/route.ts',
+    },
     // Stripe-delivered billing email (AGL-767). Aglyn never composes these —
     // Stripe sends them from the Dashboard's Customer-emails and Subscription
     // settings, so they are listed for visibility only and are not designable.

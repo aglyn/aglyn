@@ -160,16 +160,13 @@ async function sendConfirmation(
     `${confirmUrl}\n\n` +
     'If you did not ask to add this address, you can ignore this email — ' +
     'nothing has changed and the address has not been added to any account.'
-  // This confirms an address being ADDED to an account that already exists,
-  // through the sign-up confirmation's template. That template's built-in
-  // copy is written for sign-up — "finish setting up your account", "if you
-  // did not create an account", a footer saying the address was used to sign
-  // up — and none of it is true of this mail. So only a design staff
-  // published replaces the copy above; the built-in one never does.
-  const rendered = await renderSystemEmail('email-verification', {
-    verifyUrl: confirmUrl,
+  // Its own template, not the sign-up confirmation's, whose every line is
+  // about creating an account. The staff design when one is published, else
+  // the built-in copy in the platform's header and footer (AGL-3322); the
+  // copy above is the last resort behind both.
+  const designed = await renderSystemEmail('email-address-confirmation', {
+    confirmUrl,
   })
-  const designed = rendered?.source === 'designed' ? rendered : null
   const result = await sendEmail({
     to: address,
     subject: designed?.subject ?? 'Confirm your email address',

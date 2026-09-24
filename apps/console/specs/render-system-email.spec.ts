@@ -232,6 +232,7 @@ describe('renderSystemEmail', () => {
         'security-passkey-added',
         'password-reset',
         'email-verification',
+        'email-address-confirmation',
       ]
       for (const key of keys) {
         const result = await renderSystemEmail(key, { 'org.name': 'Test Org' })

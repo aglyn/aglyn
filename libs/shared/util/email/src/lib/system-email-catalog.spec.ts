@@ -116,7 +116,7 @@ describe('SYSTEM_EMAIL_TEMPLATES', () => {
 
     it('gives every Resend-delivered email a reason, and nothing else one', () => {
       // Premise: the catalog's Resend emails, all of them.
-      expect(editable.length).toBe(13)
+      expect(editable.length).toBe(14)
       for (const entry of SYSTEM_EMAIL_TEMPLATES) {
         if (isSystemEmailEditable(entry)) {
           expect(entry.footerReason?.startsWith('You’re receiving this')).toBe(true)

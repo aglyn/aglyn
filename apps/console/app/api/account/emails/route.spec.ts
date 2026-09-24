@@ -68,12 +68,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   setPrimaryAccountEmail: async () => ({ ok: true }),
 }))
 
-/** What the `email-verification` template renders; null unless a test says. */
-const mockRender = jest.fn(async (): Promise<Record<string, string> | null> => null)
+/** What the confirmation's template renders; null unless a test says. */
+const mockRender = jest.fn(
+  async (
+    _key: string,
+    _merge?: Record<string, string>,
+  ): Promise<Record<string, string> | null> => null,
+)
 
 jest.mock('../../_lib/render-system-email', () => ({
   __esModule: true,
-  renderSystemEmail: () => mockRender(),
+  renderSystemEmail: (key: string, merge?: Record<string, string>) =>
+    mockRender(key, merge),
 }))
 
 import { POST } from './route'
@@ -121,40 +127,40 @@ describe('POST /api/account/emails — the confirmation link’s host (AGL-2983)
 /**
  * Which copy confirms an ADDED address (AGL-3322).
  *
- * This mail shares the sign-up confirmation's template, and that template's
- * built-in copy is written for sign-up: "finish setting up your account", "if
- * you did not create an account", a footer saying the address was used to
- * sign up. None of it is true here, so only a published design replaces the
- * route's own copy — and the built-in one, which is what the template renders
- * while nothing is published, never does.
+ * Its own template, not the sign-up confirmation's: that one's copy is all
+ * about creating an account, and this mail goes to an address someone is
+ * adding to an account that already exists. What the template renders — a
+ * staff design, or the built-in copy in the platform's header and footer — is
+ * what goes out; the route's own copy is the last resort behind it.
  */
 describe('POST /api/account/emails — the confirmation’s copy (AGL-3322)', () => {
   const lastMail = () => mockSent[mockSent.length - 1] ?? {}
 
-  it('keeps its own copy over the template’s built-in sign-up copy', async () => {
+  it('renders its own template, with the link as its token', async () => {
+    await add('https://app.aglyn.com')
+    expect(mockRender).toHaveBeenCalledTimes(1)
+    expect(mockRender).toHaveBeenCalledWith('email-address-confirmation', {
+      confirmUrl: 'https://app.aglyn.com/manage/user?confirmEmail=tokenid.secret',
+    })
+  })
+
+  it('sends what the template renders', async () => {
     mockRender.mockResolvedValue({
-      subject: 'Confirm your email address',
-      html: '<p>Confirm this address to finish setting up your account</p>',
-      text: 'Confirm this address to finish setting up your account',
+      subject: 'Rendered subject',
+      html: '<p>Rendered body</p>',
+      text: 'Rendered body',
       source: 'default',
     })
     await add('https://app.aglyn.com')
-    expect(mockRender).toHaveBeenCalledTimes(1)
-    expect(lastMail()['text']).toContain('If you did not ask to add this address')
-    expect(lastMail()['text']).not.toContain('finish setting up')
-    expect(lastMail()['html']).toBeUndefined()
+    expect(lastMail()['subject']).toBe('Rendered subject')
+    expect(lastMail()['text']).toBe('Rendered body')
+    expect(lastMail()['html']).toBe('<p>Rendered body</p>')
   })
 
-  it('sends a design staff published, which is the one copy that replaces it', async () => {
-    mockRender.mockResolvedValue({
-      subject: 'Designed subject',
-      html: '<p>Designed body</p>',
-      text: 'Designed body',
-      source: 'designed',
-    })
+  it('falls back to its own copy when nothing renders', async () => {
     await add('https://app.aglyn.com')
-    expect(lastMail()['subject']).toBe('Designed subject')
-    expect(lastMail()['text']).toBe('Designed body')
-    expect(lastMail()['html']).toBe('<p>Designed body</p>')
+    expect(lastMail()['subject']).toBe('Confirm your email address')
+    expect(lastMail()['text']).toContain('If you did not ask to add this address')
+    expect(lastMail()['html']).toBeUndefined()
   })
 })
