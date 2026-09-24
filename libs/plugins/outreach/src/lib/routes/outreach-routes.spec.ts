@@ -21,12 +21,18 @@ import { activityTypeLabel } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
 import { isPluginActivityTargetType } from '@aglyn/aglyn/plugin-manager/plugin-activity-actions'
 import type { PluginRecordActivityRequest } from '@aglyn/aglyn/plugin-manager/plugin-record-timeline'
+import type {
+  PluginTextGenerationRequest,
+  PluginTextGenerationResult,
+  PluginTextGenerator,
+} from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import type { OutreachEmailStep, OutreachTaskStep } from '../model/outreach.types'
 import type { OutreachRecordEmailStamp } from '../runtime/runtime-deps'
 import { createOutreachDoNotContactDomainsRoute, OUTREACH_DO_NOT_CONTACT_DOMAIN_ACTIVITY } from './do-not-contact-routes'
+import { createOutreachCurateRoutes, OUTREACH_CURATION_PURPOSE, outreachCuratedActivity } from './curate-routes'
 import { createOutreachEnrollRoutes, type OutreachEnrollRouteDeps } from './enroll-routes'
 import type { TrackingHostRecord } from '@aglyn/shared-util-email'
 import {
@@ -84,6 +90,23 @@ const arrayUnionElements = (value: unknown): string[] | null =>
     ? ((value as { elements: unknown[] }).elements ?? []).map(String)
     : null
 
+/** Whether a value is a real `FieldValue.delete()` (the cleared copy, AGL-3324). */
+const isDeleteSentinel = (value: unknown): boolean =>
+  Boolean(value) && typeof value === 'object' && (value as object).constructor?.name === 'DeleteTransform'
+
+/** Removes the field at a dotted path, leaving the maps along it. */
+function deleteField(data: Data, field: string): void {
+  const parts = field.split('.')
+  let node: Data = data
+  for (const part of parts.slice(0, -1)) {
+    const held = node[part]
+    if (!isObject(held)) return
+    node[part] = { ...held }
+    node = node[part] as Data
+  }
+  delete node[parts[parts.length - 1]]
+}
+
 function fakeFirestore(docs: Docs) {
   let autoId = 0
   const snapshot = (path: string) => {
@@ -106,6 +129,10 @@ function fakeFirestore(docs: Docs) {
       for (const [field, value] of Object.entries(data)) {
         // A real `FieldValue.arrayUnion` (the enroll stamp, AGL-3254) is
         // applied as the database would; a dotted path lands at depth.
+        if (isDeleteSentinel(value)) {
+          deleteField(next, field)
+          continue
+        }
         const union = arrayUnionElements(value)
         const held = fieldOf(next, field)
         const stored = union
@@ -294,7 +321,24 @@ const deps = (): OutreachEnrollRouteDeps => ({
       return { ok: true, id: 't1', created: true }
     },
   }),
+  // The workspace's text generator (AGL-3324): a fake on the seam's shape,
+  // or none, as each curate test arms it.
+  textGenerator: () => generator,
 })
+
+/** What the curate route asks the generator, and what it answers (AGL-3324). */
+let generator: PluginTextGenerator | null = null
+let generated: PluginTextGenerationRequest[] = []
+/** Arms a generator that answers `text` for every ask. */
+function armGenerator(text: string | (() => PluginTextGenerationResult)) {
+  generator = {
+    generate: async (request) => {
+      generated.push(request)
+      if (typeof text === 'function') return text()
+      return { ok: true, text, model: 'test-model', usage: { inputTokens: 100, outputTokens: 40 } }
+    },
+  }
+}
 
 /** What the enroll route filed on the person's record (AGL-3274). */
 let filed: PluginRecordActivityRequest[] = []
@@ -377,6 +421,8 @@ beforeEach(() => {
   viewEmails = []
   stamped = []
   mx = {}
+  generator = null
+  generated = []
   members = {
     [OWNER]: {
       role: 'owner',
@@ -1546,5 +1592,265 @@ describe('outreach/link-domains (AGL-3306)', () => {
     const refused = await post(handler, OWNER, { action: 'set-up', domain: 'example.com' })
     expect(refused.status).toBe(409)
     expect(refused.body).toMatchObject({ reason: 'link-domain-refused', error: 'Campaign mail owns it.' })
+  })
+})
+
+// ── Curating (AGL-3324) ─────────────────────────────────────────────────────
+
+describe('outreach/curate (AGL-3324)', () => {
+  const curate = () => createOutreachCurateRoutes(deps())
+
+  /** The model's answer for the two email steps of `draft()`. */
+  const answer = (overrides: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      steps: [
+        {
+          stepIndex: 0,
+          subject: 'Casey, Example Co’s second location',
+          body: 'Hi Casey,\n\nSaw the second location open on Main St — congratulations.\n\nWorth twenty minutes?\n\n{{sender.firstName}}',
+          ...overrides,
+        },
+        { stepIndex: 2, subject: '', body: 'Following up, Casey — did the second location settle in?' },
+      ],
+    })
+
+  const useIt = (stepIndex: number, body: string, extra: Record<string, unknown> = {}) => ({
+    stepIndex,
+    body,
+    source: 'ai',
+    prompt: 'the prompt',
+    model: 'test-model',
+    ...extra,
+  })
+
+  it('drafts every email step for a person to enroll, from their record and the steps as written, through the seam', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    docs.set(org('contacts/c-warm'), {
+      ...docs.get(org('contacts/c-warm')),
+      facets: { [HOST]: { sources: { form: true }, address: { country: 'US' }, companyName: 'Example Co', jobTitle: 'Owner', tags: ['retail'] } },
+    })
+    armGenerator(answer())
+    const { status, body } = await post(curate().draft, REP, {
+      sequenceId,
+      contactId: 'c-warm',
+      personalLine: 'Saw the second location open on Main St.',
+    })
+    expect(status).toBe(200)
+    expect(body.model).toBe('test-model')
+    expect(body.drafts).toEqual([
+      {
+        stepIndex: 0,
+        subject: 'Casey, Example Co’s second location',
+        body: 'Hi Casey,\n\nSaw the second location open on Main St — congratulations.\n\nWorth twenty minutes?\n\n{{sender.firstName}}',
+        issues: [],
+      },
+      { stepIndex: 2, subject: null, body: 'Following up, Casey — did the second location settle in?', issues: [] },
+    ])
+    // What the generator was asked: the member, the site, the purpose, the
+    // playbook, and a prompt that states the person and the steps.
+    expect(generated).toHaveLength(1)
+    expect(generated[0]).toMatchObject({ orgId: ORG, hostId: HOST, uid: REP, staff: false, purpose: OUTREACH_CURATION_PURPOSE })
+    expect(generated[0].system).toContain('List price only')
+    expect(generated[0].prompt).toContain('Name: Casey Morgan')
+    expect(generated[0].prompt).toContain('Company: Example Co')
+    expect(generated[0].prompt).toContain('Title: Owner')
+    expect(generated[0].prompt).toContain('Tags: retail')
+    expect(generated[0].prompt).toContain('How they came to us: form')
+    expect(generated[0].prompt).toContain('Sender: Avery Quinn at Example Shop')
+    expect(generated[0].prompt).toContain('Why the sender is writing now: Saw the second location open on Main St.')
+    expect(generated[0].prompt).toContain('Subject: Your second location, {{contact.firstName}}')
+    expect(generated[0].prompt).toContain('stepIndex 2 · a reply in the thread')
+    expect(body.prompt).toBe(generated[0].prompt)
+    // Nothing was stored, and nothing was filed.
+    expect([...docs.keys()].filter((key) => key.includes('outreachEnrollments'))).toEqual([])
+    expect(filed).toEqual([])
+  })
+
+  it('names the playbook rule a draft breaks, so the dialog refuses it until it is fixed', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    armGenerator(answer({ body: 'Hi Casey — 20% off this month, see https://a.example and https://b.example.' }))
+    const { body } = await post(curate().draft, REP, { sequenceId, contactId: 'c-warm' })
+    expect(body.drafts[0].issues.map((issue: { code: string }) => issue.code)).toEqual(['too_many_links', 'discount_language'])
+    expect(body.drafts[1].issues).toEqual([])
+  })
+
+  it('says when no plugin generates text, passes the generator’s refusal through, and refuses an unreadable answer', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const none = await post(curate().draft, REP, { sequenceId, contactId: 'c-warm' })
+    expect(none).toMatchObject({ status: 503, body: { reason: 'curation-unavailable' } })
+    armGenerator(() => ({ ok: false, status: 429, reason: 'quota', error: 'Your AI allotment for this month is spent.' }))
+    const spent = await post(curate().draft, REP, { sequenceId, contactId: 'c-warm' })
+    expect(spent).toMatchObject({ status: 429, body: { reason: 'curation-refused', error: 'Your AI allotment for this month is spent.' } })
+    armGenerator(() => ({ ok: false, status: 404, reason: 'unavailable', error: 'AI drafting is not available to this workspace yet.' }))
+    expect((await post(curate().draft, REP, { sequenceId, contactId: 'c-warm' })).body.reason).toBe('curation-unavailable')
+    armGenerator('Sure! Here is a lovely email for Casey.')
+    const prose = await post(curate().draft, REP, { sequenceId, contactId: 'c-warm' })
+    expect(prose).toMatchObject({ status: 502, body: { reason: 'curation-refused' } })
+  })
+
+  it('asks for Manage data, a real person the site may see, and the sequence’s email steps only', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    armGenerator(answer())
+    expect((await post(curate().draft, 'uid-reader', { sequenceId, contactId: 'c-warm' })).status).toBe(403)
+    expect((await post(curate().draft, REP, { sequenceId, contactId: 'c-gone' })).body.reason).toBe('contact-not-found')
+    expect((await post(curate().draft, REP, { sequenceId })).body.reason).toBe('invalid-request')
+    const task = await post(curate().draft, REP, { sequenceId, contactId: 'c-warm', stepIndexes: [1] })
+    expect(task).toMatchObject({ status: 400, body: { reason: 'invalid-request' } })
+    expect(generated).toEqual([])
+  })
+
+  it('enrolls a person with the copies they confirmed, stamped, and files who wrote each on their record', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { status, body } = await post(enroll().confirm, REP, {
+      sequenceId,
+      people: [
+        {
+          contactId: 'c-warm',
+          personalLine: 'Saw the second location.',
+          stepOverrides: [
+            useIt(0, 'Hi Casey,\n\nSaw the second location open.\n\n{{sender.firstName}}', {
+              subject: 'Casey, the second location',
+              edited: true,
+            }),
+            { stepIndex: 2, body: 'Following up, Casey.', source: 'member' },
+          ],
+        },
+      ],
+    })
+    expect(status).toBe(200)
+    expect(body.enrolled).toBe(1)
+    const stored = docs.get(org(`outreachEnrollments/${sequenceId}_c-warm`))
+    expect(stored?.['stepOverrides']).toEqual({
+      '0': {
+        subject: 'Casey, the second location',
+        body: 'Hi Casey,\n\nSaw the second location open.\n\n{{sender.firstName}}',
+        source: 'ai',
+        edited: true,
+        prompt: 'the prompt',
+        model: 'test-model',
+        draftedAtMs: AT,
+        draftedByUid: REP,
+      },
+      '2': { body: 'Following up, Casey.', source: 'member', draftedAtMs: AT, draftedByUid: REP },
+    })
+    // The record: enrolled first, then one line per curated step, naming
+    // the member as the roster lists them.
+    expect(filed.map((entry) => [entry.dedupeKey, entry.body])).toEqual([
+      [`enrolled:${sequenceId}_c-warm`, 'Enrolled in Second locations'],
+      [`curated:${sequenceId}_c-warm:0:${AT}`, 'Curated step 1 — AI draft, edited by rep@example.com'],
+      [`curated:${sequenceId}_c-warm:2:${AT}`, 'Curated step 3 — written by rep@example.com'],
+    ])
+    expect(filed.every((entry) => entry.link && (entry.link as { contactId?: string }).contactId === 'c-warm')).toBe(true)
+  })
+
+  it('refuses to enroll anyone with a copy that breaks a rule, naming the rule, and nothing is written', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const { status, body } = await post(enroll().confirm, REP, {
+      sequenceId,
+      people: [{ contactId: 'c-warm', stepOverrides: [useIt(0, 'Hi — a 20% discount this week.')] }],
+    })
+    expect(status).toBe(400)
+    expect(body.reason).toBe('invalid-override')
+    expect(body.issues.map((issue: { code: string }) => issue.code)).toEqual(['discount_language'])
+    expect(docs.has(org(`outreachEnrollments/${sequenceId}_c-warm`))).toBe(false)
+    const task = await post(enroll().confirm, REP, {
+      sequenceId,
+      people: [{ contactId: 'c-warm', stepOverrides: [{ stepIndex: 1, body: 'x', source: 'ai' }] }],
+    })
+    expect(task.body).toMatchObject({ reason: 'invalid-override', error: 'A curated step names one of the sequence’s email steps.' })
+  })
+
+  it('previews the curated version, and the sending runtime reads the same copy', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    const preview = createOutreachPreviewRoute(deps())
+    const { body } = await post(preview, REP, {
+      sequenceId,
+      contactId: 'c-warm',
+      personalLine: 'Loved the new storefront.',
+      stepOverrides: [useIt(0, 'Hi {{contact.firstName}},\n\nYour own copy.\n\n{{sender.firstName}}', { subject: 'Casey, your own subject' })],
+    })
+    expect(body.subject).toBe('Casey, your own subject')
+    expect(body.text.startsWith('Hi Casey,\n\nYour own copy.\n\nAvery\n\n')).toBe(true)
+    expect(body.text).toContain('Example Shop LLC · 100 Example St, Springfield, IL 62701')
+    const refused = await post(preview, REP, {
+      sequenceId,
+      contactId: 'c-warm',
+      stepOverrides: [useIt(0, '**Bold** is not plain text.')],
+    })
+    expect(refused).toMatchObject({ status: 400, body: { reason: 'invalid-override' } })
+  })
+
+  it('drafts the next email of an enrollment, and stores it only on save — validated again, filed, and logged', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-warm' }] })
+    const enrollmentId = `${sequenceId}_c-warm`
+    // The first email went out: the enrollment is on the call step.
+    docs.set(org(`outreachEnrollments/${enrollmentId}`), { ...docs.get(org(`outreachEnrollments/${enrollmentId}`)), stepIndex: 1 })
+    armGenerator(JSON.stringify({ steps: [{ stepIndex: 2, subject: '', body: 'Casey — they replied on the Main St. thread; here is the one thing I would do next.' }] }))
+    const drafted = await post(curate().draft, REP, { enrollmentId })
+    expect(drafted.status).toBe(200)
+    expect(drafted.body.drafts).toEqual([
+      { stepIndex: 2, subject: null, body: 'Casey — they replied on the Main St. thread; here is the one thing I would do next.', issues: [] },
+    ])
+    expect(generated[0].prompt).toContain('Emails to rewrite (1 of the sequence’s 2)')
+    expect(docs.get(org(`outreachEnrollments/${enrollmentId}`))?.['stepOverrides']).toBeUndefined()
+
+    filed.length = 0
+    const saved = await post(curate().save, REP, {
+      enrollmentId,
+      stepIndex: 2,
+      override: { body: 'Casey — one thing I would do next.', source: 'ai', prompt: drafted.body.prompt, model: 'test-model', edited: true },
+    })
+    expect(saved.status).toBe(200)
+    expect(saved.body.enrollment.stepOverrides).toEqual({
+      '2': { body: 'Casey — one thing I would do next.', source: 'ai', prompt: drafted.body.prompt, model: 'test-model', edited: true, draftedAtMs: AT, draftedByUid: REP },
+    })
+    expect(docs.get(org(`outreachEnrollments/${enrollmentId}`))?.['stepOverrides']).toEqual(saved.body.enrollment.stepOverrides)
+    expect(filed.map((entry) => entry.body)).toEqual(['Curated step 3 — AI draft, edited by rep@example.com'])
+    expect(activity.at(-1)).toEqual({
+      action: outreachCuratedActivity(2, false),
+      target: { type: OUTREACH_SEQUENCE_ACTIVITY_TARGET, id: sequenceId, name: 'Second locations' },
+    })
+
+    // Clearing puts the step back to the sequence's words, and files nothing.
+    filed.length = 0
+    const cleared = await post(curate().save, REP, { enrollmentId, stepIndex: 2, override: null })
+    expect(cleared.status).toBe(200)
+    expect(cleared.body.enrollment.stepOverrides).toBeUndefined()
+    expect(docs.get(org(`outreachEnrollments/${enrollmentId}`))?.['stepOverrides']).toEqual({})
+    expect(filed).toEqual([])
+    expect(activity.at(-1)?.action).toBe(outreachCuratedActivity(2, true))
+  })
+
+  it('refuses a copy for a step that went out, a rule-breaking copy, a task step, and an ended enrollment', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-warm', 'Casey Morgan', 'casey.morgan@example.com')
+    await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-warm' }] })
+    const enrollmentId = `${sequenceId}_c-warm`
+    const ref = org(`outreachEnrollments/${enrollmentId}`)
+    docs.set(ref, { ...docs.get(ref), stepIndex: 2 })
+    const gone = await post(curate().save, REP, { enrollmentId, stepIndex: 0, override: { body: 'x', source: 'member' } })
+    expect(gone).toMatchObject({ status: 409, body: { reason: 'transition-refused' } })
+    const rule = await post(curate().save, REP, { enrollmentId, stepIndex: 2, override: { body: 'Use coupon X', source: 'member' } })
+    expect(rule).toMatchObject({ status: 400, body: { reason: 'invalid-override' } })
+    expect(rule.body.issues.map((issue: { code: string }) => issue.code)).toEqual(['discount_language'])
+    const task = await post(curate().save, REP, { enrollmentId, stepIndex: 1, override: { body: 'x', source: 'member' } })
+    expect(task).toMatchObject({ status: 400, body: { reason: 'invalid-request' } })
+    armGenerator(answer())
+    const drafted = await post(curate().draft, REP, { enrollmentId, stepIndexes: [0] })
+    expect(drafted).toMatchObject({ status: 409, body: { reason: 'transition-refused' } })
+    docs.set(ref, { ...docs.get(ref), status: 'finished', stepIndex: 3 })
+    const ended = await post(curate().save, REP, { enrollmentId, stepIndex: 2, override: { body: 'x', source: 'member' } })
+    expect(ended).toMatchObject({ status: 409, body: { reason: 'transition-refused' } })
+    expect((await post(curate().draft, REP, { enrollmentId })).body.reason).toBe('transition-refused')
+    expect((await post(curate().save, REP, { enrollmentId: 'nope', stepIndex: 0, override: null })).status).toBe(404)
   })
 })

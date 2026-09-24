@@ -949,6 +949,8 @@ async function runEmailStep(
     messageId: sent.messageId,
     subject: sent.subject,
     ...(composed.email.trackedLinks.length ? { links: composed.email.trackedLinks } : {}),
+    // Sent as this person's own copy of the step (AGL-3324), and whose words.
+    ...(composed.override ? { curated: composed.override.source } : {}),
   }
   await completeStep(deps, firestore, run, {
     enrollment,

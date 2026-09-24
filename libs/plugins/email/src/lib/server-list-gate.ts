@@ -51,6 +51,7 @@
 import {
   ASSIGNMENT_REFUSAL_MESSAGES,
   assignmentReadout,
+  grantEntriesAsRecorded,
   isOrgWideMember,
   normalizeContactEmail,
   readMarketingBasis,
@@ -255,6 +256,15 @@ export interface AddressResolution {
 export interface ResolvedBatch extends AddressResolution {
   stored: Map<string, MarketingConsentRecord>
   /**
+   * Each opted-in person's own grants, as `grantEntriesAsRecorded` read them
+   * off the SAME contact document `stored` was read from — what a
+   * pass-through enrollment carries onto the membership (AGL-3320).
+   *
+   * From the same read for the reason `stored` is: the basis decided and the
+   * sites it covers must describe one version of the person's record.
+   */
+  grants: Map<string, Record<string, Record<string, unknown>>>
+  /**
    * The consent group the resolution was made against, so the WRITE records
    * a basis for exactly the controller the verdicts were computed for.
    *
@@ -314,7 +324,7 @@ export async function resolveAddresses(input: {
    * — resolves to itself.
    */
   const group = await consentGroupForSite(input.hostId)
-  const [suppression, stored] = await Promise.all([
+  const [suppression, { stored, grants }] = await Promise.all([
     suppressionFor(input.hostId, group, addresses),
     storedConsentFor(input.hostId, group, addresses),
   ])
@@ -359,6 +369,7 @@ export async function resolveAddresses(input: {
   return {
     verdicts,
     stored,
+    grants,
     group,
     optedIn: verdicts.filter(
       (verdict) => !verdict.refusal && !verdict.requiresAttestation,
@@ -437,9 +448,13 @@ async function storedConsentFor(
   hostId: string,
   group: ConsentGroup,
   addresses: readonly string[],
-): Promise<Map<string, MarketingConsentRecord>> {
+): Promise<{
+  stored: Map<string, MarketingConsentRecord>
+  grants: Map<string, Record<string, Record<string, unknown>>>
+}> {
   const found = new Map<string, MarketingConsentRecord>()
-  if (!addresses.length) return found
+  const grants = new Map<string, Record<string, Record<string, unknown>>>()
+  if (!addresses.length) return { stored: found, grants }
   try {
     const contacts = await orgDataCollectionForHost(hostId, 'contacts')
     const chunks: string[][] = []
@@ -453,17 +468,16 @@ async function storedConsentFor(
       for (const doc of snapshot.docs) {
         const email = normalizeContactEmail(doc.get('email'))
         if (!email) continue
-        const record = readMarketingBasis(
-          doc.data() as Record<string, unknown>,
-          group,
-        )
+        const data = doc.data() as Record<string, unknown>
+        const record = readMarketingBasis(data, group)
         const already = found.get(email)
         if (already?.basis === 'declined') continue
         if (already && record.basis !== 'declined') continue
         found.set(email, record)
+        grants.set(email, grantEntriesAsRecorded(data, group))
       }
     }
-    return found
+    return { stored: found, grants }
   } catch (error) {
     console.error('[email] consent lookup failed', error)
     const refused: MarketingConsentRecord = {
@@ -476,7 +490,11 @@ async function storedConsentFor(
       basisAtMs: null,
       capturedAtMs: null,
     }
-    return new Map(addresses.map((email) => [email, refused]))
+    return {
+      stored: new Map(addresses.map((email) => [email, refused])),
+      // Nobody is enrollable on a failed read, so nobody's grants travel.
+      grants: new Map(),
+    }
   }
 }
 

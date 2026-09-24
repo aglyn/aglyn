@@ -58,6 +58,10 @@ export * from './lib/server/email-flow-gate'
 // unsubscribe header, the suppression check and the frequency ceiling reach
 // every bulk sender without a call at each server entrypoint.
 export * from './lib/server/email-marketing-gate'
+// A consent group change (AGL-3320): the carries of the three stores above,
+// and the executor that runs a change around them.
+export * from './lib/server/consent-group-carry'
+export * from './lib/server/consent-group-change'
 export * from './lib/server/sms-keywords'
 export * from './lib/server/document-id'
 export * from './lib/server/collection-preview-token'

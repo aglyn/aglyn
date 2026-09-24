@@ -219,6 +219,21 @@ Need a finer net? Conditions
 — e.g. enroll only when `marketingConsent` is ticked **and** `plan` equals `Pro`, or when
 either of two topic boxes is ticked.
 
+### When the site shares a consent group {#consent-group-disclosure}
+
+If your organization has declared this site [one
+sender](../../marketing-and-automation/email-campaigns/overview.md#consent-groups) with
+others, the form shows one more line under its **Marketing consent field**: *"You'll
+receive marketing email from \{name\}, which covers \{n\} sites."* That line is what lets
+a tick count for every site in the group, because it tells the person who they will hear
+from. Without it, consent is recorded for this site alone.
+
+- The line comes from the group's name, so renaming the group changes it on every form at
+  once. A form on a site in no group shows nothing extra.
+- A submission records the group the form showed. One sent from a page that was loaded
+  before the group changed is recorded for this site alone, because the person saw a
+  different set of sites.
+
 ## Where submissions go
 
 - **Inbox** — every submission is captured; open it in the console's mail reader dialog.

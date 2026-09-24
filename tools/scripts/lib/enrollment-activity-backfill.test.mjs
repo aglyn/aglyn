@@ -94,6 +94,35 @@ describe('the scope', () => {
       { g3: { name: 'C', hostIds: ['h4', 'h5'] } },
     )
   })
+
+  it('drops a group whose id is a site’s id, one the org holds or one any entry names', () => {
+    const colliding = { hosts: { h3: true }, consentGroups: { h3: { name: 'A', hostIds: ['h1', 'h2'] } } }
+    assert.deepEqual(readConsentGroups(colliding), {})
+    assert.deepEqual(scopeTokens(colliding, 'h1'), ['host:h1'])
+    assert.deepEqual(readConsentGroups({ hosts: ['h3'], consentGroups: colliding.consentGroups }), {})
+    assert.deepEqual(
+      readConsentGroups({ consentGroups: { h9: { name: 'A', hostIds: ['h1', 'h2'] }, g2: { name: 'B', hostIds: ['h9'] } } }),
+      {},
+    )
+    // Refused on its own, so the colliding entry contests nothing it named.
+    assert.deepEqual(
+      readConsentGroups({
+        hosts: { h4: true },
+        consentGroups: { h4: { name: 'A', hostIds: ['h1', 'h2'] }, g2: { name: 'B', hostIds: ['h2', 'h3'] } },
+      }),
+      { g2: { name: 'B', hostIds: ['h2', 'h3'] } },
+    )
+    // The control: an id no site uses is kept.
+    assert.deepEqual(readConsentGroups({ hosts: { h1: true, h2: true }, consentGroups: { g1: { name: 'A', hostIds: ['h1', 'h2'] } } }), {
+      g1: { name: 'A', hostIds: ['h1', 'h2'] },
+    })
+  })
+
+  it('restates the id refusal as its source says it', () => {
+    const source = read('libs/aglyn/src/lib/app-utils/consent-groups.ts')
+    assert.match(source, /const siteIds = consentGroupSiteIds\(org, raw as Record<string, unknown>\)/)
+    assert.match(source, /if \(siteIds\.has\(groupId\)\) continue/)
+  })
 })
 
 describe('the record', () => {

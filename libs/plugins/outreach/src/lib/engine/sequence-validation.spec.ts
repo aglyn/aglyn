@@ -31,6 +31,7 @@ import {
   OUTREACH_MERGE_FIELDS,
   outreachSubjectHasReplyPrefix,
   readOutreachSequenceSettings,
+  validateOutreachCuratedStep,
   validateOutreachOrgSettings,
   validateOutreachSendWindow,
   validateOutreachSequence,
@@ -369,5 +370,58 @@ describe('activation', () => {
     expect(codes(validateOutreachSequenceActivation(sequence({ steps: [] }), org))).toEqual([
       'steps_required',
     ])
+  })
+})
+
+describe('a curated step (AGL-3324)', () => {
+  const draft = (body: string, subject = 'Casey, your client sites') =>
+    validateOutreachCuratedStep({ subject, body, startsThread: true })
+
+  it('passes a plain email with one link, and names the path the dialog shows it under', () => {
+    expect(draft('Hi Casey,\n\nRead https://aglyn.com/pricing when you have a minute.\n\nAvery')).toEqual([])
+    expect(validateOutreachCuratedStep({ body: 'x', startsThread: false }, 'stepOverrides.2')).toEqual([])
+  })
+
+  it('refuses a second link', () => {
+    expect(codes(draft('See https://a.example and https://b.example.'))).toEqual(['too_many_links'])
+    expect(draft('See https://a.example and https://b.example.')[0].message).toContain('2 links')
+  })
+
+  it('refuses a discount, a coupon, a promo code, a cohort, a slot count or a deadline, in the body or the subject', () => {
+    for (const words of [
+      'a 20% off launch price',
+      'use coupon SPRING',
+      'your promo code is here',
+      'join the founding cohort',
+      'only 3 spots left',
+      'this offer expires on Friday',
+      'the deadline is Monday',
+      'a limited-time discount',
+    ]) {
+      expect(codes(draft(`Hi Casey, ${words}.`))).toEqual(['discount_language'])
+    }
+    expect(codes(draft('Hi Casey.', '20% off this week'))).toEqual(['discount_language'])
+    // Words that only look like one pass: a count, an expired domain.
+    expect(draft('We count twelve sites, and the expired domain renews itself.')).toEqual([])
+  })
+
+  it('refuses markup a plain-text email would show as typed', () => {
+    expect(codes(draft('**Hi Casey**'))).toEqual(['not_plain_text'])
+    expect(codes(draft('Read [pricing](https://aglyn.com/pricing).'))).toEqual(['not_plain_text'])
+    expect(codes(draft('# Your sites\n\nHi.'))).toEqual(['not_plain_text'])
+    expect(codes(draft('Hi <b>Casey</b>'))).toEqual(['not_plain_text'])
+    expect(draft('A footnote (*) and a 2*3 grid are fine.')).toEqual([])
+  })
+
+  it('holds the copy to a step’s own rules: a subject where the email starts a thread, no Re:, the lengths, the merge fields', () => {
+    expect(codes(draft('Hi.', '  '))).toEqual(['subject_required'])
+    expect(codes(draft('Hi.', 'Re: your sites'))).toEqual(['subject_reply_prefix'])
+    expect(codes(draft('   '))).toEqual(['body_required'])
+    expect(codes(draft('x'.repeat(20_001)))).toEqual(['body_too_long'])
+    expect(draft('Hi {{contact.nickname}}.').map((issue) => [issue.code, issue.severity])).toEqual([
+      ['unknown_merge_field', 'warning'],
+    ])
+    // An in-thread copy has no subject to judge, whatever was sent.
+    expect(validateOutreachCuratedStep({ subject: 'Re: anything', body: 'x', startsThread: false })).toEqual([])
   })
 })

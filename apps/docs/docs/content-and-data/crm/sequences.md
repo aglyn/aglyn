@@ -474,6 +474,40 @@ The tab's toolbar filters the people in it. **Filters** narrows them by
 filters look at the enrollments read so far; on a sequence with more than
 fit in one read, the table says so, and paging forward reads the next batch.
 
+## Curate a send for one person {#curate}
+
+A step is one email for everyone, plus the personal line. **Curate for this
+person**, on each person in the enroll dialog's check, rewrites every email
+step for that one person: the workspace's AI drafts each one from their
+record — name, company, title, website, tags, how they came to you, the
+campaigns they're filed under — with the sequence's own steps as the
+skeleton and your personal line as the reason for writing now. Each draft
+appears under the person, editable. Read it, change what you like, tick
+**I've read this draft, and it goes out to this person as written**, and
+select **Use this** — or **Keep the template** to send the step as the
+sequence wrote it. **Preview the first email** then shows the curated
+version. Nothing is stored until you enroll them, and nothing you didn't
+confirm is ever sent: a draft you leave open holds the person back from
+**Enroll**.
+
+Later, on an active enrollment, **Enrollments** › the row's menu › **Curate
+next step** rewrites the next email that hasn't gone out — after a reply, a
+click or a change on their site — and stores it the moment you use it. The
+row reads **Curated** while the step it's on has its own copy.
+
+A curated email is still the sequence's email: the merge fields fill in,
+the footer goes on the end, links are tracked when the sequence tracks
+them, and the same rules apply before anything is kept — one link at most,
+list price only (no discount, coupon, cohort, slot count or deadline), plain
+text with no markup, no invented facts. A draft that breaks one is refused
+until it's fixed. The person's **Activity** gains a line — *Curated step 2 —
+AI draft, edited by* you — with the prompt and the model kept on the
+enrollment for the audit record, and each draft counts against the
+workspace's AI credits and allotments like any other generation. When the
+AI can't draft — the workspace has no AI, your role doesn't include
+generating with it, or an allotment is spent — you can still write the
+person's copy yourself.
+
 ## How sends are scheduled {#sending}
 
 Every **15 minutes**, the steps that have come due are sent, from each rep's

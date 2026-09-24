@@ -165,6 +165,13 @@ Unlike an organization deletion there's no hold, so **export a backup first**
 (Setup → Backup & restore) if you might want it back. Your other sites and the
 organization are unaffected.
 
+A site in a [consent group](../../marketing-and-automation/email-campaigns/overview.md#consent-groups)
+can't be deleted while it's in the group, because the group's other sites
+honor the unsubscribes it holds. [Remove it from the group](../../marketing-and-automation/email-campaigns/overview.md#consent-group-leave)
+first, which copies those opt-outs to the sites that stay, then delete it. The
+same applies while a consent group change that includes the site is still
+finishing.
+
 ## Deleting your organization
 
 Deletion is separate from canceling and is the only thing that **removes your

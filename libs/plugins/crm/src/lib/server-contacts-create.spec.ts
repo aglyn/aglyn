@@ -333,6 +333,23 @@ describe('the fields', () => {
     const [options] = mockUpsert.mock.calls[0] as unknown as [Record<string, any>]
     expect(options.marketingConsent).toBe(false)
   })
+
+  /*
+   * The drawer shows the site's consent-group sentence beside the box and
+   * sends back its key (AGL-3320); the capture pools the opt-in only on the
+   * group's current key, so the route's part is to hand it on — beside a
+   * ticked box, and never beside an unticked one.
+   */
+  it('hands the capture the key of the sentence the drawer showed, beside an opt-in', async () => {
+    await post({ ...GOOD, marketingConsent: true, disclosedConsentGroup: 'abcd1234' })
+    const [options] = mockUpsert.mock.calls[0] as unknown as [Record<string, any>]
+    expect(options).toMatchObject({ marketingConsent: true, disclosedConsentGroup: 'abcd1234' })
+
+    mockUpsert.mockClear()
+    await post({ ...GOOD, marketingConsent: false, disclosedConsentGroup: 'abcd1234' })
+    const [unticked] = mockUpsert.mock.calls[0] as unknown as [Record<string, any>]
+    expect(unticked).not.toHaveProperty('disclosedConsentGroup')
+  })
 })
 
 describe('the extras', () => {

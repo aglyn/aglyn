@@ -69,6 +69,9 @@ const MINE = [
 ]
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The viewer's reach, which `useCrmScope` reads only for a site in a
+  // declared consent group (AGL-3320); an org-wide member here.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestore: () => firestore,
   useUser: () => ({ data: { uid: UID } }),
   // A site's org is `org-1`; an explicit org is itself; neither is no org.

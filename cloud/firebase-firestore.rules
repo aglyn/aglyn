@@ -619,7 +619,7 @@ service cloud.firestore {
              'suspendedAt', 'suspendedReason', 'suspendedReasonCode',
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement', 'crmInbound', 'acquisition',
-             'consentGroups', 'consentGroupsAwaitConfirmation',
+             'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
              'marketingConsentPolicy'])) ||
         (isBillingStaff() &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(
@@ -634,7 +634,7 @@ service cloud.firestore {
              'suspendedMessage', 'suspendedUntilMs', 'suspendedMode',
              'suspendedEnforcement',
              'erasureRequestedAt', 'crmInbound', 'acquisition',
-             'consentGroups', 'consentGroupsAwaitConfirmation',
+             'consentGroups', 'consentGroupsAwaitConfirmation', 'consentGroupsChange',
              'marketingConsentPolicy'])) ||
         // `isVerified()` here rather than inside `canManageOrg()` (AGL-2589):
         // that helper is a READ gate too — `billing/stripe` and the member
@@ -695,7 +695,10 @@ service cloud.firestore {
              // /api/orgs/settings), so denying them costs the product
              // nothing. On all three lists.
              'consentGroups', 'consentGroupsAwaitConfirmation',
-             'marketingConsentPolicy']));
+             'marketingConsentPolicy',
+             // AGL-3320. The lock a consent group change holds; only the
+             // Admin-SDK executor sets and clears it.
+             'consentGroupsChange']));
 
       /**
        * The commercial keys, moved off the org doc so a scoped site
@@ -2087,6 +2090,16 @@ service cloud.firestore {
       // design and is gated by the `staff` claim, not by a customer's role.
       match /activity/{entryId} {
         allow read: if isStaff();
+        allow write: if false;
+      }
+
+      // A consent group change's job (AGL-3320): read by whoever the route
+      // lets run one — a manager, or an org-wide member stamped with both of
+      // its permissions — and written only by the Admin-SDK executor.
+      match /consentGroupChanges/{changeId} {
+        allow read: if isStaff() || canManageOrg() ||
+          (isOrgWideMember() && memberStamps('org.settings') &&
+           memberStamps('data.manage'));
         allow write: if false;
       }
 

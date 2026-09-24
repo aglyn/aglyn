@@ -120,6 +120,14 @@ export interface PluginContactCaptureRequest {
    * not consent either.
    */
   marketingConsent?: boolean
+  /**
+   * The disclosure key the capture surface rendered beside that opt-in
+   * (`consentGroupDisclosureKey`, AGL-3320), passed through as the surface
+   * sent it. The owner records the opt-in for the site's whole consent group
+   * only when this is the group's current key, and for `hostId` alone
+   * otherwise — so a silo whose surface shows no disclosure sends none.
+   */
+  disclosedConsentGroup?: string
   /** Tags the silo puts on this capture; the owner adds, never replaces. */
   tags?: readonly string[]
   /** The campaigns the capture SURFACE is filed under — the merchant's own act. */

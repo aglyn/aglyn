@@ -17,6 +17,7 @@
 
 // The contract from its own module, not the plugin-manager barrel: boot needs
 // the registry and nothing else, and the barrel reaches the client contexts.
+import { registerPluginConsentGroupParticipant } from '@aglyn/aglyn/plugin-manager/plugin-consent-group-change'
 import {
   registerPluginContactCaptureWriter,
   type PluginContactCaptureWriter,
@@ -24,6 +25,7 @@ import {
 import { registerPluginLeadConversionListener } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { registerPluginPersonMatcher } from '@aglyn/aglyn/plugin-manager/plugin-person-matches'
 import { BUNDLE_ID } from './constants/bundle-common'
+import { summarizeConsentGroupChange } from './model/consent-group-summary'
 
 /**
  * The CRM as the plugin that keeps people.
@@ -94,4 +96,25 @@ export function registerCrmServerDeclarations(): void {
     },
     { pluginId: BUNDLE_ID },
   )
+  // The CRM's share of a consent group change (AGL-3320): a contact's
+  // per-site refusal carried across a separation, and the records keyed by a
+  // group re-homed after the flip. Registered whether or not a workspace has
+  // the CRM switched on, because the contacts — and the refusals on them —
+  // outlive the switch. Deferred like the rest; the summary is plain words
+  // and answers synchronously.
+  registerPluginConsentGroupParticipant(
+    {
+      async preview(request) {
+        const { consentGroupParticipant } = await import('./server/consent-group-participant')
+        return consentGroupParticipant.preview(request)
+      },
+      async run(request) {
+        const { consentGroupParticipant } = await import('./server/consent-group-participant')
+        return consentGroupParticipant.run(request)
+      },
+      summarize: summarizeConsentGroupChange,
+    },
+    { pluginId: BUNDLE_ID },
+  )
 }
+

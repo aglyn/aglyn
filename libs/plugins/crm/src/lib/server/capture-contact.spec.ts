@@ -110,6 +110,11 @@ const contactCaptures: Array<Record<string, any>> = []
 const events: Array<{ event: string; payload: Record<string, unknown> }> = []
 /** Every auto-conversion asked for. */
 const conversions: Array<Record<string, unknown>> = []
+/**
+ * The org's consent-group declaration, when a case declares one; `null` is
+ * the org that declared nothing, which every other case in this file is.
+ */
+let mockConsentGroups: Record<string, unknown> | null = null
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -235,7 +240,12 @@ jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () =>
     collectionRef(`orgs/${ORG}/${name}`),
   resolveOrgIdForHost: async () => ORG,
   consentGroupForSite: async (hostId: string) =>
-    jest.requireActual('@aglyn/aglyn/app-utils/consent-groups').soloConsentGroup(hostId),
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/consent-groups')
+      .consentGroupForHost(
+        mockConsentGroups ? { consentGroups: mockConsentGroups } : null,
+        hostId,
+      ),
   scopedToHost: (ref: any) => ref,
 }))
 
@@ -262,6 +272,7 @@ beforeEach(() => {
   contactCaptures.length = 0
   events.length = 0
   conversions.length = 0
+  mockConsentGroups = null
 })
 
 describe('a lead surface', () => {
@@ -391,5 +402,52 @@ describe('what every surface refuses', () => {
       expect(verdict).toMatchObject({ ok: false, reason: 'invalid-email' })
     }
     expect(docs.size).toBe(0)
+  })
+})
+
+/*
+ * THE DISCLOSURE KEY, handed to whichever record the capture lands on
+ * (AGL-3320). Both writers pool the opt-in over the site's consent group only
+ * on the group's current key, so one capture records the same sites on a
+ * lead as on a contact.
+ */
+describe('the consent-group key a surface sends', () => {
+  const groups = jest.requireActual('@aglyn/aglyn/app-utils/consent-groups')
+  const NORTHWIND = { nw: { name: 'Northwind', hostIds: [HOST, 'site-2'] } }
+  const currentKey = () =>
+    groups.consentGroupDisclosureKey(
+      groups.consentGroupForHost({ consentGroups: NORTHWIND }, HOST),
+    )
+  const leadSites = () =>
+    Object.keys((docs.get(leadPath()) as any)?.marketingConsentByHost ?? {}).sort()
+
+  it('pools a lead’s opt-in across the group on the current key', async () => {
+    mockConsentGroups = NORTHWIND
+    await captureContactForCrm(
+      request({ surface: 'lead', marketingConsent: true, disclosedConsentGroup: currentKey() }),
+    )
+    expect(leadSites()).toEqual([HOST, 'site-2'].sort())
+  })
+
+  it('records a lead’s opt-in for the site alone without it', async () => {
+    mockConsentGroups = NORTHWIND
+    await captureContactForCrm(request({ surface: 'lead', marketingConsent: true }))
+    expect(leadSites()).toEqual([HOST])
+  })
+
+  it('hands the key to the contact writer when the capture lands on a contact', async () => {
+    await captureContactForCrm(
+      request({ surface: 'touch', marketingConsent: true, disclosedConsentGroup: 'k-1' }),
+    )
+    expect(contactCaptures).toHaveLength(1)
+    expect(contactCaptures[0]).toMatchObject({
+      marketingConsent: true,
+      disclosedConsentGroup: 'k-1',
+    })
+  })
+
+  it('THE CONTROL: a surface that sends no key hands none on', async () => {
+    await captureContactForCrm(request({ surface: 'touch', marketingConsent: true }))
+    expect(contactCaptures[0]).not.toHaveProperty('disclosedConsentGroup')
   })
 })

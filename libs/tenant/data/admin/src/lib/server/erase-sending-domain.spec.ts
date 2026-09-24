@@ -219,7 +219,7 @@ jest.mock('./dns-probe', () => ({
   lookupMx: async () => ({ answered: false, records: [] }),
 }))
 
-import { eraseHost } from './erase'
+import { eraseHost, SiteInConsentGroupError } from './erase'
 import type { HostSendingDomainTeardown } from './host-sending-domain'
 import { readSendingDomainTeardownByLabel } from './sending-domain-debt'
 
@@ -531,5 +531,81 @@ describe('running it twice', () => {
 
     expect(tearDown).toHaveBeenCalledTimes(1)
     expect(second.sendingDomain).toBe('none')
+  })
+})
+
+/*
+ * A SITE ITS CONSENT GROUP STILL NEEDS IS NOT ERASED (AGL-3320).
+ *
+ * Here because this file's double is the whole `eraseHost` world. A grouped
+ * site's opt-outs are read by its siblings, so the erase refuses before it
+ * destroys anything — the storage, the routing, the tree and the sending
+ * domain all stand — and only the organization's own erasure, which takes
+ * every site and the declaration with them, may pass.
+ */
+describe('a site in a consent group', () => {
+  const group = (hostIds: string[]) => ({
+    consentGroups: { nw: { name: 'Northwind', hostIds } },
+  })
+
+  it('is refused before anything is destroyed', async () => {
+    seedProvisionedSite()
+    store.set(`orgs/${ORG}`, {
+      ...(store.get(`orgs/${ORG}`) ?? {}),
+      ...group([HOST, 'HostSibling']),
+    })
+    const tearDown = jest.fn(async () => ({ outcome: 'removed' as const, detail: null }))
+
+    await expect(eraseHost(HOST, { tearDownSendingDomain: tearDown })).rejects.toMatchObject({
+      name: 'SiteInConsentGroupError',
+      hostId: HOST,
+      hold: { reason: 'grouped', groupId: 'nw', name: 'Northwind' },
+    })
+    expect(store.has(`hosts/${HOST}`)).toBe(true)
+    expect(store.has(`hostIndex/${HOST}`)).toBe(true)
+    expect(store.has(`sendingLabels/${LABEL}`)).toBe(true)
+    expect((store.get(`orgs/${ORG}`) as Record<string, any>).hosts).toEqual({ [HOST]: true })
+    expect(deleteFiles).not.toHaveBeenCalled()
+    expect(tearDown).not.toHaveBeenCalled()
+  })
+
+  it('is refused while a consent group change naming it runs', async () => {
+    seedProvisionedSite()
+    store.set(`orgs/${ORG}`, {
+      ...(store.get(`orgs/${ORG}`) ?? {}),
+      consentGroupsChange: { changeId: 'c1', phase: 'carry', hostIds: [HOST] },
+    })
+
+    const refused = await eraseHost(HOST).catch((error: unknown) => error)
+    expect(refused).toBeInstanceOf(SiteInConsentGroupError)
+    expect((refused as SiteInConsentGroupError).hold).toEqual({ reason: 'changing' })
+    expect(store.has(`hosts/${HOST}`)).toBe(true)
+  })
+
+  it('is erased by the organization’s own erasure, which passes the exception', async () => {
+    seedProvisionedSite()
+    store.set(`orgs/${ORG}`, {
+      ...(store.get(`orgs/${ORG}`) ?? {}),
+      ...group([HOST, 'HostSibling']),
+    })
+
+    await eraseHost(HOST, {
+      tearDownSendingDomain: async () => ({ outcome: 'removed', detail: null }),
+      allowInConsentGroup: true,
+    })
+    expect(store.has(`hosts/${HOST}`)).toBe(false)
+  })
+
+  it('THE CONTROL: a site the group does not name is erased as before', async () => {
+    seedProvisionedSite()
+    store.set(`orgs/${ORG}`, {
+      ...(store.get(`orgs/${ORG}`) ?? {}),
+      ...group(['HostOther', 'HostSibling']),
+    })
+
+    await eraseHost(HOST, {
+      tearDownSendingDomain: async () => ({ outcome: 'removed', detail: null }),
+    })
+    expect(store.has(`hosts/${HOST}`)).toBe(false)
   })
 })

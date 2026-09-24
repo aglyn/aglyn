@@ -60,6 +60,11 @@ const sequence = {
   id: 'seq-1',
   name: 'Second locations',
   hostId: 'host-1',
+  steps: [
+    { id: 'a', kind: 'email', delayBusinessDays: 0, subject: 'Your second location, {{contact.firstName}}', replyInThread: false, body: 'Hi {{contact.firstName}},', templateId: null },
+    { id: 'b', kind: 'task', taskKind: 'call', title: 'Call', delayBusinessDays: 1 },
+    { id: 'c', kind: 'email', delayBusinessDays: 3, subject: '', replyInThread: true, body: 'Following up.', templateId: null },
+  ],
 } as OutreachSequence
 
 const person = (
@@ -118,7 +123,7 @@ const PREVIEW: OutreachEnrollPreviewResponse = {
 }
 
 let api: jest.Mocked<
-  Pick<OutreachApi, 'previewEnrollment' | 'enroll' | 'previewEmail'>
+  Pick<OutreachApi, 'previewEnrollment' | 'enroll' | 'previewEmail' | 'curateDrafts'>
 >
 
 const renderDialog = () => {
@@ -147,6 +152,7 @@ beforeEach(() => {
     previewEnrollment: jest.fn().mockResolvedValue(PREVIEW),
     enroll: jest.fn(),
     previewEmail: jest.fn(),
+    curateDrafts: jest.fn(),
   }
 })
 
@@ -504,5 +510,110 @@ describe('outreachPersonReady (AGL-2980)', () => {
         attestations: [],
       }),
     ).toBe(false)
+  })
+})
+
+describe('curating for one person (AGL-3324)', () => {
+  const toPreview = async () => {
+    renderDialog()
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Saved Contacts view' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Warm leads' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check people' }))
+    await screen.findByText('1 eligible · 1 need you · 1 blocked')
+  }
+  const DRAFTS = {
+    ok: true as const,
+    prompt: 'the prompt',
+    model: 'test-model',
+    drafts: [
+      { stepIndex: 0, subject: 'Casey, your second location', body: 'Hi Casey,\n\nSaw the second location.', issues: [] },
+      { stepIndex: 2, subject: null, body: 'Following up, Casey.', issues: [] },
+    ],
+  }
+
+  it('drafts every email for the person, holds them back until each draft is decided, and enrolls with what they used', async () => {
+    api.curateDrafts.mockResolvedValue(DRAFTS)
+    api.enroll.mockResolvedValue({ ok: true, enrolled: 1, results: [] })
+    await toPreview()
+    const casey = row('Casey Morgan')
+    expect(screen.getByRole('button', { name: 'Enroll 1 person' })).toBeTruthy()
+    fireEvent.click(within(casey).getByRole('button', { name: 'Curate for this person' }))
+    const drafts = await within(casey).findByLabelText('Curated emails for Casey Morgan')
+    expect(api.curateDrafts).toHaveBeenCalledWith({ sequenceId: 'seq-1', contactId: 'c-warm', personalLine: '' })
+    const first = within(drafts).getByLabelText('Email 1 · step 1 — draft')
+    const second = within(drafts).getByLabelText('Email 2 · step 3 — draft')
+    expect((within(first).getByLabelText('Subject') as HTMLInputElement).value).toBe('Casey, your second location')
+    expect((within(first).getByLabelText('Email') as HTMLTextAreaElement).value).toBe('Hi Casey,\n\nSaw the second location.')
+    expect(within(second).queryByLabelText('Subject')).toBeNull()
+    // Two drafts open: nobody is ready.
+    expect(screen.getByRole('button', { name: 'Enroll 0 people' })).toBeTruthy()
+    expect(screen.getByText(/decision on a draft/)).toBeTruthy()
+    // Use this needs the confirmation.
+    expect((within(first).getByRole('button', { name: 'Use this' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(within(first).getByLabelText('Email'), { target: { value: 'Hi Casey,\n\nSaw the second location — congratulations.' } })
+    fireEvent.click(within(first).getByLabelText("I've read this draft, and it goes out to this person as written"))
+    fireEvent.click(within(first).getByRole('button', { name: 'Use this' }))
+    expect(within(drafts).getByLabelText('Email 1 · step 1 — curated')).toBeTruthy()
+    fireEvent.click(within(second).getByRole('button', { name: 'Keep the template' }))
+    expect(within(drafts).getByLabelText('Email 2 · step 3 — template kept')).toBeTruthy()
+    expect(within(drafts).getByText('1 of 2 emails curated for Casey Morgan. Nothing is sent that you haven\'t confirmed.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Enroll 1 person' }))
+    await waitFor(() => expect(api.enroll).toHaveBeenCalled())
+    expect(api.enroll).toHaveBeenCalledWith('seq-1', [
+      {
+        contactId: 'c-warm',
+        personalLine: '',
+        attestations: [],
+        stepOverrides: [
+          {
+            stepIndex: 0,
+            subject: 'Casey, your second location',
+            body: 'Hi Casey,\n\nSaw the second location — congratulations.',
+            source: 'ai',
+            edited: true,
+            prompt: 'the prompt',
+            model: 'test-model',
+          },
+        ],
+      },
+    ])
+  })
+
+  it('refuses to use a draft that breaks a rule, and previews the curated version', async () => {
+    api.curateDrafts.mockResolvedValue({
+      ...DRAFTS,
+      drafts: [{ stepIndex: 0, subject: 'Hi', body: 'A 20% discount for you.', issues: [] }],
+    })
+    api.previewEmail.mockResolvedValue({ ok: true, stepIndex: 0, subject: 'Hi', text: 'Curated body\n\nFooter', unresolvedFields: [], error: null })
+    await toPreview()
+    const casey = row('Casey Morgan')
+    fireEvent.click(within(casey).getByRole('button', { name: 'Curate for this person' }))
+    const first = await within(casey).findByLabelText('Email 1 · step 1 — draft')
+    expect(within(first).getByText(/list price only/i)).toBeTruthy()
+    expect((within(first).getByLabelText(/I've read this draft/) as HTMLInputElement).disabled).toBe(true)
+    fireEvent.change(within(first).getByLabelText('Email'), { target: { value: 'A plain email for you.' } })
+    fireEvent.click(within(first).getByLabelText(/I've read this draft/))
+    fireEvent.click(within(first).getByRole('button', { name: 'Use this' }))
+    fireEvent.click(within(casey).getByRole('button', { name: 'Preview the first email' }))
+    await waitFor(() =>
+      expect(api.previewEmail).toHaveBeenCalledWith({
+        sequenceId: 'seq-1',
+        contactId: 'c-warm',
+        personalLine: '',
+        stepOverrides: [{ stepIndex: 0, subject: 'Hi', body: 'A plain email for you.', source: 'ai', edited: true, prompt: 'the prompt', model: 'test-model' }],
+      }),
+    )
+  })
+
+  it('says why the AI could not draft, and lets the rep write the emails themselves', async () => {
+    api.curateDrafts.mockRejectedValue(new Error('AI drafting is not available in this workspace.'))
+    await toPreview()
+    const casey = row('Casey Morgan')
+    fireEvent.click(within(casey).getByRole('button', { name: 'Curate for this person' }))
+    await within(casey).findByText('AI drafting is not available in this workspace.')
+    fireEvent.click(within(casey).getByRole('button', { name: 'Write them yourself' }))
+    const first = within(casey).getByLabelText('Email 1 · step 1 — draft')
+    expect(within(first).getByText('Your words')).toBeTruthy()
+    expect((within(first).getByLabelText('Email') as HTMLTextAreaElement).value).toBe('Hi {{contact.firstName}},')
   })
 })

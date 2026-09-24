@@ -49,7 +49,9 @@ import {
   inspectUploadBytes,
   isContactLifecycleStage,
   isHostPluginEnabled,
+  type ConsentGroup,
   consentGroupForHost,
+  soloConsentGroup,
   CONTACT_FIELDS_MAX_PER_ORG,
   type ContactCustomValue,
   type ContactFieldDefinition,
@@ -2573,8 +2575,32 @@ const CONTACT_WRITABLE = [
   'notes',
   'marketingConsent',
   'consentSiteId',
+  'consentGroupId',
   'custom',
 ] as const
+
+/**
+ * The sites an API opt-in is recorded for (AGL-3320): the named site's whole
+ * consent group only when the body ECHOED that group's id, and the site
+ * alone otherwise.
+ *
+ * An integration's own signup form is a capture surface this platform never
+ * sees, so it cannot prove which sentence it showed the way a Form block
+ * does. Echoing the group's id is the integration saying it showed the
+ * group's name; an opt-in that says nothing about the group, or names one
+ * the site is no longer in, is the one site's — narrow, which is the safe
+ * way to be wrong, and visible in the response's `consentSites`.
+ */
+function apiGrantGroup(
+  ctx: ApiV1Context,
+  siteId: string,
+  echoedGroupId: string | undefined,
+): ConsentGroup {
+  const group = consentGroupForHost(ctx.org as Record<string, unknown>, siteId)
+  return group.declared && echoedGroupId === group.groupId
+    ? group
+    : soloConsentGroup(siteId)
+}
 
 /**
  * Validate the writable half of a contact (AGL-2276). `partial` separates
@@ -2616,6 +2642,8 @@ function readContactInput(
         notes?: string
         marketingConsent?: boolean
         consentSiteId?: string
+        /** The consent group the opt-in was disclosed under (AGL-3320). */
+        consentGroupId?: string
         /**
          * The `custom` map as SENT, shape-checked only. Its keys and values
          * are judged against the org's definitions by the writer, which is
@@ -2634,6 +2662,7 @@ function readContactInput(
     notes?: string
     marketingConsent?: boolean
     consentSiteId?: string
+    consentGroupId?: string
     custom?: Record<string, unknown>
     crm: ContactCrmInput
   } = { crm: {} }
@@ -2690,6 +2719,13 @@ function readContactInput(
     const siteId = String(body.consentSiteId ?? '').trim()
     if (!siteId) errors.consentSiteId = 'Must name a site'
     else values.consentSiteId = siteId
+  }
+
+  if (body.consentGroupId !== undefined) {
+    const groupId =
+      typeof body.consentGroupId === 'string' ? body.consentGroupId.trim() : ''
+    if (!groupId) errors.consentGroupId = 'Must name a consent group'
+    else values.consentGroupId = groupId
   }
 
   if (body.marketingConsent !== undefined) {
@@ -2808,6 +2844,16 @@ function readContactInput(
   if (values.consentSiteId && values.marketingConsent === undefined && !writesCrm) {
     errors.consentSiteId =
       'Only accepted alongside marketingConsent or a CRM profile field'
+  }
+  /*
+   * THE GROUP IS ECHOED ONLY BESIDE AN OPT-IN (AGL-3320). It says which
+   * disclosure the person saw, so it widens a grant to the site's consent
+   * group and means nothing anywhere else — least of all beside a refusal,
+   * which already stands against every site.
+   */
+  if (values.consentGroupId && values.marketingConsent !== true) {
+    errors.consentGroupId =
+      'Only accepted with marketingConsent: true — name the consent group the person was shown'
   }
 
   return Object.keys(errors).length ? { errors } : { values }
@@ -3006,8 +3052,16 @@ async function createContact(
       headers: ctx.headers,
     })
   }
-  const { email, name, tags, notes, marketingConsent, consentSiteId, crm } =
-    parsed.values
+  const {
+    email,
+    name,
+    tags,
+    notes,
+    marketingConsent,
+    consentSiteId,
+    consentGroupId,
+    crm,
+  } = parsed.values
   if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
     return ApiErrors.badRequest({
       message: 'Contact failed validation',
@@ -3109,10 +3163,10 @@ async function createContact(
       ...(Object.keys(customValues).length ? { custom: customValues } : {}),
       ...(marketingConsent && consentSiteId
         ? {
-            // The declared controller the named site belongs to, so an API
-            // opt-in pools exactly where a form on that site would.
+            // The named site, or its whole declared consent group when the
+            // body echoed the group it showed the person (AGL-3320).
             ...marketingConsentFieldsForGroup(
-              consentGroupForHost(ctx.org as Record<string, unknown>, consentSiteId),
+              apiGrantGroup(ctx, consentSiteId, consentGroupId),
               Date.now(),
             ),
           }
@@ -3187,8 +3241,15 @@ async function updateContact(
     })
   }
 
-  const { name, tags, notes, marketingConsent, consentSiteId, crm } =
-    parsed.values
+  const {
+    name,
+    tags,
+    notes,
+    marketingConsent,
+    consentSiteId,
+    consentGroupId,
+    crm,
+  } = parsed.values
   if (consentSiteId && !orgOwnsHost(ctx, consentSiteId)) {
     return ApiErrors.badRequest({
       message: 'Contact failed validation',
@@ -3244,10 +3305,9 @@ async function updateContact(
      * over-application this change exists to end, arriving through the write
      * side instead of the read side.
      */
-    const group = consentGroupForHost(
-      ctx.org as Record<string, unknown>,
-      consentSiteId,
-    )
+    // The named site, or its whole declared consent group when the body
+    // echoed the group it showed the person (AGL-3320).
+    const group = apiGrantGroup(ctx, consentSiteId, consentGroupId)
     for (const hostId of group.hostIds) {
       update[`${MARKETING_CONSENT_BY_HOST_FIELD}.${hostId}`] = {
         marketingConsent: true,

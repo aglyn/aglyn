@@ -72,6 +72,12 @@ async function enrollInList(options: {
   name?: string
   /** The opt-in the signup itself carries — see the call site. */
   marketingConsent?: boolean
+  /**
+   * The disclosure key the signup rendered beside its opt-in, as the contact
+   * capture received it: the membership pools over the site's consent group
+   * only when it is the group's current key (AGL-3320).
+   */
+  disclosedConsentGroup?: string
 }): Promise<void> {
   if (!isDocumentId(options.listId)) return
   try {
@@ -89,6 +95,9 @@ async function enrollInList(options: {
       ...(options.name ? { name: options.name } : {}),
       source: 'newsletter',
       ...(options.marketingConsent ? { marketingConsent: true } : {}),
+      ...(options.disclosedConsentGroup
+        ? { disclosedConsentGroup: options.disclosedConsentGroup }
+        : {}),
     })
   } catch (error) {
     console.error('list enrollment failed', error)
@@ -298,6 +307,16 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
     .trim()
     .toLowerCase()
   const listId = String(body.listId ?? '').trim()
+  /*
+   * The key of the consent-group sentence the signup rendered, when it
+   * rendered one (AGL-3320). The opt-in reaches the site's whole consent
+   * group only when this is the group's current key; a signup that shows no
+   * sentence sends none and subscribes the person to this site alone.
+   */
+  const disclosedConsentGroup =
+    typeof body.__consentGroup === 'string'
+      ? body.__consentGroup.trim().slice(0, 64)
+      : ''
   if (!hostId || !EMAIL_PATTERN.test(email)) {
     return res.status(400).json({ error: 'Enter a valid email' })
   }
@@ -358,6 +377,7 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
       // subscribes stays a customer.
       lifecycleFloor: 'subscriber',
       marketingConsent: true,
+      ...(disclosedConsentGroup ? { disclosedConsentGroup } : {}),
       // Where the visitor ARRIVED from — a fact about this visit and not
       // about the person, which is what `detail` carries.
       ...(campaignTouch ? { detail: { campaignTouch } } : {}),
@@ -389,7 +409,13 @@ export const newsletterHandler: PluginApiHandler = async (req, res) => {
        * not an inference from an act: the request this handler serves is
        * "subscribe me", which is the checkbox.
        */
-      await enrollInList({ hostId, listId, email, marketingConsent: true })
+      await enrollInList({
+        hostId,
+        listId,
+        email,
+        marketingConsent: true,
+        ...(disclosedConsentGroup ? { disclosedConsentGroup } : {}),
+      })
     }
     /*
      * The caller is told which of the two things happened, so the signup form

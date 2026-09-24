@@ -5752,6 +5752,102 @@ describe('consent groups, their confirmation switch and the consent policy are s
 })
 
 /**
+ * A consent group change in flight (AGL-3320). `consentGroupsChange` on the
+ * org is the executor's lock — while it stands, no second change starts and
+ * no site it names may be deleted — and `consentGroupChanges/{id}` is the job
+ * the editor's progress panel listens to. Both are written by the Admin-SDK
+ * executor alone. The job is for the managers who run the editor, never for
+ * a collaborator on one site or a viewer.
+ */
+describe('a consent group change is the executor’s to write (AGL-3320)', () => {
+  const MARKER = { changeId: 'change-1', phase: 'carry', hostIds: [HOST], startedAtMs: 1 }
+  const JOB = { changeId: 'change-1', status: 'running', step: 'carry' }
+  const job = (ctx) => doc(ctx, 'orgs', ORG, 'consentGroupChanges', 'change-1')
+
+  it('refuses everyone setting, changing or clearing the marker from a client', async () => {
+    await mustDeny(
+      'the owner setting the marker',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { consentGroupsChange: MARKER }),
+    )
+    await env.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'orgs', ORG), { consentGroupsChange: MARKER })
+    })
+    await mustDeny(
+      'the owner clearing the lock',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { consentGroupsChange: deleteField() }),
+    )
+    await mustDeny(
+      'the owner moving its phase',
+      updateDoc(doc(authed(OWNER), 'orgs', ORG), { 'consentGroupsChange.phase': 'sweep' }),
+    )
+    for (const staffRole of ['super', 'billing']) {
+      await mustDeny(
+        `${staffRole} staff clearing the lock`,
+        updateDoc(doc(authed(STAFF, { staff: true, staffRole }), 'orgs', ORG), {
+          consentGroupsChange: deleteField(),
+        }),
+      )
+    }
+  })
+
+  it('lets managers and staff read the job, and nobody else', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(job(context.firestore()), JOB)
+    })
+    await mustAllow('the owner reading the job', getDoc(job(authed(OWNER))))
+    await mustAllow('staff reading the job', getDoc(job(authed(STAFF, { staff: true }))))
+    await mustDeny('an org-wide viewer reading the job', getDoc(job(authed(VIEWER))))
+    await mustDeny('a site collaborator reading the job', getDoc(job(authed(EDITOR))))
+    await mustDeny('an outsider reading the job', getDoc(job(authed(OUTSIDER))))
+  })
+
+  it('lets a custom role the route admits read the job — both of its permissions, org-wide', async () => {
+    // The route runs a change for any member granted `org.settings` AND
+    // `data.manage`, a custom role included; the progress panel listens here
+    // under the same gate, so a narrower rule is a denied listen.
+    const CUSTOM = 'uid-custom-consent'
+    const HALF = 'uid-half-consent'
+    const SCOPED = 'uid-scoped-consent'
+    const both = { 'org.settings': true, 'data.manage': true }
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(job(db), JOB)
+      await setDoc(doc(db, 'orgs', ORG, 'members', CUSTOM), {
+        role: 'viewer', allHosts: true, roleId: 'consent-editor', resolvedPermissions: both,
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', HALF), {
+        role: 'viewer', allHosts: true, roleId: 'settings-only',
+        resolvedPermissions: { 'org.settings': true },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', SCOPED), {
+        role: 'editor', allHosts: false, hostAccess: { [HOST]: 'editor' },
+        resolvedPermissions: both,
+      })
+    })
+    await mustAllow('a custom role stamped with both permissions', getDoc(job(authed(CUSTOM))))
+    await mustDeny('a custom role stamped with only one', getDoc(job(authed(HALF))))
+    await mustDeny('a site collaborator stamped with both', getDoc(job(authed(SCOPED))))
+    await mustDeny('the custom role writing it', updateDoc(job(authed(CUSTOM)), { lease: null }))
+  })
+
+  it('lets nobody write the job', async () => {
+    await mustDeny('the owner creating a job', setDoc(job(authed(OWNER)), JOB))
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(job(context.firestore()), JOB)
+    })
+    await mustDeny(
+      'the owner releasing its lease',
+      updateDoc(job(authed(OWNER)), { lease: null }),
+    )
+    await mustDeny('the owner deleting it', deleteDoc(job(authed(OWNER))))
+    await mustDeny(
+      'staff finishing it by hand',
+      updateDoc(job(authed(STAFF, { staff: true, staffRole: 'super' })), { status: 'done' }),
+    )
+  })
+})
+
+/**
  * The AGL-1501 lockdown surface (AGL-1507), live in ruleset 0370ace4.
  *
  * `lockdowns/{id}` holds the platform and per-user panic records. Reads are

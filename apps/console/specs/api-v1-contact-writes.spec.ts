@@ -925,3 +925,100 @@ describe('custom fields on /v1/contacts', () => {
     expect((await response.json()).error.fields.custom).toContain('object')
   })
 })
+
+/**
+ * AN API OPT-IN COVERS THE NAMED SITE, AND ITS GROUP ONLY WHEN ECHOED
+ * (AGL-3320).
+ *
+ * An integration's own signup form is a surface this platform never sees, so
+ * it cannot prove which sentence the person read. Echoing the site's consent
+ * group id is the integration saying it showed the group's name; without it,
+ * or naming a group the site is not in, the opt-in is the one site's — and
+ * `consentSites` in the answer says exactly which sites it reached.
+ */
+describe('the sites an API opt-in covers', () => {
+  beforeEach(() => {
+    mockOrg = {
+      plan: 'business',
+      subscription: { status: 'active' },
+      hosts: { 'host-1': true, 'host-2': true },
+      consentGroups: { nw: { name: 'Northwind', hostIds: ['host-1', 'host-2'] } },
+    }
+  })
+
+  it('records a create for the named site alone when no group is echoed', async () => {
+    const response = await postContact({
+      email: 'solo@example.com',
+      marketingConsent: true,
+      consentSiteId: 'host-1',
+    })
+    expect(response.status).toBe(201)
+    expect((await response.json()).consentSites).toEqual(['host-1'])
+  })
+
+  it('pools a create across the group the body echoes', async () => {
+    const response = await postContact({
+      email: 'pooled@example.com',
+      marketingConsent: true,
+      consentSiteId: 'host-1',
+      consentGroupId: 'nw',
+    })
+    expect(response.status).toBe(201)
+    expect((await response.json()).consentSites).toEqual(['host-1', 'host-2'])
+    const stored = mockDocs.get(`${CONTACTS_PATH}/con_1`) as Record<string, any>
+    expect(stored.marketingConsentByHost['host-2']).toMatchObject({
+      consentGroupId: 'nw',
+      consentGroupName: 'Northwind',
+    })
+  })
+
+  it('records the site alone for a group the site is not in', async () => {
+    const response = await postContact({
+      email: 'stale@example.com',
+      marketingConsent: true,
+      consentSiteId: 'host-1',
+      consentGroupId: 'some-old-group',
+    })
+    expect((await response.json()).consentSites).toEqual(['host-1'])
+  })
+
+  it('narrows a PATCH the same way', async () => {
+    await postContact({ email: 'patched@example.com' })
+    const alone = await patchContact('con_1', { marketingConsent: true, consentSiteId: 'host-1' })
+    expect((await alone.json()).consentSites).toEqual(['host-1'])
+    const pooled = await patchContact('con_1', {
+      marketingConsent: true,
+      consentSiteId: 'host-1',
+      consentGroupId: 'nw',
+    })
+    expect((await pooled.json()).consentSites).toEqual(['host-1', 'host-2'])
+  })
+
+  it('refuses an echoed group beside anything but an opt-in, and writes nothing', async () => {
+    for (const body of [
+      { email: 'a@example.com', consentGroupId: 'nw' },
+      { email: 'b@example.com', marketingConsent: false, consentGroupId: 'nw' },
+      { email: 'c@example.com', marketingConsent: true, consentSiteId: 'host-1', consentGroupId: '' },
+    ]) {
+      const response = await postContact(body)
+      expect(response.status).toBe(400)
+      expect((await response.json()).error.fields).toHaveProperty('consentGroupId')
+    }
+    expect(contactCount()).toBe(0)
+  })
+
+  it('THE CONTROL: an org that declared no group records the named site either way', async () => {
+    mockOrg = {
+      plan: 'business',
+      subscription: { status: 'active' },
+      hosts: { 'host-1': true, 'host-2': true },
+    }
+    const response = await postContact({
+      email: 'alone@example.com',
+      marketingConsent: true,
+      consentSiteId: 'host-1',
+      consentGroupId: 'host-1',
+    })
+    expect((await response.json()).consentSites).toEqual(['host-1'])
+  })
+})

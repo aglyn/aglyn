@@ -183,6 +183,7 @@ async function fileLead(request: PluginContactCaptureRequest): Promise<PluginCon
       ...(request.identity.name ? { name: request.identity.name } : {}),
       source,
       ...(request.marketingConsent ? { marketingConsent: true } : {}),
+      ...disclosureOf(request),
     },
     ...(campaignTouchOf(request.detail).campaignTouch
       ? { touch: campaignTouchOf(request.detail).campaignTouch }
@@ -230,6 +231,7 @@ async function captureOnContact(
       ...(request.marketingConsent === undefined
         ? {}
         : { marketingConsent: request.marketingConsent }),
+      ...disclosureOf(request),
       ...(request.tags?.length ? { tags: request.tags } : {}),
       ...(request.campaignIds?.length ? { campaignIds: request.campaignIds } : {}),
       ...(request.purchaseCents === undefined
@@ -266,6 +268,22 @@ async function captureOnContact(
       error: 'The contact could not be recorded. Nothing else was affected.',
     }
   }
+}
+
+/**
+ * THE DISCLOSURE the capture surface rendered, handed to whichever record the
+ * capture lands on (AGL-3320).
+ *
+ * Passed through unread: both writers resolve the site's group themselves and
+ * pool the opt-in only when this is its current key, so a lead and a contact
+ * written by one capture record the same sites. A string or nothing, since
+ * the writers compare it exactly and anything else could only fail to match.
+ */
+function disclosureOf(
+  request: PluginContactCaptureRequest,
+): { disclosedConsentGroup?: string } {
+  const key = request.disclosedConsentGroup
+  return typeof key === 'string' && key ? { disclosedConsentGroup: key } : {}
 }
 
 /**

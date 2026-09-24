@@ -20,6 +20,7 @@ import {
   CONTACT_LIFECYCLE_STAGE_LABELS,
   CONTACT_LIFECYCLE_STAGES,
   consentGroupDisclosure,
+  consentGroupDisclosureKey,
   type AglynOrgBilling,
   type AglynPostalAddress,
   type ConsentGroup,
@@ -76,6 +77,12 @@ export interface NewContactValues {
   tags: string[]
   address: AglynPostalAddress | null
   marketingConsent: boolean
+  /**
+   * The key of the consent-group sentence shown beside the box, when one was
+   * (AGL-3320) — what lets the route record the opt-in for the whole group
+   * the sentence named. `null` when the site sends on its own.
+   */
+  disclosedConsentGroup: string | null
 }
 
 export interface NewContactDrawerProps {
@@ -219,6 +226,9 @@ export function NewContactDrawer(props: NewContactDrawerProps) {
       tags: parseContactTags(tags),
       address: normalizeAddress(address),
       marketingConsent,
+      disclosedConsentGroup: consentGroup
+        ? consentGroupDisclosureKey(consentGroup)
+        : null,
     })
   }
 

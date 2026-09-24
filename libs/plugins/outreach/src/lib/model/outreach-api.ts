@@ -27,6 +27,7 @@
 
 import type { OutreachComposeError } from '../engine/compose'
 import type { OutreachGatewayStanding } from '../engine/mail-gateway'
+import type { OutreachValidationIssue } from '../engine/sequence-validation'
 import type { OutreachComplianceIssue } from './compliance-settings'
 import type {
   OutreachAttestationKind,
@@ -34,6 +35,7 @@ import type {
   OutreachDoNotContactDomainEntry,
   OutreachEnrollment,
   OutreachSequence,
+  OutreachStepOverrideSource,
 } from './outreach.types'
 import type { OutreachSequenceDraft, OutreachSequenceIssue } from './sequence-draft'
 
@@ -63,6 +65,9 @@ export type OutreachRouteRefusalReason =
   | 'view-unsupported'
   | 'contact-not-found'
   | 'link-domain-refused'
+  | 'curation-unavailable'
+  | 'curation-refused'
+  | 'invalid-override'
 
 /** A refusal, in the one shape every route answers with. */
 export interface OutreachRouteRefusal {
@@ -233,12 +238,33 @@ export interface OutreachEnrollPreviewResponse {
   truncated: boolean
 }
 
+/**
+ * One person's confirmed copy of one step, as the console sends it
+ * (AGL-3324): what the member read and ticked the confirmation for. The
+ * route validates it again and stamps who and when.
+ */
+export interface OutreachStepOverrideRequest {
+  stepIndex: number
+  /** Read only where the email starts a thread. */
+  subject?: string
+  body: string
+  source: OutreachStepOverrideSource
+  /** An AI draft the member changed before confirming it. */
+  edited?: boolean
+  /** The prompt the AI was given, returned by the draft route, for the audit log. */
+  prompt?: string
+  /** The model that drafted it, returned by the draft route. */
+  model?: string
+}
+
 /** One person to enroll, with what the rep supplied for them: a contact by id, or a lead by key. */
 export interface OutreachEnrollPersonRequest {
   contactId?: string
   leadId?: string
   personalLine?: string
   attestations?: OutreachAttestationKind[]
+  /** The steps the member curated for this person before enrolling them (AGL-3324). */
+  stepOverrides?: OutreachStepOverrideRequest[]
 }
 
 /** `POST outreach/enroll` — the gates are checked again, here, before anything is written. */
@@ -391,6 +417,8 @@ export interface OutreachPreviewRequest {
   personalLine?: string
   /** Which step; the first email when absent. */
   stepIndex?: number
+  /** The person's copies of steps as the dialog holds them (AGL-3324), so the preview shows the curated version. */
+  stepOverrides?: OutreachStepOverrideRequest[]
 }
 
 export interface OutreachPreviewResponse {
@@ -402,4 +430,57 @@ export interface OutreachPreviewResponse {
   unresolvedFields: string[]
   /** Why it could not be written, when it could not. */
   error: OutreachComposeError | null
+}
+
+/*==========================================
+ * CURATING (AGL-3324)
+ *==========================================*/
+
+/**
+ * `POST outreach/curate/draft` — this person's own copies of the sequence's
+ * email steps, drafted by the workspace's AI. Names EITHER a person about to
+ * be enrolled (the sequence, a contact or a lead, the personal line the rep
+ * is writing) OR an enrollment, whose next email step is drafted. Nothing is
+ * stored: the answer is what the member reads before confirming.
+ */
+export interface OutreachCurateDraftRequest {
+  orgId: string
+  sequenceId?: string
+  contactId?: string
+  leadId?: string
+  personalLine?: string
+  enrollmentId?: string
+  /** Which email steps; every email step for a person to enroll, the next one for an enrollment, when absent. */
+  stepIndexes?: number[]
+}
+
+/** One drafted step, with what the validator said about it. */
+export interface OutreachCurateDraft {
+  stepIndex: number
+  /** `null` for an in-thread email, which is sent as `Re:` the thread's subject. */
+  subject: string | null
+  body: string
+  /** Errors and warnings; a draft with an error cannot be confirmed as it stands. */
+  issues: OutreachValidationIssue[]
+}
+
+export interface OutreachCurateDraftResponse {
+  ok: true
+  drafts: OutreachCurateDraft[]
+  /** The prompt the AI was given and the model that answered, for the override's audit record. */
+  prompt: string
+  model: string
+}
+
+/** `POST outreach/curate/save` — stores a confirmed copy of one step on an enrollment, or clears it with `override: null`. */
+export interface OutreachCurateSaveRequest {
+  orgId: string
+  enrollmentId: string
+  stepIndex: number
+  override: Omit<OutreachStepOverrideRequest, 'stepIndex'> | null
+}
+
+export interface OutreachCurateSaveResponse {
+  ok: true
+  enrollment: OutreachEnrollment
 }

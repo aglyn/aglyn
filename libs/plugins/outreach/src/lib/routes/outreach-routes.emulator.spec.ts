@@ -91,6 +91,7 @@ const deps = (): OutreachEnrollRouteDeps => ({
   // No record system here: the enroll's timeline entry (AGL-3274) is the
   // fake-store spec's to pin, and this one files nothing.
   timeline: () => null,
+  textGenerator: () => null,
 })
 
 /** What the enroll route credited to a campaign (AGL-3254). */

@@ -381,6 +381,32 @@ describe('SuppressionsCard (AGL-2410)', () => {
     expect(enqueueSnackbar).not.toHaveBeenCalled()
   })
 
+  it('marks an entry copied from another site, and only that one (AGL-3320)', () => {
+    // When sites stop being one sender, each copies the other's entries so
+    // nobody who was skipped starts getting mail. The copy is an entry like
+    // any other; the marker says why an address nobody here acted on is
+    // listed.
+    suppressionDocs = [
+      {
+        $id: 'hash-copy',
+        email: 'kim@example.com',
+        reason: 'unsubscribe',
+        carriedFromHostId: 'host-2',
+        createdAt: { seconds: DAY },
+      },
+      {
+        $id: 'hash-own',
+        email: 'ari@example.com',
+        reason: 'unsubscribe',
+        createdAt: { seconds: DAY - 1 },
+      },
+    ]
+    render(<SuppressionsCard hostId="host-1" />)
+
+    expect(screen.getAllByText('Copied')).toHaveLength(1)
+    expect(screen.getByLabelText(/Copied from another site/)).toBeTruthy()
+  })
+
   it('shows a hashed legacy row honestly instead of 64 hex characters', () => {
     // Entries are keyed by `sha256(email)` because addresses are PII. A row
     // written before the address was stored beside it has only the hash,

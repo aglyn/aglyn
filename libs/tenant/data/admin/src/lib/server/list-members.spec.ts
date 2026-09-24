@@ -98,9 +98,13 @@ const firestoreHandle: any = {
 
 import { enrollListMember } from './list-members'
 import {
+  consentGroupDisclosureKey,
+  grantEntriesAsRecorded,
+  marketingConsentFieldsForGroup,
   personKey,
   readMarketingBasis,
   soloConsentGroup,
+  type ConsentGroup,
 } from '@aglyn/aglyn/server'
 
 const KEY = personKey(EMAIL) as string
@@ -293,5 +297,106 @@ describe('an address the collection cannot key', () => {
       refusal: 'unusable-address',
     })
     expect(rowCount()).toBe(0)
+  })
+})
+
+/*==========================================
+ * WHICH SITES A MEMBERSHIP'S BASIS COVERS (AGL-3320).
+ *
+ * The enrolling site may be in a declared group, and the membership is made
+ * in the group's name — but the basis reaches only the sites the person was
+ * told about. A pass-through carries the person's own grants as their record
+ * holds them; a checkbox pools on its surface's current disclosure key; an
+ * attestation is the enrolling site's alone.
+ *=========================================*/
+describe('the sites a membership’s basis covers', () => {
+  const GROUP: ConsentGroup = {
+    hostId: HOST,
+    groupId: 'nw',
+    name: 'Northwind',
+    hostIds: [HOST, OTHER_HOST],
+    declared: true,
+    awaitsConfirmation: false,
+  }
+  const sites = () => Object.keys(theRow()?.marketingConsentByHost ?? {}).sort()
+  const readFrom = (hostId: string) =>
+    readMarketingBasis(theRow() ?? null, { ...GROUP, hostId }).basis
+  const passThrough = (contact: Record<string, unknown>) =>
+    enroll({
+      group: GROUP,
+      consent: { basis: 'contact-opt-in', atMs: 123, byUid: null },
+      grantEntries: grantEntriesAsRecorded(contact, GROUP),
+    })
+
+  it('keeps a solo grant from before the group solo when it is passed through', async () => {
+    // The person opted in to site-1 alone, before the group was declared.
+    const contact = marketingConsentFieldsForGroup(soloConsentGroup(HOST), 123)
+    await passThrough(contact)
+    expect(sites()).toEqual([HOST])
+    expect(readFrom(HOST)).toBe('granted')
+    expect(readFrom(OTHER_HOST)).toBe('unrecorded')
+    expect(theRow().marketingConsentByHost[HOST]).toEqual({
+      marketingConsent: true,
+      marketingConsentAtMs: 123,
+      marketingConsentBasis: 'contact-opt-in',
+      marketingConsentByUid: null,
+      marketingConsentReason: '',
+    })
+  })
+
+  it('carries a grant given under the group to the sites it named, stamps and all', async () => {
+    const contact = marketingConsentFieldsForGroup(GROUP, 77)
+    await passThrough(contact)
+    expect(sites()).toEqual([HOST, OTHER_HOST].sort())
+    expect(theRow().marketingConsentByHost[OTHER_HOST]).toMatchObject({
+      marketingConsent: true,
+      marketingConsentAtMs: 77,
+      consentGroupId: 'nw',
+      consentGroupName: 'Northwind',
+      marketingConsentBasis: 'contact-opt-in',
+    })
+  })
+
+  it('records an attestation for the enrolling site alone', async () => {
+    await enroll({
+      group: GROUP,
+      consent: { basis: 'operator-attested', atMs: 9, byUid: 'editor-uid' },
+    })
+    expect(sites()).toEqual([HOST])
+    expect(theRow().marketingConsentByHost[HOST]).not.toHaveProperty('consentGroupId')
+  })
+
+  it('pools a checkbox only on its surface’s current disclosure key', async () => {
+    await enroll({ group: GROUP, marketingConsent: true })
+    expect(sites()).toEqual([HOST])
+    store = {}
+    await enroll({
+      group: GROUP,
+      marketingConsent: true,
+      disclosedConsentGroup: consentGroupDisclosureKey(GROUP),
+    })
+    expect(sites()).toEqual([HOST, OTHER_HOST].sort())
+  })
+
+  it('never lets an attestation borrow a pass-through’s grants', async () => {
+    const contact = marketingConsentFieldsForGroup(GROUP, 77)
+    await enroll({
+      group: GROUP,
+      consent: { basis: 'operator-attested', atMs: 9, byUid: 'editor-uid' },
+      grantEntries: grantEntriesAsRecorded(contact, GROUP),
+    })
+    expect(sites()).toEqual([HOST])
+  })
+
+  it('THE CONTROL: a site alone passes its grant through exactly as it always has', async () => {
+    const contact = marketingConsentFieldsForGroup(soloConsentGroup(HOST), 55)
+    await enroll({
+      consent: { basis: 'contact-opt-in', atMs: 55, byUid: null },
+      grantEntries: grantEntriesAsRecorded(contact, soloConsentGroup(HOST)),
+    })
+    const passed = theRow().marketingConsentByHost
+    store = {}
+    await enroll({ consent: { basis: 'contact-opt-in', atMs: 55, byUid: null } })
+    expect(passed).toEqual(theRow().marketingConsentByHost)
   })
 })

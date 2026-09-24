@@ -72,7 +72,8 @@ wrote. The interaction timeline shown in the console isn't exposed over the API.
 **site's** knowledge of a person, not the person's own facts. A contact is one record
 shared by every site that has captured them, and an agency's two brands that both know
 somebody must not read each other's notes on them — so the console stores these six
-per site (strictly, per [consent group](#add-a-contact)), and the API does the same.
+per site (strictly, per [consent group](/marketing-and-automation/email-campaigns/overview#consent-groups)),
+and the API does the same.
 Two consequences:
 
 - **Writing any of them names the site**, through `consentSiteId` — the same parameter
@@ -216,6 +217,7 @@ Returns a contact object, or `404 not_found` (`"No such contact"`).
 | `marketingConsent` | boolean | no | `true` also stamps the consent timestamp, and requires `consentSiteId`. |
 | `phone`, `jobTitle`, `companyId`, `address`, `ownerUid`, `lifecycleStage` | see [the object](#the-contact-object) | no | The [CRM profile](#crm-profile). Each requires `consentSiteId`, and lands on that site's profile of the person. |
 | `consentSiteId` | string | with `marketingConsent: true` or any profile field | The site this write is made on behalf of: the site the person opted in to, and the site whose profile the fields land on. Required for an opt-in and for a profile field; rejected alongside `marketingConsent: false` unless a profile field needs it. A site your organization does not own is a `400`. |
+| `consentGroupId` | string | no | With `marketingConsent: true`, the id of the [consent group](/marketing-and-automation/email-campaigns/overview#consent-groups) `consentSiteId` belongs to — see [opting in for a whole group](#consent-group-opt-in). Without it the opt-in is recorded for `consentSiteId` alone. |
 
 ```bash
 curl -X POST "https://app.aglyn.com/api/v1/contacts" \
@@ -311,9 +313,9 @@ curl -X PATCH "https://app.aglyn.com/api/v1/contacts/k7d2b9f104" \
 - **An opt-in has to name the site it was given to.** `marketingConsent: true`
   requires `consentSiteId`, because an API key belongs to your *organization* and
   an organization is not a brand: an agency's key reaches every client it runs. The
-  grant is recorded against that site (and, if you have declared a consent group,
-  against every site in it) and against no other. There is no default — picking your
-  only site would work until you had two.
+  grant is recorded against that site and no other, unless the body also carries
+  `consentGroupId` — see [opting in for a whole group](#consent-group-opt-in). There
+  is no default — picking your only site would work until you had two.
 - Setting `marketingConsent: true` stamps the consent timestamp. Setting it back to
   `false` withdraws consent but **leaves the original timestamp in place** — it is the
   evidence of when the person opted in, and an audit needs it. A withdrawal takes no
@@ -327,6 +329,32 @@ curl -X PATCH "https://app.aglyn.com/api/v1/contacts/k7d2b9f104" \
 - Editing is never refused by the audience band. An edit doesn't grow the audience,
   and a downgraded organization still has to be able to correct its own data.
 - `404 not_found` (`"No such contact"`) if it isn't there.
+
+#### Opting in for a whole group {#consent-group-opt-in}
+
+Where your organization has declared several sites [one
+sender](/marketing-and-automation/email-campaigns/overview#consent-groups), a person
+who signs up on one of them may be emailed by all of them — but only if they were told
+so. A signup form on a grouped site says it by name; an integration has to say it
+explicitly, by sending the group's id as `consentGroupId` beside `consentSiteId`:
+
+```bash
+curl -X PATCH "https://app.aglyn.com/api/v1/contacts/k7d2b9f104" \
+  -H "Authorization: Bearer aglyn_sk_…" \
+  -H "Content-Type: application/json" \
+  -d '{"marketingConsent":true,"consentSiteId":"site_a1b2c3","consentGroupId":"cg_4k2x9q0m7r1t5w8z"}'
+```
+
+- Send it only when the person was shown the group's name where they signed up — that
+  is what makes the opt-in cover every site in it.
+- A group's id is shown under its name on your organization's **Emails → Consent
+  groups** page.
+- Without `consentGroupId`, or with an id that is not the current group of
+  `consentSiteId`, the opt-in is recorded for `consentSiteId` alone. Narrower is the
+  safe answer: the person can always be asked again, and mail sent without consent
+  cannot be unsent.
+- It changes nothing about a withdrawal: `marketingConsent: false` already applies to
+  every site.
 
 ### Delete a contact
 

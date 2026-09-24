@@ -17,6 +17,10 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  type ConsentGroupSiteHold,
+  consentGroupSiteHold,
+} from '@aglyn/aglyn/app-utils/consent-groups'
+import {
   emailUnverifiedResponse,
   eraseHost,
   firebaseAdmin,
@@ -31,11 +35,36 @@ import { teardownSendingDomain } from '../../../../utils/server/provision-sendin
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
+ * What the site's admin is told when its consent group still needs it
+ * (AGL-3320) — the one thing they can do about it, in the words of the
+ * Emails page where they do it.
+ */
+function consentGroupHoldResponse(hold: ConsentGroupSiteHold): Response {
+  return Response.json(
+    {
+      error:
+        hold.reason === 'grouped'
+          ? `This site sends as part of the consent group "${hold.name}". ` +
+            'Remove it from the group on your organization’s Emails page, ' +
+            'then delete it.'
+          : 'A consent group change that includes this site is still ' +
+            'finishing. Delete the site once it is done.',
+      reason: hold.reason === 'grouped' ? 'consent-group' : 'consent-group-change',
+    },
+    { status: 409 },
+  )
+}
+
+/**
  * Permanently delete a single site (AGL-488). Site-admin only. Unlike an
  * organization deletion there is no hold — a site is deleted immediately
  * (the console gates it behind a type-the-name confirm). `eraseHost` cleans
  * up Storage, the routing index, the org's hosts map, and the Firestore
  * tree so nothing is orphaned.
+ *
+ * A site in a consent group, or in a change to one that is still running,
+ * is refused with a 409 (AGL-3320): its opt-outs are read by the other sites
+ * in its group, so it leaves the group — which carries them over — first.
  */
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -116,14 +145,32 @@ async function handler(request: Request): Promise<Response> {
     // 423 body; staff bypass is the un-panic invariant. The org doc is
     // fetched deliberately — an org lock never stamps host docs, so a
     // host-only verdict would silently miss it.
+    const owningOrg = (await getOrgForHost(hostId))?.org
     const locked = await lockdownRefusal({
       request,
       staff: decoded['staff'] === true,
       uid: decoded.uid,
-      org: (await getOrgForHost(hostId))?.org,
+      org: owningOrg,
       host: hostSnapshot.data(),
     })
     if (locked) return locked
+
+    /*==========================================
+     * NOT WHILE ITS CONSENT GROUP STILL NEEDS IT (AGL-3320).
+     *
+     * A grouped site's opt-outs are stored on the site and read by every
+     * site in its group, so erasing it would start mailing, from the sites
+     * that stay, people who unsubscribed here — and leave the declaration
+     * naming a site that is gone. Staff are held to it too: the hazard is
+     * to the people on the list, not a permission. `eraseHost` refuses the
+     * same site on its own, so a caller that reaches it another way meets
+     * the same answer.
+     *=========================================*/
+    const hold = consentGroupSiteHold(
+      (owningOrg ?? null) as Record<string, unknown> | null,
+      hostId,
+    )
+    if (hold) return consentGroupHoldResponse(hold)
 
     /*==========================================
      * READ BEFORE THE ERASE, LOG AFTER IT (AGL-118).
@@ -212,6 +259,13 @@ async function handler(request: Request): Promise<Response> {
     // for anything else, so a real failure keeps the answer below.
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated
+    // The group changed between the check above and the erase: `eraseHost`
+    // refused before destroying anything, and the answer is the same 409.
+    // Matched by name, so this route does not load the erase module for it.
+    const refused = error as { name?: unknown; hold?: ConsentGroupSiteHold }
+    if (refused?.name === 'SiteInConsentGroupError' && refused.hold) {
+      return consentGroupHoldResponse(refused.hold)
+    }
     console.error(error)
     return Response.json({ error: 'Site deletion failed' }, { status: 500 })
   }
