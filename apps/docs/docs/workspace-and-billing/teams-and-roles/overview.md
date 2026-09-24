@@ -16,9 +16,10 @@ Aglyn has two kinds of people: your **team** (who build and manage the site) and
 ![The organization Team page: the invite row above the members roster, with each member's role, access and AI credits, under the table's Columns, Filters, Export and Search controls](/img/teams-and-roles/org-team-page.png)
 
 The **Team** page's roster filters through its table's toolbar: **Filters** narrows it
-by **Role** or by **Access** (team manager or site collaborator), and **Search** matches
-any word of a member's name, email, or title. Each filter in force shows as a chip above
-the table. The role pickers and **Permissions** in each row work as before.
+by **Member** (the name), **Role** or **Access** (team manager or site collaborator), and
+**Search** matches any word of a member's name, email, or title. Both look at the whole
+roster, not only the page on screen, and each filter in force shows as a chip above
+the table; see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). The role pickers and **Permissions** in each row work as before.
 
 ## Team roles
 
@@ -93,8 +94,9 @@ ordered by email address with the organization's owner first. **Filters** in the
 toolbar narrows it by **Site access** — one role, or several at once — and the search box
 finds collaborators whose email address starts with what you type. Both reach every
 collaborator on the site, not only the page on screen, and each filter in force shows as
-a chip above the table. The search matches the start of the address, because the list
-holds addresses rather than names.
+a chip above the table. The filter and the search add up. The search matches the start
+of the address, because the list holds addresses rather than names. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### AI access for collaborators {#collaborator-ai-access}
 

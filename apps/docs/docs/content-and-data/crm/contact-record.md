@@ -319,8 +319,9 @@ routing has no lead, and the link is simply not there.
 
 ## Finding a contact
 
-The list's search and column filters reach every contact in the workspace by
-name and email. The console's **search** (the magnifying glass in the top bar)
+The list's filters reach every contact by name or email, one served filter at
+a time, and its search box narrows the thousand contacts the list read — see
+[Filters on the Contacts list](./views.md#filters-on-the-contacts-list). The console's **search** (the magnifying glass in the top bar)
 finds contacts too — by name, email, phone number or company name — and opens
 the person's page. Contacts appear in that search only for members who can
 manage data on the site, and only while the CRM is available to them.

@@ -607,7 +607,7 @@ each. Each table filters through its own toolbar: **Search** finds a listing by 
 and **Filters** offers the listing, who bought it (**You** or **A colleague**) on the
 workspace's table, and which workspace a purchase landed in on the buyer's own. Both
 answer over every license the table holds, and each filter in force shows as a chip
-above it.
+above it; see [Filter and search a list](../../../getting-started/console-tour.md#filter-and-search).
 
 Every listing shows its **artifact type** as a chip — Plugin, Component,
 Site template, Layout, Dataset schema, Email template or Email starter — so

@@ -254,7 +254,8 @@ Domains of public mailbox providers are never added automatically.
 
 The listed domains are a table. Its toolbar's **Filters** narrows them by
 **Why** they are listed, the domain or the bounce detail, and **Search** finds
-a domain by any part of it. Both look at every listed domain.
+a domain or its detail by any part of it. Both look at every listed domain; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Sequences {#sequences}
 
@@ -265,10 +266,12 @@ replied, bounced or opted out.
 
 The table's toolbar filters the list. **Filters** narrows it by **Status**
 (pick one or several), name or mailbox, and **Search** matches any word of a
-sequence's name or mailbox. Both look at every sequence, not only the page on
-screen, and each filter in force shows as a chip above the table; remove a
-chip to drop its filter. The **Filters** panel edits one filter at a time,
-and filters on different columns add up.
+sequence's name or mailbox. Both look at every sequence the list read — the
+200 newest, which for nearly every organization is all of them — not only the
+page on screen, and each filter in force shows as a chip above the table;
+remove a chip to drop its filter. The **Filters** panel edits one filter at a
+time, and filters on different columns add up; see
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Build a sequence {#build-a-sequence}
 
@@ -462,8 +465,9 @@ marked **Lead** until the lead converts. For each one you can:
 The tab's toolbar filters the people in it. **Filters** narrows them by
 **Status**, **Enrolled as** (contact or lead), name, email or stop reason, and
 **Search** matches any word of a name, address, step or stop reason. The
-filters look at the enrollments read so far; on a sequence with more than
-fit in one read, the table says so, and paging forward reads the next batch.
+filters look at the enrollments read so far, 200 at a time; on a sequence with
+more than that, the table says so, and paging forward reads the next 200. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Curate a send for one person {#curate}
 

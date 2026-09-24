@@ -121,8 +121,10 @@ API refuse another entry on that record with a message saying so.
 The **Contacts** section is the list the rest of the CRM is built on. It lets
 you:
 
-- Browse the **list**, with Owner and Stage columns, a stage filter, an
-  **Assigned to me** toggle, and one optional column per custom field.
+- Browse the **list**, with Owner and Stage columns and one optional column
+  per custom field, and narrow it by stage, owner (**Me** included) and the
+  rest through the table's **Filters** — see
+  [Filters on the Contacts list](./views.md#filters-on-the-contacts-list).
 - Add a contact **by hand** with **New contact** — see
   [The contact record](./contact-record.md).
 - Open a contact's **own page** to edit their profile, see where they came

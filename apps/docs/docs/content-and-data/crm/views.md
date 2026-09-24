@@ -65,7 +65,10 @@ The panel edits one filter at a time. Filters on different columns add up:
 filter one column, then another, and the list keeps both. Every filter in
 force shows as a **chip** beside the views control, where its ✕ removes it,
 and all of them are part of the saved view. A view saved before the panel
-existed keeps its filters as they were.
+existed keeps its filters as they were. The toolbar works the way it does on
+every console list — see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search) — and the sections
+below say what each CRM list's filters reach. On the companies and deals lists
+one served filter applies at a time, so a new one replaces the last.
 
 ## Filters on the Contacts list
 
@@ -77,11 +80,15 @@ and updated dates, email verdict, next activity, and one field per
 One chip reaches every contact and the rest narrow what it found. The
 database answers one filter per query, so the first filter it can serve —
 a name, an email, a tag, a form, a date, an order count — is run against the
-whole collection, and every other filter narrows the newest thousand contacts
-that query returned. The served chip is filled; the others are outlined; and
+whole collection, and every other filter narrows the first thousand contacts
+that query returned — the newest, unless the served filter sorts them its own
+way. The search box, over name, email, phone, company and tags, narrows those
+same thousand. The served chip is filled; the others are outlined; and
 the caption under the chips says which is which. Owner, stage, source, company
 and custom-field filters always narrow rather than reach, because those
-facts are kept per site and no query can reach them directly. Sorting
+facts are kept per site and no query can reach them directly. On a site's
+Contacts list a name or tag **contains** filter narrows too, because the
+query already spends its one list match on the site. Sorting
 reorders the loaded window.
 
 ## Filters on the other lists
@@ -97,8 +104,9 @@ reorders the loaded window.
   deals of that status and pipeline — for nearly every organization, all of
   them.
 - **Tasks** — **Show** is the task view (My tasks, Overdue, Today, Upcoming,
-  All open, Done) and reaches every task; Kind, Priority and Assignee, and
-  the search over title and notes, narrow the rows that view loaded.
+  All open, Done) and is answered by the query, up to 200 tasks a view; Kind,
+  Priority and Assignee, and the search over title and notes, narrow the rows
+  that view loaded.
 
 On the contacts, companies and deals lists, **Next activity** › **is empty**
 keeps only the records with no open task scheduled against them (see

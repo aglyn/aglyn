@@ -88,7 +88,8 @@ reverse it. Entries with nothing in the sorted column, such as a draft with no p
 date, follow the rest in either direction rather than dropping out. **Filters** in the
 table's toolbar narrows the list to one **Status** or one **Category** across the whole
 collection, not only the page you're on, and the filter in force shows as a chip above the
-table.
+table. One filter applies at a time, so a new one replaces the last, and the entries
+table has no search box. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 Each entry carries, besides the title, excerpt, cover image, and markdown body:
 
@@ -144,7 +145,8 @@ them, and pick one per entry.
 
 The Authors table's toolbar filters it: **Filters** narrows it by name or **Type**
 (Person or Organization), and **Search** matches any word of an author's name, job
-title, or page address.
+title, or page address. Both look at every author on the site, not only the page on
+screen.
 
 Each author is either a **Person** or an **Organization**, and the choice is a real
 one — they are different `schema.org` types with different fields, so the editor shows

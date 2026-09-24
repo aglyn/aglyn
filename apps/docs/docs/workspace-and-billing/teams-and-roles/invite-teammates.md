@@ -140,9 +140,11 @@ takes you to that screen. Entries recorded before this shipped show a plain desc
 instead of a link.
 
 A site's own activity log, on its **Setup** page, filters through its table's toolbar:
-**Filters** narrows it to one **Action** (or several, with **is any of**) or to entries
-before or after a date, across the whole log rather than the page on screen. It has no
-search box, because nothing can search the whole log by word.
+**Filters** narrows it to one **Action** (or several, with **is any of**) — typed as
+the action is recorded, since the panel offers no list of them — or to entries before or
+after a date, and the two add up, across the whole log rather than the page on screen.
+It has no search box, because nothing can search the whole log by word. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### AI actions in the log {#ai-actions}
 

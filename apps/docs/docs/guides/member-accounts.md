@@ -149,12 +149,13 @@ source entirely.
 
 The site's **Users** page has two cards: **Site users** (your members — this
 guide) and **Users** (console collaborators). The Site users card is
-searchable and paged, newest first, with **Email**, **Name**, **Joined**, and
-**Status** columns. **Filters** in the table's toolbar narrows it by email, name,
+paged, newest first, with **Email**, **Name**, **Joined**, and
+**Status** columns, and no search box — filter by email instead. **Filters** in the table's toolbar narrows it by email, name,
 or join date, one filter at a time, across every member rather than the page on
 screen. **Status** (Active or Suspended) is a filter too, and it combines with
 any one of the others — suspended members whose email starts with a given
-address, say. Each filter in force shows as a chip above the table. For members who may open the
+address, say. Each filter in force shows as a chip above the table; see
+[Filter and search a list](../getting-started/console-tour.md#filter-and-search). For members who may open the
 [CRM](../content-and-data/crm/overview.md), each row's **⋮** menu holds
 **Open in CRM** — the member's contact, found by the address they signed up
 with.

@@ -285,13 +285,15 @@ The submissions table filters through its toolbar. **Filters** narrows it by
 **Form**, **Read** (read or unread), sender and message, and on your organization's
 Inbox by **Site**; **Search** matches a sender, a form name or anything in the
 message. **Form** reaches every submission sent to that form. The other filters and
-the search look through the first 100 submissions the table read and say when there
-are more; paging forward reads the next page.
+the search look through the first 100 submissions the table read — under the chosen
+**Form**, when there is one — and say when there are more; paging forward reads the
+next page. The **Form** chip is filled in to show it reached every submission.
 
 The **Members & leads** table filters the same way, by address, **Type** (member, or
 lead by where it came from) and, on your organization's Inbox, **Site**. **Search**
 matches an address, a name or a lead's source. It looks at every contact the table
-read, and the note under the table says when a site holds more than that.
+read — the newest 200 members and 200 leads — and the note under the table says when a
+site holds more than that. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 #### Who a submission is "from" {#who-a-submission-is-from}
 
@@ -459,7 +461,7 @@ The **Forms** table filters through its toolbar by display name, slug and **Stat
 the list until you ask for them: choose **Status** in the **Filters** panel and pick
 **Retired** to find one and restore it. The list is paged, so the first filter reads
 the first 100 forms and matches over them; the table says when there are more, and
-paging forward reads the next page.
+paging forward reads the next page. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Duplicate a form
 
