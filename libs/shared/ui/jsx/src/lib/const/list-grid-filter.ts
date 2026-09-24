@@ -26,6 +26,7 @@ import {
   type ListFilterField,
   type ListFilterRequest,
   listFilterColumn,
+  listFilterOperatorLabel,
   listFilterOperators,
   matchListFilter,
 } from './list-filter'
@@ -300,3 +301,49 @@ export function upsertListFilterClause<Clause extends ListFilterClause>(
   if (at === -1) return [...rest, next]
   return [...rest.slice(0, at), next, ...rest.slice(at)]
 }
+
+/** Operators that carry no value. */
+const VALUELESS_OPERATORS = new Set(['isEmpty', 'isNotEmpty'])
+/** Operators that take several values, comma-joined the way the grammar splits them. */
+const MULTI_OPERATORS = new Set(['isAnyOf'])
+
+const dayLabel = (raw: string): string => {
+  const at = new Date(raw)
+  return Number.isNaN(at.getTime()) ? raw : at.toLocaleDateString()
+}
+
+/**
+ * How a clause reads as a sentence — "Owner is Dana", "Created on or after
+ * 1 Jan", "Reason is any of Bounced, Complained": its header, its operator,
+ * and its value by the label of the option it names.
+ *
+ * ONE wording, used by the chips over a list and by the notices that say a
+ * clause was not applied (`listQueryRefusals`), so the two cannot describe
+ * the same clause differently.
+ */
+export function listFilterClauseSentence(
+  clause: ListFilterClause,
+  context: {
+    fields: readonly ListFilterField[]
+    headers?: Readonly<Record<string, string>>
+    options?: Readonly<Record<string, readonly ListFilterOption[]>>
+  },
+): string {
+  const field = context.fields.find((entry) => entry.column === clause.field)
+  const header = context.headers?.[clause.field] ?? clause.field
+  const choices = context.options?.[clause.field]
+  const named = (value: string) =>
+    choices?.find((option) => option.value === value)?.label ?? value
+  const value = VALUELESS_OPERATORS.has(clause.op)
+    ? ''
+    : MULTI_OPERATORS.has(clause.op)
+      ? clause.value
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean)
+          .map(named)
+          .join(', ')
+      : clause.label ?? (field?.kind === 'date' ? dayLabel(clause.value) : named(clause.value))
+  return `${header} ${listFilterOperatorLabel(clause.op)}${value ? ` ${value}` : ''}`
+}
+
