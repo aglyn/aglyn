@@ -16,6 +16,7 @@
  */
 'use client'
 
+import { pluginDocsHelp } from '@aglyn/aglyn'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { MenuItem, Stack, TextField, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
@@ -96,7 +97,12 @@ export function OrgConversionsSection(props: OrgConversionsSectionProps) {
 
   if (!hostId) {
     return (
-      <CardDisplay header="Conversions" contentGutterX contentGutterY>
+      <CardDisplay
+        header="Conversions"
+        help={pluginDocsHelp('emailCampaigns', { anchor: '#the-campaign-report' })}
+        contentGutterX
+        contentGutterY
+      >
         <Typography variant="body2" color="text.secondary">
           {'Conversions are recorded by the site a visitor converts on, and ' +
             'this organization has no sites yet.'}
