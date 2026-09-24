@@ -30,6 +30,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import { mintPasswordResetToken } from './membership'
+import { readMemberPasswordHash } from './member-credentials'
 import { readClientIp } from '@aglyn/aglyn/app-utils/request-ip'
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -182,10 +183,12 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
       console.error('membership/recover: email is not configured')
       return res.status(200).json({ ok: true })
     }
+    // Bound to the hash sign-in checks: the credential document's, else the
+    // legacy copy on the profile (AGL-3308).
     const token = mintPasswordResetToken(
       hostId,
       memberDoc.id,
-      memberDoc.get('passwordScrypt'),
+      await readMemberPasswordHash(hostRef, memberDoc),
     )
     // `hostPublicOrigin`, not a hand-rolled apex (AGL-2195). This URL is
     // minted server-side and mailed out, so a wrong apex is not a display

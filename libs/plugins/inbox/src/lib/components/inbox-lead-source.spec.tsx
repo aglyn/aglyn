@@ -49,6 +49,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The lead silo is the org's (AGL-3275), so these cards resolve it.
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
+  // The signed-in account a member removal is authorized as (AGL-3308).
+  useUser: () => ({ data: null }),
   // Routed by the collection the factory addresses, exactly as Firestore
   // would. One shared blob would hand the leads table the form submissions
   // and pass on data the real reads can never produce.

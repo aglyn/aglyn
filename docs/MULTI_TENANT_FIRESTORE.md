@@ -117,6 +117,7 @@ orgs/{orgId}
     name, domains, settings, ...
     screens/{...}, layouts/{...}             # NOT shared across hosts
     siteMembers/{...}                        # published-site end users
+    siteMemberCredentials/{memberId}         # their password hashes; no client access (AGL-3308)
     contacts/{...}, redirects/{...}, ...
 
   media/{mediaId}                            # SHARED across the org's hosts

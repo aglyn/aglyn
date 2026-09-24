@@ -43,10 +43,12 @@ import {
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   useFirestore,
   useFirestoreCollection,
   useOrgDataScope,
+  useUser,
 } from '@aglyn/tenant-feature-instance'
 import {
   Alert,
@@ -60,15 +62,7 @@ import {
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  orderBy,
-  query,
-  where,
-} from 'firebase/firestore'
+import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useRecordRouteContext } from './use-record-route-context'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
@@ -106,6 +100,7 @@ export function ContactsCard({
   orgMount?: ConsolePluginOrgMount
 }) {
   const firestore = useFirestore()
+  const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
   // Where a lead is WORKED (AGL-2608). This card lists leads; the CRM's
@@ -232,6 +227,13 @@ export function ContactsCard({
     ],
     [siteMembers, dedupedLeads],
   )
+  /*
+   * REMOVED BY THE ROUTE THAT OWNS MEMBER ACCOUNTS (AGL-3308), not by a
+   * client delete. A member's password hash lives in a document no client can
+   * reach, so deleting the profile from here would leave it behind: the route
+   * deletes both, and the rules refuse a client delete of any member that
+   * has one.
+   */
   const handleDeleteMember = useCallback(
     (member: any) => async () => {
       // Members are listed only under a site, so there is one to delete from.
@@ -245,10 +247,28 @@ export function ContactsCard({
         .then(() => true)
         .catch(() => false)
       if (!confirmed) return
-      await deleteDoc(doc(firestore, 'hosts', hostId, 'siteMembers', member.$id))
-      enqueueSnackbar('Member removed', { variant: 'success', persist: false })
+      try {
+        const response = await authorizedFetch(user, '/api/membership/admin-remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hostId, memberId: member.$id }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          return void enqueueSnackbar(payload?.error ?? 'The member was not removed', {
+            variant: 'warning',
+            allowDuplicate: true,
+          })
+        }
+        enqueueSnackbar('Member removed', { variant: 'success', persist: false })
+      } catch {
+        enqueueSnackbar('The member was not removed', {
+          variant: 'warning',
+          allowDuplicate: true,
+        })
+      }
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [confirm, user, hostId, enqueueSnackbar],
   )
 
   /*

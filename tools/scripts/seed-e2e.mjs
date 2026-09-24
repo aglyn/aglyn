@@ -646,18 +646,21 @@ for (const [id, fileName, tags, seed] of mediaFixtures) {
 // stay at the root so the default view — and the specs waiting on hero.jpg —
 // are unchanged.
 // Site member — a visitor account on the published site, which is a wholly
-// separate identity from the console users above: a Firestore doc with a
-// scrypt-hashed password, not a Firebase Auth user (AGL-109). Seeded here so
-// the console's Site users card and its member drawer have something to open
-// without running the full guides walk (AGL-921).
+// separate identity from the console users above: a Firestore doc, not a
+// Firebase Auth user (AGL-109), with its scrypt-hashed password on the
+// credential document beside it that no client reads (AGL-3308). Seeded here
+// so the console's Site users card and its member drawer have something to
+// open without running the full guides walk (AGL-921).
 await put(hostRef.collection('siteMembers').doc('seed-site-member'), {
   email: 'visitor@aglyn.test',
   displayName: 'Rae Visitor',
+  createdAt: now,
+})
+await put(hostRef.collection('siteMemberCredentials').doc('seed-site-member'), {
   passwordScrypt: (() => {
     const salt = randomBytes(16).toString('hex')
     return `${salt}:${scryptSync('Visitor-Password-1', salt, 64).toString('hex')}`
   })(),
-  createdAt: now,
 })
 await put(hostRef.collection('mediaFolders').doc('seed-folder-blog'), {
   name: 'Blog covers',

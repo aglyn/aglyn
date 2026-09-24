@@ -39,6 +39,8 @@
 
 const mockState: {
   members: Array<Record<string, unknown>>
+  /** Credential documents written beside them (AGL-3308), keyed by member id. */
+  credentials: Array<{ id: string; data: Record<string, unknown> }>
   leads: Array<Record<string, unknown>>
   trips: Array<Record<string, unknown>>
   existingMembers: number
@@ -47,6 +49,7 @@ const mockState: {
   countsOutsideTransaction: number
 } = {
   members: [],
+  credentials: [],
   leads: [],
   trips: [],
   existingMembers: 0,
@@ -84,7 +87,14 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         create: (_ref: unknown, data: Record<string, unknown>) => {
           mockState.members.push(data)
         },
+        set: (ref: { id: string; credential?: boolean }, data: Record<string, unknown>) => {
+          if (!ref.credential) throw new Error('unexpected set')
+          mockState.credentials.push({ id: ref.id, data })
+        },
       }),
+  }
+  const credentialsCollection: any = {
+    doc: (id: string) => ({ id, credential: true }),
   }
   const hostRef: any = {
     firestore,
@@ -94,7 +104,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       // stranger a door that still opens (AGL-1666).
       data: () => ({ business: { supportEmail: 'hello@example.com' } }),
     }),
-    collection: () => membersCollection,
+    collection: (name: string) =>
+      name === 'siteMemberCredentials' ? credentialsCollection : membersCollection,
   }
   return {
     firebaseAdmin: {
@@ -189,6 +200,7 @@ const register = async (body: Record<string, unknown> = {}) => {
 
 beforeEach(() => {
   mockState.members = []
+  mockState.credentials = []
   mockState.leads = []
   mockState.trips = []
   mockState.existingMembers = 0
@@ -204,6 +216,7 @@ describe('the sign-up ceiling (AGL-1529)', () => {
     const res = await register()
     expect(res.statusCode).toBe(429)
     expect(mockState.members).toHaveLength(0)
+    expect(mockState.credentials).toHaveLength(0)
     // …and the lead the sign-up would have left behind never happens either:
     // there was no sign-up.
     expect(mockState.leads).toHaveLength(0)
@@ -214,6 +227,12 @@ describe('the sign-up ceiling (AGL-1529)', () => {
     const res = await register({ displayName: 'Dana Reed' })
     expect(res.statusCode).toBe(200)
     expect(mockState.members).toHaveLength(1)
+    // The hash goes to the member's credential document in the same
+    // transaction (AGL-3308), and never onto the profile the console lists.
+    expect(mockState.credentials).toEqual([
+      { id: 'member-1', data: { passwordScrypt: 'scrypt$test' } },
+    ])
+    expect(mockState.members[0]).not.toHaveProperty('passwordScrypt')
     // A sign-up files no lead of its own (AGL-3232); the record system
     // holds the person as a contact.
     expect(mockState.leads).toHaveLength(0)
@@ -310,5 +329,6 @@ describe('the sign-up ceiling (AGL-1529)', () => {
     expect(res.statusCode).toBe(409)
     expect(res.body.code).toBeUndefined()
     expect(mockState.trips).toHaveLength(0)
+    expect(mockState.credentials).toHaveLength(0)
   })
 })

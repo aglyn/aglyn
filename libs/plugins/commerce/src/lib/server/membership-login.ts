@@ -25,6 +25,7 @@ import {
   setMemberCookie,
   verifyMemberPassword,
 } from './membership'
+import { readMemberPasswordHash } from './member-credentials'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
   readClientIp,
@@ -66,18 +67,19 @@ export const membershipLoginHandler: PluginApiHandler = async (req, res) => {
   }
   try {
     const firestore = firebaseAdmin.app().firestore()
-    const membersQuery = await firestore
-      .collection('hosts')
-      .doc(hostId)
+    const hostRef = firestore.collection('hosts').doc(hostId)
+    const membersQuery = await hostRef
       .collection('siteMembers')
       .where('email', '==', email)
       .limit(1)
       .get()
     const memberDoc = membersQuery.docs[0]
-    if (
-      !memberDoc ||
-      !verifyMemberPassword(password, memberDoc.get('passwordScrypt'))
-    ) {
+    // The credential document's hash, else the legacy copy on the profile
+    // (AGL-3308) — see member-credentials.ts.
+    const passwordScrypt = memberDoc
+      ? await readMemberPasswordHash(hostRef, memberDoc)
+      : undefined
+    if (!memberDoc || !verifyMemberPassword(password, passwordScrypt)) {
       return res.status(401).json({ error: 'Wrong email or password' })
     }
     // Suspension gate (AGL-546): console-suspended members cannot sign in.
