@@ -74,7 +74,10 @@ import {
   readContactFacet,
 } from './contacts'
 import { CONTACT_COMPANY_IDS_FIELD, CONTACT_LIFECYCLE_STAGE_LABELS } from './crm'
-import { MARKETING_CONSENT_BY_HOST_FIELD } from './marketing-consent'
+import {
+  MARKETING_CONSENT_BY_HOST_FIELD,
+  MARKETING_CONSENT_FIELD,
+} from './marketing-consent'
 import { nameSearchFields } from './name-search'
 
 /** The tags cap every writer applies, so a union cannot exceed it. */
@@ -270,6 +273,29 @@ function mapOf(value: unknown): Doc {
 }
 
 /**
+ * A refusal one record holds for a site, written over the other record's grant
+ * for the same site (AGL-3320).
+ *
+ * The refusal outranks the grant, as it does when one person's refusal and
+ * grant sit on two sites of one group: two records of one person who said no
+ * to a site are a person who said no to it, and a merge that kept the grant
+ * would start mailing them. The grant is kept beside it as `supersededEntry`,
+ * so what the survivor held is still on the record.
+ *
+ * The merge is written with a merging `set`, which keeps every field of the
+ * survivor's entry it does not name — so the grant's own fields are named
+ * here, empty, or the refusal would read as carrying the grant's disclosure
+ * and whoever recorded it.
+ */
+function refusalOver(refusal: Doc, grant: Doc): Doc {
+  const entry: Doc = { ...refusal, supersededEntry: grant }
+  for (const key of Object.keys(grant)) {
+    if (!(key in entry)) entry[key] = null
+  }
+  return entry
+}
+
+/**
  * The plan for folding `merged` into `survivor`.
  *
  * Both are the stored documents as read. The survivor's `email` is the
@@ -325,11 +351,18 @@ export function planContactMerge(survivor: Doc, merged: Doc): ContactMergePlan {
   if (!isEmpty(survivor['custom']) || !isEmpty(merged['custom'])) {
     out['custom'] = mergeCustom(survivor['custom'], merged['custom'])
   }
-  // Consent: a grant fills where the survivor has none for that site; a
-  // refusal on either record stands.
-  const consentByHost = {
-    ...mapOf(merged[MARKETING_CONSENT_BY_HOST_FIELD]),
-    ...mapOf(survivor[MARKETING_CONSENT_BY_HOST_FIELD]),
+  // Consent: a grant fills where the survivor has none for that site, and a
+  // refusal on either record stands — per site as well as unscoped (AGL-3320).
+  const survivorConsent = mapOf(survivor[MARKETING_CONSENT_BY_HOST_FIELD])
+  const mergedConsent = mapOf(merged[MARKETING_CONSENT_BY_HOST_FIELD])
+  const consentByHost: Doc = { ...mergedConsent, ...survivorConsent }
+  for (const [hostId, value] of Object.entries(mergedConsent)) {
+    const refusal = mapOf(value)
+    if (refusal[MARKETING_CONSENT_FIELD] !== false) continue
+    if (!(hostId in survivorConsent)) continue
+    const standing = mapOf(survivorConsent[hostId])
+    if (standing[MARKETING_CONSENT_FIELD] === false) continue
+    consentByHost[hostId] = refusalOver(refusal, standing)
   }
   if (Object.keys(consentByHost).length) {
     out[MARKETING_CONSENT_BY_HOST_FIELD] = consentByHost
