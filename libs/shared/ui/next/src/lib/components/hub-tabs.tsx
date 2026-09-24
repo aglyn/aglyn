@@ -43,9 +43,10 @@ import { useTabParam } from '../hooks/use-tab-param'
  * tab `sx` is how they drift into looking like two different products, which
  * is exactly what happened the first time this rail was rebuilt by hand.
  */
-function useRailLayout() {
+function useRailLayout(forceStacked = false) {
   const theme = useTheme()
-  const stacked = useMediaQuery(theme.breakpoints.down('sm'))
+  const narrow = useMediaQuery(theme.breakpoints.down('sm'))
+  const stacked = forceStacked || narrow
   return {
     stacked,
     /** Props every rail passes to its `Tabs`/`TabList`. */
@@ -215,6 +216,14 @@ export interface HubSectionsProps {
   children: ReactNode
   /** Left nav card header (defaults to "Navigation"). */
   navHeader?: string
+  /**
+   * The page needs the row's whole width — a wide table, a record with a
+   * timeline — so the rail is drawn ABOVE it as the strip a phone gets,
+   * rather than beside it in a column that is empty below its few tabs
+   * (AGL-3332). The same rail either way: same sections, same links, same
+   * selected tab.
+   */
+  wide?: boolean
 }
 
 /**
@@ -311,8 +320,8 @@ function LockedSectionLabel(props: { label: string }) {
 }
 
 export function HubSections(props: HubSectionsProps) {
-  const { sections, children, navHeader = 'Navigation' } = props
-  const { tabsProps } = useRailLayout()
+  const { sections, children, navHeader = 'Navigation', wide = false } = props
+  const { tabsProps } = useRailLayout(wide)
   const shown = useMemo(
     () => sections.filter((section) => section.visible !== false),
     [sections],
@@ -326,7 +335,7 @@ export function HubSections(props: HubSectionsProps) {
       spacing={3}
       items={[
         {
-          size: { xs: 12, sm: 3 },
+          size: wide ? { xs: 12 } : { xs: 12, sm: 3 },
           children: (
             <CardDisplay header={navHeader}>
               {/*
@@ -359,7 +368,7 @@ export function HubSections(props: HubSectionsProps) {
             </CardDisplay>
           ),
         },
-        { size: { xs: 12, sm: 9 }, children },
+        { size: wide ? { xs: 12 } : { xs: 12, sm: 9 }, children },
       ]}
     />
   )

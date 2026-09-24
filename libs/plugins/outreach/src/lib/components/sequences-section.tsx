@@ -58,6 +58,7 @@ import {
   OutreachSequenceStatusChip,
   useOutreachNavigate,
 } from './outreach-ui'
+import { OutreachEnrollmentDetail } from './enrollment-detail'
 import {
   OutreachSequenceDetail,
   type OutreachSequenceTab,
@@ -79,7 +80,10 @@ export interface OutreachSequencesSectionProps {
   org?: Record<string, unknown> | null
   /** The section's own path: `/[orgSlug]/outreach/sequences`. */
   sectionPath: string
-  /** The path below the section: `[]`, `['new']`, `[id]` or `[id, 'enrollments']`. */
+  /**
+   * The path below the section: `[]`, `['new']`, `[id]`, `[id, 'enrollments']`
+   * or `[id, 'enrollments', enrollmentId]` — one person's page (AGL-3332).
+   */
   subpath: readonly string[]
   /** The Mailboxes section: `/[orgSlug]/outreach/mailboxes`. */
   mailboxesPath: string
@@ -103,7 +107,7 @@ export function OutreachSequencesSection(props: OutreachSequencesSectionProps) {
   const navigate = useOutreachNavigate()
 
   if (!orgId) return <OutreachLoading label="Loading sequences…" />
-  const [first, second] = subpath
+  const [first, second, third] = subpath
   if (first === OUTREACH_NEW_SEQUENCE_SEGMENT) {
     return (
       <Stack spacing={2}>
@@ -122,6 +126,18 @@ export function OutreachSequencesSection(props: OutreachSequencesSectionProps) {
           onCancel={() => navigate(sectionPath)}
         />
       </Stack>
+    )
+  }
+  if (first && second === 'enrollments' && third) {
+    return (
+      <OutreachEnrollmentDetail
+        orgId={orgId}
+        orgMount={props.orgMount}
+        sectionPath={sectionPath}
+        sequenceId={first}
+        enrollmentId={third}
+        mailboxes={mailboxes}
+      />
     )
   }
   if (first) {

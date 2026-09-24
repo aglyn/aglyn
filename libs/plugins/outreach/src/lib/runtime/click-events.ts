@@ -26,7 +26,11 @@ import {
   type OutreachClickJudgement,
 } from '../engine/click-tracking'
 import { readOutreachEngagement } from '../model/enrollment-engagement'
+import { outreachClickHistoryRow, outreachHistoryEntryId } from '../model/enrollment-history'
 import {
+  OUTREACH_ENGAGEMENT_LINKS_MAX,
+  OUTREACH_ENROLLMENT_HISTORY,
+  OUTREACH_ENROLLMENT_HISTORY_MAX,
   OUTREACH_LINK_ROLLUP_PATH,
   type OutreachEnrollment,
   type OutreachEnrollmentEngagement,
@@ -48,15 +52,20 @@ import type { OutreachRuntimeDeps } from './runtime-deps'
  * redirect needs nothing from Firestore to answer it, and a failure here
  * costs a number rather than a visit.
  *
- * Three places are written, because three different questions are asked of
- * them and no one document answers all three:
+ * Four places are written, because four different questions are asked of
+ * them and no one document answers all of them:
  *
  * 1. **The enrollment** — "did THIS person act?", which the enrollments
- *    table shows per row and a rep reads before calling someone.
- * 2. **The sequence** — "is this sequence working?", which is the report
+ *    table shows per row and a rep reads before calling someone: totals,
+ *    and the distinct destinations they followed.
+ * 2. **The enrollment's history** (AGL-3332) — "what exactly did they do,
+ *    and when?", one row per visit: the destination, the step whose email
+ *    carried it, and whether a person or a scanner made it. Read only when
+ *    someone opens the person, so the table's listener never carries it.
+ * 3. **The sequence** — "is this sequence working?", which is the report
  *    card, and which cannot be derived from the enrollments because the
  *    console lists them a page at a time.
- * 3. **The link rollup** — "which of our links did they follow?", one
+ * 4. **The link rollup** — "which of our links did they follow?", one
  *    document holding a bounded map, keyed and capped by the campaign
  *    rollup's own rules so a link means the same thing in both reports.
  */
@@ -130,15 +139,28 @@ export async function recordOutreachClick(
     })
     const held = readOutreachEngagement(enrollment.engagement)
     const first = judgement.human && held.firstClickAtMs === null
+    const key = campaignLinkKey(url)
+    // A row for this visit, while the person's history has room for one.
+    const logged = held.loggedClicks + held.loggedMachineClicks < OUTREACH_ENROLLMENT_HISTORY_MAX
     const engagement: OutreachEnrollmentEngagement = judgement.human
       ? {
           clicks: held.clicks + 1,
           firstClickAtMs: held.firstClickAtMs ?? nowMs,
           lastClickAtMs: nowMs,
-          lastClickUrl: campaignLinkKey(url) ?? held.lastClickUrl,
+          lastClickUrl: key ?? held.lastClickUrl,
           machineClicks: held.machineClicks,
+          links:
+            key && !held.links.includes(key) && held.links.length < OUTREACH_ENGAGEMENT_LINKS_MAX
+              ? [...held.links, key]
+              : held.links,
+          loggedClicks: held.loggedClicks + (logged ? 1 : 0),
+          loggedMachineClicks: held.loggedMachineClicks,
         }
-      : { ...held, machineClicks: held.machineClicks + 1 }
+      : {
+          ...held,
+          machineClicks: held.machineClicks + 1,
+          loggedMachineClicks: held.loggedMachineClicks + (logged ? 1 : 0),
+        }
     /*
      * `updatedAtMs` is deliberately NOT touched. It is what the enrollments
      * table sorts "last activity" by and what a member reads as "something
@@ -146,6 +168,24 @@ export async function recordOutreachClick(
      * that. The engagement carries its own timestamps for what a click is.
      */
     transaction.update(ref, { engagement })
+    /*
+     * The row is written in the same transaction as the count it itemizes,
+     * so `loggedClicks` is exactly the number of rows: the detail view says
+     * how many clicks have none — before the history began — from the two
+     * numbers alone, and never invents a row for one of them.
+     */
+    if (logged) {
+      transaction.set(
+        ref.collection(OUTREACH_ENROLLMENT_HISTORY).doc(outreachHistoryEntryId(nowMs)),
+        outreachClickHistoryRow({
+          atMs: nowMs,
+          url: key,
+          stepIndex,
+          human: judgement.human,
+          machineReason: judgement.machineReason,
+        }),
+      )
+    }
     return { ...judgement, first, enrollment: { ...enrollment, engagement } } as OutreachClickOutcome
   })
 

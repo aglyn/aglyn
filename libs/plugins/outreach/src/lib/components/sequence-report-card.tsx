@@ -19,16 +19,20 @@
 import type { CampaignRate } from '@aglyn/shared-ui-email-campaigns/model'
 import {
   Alert,
+  ButtonBase,
   Card,
   CardContent,
   Divider,
+  Link,
   Stack,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import type { ReactNode } from 'react'
 // Not a raw MUI `Table`: a destination is a long string, and a raw table is
 // cut off by the card around it with nothing able to scroll to what is past
 // the edge (AGL-3045).
@@ -61,13 +65,28 @@ export interface OutreachSequenceReportCardProps {
   links: OutreachSequenceLinksLoad
   /** The mailbox's zone, which times are read in; `null` for the reader's own. */
   timeZone: string | null
+  /** Lists the people who clicked, on the Enrollments tab (AGL-3332). */
+  onShowClickers?: () => void
+  /** Lists the people who followed one destination, on the Enrollments tab (AGL-3332). */
+  onShowLink?: (url: string) => void
 }
 
-/** One figure, with what it counts under it. */
-function Figure(props: { label: string; value: string; hint?: string }) {
-  return (
-    <Stack spacing={0} sx={{ minWidth: 110 }}>
-      <Typography variant="h5" component="p">
+/**
+ * One figure, with what it counts under it — and where it leads, when it
+ * leads somewhere. The sequence's Results and one person's page (AGL-3332)
+ * draw their numbers alike.
+ */
+export function OutreachFigure(props: {
+  label: string
+  value: string
+  hint?: string
+  /** Opens the list behind the figure; named for a screen reader by `action`. */
+  onClick?: () => void
+  action?: string
+}) {
+  const body: ReactNode = (
+    <>
+      <Typography variant="h5" component="p" color={props.onClick ? 'primary' : undefined}>
         {props.value}
       </Typography>
       <Typography variant="body2">{props.label}</Typography>
@@ -76,7 +95,35 @@ function Figure(props: { label: string; value: string; hint?: string }) {
           {props.hint}
         </Typography>
       ) : null}
-    </Stack>
+    </>
+  )
+  if (!props.onClick) {
+    return (
+      <Stack spacing={0} sx={{ minWidth: 110 }}>
+        {body}
+      </Stack>
+    )
+  }
+  return (
+    <Tooltip title={props.action}>
+      <ButtonBase
+        onClick={props.onClick}
+        aria-label={`${props.value} ${props.label}. ${props.action}`}
+        sx={{
+          minWidth: 110,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          textAlign: 'left',
+          borderRadius: 1,
+          px: 1,
+          mx: -1,
+          '&:hover, &.Mui-focusVisible': { bgcolor: 'action.hover' },
+        }}
+      >
+        {body}
+      </ButtonBase>
+    </Tooltip>
   )
 }
 
@@ -115,13 +162,13 @@ export function OutreachSequenceReportCard(props: OutreachSequenceReportCardProp
             Results
           </Typography>
           <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap', rowGap: 2 }}>
-            <Figure label="Emails sent" value={count(report.sent)} />
-            <Figure
+            <OutreachFigure label="Emails sent" value={count(report.sent)} />
+            <OutreachFigure
               label="People emailed"
               value={report.people === null ? '—' : count(report.people)}
               {...(report.people === null ? { hint: 'Not counted for this sequence' } : {})}
             />
-            <Figure
+            <OutreachFigure
               label="Clicked"
               value={count(report.uniqueClicks)}
               hint={
@@ -129,10 +176,13 @@ export function OutreachSequenceReportCard(props: OutreachSequenceReportCardProp
                   ? undefined
                   : `${count(report.clicks)} clicks in all`
               }
+              {...(props.onShowClickers && report.uniqueClicks > 0
+                ? { onClick: props.onShowClickers, action: 'Show who clicked' }
+                : {})}
             />
-            <Figure label="Click rate" value={clickRate.value} hint={clickRate.hint} />
+            <OutreachFigure label="Click rate" value={clickRate.value} hint={clickRate.hint} />
             {report.machineClicks > 0 ? (
-              <Figure
+              <OutreachFigure
                 label="Scanner clicks"
                 value={count(report.machineClicks)}
                 hint="Not in the rate"
@@ -168,14 +218,31 @@ export function OutreachSequenceReportCard(props: OutreachSequenceReportCardProp
                 </TableHead>
                 <TableBody>
                   {links.rows.map((row) => (
-                    <TableRow key={row.url}>
-                      <TableCell sx={{ wordBreak: 'break-all' }}>{row.url}</TableCell>
+                    <TableRow key={row.url} hover={Boolean(props.onShowLink)}>
+                      <TableCell sx={{ wordBreak: 'break-all' }}>
+                        {props.onShowLink ? (
+                          <Link
+                            component="button"
+                            type="button"
+                            variant="body2"
+                            underline="hover"
+                            onClick={() => props.onShowLink?.(row.url)}
+                            aria-label={`Show who followed ${row.url}`}
+                            sx={{ textAlign: 'left', wordBreak: 'break-all' }}
+                          >
+                            {row.url}
+                          </Link>
+                        ) : (
+                          row.url
+                        )}
+                      </TableCell>
                       <TableCell align="right">{count(row.clicks)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </ScrollTable>
               <Typography variant="caption" color="text.secondary">
+                {props.onShowLink ? 'Select a destination to see who followed it. ' : ''}
                 Two links to the same page are counted as one destination, whatever
                 tracking parameters follow the address.
                 {links.truncated

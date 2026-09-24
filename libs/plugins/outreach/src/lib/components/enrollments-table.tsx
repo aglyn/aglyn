@@ -25,41 +25,41 @@ import {
   listActionsColumn,
   type ListTableProps,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { hiddenFilterVisibility, type ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   filterListRows,
   inMemoryListField,
   listFilterGridColumns,
+  type ListFilterClause,
+  type ListFilterOption,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
-  Button,
   Card,
   CardContent,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
+  Chip,
+  Link,
   Stack,
-  TextField,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
-  Chip,
 } from '@mui/material'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
-import { OutreachCurateStepDialog, outreachNextEmailStepIndex } from './curate-step-dialog'
-import { readOutreachEngagement } from '../model/enrollment-engagement'
-import type { OutreachEnrollmentAction } from '../model/outreach-api'
+import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
+import {
+  outreachClickCountLabel,
+  outreachClickSummary,
+  type OutreachClickSummary,
+} from '../model/enrollment-engagement'
 import {
   OUTREACH_ENROLLMENT_STATUSES,
   OUTREACH_TASK_KIND_LABELS,
   type OutreachEnrollment,
   type OutreachSequenceStep,
 } from '../model/outreach.types'
+import { useOutreachEnrollmentActions } from './enrollment-actions'
+import { OUTREACH_CLICKED_FILTER_VALUE } from './enrollment-filter-params'
 import {
   formatOutreachTime,
   OUTREACH_ENROLLMENT_STATUS_LABELS,
@@ -86,6 +86,22 @@ export interface OutreachEnrollmentsTableProps {
   api: OutreachApi
   /** Shown in the empty state when the sequence takes people. */
   enrollAction?: ReactNode
+  /**
+   * Opens one person's page (AGL-3332): a row's click, Enter on a focused
+   * row, or the name on a phone's card. The row's menu never opens it.
+   */
+  onOpen?: (enrollment: OutreachEnrollment) => void
+  /** The person's page, for the name on a phone's card, which is a real link. */
+  hrefFor?: (enrollment: OutreachEnrollment) => string
+  /**
+   * The clauses the table is narrowed by, when the page holds them — so the
+   * Results card's "Clicked" and "Links followed" can set one (AGL-3332).
+   * Omitted, the table holds its own.
+   */
+  clauses?: readonly ListFilterClause[]
+  onClausesChange?: (clauses: ListFilterClause[]) => void
+  /** Destinations the sequence's links went to, for the "Link followed" filter's choices. */
+  linkOptions?: readonly ListFilterOption[]
 }
 
 /** The step an enrollment is on, as a person reads it. */
@@ -123,31 +139,6 @@ function lastActivityMs(enrollment: OutreachEnrollment): number {
   )
 }
 
-/** The row's actions: the four the action route takes, and curating the next step (AGL-3324). */
-type RowAction = OutreachEnrollmentAction | 'curate'
-
-/** What a member may do to an enrollment in the status it is in. */
-function actionsFor(
-  enrollment: OutreachEnrollment,
-  steps: readonly OutreachSequenceStep[],
-): RowAction[] {
-  const actions: RowAction[] = []
-  // Rewrite the next email for this one person, while one is still to go.
-  if (outreachNextEmailStepIndex(enrollment, steps) !== null) actions.push('curate')
-  if (enrollment.status === 'active') actions.push('pause', 'stop')
-  if (enrollment.status === 'paused') actions.push('resume', 'stop')
-  if (enrollment.status !== 'opted_out') actions.push('do_not_contact')
-  return actions
-}
-
-const ACTION_LABELS: Record<RowAction, string> = {
-  curate: 'Curate next step',
-  pause: 'Pause',
-  resume: 'Resume',
-  stop: 'Stop',
-  do_not_contact: 'Mark do-not-contact',
-}
-
 /** Whether the step the enrollment is on goes out as this person's own copy (AGL-3324). */
 export function outreachStepIsCurated(
   enrollment: Pick<OutreachEnrollment, 'stepIndex' | 'stepOverrides'>,
@@ -155,49 +146,27 @@ export function outreachStepIsCurated(
   return Boolean(enrollment.stepOverrides?.[String(enrollment.stepIndex)])
 }
 
-/** What the snackbar says once an action lands. */
-const DONE_LABELS: Record<
-  Exclude<OutreachEnrollmentAction, 'do_not_contact'>,
-  string
-> = {
-  pause: 'Paused.',
-  resume: 'Resumed.',
-  stop: 'Stopped.',
-}
-
-/** The two actions that end something for good ask first. */
-const CONFIRM: Partial<
-  Record<
-    OutreachEnrollmentAction,
-    { title: string; body: string; label: string }
-  >
-> = {
-  stop: {
-    title: 'Stop this enrollment?',
-    body: 'They won’t get any more steps from this sequence, and they can’t be enrolled in it again.',
-    label: 'Stop',
-  },
-  do_not_contact: {
-    title: 'Mark do-not-contact?',
-    body:
-      'The address goes on your organization’s do-not-contact list, which every sequence checks before ' +
-      'every send, and they are stopped in every sequence they are in.',
-    label: 'Mark do-not-contact',
-  },
-}
-
 /*
  * What the enrollments grid's Filters panel offers (AGL-3317). Status and
  * whether the person is a lead are picked; the name, the address and the
  * stop reason are typed. `target` and `email` are no column of their own,
  * so they are hidden columns the panel can still reach.
+ *
+ * A sequence that counts clicks adds two more (AGL-3332): whether the person
+ * clicked, and a destination they followed — each of their destinations
+ * matched whole, never by a piece of its address, so "followed /pricing"
+ * does not also list the people who followed "/pricing/enterprise".
  */
-const ENROLLMENT_FILTER_FIELDS = [
+const BASE_FILTER_FIELDS: ListFilterField[] = [
   inMemoryListField('status', 'select'),
   inMemoryListField('target', 'select'),
   inMemoryListField('contactName', 'text'),
   inMemoryListField('email', 'text'),
   inMemoryListField('stopReason', 'text'),
+]
+const CLICK_FILTER_FIELDS: ListFilterField[] = [
+  inMemoryListField('clicked', 'select'),
+  { ...inMemoryListField('link', 'select'), tokensPath: 'link', verbatimTokens: true },
 ]
 const ENROLLMENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
   status: 'Status',
@@ -205,8 +174,10 @@ const ENROLLMENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
   contactName: 'Name',
   email: 'Email',
   stopReason: 'Stop reason',
+  clicked: 'Clicked',
+  link: 'Link followed',
 }
-const ENROLLMENT_FILTER_OPTIONS = {
+const BASE_FILTER_OPTIONS: Record<string, readonly ListFilterOption[]> = {
   status: OUTREACH_ENROLLMENT_STATUSES.map((status) => ({
     value: status,
     label: OUTREACH_ENROLLMENT_STATUS_LABELS[status],
@@ -216,13 +187,72 @@ const ENROLLMENT_FILTER_OPTIONS = {
     { value: 'lead', label: 'Lead' },
   ],
 }
+const CLICKED_OPTIONS: readonly ListFilterOption[] = [
+  { value: OUTREACH_CLICKED_FILTER_VALUE, label: 'Yes' },
+  { value: 'no', label: 'No' },
+]
 /** What the quick search reads on an enrollment row. */
 const ENROLLMENT_SEARCH_FIELDS = ['contactName', 'email', 'step', 'stopReason'] as const
-/** The filter-only columns never show. */
-const ENROLLMENT_HIDDEN_COLUMNS = hiddenFilterVisibility(ENROLLMENT_FILTER_FIELDS, [
-  'status',
-  'stopReason',
-])
+/** Columns a reader can show from the column chooser, off until they do (AGL-3332). */
+const CLICK_DETAIL_COLUMNS = ['linksFollowed', 'lastClick', 'scannerClicks'] as const
+
+/** The table's grammar, with the click fields when the sequence counts clicks. */
+function filterFieldsFor(trackClicks: boolean): ListFilterField[] {
+  return trackClicks ? [...BASE_FILTER_FIELDS, ...CLICK_FILTER_FIELDS] : BASE_FILTER_FIELDS
+}
+
+/** What the panel, the chips and `filterListRows` read off one enrollment. */
+function filterRow(
+  enrollment: OutreachEnrollment,
+  steps: readonly OutreachSequenceStep[],
+  clicks: OutreachClickSummary,
+) {
+  return {
+    enrollment,
+    status: enrollment.status,
+    target: enrollment.target === 'lead' ? 'lead' : 'contact',
+    contactName: enrollment.contactName,
+    email: enrollment.email,
+    step: outreachCurrentStepLabel(enrollment, steps),
+    stopReason: outreachStopLabel(enrollment),
+    clicked: clicks.clicks > 0 ? OUTREACH_CLICKED_FILTER_VALUE : 'no',
+    link: clicks.followed,
+  }
+}
+
+/** The stop reason: its short label, with every word of it on hover and on the person's page. */
+function StopReasonCell(props: { enrollment: OutreachEnrollment }) {
+  const { enrollment } = props
+  if (!enrollment.stopReason) {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        —
+      </Typography>
+    )
+  }
+  const label = OUTREACH_STOP_REASON_LABELS[enrollment.stopReason] ?? ''
+  const text = (
+    <Typography
+      variant="body2"
+      sx={{
+        whiteSpace: 'normal',
+        lineHeight: 1.3,
+        ...(enrollment.stopDetail
+          ? { textDecoration: 'underline dotted', textUnderlineOffset: 3, cursor: 'help' }
+          : {}),
+      }}
+    >
+      {label}
+    </Typography>
+  )
+  return enrollment.stopDetail ? (
+    <Tooltip title={outreachStopLabel(enrollment)} describeChild>
+      {text}
+    </Tooltip>
+  ) : (
+    text
+  )
+}
 
 /** The table's columns; the person and the actions are drawn from the row's enrollment. */
 function columns(
@@ -233,9 +263,14 @@ function columns(
     {
       field: 'person',
       headerName: 'Person',
-      flex: 1,
-      minWidth: 200,
+      flex: 1.2,
+      minWidth: 190,
       sortable: false,
+      // What the export writes for a column that is drawn rather than read.
+      valueGetter: (_value: unknown, row: { enrollment: OutreachEnrollment }) =>
+        row.enrollment.contactName
+          ? `${row.enrollment.contactName} <${row.enrollment.email}>`
+          : row.enrollment.email,
       renderCell: ({ row }) => (
         <Stack
           spacing={0}
@@ -260,7 +295,7 @@ function columns(
     {
       field: 'status',
       headerName: 'Status',
-      width: 120,
+      width: 110,
       renderCell: ({ row }) => (
         <OutreachEnrollmentStatusChip status={row.status} />
       ),
@@ -281,11 +316,11 @@ function columns(
         </Stack>
       ),
     },
-    { field: 'nextSend', headerName: 'Next send', width: 190, sortable: false },
+    { field: 'nextSend', headerName: 'Next send', width: 170, sortable: false },
     {
       field: 'lastActivity',
       headerName: 'Last activity',
-      width: 190,
+      width: 170,
       sortable: false,
     },
     ...(trackClicks
@@ -293,60 +328,77 @@ function columns(
           {
             field: 'clicks',
             headerName: 'Clicks',
+            description: 'A person’s clicks, and how many different links they followed. Scanners are not counted.',
+            width: 110,
+            sortable: false,
+            renderCell: ({ row }: { row: { clicks: string } }) => (
+              <Typography variant="body2" color={row.clicks === '—' ? 'text.secondary' : undefined}>
+                {row.clicks}
+              </Typography>
+            ),
+          },
+          {
+            field: 'linksFollowed',
+            headerName: 'Links followed',
+            flex: 1,
+            minWidth: 220,
+            sortable: false,
+          },
+          { field: 'lastClick', headerName: 'Last click', width: 170, sortable: false },
+          {
+            field: 'scannerClicks',
+            headerName: 'Scanner clicks',
+            description: 'Clicks a security scanner made, which are not counted as the person’s.',
             width: 130,
             sortable: false,
-            renderCell: ({ row }: { row: { enrollment: OutreachEnrollment } }) => {
-              const engagement = readOutreachEngagement(row.enrollment.engagement)
-              if (!engagement.clicks) {
-                return (
-                  <Typography variant="body2" color="text.secondary">
-                    —
-                  </Typography>
-                )
-              }
-              return (
-                <Stack spacing={0} sx={{ justifyContent: 'center', height: '100%' }}>
-                  <Typography variant="body2">
-                    {engagement.clicks === 1 ? '1 click' : `${engagement.clicks} clicks`}
-                  </Typography>
-                  {engagement.lastClickUrl ? (
-                    <Typography variant="caption" color="text.secondary" noWrap>
-                      {engagement.lastClickUrl}
-                    </Typography>
-                  ) : null}
-                </Stack>
-              )
-            },
           },
         ]
       : []),
-    { field: 'stopReason', headerName: 'Stop reason', flex: 1, minWidth: 170 },
+    {
+      field: 'stopReason',
+      headerName: 'Stop reason',
+      flex: 1,
+      minWidth: 170,
+      renderCell: ({ row }) => <StopReasonCell enrollment={row.enrollment} />,
+    },
     listActionsColumn((row) => rowActions(row.enrollment), { width: 72 }),
   ]
 }
+
+/** A plain click on a link, which the page handles itself; any other is the browser's. */
+const plainClick = (event: MouseEvent) =>
+  !event.defaultPrevented &&
+  event.button === 0 &&
+  !event.metaKey &&
+  !event.ctrlKey &&
+  !event.shiftKey &&
+  !event.altKey
 
 /**
  * A sequence's enrollments (AGL-2980): who is in it, where each person
  * stands, when their next step goes out in the mailbox's timezone, and the
  * four things a member can do about it — pause, resume, stop, and mark
  * do-not-contact. A table on wider screens, a list of cards on a phone.
+ *
+ * Each row opens the person's own page (AGL-3332), which holds everything
+ * else known about them: so a cell says one thing, whole, and the detail
+ * behind it is a click away rather than cut off at the column's edge.
  */
 export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
-  const { enrollments, steps, timeZone, api } = props
+  const { enrollments, steps, timeZone, api, onOpen, hrefFor } = props
   const trackClicks = props.trackClicks === true
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('md'))
-  const { enqueueSnackbar } = useSnackbar()
-  const [confirming, setConfirming] = useState<{
-    enrollment: OutreachEnrollment
-    action: OutreachEnrollmentAction
-  } | null>(null)
-  const [detail, setDetail] = useState('')
-  const [busy, setBusy] = useState<string | null>(null)
-  const [curating, setCurating] = useState<OutreachEnrollment | null>(null)
+  const actions = useOutreachEnrollmentActions({ api, steps })
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const gridFilter = useListGridFilter({ selectFields: ['status', 'target'] })
+  const fields = useMemo(() => filterFieldsFor(trackClicks), [trackClicks])
+  const gridFilter = useListGridFilter({
+    selectFields: ['status', 'target', 'clicked', 'link'],
+    ...(props.clauses !== undefined
+      ? { clauses: props.clauses, onChange: props.onClausesChange }
+      : {}),
+  })
   const filtering = gridFilter.clauses.length > 0 || gridFilter.searchWords.length > 0
   /*
    * The rows the grid is handed, every clause and the search answered over
@@ -355,69 +407,71 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
    */
   const searchKey = gridFilter.searchWords.join(' ')
   const loadedData = enrollments.data
+  const summaries = useMemo(
+    () =>
+      new Map(
+        loadedData.map((enrollment) => [enrollment.id, outreachClickSummary(enrollment.engagement)]),
+      ),
+    [loadedData],
+  )
+  const clicksOf = (enrollment: OutreachEnrollment) =>
+    summaries.get(enrollment.id) ?? outreachClickSummary(enrollment.engagement)
   const matching = useMemo(
     () =>
       filterListRows(
-        loadedData.map((enrollment) => ({
-          enrollment,
-          status: enrollment.status,
-          target: enrollment.target === 'lead' ? 'lead' : 'contact',
-          contactName: enrollment.contactName,
-          email: enrollment.email,
-          step: outreachCurrentStepLabel(enrollment, steps),
-          stopReason: outreachStopLabel(enrollment),
-        })),
-        ENROLLMENT_FILTER_FIELDS,
+        loadedData.map((enrollment) => filterRow(enrollment, steps, clicksOf(enrollment))),
+        fields,
         gridFilter.clauses,
         { paths: ENROLLMENT_SEARCH_FIELDS, words: gridFilter.searchWords },
       ).map((row) => row.enrollment),
-    // `searchKey` stands for the words, which are a new array each render.
+    // `searchKey` stands for the words, which are a new array each render;
+    // `summaries` for `clicksOf`, which reads nothing else.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loadedData, steps, gridFilter.clauses, searchKey],
+    [loadedData, summaries, steps, fields, gridFilter.clauses, searchKey],
   )
   // A narrowed list starts again at its first page.
   useEffect(() => setPage(0), [gridFilter.clauses, searchKey])
 
-  const act = async (
-    enrollment: OutreachEnrollment,
-    action: OutreachEnrollmentAction,
-    why?: string,
-  ) => {
-    setBusy(enrollment.id)
-    try {
-      const answer = await api.actOnEnrollment(enrollment.id, action, why)
-      const others = answer.stoppedOthers
-      enqueueSnackbar(
-        action === 'do_not_contact'
-          ? `Marked do-not-contact${others ? `, and stopped in ${others} other ${others === 1 ? 'sequence' : 'sequences'}` : ''}.`
-          : answer.changed
-            ? DONE_LABELS[action]
-            : 'Nothing to change.',
-        { variant: 'success' },
-      )
-    } catch (error) {
-      enqueueSnackbar((error as Error).message, {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    } finally {
-      setBusy(null)
+  /*
+   * The destinations the "Link followed" filter offers: the sequence's own
+   * rollup, and any a loaded person followed that it does not list — the
+   * rollup is capped, and a filter that could not name a destination a
+   * person followed would hide them from it.
+   */
+  const linkOptions = useMemo(() => {
+    const options = new Map<string, string>()
+    for (const option of props.linkOptions ?? []) options.set(option.value, option.label)
+    for (const summary of summaries.values()) {
+      for (const url of summary.followed) if (!options.has(url)) options.set(url, url)
     }
-  }
-
-  const choose = (
-    enrollment: OutreachEnrollment,
-    action: RowAction,
-  ) => {
-    if (action === 'curate') {
-      setCurating(enrollment)
-    } else if (CONFIRM[action]) {
-      setDetail('')
-      setConfirming({ enrollment, action })
-    } else {
-      void act(enrollment, action)
-    }
-  }
+    return [...options].map(([value, label]) => ({ value, label }))
+  }, [props.linkOptions, summaries])
+  const filterOptions = useMemo(
+    () =>
+      trackClicks
+        ? { ...BASE_FILTER_OPTIONS, clicked: CLICKED_OPTIONS, link: linkOptions }
+        : BASE_FILTER_OPTIONS,
+    [trackClicks, linkOptions],
+  )
+  const hiddenColumns = useMemo(
+    () => ({
+      ...hiddenFilterVisibility(fields, ['status', 'stopReason']),
+      ...(trackClicks
+        ? Object.fromEntries(CLICK_DETAIL_COLUMNS.map((column) => [column, false]))
+        : {}),
+    }),
+    [fields, trackClicks],
+  )
+  /*
+   * A person who followed this destination before each click was recorded
+   * on its own, and another link after it, is known by their LAST link only
+   * — so a "Link followed" filter says it may miss them rather than
+   * implying the list is whole.
+   */
+  const linkFilterMayMiss =
+    trackClicks &&
+    gridFilter.clauses.some((clause) => clause.field === 'link') &&
+    [...summaries.values()].some((summary) => summary.linkCount === null)
 
   if (enrollments.status === 'loading')
     return <OutreachLoading label="Loading enrollments…" />
@@ -441,25 +495,35 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
   const rowActions = (enrollment: OutreachEnrollment) => (
     <ListRowActions
       label={enrollment.contactName || enrollment.email}
-      items={actionsFor(enrollment, steps).map((action) => ({
-        key: action,
-        label: ACTION_LABELS[action],
-        onClick: () => choose(enrollment, action),
-        destructive: action === 'stop' || action === 'do_not_contact',
-        disabled: busy === enrollment.id,
-      }))}
+      items={actions.menuItems(enrollment)}
     />
   )
   const nextSend = (enrollment: OutreachEnrollment) =>
     enrollment.status === 'active' || enrollment.status === 'paused'
       ? formatOutreachTime(enrollment.nextDueAtMs, timeZone)
       : '—'
+  const personName = (enrollment: OutreachEnrollment) => {
+    const name = enrollment.contactName || enrollment.email
+    if (!hrefFor) return <Typography variant="body2">{name}</Typography>
+    return (
+      <Link
+        href={hrefFor(enrollment)}
+        variant="body2"
+        underline="hover"
+        onClick={(event) => {
+          if (!onOpen || !plainClick(event)) return
+          event.preventDefault()
+          onOpen(enrollment)
+        }}
+      >
+        {name}
+      </Link>
+    )
+  }
   const person = (enrollment: OutreachEnrollment) => (
     <Stack spacing={0}>
       <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-        <Typography variant="body2">
-          {enrollment.contactName || enrollment.email}
-        </Typography>
+        {personName(enrollment)}
         {enrollment.target === 'lead' ? (
           <Chip size="small" variant="outlined" label="Lead" />
         ) : null}
@@ -485,15 +549,21 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
   return (
     <Stack spacing={1.5}>
       <ListFilterChips
-        fields={ENROLLMENT_FILTER_FIELDS}
+        fields={fields}
         headers={ENROLLMENT_FILTER_HEADERS}
         clauses={gridFilter.clauses}
         onChange={gridFilter.setClauses}
-        options={ENROLLMENT_FILTER_OPTIONS}
+        options={filterOptions}
       />
       {filtering && enrollments.hasMore ? (
         <Typography variant="caption" color="text.secondary">
           {`Filtering the ${enrollments.data.length} enrollments read so far — the next page reads more.`}
+        </Typography>
+      ) : null}
+      {linkFilterMayMiss ? (
+        <Typography variant="caption" color="text.secondary">
+          Clicks made before each one was recorded on its own kept only the person’s last link, so
+          someone who followed this link and then another back then is not listed here.
         </Typography>
       ) : null}
       {narrow ? (
@@ -503,74 +573,85 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
           sx={{ listStyle: 'none', p: 0, m: 0 }}
           aria-label="Enrollments"
         >
-          {pageRows.map((enrollment) => (
-            <Card key={enrollment.id} variant="outlined" component="li">
-              <CardContent>
-                <Stack spacing={1}>
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{ alignItems: 'flex-start' }}
-                  >
-                    <Stack sx={{ flexGrow: 1, minWidth: 0 }}>
-                      {person(enrollment)}
+          {pageRows.map((enrollment) => {
+            const clicks = clicksOf(enrollment)
+            return (
+              <Card key={enrollment.id} variant="outlined" component="li">
+                <CardContent>
+                  <Stack spacing={1}>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{ alignItems: 'flex-start' }}
+                    >
+                      <Stack sx={{ flexGrow: 1, minWidth: 0 }}>
+                        {person(enrollment)}
+                      </Stack>
+                      <OutreachEnrollmentStatusChip status={enrollment.status} />
+                      {rowActions(enrollment)}
                     </Stack>
-                    <OutreachEnrollmentStatusChip status={enrollment.status} />
-                    {rowActions(enrollment)}
-                  </Stack>
-                  <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+                    <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {outreachCurrentStepLabel(enrollment, steps)}
+                      </Typography>
+                      {outreachStepIsCurated(enrollment) ? (
+                        <Chip size="small" variant="outlined" color="success" label="Curated" />
+                      ) : null}
+                    </Stack>
                     <Typography variant="body2" color="text.secondary">
-                      {outreachCurrentStepLabel(enrollment, steps)}
+                      {`Next send: ${nextSend(enrollment)} · Last activity: ${formatOutreachTime(lastActivityMs(enrollment), timeZone)}`}
                     </Typography>
-                    {outreachStepIsCurated(enrollment) ? (
-                      <Chip size="small" variant="outlined" color="success" label="Curated" />
+                    {trackClicks && clicks.clicks ? (
+                      <Typography variant="body2" color="text.secondary">
+                        {`Clicks: ${outreachClickCountLabel(clicks)}`}
+                      </Typography>
+                    ) : null}
+                    {outreachStopLabel(enrollment) ? (
+                      <Typography variant="body2" color="text.secondary">
+                        {outreachStopLabel(enrollment)}
+                      </Typography>
                     ) : null}
                   </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    {`Next send: ${nextSend(enrollment)} · Last activity: ${formatOutreachTime(lastActivityMs(enrollment), timeZone)}`}
-                  </Typography>
-                  {trackClicks && readOutreachEngagement(enrollment.engagement).clicks ? (
-                    <Typography variant="body2" color="text.secondary">
-                      {`Clicked ${readOutreachEngagement(enrollment.engagement).clicks} ${
-                        readOutreachEngagement(enrollment.engagement).clicks === 1 ? 'time' : 'times'
-                      }`}
-                    </Typography>
-                  ) : null}
-                  {outreachStopLabel(enrollment) ? (
-                    <Typography variant="body2" color="text.secondary">
-                      {outreachStopLabel(enrollment)}
-                    </Typography>
-                  ) : null}
-                </Stack>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            )
+          })}
         </Stack>
       ) : (
         <ListTable
           aria-label="Enrollments"
           columns={listFilterGridColumns(
             columns(rowActions, trackClicks),
-            ENROLLMENT_FILTER_FIELDS,
-            ENROLLMENT_FILTER_OPTIONS,
+            fields,
+            filterOptions,
             ENROLLMENT_FILTER_HEADERS,
           )}
-          initialState={{ columns: { columnVisibilityModel: ENROLLMENT_HIDDEN_COLUMNS } }}
-          rows={pageRows.map((enrollment) => ({
-            $id: enrollment.id,
-            enrollment,
-            status: enrollment.status,
-            target: enrollment.target === 'lead' ? 'lead' : 'contact',
-            contactName: enrollment.contactName,
-            email: enrollment.email,
-            step: outreachCurrentStepLabel(enrollment, steps),
-            nextSend: nextSend(enrollment),
-            lastActivity: formatOutreachTime(
-              lastActivityMs(enrollment),
-              timeZone,
-            ),
-            stopReason: outreachStopLabel(enrollment) || '—',
-          }))}
+          initialState={{ columns: { columnVisibilityModel: hiddenColumns } }}
+          rows={pageRows.map((enrollment) => {
+            const clicks = clicksOf(enrollment)
+            return {
+              $id: enrollment.id,
+              ...filterRow(enrollment, steps, clicks),
+              nextSend: nextSend(enrollment),
+              lastActivity: formatOutreachTime(
+                lastActivityMs(enrollment),
+                timeZone,
+              ),
+              // What the export writes; the cells draw these their own way.
+              clicks: outreachClickCountLabel(clicks),
+              linksFollowed: clicks.followed.join(' ') || '—',
+              lastClick: clicks.clicks
+                ? formatOutreachTime(enrollment.engagement?.lastClickAtMs, timeZone)
+                : '—',
+              scannerClicks: clicks.machineClicks ? String(clicks.machineClicks) : '—',
+              stopReason: outreachStopLabel(enrollment) || '—',
+            }
+          })}
+          onOpen={
+            onOpen
+              ? (_id, row: { enrollment: OutreachEnrollment }) => onOpen(row.enrollment)
+              : undefined
+          }
           /*
            * The panel and the search are the grid's; the table answers them
            * over the enrollments it read (AGL-3317).
@@ -592,54 +673,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
         onPageChange={turnTo}
         onPageSizeChange={setPageSize}
       />
-
-      <OutreachCurateStepDialog
-        enrollment={curating}
-        steps={steps}
-        api={api}
-        onClose={() => setCurating(null)}
-      />
-
-      <Dialog
-        open={Boolean(confirming)}
-        onClose={() => setConfirming(null)}
-        fullWidth
-        maxWidth="xs"
-      >
-        {confirming ? (
-          <>
-            <DialogTitle>{CONFIRM[confirming.action]?.title}</DialogTitle>
-            <DialogContent>
-              <Stack spacing={2}>
-                <DialogContentText>
-                  {CONFIRM[confirming.action]?.body}
-                </DialogContentText>
-                <TextField
-                  label="Why (optional)"
-                  value={detail}
-                  onChange={(event) => setDetail(event.target.value)}
-                  fullWidth
-                  slotProps={{ htmlInput: { maxLength: 200 } }}
-                />
-              </Stack>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setConfirming(null)}>Cancel</Button>
-              <Button
-                color="error"
-                variant="contained"
-                onClick={() => {
-                  const { enrollment, action } = confirming
-                  setConfirming(null)
-                  void act(enrollment, action, detail.trim() || undefined)
-                }}
-              >
-                {CONFIRM[confirming.action]?.label}
-              </Button>
-            </DialogActions>
-          </>
-        ) : null}
-      </Dialog>
+      {actions.dialogs}
     </Stack>
   )
 }

@@ -121,6 +121,9 @@ describe('readOutreachEngagement', () => {
       lastClickAtMs: null,
       lastClickUrl: null,
       machineClicks: 0,
+      links: [],
+      loggedClicks: 0,
+      loggedMachineClicks: 0,
     })
   })
 
@@ -132,6 +135,10 @@ describe('readOutreachEngagement', () => {
         lastClickAtMs: 'soon',
         lastClickUrl: 'https://aglyn.com/pricing',
         machineClicks: -2,
+        links: ['https://aglyn.com/pricing', 7, 'https://aglyn.com/pricing', ''],
+        // More than the clicks it itemizes cannot be true, and is read as all of them.
+        loggedClicks: 9,
+        loggedMachineClicks: 'two',
       }),
     ).toEqual({
       clicks: 3,
@@ -139,6 +146,9 @@ describe('readOutreachEngagement', () => {
       lastClickAtMs: null,
       lastClickUrl: 'https://aglyn.com/pricing',
       machineClicks: 0,
+      links: ['https://aglyn.com/pricing'],
+      loggedClicks: 3,
+      loggedMachineClicks: 0,
     })
   })
 })

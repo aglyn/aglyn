@@ -1381,6 +1381,21 @@ describe('outreach/enrollments/action (AGL-2980)', () => {
     expect((await post(action(), REP, { enrollmentId: 'seq-1_gone', action: 'pause' })).status).toBe(404)
     expect((await post(action(), REP, { enrollmentId: 'seq-1_c-1', action: 'delete' })).status).toBe(400)
   })
+
+  it('writes each act that moved the enrollment to its history, with who and why (AGL-3332)', async () => {
+    seed('seq-1_c-1')
+    await post(action(), REP, { enrollmentId: 'seq-1_c-1', action: 'pause', detail: 'Out of office' })
+    await post(action(), OWNER, { enrollmentId: 'seq-1_c-1', action: 'resume' })
+    // A resume of an active enrollment changes nothing, and writes nothing.
+    await post(action(), OWNER, { enrollmentId: 'seq-1_c-1', action: 'resume' })
+    const history = [...docs.keys()]
+      .filter((key) => key.startsWith(`${org('outreachEnrollments/seq-1_c-1')}/history/`))
+      .map((key) => docs.get(key))
+    expect(history).toEqual([
+      { kind: 'action', atMs: AT, action: 'pause', byUid: REP, detail: 'Out of office' },
+      { kind: 'action', atMs: AT, action: 'resume', byUid: OWNER, detail: null },
+    ])
+  })
 })
 
 // ── Preview ─────────────────────────────────────────────────────────────────

@@ -514,6 +514,46 @@ filters look at the enrollments read so far, 200 at a time; on a sequence with
 more than that, the table says so, and paging forward reads the next 200. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
+On a sequence that counts link clicks, the **Clicks** column shows how many
+times the person clicked and how many different links they followed — *2 · 1
+link*. Clicks made by security scanners aren't in it. **Filters** adds
+**Clicked** and **Link followed**, and the column chooser adds **Links
+followed**, **Last click** and **Scanner clicks**, which the export then
+includes. **Stop reason** shows the short reason; hover it for the whole of it.
+
+The sequence's **Results** card leads to the same list: select the **Clicked**
+figure to see the people who clicked, or a destination under **Links followed**
+to see the people who followed it.
+
+## See one person's history {#person-history}
+
+Select a person's row — or focus it and press **Enter** — to open their page.
+Its address is theirs alone, so you can paste it into a comment or a message to
+point a teammate at one person. The page has three parts:
+
+- **The header** — their name and address, a **Lead** or **Contact** chip that
+  opens their CRM record, their status, the step they're on and when the next
+  one sends, with the same actions as the row's menu. A person held because
+  their [mail gateway](#mail-gateways) refused you shows why, and **Resume and
+  send** sends the email anyway. Under it, five numbers: emails sent, clicks,
+  links followed, scanner clicks (which aren't counted) and replies.
+- **Activity** — everything that happened to them, newest first: when they were
+  enrolled and by whom, each email with its subject as sent (and whether it was
+  their [curated](#curate) copy), each link they followed with the full address
+  and the email it came from, scanner visits with why they were read as a
+  scanner, replies, bounces with what the receiving server said, holds,
+  pauses, resumes and stops with who did it and why. **Open thread in Gmail**
+  opens the conversation in the sending mailbox.
+- **Details** — closed until you open it: the personal line, the attestations,
+  the mailbox, the campaigns, what your mail has met at their domain, each
+  curated email in full, the Gmail threads and the enrollment's id.
+
+Clicks are listed one at a time from the release that added this page. Clicks
+before it were kept only as a count, the times of the first and last, and the
+last link followed, so the page shows them as one line saying exactly that
+rather than guessing at the rest. Someone enrolled but not yet emailed shows *Nothing
+yet* and when their first step sends.
+
 ## Curate a send for one person {#curate}
 
 A step is one email for everyone, plus the personal line. **Curate for this

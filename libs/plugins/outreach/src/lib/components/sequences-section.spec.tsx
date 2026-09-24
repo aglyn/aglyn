@@ -70,6 +70,13 @@ jest.mock('./sequence-editor', () => ({
     </div>
   ),
 }))
+jest.mock('./enrollment-detail', () => ({
+  OutreachEnrollmentDetail: (props: { sequenceId: string; enrollmentId: string; sectionPath: string }) => (
+    <div role="article" aria-label="Enrollment detail">
+      {`${props.sectionPath} ${props.sequenceId}:${props.enrollmentId}`}
+    </div>
+  ),
+}))
 jest.mock('./sequence-detail', () => ({
   OutreachSequenceDetail: (props: { sequenceId: string; tab: string }) => (
     <div
@@ -243,6 +250,14 @@ describe('the pages below the section (AGL-2980)', () => {
     expect(
       screen.getByRole('article', { name: 'Sequence detail' }).textContent,
     ).toBe('seq-1:enrollments')
+  })
+
+  it('opens one person’s page beneath a sequence’s enrollments (AGL-3332)', () => {
+    renderSection(['seq-1', 'enrollments', 'seq-1_c-1'])
+    expect(screen.queryByRole('article', { name: 'Sequence detail' })).toBeNull()
+    expect(
+      screen.getByRole('article', { name: 'Enrollment detail' }).textContent,
+    ).toMatch(/ seq-1:seq-1_c-1$/)
   })
 })
 

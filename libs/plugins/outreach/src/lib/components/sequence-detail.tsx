@@ -40,9 +40,13 @@ import {
   Typography,
 } from '@mui/material'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
-import { useState } from 'react'
+import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useMemo, useState } from 'react'
 import { validateOutreachOrgSettings } from '../engine/sequence-validation'
 import type { OutreachSequenceAction } from '../model/outreach-api'
+import type { OutreachEnrollment } from '../model/outreach.types'
+import { outreachSequenceLinkReport } from '../model/sequence-report'
 import {
   outreachMailboxActivationIssue,
   outreachSequenceMailboxState,
@@ -50,6 +54,12 @@ import {
   type OutreachSequenceMailboxState,
 } from '../model/sequence-draft'
 import { OutreachEnrollDialog } from './enroll-dialog'
+import {
+  outreachClauseLivesInUrl,
+  outreachEnrollmentFilterSearch,
+  outreachEnrollmentsFilterHref,
+  outreachEnrollmentUrlClauses,
+} from './enrollment-filter-params'
 import { OutreachEnrollmentsTable } from './enrollments-table'
 import {
   OutreachLink,
@@ -137,6 +147,15 @@ const NOT_SENDING: Record<Exclude<OutreachSequenceMailboxState, 'sending'>, stri
     'Google stopped accepting this sequence’s mailbox, so nothing is sent until it is reconnected.',
 }
 
+/** One person's page (AGL-3332): `…/sequences/{id}/enrollments/{enrollmentId}`. */
+export function outreachEnrollmentPath(
+  sectionPath: string,
+  sequenceId: string,
+  enrollmentId: string,
+): string {
+  return `${sectionPath}/${sequenceId}/enrollments/${encodeURIComponent(enrollmentId)}`
+}
+
 /** The words an action's button and its snackbar use. */
 const ACTIONS: Record<OutreachSequenceAction, { label: string; done: string }> =
   {
@@ -174,8 +193,42 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
   )
   const [enrolling, setEnrolling] = useState(false)
 
+  /*
+   * The enrollments table's filter (AGL-3332). "Who clicked" and "who
+   * followed this destination" live in the URL, where the Results card
+   * sets them and where back from a person finds them again; every other
+   * clause the panel sets is the page's own.
+   */
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const search = searchParams?.toString() ?? ''
+  const urlClauses = useMemo(
+    () => outreachEnrollmentUrlClauses(new URLSearchParams(search)),
+    [search],
+  )
+  const [ownClauses, setOwnClauses] = useState<ListFilterClause[]>([])
+  const clauses = useMemo(() => [...ownClauses, ...urlClauses], [ownClauses, urlClauses])
+  const setClauses = (next: ListFilterClause[]) => {
+    setOwnClauses(next.filter((clause) => !outreachClauseLivesInUrl(clause)))
+    const nextSearch = outreachEnrollmentFilterSearch(next, search)
+    if (nextSearch !== search) {
+      router.replace(nextSearch ? `${pathname}?${nextSearch}` : pathname, { scroll: false })
+    }
+  }
+  const linkOptions = useMemo(
+    () =>
+      outreachSequenceLinkReport(
+        links.status === 'ready' ? (links.data ?? undefined) : undefined,
+      ).rows.map((row) => ({ value: row.url, label: row.url })),
+    [links],
+  )
+
   const sequence = loaded.data
   const detailPath = `${sectionPath}/${sequenceId}`
+  const enrollmentsPath = `${detailPath}/enrollments`
+  const enrollmentHref = (enrollment: OutreachEnrollment) =>
+    outreachEnrollmentPath(sectionPath, sequenceId, enrollment.id)
   const back = (
     <OutreachLink href={sectionPath}>
       <Stack
@@ -405,13 +458,21 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
           sequence={sequence}
           links={links}
           timeZone={mailbox?.timezone ?? null}
+          // Each leads to the people behind it, on the Enrollments tab's own
+          // filter (AGL-3332).
+          onShowClickers={() =>
+            navigate(outreachEnrollmentsFilterHref(enrollmentsPath, { clicked: true }))
+          }
+          onShowLink={(url) =>
+            navigate(outreachEnrollmentsFilterHref(enrollmentsPath, { link: url }))
+          }
         />
       )}
 
       <Tabs
         value={props.tab}
         onChange={(_event, next: OutreachSequenceTab) =>
-          navigate(next === 'steps' ? detailPath : `${detailPath}/enrollments`)
+          navigate(next === 'steps' ? detailPath : enrollmentsPath)
         }
         aria-label="Sequence"
       >
@@ -434,10 +495,17 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
         <OutreachEnrollmentsTable
           enrollments={enrollments}
           steps={sequence.steps}
-          trackClicks={sequence.settings.trackClicks}
+          // A sequence that counted clicks once has them to show, whether or
+          // not it counts them now.
+          trackClicks={sequence.settings.trackClicks || sequence.stats?.clickTracked === true}
           timeZone={mailbox?.timezone ?? null}
           api={api}
           enrollAction={sequence.status === 'active' ? enrollButton : undefined}
+          onOpen={(enrollment) => navigate(enrollmentHref(enrollment))}
+          hrefFor={enrollmentHref}
+          clauses={clauses}
+          onClausesChange={setClauses}
+          linkOptions={linkOptions}
         />
       )}
 

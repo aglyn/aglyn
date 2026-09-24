@@ -19,6 +19,7 @@ import type {
   PluginPersonEraser,
   PluginPersonErasureReport,
 } from '@aglyn/aglyn/plugin-manager/plugin-person-erasure'
+import { OUTREACH_ENROLLMENT_HISTORY } from '../model/outreach.types'
 import { outreachDoNotContactCollection } from '../storage/do-not-contact-store'
 import { outreachOrgCollection } from '../storage/outreach-records'
 
@@ -28,7 +29,10 @@ import { outreachOrgCollection } from '../storage/outreach-records'
  * The person's ENROLLMENTS go: each names them — their address, their
  * contact, the personal line a rep wrote about them, the attestations — and
  * is about them. They are found by the address and by the contacts the
- * erasure is deleting, and deleted whatever their status.
+ * erasure is deleting, and deleted whatever their status. Each one's
+ * HISTORY (AGL-3332) — every link they followed, and when — goes first: a
+ * subcollection outlives the document above it, and would otherwise be a
+ * record of an erased person's clicks that nothing lists.
  *
  * Their DO-NOT-CONTACT entry STAYS, on the rule every suppression list
  * follows through an erasure: it is keyed by `personKey`, carries no
@@ -66,13 +70,20 @@ export function createOutreachPersonEraser(deps: { firestore(): Firestore }): Pl
     const listed = (await entry.get()).exists
     if (dryRun) return { enrollments: found.size, doNotContactKept: listed, doNotContactScrubbed: null }
 
-    const refs = [...found.values()]
+    const enrollmentRefs = [...found.values()]
+    const historyRefs: FirebaseFirestore.DocumentReference[] = []
+    for (const ref of enrollmentRefs) {
+      for (const row of (await ref.collection(OUTREACH_ENROLLMENT_HISTORY).get()).docs) historyRefs.push(row.ref)
+    }
+    // The rows before the enrollments, so a run cut short leaves a history
+    // under a live enrollment rather than one under nothing.
+    const refs = [...historyRefs, ...enrollmentRefs]
     for (let start = 0; start < refs.length; start += BATCH_LIMIT) {
       const batch = firestore.batch()
       for (const ref of refs.slice(start, start + BATCH_LIMIT)) batch.delete(ref)
       await batch.commit()
     }
     if (listed) await entry.update({ detail: null, enrollmentId: null })
-    return { enrollments: refs.length, doNotContactKept: listed, doNotContactScrubbed: listed }
+    return { enrollments: enrollmentRefs.length, doNotContactKept: listed, doNotContactScrubbed: listed }
   }
 }

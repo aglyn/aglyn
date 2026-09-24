@@ -25,7 +25,8 @@ import type {
   OutreachEnrollmentAction,
   OutreachEnrollmentActionResponse,
 } from '../model/outreach-api'
-import type { OutreachEnrollment } from '../model/outreach.types'
+import { outreachActionHistoryRow, outreachHistoryEntryId } from '../model/enrollment-history'
+import { OUTREACH_ENROLLMENT_HISTORY, type OutreachEnrollment } from '../model/outreach.types'
 import { addOutreachDoNotContact } from '../storage/do-not-contact-store'
 import { outreachOrgCollection, readStoredOutreachEnrollment } from '../storage/outreach-records'
 import type { OutreachRouteDeps } from './route-deps'
@@ -58,6 +59,11 @@ import {
  * RESUME on an enrollment the engine held for its gateway (AGL-3326) is the
  * member saying "send it anyway": the hold is stamped released with who and
  * when, and the gates do not hold that enrollment on the gateway again.
+ *
+ * Every act that moves the enrollment is also a row of its history
+ * (AGL-3332), with who and why, in the same transaction: the enrollment
+ * holds only its CURRENT stop, and a resume clears it, so without the row
+ * the person's page could not say they were ever paused.
  */
 
 const ACTIONS: readonly OutreachEnrollmentAction[] = ['pause', 'resume', 'stop', 'do_not_contact']
@@ -126,6 +132,10 @@ export function createOutreachEnrollmentActionRoute(deps: OutreachRouteDeps): Pl
         updatedAtMs: nowMs,
       }
       transaction.update(ref, written)
+      transaction.set(
+        ref.collection(OUTREACH_ENROLLMENT_HISTORY).doc(outreachHistoryEntryId(nowMs)),
+        outreachActionHistoryRow({ atMs: nowMs, action, byUid: caller.uid, detail }),
+      )
       return { enrollment: { ...enrollment, ...written } as OutreachEnrollment, error: null, changed: true }
     })
     if (!applied) return outreachRefusal(404, 'enrollment-not-found', 'That enrollment no longer exists.')
