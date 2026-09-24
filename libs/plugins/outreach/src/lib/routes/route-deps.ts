@@ -16,6 +16,7 @@
  */
 
 import type { OutreachCampaignCredit, OutreachRecordEmailStamp } from '../runtime/runtime-deps'
+import type { OutreachResolveMx } from '../storage/domain-intel-store'
 import type { OutreachRouteGateDeps } from './route-gate'
 
 /**
@@ -59,4 +60,9 @@ export interface OutreachRouteDeps {
    * enroll route's `enrolled`; the runtime's twin credits the rest.
    */
   creditCampaign: OutreachCampaignCredit['credit']
+  /**
+   * The MX resolver the enroll routes classify a domain's mail gateway with
+   * (AGL-3326) — Node's `dns.promises.resolveMx` on the platform.
+   */
+  resolveMx: OutreachResolveMx
 }

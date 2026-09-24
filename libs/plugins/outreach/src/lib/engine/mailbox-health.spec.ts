@@ -51,39 +51,34 @@ describe('decideOutreachMailboxHealth', () => {
     })
   })
 
-  it('pauses when more than 3% of the last 50 sends hard-bounced', () => {
-    // One in fifty is 2%; two is 4%.
+  it('pauses at three hard bounces in the last 50 sends, and no longer on two (AGL-3326)', () => {
+    // A bounce two days ago plus one today was 4% of fifty, and paused a
+    // mailbox on history the daily rule had already let pass.
     expect(health({ recentSends: 50, recentHardBounces: 1 }).pause).toBe(false)
-    expect(health({ recentSends: 50, recentHardBounces: 2 })).toEqual({
+    expect(health({ recentSends: 50, recentHardBounces: 2 }).pause).toBe(false)
+    expect(health({ recentSends: 50, recentHardBounces: 3 })).toEqual({
       pause: true,
-      reason: 'bounce_rate',
-      message:
-        'Paused: 2 of the last 50 emails hard-bounced (4.0%). Re-check the addresses in your sequences before resuming.',
+      reason: 'bounces_in_window',
+      message: 'Paused: 3 of the last 50 emails hard-bounced. Re-check the addresses in your sequences before resuming.',
       pausedUntilMs: null,
     })
   })
 
-  it('takes the rate over at most 50 sends', () => {
+  it('takes the count over at most 50 sends', () => {
     // A caller that counted a longer history is held to the window it was asked for.
-    expect(health({ recentSends: 400, recentHardBounces: 2 })).toMatchObject({ pause: true, reason: 'bounce_rate' })
+    expect(health({ recentSends: 400, recentHardBounces: 3 })).toMatchObject({ pause: true, reason: 'bounces_in_window' })
   })
 
-  it('judges the rate only once the window holds 25 sends (AGL-3244)', () => {
-    // 1 of 21 is 4.8%, and was the pause that closed a whole sending window
-    // on one gateway block; under the floor a single bounce is not a rate.
-    expect(health({ recentSends: 21, recentHardBounces: 1 }).pause).toBe(false)
-    expect(health({ recentSends: OUTREACH_BOUNCE_RATE_MIN_SENDS - 1, recentHardBounces: 1 }).pause).toBe(false)
-    expect(health({ recentSends: OUTREACH_BOUNCE_RATE_MIN_SENDS, recentHardBounces: 1 })).toMatchObject({
+  it('judges the window only once it holds 25 sends (AGL-3244)', () => {
+    // Under the floor the daily rule alone judges a young mailbox.
+    expect(health({ recentSends: 21, recentHardBounces: 3 }).pause).toBe(false)
+    expect(health({ recentSends: OUTREACH_BOUNCE_RATE_MIN_SENDS - 1, recentHardBounces: 3 }).pause).toBe(false)
+    expect(health({ recentSends: OUTREACH_BOUNCE_RATE_MIN_SENDS, recentHardBounces: 3 })).toMatchObject({
       pause: true,
-      reason: 'bounce_rate',
-      message: expect.stringContaining('1 of the last 25 emails hard-bounced (4.0%)'),
+      reason: 'bounces_in_window',
+      message: expect.stringContaining('3 of the last 25 emails hard-bounced'),
     })
-    expect(health({ recentSends: 33, recentHardBounces: 1 })).toMatchObject({
-      pause: true,
-      reason: 'bounce_rate',
-      message: expect.stringContaining('1 of the last 33 emails hard-bounced (3.0%)'),
-    })
-    expect(health({ recentSends: 34, recentHardBounces: 1 }).pause).toBe(false)
+    expect(health({ recentSends: 34, recentHardBounces: 2 }).pause).toBe(false)
     expect(health({ recentSends: 0, recentHardBounces: 0 }).pause).toBe(false)
   })
 

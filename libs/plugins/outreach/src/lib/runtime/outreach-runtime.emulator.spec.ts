@@ -127,6 +127,7 @@ function deps(overrides: Partial<OutreachRuntimeDeps> = {}): OutreachRuntimeDeps
       client: gmail,
       credential: {} as never,
     }),
+    resolveMx: async () => [{ exchange: 'mx.example.com', priority: 10 }],
     orgRefusal: async () => null,
     sendRefusal: async () => null,
     timeline,

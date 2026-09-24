@@ -67,6 +67,7 @@ function fakeFirestore(
   const docRef = (path: string): any => ({
     path,
     get: async () => snapshot(path),
+    set: async () => undefined,
     collection: (name: string) => collectionRef(`${path}/${name}`),
   })
   return {
@@ -97,6 +98,7 @@ const lookup = (
     hostId: SITE_A,
     ...(consentHostIds ? { consentHostIds } : {}),
     ...(consentAwaitsConfirmation === undefined ? {} : { consentAwaitsConfirmation }),
+    gateway: { resolveMx: async () => [{ exchange: 'mx.example.com', priority: 10 }], nowMs: 0 },
     people: [person],
   }).then((answers) => answers.get(person.personId))
 

@@ -91,6 +91,7 @@ function deps(): OutreachEnrollRouteDeps {
     random: () => 0,
     logOrgActivity: unused,
     crmViewEmails: unused,
+    resolveMx: unused,
     stampRecordEmailState: unused,
     creditCampaign: unused,
     timeline: unused,

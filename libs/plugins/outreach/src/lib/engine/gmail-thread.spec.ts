@@ -213,12 +213,14 @@ describe("Gmail's own delivery status notifications", () => {
           diagnostic: expect.stringMatching(
             /^550-5\.1\.1 The email account that you tried to reach does not exist\. .*550 5\.1\.1/,
           ),
+          remoteMta: expect.any(String),
           kind: 'hard',
         },
       ],
       failedAddresses: ['casey@example.com'],
       status: '5.1.1',
       diagnostic: expect.any(String),
+      remoteMta: expect.any(String),
     })
     expect(classifyOutreachMessage(bounce, { selfAddresses: SELF })).toMatchObject({
       kind: 'hard_bounce',
@@ -267,6 +269,7 @@ describe('other servers’ reports', () => {
       failedAddresses: [],
       status: '5.1.1',
       diagnostic: null,
+      remoteMta: null,
     })
   })
 })

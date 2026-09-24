@@ -114,6 +114,7 @@ const deps = (): OutreachRouteDeps => ({
   },
   stampRecordEmailState: async () => undefined,
   creditCampaign: async () => undefined,
+  resolveMx: async () => [{ exchange: 'mx.example.com', priority: 10 }],
 })
 
 const SETTINGS_PATH = `orgs/${ORG}/outreachSettings/compliance`

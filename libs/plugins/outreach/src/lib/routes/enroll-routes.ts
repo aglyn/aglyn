@@ -61,6 +61,7 @@ import {
 } from '../model/outreach-api'
 import type { OutreachSequence, OutreachStepOverrides } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
+import type { OutreachDomainIntelReadInput } from '../storage/domain-intel-store'
 import { fileOutreachNote } from '../runtime/timeline'
 import {
   outreachEnrollmentId,
@@ -151,6 +152,7 @@ const UNCHECKED: OutreachGateLookups = {
   workspaceMembers: null,
   openEnrollments: null,
   hasInboundEmail: null,
+  gateway: null,
 }
 
 type Firestore = FirebaseFirestore.Firestore
@@ -230,6 +232,7 @@ async function readPeople(
   sequence: OutreachSequence,
   context: EnrollContext,
   people: readonly OutreachPersonRef[],
+  gateway: OutreachDomainIntelReadInput,
 ): Promise<{
   candidates: OutreachEnrollCandidate[]
   enrolledHere: Set<string>
@@ -257,6 +260,7 @@ async function readPeople(
         hostId: sequence.hostId,
         consentHostIds: context.consentHostIds,
         consentAwaitsConfirmation: context.consentAwaitsConfirmation,
+        gateway,
         people: askable.map((candidate) => ({
           personId: candidate.personId,
           contactId: candidate.contactId || null,
@@ -480,6 +484,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       sequence,
       context,
       named.people,
+      { resolveMx: deps.resolveMx, nowMs: deps.now() },
     )
     const people = candidates.map((candidate) =>
       previewOutreachPerson(
@@ -586,6 +591,7 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       sequence,
       context,
       [...requested.values()].map((entry) => entry.ref),
+      { resolveMx: deps.resolveMx, nowMs },
     )
     const enrollments = outreachOrgCollection(firestore, caller.orgId, 'enrollments')
     const campaignNames = await sequenceCampaignNames(firestore, caller.orgId, sequence)
@@ -652,6 +658,17 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
           nowMs,
           random: deps.random,
         })
+        // The member ticked this person past the red gateway chip
+        // (AGL-3326): that is their say-so, stamped as the hold's release,
+        // so the engine does not hold the send they were just shown.
+        if (decision.hold) {
+          enrollment.gatewayHold = {
+            gateway: decision.hold.gateway,
+            heldAtMs: null,
+            releasedByUid: caller.uid,
+            releasedAtMs: nowMs,
+          }
+        }
         // The person's own copies of steps (AGL-3324) ride with the
         // enrollment from its first write: nothing sends between.
         if (Object.keys(stepOverrides).length) enrollment.stepOverrides = stepOverrides

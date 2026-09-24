@@ -243,12 +243,20 @@ describe('delivery reports', () => {
     expect(parsed).toEqual({
       kind: 'hard',
       recipients: [
-        { address: 'casey@example.com', action: 'delayed', status: '4.4.1', diagnostic: null, kind: 'soft' },
+        {
+          address: 'casey@example.com',
+          action: 'delayed',
+          status: '4.4.1',
+          diagnostic: null,
+          remoteMta: null,
+          kind: 'soft',
+        },
         {
           address: 'riley@example.net',
           action: 'failed',
           status: '5.1.1',
           diagnostic: 'host mx.example.net said: 550 5.1.1 <riley@example.net>: Recipient address rejected',
+          remoteMta: null,
           kind: 'hard',
         },
       ],
@@ -256,6 +264,7 @@ describe('delivery reports', () => {
       failedAddresses: ['riley@example.net'],
       status: '5.1.1',
       diagnostic: 'host mx.example.net said: 550 5.1.1 <riley@example.net>: Recipient address rejected',
+      remoteMta: null,
     })
   })
 
@@ -274,6 +283,7 @@ describe('delivery reports', () => {
       failedAddresses: ['casey@example.com', 'riley@example.net'],
       status: '5.1.1',
       diagnostic: null,
+      remoteMta: null,
     })
   })
 

@@ -902,6 +902,19 @@ service cloud.firestore {
         allow read: if canReadOutreach();
         allow write: if false;
       }
+      // What the organization learned about the domains it writes to and
+      // the mail gateways in front of them (AGL-3326): MX records and a
+      // per-gateway ledger of sends, deliveries and blocks. Written by the
+      // enroll routes and the sending runtime; a client that could write
+      // them could clear the blocks that hold a send.
+      match /outreachDomainIntel/{domain} {
+        allow read: if canReadOutreach();
+        allow write: if false;
+      }
+      match /outreachGatewayStats/{gateway} {
+        allow read: if canReadOutreach();
+        allow write: if false;
+      }
 
       /**
        * Per-user AI usage (AGL-2928): one document per person per month,

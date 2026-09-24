@@ -79,7 +79,14 @@ export function canTransitionOutreachEnrollment(
 
 /** Something that happened to an enrollment. `atMs` is when it happened. */
 export type OutreachEnrollmentEvent =
-  | { type: 'pause'; atMs: number; byUid: string | null; detail?: string | null }
+  | {
+      type: 'pause'
+      atMs: number
+      byUid: string | null
+      /** `manual` unless the engine held the send on its gateway (AGL-3326). */
+      reason?: Extract<OutreachStopReason, 'manual' | 'gateway_blocked_here'>
+      detail?: string | null
+    }
   | { type: 'resume'; atMs: number; byUid: string | null }
   | {
       type: 'stop'
@@ -174,7 +181,7 @@ export function applyOutreachEnrollmentEvent(
   }
   const reason: OutreachStopReason =
     event.type === 'pause'
-      ? 'manual'
+      ? (event.reason ?? 'manual')
       : event.type === 'stop'
         ? (event.reason ?? 'manual')
         : event.type === 'reply'

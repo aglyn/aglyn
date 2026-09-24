@@ -61,6 +61,7 @@ import {
   lookupOutreachDoNotContact,
   lookupOutreachDoNotContactDomains,
 } from '../storage/do-not-contact-store'
+import { type OutreachDomainIntelReadInput, readOutreachGatewayStandings } from '../storage/domain-intel-store'
 import { outreachOrgCollection } from '../storage/outreach-records'
 
 /**
@@ -96,6 +97,12 @@ export interface ReadOutreachGateLookupsInput {
    * site's own does. Omitted, it does not.
    */
   consentAwaitsConfirmation?: boolean
+  /**
+   * The MX resolver and the clock the domain intel is read with (AGL-3326):
+   * a domain's gateway is looked up once a week and cached on the org, and
+   * its ledger is read for the windows the hold and the chip judge.
+   */
+  gateway: OutreachDomainIntelReadInput
   people: readonly OutreachGateLookupPerson[]
 }
 
@@ -196,7 +203,7 @@ export async function readOutreachGateLookups(
   const enrollments = outreachOrgCollection(firestore, orgId, 'enrollments')
   const activities = firestore.collection('orgs').doc(orgId).collection(CRM_COLLECTIONS.activities)
 
-  const [platform, site, sales, doNotContact, doNotContactDomain, roster, perPerson] = await Promise.all([
+  const [platform, site, sales, doNotContact, doNotContactDomain, gateway, roster, perPerson] = await Promise.all([
     keyedLookup(
       firestore,
       people,
@@ -248,6 +255,18 @@ export async function readOutreachGateLookups(
       orgId,
       people.map((person) => person.email),
     ),
+    // The mail gateway in front of each domain and its record here
+    // (AGL-3326), one read over the distinct domains and one over the
+    // gateways they name.
+    readOutreachGatewayStandings(
+      firestore,
+      orgId,
+      people.map((person) => person.email),
+      input.gateway,
+    ).catch((error: unknown) => {
+      console.error('[outreach] mail gateway lookup failed; reading as unchecked', error)
+      return new Map<string, null>()
+    }),
     loadCrmInboundRoster(firestore, orgId).catch((error: unknown): MemberAddresses[] | null => {
       console.error('[outreach] roster lookup failed; reading as unchecked', error)
       return null
@@ -302,6 +321,7 @@ export async function readOutreachGateLookups(
       salesTopicState: sales.get(person.personId) ?? null,
       doNotContact: doNotContact.get(person.email) ?? null,
       doNotContactDomain: doNotContactDomain.get(person.email) ?? null,
+      gateway: gateway.get(person.email) ?? null,
       workspaceMembers: roster,
       openEnrollments: own?.open ?? null,
       hasInboundEmail: own?.inbound ?? null,

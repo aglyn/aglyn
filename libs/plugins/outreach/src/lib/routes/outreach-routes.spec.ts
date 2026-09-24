@@ -289,11 +289,23 @@ const gate: OutreachRouteGateDeps = {
   lockdownRefusal: async () => null,
 }
 
+/**
+ * The MX table the routes resolve against (AGL-3326), by domain: a list of
+ * exchanges, or `null` for a domain the resolver says has none. A domain
+ * not in it is hosted on a plain exchange of its own.
+ */
+let mx: Record<string, Array<{ exchange: string; priority: number }> | null>
+
 const deps = (): OutreachEnrollRouteDeps => ({
   firestore: () => fakeFirestore(docs),
   gate,
   now: () => AT,
   random: () => 0.5,
+  resolveMx: async (domain) => {
+    const records = domain in mx ? mx[domain] : [{ exchange: `mx.${domain}`, priority: 10 }]
+    if (records === null) throw Object.assign(new Error(`queryMx ENODATA ${domain}`), { code: 'ENODATA' })
+    return records
+  },
   logOrgActivity: async (_orgId, _actor, action, target) => {
     activity.push({ action, target })
   },
@@ -413,6 +425,7 @@ beforeEach(() => {
   filed = []
   viewEmails = []
   stamped = []
+  mx = {}
   generator = null
   generated = []
   members = {
@@ -937,6 +950,85 @@ describe('outreach/enroll/preview (AGL-2980)', () => {
     expect(worked.body.people.map((person: { personId: string }) => person.personId)).toEqual([working])
   })
 
+  /*
+   * The mail gateway in front of each domain (AGL-3326): the MX is looked
+   * up once and cached on the org for a week, a domain with no MX is
+   * blocked, and a gateway that refused this organization twice lately
+   * without delivering is shown red, un-ticked by default, and would be
+   * held at the send.
+   */
+  it('reads each domain’s mail gateway from its MX, caches it, blocks no MX, and flags a gateway that refused twice (AGL-3326)', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-barracuda', 'Kristan Cole', 'kristan@lifespire.example')
+    warm('c-google', 'Casey Morgan', 'casey@workspace.example')
+    warm('c-nomx', 'Nobody Home', 'nobody@parked.example')
+    warm('c-known', 'Sam Park', 'sam@cached.example')
+    mx['lifespire.example'] = [{ exchange: 'd78608a.ess.barracudanetworks.com', priority: 10 }]
+    mx['workspace.example'] = [
+      { exchange: 'alt1.aspmx.l.google.com', priority: 5 },
+      { exchange: 'aspmx.l.google.com', priority: 1 },
+    ]
+    mx['parked.example'] = null
+    // A domain looked up yesterday is read from the cache, not the resolver.
+    docs.set(org('outreachDomainIntel/cached.example'), {
+      domain: 'cached.example',
+      mx: ['us-smtp-inbound-1.mimecast.com'],
+      gateway: 'mimecast',
+      resolvedAtMs: AT - 86_400_000,
+    })
+    mx['cached.example'] = null
+    // Barracuda refused this organization twice this week and delivered nothing.
+    const day = (offsetDays: number) => new Date(AT - offsetDays * 86_400_000).toISOString().slice(0, 10)
+    docs.set(org('outreachGatewayStats/barracuda'), {
+      gateway: 'barracuda',
+      sent: 2,
+      delivered: 0,
+      blocked: 2,
+      days: { [day(0)]: { sent: 1, delivered: 0, blocked: 1 }, [day(2)]: { sent: 1, delivered: 0, blocked: 1 } },
+    })
+    docs.set(org('outreachGatewayStats/mimecast'), {
+      gateway: 'mimecast',
+      sent: 1,
+      delivered: 1,
+      blocked: 0,
+      days: { [day(1)]: { sent: 1, delivered: 1, blocked: 0 } },
+    })
+
+    const { body } = await post(enroll().preview, REP, {
+      sequenceId,
+      source: { kind: 'contacts', contactIds: ['c-barracuda', 'c-google', 'c-nomx', 'c-known'] },
+    })
+    const byId = Object.fromEntries(body.people.map((person: { contactId: string }) => [person.contactId, person]))
+    expect(byId['c-barracuda']).toMatchObject({
+      status: 'eligible',
+      gateway: { gateway: 'barracuda', blocked7: 2, delivered7: 0, blocked30: 2, delivered30: 0, hold: true },
+    })
+    expect(byId['c-google']).toMatchObject({
+      status: 'eligible',
+      gateway: { gateway: 'google', blocked7: 0, delivered7: 0, hold: false },
+    })
+    expect(byId['c-known']).toMatchObject({
+      status: 'eligible',
+      gateway: { gateway: 'mimecast', blocked7: 0, delivered7: 1, hold: false },
+    })
+    expect(byId['c-nomx']).toMatchObject({ status: 'blocked', gateway: { gateway: 'none', hold: false } })
+    expect(byId['c-nomx'].blocks).toEqual([
+      { code: 'no_mx', reason: 'parked.example has no MX record, so nobody@parked.example cannot receive mail.' },
+    ])
+    // The lookups are cached on the org, MX and all, for the next reader.
+    expect(docs.get(org('outreachDomainIntel/lifespire.example'))).toMatchObject({
+      mx: ['d78608a.ess.barracudanetworks.com'],
+      gateway: 'barracuda',
+      resolvedAtMs: AT,
+    })
+    expect(docs.get(org('outreachDomainIntel/workspace.example'))?.['mx']).toEqual([
+      'aspmx.l.google.com',
+      'alt1.aspmx.l.google.com',
+    ])
+    expect(docs.get(org('outreachDomainIntel/parked.example'))).toMatchObject({ mx: [], gateway: 'none' })
+    expect(docs.get(org('outreachDomainIntel/cached.example'))?.['resolvedAtMs']).toBe(AT - 86_400_000)
+  })
+
   it('asks for Manage data, and an active sequence', async () => {
     const refused = await post(enroll().preview, 'uid-reader', { sequenceId: 'x', source: { kind: 'contacts', contactIds: ['c'] } })
     expect(refused).toMatchObject({ status: 403, body: { reason: 'permission' } })
@@ -1006,6 +1098,23 @@ describe('outreach/enroll (AGL-2980)', () => {
     expect(activity.at(-1)).toEqual({
       action: 'Enrolled 1 person in a sequence',
       target: { type: 'outreach:sequence', id: sequenceId, name: 'Second locations' },
+    })
+  })
+
+  it('enrolling a person past the red gateway chip releases the hold as the member’s say-so (AGL-3326)', async () => {
+    const sequenceId = await activeSequence()
+    warm('c-barracuda', 'Kristan Cole', 'kristan@lifespire.example')
+    mx['lifespire.example'] = [{ exchange: 'd78608a.ess.barracudanetworks.com', priority: 10 }]
+    const today = new Date(AT).toISOString().slice(0, 10)
+    docs.set(org('outreachGatewayStats/barracuda'), {
+      gateway: 'barracuda',
+      days: { [today]: { sent: 2, delivered: 0, blocked: 2 } },
+    })
+    const { body } = await post(enroll().confirm, REP, { sequenceId, people: [{ contactId: 'c-barracuda' }] })
+    expect(body.results[0]).toMatchObject({ outcome: 'enrolled' })
+    expect(docs.get(org(`outreachEnrollments/${sequenceId}_c-barracuda`))).toMatchObject({
+      status: 'active',
+      gatewayHold: { gateway: 'barracuda', heldAtMs: null, releasedByUid: REP, releasedAtMs: AT },
     })
   })
 
@@ -1199,6 +1308,21 @@ describe('outreach/enrollments/action (AGL-2980)', () => {
       nextDueAtMs: AT + 60_000,
     })
     expect(resumed.body.changed).toBe(true)
+  })
+
+  it('resuming an enrollment the engine held for its gateway stamps the release (AGL-3326)', async () => {
+    seed('seq-1_c-1', {
+      status: 'paused',
+      stopReason: 'gateway_blocked_here',
+      stoppedAtMs: AT - 60_000,
+      gatewayHold: { gateway: 'barracuda', heldAtMs: AT - 60_000, releasedByUid: null, releasedAtMs: null },
+    })
+    const resumed = await post(action(), REP, { enrollmentId: 'seq-1_c-1', action: 'resume' })
+    expect(resumed.body.enrollment).toMatchObject({
+      status: 'active',
+      stopReason: null,
+      gatewayHold: { gateway: 'barracuda', heldAtMs: AT - 60_000, releasedByUid: REP, releasedAtMs: AT },
+    })
   })
 
   it('stops for good, and refuses to resume a stopped enrollment', async () => {
