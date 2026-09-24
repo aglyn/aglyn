@@ -33,11 +33,13 @@ import {
   RateRow,
   Section,
 } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
@@ -87,6 +89,12 @@ import {
   type CampaignSend,
   type EmailCampaign,
 } from '@aglyn/shared-ui-email-campaigns/model'
+import {
+  EMAIL_STATE_FILTER_FIELD,
+  EMAIL_STATE_OPTIONS,
+  EMAIL_SUBJECT_FILTER_FIELD,
+  emailFilterValues,
+} from './email-send-filter'
 import CampaignComposer from './campaign-composer'
 import CampaignEditDrawer, {
   type CampaignEditValues,
@@ -140,6 +148,15 @@ const rolled = (
       ? `across ${value.recorded} of ${value.sends} emails`
       : `across ${value.sends} email${value.sends === 1 ? '' : 's'}`,
 })
+
+/* What the campaign's emails table filters by (AGL-3317). */
+const SEND_FILTER_FIELDS = [EMAIL_SUBJECT_FILTER_FIELD, EMAIL_STATE_FILTER_FIELD]
+const SEND_FILTER_OPTIONS = { state: EMAIL_STATE_OPTIONS }
+const SEND_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  subject: 'Subject',
+  state: 'State',
+}
+const SEND_SEARCH_FIELDS = ['subjectText'] as const
 
 export interface CampaignDetailCardProps {
   /** The site, or `null` on the org Marketing hub. */
@@ -326,6 +343,21 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
     [readSends],
   )
   const rollup = useMemo(() => campaignRollup(sends), [sends])
+  /*
+   * The emails table's Filters panel and search (AGL-3317), answered over
+   * every email the card read — the same window the figures above cover.
+   */
+  const sendFilterRows = useMemo(
+    () => sends.map((send) => ({ ...send, ...emailFilterValues(send) })),
+    [sends],
+  )
+  const sendFilter = useListRowsFilter({
+    rows: sendFilterRows,
+    fields: SEND_FILTER_FIELDS,
+    options: SEND_FILTER_OPTIONS,
+    headers: SEND_FILTER_HEADERS,
+    search: SEND_SEARCH_FIELDS,
+  })
   // The ids the two sections beneath the figures join on. Derived from the
   // window this card already holds, so neither of them reads the send list
   // again to find out which emails the campaign has.
@@ -1034,15 +1066,18 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         </Stack>
         {sends.length ? (
           <Stack spacing={0.5}>
+            <ListFilterChips {...sendFilter.chipsProps} />
             <ListTable
               aria-label="The campaign's emails"
-              rows={sends}
-              columns={sendColumns}
+              rows={sendFilter.rows}
+              columns={sendFilter.filterColumns(sendColumns as GridColDef[])}
               rowHeight={TABLE_ROW_HEIGHT}
               onOpen={(_id, send) => {
                 const href = sendHref(send)
                 if (href) router.push(href)
               }}
+              {...sendFilter.gridProps}
+              noRowsLabel="No emails match these filters"
             />
             {sendsTruncated ? (
               <Alert severity="info">

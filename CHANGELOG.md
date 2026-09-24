@@ -9,6 +9,33 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.188 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.187...v1.0.0-beta.188)
+
+### Added
+
+- **marketing:** the campaigns and emails lists filter through the grid's own toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **shared-ui-jsx:** the two list recipes every converted list repeats ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **outreach:** the sequences lists filter through the grid's own toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **release:** a publishable package with no trust record reds its own PR ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+### Fixed
+
+- **release:** the sweep says why npm refuses to trust a name it has never held ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+### Changed
+
+- **shared-ui-jsx:** the grid filter path every list uses lives beside ListTable ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317), [AGL-3313](https://linear.app/aglyn/issue/AGL-3313))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3317 ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **tools:** @aglyn/shared-util-first-touch joins the trusted-publisher record ([AGL-3201](https://linear.app/aglyn/issue/AGL-3201))
+
+</details>
+
 ## v1.0.0-beta.187 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.186...v1.0.0-beta.187)

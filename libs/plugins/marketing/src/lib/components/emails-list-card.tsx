@@ -30,11 +30,14 @@ import {
   MdiIcon,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
@@ -67,6 +70,12 @@ import {
   useCampaignManageApi,
   useCampaignSendApi,
 } from './use-campaign-send-api'
+import {
+  EMAIL_STATE_FILTER_FIELD,
+  EMAIL_STATE_OPTIONS,
+  EMAIL_SUBJECT_FILTER_FIELD,
+  emailFilterValues,
+} from './email-send-filter'
 import { useMarketingHubPath } from './use-marketing-hub-path'
 import { campaignContainersQuery, campaignSendsQuery } from './campaign-queries'
 import {
@@ -117,6 +126,27 @@ const STATE_COLOR: Partial<
   sending: 'info',
   stopped: 'warning',
 }
+
+/*
+ * What the messages grid's Filters panel offers (AGL-3317). The card reads
+ * every message under its ceiling, so the panel and the search answer over
+ * all of them. State is what the email is DOING (`campaignSendDisplay`),
+ * not the status it stores.
+ */
+const EMAIL_FILTER_FIELDS = [
+  EMAIL_SUBJECT_FILTER_FIELD,
+  EMAIL_STATE_FILTER_FIELD,
+  inMemoryListField('emailCampaignId', 'select'),
+  inMemoryListField('site', 'text', 'siteName'),
+]
+const EMAIL_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  subject: 'Subject',
+  state: 'State',
+  emailCampaignId: 'Campaign',
+  site: 'Site',
+}
+/** What the quick search reads on a message row. */
+const EMAIL_SEARCH_FIELDS = ['subjectText', 'siteName'] as const
 
 const emailsDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#opens--clicks',
@@ -465,6 +495,41 @@ export function EmailsListCard(props: EmailsListCardProps) {
     [campaignDocs],
   )
 
+  const filterRows = useMemo(
+    () =>
+      emails.map((email: any) => ({
+        ...email,
+        ...emailFilterValues(email),
+        emailCampaignId: email.emailCampaignId ? String(email.emailCampaignId) : '',
+        siteName: orgMount && email?.hostId ? orgSiteName(orgMount, email.hostId) : '',
+      })),
+    [emails, orgMount],
+  )
+  const filterFields = useMemo(
+    () =>
+      orgMount
+        ? EMAIL_FILTER_FIELDS
+        : EMAIL_FILTER_FIELDS.filter((field) => field.column !== 'site'),
+    [orgMount],
+  )
+  const filterOptions = useMemo(
+    () => ({
+      state: EMAIL_STATE_OPTIONS,
+      emailCampaignId: [
+        { value: '', label: 'Single send' },
+        ...campaignOptions,
+      ],
+    }),
+    [campaignOptions],
+  )
+  const listFilter = useListRowsFilter({
+    rows: filterRows,
+    fields: filterFields,
+    options: filterOptions,
+    headers: EMAIL_FILTER_HEADERS,
+    search: EMAIL_SEARCH_FIELDS,
+  })
+
   /*==========================================
    * CREATE, THEN GO TO THE EMAIL'S OWN PAGE.
    *
@@ -694,13 +759,21 @@ export function EmailsListCard(props: EmailsListCardProps) {
             </Button>
           </Stack>
         ) : (
-          <ListTable
-            aria-label="Messages"
-            rows={emails}
-            columns={columns}
-            rowHeight={TABLE_ROW_HEIGHT}
-            onOpen={(_id, row) => router.push(emailHref(row))}
-          />
+          <>
+            <ListFilterChips {...listFilter.chipsProps} />
+            <ListTable
+              aria-label="Messages"
+              rows={listFilter.rows}
+              columns={listFilter.filterColumns(columns)}
+              rowHeight={TABLE_ROW_HEIGHT}
+              onOpen={(_id, row) => router.push(emailHref(row))}
+              // The panel and the search are the grid's; the card answers
+              // them over every message it read (AGL-3317).
+              {...listFilter.gridProps}
+              initialState={{ columns: { columnVisibilityModel: { emailCampaignId: false } } }}
+              noRowsLabel="No messages match these filters"
+            />
+          </>
         )}
         {truncated ? (
           <Alert severity="info">

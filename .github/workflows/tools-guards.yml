@@ -1224,6 +1224,19 @@ jobs:
       # package this misses is a release that publishes fifty and fails on the
       # fifty-first, which cannot be repaired — a published version is final.
       - run: npm run test:trust-packages
+      # AGL-3201 — and the half that was missing when a NEW lib arrived. Trust
+      # is per package, so a lib nobody has configured cannot be created by
+      # the release workflow's OIDC token: npm answers `E404 Not Found - PUT`.
+      # `@aglyn/shared-util-first-touch` did exactly that on 2026-09-23 and
+      # cost four production releases, and the repo had said nothing — the lib
+      # merged green and the first sign was a red publish job. This refuses a
+      # publishable package with no record of a real `npm trust list` answer,
+      # so the PR that adds the lib goes red instead. It asks npm nothing:
+      # `npm trust list` is not public, so the record is a file the owner's
+      # sweep writes. The self-test runs first, and its fixture is the case
+      # that broke — a package the record does not name.
+      - run: npm run test:package-trust
+      - run: npm run check:package-trust
       # AGL-3201 — `npm view` with MORE THAN ONE field answers with an ARRAY
       # wrapping the object, and with one field it answers bare. Reading the
       # multi-field answer as an object gives `undefined` for every field,

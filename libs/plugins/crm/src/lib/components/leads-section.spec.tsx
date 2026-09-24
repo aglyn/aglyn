@@ -606,7 +606,7 @@ describe('a view saved with the old dropdowns', () => {
     // Open, so the qualified lead is out; Apollo, so the bare one is out.
     expect(gridRows()).toEqual(['apollo@example.com'])
     expect(mockGrid.filterModel.items).toEqual([
-      { id: 'crm', field: 'leadSource', operator: 'is', value: 'Outbound · Apollo' },
+      { id: 'list', field: 'leadSource', operator: 'is', value: 'Outbound · Apollo' },
     ])
     expect(screen.getByText('Status is Open (new or working)')).toBeTruthy()
   })

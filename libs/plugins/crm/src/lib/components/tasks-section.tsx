@@ -65,9 +65,9 @@ import {
   type ListFilterField,
   matchListFilter,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { crmFilterColumns, crmRowMatchesSearch } from '../model/crm-grid-filter'
-import { useCrmGridFilter } from '../hooks/use-crm-grid-filter'
-import CrmFilterBar from './crm-filter-bar'
+import { listFilterGridColumns, listRowMatchesSearch } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { CrmListToolbar } from './crm-list-toolbar'
 import {
   TaskDueText,
@@ -194,7 +194,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
       ),
     [views.setFilters],
   )
-  const gridFilter = useCrmGridFilter({
+  const gridFilter = useListGridFilter({
     clauses,
     onChange: setClauses,
     selectFields: ['view', 'kind', 'priority', 'assigneeUid'],
@@ -232,7 +232,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
           clauses.every(
             (clause) =>
               clause.field === 'view' || matchListFilter(task, TASK_FILTER_FIELDS, clause),
-          ) && crmRowMatchesSearch(task, TASK_SEARCH_FIELDS, gridFilter.searchWords),
+          ) && listRowMatchesSearch(task, TASK_SEARCH_FIELDS, gridFilter.searchWords),
       ),
     // `searchKey` stands for the words, which are a new array each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -455,7 +455,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
   )
   /* The column and sort models are the view's (AGL-2617). */
   const filterColumns = useMemo(
-    () => crmFilterColumns(columns, TASK_FILTER_FIELDS, filterOptions, TASK_FILTER_HEADERS),
+    () => listFilterGridColumns(columns, TASK_FILTER_FIELDS, filterOptions, TASK_FILTER_HEADERS),
     [columns, filterOptions],
   )
   const grid = useCrmViewGrid(views, filterColumns, TASK_HIDDEN_COLUMNS)
@@ -493,7 +493,7 @@ export function TasksSection(props: ConsolePluginPageProps) {
           */}
           <CrmListToolbar label="Task filters">
             <CrmViewsControl controller={views} allLabel="All tasks" />
-            <CrmFilterBar
+            <ListFilterChips
               fields={TASK_FILTER_FIELDS}
               headers={TASK_FILTER_HEADERS}
               clauses={clauses}

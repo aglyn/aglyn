@@ -252,12 +252,23 @@ before each send, with the domain named. Take a domain off with its
 **Remove** button; both changes are written to your organization's activity.
 Domains of public mailbox providers are never added automatically.
 
+The listed domains are a table. Its toolbar's **Filters** narrows them by
+**Why** they are listed, the domain or the bounce detail, and **Search** finds
+a domain by any part of it. Both look at every listed domain.
+
 ## Sequences {#sequences}
 
 A **sequence** is the emails, and the tasks between them, one person gets from
 one rep. **Sequences → All sequences** lists each one with its mailbox, its status,
 and how many people it has enrolled, and how many of them are still active,
 replied, bounced or opted out.
+
+The table's toolbar filters the list. **Filters** narrows it by **Status**
+(pick one or several), name or mailbox, and **Search** matches any word of a
+sequence's name or mailbox. Both look at every sequence, not only the page on
+screen, and each filter in force shows as a chip above the table; remove a
+chip to drop its filter. The **Filters** panel edits one filter at a time,
+and filters on different columns add up.
 
 ### Build a sequence {#build-a-sequence}
 
@@ -412,6 +423,12 @@ marked **Lead** until the lead converts. For each one you can:
 - **Mark do-not-contact** — puts the address on your organization's
   do-not-contact list, which every sequence checks before every send, and
   stops them in every other sequence too.
+
+The tab's toolbar filters the people in it. **Filters** narrows them by
+**Status**, **Enrolled as** (contact or lead), name, email or stop reason, and
+**Search** matches any word of a name, address, step or stop reason. The
+filters look at the enrollments read so far; on a sequence with more than
+fit in one read, the table says so, and paging forward reads the next batch.
 
 ## How sends are scheduled {#sending}
 

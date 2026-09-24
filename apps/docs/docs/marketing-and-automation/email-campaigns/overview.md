@@ -113,6 +113,24 @@ the campaign's page adds their figures up.
 one and marked **Single send**. Their reports open at the same address they always did,
 and the unsubscribe links in mail already delivered are untouched.
 
+### Filter the campaigns and emails lists {#filter-the-lists}
+
+The campaigns list, the Emails list and a campaign's own emails each filter
+through their table's toolbar. **Filters** narrows the list by a column, and
+**Search** matches any word of a name or subject:
+
+- **Campaigns:** Window (no dates, upcoming, running, ended), Lists, Kind
+  (campaign or single send) and, on the organization's page, Sites.
+- **Emails:** State (draft, scheduled, sending, sent, stopped), Campaign
+  (or single send) and, on the organization's page, Site. State is what the
+  email is doing, so an email part way through a large audience is
+  **Sending**, not **Scheduled**.
+
+The filters look at every campaign or email the list read, not only the page
+on screen. Each filter in force shows as a chip above the table; remove a
+chip to drop it. The **Filters** panel edits one filter at a time, and
+filters on different columns add up.
+
 ### What belongs to a campaign {#what-belongs-to-a-campaign}
 
 A push is rarely only its mail. A campaign can also hold the **landing pages**, the
@@ -731,6 +749,11 @@ Two ways to finish a test without watching it:
   one variant (re-sends reach the same variant), sends count as exposures, and once a
   winner is picked every later send uses the winning copy.
 
+The Experiments table filters through its toolbar by name, what it tests
+(screen, section or email) and status. The list is paged, so the first
+filter reads the first 100 experiments and matches over them; the table says
+when there are more, and paging forward reads the next page.
+
 ### Across your organization's sites {#experiments-across-sites}
 
 Your organization's own **Marketing → A/B testing** lists every site's tests, grouped by
@@ -801,6 +824,12 @@ audience rather than a spreadsheet.
 Only campaigns from your own sites appear on a person's timeline. Another
 business in your workspace mailing the same person sees its own campaigns and
 never yours, and account mail — receipts, confirmations — is not listed at all.
+
+An email's **Recipients** table lists everyone it was sent to. To see only
+the people who opened it, or only those who clicked something, choose
+**Engagement** in the table's **Filters** panel. That filter reaches the
+whole delivery log, one page at a time. The table has no search box, because
+the delivery log can only be narrowed by engagement.
 
 ### Which links were clicked
 

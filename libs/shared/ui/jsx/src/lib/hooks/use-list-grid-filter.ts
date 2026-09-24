@@ -17,32 +17,35 @@
 
 'use client'
 
-import type { CrmViewFilterClause } from '@aglyn/aglyn'
 import type { GridFilterItem, GridFilterModel } from '@mui/x-data-grid'
 import { useCallback, useMemo, useState } from 'react'
 import {
-  type CrmGridFilterCodec,
-  crmPlainCodec,
-  crmSelectCodec,
-  crmUpsertClause,
-} from '../model/crm-grid-filter'
+  type ListFilterClause,
+  type ListGridFilterCodec,
+  listPlainCodec,
+  listSelectCodec,
+  upsertListFilterClause,
+} from '../const/list-grid-filter'
 
-export interface CrmGridFilterOptions {
-  /** The clauses the list is narrowed by — the saved view's working filters. */
-  clauses: readonly CrmViewFilterClause[]
-  onChange: (clauses: CrmViewFilterClause[]) => void
+export interface ListGridFilterOptions {
+  /**
+   * The clauses the list is narrowed by — a saved view's working filters.
+   * Omitted, the hook holds them itself, for a list with no saved views.
+   */
+  clauses?: readonly ListFilterClause[]
+  onChange?: (clauses: ListFilterClause[]) => void
   /** Fields whose values are picked, which the panel shows as a select. */
   selectFields?: readonly string[]
   /** A field whose stored clauses predate the panel, translated its own way. */
-  codecs?: Readonly<Record<string, CrmGridFilterCodec>>
+  codecs?: Readonly<Record<string, ListGridFilterCodec>>
   /**
    * The query serves ONE clause, so the panel's replaces every other — a
    * server-paged list, which has no loaded window to narrow further.
    * `keepAlongside` names the clauses that do narrow the loaded page and so
-   * may stand beside it ("No next activity").
+   * may stand beside it.
    */
   single?: boolean
-  keepAlongside?: (clause: CrmViewFilterClause) => boolean
+  keepAlongside?: (clause: ListFilterClause) => boolean
   /**
    * The quick search's words, held by the list when it needs them before
    * the grid's columns exist; the hook holds them itself otherwise.
@@ -51,44 +54,59 @@ export interface CrmGridFilterOptions {
 }
 
 /** What the grid is handed, and what the list filters its rows by. */
-export interface CrmGridFilter {
+export interface ListGridFilter {
   /** Controlled: the panel's one item, and the quick search's words. */
   filterModel: GridFilterModel
   onFilterModelChange: (model: GridFilterModel) => void
   /** The quick search's words, for the list to match its rows against. */
   searchWords: string[]
+  /** Every clause in force — the ones given, or the ones the hook holds. */
+  clauses: readonly ListFilterClause[]
+  /** Replaces every clause; what the chips call to remove one. */
+  setClauses: (clauses: ListFilterClause[]) => void
 }
 
+const NO_CLAUSES: readonly ListFilterClause[] = []
+
 /**
- * The grid's Filters panel and quick search, bound to a list's view clauses
- * (AGL-3313). See `model/crm-grid-filter.ts` for the shape both sides keep.
+ * The grid's Filters panel and quick search, bound to a list's clauses
+ * (AGL-3313; shared since AGL-3317). See `const/list-grid-filter.ts` for the
+ * shape both sides keep.
  *
  * ## One field, one clause; the panel edits one at a time
  *
- * The free DataGrid's panel holds a single item, while a saved view
- * holds several clauses. So each FIELD holds one clause, and the panel is a
- * window onto whichever field was last filtered: setting a value writes
+ * The free DataGrid's panel holds a single item, while a list may be
+ * narrowed by several clauses. So each FIELD holds one clause, and the panel
+ * is a window onto whichever field was last filtered: setting a value writes
  * that field's clause, clearing it or deleting the row removes it, and
  * choosing another column in the panel moves the window without touching
- * the clause the reader just set. Filtering Lead source and then Status is
+ * the clause the reader just set. Filtering one field and then another is
  * therefore both, which is what a reader who does it means; the chips over
- * the grid (`CrmFilterBar`) show every clause and remove any of them.
+ * the grid (`ListFilterChips`) show every clause and remove any of them.
  *
  * ## The list answers, never the grid
  *
  * Every list passes `filterMode="server"`: the grid holds one page, or a
  * window the query already narrowed, so a filter the grid ran itself would
  * answer "no match" for a row on the next page. The list reads the clauses
- * — onto its query where it can, over its loaded rows where it cannot —
- * and the quick search's words, and hands the grid the rows that answer.
+ * — onto its query where it can, over its loaded rows where it cannot
+ * (`filterListRows`) — and the quick search's words, and hands the grid the
+ * rows that answer.
  */
-export function useCrmGridFilter(options: CrmGridFilterOptions): CrmGridFilter {
-  const { clauses, onChange, selectFields = [], codecs = {}, single = false, keepAlongside } =
-    options
+export function useListGridFilter(options: ListGridFilterOptions = {}): ListGridFilter {
+  const { selectFields = [], codecs = {}, single = false, keepAlongside } = options
+
+  const [ownClauses, setOwnClauses] = useState<ListFilterClause[]>([])
+  const controlled = options.clauses !== undefined
+  const clauses = options.clauses ?? (controlled ? NO_CLAUSES : ownClauses)
+  const onChange = useMemo(
+    () => (controlled ? (options.onChange ?? (() => undefined)) : setOwnClauses),
+    [controlled, options.onChange],
+  )
 
   const codecFor = useCallback(
-    (field: string): CrmGridFilterCodec =>
-      codecs[field] ?? (selectFields.includes(field) ? crmSelectCodec : crmPlainCodec),
+    (field: string): ListGridFilterCodec =>
+      codecs[field] ?? (selectFields.includes(field) ? listSelectCodec : listPlainCodec),
     [codecs, selectFields],
   )
 
@@ -118,7 +136,7 @@ export function useCrmGridFilter(options: CrmGridFilterOptions): CrmGridFilter {
       pending && pending.field === shownField
         ? pending
         : clause && shown
-          ? { id: 'crm', field: clause.field, ...shown }
+          ? { id: 'list', field: clause.field, ...shown }
           : null
     return { items: item ? [item] : [], quickFilterValues: searchWords }
   }, [shownField, clauses, codecFor, pending, searchWords])
@@ -132,7 +150,7 @@ export function useCrmGridFilter(options: CrmGridFilterOptions): CrmGridFilter {
       // The row deleted: the field it showed is no longer filtered.
       if (!item) {
         if (shownField && clauses.some((clause) => clause.field === shownField)) {
-          onChange(crmUpsertClause(clauses, shownField, null))
+          onChange(upsertListFilterClause(clauses, shownField, null))
         }
         setPending(null)
         setFocus(null)
@@ -145,9 +163,9 @@ export function useCrmGridFilter(options: CrmGridFilterOptions): CrmGridFilter {
       if (!clause) {
         // No value yet. A value cleared on the field already shown removes
         // its clause; a column just chosen leaves the last one standing.
-        setPending({ ...item, id: 'crm' })
+        setPending({ ...item, id: 'list' })
         if (!moved && clauses.some((entry) => entry.field === field)) {
-          onChange(crmUpsertClause(clauses, field, null))
+          onChange(upsertListFilterClause(clauses, field, null))
         }
         return
       }
@@ -158,7 +176,7 @@ export function useCrmGridFilter(options: CrmGridFilterOptions): CrmGridFilter {
         single && !keepAlongside?.(clause)
           ? clauses.filter((entry) => entry.field === field || keepAlongside?.(entry))
           : clauses
-      const next = crmUpsertClause(base, field, clause)
+      const next = upsertListFilterClause(base, field, clause)
       const same =
         next.length === clauses.length &&
         next.every(
@@ -172,7 +190,7 @@ export function useCrmGridFilter(options: CrmGridFilterOptions): CrmGridFilter {
     [searchWords, setSearchWords, shownField, clauses, onChange, codecFor, single, keepAlongside],
   )
 
-  return { filterModel, onFilterModelChange, searchWords }
+  return { filterModel, onFilterModelChange, searchWords, clauses, setClauses: onChange }
 }
 
-export default useCrmGridFilter
+export default useListGridFilter

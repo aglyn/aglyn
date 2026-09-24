@@ -400,6 +400,32 @@ function main(argv) {
     } catch (error) {
       failed += 1
       console.error(`    FAILED ${name} — ${error.message}`)
+      /*
+       * ⛔ A TRUST ROW CANNOT PRECEDE THE PACKAGE (measured 2026-09-24).
+       *
+       * npm refuses `npm trust github` with `E404` for a name the registry
+       * does not hold, and says only "Not Found" — which reads like the
+       * COMMAND is wrong rather than like the package is missing. The
+       * permission being granted is called `createPackage`, which actively
+       * suggests the opposite: it lets the workflow publish a new VERSION of
+       * a package whose row exists, it does not bring the name into being.
+       *
+       * So the remedy is a manual first publish, and it is named here rather
+       * than left to be worked out. This is the message somebody reads at the
+       * exact moment they are stuck on it.
+       */
+      if (/\bE404\b|Not Found/i.test(error.message ?? '')) {
+        console.error('')
+        console.error(`    ${name} is not on the registry, and npm will not trust a name`)
+        console.error('    that does not exist. Publish it once by hand first, then re-run:')
+        console.error('')
+        console.error(`      npm run publish:packages -- --only ${name} --publish`)
+        console.error(`      npm run trust:packages -- --set`)
+        console.error('')
+        console.error('    That first version has no provenance — it is signed by a CI run')
+        console.error('    identity and there is none on a laptop. Every later one does.')
+        console.error('')
+      }
     }
   }
 
