@@ -120,7 +120,7 @@ afterEach(() => jest.restoreAllMocks())
 /** The row whose Order cell names this order number. */
 const rowFor = (orderNumber: string) => {
   const cell = screen.getByText(orderNumber)
-  const row = cell.closest('tr')
+  const row = cell.closest('[role="row"]') as HTMLElement | null
   if (!row) throw new Error(`no row for ${orderNumber}`)
   return row
 }

@@ -210,7 +210,7 @@ describe('the products table pages, and its header counts the catalog', () => {
 
   it('renders one page, not the whole window', async () => {
     await mount()
-    expect(document.querySelectorAll('tbody tr')).toHaveLength(
+    expect(document.querySelectorAll('.MuiDataGrid-row')).toHaveLength(
       TABLE_PAGE_SIZE_DEFAULT,
     )
   })
@@ -243,14 +243,32 @@ describe('the products table pages, and its header counts the catalog', () => {
     await waitFor(() =>
       expect(screen.getByText('Product 0010')).toBeTruthy(),
     )
-    expect(document.querySelectorAll('tbody tr')).toHaveLength(
+    expect(document.querySelectorAll('.MuiDataGrid-row')).toHaveLength(
       TABLE_PAGE_SIZE_DEFAULT,
+    )
+  })
+
+  it('the grid’s search runs the served query (AGL-3317)', async () => {
+    await mount()
+    fireEvent.change(screen.getByRole('searchbox'), {
+      target: { value: 'Product 0003' },
+    })
+    await waitFor(() =>
+      expect(
+        mockQueries.some(
+          (built) =>
+            built.name === 'products' &&
+            built.constraints.some(
+              (item: any) => item?.field === 'nameTokens' && item.op === 'array-contains',
+            ),
+        ),
+      ).toBe(true),
     )
   })
 
   it('a FILTERED header carries no number at all', async () => {
     await mount()
-    fireEvent.change(screen.getByLabelText('Search'), {
+    fireEvent.change(screen.getByRole('searchbox'), {
       target: { value: 'Product 0003' },
     })
     // Under a filter the aggregate counts the whole catalog and the view

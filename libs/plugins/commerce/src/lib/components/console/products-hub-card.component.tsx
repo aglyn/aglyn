@@ -20,10 +20,20 @@ import * as Aglyn from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
 import { PRODUCT_LIST_FILTER_FIELDS } from '../../constants/product-filters'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
+import {
+  filterListRows,
+  inMemoryListField,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -37,10 +47,6 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
@@ -56,6 +62,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
+import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
@@ -101,6 +108,24 @@ const STATUS_COLOR: Record<string, 'default' | 'success' | 'warning'> = {
   archived: 'default',
 }
 
+/*
+ * What the products grid's Filters panel offers: Status, a select. The
+ * query serves it whenever no search is typed; under a search the query is
+ * the search, and Status narrows its matches over the rows the card holds.
+ */
+const PRODUCT_GRID_FILTER_FIELDS = [inMemoryListField('status', 'select')]
+const PRODUCT_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  status: 'Status',
+}
+const PRODUCT_GRID_FILTER_OPTIONS = {
+  status: [
+    { value: 'active', label: 'Active' },
+    { value: 'draft', label: 'Draft' },
+    { value: 'archived', label: 'Archived' },
+  ],
+}
+const PRODUCT_GRID_SELECT_FIELDS = Object.keys(PRODUCT_GRID_FILTER_OPTIONS)
+
 /**
  * Products hub v1 (AGL-279): the catalog manager replacing the Commerce
  * Starter card — search + status filter over `hosts/{hostId}/products`,
@@ -118,9 +143,32 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const createHostResource = useHostResourceApi()
   const { org, ready: planReady } = useOrgPlan(hostId)
   const { confirm } = useConfirmationContext()
-  const [search, setSearch] = useState('')
   /*
-   * WHICH field the search box searches (AGL-2501).
+   * The grid's quick search IS the served search: its words go to the query,
+   * never matched again over the rows (see the query below).
+   */
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const search = searchWords.join(' ').trim()
+  const gridFilter = useListGridFilter({
+    selectFields: PRODUCT_GRID_SELECT_FIELDS,
+    search: { words: searchWords, onChange: setSearchWords },
+  })
+  const filterClauses = gridFilter.clauses
+  /*
+   * The Status clause the query can serve — only while no search is typed,
+   * because the query carries one predicate.
+   */
+  const servedStatus = search
+    ? null
+    : (filterClauses.find(
+        (clause) =>
+          clause.field === 'status' &&
+          listFilterConstraints(PRODUCT_LIST_FILTER_FIELDS, clause) !== null,
+      ) ?? null)
+  /*
+   * WHICH field the search box searches (AGL-2501). A SCOPE of the search,
+   * not a filter: it picks which served query the search runs, so it stays
+   * beside the grid rather than in its panel.
    *
    * The box used to compare four fields at once — name, slug, tag, SKU — over
    * the rows the listener had already fetched. Server-side that is not one
@@ -136,7 +184,6 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const [searchField, setSearchField] = useState<'name' | 'skus' | 'barcodes'>(
     'name',
   )
-  const [statusFilter, setStatusFilter] = useState('all')
   const [editing, setEditing] = useState<ProductRow | null>(null)
   const [creating, setCreating] = useState(false)
   const [adjusting, setAdjusting] = useState<{
@@ -211,11 +258,9 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
        */
       const constraints = listFilterConstraints(
         PRODUCT_LIST_FILTER_FIELDS,
-        search.trim()
-          ? { field: searchField, op: 'contains', value: search.trim() }
-          : statusFilter !== 'all'
-            ? { field: 'status', op: 'equals', value: statusFilter }
-            : null,
+        search
+          ? { field: searchField, op: 'contains', value: search }
+          : servedStatus,
       )
       return query(
         collection(firestore, 'hosts', hostId, 'products'),
@@ -229,7 +274,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         limit(CATALOG_CEILING + 1),
       )
     },
-    [firestore, hostId, search, searchField, statusFilter],
+    [firestore, hostId, search, searchField, servedStatus?.op, servedStatus?.value],
     { idField: '$id' },
   )
   /*
@@ -286,28 +331,28 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
      * its first word and then dropped again here by a whole-string compare
      * that the matching row never satisfies: rows found, then hidden.
      *
-     * The status narrowing stays, and only earns its keep when a name search
-     * is also active — that is the one combination the single predicate above
-     * cannot express, and here it runs over rows the server already matched by
-     * name across the whole catalog rather than over an arbitrary window.
+     * The panel's clauses are matched here, and Status only earns its keep
+     * when a search is also active — that is the one combination the single
+     * predicate above cannot express, and here it runs over rows the server
+     * already matched across the whole catalog rather than over an arbitrary
+     * window. No search words are passed: the query answered them.
      *
      * Soft-deleted products are still dropped here rather than in the query:
      * `deletedAt` is absent on a live product, and Firestore cannot ask for
      * documents that LACK a field.
      */
-    return (productDocs ?? [])
+    const live: ProductRow[] = (productDocs ?? [])
       .slice(0, CATALOG_CEILING)
       .filter((product: any) => !product.deletedAt)
       .map((product: any) => ({
         ...CommerceModel.liftLegacyProduct(product),
         $id: product.$id,
       }))
-      .filter(
-        (product: ProductRow) =>
-          statusFilter === 'all' || product.status === statusFilter,
-      )
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [productDocs, statusFilter])
+    return filterListRows(live, PRODUCT_GRID_FILTER_FIELDS, filterClauses, {
+      paths: [],
+      words: [],
+    }).sort((a, b) => a.name.localeCompare(b.name))
+  }, [productDocs, filterClauses])
 
   /*==========================================
    * THE TABLE PAGES, and the READ deliberately does not (AGL-2501).
@@ -334,7 +379,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   // A filter narrows the list under the reader's feet, and page four of the
   // unfiltered catalog is not a position in the filtered one.
-  useEffect(() => setPage(0), [search, searchField, statusFilter])
+  useEffect(() => setPage(0), [search, searchField, filterClauses])
   const visibleProducts = useMemo(
     () => products.slice(page * pageSize, page * pageSize + pageSize),
     [products, page, pageSize],
@@ -731,6 +776,137 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     return held > 0 ? ` (${held} reserved)` : ''
   }
 
+  const productColumns = listFilterGridColumns(
+    [
+      {
+        field: 'name',
+        headerName: 'Product',
+        flex: 1,
+        minWidth: 200,
+        renderCell: ({ row }: { row: ProductRow }) => (
+          <Stack sx={{ minWidth: 0 }}>
+            <Typography variant="body2" noWrap>
+              {row.name}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {`/${row.slug} · id: ${row.$id}`}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        field: 'status',
+        headerName: 'Status',
+        width: 120,
+        renderCell: ({ row }: { row: ProductRow }) => (
+          <Chip
+            label={row.status}
+            size="small"
+            color={STATUS_COLOR[row.status] ?? 'default'}
+            variant="outlined"
+          />
+        ),
+      },
+      { field: 'type', headerName: 'Type', width: 110 },
+      {
+        field: 'priceUsd',
+        headerName: 'Price',
+        width: 130,
+        sortable: false,
+        renderCell: ({ row }: { row: ProductRow }) =>
+          CommerceModel.productPriceMissing(row) ? (
+            <Chip label="Set a price" size="small" color="warning" variant="outlined" />
+          ) : (
+            formatPrice(row)
+          ),
+      },
+      {
+        field: 'stock',
+        headerName: 'Stock',
+        width: 150,
+        sortable: false,
+        renderCell: ({ row }: { row: ProductRow }) => (
+          <span>
+            {formatStock(row)}
+            {formatHeld(row) ? (
+              <Typography variant="caption" color="text.secondary" component="span">
+                {formatHeld(row)}
+              </Typography>
+            ) : null}
+          </span>
+        ),
+      },
+      {
+        field: 'variants',
+        headerName: 'Variants',
+        width: 100,
+        sortable: false,
+        valueGetter: (_value: unknown, row: ProductRow) => row.variants.length,
+      },
+      listActionsColumn(
+        (product: ProductRow) => (
+          <Stack
+            direction="row"
+            spacing={0.5}
+            sx={{ justifyContent: 'flex-end', whiteSpace: 'nowrap' }}
+          >
+            <Button size="small" onClick={() => setEditing(product)}>
+              {'Edit'}
+            </Button>
+            <Button size="small" onClick={handleDuplicate(product)}>
+              {'Duplicate'}
+            </Button>
+            {product.type === 'digital' ? (
+              <Button size="small" onClick={() => setKeysFor(product)}>
+                {'Keys'}
+              </Button>
+            ) : null}
+            {CommerceModel.productInventory(product) != null ? (
+              <Button
+                size="small"
+                onClick={() =>
+                  setAdjusting({
+                    product,
+                    variantId:
+                      product.variants.find(
+                        (variant) => variant.inventory != null,
+                      )?.id ?? product.variants[0].id,
+                    delta: '',
+                    reason: 'restock',
+                    locationId:
+                      (locationDocs ?? []).find(
+                        (location: any) => location.isDefault,
+                      )?.$id ??
+                      (locationDocs ?? [])[0]?.$id ??
+                      '',
+                  })
+                }
+              >
+                {'Stock'}
+              </Button>
+            ) : null}
+            <Button
+              size="small"
+              onClick={handleStatus(
+                product,
+                product.status === 'archived' ? 'active' : 'archived',
+              )}
+            >
+              {product.status === 'archived' ? 'Activate' : 'Archive'}
+            </Button>
+            <Button size="small" color="error" onClick={handleDelete(product)}>
+              {'Delete'}
+            </Button>
+          </Stack>
+        ),
+        { width: 470 },
+      ),
+    ] as GridColDef[],
+    PRODUCT_GRID_FILTER_FIELDS,
+    PRODUCT_GRID_FILTER_OPTIONS,
+    PRODUCT_GRID_FILTER_HEADERS,
+  )
+
   return (
     <CardDisplay
       /*
@@ -745,7 +921,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
        * count line answers it instead.
        */
       header={
-        search || statusFilter !== 'all'
+        search || filterClauses.length
           ? 'Products'
           : `Products${productCount ? ` (${productCount})` : ''}`
       }
@@ -756,21 +932,7 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
       <Stack spacing={2}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
           <TextField
-            label="Search"
-            placeholder={
-              searchField === 'name'
-                ? 'Product name'
-                : searchField === 'skus'
-                  ? 'Whole SKU'
-                  : 'Whole barcode'
-            }
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            size="small"
-            sx={{ flex: 1 }}
-          />
-          <TextField
-            label="In"
+            label="Search in"
             value={searchField}
             onChange={(event) =>
               setSearchField(
@@ -779,25 +941,13 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             }
             size="small"
             select
-            sx={{ minWidth: 110 }}
+            sx={{ minWidth: 170 }}
           >
             <MenuItem value="name">{'Name'}</MenuItem>
-            <MenuItem value="skus">{'SKU'}</MenuItem>
-            <MenuItem value="barcodes">{'Barcode'}</MenuItem>
+            <MenuItem value="skus">{'SKU (whole)'}</MenuItem>
+            <MenuItem value="barcodes">{'Barcode (whole)'}</MenuItem>
           </TextField>
-          <TextField
-            label="Status"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            size="small"
-            select
-            sx={{ minWidth: 130 }}
-          >
-            <MenuItem value="all">{'All'}</MenuItem>
-            <MenuItem value="active">{'Active'}</MenuItem>
-            <MenuItem value="draft">{'Draft'}</MenuItem>
-            <MenuItem value="archived">{'Archived'}</MenuItem>
-          </TextField>
+          <Box sx={{ flex: 1 }} />
           <Button
             variant="contained"
             color="primary"
@@ -852,131 +1002,37 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
           lastImport={lastImport}
           onCreated={onCatalogCreated}
         />
-        {products.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {search || statusFilter !== 'all'
-              ? 'No products match the current filters.'
+        <ListFilterChips
+          fields={PRODUCT_GRID_FILTER_FIELDS}
+          headers={PRODUCT_GRID_FILTER_HEADERS}
+          clauses={filterClauses}
+          onChange={gridFilter.setClauses}
+          options={PRODUCT_GRID_FILTER_OPTIONS}
+          servedField={servedStatus ? 'status' : null}
+        />
+        <ListTable
+          aria-label="Products"
+          rows={visibleProducts}
+          columns={productColumns}
+          filterMode="server"
+          filterModel={gridFilter.filterModel}
+          onFilterModelChange={gridFilter.onFilterModelChange}
+          // The search box drives the served query above.
+          quickFilter
+          // `ListPagination` below pages what the card holds.
+          hideFooter
+          noRowsLabel={
+            search || filterClauses.length
+              ? 'No products match these filters'
+              : 'No products yet'
+          }
+          noRowsDescription={
+            search || filterClauses.length
+              ? undefined
               : 'Build your catalog: add a product, then drop commerce ' +
-                'blocks on any screen in the besigner.'}
-          </Typography>
-        ) : (
-          <Box>
-            <ScrollTable size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>{'Product'}</TableCell>
-                  <TableCell>{'Status'}</TableCell>
-                  <TableCell>{'Type'}</TableCell>
-                  <TableCell>{'Price'}</TableCell>
-                  <TableCell>{'Stock'}</TableCell>
-                  <TableCell>{'Variants'}</TableCell>
-                  <TableCell align="right">{'Actions'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {visibleProducts.map((product) => (
-                  <TableRow key={product.$id} hover>
-                    <TableCell sx={{ maxWidth: 260 }}>
-                      <Typography variant="body2" noWrap>
-                        {product.name}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        noWrap
-                        sx={{ display: 'block' }}
-                      >
-                        {`/${product.slug} · id: ${product.$id}`}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={product.status}
-                        size="small"
-                        color={STATUS_COLOR[product.status] ?? 'default'}
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell>{product.type}</TableCell>
-                    <TableCell>
-                      {CommerceModel.productPriceMissing(product) ? (
-                        <Chip label="Set a price" size="small" color="warning" variant="outlined" />
-                      ) : (
-                        formatPrice(product)
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {formatStock(product)}
-                      {formatHeld(product) ? (
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          component="span"
-                        >
-                          {formatHeld(product)}
-                        </Typography>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>{product.variants.length}</TableCell>
-                    <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                      <Button size="small" onClick={() => setEditing(product)}>
-                        {'Edit'}
-                      </Button>
-                      <Button size="small" onClick={handleDuplicate(product)}>
-                        {'Duplicate'}
-                      </Button>
-                      {product.type === 'digital' ? (
-                        <Button size="small" onClick={() => setKeysFor(product)}>
-                          {'Keys'}
-                        </Button>
-                      ) : null}
-                      {CommerceModel.productInventory(product) != null ? (
-                        <Button
-                          size="small"
-                          onClick={() =>
-                            setAdjusting({
-                              product,
-                              variantId:
-                                product.variants.find(
-                                  (variant) => variant.inventory != null,
-                                )?.id ?? product.variants[0].id,
-                              delta: '',
-                              reason: 'restock',
-                              locationId:
-                                (locationDocs ?? []).find(
-                                  (location: any) => location.isDefault,
-                                )?.$id ??
-                                (locationDocs ?? [])[0]?.$id ??
-                                '',
-                            })
-                          }
-                        >
-                          {'Stock'}
-                        </Button>
-                      ) : null}
-                      <Button
-                        size="small"
-                        onClick={handleStatus(
-                          product,
-                          product.status === 'archived' ? 'active' : 'archived',
-                        )}
-                      >
-                        {product.status === 'archived' ? 'Activate' : 'Archive'}
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        onClick={handleDelete(product)}
-                      >
-                        {'Delete'}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </ScrollTable>
-          </Box>
-        )}
+                'blocks on any screen in Besigner.'
+          }
+        />
         {products.length === 0 ? null : (
           <ListPagination
             page={page}
@@ -993,8 +1049,8 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
         {catalogTruncated ? (
           <Alert severity="info">
             {`This table holds ${CATALOG_CEILING} products at a time and this ` +
-              'catalog is larger. Search reaches every product; the CSV ' +
-              'export covers what the table holds.'}
+              'catalog is larger. Search, and Status on its own, reach every ' +
+              'product; the CSV export covers what the table holds.'}
           </Alert>
         ) : null}
       </Stack>

@@ -30,8 +30,38 @@
  * a real `setTimeout` and fake timers would deadlock the hover assertion.
  */
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import HostOrdersCard from './host-orders-card.component'
+
+/*
+ * The real grid, with its props kept so a case can set a filter the way the
+ * grid's Filters panel does: through `onFilterModelChange`.
+ */
+let mockGrid: {
+  filterModel: { quickFilterValues?: unknown[] }
+  onFilterModelChange: (model: {
+    items: Array<Record<string, unknown>>
+    quickFilterValues?: unknown[]
+  }) => void
+}
+jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => {
+  const actual = jest.requireActual('@aglyn/shared-ui-jsx/components/list-table.component')
+  return {
+    ...actual,
+    ListTable: (props: typeof mockGrid) => {
+      mockGrid = props
+      return <actual.ListTable {...props} />
+    },
+  }
+})
+/** Picks a value for a column in the grid's Filters panel. */
+const pickFilter = (field: string, value: string) =>
+  act(() =>
+    mockGrid.onFilterModelChange({
+      items: [{ id: 'panel', field, operator: 'is', value }],
+      quickFilterValues: mockGrid.filterModel.quickFilterValues,
+    }),
+  )
 
 /** Swapped per case, keyed by collection name. */
 let orderDocs: Array<Record<string, unknown>> = []
@@ -206,11 +236,24 @@ describe('the orders list surfaces an open dispute (AGL-1796)', () => {
       order('b', 'Kettle', { status: 'delivered' }),
     ]
     render(<HostOrdersCard hostId="host-1" />)
-    fireEvent.mouseDown(screen.getByLabelText('Status'))
-    // The status select now carries display labels, not raw enum values.
-    fireEvent.click(within(screen.getByRole('listbox')).getByText('Delivered'))
+    pickFilter('statusKey', 'delivered')
     expect(rowNames()).toEqual(['Kettle'])
     expect(screen.getByRole('alert').textContent).toContain('in 3 days')
+  })
+
+  it('keeps the banner through the grid’s own search (AGL-3317)', async () => {
+    orderDocs = [
+      order('a', 'Mug', { dispute: openDispute(3) }),
+      order('b', 'Kettle', {
+        lineItems: [{ productId: 'p2', name: 'Kettle', quantity: 1, unitAmountCents: 6200 }],
+      }),
+    ]
+    render(<HostOrdersCard hostId="host-1" />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'kettle' } })
+    await waitFor(() => expect(rowNames()).toEqual(['Kettle']))
+    expect(screen.getByRole('alert').textContent).toContain('in 3 days')
+    pickFilter('productIds', 'p1')
+    expect(screen.getByText('No orders match these filters')).toBeTruthy()
   })
 
   it('filters to the open disputes from the banner itself', () => {
@@ -246,10 +289,7 @@ describe('the orders list surfaces an open dispute (AGL-1796)', () => {
       order('d', 'Saucer', { dispute: openDispute(3) }),
     ]
     render(<HostOrdersCard hostId="host-1" />)
-    fireEvent.mouseDown(screen.getByLabelText('Disputes'))
-    fireEvent.click(
-      within(screen.getByRole('listbox')).getByText('Charged back'),
-    )
+    pickFilter('disputeKey', 'lost')
     expect(rowNames()).toEqual(['Mug'])
   })
 
