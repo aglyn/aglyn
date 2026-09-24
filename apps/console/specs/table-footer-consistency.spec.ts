@@ -990,16 +990,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'the map is over a parsed prop, not over documents.',
   ],
   [
-    'libs/plugins/crm/src/lib/components/fields-section.tsx',
-    'The organization’s custom contact field DEFINITIONS (AGL-2601) — a ' +
-      'settings table, one row per field the merchant declared, bounded by ' +
-      '`CONTACT_FIELDS_MAX_PER_ORG` (100) at the read itself: the collection ' +
-      'has no index, is read whole under that `limit()`, and is ordered in ' +
-      'memory by the stored `order` the arrows on each row move. The bound ' +
-      'is what a profile form can carry, not how long the account has ' +
-      'existed, so there is no second page for a footer to turn to.',
-  ],
-  [
     'libs/plugins/crm/src/lib/components/lead-source-values-card.tsx',
     'The organization’s LEAD SOURCE picklist values (AGL-3298) — a settings ' +
       'table, one row per value the merchant declared, bounded by ' +
@@ -1871,7 +1861,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // new table: the org's declaration of which sites are one sender, read
     // off the org document, which cannot name more groups than half the
     // org's sites.
-    expect(NOT_A_LIST).toHaveLength(68)
+    //
+    // 67 since the CRM's field definitions joined the list table (AGL-3335):
+    // the Fields section pages, sorts, filters and searches under the grid's
+    // own footer, so its settings-table row retires.
+    expect(NOT_A_LIST).toHaveLength(67)
   })
 })
 
@@ -1985,6 +1979,8 @@ describe('CRM lists filter through the grid, by the shared path', () => {
       'companies-section.tsx',
       'contacts-section.tsx',
       'deals-section.tsx',
+      // The field definitions joined the list table (AGL-3335).
+      'fields-section.tsx',
       'leads-section.tsx',
       'tasks-section.tsx',
     ])

@@ -42,8 +42,13 @@ Open **CRM → Fields**, pick the tab for the record the field describes — **C
 - **Required on the … form** — the record's page will not save the field empty. It does
   not make a website form field required; that is set on the form itself.
 
-Fields are listed in the order they appear on a record and in the list's columns; the
-arrows on each row move a field up or down.
+Each tab is the console's list table: it pages, sorts by **Field**, **Key** or **Type**,
+filters by **Type** and **Required** from its **Filters** panel, and searches a field's
+name and key. It opens in the order fields appear on a record and in the list's columns,
+numbered under **Order**; the arrows on each row move a field up or down. The order is
+the record's, not a view of the list, so the arrows are live only while the list shows
+it — with a sort, a filter or a search in force they wait, and say **Clear sorting and
+filters to reorder**.
 
 :::note
 How many records carry a value under each field is not counted. That would read every
