@@ -9,6 +9,25 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.189 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/eaf9b62d8...v1.0.0-beta.189)
+
+### Added
+
+- **console:** aglyn's own emails carry the marketing site's email blocks ([AGL-3318](https://linear.app/aglyn/issue/AGL-3318), [AGL-2428](https://linear.app/aglyn/issue/AGL-2428))
+
+### Fixed
+
+- **console:** an email editor's save menu says what publishing changes ([AGL-3318](https://linear.app/aglyn/issue/AGL-3318))
+
+<details>
+<summary>Also in this release: 1 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3318 ([AGL-3318](https://linear.app/aglyn/issue/AGL-3318))
+
+</details>
+
 ## v1.0.0-beta.188 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.187...v1.0.0-beta.188)

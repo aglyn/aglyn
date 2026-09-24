@@ -21,8 +21,10 @@ import {
   PLATFORM_BRANDING_PROFILE,
   resolveBrandingProfile,
 } from '@aglyn/aglyn'
+import { compress } from '@aglyn/aglyn/app-utils/compress'
 import { EMAIL_NODE_ROOT_ID } from '@aglyn/shared-util-email'
 import {
+  isPlatformBrandedSend,
   loadSystemEmail,
   renderEffectiveSystemEmail,
   renderLoadedSystemEmail,
@@ -31,20 +33,39 @@ import {
 
 const mockGet = jest.fn()
 const mockVersionGet = jest.fn()
+/** `hosts/{hostId}/components/{componentId}`, by host and component id. */
+const mockComponentGet = jest.fn()
+/** The marketing site the deployment names; null when it names none. */
+const mockPlatformHost = jest.fn((): string | null => null)
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   firebaseAdmin: {
     app: () => ({
       firestore: () => ({
-        collection: () => ({
-          doc: () => ({
-            get: mockGet,
-            collection: () => ({ doc: () => ({ get: mockVersionGet }) }),
-          }),
+        // The template and its versions, and the one other path this module
+        // reads: a site's published components (AGL-3318).
+        collection: (name: string) => ({
+          doc: (id: string) =>
+            name === 'hosts'
+              ? {
+                  collection: () => ({
+                    doc: (componentId: string) => ({
+                      get: () => mockComponentGet(id, componentId),
+                    }),
+                  }),
+                }
+              : {
+                  get: mockGet,
+                  collection: () => ({ doc: () => ({ get: mockVersionGet }) }),
+                },
         }),
       }),
     }),
   },
+}))
+
+jest.mock('@aglyn/tenant-data-admin/server/platform-marketing-consent', () => ({
+  platformMarketingHostId: () => mockPlatformHost(),
 }))
 
 /** A Firestore-ish snapshot over a plain object. */
@@ -358,6 +379,235 @@ describe('renderSystemEmail', () => {
 
       const platform = renderLoadedSystemEmail(loaded!, {})
       expect(platform?.html).toContain(PLATFORM_BRANDING_PROFILE.supportUrl)
+    })
+  })
+
+  /**
+   * Aglyn's own mail wears its marketing site's header and footer (AGL-3318).
+   *
+   * A block is a component of that site, placed in a platform email as a
+   * `reusableInstance`, and the mail renderer draws a node it does not know as
+   * nothing. So the send reads the block from the site the deployment names
+   * and expands it, except where the recipient must never see Aglyn: a
+   * white-label org's people.
+   */
+  describe('email blocks from the platform marketing site (AGL-3318)', () => {
+    const MARKETING_HOST = 'aglyn-marketing'
+    const FOOTER_TEXT = 'Aglyn, 100 Example Street'
+    /** The site's published footer, compressed as a promoted one is stored. */
+    const STORED_FOOTER = {
+      rootId: 'froot',
+      nodes: compress({
+        froot: {
+          $id: 'froot',
+          componentId: 'emailSection',
+          pluginId: 'email',
+          nodes: ['fline'],
+        },
+        fline: {
+          $id: 'fline',
+          componentId: 'emailText',
+          pluginId: 'email',
+          parentId: 'froot',
+          props: { children: FOOTER_TEXT, variant: 'caption' },
+        },
+      }),
+    }
+    /** A designed email with the footer placed under its own copy. */
+    const PLACES_FOOTER = {
+      '_@_': { $id: '_@_', componentId: 'div', nodes: ['t1', 'ftr'] },
+      t1: {
+        $id: 't1',
+        componentId: 'emailText',
+        pluginId: 'email',
+        parentId: '_@_',
+        props: { children: 'Hello {{org.name}}', variant: 'body' },
+      },
+      ftr: {
+        $id: 'ftr',
+        componentId: 'reusableInstance',
+        pluginId: 'mui',
+        parentId: '_@_',
+        props: { refId: 'footer-1', name: 'Email footer' },
+        nodes: [],
+      },
+    }
+    /** An agency's brand with no support URL, which never inherits Aglyn's. */
+    const WHITE_LABEL = brandMergeTokens(
+      resolveBrandingProfile({
+        plan: 'agency',
+        brandingProfile: { productName: 'Acme Sites' },
+      } as never),
+    )
+
+    beforeEach(() => {
+      jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+      mockPlatformHost.mockReturnValue(MARKETING_HOST)
+      mockGet.mockResolvedValue(
+        snapshot({ versionId: 'v1', subject: 'Join {{org.name}}' }),
+      )
+      mockVersionGet.mockResolvedValue(snapshot({ nodes: PLACES_FOOTER }))
+      mockComponentGet.mockImplementation(async (hostId, componentId) =>
+        snapshot(
+          hostId === MARKETING_HOST && componentId === 'footer-1'
+            ? STORED_FOOTER
+            : null,
+        ),
+      )
+    })
+    afterEach(() => {
+      mockPlatformHost.mockReturnValue(null)
+      mockComponentGet.mockReset()
+    })
+
+    it('expands a placed block, read from the marketing site, in a platform send', async () => {
+      const result = await renderSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+      })
+      expect(mockComponentGet).toHaveBeenCalledWith(MARKETING_HOST, 'footer-1')
+      expect(result?.html).toContain('Hello Test Org')
+      expect(result?.html).toContain(FOOTER_TEXT)
+      // The block's copy reaches the plain-text part as well.
+      expect(result?.text).toContain(FOOTER_TEXT)
+    })
+
+    it('leaves it out of a white-label send, whose recipient must never see Aglyn', async () => {
+      const result = await renderSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+        ...WHITE_LABEL,
+      })
+      // The designed copy still sends; only the block is gone.
+      expect(result?.html).toContain('Hello Test Org')
+      expect(result?.html).not.toContain(FOOTER_TEXT)
+      expect(result?.text).not.toContain(FOOTER_TEXT)
+    })
+
+    it('reads nothing when the deployment names no marketing site, and still renders', async () => {
+      mockPlatformHost.mockReturnValue(null)
+      const result = await renderSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+      })
+      expect(mockComponentGet).not.toHaveBeenCalled()
+      expect(result?.html).toContain('Hello Test Org')
+      expect(result?.html).not.toContain(FOOTER_TEXT)
+    })
+
+    it('still sends the designed copy when the block read fails', async () => {
+      mockComponentGet.mockRejectedValue(new Error('unavailable'))
+      const result = await renderSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+      })
+      // The design, not null: null would swap it for the built-in copy.
+      expect(result?.subject).toBe('Join Test Org')
+      expect(result?.html).toContain('Hello Test Org')
+      expect(result?.html).not.toContain(FOOTER_TEXT)
+      expect(console.error).toHaveBeenCalledWith(
+        expect.stringContaining('email blocks failed to load'),
+        expect.any(Error),
+      )
+    })
+
+    it('reads a design that places nothing without asking the marketing site', async () => {
+      mockVersionGet.mockResolvedValue(snapshot({ nodes: NODES }))
+      const result = await renderSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+      })
+      expect(result?.html).toContain('Hello Test Org')
+      expect(mockComponentGet).not.toHaveBeenCalled()
+    })
+
+    it('reads the blocks once for a batch, and decides per recipient', async () => {
+      const loaded = await loadSystemEmail('org-invite')
+      expect(mockComponentGet).toHaveBeenCalledTimes(1)
+
+      const platform = renderLoadedSystemEmail(loaded!, { 'org.name': 'Org A' })
+      const agency = renderLoadedSystemEmail(loaded!, {
+        'org.name': 'Org B',
+        ...WHITE_LABEL,
+      })
+      expect(platform?.html).toContain(FOOTER_TEXT)
+      expect(agency?.html).not.toContain(FOOTER_TEXT)
+      // Rendering composed from what the load read, and read nothing more.
+      expect(mockComponentGet).toHaveBeenCalledTimes(1)
+    })
+
+    it('leaves it out when the send carries an org email logo, which stays the only header', async () => {
+      const loaded = await loadSystemEmail('org-invite')
+      const result = renderLoadedSystemEmail(
+        loaded!,
+        { 'org.name': 'Test Org' },
+        { brandLogoUrl: 'https://cdn.example.com/acme.png' },
+      )
+      expect(result?.html).toContain('https://cdn.example.com/acme.png')
+      expect(result?.html).not.toContain(FOOTER_TEXT)
+    })
+
+    it('expands it in a staff test send of the designed version too', async () => {
+      const result = await renderEffectiveSystemEmail('org-invite', {
+        'org.name': 'Test Org',
+      })
+      expect(result?.html).toContain(FOOTER_TEXT)
+    })
+  })
+
+  describe('isPlatformBrandedSend (AGL-3318)', () => {
+    const withDefaults = (merge: Record<string, string>) => ({
+      ...brandMergeTokens(PLATFORM_BRANDING_PROFILE),
+      ...merge,
+    })
+
+    it('is true for an org-less send, which supplies no brand at all', () => {
+      expect(isPlatformBrandedSend(withDefaults({ 'org.name': 'Test Org' }))).toBe(
+        true,
+      )
+    })
+
+    it('is true for an org without white-label, which resolves to the platform brand', () => {
+      const branding = resolveBrandingProfile({
+        plan: 'pro',
+        brandingProfile: { productName: 'Ignored Without The Entitlement' },
+      } as never)
+      expect(
+        isPlatformBrandedSend(withDefaults(brandMergeTokens(branding)), {
+          brandLogoUrl: branding.emailLogoUrl,
+        }),
+      ).toBe(true)
+    })
+
+    it('is false for a white-label org that set no support URL', () => {
+      // The one field every white-label profile differs on (AGL-2428).
+      const branding = resolveBrandingProfile({
+        plan: 'agency',
+        brandingProfile: {},
+      } as never)
+      expect(branding.productName).toBe(PLATFORM_BRANDING_PROFILE.productName)
+      expect(
+        isPlatformBrandedSend(withDefaults(brandMergeTokens(branding)), {
+          brandLogoUrl: branding.emailLogoUrl,
+        }),
+      ).toBe(false)
+    })
+
+    it('is false for a white-label org with its own support URL', () => {
+      const branding = resolveBrandingProfile({
+        plan: 'agency',
+        brandingProfile: { supportUrl: 'https://acme.test/help' },
+      } as never)
+      expect(isPlatformBrandedSend(withDefaults(brandMergeTokens(branding)))).toBe(
+        false,
+      )
+    })
+
+    it('is false whenever the send carries an email logo', () => {
+      expect(
+        isPlatformBrandedSend(withDefaults({}), {
+          brandLogoUrl: 'https://cdn.example.com/acme.png',
+        }),
+      ).toBe(false)
+      // Blank is no logo, as the renderer reads it.
+      expect(isPlatformBrandedSend(withDefaults({}), { brandLogoUrl: '  ' })).toBe(
+        true,
+      )
     })
   })
 

@@ -436,6 +436,15 @@ system emails that exist — adding one is a code change. Password reset and ema
 verification are Aglyn's own and are fully editable. Billing emails — receipts, failed
 payments, refunds — are sent by Stripe from its Dashboard and are listed read-only.
 
+The editor also offers the platform marketing site's email blocks, such as its header
+and footer, under **Your email blocks**, and draws them where you place them. They come
+from the site that `PLATFORM_MARKETING_HOST_ID` names; without one, the drawer offers
+none. Blocks are made and changed on that site, so **Save as reusable component** isn't
+offered here. Mail sent under the Aglyn brand carries them. Mail to the people of a
+white-label organization leaves them out, so the organization's own email logo is the
+only header it has. On the marketing site, a block's **Used by** lists the system
+emails that place it.
+
 #### Platform send rate {#platform-send-rate}
 
 At the top of the same page. Everything Aglyn sends leaves on **one** Resend key

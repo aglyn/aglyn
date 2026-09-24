@@ -79,6 +79,18 @@ export interface ReusableComponentsProviderProps {
    * editor refuses the reference and the graft bounds it anyway.
    */
   editingFormId?: string
+  /**
+   * Whether this canvas offers Save as reusable component. On by default.
+   *
+   * Off for a document that borrows another site's components rather than
+   * authoring them: a platform email draws the platform marketing site's
+   * email blocks (AGL-3318), and a promotion there would create a component
+   * on that site from outside its own editor, under no workspace's plan.
+   * Detach stays, since it rewrites only the document open here. Edit
+   * component stays too, and opens nothing on a route that names no site,
+   * which has no link to build.
+   */
+  allowPromote?: boolean
   children?: JSX.Children
 }
 
@@ -92,7 +104,7 @@ export interface ReusableComponentsProviderProps {
 export function ReusableComponentsProvider(
   props: ReusableComponentsProviderProps,
 ) {
-  const { hostId, editingFormId, children } = props
+  const { hostId, editingFormId, allowPromote = true, children } = props
   const firestore = useFirestore()
   const createHostResource = useHostResourceApi()
   const { enqueueSnackbar } = useSnackbar()
@@ -397,15 +409,19 @@ export function ReusableComponentsProvider(
   // instance instead of a dashed box, and the chosen icon. Straight off the
   // hook rather than a second mapping of the same docs — two maps of the
   // same type will eventually disagree about which fields a definition has.
+  //
+  // `onPromote` is left out rather than stubbed when promotion is off: the
+  // Attributes panel draws Save as reusable component only when it is there.
   const contextValue = useMemo(
     () => ({
-      onPromote: handlePromote,
+      ...(allowPromote ? { onPromote: handlePromote } : {}),
       onDemote: handleDemote,
       onEditComponent: handleEditComponent,
       definitions,
       formDesigns,
     }),
     [
+      allowPromote,
       handlePromote,
       handleDemote,
       handleEditComponent,

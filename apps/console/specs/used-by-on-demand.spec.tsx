@@ -133,3 +133,41 @@ describe('the Used by card scans only when asked (AGL-703)', () => {
     expect(screen.queryByText(/Nothing uses this/i)).toBeNull()
   })
 })
+
+describe('a platform email in Used by (AGL-3318)', () => {
+  it('names it as an email, opened in the staff email editor', async () => {
+    // Only the platform marketing site's blocks have these dependents: the
+    // platform's own emails, keyed by catalog key.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        dependents: [
+          {
+            type: 'systemEmail',
+            id: 'org-invite',
+            name: 'Organization invite',
+            via: ['id'],
+            versionId: 'v3',
+          },
+          { type: 'systemEmail', id: 'welcome', name: 'Welcome', via: ['id'] },
+        ],
+        complete: true,
+      }),
+    })
+    render(<UsedByCard hostId="h1" kind="component" id="c1" noun="component" />)
+    fireEvent.click(screen.getByText(/Find where this is used/i))
+    await waitFor(() =>
+      expect(screen.getByText('Organization invite')).toBeTruthy(),
+    )
+    // The version that sends, where the placement is changed.
+    expect(
+      screen.getByText('Organization invite').closest('a')?.getAttribute('href'),
+    ).toBe('/admin/emails/org-invite/versions/v3/besigner')
+    // No version named: the staff list, never a site page.
+    expect(
+      screen.getByText('Welcome').closest('a')?.getAttribute('href'),
+    ).toBe('/admin/emails')
+    expect(screen.getAllByText('email')).toHaveLength(2)
+    expect(screen.queryByText('systemEmail')).toBeNull()
+  })
+})
