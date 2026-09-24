@@ -515,7 +515,7 @@ function OrgSendingTables(props: { mount: EmailOrgMount; basePath: string }) {
             {(first.customDomainPlan
               ? `Sending as your own domain starts on the ${first.customDomainPlan} plan. `
               : '') +
-              'Until then each site sends on a shared Aglyn address, whose ' +
+              'Until then each site sends on a shared sending address, whose ' +
               'delivery reputation is pooled with the other sites on it.'}
           </Typography>
         ) : null}
