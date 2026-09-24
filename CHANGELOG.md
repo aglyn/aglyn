@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.185 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/56230db8e...v1.0.0-beta.185)
+
+### Fixed
+
+- **console:** email blocks read as emails in Used by, properties and the picker ([AGL-3287](https://linear.app/aglyn/issue/AGL-3287))
+
 ## v1.0.0-beta.184 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/b203f4340...v1.0.0-beta.184)

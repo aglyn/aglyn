@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/plugins-events-calendar",
-  "version": "1.0.0-beta.184",
+  "version": "1.0.0-beta.185",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,14 +25,14 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.184",
-    "@aglyn/shared-data-mdi": "1.0.0-beta.184",
-    "@aglyn/shared-ui-jsx": "1.0.0-beta.184",
-    "@aglyn/shared-ui-snackstack": "1.0.0-beta.184",
-    "@aglyn/shared-util-timestamp": "1.0.0-beta.184",
-    "@aglyn/tenant-data-admin": "1.0.0-beta.184",
-    "@aglyn/tenant-feature-instance": "1.0.0-beta.184",
-    "@aglyn/tenant-runtime": "1.0.0-beta.184",
+    "@aglyn/aglyn": "1.0.0-beta.185",
+    "@aglyn/shared-data-mdi": "1.0.0-beta.185",
+    "@aglyn/shared-ui-jsx": "1.0.0-beta.185",
+    "@aglyn/shared-ui-snackstack": "1.0.0-beta.185",
+    "@aglyn/shared-util-timestamp": "1.0.0-beta.185",
+    "@aglyn/tenant-data-admin": "1.0.0-beta.185",
+    "@aglyn/tenant-feature-instance": "1.0.0-beta.185",
+    "@aglyn/tenant-runtime": "1.0.0-beta.185",
     "@swc/helpers": "0.5.23"
   },
   "peerDependencies": {
