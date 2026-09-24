@@ -16,7 +16,11 @@
  */
 'use client'
 
-import { normalizeContactEmail, pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  normalizeContactEmail,
+  pluginDocsHelp,
+  type ConsolePluginOrgMount,
+} from '@aglyn/aglyn'
 // A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published
@@ -68,6 +72,7 @@ import {
 import { useCallback, useMemo, useState } from 'react'
 import { useRecordRouteContext } from './use-record-route-context'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import { orgSiteNames } from './inbox-org-sites'
 
 /**
  * How many members and how many leads the contacts table reads.
@@ -86,8 +91,20 @@ const CONTACT_CEILING = 200
  * split is what makes "mount only the section being read" structural: hooks
  * cannot be conditional, so a page holding every section's reads pays for all
  * of them whichever one the URL names.
+ *
+ * On the organization's Inbox (`hostId: null`, AGL-3303) it lists the
+ * organization's leads with the sites each was captured by. A member signs up
+ * to ONE site and lives under it, so members are listed once a site is
+ * picked, which is the page handing this card that site.
  */
-export function ContactsCard({ hostId }: { hostId: string }) {
+export function ContactsCard({
+  hostId,
+  orgMount,
+}: {
+  hostId: string | null
+  /** The organization and its sites — present exactly when `hostId` is `null`. */
+  orgMount?: ConsolePluginOrgMount
+}) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
@@ -126,11 +143,13 @@ export function ContactsCard({ hostId }: { hostId: string }) {
    *=========================================*/
   const { data: memberDocs } = useFirestoreCollection<any>(
     () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'siteMembers'),
-        orderBy('createdAt', 'desc'),
-        limit(CONTACT_CEILING + 1),
-      ),
+      hostId
+        ? query(
+            collection(firestore, 'hosts', hostId, 'siteMembers'),
+            orderBy('createdAt', 'desc'),
+            limit(CONTACT_CEILING + 1),
+          )
+        : null,
     [firestore, hostId],
     { idField: '$id' },
   )
@@ -139,14 +158,31 @@ export function ContactsCard({ hostId }: { hostId: string }) {
    * `visibleTo`. Reading `hosts/{hostId}/leads` showed a site its
    * pre-migration rows and nothing captured since.
    */
-  const { orgId } = useOrgDataScope({ hostId })
+  const { orgId } = useOrgDataScope({
+    hostId: hostId ?? undefined,
+    orgId: hostId == null ? orgMount?.orgId : undefined,
+  })
   const siteMembers = (memberDocs ?? []).slice(0, CONTACT_CEILING)
   const { data: leadDocs } = useFirestoreCollection<any>(
     () =>
       orgId
         ? query(
             collection(firestore, 'orgs', orgId, 'leads'),
-            where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId)),
+            /*
+             * Every site's, on the organization's Inbox: an org-wide member
+             * reads the collection unscoped — the rules short-circuit on
+             * their reach, as for the CRM's own org list — so a clause here
+             * would only narrow what they may already read.
+             */
+            ...(hostId
+              ? [
+                  where(
+                    'visibleTo',
+                    'array-contains-any',
+                    scopeTokensForHost(hostId),
+                  ),
+                ]
+              : []),
             orderBy('createdAt', 'desc'),
             limit(CONTACT_CEILING + 1),
           )
@@ -198,6 +234,8 @@ export function ContactsCard({ hostId }: { hostId: string }) {
   )
   const handleDeleteMember = useCallback(
     (member: any) => async () => {
+      // Members are listed only under a site, so there is one to delete from.
+      if (!hostId) return
       const confirmed = await confirm({
         title: 'Remove this member?',
         description: `"${member.email}" can no longer sign in to your site.`,
@@ -223,6 +261,20 @@ export function ContactsCard({ hostId }: { hostId: string }) {
    * does not.
    */
   const [leadOrigin, setLeadOrigin] = useState<any | null>(null)
+  /*
+   * The site a lead's attribution is asked of. Under a site it is that site;
+   * across every site a lead is one org row that several sites may have met,
+   * and the credit is filed by the site whose capture made it — the first in
+   * `capturedByHostIds`, the site the CRM's own lead page asks as well.
+   */
+  const originSite = (contact: any): string | null => {
+    if (hostId) return hostId
+    const first = Array.isArray(contact?.capturedByHostIds)
+      ? contact.capturedByHostIds[0]
+      : null
+    return typeof first === 'string' && first ? first : null
+  }
+  const leadOriginSite = leadOrigin ? originSite(leadOrigin) : null
 
   const contactActions = (contact: any): RowActionsMenuItem[] =>
     contact.contactKind === 'member'
@@ -248,12 +300,17 @@ export function ContactsCard({ hostId }: { hostId: string }) {
                 },
               ]
             : []),
-          {
-            key: 'origin',
-            label: 'Where this came from',
-            icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
-            onClick: () => setLeadOrigin(contact),
-          },
+          // A lead no site captured has no site to ask for its campaign.
+          ...(originSite(contact)
+            ? [
+                {
+                  key: 'origin',
+                  label: 'Where this came from',
+                  icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
+                  onClick: () => setLeadOrigin(contact),
+                },
+              ]
+            : []),
         ]
   const contactColumns: GridColDef[] = [
     {
@@ -307,6 +364,23 @@ export function ContactsCard({ hostId }: { hostId: string }) {
           <Chip label={value} size="small" variant="outlined" />
         ),
     },
+    /*
+      KNOWN BY, on the organization's Inbox: every site that captured the
+      person, as the CRM's organization Leads list names them. A lead is one
+      org row, so "which site" is a set, never one answer.
+     */
+    ...(hostId == null
+      ? [
+          {
+            field: 'capturedByHostIds',
+            headerName: 'Site',
+            flex: 1,
+            minWidth: 160,
+            valueGetter: (_value: unknown, contact: any) =>
+              orgSiteNames(orgMount, contact.capturedByHostIds),
+          } satisfies GridColDef,
+        ]
+      : []),
     {
       field: 'createdAt',
       headerName: 'Joined',
@@ -330,7 +404,7 @@ export function ContactsCard({ hostId }: { hostId: string }) {
   return (
     <>
       <CardDisplay
-        header={'Site Members & Leads'}
+        header={hostId == null ? 'Leads' : 'Site Members & Leads'}
         help={pluginDocsHelp('membersOnly', {
           anchor: '#manage-your-members',
         })}
@@ -338,10 +412,22 @@ export function ContactsCard({ hostId }: { hostId: string }) {
         contentGutterY
         contentBordered="all"
       >
+        {hostId == null ? (
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ mb: leads.length ? 2 : 1 }}
+          >
+            {'Every site’s leads, newest first. Members sign up to one site ' +
+              'each — choose a site to list its members beside its leads.'}
+          </Typography>
+        ) : null}
         {siteMembers.length === 0 && leads.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            {'No members yet — visitors can join at /signup on your ' +
-              'site; sign-ups also appear here as leads.'}
+            {hostId == null
+              ? 'No leads on any site yet.'
+              : 'No members yet — visitors can join at /signup on your ' +
+                'site; sign-ups also appear here as leads.'}
           </Typography>
         ) : (
           <>
@@ -356,10 +442,14 @@ export function ContactsCard({ hostId }: { hostId: string }) {
             />
             {contactsTruncated ? (
               <Alert severity="info" sx={{ mt: 1 }}>
-                {`Paging the ${CONTACT_CEILING} newest members and the ` +
-                  `${CONTACT_CEILING} newest leads. This site has more ` +
-                  'than that — the campaign audiences still reach ' +
-                  'everyone, whether or not they are listed here.'}
+                {hostId == null
+                  ? `Paging the ${CONTACT_CEILING} newest leads. Your ` +
+                    'sites hold more than that — the CRM’s Leads list ' +
+                    'reaches every one of them.'
+                  : `Paging the ${CONTACT_CEILING} newest members and the ` +
+                    `${CONTACT_CEILING} newest leads. This site has more ` +
+                    'than that — the campaign audiences still reach ' +
+                    'everyone, whether or not they are listed here.'}
               </Alert>
             ) : null}
           </>
@@ -381,9 +471,9 @@ export function ContactsCard({ hostId }: { hostId: string }) {
       >
         <DialogTitle>{leadOrigin?.email ?? 'Lead'}</DialogTitle>
         <DialogContent>
-          {leadOrigin?.$id ? (
+          {leadOrigin?.$id && leadOriginSite ? (
             <InboxRecordAttributionZone
-              hostId={hostId}
+              hostId={leadOriginSite}
               recordKind="lead"
               recordId={String(leadOrigin.$id)}
             />

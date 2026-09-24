@@ -664,6 +664,9 @@
           "routes": [
             "/inbox"
           ],
+          "orgRoutes": [
+            "/inbox"
+          ],
           "slots": [
             "formSubmissions",
             "hostDashboard"

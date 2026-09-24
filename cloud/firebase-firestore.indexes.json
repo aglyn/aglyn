@@ -43,6 +43,20 @@
       ]
     },
     {
+      "collectionGroup": "formSubmissions",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "orgId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "outreachEnrollments",
       "queryScope": "COLLECTION",
       "fields": [

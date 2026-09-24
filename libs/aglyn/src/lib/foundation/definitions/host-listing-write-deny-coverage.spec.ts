@@ -84,6 +84,7 @@ import {
   declaredFields,
   parseUpdateRule,
   readFieldsOf,
+  recursiveMatchesReaching,
   seedFieldsOfCollection,
 } from './write-deny-coverage.util'
 
@@ -321,9 +322,9 @@ describe('every server-owned host field is denied to client writes (AGL-1361)', 
     // in one block proves nothing if a wildcard block elsewhere allows the
     // same write. `parseUpdateRule` already refuses more than one
     // `allow … update` inside the block; this covers the outside of it.
-    expect(rule.topLevelMatches.filter((path) => path.includes('**'))).toEqual(
-      [],
-    )
+    // A collection-group match on another collection (AGL-3303) cannot
+    // reach a host document at all; `recursiveMatchesReaching` tells it apart.
+    expect(recursiveMatchesReaching(rule.topLevelMatches, 'hosts')).toEqual([])
     expect(
       rule.topLevelMatches.filter((path) => path.startsWith('/hosts')),
     ).toEqual(['/hosts/<hostId>'])
@@ -466,9 +467,9 @@ describe('every server-owned listing field is denied to client writes (AGL-1361)
   })
 
   it('has no second rule that could OR a looser write onto the listing doc', () => {
-    expect(rule.topLevelMatches.filter((path) => path.includes('**'))).toEqual(
-      [],
-    )
+    expect(
+      recursiveMatchesReaching(rule.topLevelMatches, 'marketplaceListings'),
+    ).toEqual([])
     // `/revocations/{listingId}` is keyed by the same id but is a DIFFERENT
     // collection, so the filter is on the collection name, not the variable.
     expect(

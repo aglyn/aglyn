@@ -39,7 +39,11 @@ import { render } from '@testing-library/react'
 import { FORMS_MAX_PER_HOST } from '@aglyn/aglyn'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import type { ReactNode } from 'react'
-import { INBOX_CONSOLE_SECTIONS } from './inbox-console-sections'
+import {
+  INBOX_CONSOLE_SECTIONS,
+  INBOX_ORG_CONSOLE_SECTIONS,
+} from './inbox-console-sections'
+import { inboxSitePickKey } from './use-inbox-site-pick'
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.
@@ -47,7 +51,7 @@ import { INBOX_CONSOLE_SECTIONS } from './inbox-console-sections'
  * Module-scoped and `mock`-prefixed so the `jest.mock` factories below may
  * close over it — jest's out-of-scope-variable guard admits that one prefix.
  */
-const mockListens: Array<{ path: string; limit: number }> = []
+const mockListens: Array<{ path: string; limit: number; wheres: string[] }> = []
 
 /**
  * A query with no `limit()` still reads the whole collection. Counting it as
@@ -66,6 +70,8 @@ jest.mock('firebase/firestore', () => {
     collection: (_db: unknown, ...segments: string[]) => ({
       __path: segments.join('/'),
     }),
+    // Every collection of that name, wherever it hangs (AGL-3303).
+    collectionGroup: (_db: unknown, id: string) => ({ __path: `**/${id}` }),
     doc: (_db: unknown, ...segments: string[]) => ({
       __path: segments.join('/'),
       __doc: true,
@@ -78,9 +84,16 @@ jest.mock('firebase/firestore', () => {
         )
         .map((c) => c.args[0])
         .filter((n) => typeof n === 'number')
+      const wheres = constraints
+        .filter(
+          (c): c is { __constraint: string; args: unknown[] } =>
+            !!c && (c as { __constraint?: string }).__constraint === 'where',
+        )
+        .map((c) => c.args.map(String).join(' '))
       return {
         __path: base?.__path ?? '(unknown)',
         __limit: limits.length ? Math.max(...limits) : 0,
+        __wheres: wheres,
       }
     },
     limit: marker('limit'),
@@ -90,13 +103,14 @@ jest.mock('firebase/firestore', () => {
     count: marker('count'),
     sum: marker('sum'),
     onSnapshot: (
-      ref: { __path?: string; __limit?: number; __doc?: boolean },
+      ref: { __path?: string; __limit?: number; __doc?: boolean; __wheres?: string[] },
       ..._rest: unknown[]
     ) => {
       mockListens.push({
         path: ref?.__path ?? '(unknown)',
         // A single-document listen reads exactly one document.
         limit: ref?.__doc ? 1 : (ref?.__limit ?? 0),
+        wheres: ref?.__wheres ?? [],
       })
       return () => undefined
     },
@@ -220,7 +234,7 @@ const NOTICE_LISTENS = [
 ]
 
 /** Documents the recorded listens would return at their limits. */
-function documentCeiling(listens: Array<{ path: string; limit: number }>) {
+function documentCeiling(listens: ReadonlyArray<{ path: string; limit: number }>) {
   return listens.reduce(
     (total, listen) => total + (listen.limit || UNBOUNDED_ESTIMATE),
     0,
@@ -229,7 +243,7 @@ function documentCeiling(listens: Array<{ path: string; limit: number }>) {
 
 function summarize(
   label: string,
-  listens: Array<{ path: string; limit: number }>,
+  listens: ReadonlyArray<{ path: string; limit: number }>,
 ) {
   const bounded = listens.filter((l) => l.limit > 0)
   console.log(
@@ -419,5 +433,126 @@ describe('inbox console read cost (AGL-2501)', () => {
       await renderConsole(section)
       expect(listenedCollections()).not.toContain('orders')
     }
+  })
+})
+
+/*
+ * ## The organization's Inbox (AGL-3303)
+ *
+ * The same page handed no site: every site's submissions, the organization's
+ * leads and every campaign, with a site filter that narrows the page to one
+ * site's own view. The promise under test is that the every-site view is
+ * BOUNDED — one query per section, never a listener per site — and that
+ * picking a site buys exactly what that site's own Inbox buys.
+ */
+const ORG_BASE_PATH = '/acme/inbox'
+const ORG_MOUNT = {
+  orgId: 'org1',
+  orgSlug: 'acme',
+  hosts: [
+    { id: 'site1', name: 'Site one', subdomain: 'site' },
+    { id: 'site2', name: 'Site two', subdomain: 'two' },
+    { id: 'site3', name: 'Site three', subdomain: 'three' },
+  ],
+  hostsReady: true,
+  hostsPath: '/acme/hosts',
+}
+
+async function renderOrgConsole(section: string, mount = ORG_MOUNT) {
+  mockSection = section
+  mockListens.length = 0
+  const { InboxConsolePage } = await import('./inbox-console-page')
+  return render(
+    <InboxConsolePage
+      hostId={null}
+      orgMount={mount}
+      entitled
+      org={{ plan: 'business' } as never}
+      permissions={{} as never}
+      basePath={ORG_BASE_PATH}
+      sections={INBOX_ORG_CONSOLE_SECTIONS.map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        href: `${ORG_BASE_PATH}/${entry.id}`,
+        visible: true,
+      }))}
+      section={section}
+      segments={[section]}
+    /> as ReactNode as never,
+  )
+}
+
+describe('the organization’s inbox read cost (AGL-3303)', () => {
+  afterEach(() => {
+    mockSection = ''
+    mockListens.length = 0
+    window.sessionStorage.clear()
+  })
+
+  it('every site’s submissions are ONE group query, one page deep, filtered on the org', async () => {
+    await renderOrgConsole('submissions')
+    summarize('org submissions, every site', mockListens)
+    // Three sites and one listen: not a listener per site, and no ceiling
+    // notices, which belong to one site at a time.
+    expect(listenKeys()).toEqual([`**/formSubmissions#${TABLE_PAGE_SIZE_DEFAULT + 1}`])
+    // The clause the rules require of a group read — without it the query
+    // is refused outright, so it is part of what this page costs.
+    expect(mockListens[0].wheres).toEqual(['orgId == org1'])
+  })
+
+  it('every site’s leads are one unscoped window, and no site’s members', async () => {
+    await renderOrgConsole('contacts')
+    summarize('org contacts, every site', mockListens)
+    expect(listenKeys()).toEqual(['orgs/org1/leads#201'])
+    // An org-wide member reads the org's leads unscoped; a `visibleTo`
+    // clause would only narrow what the rules already admit.
+    expect(mockListens[0].wheres).toEqual([])
+  })
+
+  it('every site’s campaigns read nothing of the Inbox’s own', async () => {
+    await renderOrgConsole('campaigns')
+    summarize('org campaigns, every site', mockListens)
+    expect(listenKeys()).toEqual([])
+  })
+
+  it('a picked site buys exactly what its own Inbox buys', async () => {
+    window.sessionStorage.setItem(inboxSitePickKey('org1'), 'site1')
+    await renderOrgConsole('submissions')
+    summarize('org submissions, one site picked', mockListens)
+    expect(listenKeys()).toEqual(
+      [
+        ...NOTICE_LISTENS,
+        `hosts/site1/formSubmissions#${TABLE_PAGE_SIZE_DEFAULT + 1}`,
+        `hosts/site1/forms#${FORMS_MAX_PER_HOST + 1}`,
+      ].sort(),
+    )
+    await renderOrgConsole('contacts')
+    expect(listenKeys()).toEqual(
+      [...NOTICE_LISTENS, 'orgs/org1/leads#201', 'hosts/site1/siteMembers#201'].sort(),
+    )
+  })
+
+  it('an org with one site reads that site’s view, with nothing to pick', async () => {
+    await renderOrgConsole('submissions', { ...ORG_MOUNT, hosts: [ORG_MOUNT.hosts[0]] })
+    expect(listenKeys()).toEqual(
+      [
+        ...NOTICE_LISTENS,
+        `hosts/site1/formSubmissions#${TABLE_PAGE_SIZE_DEFAULT + 1}`,
+        `hosts/site1/forms#${FORMS_MAX_PER_HOST + 1}`,
+      ].sort(),
+    )
+  })
+
+  it('reads nothing until the org’s sites have settled', async () => {
+    // A section drawn before the sites land would open the every-site reads
+    // for a page that may be about to switch to one site's — and bill both.
+    await renderOrgConsole('submissions', { ...ORG_MOUNT, hostsReady: false })
+    expect(listenKeys()).toEqual([])
+  })
+
+  it('a remembered site the org no longer has is forgotten, not read', async () => {
+    window.sessionStorage.setItem(inboxSitePickKey('org1'), 'site-gone')
+    await renderOrgConsole('submissions')
+    expect(listenKeys()).toEqual([`**/formSubmissions#${TABLE_PAGE_SIZE_DEFAULT + 1}`])
   })
 })

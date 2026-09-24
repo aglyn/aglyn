@@ -57,7 +57,12 @@ import { readFileSync, readdirSync } from 'fs'
 import type { Dirent } from 'fs'
 import { join, resolve } from 'path'
 
-import { parseHostSubcollectionRules } from './write-deny-coverage.util'
+import {
+  normalizePathVariables,
+  parseHostSubcollectionRules,
+  rawBlockBody,
+  stripComments,
+} from './write-deny-coverage.util'
 
 const REPO_ROOT = resolve(__dirname, '../../../../../..')
 const RULES_FILE = 'cloud/firebase-firestore.rules'
@@ -423,8 +428,10 @@ const EDITOR_WRITABLE_HOST_SUBCOLLECTIONS: Record<string, string> = {
     'The capture doors write leads through the Admin SDK.',
   formSubmissions:
     'Create is denied (AGL-1668) because the row is what the meter counts; ' +
-    'update and delete stay open because the inbox marks a submission read ' +
-    'and deletes it client-side.',
+    'update is excluded from the catch-all and re-granted by a dedicated ' +
+    'block for `read` alone, since `orgId` and `hostId` decide which ' +
+    'organization Inbox lists the row (AGL-3303); delete stays open because ' +
+    'the inbox deletes a submission client-side.',
   forms:
     'Form definitions, authored on the site Forms page and bound to a `Form` ' +
     'node by id. Create is denied so it routes through /api/hosts/resources, ' +
@@ -692,6 +699,35 @@ describe('every host subcollection is classified (AGL-2038)', () => {
       .split('allow update:')[0]
     expect(entriesBlock).toContain('allow create: if isStaff();')
     expect(entriesBlock).not.toContain('canWriteHostContent')
+  })
+
+  /**
+   * A collection-group read spans EVERY collection of its name (AGL-3303),
+   * and the catch-all lets an editor create documents at any depth beneath a
+   * collection it does not name. So each collection a group read spans has to
+   * be refused there as a NESTED collection too, or a site editor could mint
+   * rows the group read would list under whatever org they claimed.
+   */
+  it('refuses a nested copy of every collection a group read spans', () => {
+    const source = normalizePathVariables(stripComments(read(RULES_FILE)))
+    const groups = [
+      ...source.matchAll(/match \/<path=\*\*>\/([A-Za-z][A-Za-z0-9]*)\//g),
+    ].map((match) => match[1])
+    // THE CONTROL: the organization Inbox's read is the one there is.
+    expect(groups).toEqual(['formSubmissions'])
+    const catchAll = rawBlockBody(
+      rawBlockBody(source, 'match /hosts/<hostId> {'),
+      'match /<subcollection>/<document=**> {',
+    )
+    const create =
+      catchAll.split(';').find((entry) => /\ballow\b[^:]*\bcreate\b/.test(entry)) ??
+      ''
+    for (const name of groups) {
+      expect([
+        name,
+        create.includes(`!string(document).matches('.*/${name}/[^/]+')`),
+      ]).toEqual([name, true])
+    }
   })
 
   it('keeps the classifications from going stale', () => {

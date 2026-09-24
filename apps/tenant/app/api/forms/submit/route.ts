@@ -551,7 +551,25 @@ export async function POST(request: Request): Promise<Response> {
     // `Date.now()` would let a slow write decide whether a touch was inside
     // the window for the contact and outside it for the lead.
     const submittedAtMs = Date.now()
+    /*
+     * The organization this site belongs to, off the two documents this
+     * route has already read — the host, whose `orgId` only the org APIs
+     * write, and the `hostIndex` mirror the plan gate resolved through.
+     */
+    const hostOrgId = hostSnapshot.get('orgId')
+    const submissionOrgId =
+      typeof hostOrgId === 'string' && hostOrgId ? hostOrgId : owningOrg?.orgId
     const submissionRef = await hostRef.collection('formSubmissions').add({
+      /*
+       * WHERE THE ROW LIVES, as fields (AGL-3303). The organization's Inbox
+       * reads every site's submissions with ONE collection-group query,
+       * `where('orgId', '==', …)` newest first, and the rules admit that
+       * read on the org named here; `hostId` is what that list addresses a
+       * row's site by. Both are frozen against a client update, and a site
+       * with no org carries no `orgId`, so it is in no organization's list.
+       */
+      ...(submissionOrgId ? { orgId: submissionOrgId } : {}),
+      hostId,
       // Stamped only for a form that exists on THIS site. An unverified id
       // never reaches the row, so the per-form list cannot be written into
       // from outside.

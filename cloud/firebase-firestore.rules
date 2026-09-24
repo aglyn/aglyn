@@ -3306,12 +3306,12 @@ service cloud.firestore {
         //    one lowers the storage meter or forges `visibleTo` tokens, and a
         //    deleted one destroys the only route back to an asset. Both
         //    writers are Admin-SDK routes.
-        //  - `formSubmissions`, CREATE ONLY (AGL-1668): /api/forms/submit is
+        //  - `formSubmissions`, CREATE (AGL-1668): /api/forms/submit is
         //    the only writer, and in the same request increments the monthly
         //    counter billing and the AGL-1655 abuse ceiling read; a client
-        //    `add()` reached neither. Update and delete stay OPEN on purpose:
-        //    the inbox plugin marks read and deletes client-side, and neither
-        //    touches the counter, which is monotonic per month.
+        //    `add()` reached neither. UPDATE is excluded so the block below
+        //    can narrow it to `read` (AGL-3303); DELETE stays OPEN: the inbox
+        //    plugin deletes client-side, and the counter is monotonic.
         //  - `orders`, all three (AGL-1827): status is server-owned; the
         //    dedicated block above owns the reasoning and the re-grant.
         //  - `screenAnalytics`, all three (AGL-2038): the page-view beacon one
@@ -3378,7 +3378,11 @@ service cloud.firestore {
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
-              'flowEnrollments', 'leads']));
+              'flowEnrollments', 'leads']) &&
+            // The org Inbox's collection-group read (AGL-3303) lists EVERY
+            // `formSubmissions` collection, at any depth, filed under the org
+            // a row names, so none may be minted beneath another name here.
+            !string(document).matches('.*/formSubmissions/[^/]+'));
         // More names on all THREE lists, each server-written with no client
         // writer to break:
         //
@@ -3476,6 +3480,7 @@ service cloud.firestore {
             !(subcollection in ['screens', 'layouts', 'components', 'installs',
               'templates', 'collections', 'datasets', 'orders', 'registers',
               'webhooks', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
+              'formSubmissions',
               'counters', 'analytics', 'screenAnalytics', 'members',
               'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
               'checkouts',
@@ -3553,6 +3558,17 @@ service cloud.firestore {
       match /memberPosts/{postId} {
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
+      }
+      // Form submissions (AGL-3303): the one field the Inbox writes. A row's
+      // `orgId` and `hostId` decide which organization's Inbox lists it (the
+      // collection-group read after this block), so a client able to rewrite
+      // them could file a row into another org's list. The catch-all's update
+      // list names the collection, so this narrowing is what decides.
+      match /formSubmissions/{submissionId} {
+        allow update: if isStaff() ||
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['read']));
       }
       /**
        * URL redirects (AGL-1881). Excluded from all THREE catch-all lists
@@ -3684,6 +3700,28 @@ service cloud.firestore {
         allow delete: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId));
       }
+    }
+
+    /**
+     * Every site's form submissions at once (AGL-3303): the organization's
+     * Inbox lists them with ONE collection-group query on the `orgId` the
+     * submit route stamps. The rule reads `resource.data.orgId`, which only a
+     * list filtered on it can prove, so an unfiltered group list is refused,
+     * and so is any list by a scoped collaborator or an outsider. One site's
+     * reads still go through the host catch-all, whose create refuses a
+     * nested `formSubmissions`: every row in the group is the route's.
+     *
+     * `isOrgWideMember()` with the org as an argument: the org block's
+     * helpers are out of scope here. exists() first, as in publisherManager().
+     */
+    function isOrgWideMemberOf(orgId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)) &&
+        (get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.role in ['owner', 'admin'] ||
+         get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data.get('allHosts', false) == true);
+    }
+    match /{path=**}/formSubmissions/{submissionId} {
+      allow read: if isStaff() || isOrgWideMemberOf(resource.data.orgId);
     }
 
     /**

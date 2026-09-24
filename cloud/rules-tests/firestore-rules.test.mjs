@@ -36,6 +36,7 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  collectionGroup,
   deleteDoc,
   deleteField,
   doc,
@@ -2920,6 +2921,159 @@ describe('hosts', () => {
       'editor reads the submission the route wrote',
       getDoc(doc(authed(EDITOR), 'hosts', HOST, 'formSubmissions', 'fs-route')),
     )
+  })
+
+  /**
+   * AGL-3303. The organization's Inbox reads every site's submissions with
+   * ONE collection-group query on the `orgId` the submit route stamps. The
+   * rule can only prove that read for a list filtered on the org, so this
+   * drives the real query shape against every principal: admitted for an
+   * org-wide member, refused for a scoped collaborator, an outsider and an
+   * unfiltered list — and the stamp it trusts is frozen against the client.
+   */
+  describe('every site\'s submissions, for an org-wide member (AGL-3303)', () => {
+    const SITE_B = 'host-b'
+    const THEIR_HOST = 'host-their-org'
+    const orgInbox = (db, orgId) =>
+      query(
+        collectionGroup(db, 'formSubmissions'),
+        where('orgId', '==', orgId),
+        orderBy('createdAt', 'desc'),
+        limit(11),
+      )
+
+    beforeEach(async () => {
+      await env.withSecurityRulesDisabled(async (context) => {
+        const db = context.firestore()
+        // A second site in the org, which the scoped EDITOR was not given.
+        await setDoc(doc(db, 'hosts', SITE_B), {
+          displayName: 'Site B', orgId: ORG,
+          memberRoles: { [OWNER]: 'admin', [VIEWER]: 'viewer' },
+        })
+        await setDoc(doc(db, 'hosts', THEIR_HOST), {
+          displayName: 'Theirs', orgId: OTHER_ORG,
+          memberRoles: { [OUTSIDER]: 'admin' },
+        })
+        const row = (hostId, orgId, minutes) => ({
+          ...(orgId ? { orgId } : {}),
+          ...(orgId ? { hostId } : {}),
+          formName: 'Contact', fields: { email: `${hostId}@b.test` },
+          read: false, createdAt: new Date(Date.now() - minutes * 60_000),
+        })
+        await setDoc(doc(db, 'hosts', HOST, 'formSubmissions', 'fs-a'), row(HOST, ORG, 1))
+        await setDoc(doc(db, 'hosts', SITE_B, 'formSubmissions', 'fs-b'), row(SITE_B, ORG, 2))
+        await setDoc(
+          doc(db, 'hosts', THEIR_HOST, 'formSubmissions', 'fs-x'),
+          row(THEIR_HOST, OTHER_ORG, 3),
+        )
+        // Written before the stamp existed: in no organization's list.
+        await setDoc(doc(db, 'hosts', HOST, 'formSubmissions', 'fs-legacy'), row(HOST, null, 4))
+      })
+    })
+
+    it('an org-wide member lists every site of its org with one filtered group query', async () => {
+      for (const uid of [OWNER, VIEWER]) {
+        const snapshot = await getDocs(orgInbox(authed(uid), ORG)).catch((error) =>
+          assert.fail(`the org Inbox query was denied to ${uid}: ${error?.message ?? error}`),
+        )
+        // Both of the org's sites, newest first — and neither the other
+        // org's row nor the unstamped one.
+        assert.deepEqual(
+          snapshot.docs.map((entry) => entry.ref.path),
+          [`hosts/${HOST}/formSubmissions/fs-a`, `hosts/${SITE_B}/formSubmissions/fs-b`],
+          `the org Inbox as ${uid}`,
+        )
+      }
+    })
+
+    it('a scoped collaborator, an outsider and a stranger are refused it', async () => {
+      for (const uid of [EDITOR, AUTHOR, OUTSIDER]) {
+        await mustDeny(`the org Inbox query as ${uid}`, getDocs(orgInbox(authed(uid), ORG)))
+      }
+      await mustDeny('the org Inbox query signed out', getDocs(orgInbox(anon(), ORG)))
+      // The positive control for the outsider: their OWN org's list works,
+      // so the refusal above is about the org named, not the query shape.
+      await mustAllow('an outsider listing their own org', getDocs(orgInbox(authed(OUTSIDER), OTHER_ORG)))
+    })
+
+    it('an unfiltered group list is refused even to the owner, and so is another org\'s', async () => {
+      await mustDeny(
+        'an unfiltered formSubmissions group list',
+        getDocs(query(collectionGroup(authed(OWNER), 'formSubmissions'), orderBy('createdAt', 'desc'), limit(11))),
+      )
+      await mustDeny('the owner listing another org', getDocs(orgInbox(authed(OWNER), OTHER_ORG)))
+      // Staff support reads the group whole.
+      await mustAllow(
+        'staff listing the group unfiltered',
+        getDocs(query(collectionGroup(authed(STAFF, { staff: true }), 'formSubmissions'), limit(11))),
+      )
+    })
+
+    it('one site\'s reads still go through the site', async () => {
+      const db = authed(EDITOR)
+      await mustAllow(
+        'the site Inbox query on the collaborator\'s own site',
+        getDocs(query(collection(db, 'hosts', HOST, 'formSubmissions'), orderBy('createdAt', 'desc'), limit(11))),
+      )
+      await mustAllow('reading an unstamped row on the own site', getDoc(doc(db, 'hosts', HOST, 'formSubmissions', 'fs-legacy')))
+      await mustDeny('reading a sibling site\'s row', getDoc(doc(db, 'hosts', SITE_B, 'formSubmissions', 'fs-b')))
+      // An org-wide member reaches a row by its own site, as the org list's
+      // row actions address it.
+      await mustAllow('the owner reading site B\'s row', getDoc(doc(authed(OWNER), 'hosts', SITE_B, 'formSubmissions', 'fs-b')))
+    })
+
+    it('no client can mint a formSubmissions collection anywhere else in a site', async () => {
+      // The group read spans EVERY collection of the name. One an editor could
+      // create beneath a collection of their own would be listed in whichever
+      // org it named — a stranger's included — as a row of that org's site.
+      const db = authed(EDITOR)
+      await mustAllow(
+        'an editor creating a coupon (the control)',
+        setDoc(doc(db, 'hosts', HOST, 'coupons', 'c1'), { code: 'SAVE10' }),
+      )
+      await mustAllow(
+        'an editor creating a nested document of another name',
+        setDoc(doc(db, 'hosts', HOST, 'coupons', 'c1', 'notes', 'n1'), { text: 'ok' }),
+      )
+      const planted = {
+        orgId: OTHER_ORG, hostId: THEIR_HOST, formName: 'Forged',
+        fields: { email: 'forged@b.test' }, read: false, createdAt: new Date(),
+      }
+      for (const path of [
+        ['hosts', HOST, 'coupons', 'c1', 'formSubmissions', 'planted'],
+        ['hosts', HOST, 'coupons', 'c1', 'notes', 'n1', 'formSubmissions', 'planted'],
+      ]) {
+        await mustDeny(`planting ${path.join('/')}`, setDoc(doc(db, ...path), planted))
+      }
+      // A document NAMED formSubmissions is not a collection of them.
+      await mustAllow(
+        'a coupon whose id happens to be formSubmissions',
+        setDoc(doc(db, 'hosts', HOST, 'coupons', 'formSubmissions'), { code: 'X' }),
+      )
+    })
+
+    it('the stamp is frozen: read is the one field a client writes', async () => {
+      const row = (db) => doc(db, 'hosts', HOST, 'formSubmissions', 'fs-a')
+      await mustAllow('an editor marking a row read', updateDoc(row(authed(EDITOR)), { read: true }))
+      await mustAllow('an editor marking it unread again', updateDoc(row(authed(EDITOR)), { read: false }))
+      // A path question, not a role one: the owner may no more re-file a row.
+      for (const uid of [EDITOR, OWNER]) {
+        await mustDeny(`re-filing a row into another org as ${uid}`, updateDoc(row(authed(uid)), { orgId: OTHER_ORG }))
+        await mustDeny(`moving a row to another site as ${uid}`, updateDoc(row(authed(uid)), { hostId: SITE_B }))
+        await mustDeny(`clearing the stamp as ${uid}`, updateDoc(row(authed(uid)), { orgId: deleteField() }))
+      }
+      await mustDeny(
+        'rewriting what the visitor sent under cover of a read',
+        updateDoc(row(authed(EDITOR)), { read: true, fields: { email: 'forged@b.test' } }),
+      )
+      // A replied-to thread's documents are the server's; nothing re-grants
+      // them under this name.
+      await mustDeny(
+        'an editor updating a nested reply',
+        setDoc(doc(authed(EDITOR), 'hosts', HOST, 'formSubmissions', 'fs-a', 'replies', 'r1'), { sentAtMs: 1 }, { merge: true }),
+      )
+      await mustAllow('an editor deleting a row', deleteDoc(row(authed(EDITOR))))
+    })
   })
 
   /**
