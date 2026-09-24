@@ -203,3 +203,72 @@ export const nameSearchNormalizers = {
   maxPrefix: NAME_TOKEN_MAX_PREFIX,
 } as const
 
+
+/**
+ * What joins a scope token to a search prefix in a SCOPED search token
+ * (AGL-3321): `host:abc~acm`.
+ *
+ * A list under a scope clause — `visibleTo array-contains-any [...]`, the
+ * query the rules can prove for a site collaborator — has spent Firestore's
+ * one array clause on the scope, so its search cannot be a second
+ * `array-contains`. The list query plan folds the typed word INTO the scope
+ * clause instead (`ListQueryDeclaration.search.scoped`), asking for each
+ * scope token joined to the word; the writers stamp every scope token
+ * joined to every prefix, through {@link scopedSearchTokens}. A declaration
+ * names this constant as its `join`, so the writer and the reader cannot
+ * disagree about the character between the two halves.
+ *
+ * `~` appears in no scope token (`org`, `host:{id}`), so the split is never
+ * ambiguous; a prefix that itself holds a `~` is matched whole on both sides
+ * and needs no escaping.
+ */
+export const SCOPED_SEARCH_JOIN = '~'
+
+/**
+ * The `search.scoped` half of a list declaration, over the array the
+ * writers stamp with {@link scopedSearchTokens}.
+ */
+export function scopedSearch(tokensPath: string): {
+  tokensPath: string
+  join: typeof SCOPED_SEARCH_JOIN
+} {
+  return { tokensPath, join: SCOPED_SEARCH_JOIN }
+}
+
+/**
+ * Every scope a record is visible to, joined to every search prefix it
+ * carries: `[org~a, org~ac, host:x~a, …]`, in scope order then token order,
+ * with no duplicates (AGL-3321).
+ *
+ * `visibleTo` is read defensively — a record's stored array — and keeps
+ * every non-empty string in it; anything else answers no scope, and so no
+ * scoped tokens: a record visible to nobody is found by no scoped search.
+ * `tokens` is whatever the record's plain search array holds, so a list that
+ * searches several fields passes their merged prefixes rather than one
+ * name's. Each is stamped beside the plain array on every write that sets
+ * either the searched text or `visibleTo`.
+ *
+ * The count is the product of the two, so a record placed on thirty sites
+ * with a long name carries thousands of entries. That stays far inside
+ * Firestore's per-document index-entry ceiling, and it is the price of a
+ * search a scoped reader can run at all.
+ */
+export function scopedSearchTokens(
+  visibleTo: unknown,
+  tokens: readonly string[],
+): string[] {
+  if (!Array.isArray(visibleTo)) return []
+  const scopes = [
+    ...new Set(
+      visibleTo.filter(
+        (entry): entry is string => typeof entry === 'string' && entry.length > 0,
+      ),
+    ),
+  ]
+  const words = [...new Set(tokens.filter((token) => typeof token === 'string' && token))]
+  const scoped: string[] = []
+  for (const scope of scopes) {
+    for (const word of words) scoped.push(`${scope}${SCOPED_SEARCH_JOIN}${word}`)
+  }
+  return scoped
+}
