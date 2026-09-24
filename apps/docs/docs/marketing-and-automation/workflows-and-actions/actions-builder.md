@@ -258,6 +258,12 @@ Every automation row has a **Runs** button. It opens **Runs — *your automation
 | **Result** | **Succeeded**, **Failed**, or **Skipped**. |
 | **What happened** | For a run, what each step did, joined with `·`. For a failure, the errors. For a skip, which condition stopped it. |
 
+The table's toolbar narrows it. **Filters** offers **Trigger** and **Result** as picked
+values, **Time** by day, and **What happened** as typed text; **Search** finds words in
+the trigger or in what happened. Both reach every run the table read — the runs among
+the site's 200 most recent activity entries — not only the page on screen, and each
+filter in force shows as a chip above the table.
+
 **Skipped** is a result, not an absence — see
 [Only run when a field matches](#only-run-when-a-field-matches). A run that fired but
 whose steps errored is **Failed**, and the errors are in the last column rather than in a

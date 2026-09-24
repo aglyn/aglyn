@@ -29,6 +29,15 @@ email document and opens it in the besigner with the email blocks:
 - **Email custom HTML** — raw table markup for advanced layouts,
   sanitized.
 
+## Find a template
+
+The templates table filters through its toolbar by name and **Origin** (yours, or
+installed from a listing), and **Search** matches any word of a template's name.
+On your organization's Emails page it also filters by **Site**, and Search matches
+site names too. The filters look at every template the table read, not only the
+page on screen; where a site holds more templates than the table reads, the note
+under it says so.
+
 ## Duplicate a template
 
 Every template on the list has **Duplicate…** in its row menu. The copy takes
