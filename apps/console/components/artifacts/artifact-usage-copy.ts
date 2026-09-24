@@ -64,6 +64,8 @@ export interface ArtifactDependent {
      * below exactly: an empty space where it was.
      */
     | 'emailTemplate'
+    /** A campaign's email design, which the same sentence covers (AGL-3287). */
+    | 'emailDesign'
   id: string
   name: string
   versionId?: string

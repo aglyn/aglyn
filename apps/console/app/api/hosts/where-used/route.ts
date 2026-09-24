@@ -42,7 +42,9 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 export interface WhereUsedDependent {
   /**
    * Resource collection the dependent lives in. `emailTemplate` is one of the
-   * site's transactional emails, keyed by its catalog key (AGL-3287).
+   * site's transactional emails, keyed by its catalog key; `emailDesign` is a
+   * campaign's email, a `kind: 'email'` screen that is never a page
+   * (AGL-3287).
    */
   type:
     | 'screen'
@@ -52,6 +54,7 @@ export interface WhereUsedDependent {
     | 'component'
     | 'collection'
     | 'emailTemplate'
+    | 'emailDesign'
   id: string
   name: string
   /** 'id' = rename-safe reference; 'name' = legacy token, breaks on rename. */

@@ -517,11 +517,13 @@ function ComponentBesignerPage(props) {
       markOwnWrite()
       await save({ props: nextProps }, { merge: true })
       enqueueSnackbar(
-        'Properties saved. Publish to make them available on live pages.',
+        isEmailBlock
+          ? 'Properties saved. Publish to make them available in your emails.'
+          : 'Properties saved. Publish to make them available on live pages.',
         { variant: 'success', persist: false },
       )
     },
-    [updateComponentVersion, markOwnWrite, enqueueSnackbar],
+    [updateComponentVersion, markOwnWrite, enqueueSnackbar, isEmailBlock],
   )
   /**
    * Promote the canvas onto the parent document — the thing the tenant renders.
@@ -1113,6 +1115,7 @@ function ComponentBesignerPage(props) {
                     value={declaredProps}
                     onClose={() => setPropsDialogOpen(false)}
                     onSave={handleSaveDeclaredProps}
+                    emailBlock={isEmailBlock}
                   />
                 </BesignerMediaPickerProvider>
               </InteractionsProvider>

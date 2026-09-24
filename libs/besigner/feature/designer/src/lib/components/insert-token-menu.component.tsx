@@ -158,7 +158,9 @@ export interface InsertTokenMenuProps {
  * serving both the per-field {x} adornment and the legacy element-level
  * "Insert binding" button (AGL-100). Groups render in option order with
  * subheaders; context-dependent groups carry a hint line saying where
- * their tokens resolve. Search filters across label, group, and preview.
+ * their tokens resolve. Search filters across label, group, preview, and the
+ * token itself — a property is found by the name its dialog shows
+ * (`{{prop.reason}}`) as well as by its label.
  */
 export function InsertTokenMenu(props: InsertTokenMenuProps) {
   const { anchorEl, open, onClose, options, onInsert, emptyText } = props
@@ -174,7 +176,7 @@ export function InsertTokenMenu(props: InsertTokenMenuProps) {
     const term = search.trim().toLowerCase()
     if (!term) return options
     return options.filter((option) =>
-      [option.label, option.group, option.preview]
+      [option.label, option.group, option.preview, option.token]
         .filter(Boolean)
         .some((text) => String(text).toLowerCase().includes(term)),
     )

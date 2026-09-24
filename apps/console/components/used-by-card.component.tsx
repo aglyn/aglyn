@@ -36,6 +36,8 @@ interface Dependent {
     | 'collection'
     /** One of the site's transactional emails, by catalog key (AGL-3287). */
     | 'emailTemplate'
+    /** A campaign's email design: a screen id, never a page (AGL-3287). */
+    | 'emailDesign'
   id: string
   name: string
   versionId?: string
@@ -74,6 +76,7 @@ export type UsedByKind = 'component' | 'layout' | 'screen'
  */
 const TYPE_LABEL: Partial<Record<Dependent['type'], string>> = {
   emailTemplate: 'email',
+  emailDesign: 'email',
 }
 
 /** What a screen dependent's `relation` is called on the row. */
@@ -253,6 +256,17 @@ export function UsedByCard({
         // The site's emails, where each transactional email is opened in
         // the besigner — a placement is changed there (AGL-3287).
         return buildRoute(Route.HOST_SETUP_EMAILS, { orgSlug, host })
+      }
+      if (dependent.type === 'emailDesign' && dependent.versionId) {
+        // Straight into the besigner, where the placement is changed — the
+        // screen details page is a PAGE's settings, and an email design
+        // opened there offers a slug and a Publish that would route it.
+        return buildRoute(Route.SCREEN_BESIGNER, {
+          orgSlug,
+          host,
+          screenId: dependent.id,
+          versionId: dependent.versionId,
+        })
       }
       // A screen with no published version has nowhere to link to; the row
       // still has to appear, because it still uses this.
