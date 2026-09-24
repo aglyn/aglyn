@@ -92,6 +92,7 @@ import {
   hasAnyKeys,
   normalizePathVariables,
   readFieldsOf,
+  recursiveMatchesReaching,
   seedFields as seedFieldsOf,
   stripComments,
   topLevelBody,
@@ -490,9 +491,10 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
     // Sibling `match` blocks are OR'd and the LOOSER one wins, so a deny-list
     // in one block proves nothing if a wildcard block elsewhere allows the
     // same write. `parseOrgUpdateRule` already refuses more than one `allow …
-    // update` inside the org block; this covers the outside of it.
-    const wildcards = rule.topLevelMatches.filter((path) => path.includes('**'))
-    expect(wildcards).toEqual([])
+    // update` inside the org block; this covers the outside of it. A
+    // collection-group match on another collection cannot reach an org
+    // document at all, which `recursiveMatchesReaching` tells apart.
+    expect(recursiveMatchesReaching(rule.topLevelMatches, 'orgs')).toEqual([])
     expect(
       rule.topLevelMatches.filter((path) => path.startsWith('/orgs')),
     ).toEqual(['/orgs/<orgId>'])
@@ -503,5 +505,41 @@ describe('every server-owned org field is denied to client writes (AGL-1355)', (
         /\ballow\s+write\b/.test(statement),
       ),
     ).toEqual([])
+  })
+
+  it('lets a collection-group match read and nothing else (AGL-3303)', () => {
+    // A recursive match is OR'd onto every document its tail reaches, so the
+    // one that exists — the organization Inbox's read of every site's
+    // submissions — must grant no write, and a new one must be reasoned
+    // about here before it lands.
+    // THE CONTROL for the helper the guards above lean on: every shape that
+    // CAN reach an org is reported, and only the group match on another
+    // collection is let through.
+    expect(
+      recursiveMatchesReaching(
+        [
+          '/<document=**>',
+          '/<path=**>/orgs/<orgId>',
+          '/<path=**>/<collection>/<id>',
+          '/<path=**>/formSubmissions/<submissionId>',
+        ],
+        'orgs',
+      ),
+    ).toEqual([
+      '/<document=**>',
+      '/<path=**>/orgs/<orgId>',
+      '/<path=**>/<collection>/<id>',
+    ])
+    const source = normalizePathVariables(stripComments(read(RULES_FILE)))
+    const groups = rule.topLevelMatches.filter((path) => path.includes('**'))
+    expect(groups).toEqual(['/<path=**>/formSubmissions/<submissionId>'])
+    for (const path of groups) {
+      const body = topLevelBody(source, `match ${path} {`)
+      expect([
+        path,
+        /\ballow\b[^:]*\b(write|create|update|delete)\b/.test(body),
+      ]).toEqual([path, false])
+      expect([path, /\ballow\s+read\b/.test(body)]).toEqual([path, true])
+    }
   })
 })

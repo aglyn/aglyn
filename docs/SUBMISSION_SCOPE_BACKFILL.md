@@ -37,9 +37,11 @@ Nothing else on a submission is read beyond those two fields or written.
    node tools/scripts/deploy-firestore-rules.mjs
    ```
    They add the collection-group read (org-wide members, a list filtered on
-   `orgId` only) and freeze `orgId`/`hostId` against the client, narrowing a
-   submission's client update to `read`. Both are safe under the console that
-   is live before the promotion: it only ever writes `read`.
+   `orgId` only), freeze `orgId`/`hostId` against the client — narrowing a
+   submission's client update to `read` — and refuse a client creating a
+   `formSubmissions` collection anywhere else in a site, since the group read
+   would list it. All of it is safe under the console that is live before the
+   promotion: it only ever writes `read`, and never nests the collection.
 3. **Promote.** From here every new submission arrives stamped.
 4. **Then this script.** Run before the promotion is live, the rows arriving
    between the run and the deploy would be unstamped again — and `--apply` is

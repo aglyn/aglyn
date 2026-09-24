@@ -3022,6 +3022,36 @@ describe('hosts', () => {
       await mustAllow('the owner reading site B\'s row', getDoc(doc(authed(OWNER), 'hosts', SITE_B, 'formSubmissions', 'fs-b')))
     })
 
+    it('no client can mint a formSubmissions collection anywhere else in a site', async () => {
+      // The group read spans EVERY collection of the name. One an editor could
+      // create beneath a collection of their own would be listed in whichever
+      // org it named — a stranger's included — as a row of that org's site.
+      const db = authed(EDITOR)
+      await mustAllow(
+        'an editor creating a coupon (the control)',
+        setDoc(doc(db, 'hosts', HOST, 'coupons', 'c1'), { code: 'SAVE10' }),
+      )
+      await mustAllow(
+        'an editor creating a nested document of another name',
+        setDoc(doc(db, 'hosts', HOST, 'coupons', 'c1', 'notes', 'n1'), { text: 'ok' }),
+      )
+      const planted = {
+        orgId: OTHER_ORG, hostId: THEIR_HOST, formName: 'Forged',
+        fields: { email: 'forged@b.test' }, read: false, createdAt: new Date(),
+      }
+      for (const path of [
+        ['hosts', HOST, 'coupons', 'c1', 'formSubmissions', 'planted'],
+        ['hosts', HOST, 'coupons', 'c1', 'notes', 'n1', 'formSubmissions', 'planted'],
+      ]) {
+        await mustDeny(`planting ${path.join('/')}`, setDoc(doc(db, ...path), planted))
+      }
+      // A document NAMED formSubmissions is not a collection of them.
+      await mustAllow(
+        'a coupon whose id happens to be formSubmissions',
+        setDoc(doc(db, 'hosts', HOST, 'coupons', 'formSubmissions'), { code: 'X' }),
+      )
+    })
+
     it('the stamp is frozen: read is the one field a client writes', async () => {
       const row = (db) => doc(db, 'hosts', HOST, 'formSubmissions', 'fs-a')
       await mustAllow('an editor marking a row read', updateDoc(row(authed(EDITOR)), { read: true }))

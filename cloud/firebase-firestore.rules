@@ -3324,7 +3324,11 @@ service cloud.firestore {
               'topicOptOuts', 'emailFrequency', 'campaigns', 'emailCampaigns',
               'emailAttributions', 'campaignAttributions',
               'campaignSequenceReports',
-              'flowEnrollments', 'leads']));
+              'flowEnrollments', 'leads']) &&
+            // The org Inbox's collection-group read (AGL-3303) lists EVERY
+            // `formSubmissions` collection, at any depth, filed under the org
+            // a row names, so none may be minted beneath another name here.
+            !string(document).matches('.*/formSubmissions/[^/]+'));
         // More names on all THREE lists, each server-written with no client
         // writer to break:
         //
@@ -3650,7 +3654,8 @@ service cloud.firestore {
      * submit route stamps. The rule reads `resource.data.orgId`, which only a
      * list filtered on it can prove, so an unfiltered group list is refused,
      * and so is any list by a scoped collaborator or an outsider. One site's
-     * reads still go through the host catch-all.
+     * reads still go through the host catch-all, whose create refuses a
+     * nested `formSubmissions`: every row in the group is the route's.
      *
      * `isOrgWideMember()` with the org as an argument: the org block's
      * helpers are out of scope here. exists() first, as in publisherManager().

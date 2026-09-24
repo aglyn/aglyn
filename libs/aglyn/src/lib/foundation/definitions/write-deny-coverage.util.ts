@@ -321,6 +321,37 @@ export function declaredFields(source: string, header: string): string[] {
   ].map((entry) => entry[1])
 }
 
+/**
+ * The top-level recursive (`**`) matches that could reach a document in
+ * `collection` — the ones that could OR a looser write onto it.
+ *
+ * A recursive wildcard matches only what its tail allows. A collection-group
+ * match, `/{path=**}/formSubmissions/{submissionId}` (AGL-3303), reaches
+ * documents in a collection named `formSubmissions` and nothing else; a
+ * wildcard collection, or a recursive tail, reaches every document. So only
+ * those, and a group match naming `collection` itself, are the hazard a
+ * deny-list guard has to refuse.
+ *
+ * `topLevelMatches` are post-`normalizePathVariables`.
+ */
+export function recursiveMatchesReaching(
+  topLevelMatches: readonly string[],
+  collection: string,
+): string[] {
+  return topLevelMatches.filter((path) => {
+    if (!path.includes('**')) return false
+    const segments = path.split('/').filter(Boolean)
+    const last = segments[segments.length - 1] ?? ''
+    const parent = segments[segments.length - 2] ?? ''
+    return (
+      last.includes('**') ||
+      !parent ||
+      parent.startsWith('<') ||
+      parent === collection
+    )
+  })
+}
+
 /** A parsed `allow update` rule for one document. */
 export interface ParsedUpdateRule {
   /** Every key denied to the client branch, across all its `hasAny` lists. */
