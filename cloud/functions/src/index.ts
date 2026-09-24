@@ -353,6 +353,13 @@ const CONSOLE_FAST_CRON_ROUTES: readonly string[] = [
    * and needs no deploy of this function.
    */
   '/api/admin/plugin-crons',
+  /*
+   * Every consent group change still in flight (AGL-3320). The console's
+   * editor works a change while its tab is open; this finishes the ones whose
+   * tab was closed — the carry, the flip, the re-home and the delayed sweep —
+   * so an abandoned change never holds the next one off.
+   */
+  '/api/admin/consent-group-changes',
 ]
 
 /** What one POST to a cron route settled as. */

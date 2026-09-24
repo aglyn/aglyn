@@ -108,14 +108,16 @@ describe('the routes are WIRED to it', () => {
 
   /**
    * Every scheduled route that writes something a later run cannot take back.
-   * `audit-archive` deletes Firestore audit rows; the other three write
-   * Storage objects, stored verdicts and Vercel domain state.
+   * `audit-archive` deletes Firestore audit rows; the next three write
+   * Storage objects, stored verdicts and Vercel domain state; and
+   * `consent-group-changes` flips a workspace's consent groups (AGL-3320).
    */
   const guarded = [
     'admin/audit-archive',
     'admin/reap-plugin-artifacts',
     'admin/reverify-plugin-versions',
     'admin/finish-domain-attachments',
+    'admin/consent-group-changes',
   ]
 
   it.each(guarded)('%s calls the shared helper', (route) => {

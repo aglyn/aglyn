@@ -2526,6 +2526,20 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
       'Runs every console job a plugin declares, each with its own row on this board. If it stops, every one of those jobs stops with it — a plugin’s scheduled sends and syncs among them — and each of their rows goes silent too.',
   },
   {
+    id: 'consent-group-changes',
+    label: 'Consent group changes',
+    // The seventh route on the `consoleFastCrons` job (AGL-3320). The editor's
+    // progress panel works a change while it is open; this finishes every one
+    // whose panel was closed, so fifteen minutes is how long an abandoned
+    // change can sit between steps.
+    cron: '*/15 * * * *',
+    runner: 'cloud-scheduler',
+    target: 'consoleFastCrons \u2192 console /api/admin/consent-group-changes',
+    graceMinutes: 45,
+    drives:
+      'Finishes every consent group change an admin started and then left: the refusals carried between separating sites, the new declaration, the re-homed records and the delayed sweep (AGL-3320). If it stops, a change whose editor was closed stays where it stopped — before the flip the old groups stay in force, after it the records keyed by the old groups wait to move — and no further change can start until it finishes.',
+  },
+  {
     id: 'ai-jobs-beat',
     label: 'AI jobs beat',
     // Its own Cloud Scheduler job, every minute (AGL-3026): the console route
