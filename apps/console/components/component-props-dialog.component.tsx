@@ -68,6 +68,23 @@ const TEXT_SHAPED_TYPES: ReadonlySet<string> = new Set([
   'number',
 ])
 
+/**
+ * What one placement of the properties' owner is called in copy: a page for a
+ * component, a screen for a layout, an email for an email block (AGL-3287).
+ */
+type PlacementNoun = 'page' | 'screen' | 'email'
+
+/** The plural, sentence-initial form of each placement. */
+const PLACES: Record<PlacementNoun, string> = {
+  page: 'Pages',
+  screen: 'Screens',
+  email: 'Emails',
+}
+
+/** "a page", "a screen", "an email". */
+const withArticle = (place: PlacementNoun): string =>
+  `${place === 'email' ? 'an' : 'a'} ${place}`
+
 /** Every kind, listed under the group the type picker shows it in. */
 const TYPES_BY_GROUP = REUSABLE_PROP_KIND_GROUPS.map((group) => ({
   group,
@@ -686,9 +703,11 @@ function PropertyConditionEditor(props: {
   declared: readonly Aglyn.ReusableComponentProp[]
   error: string
   noun: PropertyOwnerNoun
+  /** What one placement is called: a page, a layout's screen, or an email. */
+  place: PlacementNoun
   onChange: (condition: Aglyn.ReusableComponentProp['condition']) => void
 }) {
-  const { prop, declared, error, noun, onChange } = props
+  const { prop, declared, error, noun, place, onChange } = props
   const draft = useMemo(() => readPropertyCondition(prop.condition), [prop.condition])
   const others = declared.filter(
     (candidate) => candidate.name && candidate.name !== prop.name,
@@ -728,7 +747,7 @@ function PropertyConditionEditor(props: {
     <Stack spacing={1}>
       <Typography variant="caption" color="text.secondary">
         {draft.rules.length
-          ? `Shown, and applied, only on a ${noun === 'layout' ? 'screen' : 'page'} where`
+          ? `Shown, and applied, only on ${withArticle(place)} where`
           : `Always shown. Add a condition to show and apply this property only when other properties of this ${noun} meet it.`}
       </Typography>
       {draft.rules.length > 1 ? (
@@ -919,6 +938,11 @@ export interface ComponentPropsDialogProps {
   onSave: (props: Aglyn.ReusableComponentProp[]) => Promise<void> | void
   /** Whose properties these are: a reusable component's, or a layout's. */
   noun?: PropertyOwnerNoun
+  /**
+   * The component is an email block (AGL-3287), so each EMAIL it is in sets
+   * its values — the copy says so rather than talking about pages.
+   */
+  emailBlock?: boolean
 }
 
 /**
@@ -937,7 +961,9 @@ export interface ComponentPropsDialogProps {
  * fixing a typo on a property nothing uses yet.
  */
 export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
-  const { open, value, onClose, onSave, noun = 'component' } = props
+  const { open, value, onClose, onSave, noun = 'component', emailBlock } = props
+  const place: PlacementNoun =
+    noun === 'layout' ? 'screen' : emailBlock ? 'email' : 'page'
   const [draft, setDraft] = useState<Aglyn.ReusableComponentProp[]>([])
   const [saving, setSaving] = useState(false)
   // A key per row that survives renames and reordering, so each row's own
@@ -1004,9 +1030,7 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
       </DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {`Properties let one ${owner} show different content on each ${
-            noun === 'layout' ? 'screen' : 'page'
-          }. `}
+          {`Properties let one ${owner} show different content on each ${place}. `}
           {'Add one here, then use its token — for example '}
           <code>{'{{prop.headline}}'}</code>
           {` — anywhere inside this ${owner}, or bind a field to it with its {} button. `}
@@ -1161,7 +1185,7 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
                       }
                     />
                     <Typography variant="caption" color="text.secondary">
-                      {`Used where a ${noun === 'layout' ? 'screen' : 'page'} sets nothing.`}
+                      {`Used where ${withArticle(place)} sets nothing.`}
                     </Typography>
                   </Stack>
                   <PropertyConditionEditor
@@ -1169,6 +1193,7 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
                     declared={draft}
                     error={errors[index]?.condition ?? ''}
                     noun={noun}
+                    place={place}
                     onChange={(condition) => update(index, { condition })}
                   />
                 </Stack>
@@ -1194,7 +1219,7 @@ export function ComponentPropsDialog(props: ComponentPropsDialogProps) {
             {renamed.length === 1
               ? `"${renamed[0]}" was renamed or removed. `
               : `${renamed.length} properties were renamed or removed. `}
-            {`${noun === 'layout' ? 'Screens' : 'Pages'} using this ${owner} keep whatever they set for the old `}
+            {`${PLACES[place]} using this ${owner} keep whatever they set for the old `}
             {'name, but it will no longer be used — they fall back to '}
             {'the default.'}
           </Alert>

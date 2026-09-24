@@ -407,6 +407,23 @@ describe('the dialog offers every property kind (AGL-2893)', () => {
     expect(await screen.findByText('Layout properties')).toBeTruthy()
     expect(screen.getByText(/Each screen that uses it sets its own values/)).toBeTruthy()
   })
+
+  it('speaks of emails, not pages, for an email block (AGL-3287)', async () => {
+    render(
+      <ComponentPropsDialog
+        open
+        emailBlock
+        value={[{ name: 'reason', type: 'text', label: 'Why they get this email' }]}
+        onClose={jest.fn()}
+        onSave={jest.fn()}
+      />,
+    )
+    expect(
+      await screen.findByText(/show different content on each email\./),
+    ).toBeTruthy()
+    expect(screen.getByText('Used where an email sets nothing.')).toBeTruthy()
+    expect(screen.queryByText(/each page/)).toBeNull()
+  })
 })
 
 describe('conditions, as the dialog edits them (AGL-2893)', () => {

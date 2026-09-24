@@ -189,14 +189,17 @@ describe('scanComponentUsage', () => {
     expect(found.map((entry) => entry.id)).not.toContain('order-receipt')
   })
 
-  it('reports a campaign email design as the screen it is', () => {
+  it('reports a campaign email design as an email, never a page', () => {
     // A campaign's email is a `kind: 'email'` SCREEN, read with every other
-    // screen on its published version — no second corpus needed.
+    // screen on its published version — no second corpus needed — and named
+    // for what it is, so the card opens it where it is edited rather than on
+    // a page's settings.
     const found = scanComponentUsage('cmp-badge', {
       screens: [
         {
           id: 'scr-newsletter',
           displayName: 'August newsletter',
+          kind: 'email',
           versionId: 'v4',
           nodes: treeWithInstance('cmp-badge'),
         },
@@ -206,7 +209,7 @@ describe('scanComponentUsage', () => {
     })
     expect(found).toEqual([
       {
-        type: 'screen',
+        type: 'emailDesign',
         id: 'scr-newsletter',
         name: 'August newsletter',
         via: ['id'],

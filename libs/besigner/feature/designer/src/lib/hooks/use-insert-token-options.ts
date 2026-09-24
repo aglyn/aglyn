@@ -72,7 +72,9 @@ export function componentPropBindingOptions(
       groupHint:
         owner === 'layout'
           ? 'Set per screen in the Screen Properties of each screen using this layout'
-          : 'Set per page in the Attributes panel of each instance',
+          : // Pages and emails alike: an email block is a component too
+            // (AGL-3287), and its values are set in each email it is in.
+            'Set in the Attributes panel wherever this component is used',
       label: prop.label || prop.name,
       token: `{{${COMPONENT_PROP_TOKEN_PREFIX}${prop.name}}}`,
       preview: componentPropDefaultPreview(prop),

@@ -164,6 +164,34 @@ describe('InsertTokenMenu (AGL-583)', () => {
     fireEvent.click(screen.getByText('Title'))
     expect(onInsert).toHaveBeenCalledWith('{{entry.title}}')
   })
+
+  it('finds a property by its name as well as its label (AGL-3287)', () => {
+    // The properties dialog shows a property's NAME and its token; the picker
+    // lists its label. Searching the name the author just typed has to work.
+    const anchor = document.createElement('button')
+    document.body.appendChild(anchor)
+    render(
+      <InsertTokenMenu
+        anchorEl={anchor}
+        open
+        onClose={jest.fn()}
+        options={[
+          ...options,
+          {
+            group: 'Properties',
+            label: 'Why they get this email',
+            token: '{{prop.reason}}',
+          },
+        ]}
+        onInsert={jest.fn()}
+      />,
+    )
+    fireEvent.change(screen.getByPlaceholderText('Search data…'), {
+      target: { value: 'reason' },
+    })
+    expect(screen.getByText('Why they get this email')).toBeTruthy()
+    expect(screen.queryByText('Message')).toBeNull()
+  })
 })
 
 describe('ElementPropsForm insert affordance (AGL-583)', () => {

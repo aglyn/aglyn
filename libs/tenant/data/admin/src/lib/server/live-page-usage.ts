@@ -63,6 +63,11 @@ export interface UsageCandidate {
   /** Screens only: the screen they nest under, which is part of their path. */
   parentId?: string
   /**
+   * Screens only: `'email'` for a campaign email design (AGL-3287), which
+   * a scan reports as an `emailDesign` rather than a page.
+   */
+  kind?: string
+  /**
    * Components only: the properties the definition declares (AGL-1247). A
    * Link property's default renders as a link wherever an instance leaves the
    * property unset, and it is stored here, not in `nodes` (AGL-2846).
@@ -74,11 +79,21 @@ export interface UsageCandidate {
 export interface UsageDependent {
   /**
    * `emailTemplate` is one of the site's own transactional emails
-   * (`hosts/{h}/emailTemplates/{key}`), `id` its catalog key (AGL-3287). An
-   * email designed for a campaign is a `kind: 'email'` SCREEN and reports as
-   * `screen`.
+   * (`hosts/{h}/emailTemplates/{key}`), `id` its catalog key (AGL-3287).
+   *
+   * `emailDesign` is an email designed for a campaign: a `kind: 'email'`
+   * screen document, `id` its screen id. It is its own type rather than a
+   * `screen` because it is never a page. A caller that took it for one sent
+   * the reader to the page settings — a slug, SEO and a Publish button that
+   * would serve the email as a route — and a cache drop has no page to drop.
    */
-  type: 'screen' | 'layout' | 'component' | 'collection' | 'emailTemplate'
+  type:
+    | 'screen'
+    | 'layout'
+    | 'component'
+    | 'collection'
+    | 'emailTemplate'
+    | 'emailDesign'
   id: string
   name: string
   via: Array<'id' | 'name'>
@@ -149,7 +164,10 @@ export function scanComponentUsage(
       if (type === 'component' && candidate.id === componentId) continue
       if (!nodesReferenceComponent(candidate.nodes, componentId)) continue
       dependents.push({
-        type,
+        type:
+          type === 'screen' && candidate.kind === 'email'
+            ? 'emailDesign'
+            : type,
         id: candidate.id,
         name: usageCandidateLabel(candidate),
         // Instances reference by id, so a rename can never break them.
@@ -320,10 +338,11 @@ export function screenIdsUsingComponentDeep(
           seenComponents.add(dependent.id)
           next.push(dependent.id)
         }
-        // A transactional email is not a page and nothing caches it, so it
-        // contributes no screen and is not followed (AGL-3287). Its id is a
-        // catalog key, and walking it as a component would read a key as a
-        // definition that does not exist.
+        // An email — transactional or designed for a campaign — is not a page
+        // and nothing caches it, so it contributes no screen and is not
+        // followed (AGL-3287). A transactional email's id is a catalog key,
+        // and walking it as a component would read a key as a definition that
+        // does not exist.
       }
     }
     frontier = next
@@ -424,6 +443,11 @@ export async function readUsageCandidates(
         // (AGL-703).
         ...(docSnapshot.get('parentId')
           ? { parentId: String(docSnapshot.get('parentId')) }
+          : {}),
+        // Screens only: a campaign email design is a screen document that is
+        // never a page (AGL-3287).
+        ...(collectionName === 'screens' && docSnapshot.get('kind')
+          ? { kind: String(docSnapshot.get('kind')) }
           : {}),
         // Components only: the declared properties, whose Link defaults render
         // as links wherever an instance leaves one unset (AGL-2846). The same
