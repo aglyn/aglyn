@@ -17,7 +17,7 @@
  *
  * A record's `filterKeys` is the token array the records table's Filters
  * panel and quick search query with `array-contains` (see
- * `libs/aglyn/src/lib/app-utils/dataset-filter-keys.ts`). Every writer stamps
+ * `datasetFilterKeys` in `libs/aglyn/src/lib/app-utils/dataset-models.ts`). Every writer stamps
  * it now, through `datasetIntegrityFields` / `datasetIntegrityUpdate`; a
  * record written before that carries none, and so answers no served filter
  * until it is edited or this script reaches it.
@@ -46,8 +46,13 @@
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
+import {
+  datasetFilterKeys,
+  datasetFilterToken,
+  datasetSearchToken,
+} from './lib/dataset-filter-keys.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, '..', '..')
@@ -76,14 +81,13 @@ const args = parseDeployArgs({
 const BATCH_SIZE = 400
 
 /*
- * The token builder, imported from its TypeScript source under Node's type
- * stripping: the file takes type-only imports for exactly this reason, and
- * its spec holds it to that. One implementation, so the backfill cannot
- * stamp a spelling the writers and the query do not use.
+ * The token builder, restated beside this script (`lib/dataset-filter-keys.mjs`)
+ * because `dataset-models.ts` cannot be imported by a plain Node script. The
+ * copy and the library are pinned to the same worked examples, which the
+ * self-test below asserts, so the backfill cannot stamp a spelling the
+ * writers and the query do not use.
  */
-const { datasetFilterKeys } = await import(
-  pathToFileURL(join(APP_UTILS, 'dataset-filter-keys.ts')).href
-)
+
 
 /**
  * `effectiveDatasetModel`, restated — KEEP IN SYNC with
@@ -252,8 +256,22 @@ function runSelfTest() {
   }
   const keys = datasetFilterKeys(model, { name: 'Red Kettle', status: 'Open' })
 
+  // The copy answers the worked examples the library's spec asserts.
+  const fixtures = JSON.parse(
+    readFileSync(join(here, 'lib', 'dataset-filter-keys.fixtures.json'), 'utf8'),
+  )
+  fixtures.keys.forEach((one, at) =>
+    check(`fixture keys #${at}`, datasetFilterKeys(fixtures.model, one.values), one.expected),
+  )
+  fixtures.tokens.forEach((one, at) =>
+    check(`fixture token #${at}`, datasetFilterToken(fixtures.model, one.clause), one.expected),
+  )
+  fixtures.search.forEach((one, at) =>
+    check(`fixture search #${at}`, datasetSearchToken(one.word), one.expected),
+  )
+
   check(
-    'imports the token builder from its TypeScript source',
+    'reads the token builder beside this script',
     keys.includes('f:status=Open') && keys.includes('f:name^kett') && keys.includes('s:red'),
     true,
   )

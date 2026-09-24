@@ -15,11 +15,17 @@
  * limitations under the License.
  */
 
-// TYPE imports only. `tools/scripts/backfill-dataset-filter-keys.mjs` imports
-// this file directly under Node's type stripping, which erases these lines and
-// would fail on any import that has to resolve at run time.
-import type { DatasetFieldDefinition, DatasetModel } from './dataset-models'
-
+/*
+ * THE DATASET FILTER-TOKEN BUILDER, restated for the backfill (AGL-3321).
+ *
+ * KEEP IN SYNC with `datasetFilterKeys` in
+ * `libs/aglyn/src/lib/app-utils/dataset-models.ts`. A .mjs script cannot
+ * import that module (it imports others at run time), so this is a copy with
+ * the types stripped. Both are pinned to the same worked examples,
+ * `dataset-filter-keys.fixtures.json` beside this file: the library's spec
+ * asserts them and so does the backfill's --self-test, so a change to one
+ * that the other does not share turns one of the two red.
+ */
 /**
  * A dataset record's FILTER TOKENS: every question the records table can ask
  * of a record, flattened into one array of strings Firestore indexes on its
@@ -71,17 +77,12 @@ export const DATASET_FILTER_PREFIX_MAX = 12
 export const DATASET_FILTER_WORDS_MAX = 40
 
 /** One clause of the records table's filter: `{ field, op, value }`. */
-export interface DatasetFilterClause {
-  field: string
-  op: string
-  value: string
-}
 
 /**
  * The words of a text value: split on anything that is not a letter or a
  * digit, lower-cased, at most {@link DATASET_FILTER_WORDS_MAX} of them.
  */
-export function datasetFilterWords(text: string): string[] {
+export function datasetFilterWords(text) {
   return String(text)
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
@@ -90,41 +91,41 @@ export function datasetFilterWords(text: string): string[] {
 }
 
 /** A word's prefixes, 1 to {@link DATASET_FILTER_PREFIX_MAX} characters. */
-function prefixes(word: string): string[] {
+function prefixes(word) {
   const chars = Array.from(word).slice(0, DATASET_FILTER_PREFIX_MAX)
   return chars.map((_char, at) => chars.slice(0, at + 1).join(''))
 }
 
 /** A word clipped the way its stored prefixes are. */
-function clipWord(word: string): string {
+function clipWord(word) {
   return Array.from(word).slice(0, DATASET_FILTER_PREFIX_MAX).join('')
 }
 
-const isEnum = (field: DatasetFieldDefinition): boolean =>
+const isEnum = (field) =>
   field.type === 'text' && (field.validation?.options?.length ?? 0) > 0
 
-const isNumeric = (field: DatasetFieldDefinition): boolean =>
+const isNumeric = (field) =>
   field.type === 'int32' || field.type === 'int64' || field.type === 'float'
 
 /**
  * A stored value as text, or null. Numbers are accepted because a form or an
  * automation stores every value as text and an import may do the reverse.
  */
-function asText(value: unknown): string | null {
+function asText(value) {
   if (typeof value === 'string') return value
   if (typeof value === 'number' && Number.isFinite(value)) return String(value)
   return null
 }
 
 /** Plain text as its `=` token's value: lower-cased, trimmed, clipped. */
-function textKey(value: string): string {
+function textKey(value) {
   return Array.from(value.trim().toLowerCase())
     .slice(0, DATASET_FILTER_VALUE_MAX)
     .join('')
 }
 
 /** A stored number (or its text form) as its `=` token's value. */
-function numberKey(value: unknown): string | null {
+function numberKey(value) {
   const number =
     typeof value === 'number'
       ? value
@@ -135,26 +136,25 @@ function numberKey(value: unknown): string | null {
 }
 
 /** A stored boolean (or its text form) as its `=` token's value. */
-function boolKey(value: unknown): string | null {
+function boolKey(value) {
   if (typeof value === 'boolean') return String(value)
   if (value === 'true' || value === 'false') return value
   return null
 }
 
 /** Every field a model declares, in display order and then the rest. */
-function modelFieldIds(model: DatasetModel): string[] {
-  return [...new Set([...(model.order ?? []), ...Object.keys(model.fields ?? {})])]
+function modelFieldIds(model) {
+  return [
+    ...new Set([...(model.order ?? []), ...Object.keys(model.fields ?? {})]),
+  ]
 }
 
 /** The tokens described in {@link DATASET_FILTER_KEYS_MAX}'s comment. */
-export function datasetFilterKeys(
-  model: DatasetModel,
-  values: Record<string, unknown> | undefined,
-): string[] {
-  const exact: string[] = []
-  const fieldWords: string[] = []
-  const search: string[] = []
-  const searchable = (text: string) => {
+export function datasetFilterKeys(model, values) {
+  const exact = []
+  const fieldWords = []
+  const search = []
+  const searchable = (text) => {
     for (const word of datasetFilterWords(text)) {
       for (const prefix of prefixes(word)) search.push(`s:${prefix}`)
     }
@@ -212,10 +212,7 @@ export function datasetFilterKeys(
  * `clause.field` is the field id. The operator names are the grid's: a
  * select's `equals`, a number's `=`, a boolean's `is`, a list's `contains`.
  */
-export function datasetFilterToken(
-  model: DatasetModel,
-  clause: DatasetFilterClause,
-): string | null {
+export function datasetFilterToken(model, clause) {
   const field = model.fields?.[clause.field]
   if (!field) return null
   const { op } = clause
@@ -240,7 +237,9 @@ export function datasetFilterToken(
     return equals && key ? `f:${clause.field}=${key}` : null
   }
   if (field.type === 'sorted') {
-    return equals || op === 'contains' ? `f:${clause.field}=${value.trim()}` : null
+    return equals || op === 'contains'
+      ? `f:${clause.field}=${value.trim()}`
+      : null
   }
   return null
 }
@@ -252,10 +251,7 @@ export function datasetFilterToken(
  * the query can serve only one of them, and the rest are matched over the
  * rows it returns, by these same tokens, so both answers agree.
  */
-export function datasetFilterTokens(
-  model: DatasetModel,
-  clause: DatasetFilterClause,
-): string[] | null {
+export function datasetFilterTokens(model, clause) {
   const first = datasetFilterToken(model, clause)
   if (!first) return null
   const field = model.fields?.[clause.field]
@@ -273,7 +269,7 @@ export function datasetFilterTokens(
  * run — split the search text with {@link datasetFilterWords} to ask for
  * every run.
  */
-export function datasetSearchToken(word: string): string | null {
+export function datasetSearchToken(word) {
   const [first] = datasetFilterWords(word)
   return first ? `s:${clipWord(first)}` : null
 }

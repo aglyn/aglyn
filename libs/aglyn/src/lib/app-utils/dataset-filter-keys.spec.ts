@@ -24,7 +24,7 @@ import {
   datasetFilterTokens,
   datasetFilterWords,
   datasetSearchToken,
-} from './dataset-filter-keys'
+} from './dataset-models'
 import {
   datasetIntegrityFields,
   datasetIntegrityUpdate,
@@ -224,11 +224,24 @@ describe('the integrity writers carry the tokens', () => {
     expect(datasetIntegrityUpdate(model, { due: 5 }, clear).filterKeys).toBe(clear)
   })
 
-  it('stays importable by a plain Node script', () => {
-    // The backfill imports this file under Node's type stripping, which
-    // erases `import type` and nothing else.
-    const source = readFileSync(join(__dirname, 'dataset-filter-keys.ts'), 'utf8')
-    const imports = source.match(/^import .*$/gm) ?? []
-    expect(imports.every((line) => line.startsWith('import type '))).toBe(true)
+  it('answers the worked examples the backfill\'s copy is held to', () => {
+    // `tools/scripts/lib/dataset-filter-keys.mjs` restates this builder for
+    // the backfill; its --self-test asserts the same file, so the two
+    // cannot drift apart without one of them going red.
+    const fixtures = JSON.parse(
+      readFileSync(
+        join(__dirname, '..', '..', '..', '..', '..', 'tools', 'scripts', 'lib', 'dataset-filter-keys.fixtures.json'),
+        'utf8',
+      ),
+    )
+    for (const one of fixtures.keys) {
+      expect(datasetFilterKeys(fixtures.model, one.values)).toEqual(one.expected)
+    }
+    for (const one of fixtures.tokens) {
+      expect(datasetFilterToken(fixtures.model, one.clause)).toEqual(one.expected)
+    }
+    for (const one of fixtures.search) {
+      expect(datasetSearchToken(one.word)).toEqual(one.expected)
+    }
   })
 })
