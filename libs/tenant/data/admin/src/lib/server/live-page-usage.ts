@@ -39,6 +39,10 @@ import {
   type ReusableComponentProp,
 } from '@aglyn/aglyn/server'
 import {
+  getSystemEmailTemplate,
+  SYSTEM_EMAIL_COLLECTION,
+} from '@aglyn/shared-util-email/system-email-catalog'
+import {
   getTenantEmail,
   TENANT_EMAIL_COLLECTION,
 } from '@aglyn/shared-util-email/tenant-email-catalog'
@@ -86,6 +90,12 @@ export interface UsageDependent {
    * `screen` because it is never a page. A caller that took it for one sent
    * the reader to the page settings — a slug, SEO and a Publish button that
    * would serve the email as a route — and a cache drop has no page to drop.
+   *
+   * `systemEmail` is one of the platform's own emails
+   * (`systemEmailTemplates/{key}`, at the root, belonging to no site), `id`
+   * its catalog key (AGL-3318). Only the platform marketing site's blocks
+   * have one: that is the site those emails read their header and footer
+   * from.
    */
   type:
     | 'screen'
@@ -94,6 +104,7 @@ export interface UsageDependent {
     | 'collection'
     | 'emailTemplate'
     | 'emailDesign'
+    | 'systemEmail'
   id: string
   name: string
   via: Array<'id' | 'name'>
@@ -125,6 +136,13 @@ export interface UsageSources {
    * has any use for them, and none reads them.
    */
   emailTemplates?: UsageCandidate[]
+  /**
+   * The platform's own emails, each on its published version (AGL-3318).
+   * Read only when the site scanned is the platform marketing site, whose
+   * email blocks those emails place, and listed by {@link scanComponentUsage}
+   * alone for the reason `emailTemplates` is: an email is not a page.
+   */
+  systemEmails?: UsageCandidate[]
 }
 
 /** `displayName`, falling back to a legacy `name`, then the raw id. */
@@ -144,9 +162,11 @@ export const isLiveUsageCandidate = (candidate: UsageCandidate): boolean =>
  * versions, OTHER component definitions — `composeReusableComponentNodes`
  * grafts nested instances, so a component used only inside another component
  * is genuinely used — and, when the caller read them, the site's transactional
- * emails, which graft a placed header or footer at send time (AGL-3287).
- * Omitting any of them would report "used nowhere" for something that renders
- * and invite a confident deletion, which is worse than showing nothing at all.
+ * emails, which graft a placed header or footer at send time (AGL-3287), and
+ * the platform's own emails, which graft the platform marketing site's header
+ * and footer (AGL-3318). Omitting any of them would report "used nowhere" for
+ * something that renders and invite a confident deletion, which is worse than
+ * showing nothing at all.
  */
 export function scanComponentUsage(
   componentId: string,
@@ -180,6 +200,7 @@ export function scanComponentUsage(
   collect(sources.layouts, 'layout')
   collect(sources.components, 'component')
   collect(sources.emailTemplates ?? [], 'emailTemplate')
+  collect(sources.systemEmails ?? [], 'systemEmail')
   return dependents
 }
 
@@ -338,11 +359,12 @@ export function screenIdsUsingComponentDeep(
           seenComponents.add(dependent.id)
           next.push(dependent.id)
         }
-        // An email — transactional or designed for a campaign — is not a page
-        // and nothing caches it, so it contributes no screen and is not
-        // followed (AGL-3287). A transactional email's id is a catalog key,
-        // and walking it as a component would read a key as a definition that
-        // does not exist.
+        // An email — transactional, designed for a campaign, or one of the
+        // platform's own — is not a page and nothing caches it, so it
+        // contributes no screen and is not followed (AGL-3287, AGL-3318). A
+        // transactional or platform email's id is a catalog key, and walking
+        // it as a component would read a key as a definition that does not
+        // exist.
       }
     }
     frontier = next
@@ -389,10 +411,51 @@ export async function readUsageCandidates(
     | typeof TENANT_EMAIL_COLLECTION,
   options: { withNodes: boolean; limit: number },
 ): Promise<UsageCandidateRead> {
+  return readCandidatesIn(
+    hostRef.collection(collectionName),
+    collectionName,
+    options,
+  )
+}
+
+/**
+ * The platform's own emails as a usage corpus (AGL-3318).
+ *
+ * They live at the ROOT, `systemEmailTemplates/{key}`, because they belong to
+ * no site, with the shape a site's own emails have: the published `versionId`
+ * on the template, the tree on that version, and no name but the catalog's.
+ * Only a scan of the platform marketing site asks for them, since its email
+ * blocks are the ones they place. Read under the same bound, and reporting
+ * the same `truncated`, as a site's collections; the catalog is code, so a
+ * document exists only for an email somebody designed, and the read is a
+ * handful of documents.
+ */
+export async function readSystemEmailUsageCandidates(
+  firestore: Pick<FirebaseFirestore.Firestore, 'collection'>,
+  options: { limit: number },
+): Promise<UsageCandidateRead> {
+  return readCandidatesIn(
+    firestore.collection(SYSTEM_EMAIL_COLLECTION),
+    SYSTEM_EMAIL_COLLECTION,
+    { withNodes: true, limit: options.limit },
+  )
+}
+
+/** The read both of the above make, over the collection each one names. */
+async function readCandidatesIn(
+  collection: FirebaseFirestore.CollectionReference,
+  collectionName:
+    | 'screens'
+    | 'layouts'
+    | 'components'
+    | typeof TENANT_EMAIL_COLLECTION
+    | typeof SYSTEM_EMAIL_COLLECTION,
+  options: { withNodes: boolean; limit: number },
+): Promise<UsageCandidateRead> {
   const { withNodes, limit } = options
   // One over the limit: if the extra document comes back, there was more than
   // we are about to look at. Cheaper than a count() and exact.
-  const docs = await hostRef.collection(collectionName).limit(limit + 1).get()
+  const docs = await collection.limit(limit + 1).get()
   const truncated = docs.size > limit
   const inScope = truncated ? docs.docs.slice(0, limit) : docs.docs
 
@@ -430,7 +493,10 @@ export async function readUsageCandidates(
         displayName:
           collectionName === TENANT_EMAIL_COLLECTION
             ? (getTenantEmail(docSnapshot.id)?.name ?? docSnapshot.id)
-            : docSnapshot.get('displayName'),
+            : collectionName === SYSTEM_EMAIL_COLLECTION
+              ? (getSystemEmailTemplate(docSnapshot.id)?.name ??
+                docSnapshot.id)
+              : docSnapshot.get('displayName'),
         name: docSnapshot.get('name'),
         deletedAt: docSnapshot.get('deletedAt'),
         nodes,

@@ -66,6 +66,12 @@ export interface ArtifactDependent {
     | 'emailTemplate'
     /** A campaign's email design, which the same sentence covers (AGL-3287). */
     | 'emailDesign'
+    /**
+     * One of the platform's own emails, listed only for the platform
+     * marketing site's components (AGL-3318). The same sentence covers it:
+     * the placement sends as an empty space.
+     */
+    | 'systemEmail'
   id: string
   name: string
   versionId?: string

@@ -27,6 +27,7 @@
 
 import { compress } from '@aglyn/aglyn/app-utils/compress'
 import {
+  readSystemEmailUsageCandidates,
   readUsageCandidates,
   scanComponentUsage,
   screenIdsUsingComponentDeep,
@@ -45,6 +46,19 @@ const PLACES_HEADER = {
 
 /** A host document reference over path-keyed documents. */
 function hostRefOver(documents: Record<string, Record<string, unknown>>) {
+  return refOver(documents, 'hosts/h1/')
+}
+
+/** The database root over path-keyed documents, for a root collection. */
+function firestoreOver(documents: Record<string, Record<string, unknown>>) {
+  return refOver(documents, '')
+}
+
+/** Collections under `base` (`''` for the root) over path-keyed documents. */
+function refOver(
+  documents: Record<string, Record<string, unknown>>,
+  base: string,
+) {
   const snapshot = (path: string) => {
     const data = documents[path]
     return {
@@ -64,7 +78,7 @@ function hostRefOver(documents: Record<string, Record<string, unknown>>) {
     collection: (name: string) => ({
       limit: (max: number) => ({
         get: async () => {
-          const prefix = `hosts/h1/${name}/`
+          const prefix = `${base}${name}/`
           const docs = Object.keys(documents)
             .filter(
               (key) =>
@@ -198,6 +212,95 @@ describe('a campaign email design is an email, not a page (AGL-3287)', () => {
       },
     ])
     // Only the page has a cache to drop when the block is published.
+    expect(screenIdsUsingComponentDeep('header-1', sources)).toEqual(['home'])
+  })
+})
+
+/**
+ * The platform's own emails place the platform marketing site's header and
+ * footer (AGL-3318). They live at the ROOT, `systemEmailTemplates/{key}`,
+ * belonging to no site, so a scan of that site's blocks has to read them
+ * there — and, like every email, they are never a page.
+ */
+describe('the platform’s own emails, for the marketing site’s blocks (AGL-3318)', () => {
+  const firestore = firestoreOver({
+    'systemEmailTemplates/org-invite': { versionId: 'v3' },
+    'systemEmailTemplates/org-invite/versions/v3': {
+      nodes: Buffer.from(compress(PLACES_HEADER)),
+    },
+    'systemEmailTemplates/welcome': { versionId: 'v1' },
+    'systemEmailTemplates/welcome/versions/v1': {
+      nodes: { '_@_': { $id: '_@_', componentId: 'div', nodes: [] } },
+    },
+    // Reset to default: the pointer is cleared, and nothing sends from it.
+    'systemEmailTemplates/usage-summary': { versionId: null },
+    // A site's own email under the same key is not a platform email.
+    'hosts/h1/emailTemplates/org-invite': { versionId: 'v1' },
+  })
+
+  it('reads each published tree at the root, decoded, under the catalog’s name', async () => {
+    const read = await readSystemEmailUsageCandidates(firestore, {
+      limit: 200,
+    })
+    expect(read.truncated).toBe(false)
+    expect(read.candidates.map((entry) => entry.id)).toEqual([
+      'org-invite',
+      'usage-summary',
+      'welcome',
+    ])
+    expect(read.candidates[0]).toMatchObject({
+      id: 'org-invite',
+      displayName: 'Organization invite',
+      versionId: 'v3',
+      nodes: PLACES_HEADER,
+    })
+    expect(read.candidates[1]).toMatchObject({
+      id: 'usage-summary',
+      displayName: 'Monthly usage summary',
+      nodes: null,
+    })
+  })
+
+  it('says so when there were more than one pass reads', async () => {
+    const read = await readSystemEmailUsageCandidates(firestore, { limit: 2 })
+    expect(read.truncated).toBe(true)
+    expect(read.candidates).toHaveLength(2)
+  })
+
+  it('reports the email that places the block, and gives no page to drop', async () => {
+    const { candidates } = await readSystemEmailUsageCandidates(firestore, {
+      limit: 200,
+    })
+    const home = {
+      id: 'home',
+      displayName: 'Home',
+      versionId: 'v9',
+      nodes: PLACES_HEADER,
+    }
+    const sources = {
+      screens: [home],
+      layouts: [],
+      components: [],
+      systemEmails: candidates,
+    }
+    expect(scanComponentUsage('header-1', sources)).toEqual([
+      {
+        type: 'screen',
+        id: 'home',
+        name: 'Home',
+        via: ['id'],
+        versionId: 'v9',
+      },
+      {
+        type: 'systemEmail',
+        id: 'org-invite',
+        name: 'Organization invite',
+        via: ['id'],
+        versionId: 'v3',
+      },
+    ])
+    // The page is the only thing with a cache; a catalog key is never walked
+    // as a component.
     expect(screenIdsUsingComponentDeep('header-1', sources)).toEqual(['home'])
   })
 })

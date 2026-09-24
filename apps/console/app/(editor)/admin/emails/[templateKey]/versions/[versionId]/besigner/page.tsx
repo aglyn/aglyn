@@ -61,6 +61,8 @@ import { useCallback, useEffect, useState } from 'react'
 import BesignerAppBarComponent from '../../../../../../../../components/besigner-app-bar.component'
 import BesignerWordmark from '../../../../../../../../components/layouts/besigner-wordmark.component'
 import MainLayout from '../../../../../../../../components/layouts/main.layout'
+import { usePlatformMarketingHostId } from '../../../../../../../../components/platform-marketing-host.context'
+import ReusableComponentsProvider from '../../../../../../../../components/reusable-components-provider.component'
 import '../../../../../../../../constants/app-setup'
 import { consolePluginLoader } from '../../../../../../../../constants/console-plugin-loader'
 import { buildRoute, Route } from '../../../../../../../../constants/route-links'
@@ -135,7 +137,8 @@ interface SystemEmailVersionState {
  * publishing, the live URL, the host theme, the entity/binding/interaction
  * pickers — is a property of a site. A system email has none of those. It is
  * mail the platform sends, so what is left is the canvas itself plus a
- * subject and preheader.
+ * subject and preheader. The one site-owned thing it borrows is the platform
+ * marketing site's email blocks, its header and footer (AGL-3318).
  *
  * That the editing core needed no changes to run here is the point: if
  * `useBesignerDocument` (AGL-746) still wanted a host, the extraction would
@@ -157,6 +160,7 @@ function SystemEmailBesignerPage() {
   const handleAddElementClick = useAddElementDrawerCallback()
   const isStaff = useIsStaff()
   const listUrl = buildRoute(Route.ADMIN_EMAILS)
+  const blocksHostId = usePlatformMarketingHostId()
 
   const definition = getSystemEmailTemplate(templateKey)
   // A Stripe-delivered entry has an editor that could never change what a
@@ -415,7 +419,7 @@ function SystemEmailBesignerPage() {
       </Alert>
     ) : null
 
-  return (
+  const editor = (
     <>
       <MainLayout
         enableAppBarElevation
@@ -622,7 +626,11 @@ function SystemEmailBesignerPage() {
               'organization, so there is nothing host-scoped to browse. Add ' +
               'an image by dropping in an Image block and pasting a publicly ' +
               'reachable https URL (for example an asset on your own site) into ' +
-              'its URL field.'}
+              'its URL field.' +
+              (blocksHostId
+                ? ' The header and footer under Your email blocks come from ' +
+                  'the platform marketing site, so change them there.'
+                : '')}
           </Alert>
         </Stack>
       </CloseableDrawerComponent>
@@ -636,6 +644,25 @@ function SystemEmailBesignerPage() {
         />
       )}
     </>
+  )
+
+  /*
+   * The platform marketing site's email blocks (AGL-3318): offered under Your
+   * email blocks and drawn on the canvas where they are placed, as a site's
+   * own email editor has its site's. A platform email belongs to no site, so
+   * they come from the one the deployment names, and without one this editor
+   * renders as it always has.
+   *
+   * Promotion is off. Save as reusable component would make a component on
+   * that site from here, outside its own editor and under no workspace's
+   * plan, so the header and footer are made and changed on the site itself.
+   */
+  return blocksHostId ? (
+    <ReusableComponentsProvider hostId={blocksHostId} allowPromote={false}>
+      {editor}
+    </ReusableComponentsProvider>
+  ) : (
+    editor
   )
 }
 

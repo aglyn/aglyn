@@ -38,6 +38,11 @@ interface Dependent {
     | 'emailTemplate'
     /** A campaign's email design: a screen id, never a page (AGL-3287). */
     | 'emailDesign'
+    /**
+     * One of the platform's own emails, by catalog key: listed only on the
+     * platform marketing site, whose email blocks they place (AGL-3318).
+     */
+    | 'systemEmail'
   id: string
   name: string
   versionId?: string
@@ -77,6 +82,7 @@ export type UsedByKind = 'component' | 'layout' | 'screen'
 const TYPE_LABEL: Partial<Record<Dependent['type'], string>> = {
   emailTemplate: 'email',
   emailDesign: 'email',
+  systemEmail: 'email',
 }
 
 /** What a screen dependent's `relation` is called on the row. */
@@ -267,6 +273,17 @@ export function UsedByCard({
           screenId: dependent.id,
           versionId: dependent.versionId,
         })
+      }
+      if (dependent.type === 'systemEmail') {
+        // The staff email editor, open at the version that sends, where the
+        // placement is changed (AGL-3318); the staff list of system emails
+        // when no version is named. Both are staff pages, like the emails.
+        return dependent.versionId
+          ? buildRoute(Route.ADMIN_EMAIL_BESIGNER, {
+              templateKey: dependent.id,
+              versionId: dependent.versionId,
+            })
+          : buildRoute(Route.ADMIN_EMAILS)
       }
       // A screen with no published version has nowhere to link to; the row
       // still has to appear, because it still uses this.

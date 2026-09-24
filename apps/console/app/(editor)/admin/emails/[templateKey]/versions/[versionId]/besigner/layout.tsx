@@ -16,8 +16,10 @@
  */
 
 import { getSystemEmailTemplate } from '@aglyn/shared-util-email'
+import { platformMarketingHostId } from '@aglyn/tenant-data-admin/server/platform-marketing-consent'
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { PlatformMarketingHostProvider } from '../../../../../../../../components/platform-marketing-host.context'
 import { entityPageTitle } from '../../../../../../../entity-page-title'
 
 // Title-only shell (AGL-1059): the page is a client component, and a client
@@ -43,10 +45,20 @@ export async function generateMetadata({
   }
 }
 
+/**
+ * The site whose email blocks this editor offers (AGL-3318), read here because
+ * it is a server setting and the page under this layout is a client component.
+ * A platform email belongs to no site, and its header and footer are the ones
+ * on the platform marketing site the deployment names.
+ */
 export default function AdminEmailBesignerTitleLayout({
   children,
 }: {
   children: ReactNode
 }) {
-  return <>{children}</>
+  return (
+    <PlatformMarketingHostProvider hostId={platformMarketingHostId()}>
+      {children}
+    </PlatformMarketingHostProvider>
+  )
 }
