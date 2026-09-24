@@ -388,6 +388,39 @@ describe('a person is not enrolled twice in the same flow', () => {
     expect(store.size).toBe(3)
   })
 
+  it('keeps an org automation’s row apart from a site action sharing its id (AGL-3302)', async () => {
+    // Org automation ids come from the organization's collection and a site
+    // action's from the site's, so the two can collide; the prefix is what
+    // stops one person's wait in each from being the same row.
+    await enroll()
+    const org = await enrollInFlow({
+      hostId: HOST,
+      automation: 'org',
+      orgId: 'org-1',
+      actionId: 'action-1',
+      action: { name: 'Every site', steps: [{ type: 'wait', delayMinutes: 60 }] },
+      email: 'buyer@example.com',
+      event: 'formSubmission',
+      payload: { email: 'buyer@example.com' },
+      nextStepIndex: 1,
+      resumeAtMs: NOW + 60_000,
+      nowMs: NOW,
+    })
+
+    expect(org).toEqual({
+      enrolled: true,
+      id: flowEnrollmentId('action-1', keyFor(), 'org'),
+    })
+    expect(flowEnrollmentId('action-1', keyFor(), 'org')).toBe(
+      `org-action-1__${keyFor()}`,
+    )
+    expect(store.size).toBe(2)
+    const row = store.get(
+      enrollmentPath(HOST, flowEnrollmentId('action-1', keyFor(), 'org')),
+    )
+    expect(row).toMatchObject({ automation: 'org', orgId: 'org-1' })
+  })
+
   it('refuses to wait for nobody', async () => {
     // A flow that waits continues later FOR A PERSON. Without an address
     // there is no dedupe key, so a page-view trigger would mint a row per

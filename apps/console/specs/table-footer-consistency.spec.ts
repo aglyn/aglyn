@@ -1266,6 +1266,21 @@ const NOT_A_LIST: Array<[string, string]> = [
       'cannot be exceeded and the second page can never exist.',
   ],
   [
+    'libs/plugins/workflows/src/lib/components/org-site-automation-list.component.tsx',
+    'An INDEX of where each site’s workflows, actions and webhooks are, on ' +
+      'the org hub (AGL-3302): ten rows per site under a probe row that says ' +
+      'the site has more and links into that site’s own hub, where the full ' +
+      'list is paged. The sites are capped and folded behind "Show N more ' +
+      'sites", so a page boundary would cut one site’s rows from its name.',
+  ],
+  [
+    'libs/plugins/workflows/src/lib/components/site-org-automations-panel.component.tsx',
+    'One row per org automation the organization places on this site ' +
+      '(AGL-3302), bounded by `ORG_AUTOMATIONS_MAX` for the whole organization ' +
+      'and read whole, so there is no second page. The paged list is the org ' +
+      'hub’s own.',
+  ],
+  [
     'libs/plugins/marketing/src/lib/components/host-overlays-card.component.tsx',
     'A PRECEDENCE list: the first enabled overlay of each kind is the one a ' +
       'visitor sees, and the arrows reorder by swapping `order` with the ' +
@@ -1835,7 +1850,13 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // 65 after AGL-3298, and this one IS a new table: the lead source
     // picklist's values, a settings table capped at `CRM_PICKLIST_VALUES_MAX`
     // like the other CRM settings rows above it.
-    expect(NOT_A_LIST).toHaveLength(65)
+    //
+    // 67 since org automations (AGL-3302): the org hub's index of every
+    // site's workflows, actions and webhooks — ten rows per site under a
+    // probe that links into the site's own paged list, over a capped and
+    // folded set of sites — and the site hub's panel of the org automations
+    // placed on it, bounded by the organization's cap and read whole.
+    expect(NOT_A_LIST).toHaveLength(67)
   })
 })
 

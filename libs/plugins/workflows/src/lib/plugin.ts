@@ -19,7 +19,10 @@ import * as Aglyn from '@aglyn/aglyn'
 import { mdiSitemap } from '@aglyn/shared-data-mdi'
 import { lazy } from 'react'
 import { HostActivityCard } from './components/host-activity-card.component'
-import { WORKFLOWS_CONSOLE_SECTIONS } from './components/workflows-console-sections'
+import {
+  WORKFLOWS_CONSOLE_SECTIONS,
+  WORKFLOWS_ORG_CONSOLE_SECTIONS,
+} from './components/workflows-console-sections'
 import { registerPluginZone } from '@aglyn/aglyn/plugin-manager/plugin-zones'
 import { WORKFLOW_USAGE_ZONE } from './components/workflow-zones'
 import { BUNDLE_ID } from './constants/bundle-common'
@@ -82,6 +85,28 @@ export function registerWorkflowsConsole(): void {
         sections: WORKFLOWS_CONSOLE_SECTIONS,
         // Reuse the existing release-flag nav-tab so staff-preview gating is
         // unchanged now that the tab comes from the plugin (AGL-395).
+        navTabId: 'nav-tab-workflows',
+        icon: { path: mdiSitemap.path },
+        header: {
+          title: 'Automation',
+          icon: { path: mdiSitemap.path },
+          docsTopic: 'workflows',
+        },
+        Component: WorkflowsConsolePage,
+      },
+    ],
+    /*
+     * The ORGANIZATION's Automation hub (AGL-3302), at `/[orgSlug]/automation`:
+     * the org automations placed across the organization's sites, and every
+     * site's own workflows, actions and webhooks side by side. The same page
+     * component, mounted with no site; the site tab's release flag gates both
+     * levels, so one flag rolls the surface out at once.
+     */
+    orgNavItems: [
+      {
+        label: 'Automation',
+        href: '/automation',
+        sections: WORKFLOWS_ORG_CONSOLE_SECTIONS,
         navTabId: 'nav-tab-workflows',
         icon: { path: mdiSitemap.path },
         header: {

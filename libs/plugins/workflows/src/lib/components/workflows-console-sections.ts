@@ -17,7 +17,12 @@
 
 import type { ConsoleNavSection } from '@aglyn/aglyn'
 
-export type WorkflowsConsoleSectionId = 'workflows' | 'actions' | 'webhooks'
+export type WorkflowsConsoleSectionId =
+  | 'workflows'
+  | 'actions'
+  | 'webhooks'
+  // The ORGANIZATION hub's own section (AGL-3302); no site rail carries it.
+  | 'automations'
 
 /**
  * The workflows console's sections, in rail order (AGL-2501).
@@ -46,3 +51,27 @@ export const WORKFLOWS_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
  * is deliberately no separate default constant — a second place to say which
  * section is first is a second place for it to disagree with the rail.
  */
+
+/**
+ * The ORGANIZATION-level Automation hub's sections, at `/[orgSlug]/automation`
+ * (AGL-3302).
+ *
+ * Org automations come first because they are the one thing that lives here
+ * and nowhere else: the organization writes them once and places them on the
+ * sites it chooses. The other three are the sites' own workflows, actions and
+ * webhooks listed side by side with the site each belongs to — each row opens
+ * in that site's hub, where it is edited, because a workflow calls its site's
+ * functions and a webhook holds its site's secret.
+ *
+ * The ids are the site rail's for the three it shares, so a link built for
+ * one level reads the same at the other. `automations` takes the `actions`
+ * entitlement: an org automation is built from the actions builder's steps,
+ * so the plan that carries one carries the other, and the shell draws the
+ * section locked — with its upgrade notice — for a plan without it.
+ */
+export const WORKFLOWS_ORG_CONSOLE_SECTIONS: readonly ConsoleNavSection[] = [
+  { id: 'automations', label: 'Org automations', featureFlag: 'actions' },
+  { id: 'workflows', label: 'Workflows' },
+  { id: 'actions', label: 'Actions' },
+  { id: 'webhooks', label: 'Webhooks' },
+]

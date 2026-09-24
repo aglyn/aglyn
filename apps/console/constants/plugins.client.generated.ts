@@ -125,9 +125,9 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
   },
   {
     id: 'workflows',
-    apiPrefixes: ["hooks"],
+    apiPrefixes: ["hooks","automations"],
     register: {"console":"registerWorkflowsConsole"},
-    contributes: {"console":{"shell":true,"routes":["/automation"],"slots":["hostActivity"]}},
+    contributes: {"console":{"shell":true,"routes":["/automation"],"orgRoutes":["/automation"],"slots":["hostActivity"]}},
     load: () => import('@aglyn/plugins-workflows'),
   },
   {

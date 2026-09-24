@@ -4406,6 +4406,131 @@ describe('campaigns and their sends belong to the org (AGL-3273)', () => {
   })
 })
 
+/**
+ * Org automations (AGL-3302): one automation the organization places on the
+ * sites it chooses. Read through the scoped predicate a campaign container
+ * answers to — an org-wide member reads every one, a site collaborator the
+ * ones placed on their site — and written by no client at all: the save and
+ * the per-site pause are server routes.
+ */
+describe('org automations are read by placement and written by no client (AGL-3302)', () => {
+  const OTHER_HOST = 'host-other'
+  const automation = (visibleTo) => ({
+    name: 'Welcome every lead',
+    trigger: { event: 'formSubmission', conditions: null, combinator: null },
+    steps: [{ type: 'sendEmail', subject: 'Welcome', body: 'Thanks' }],
+    enabled: true,
+    visibleTo,
+    pausedHostIds: [],
+    deletedAt: null,
+  })
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'automations', 'a-org'), automation(['org']))
+      await setDoc(
+        doc(db, 'orgs', ORG, 'automations', 'a-mine'),
+        automation([`host:${HOST}`]),
+      )
+      await setDoc(
+        doc(db, 'orgs', ORG, 'automations', 'a-theirs'),
+        automation([`host:${OTHER_HOST}`]),
+      )
+    })
+  })
+
+  it('an org-wide member lists every one — the org hub’s read', async () => {
+    const db = authed(OWNER)
+    await mustAllow(
+      'the org hub listing its live automations',
+      getDocs(
+        query(
+          collection(db, 'orgs', ORG, 'automations'),
+          where('deletedAt', '==', null),
+        ),
+      ),
+    )
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'automations', 'a-theirs')))
+    // An org-wide VIEWER reads them too: reading is not managing.
+    await assertSucceeds(
+      getDoc(doc(authed(VIEWER), 'orgs', ORG, 'automations', 'a-theirs')),
+    )
+  })
+
+  it('a site collaborator reads the ones placed on their site, not a sibling’s', async () => {
+    const db = authed(EDITOR)
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'automations', 'a-org')))
+    await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'automations', 'a-mine')))
+    await mustDeny(
+      'a collaborator reading a sibling site’s org automation',
+      getDoc(doc(db, 'orgs', ORG, 'automations', 'a-theirs')),
+    )
+    // The site hub's panel: live, and placed on this site.
+    await mustAllow(
+      'the site hub listing the org automations that run on it',
+      getDocs(
+        query(
+          collection(db, 'orgs', ORG, 'automations'),
+          where('deletedAt', '==', null),
+          where('visibleTo', 'array-contains-any', ['org', `host:${HOST}`]),
+        ),
+      ),
+    )
+    await mustDeny(
+      'a collaborator listing every org automation unfiltered',
+      getDocs(collection(db, 'orgs', ORG, 'automations')),
+    )
+    await mustDeny(
+      'a collaborator listing a sibling site’s org automations',
+      getDocs(
+        query(
+          collection(db, 'orgs', ORG, 'automations'),
+          where('visibleTo', 'array-contains-any', [`host:${OTHER_HOST}`]),
+        ),
+      ),
+    )
+  })
+
+  it('no client writes one — not the owner, not the site’s own editor', async () => {
+    for (const uid of [OWNER, EDITOR]) {
+      const db = authed(uid)
+      await mustDeny(
+        `creating an org automation as ${uid}`,
+        setDoc(doc(db, 'orgs', ORG, 'automations', 'a-new'), automation(['org'])),
+      )
+      await mustDeny(
+        `editing an org automation's steps as ${uid}`,
+        updateDoc(doc(db, 'orgs', ORG, 'automations', 'a-org'), {
+          steps: [{ type: 'webhookPost', webhookId: 'hook-1' }],
+        }),
+      )
+      // The host level control is a server route: a client that could write
+      // the pause list could pause somebody else's site.
+      await mustDeny(
+        `pausing an org automation client-direct as ${uid}`,
+        updateDoc(doc(db, 'orgs', ORG, 'automations', 'a-org'), {
+          pausedHostIds: arrayUnion(HOST),
+        }),
+      )
+      await mustDeny(
+        `deleting an org automation client-direct as ${uid}`,
+        deleteDoc(doc(db, 'orgs', ORG, 'automations', 'a-mine')),
+      )
+    }
+  })
+
+  it('an outsider reads nothing', async () => {
+    await mustDeny(
+      'an outsider reading an every-site org automation',
+      getDoc(doc(authed(OUTSIDER), 'orgs', ORG, 'automations', 'a-org')),
+    )
+    await mustDeny(
+      'an anonymous caller reading an every-site org automation',
+      getDoc(doc(anon(), 'orgs', ORG, 'automations', 'a-org')),
+    )
+  })
+})
+
 describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
   const OTHER_HOST = 'host-other'
   beforeEach(async () => {

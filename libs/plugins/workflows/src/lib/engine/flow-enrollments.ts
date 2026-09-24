@@ -71,10 +71,18 @@ import type { PluginJobHostGate } from '@aglyn/aglyn/server'
 import type { WorkflowStep } from './workflow-steps'
 
 /**
- * `hosts/{hostId}/flowEnrollments/{actionId__personKey}` for an action, and
- * `{workflow-<workflowId>__personKey}` for a workflow.
+ * `hosts/{hostId}/flowEnrollments/{actionId__personKey}` for an action,
+ * `{workflow-<workflowId>__personKey}` for a workflow, and
+ * `{org-<automationId>__personKey}` for an org automation waiting on the site
+ * it ran on.
  */
 export const FLOW_ENROLLMENTS_SUBCOLLECTION = 'flowEnrollments'
+
+/**
+ * What is waiting, when it is not a site action: `workflow` for a workflow's
+ * run and `org` for an org automation's (AGL-3302).
+ */
+export type FlowEnrollmentAutomation = 'workflow' | 'org'
 
 /**
  * Documents one sweep may READ across every site.
@@ -124,12 +132,19 @@ export type FlowEnrollmentEnding =
 export interface FlowEnrollment {
   hostId: string
   /**
-   * What is waiting: `workflow` for a workflow's run, absent for an action's
-   * — which is every enrollment written before a workflow could wait, so an
-   * absent field is read as an action for as long as those rows exist.
+   * What is waiting: `workflow` for a workflow's run, `org` for an org
+   * automation's, absent for an action's — which is every enrollment written
+   * before a workflow could wait, so an absent field is read as an action for
+   * as long as those rows exist.
    */
-  automation?: 'workflow'
-  /** The automation's document id: the action's, or the workflow's. */
+  automation?: FlowEnrollmentAutomation
+  /**
+   * The organization whose automation this is, on an `org` enrollment: the
+   * resume re-reads `orgs/{orgId}/automations/{actionId}`, and refuses to
+   * continue for a site that has since left the organization.
+   */
+  orgId?: string
+  /** The automation's document id: the action's, the workflow's or the org automation's. */
   actionId: string
   actionName: string
   status: FlowEnrollmentStatus
@@ -191,13 +206,14 @@ export interface FlowEnrollment {
 export function flowEnrollmentId(
   actionId: string,
   key: string,
-  automation?: 'workflow',
+  automation?: FlowEnrollmentAutomation,
 ): string {
-  // A workflow's id is kept apart from an action's, so the two kinds can
-  // never share a row whatever ids their collections hand out.
-  return automation === 'workflow'
-    ? `workflow-${actionId}__${key}`
-    : `${actionId}__${key}`
+  // Each kind's id is kept apart from the others', so no two kinds can ever
+  // share a row whatever ids their collections hand out — an org automation's
+  // id comes from a different collection than the site's own action ids.
+  if (automation === 'workflow') return `workflow-${actionId}__${key}`
+  if (automation === 'org') return `org-${actionId}__${key}`
+  return `${actionId}__${key}`
 }
 
 function enrollmentsRef(
@@ -212,8 +228,10 @@ function enrollmentsRef(
 
 export interface EnrollInFlowOptions {
   hostId: string
-  /** `workflow` for a workflow's run; absent for an action's. */
-  automation?: 'workflow'
+  /** `workflow` for a workflow's run, `org` for an org automation's; absent for an action's. */
+  automation?: FlowEnrollmentAutomation
+  /** The owning organization, on an `org` enrollment. */
+  orgId?: string
   /** The automation's document id. */
   actionId: string
   action: { name?: string; steps?: readonly WorkflowStep[] }
@@ -277,8 +295,9 @@ export async function enrollInFlow(
       }
       const enrollment: FlowEnrollment = {
         hostId: options.hostId,
-        ...(options.automation === 'workflow'
-          ? { automation: 'workflow' as const }
+        ...(options.automation ? { automation: options.automation } : {}),
+        ...(options.automation === 'org' && options.orgId
+          ? { orgId: options.orgId }
           : {}),
         actionId: options.actionId,
         actionName: String(options.action.name ?? ''),
