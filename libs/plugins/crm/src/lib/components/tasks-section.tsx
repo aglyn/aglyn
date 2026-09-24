@@ -30,7 +30,6 @@ import { useCrmScope } from '../hooks/use-crm-scope'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
 import CrmViewsControl from './crm-views-control'
-import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -525,21 +524,6 @@ export function TasksSection(props: ConsolePluginPageProps) {
             <Typography variant="body2" color="error">
               {'The tasks could not be loaded. Reload to try again.'}
             </Typography>
-          ) : status === 'success' && !loaded.length ? (
-            <EmptyStateComponent
-              label={EMPTY_LABEL[view]}
-              description={EMPTY_COPY[view]}
-              action={
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="primary"
-                  onClick={() => setDrawer({ open: true, task: null })}
-                >
-                  {'New task'}
-                </Button>
-              }
-            />
           ) : (
             <>
               {truncated ? (
@@ -580,8 +564,26 @@ export function TasksSection(props: ConsolePluginPageProps) {
                     const found = tasks.find((row) => row.$id === id)
                     if (found) setDrawer({ open: true, task: found })
                   }}
-                  // The panel and the search are the grid's; the section
-                  // answers them, the view through the query (AGL-3313).
+                  /*
+                   * The panel and the search are the grid's; the section
+                   * answers them, the view through the query (AGL-3313). An
+                   * empty view is said inside the grid rather than instead of
+                   * it, so its toolbar stays to choose another view.
+                   */
+                  noRowsLabel={loaded.length ? 'No tasks match these filters' : EMPTY_LABEL[view]}
+                  noRowsDescription={loaded.length ? undefined : EMPTY_COPY[view]}
+                  noRowsAction={
+                    loaded.length ? undefined : (
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                        onClick={() => setDrawer({ open: true, task: null })}
+                      >
+                        {'New task'}
+                      </Button>
+                    )
+                  }
                   filterMode="server"
                   filterModel={gridFilter.filterModel}
                   onFilterModelChange={gridFilter.onFilterModelChange}
