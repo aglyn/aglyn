@@ -38,6 +38,10 @@ import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band
 import { resolveUploadSite } from '../../../../utils/server/media-upload-site'
 import { scheduleMediaDeliveryCopies } from '../../../../utils/server/media-delivery-copies'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
+import {
+  embeddedMetadataAtIngress,
+  storageObjectReader,
+} from '../../../../utils/server/media-embedded'
 import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
   emailUnverifiedResponse,
@@ -671,6 +675,17 @@ async function handler(request: Request): Promise<Response> {
         }),
     })
 
+    // What the file carries inside itself (AGL-3331). This leg never holds
+    // the bytes, so the reader pulls them by range — a film costs its
+    // `moov` box, not its 200 MB — and it is time-boxed: an upload never
+    // waits on a caption, and an asset it skips is read when its Details
+    // drawer first opens.
+    const embeddedMetadata = await embeddedMetadataAtIngress({
+      contentType,
+      reader: storageObjectReader(file, actualBytes),
+      ...(contentSha256 ? { contentSha256 } : {}),
+    })
+
     const token = randomUUID()
     await file.setMetadata({
       metadata: { firebaseStorageDownloadTokens: token },
@@ -722,6 +737,8 @@ async function handler(request: Request): Promise<Response> {
       ...(contentSha256 ? { contentSha256 } : {}),
       // AGL-1474 — absent on every clean asset. See `/api/media/upload`.
       ...(svgRemoved.length ? { svgSanitized: svgRemoved } : {}),
+      // AGL-3331 — absent when the format has no reader or the read gave up.
+      ...(embeddedMetadata ? { embeddedMetadata } : {}),
       // The org's Default sharing applied to the site the upload was made
       // from, same as the direct upload route (AGL-1043/1048) — the scoped
       // reads need the field present on every asset.

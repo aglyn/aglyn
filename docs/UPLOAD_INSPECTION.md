@@ -54,6 +54,7 @@ fails if a new bucket write appears that is neither covered nor exempted.
 | 3 | `apps/console/app/api/media/replace/route.ts` | Yes | Yes |
 | 4 | `apps/console/utils/api-v1-resources.ts` (`/v1` media write, AGL-2463) | Yes | Yes |
 | 5 | `libs/plugins/marketplace/src/lib/server/preview-image.ts` | Yes | Yes |
+| 6 | `apps/console/app/api/media/metadata/route.ts` (embedded-metadata edit, AGL-3331) | Yes — the file, rewritten in process | Yes |
 
 **The signed route (#2) is the interesting one.** Its whole purpose is that a
 200 MB video never enters the function, so downloading it back to inspect it

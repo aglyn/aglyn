@@ -234,7 +234,7 @@ service cloud.firestore {
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
         'video', 'poster', 'posterError', 'videoRenditions',
-        'deliveryCopies']);
+        'deliveryCopies', 'embeddedMetadata']);
     }
     function mediaObjectFieldsUnchanged() {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
@@ -242,7 +242,7 @@ service cloud.firestore {
         'contentHash', 'contentSha256', 'sizeBytes', 'variants',
         'variantsError', 'svgSanitized', 'uploadedBy', 'createdAt',
         'video', 'poster', 'posterError', 'videoRenditions',
-        'deliveryCopies']);
+        'deliveryCopies', 'embeddedMetadata']);
     }
 
     /**

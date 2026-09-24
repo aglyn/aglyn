@@ -61,8 +61,11 @@ uploads are paused on every plan for now — see [Upload](#upload).
     it; on very large libraries it searches as much as it can and says where it stopped, so
     narrowing by folder, type or date gets you the rest.
 - Capture and edit **metadata** in a detail drawer — file name, alt text, description,
-  [tags](#tags), and your own **custom key/value metadata** (mirrored onto the delivered
-  object's storage metadata). Bulk-edit tags and folders across a selection.
+  [tags](#tags), and your own [custom key/value metadata](#custom-metadata) (mirrored onto
+  the delivered object's storage metadata). Bulk-edit tags and folders across a selection.
+- See and edit [the details inside the file itself](#file-info) — a photo's caption,
+  credit, copyright, keywords and camera, a PDF's title and author, an Office file's
+  properties, a video's tags — under **File info** in the same drawer.
 - Each card has an **overflow menu** (the ⋮ button that appears on hover) so actions stay
   tidy. What it offers depends on the file:
   - **Copy URL** — public files only. **Copy temporary link** replaces it on a private
@@ -143,6 +146,63 @@ tag no chip could ever match — a file you tagged and then could not find by th
 Normalizing at entry is what makes the chip you see and the tag that gets stored the
 same thing. The exact caps are in
 [Tag limits](#tag-limits).
+
+### Custom metadata {#custom-metadata}
+
+Under **Custom metadata** in the **Details** drawer, **Add field** gives you a key and a
+value — a campaign code, a license number, whatever your team files things by. Search
+finds them with `meta.<key>:<value>`. Removing a field or renaming its key and pressing
+**Save** takes the old one off the file for good; it does not come back the next time
+the drawer opens.
+
+Custom metadata belongs to Aglyn, not to the file: it is never written into the file's
+bytes, so a download does not carry it. For details that should travel with the file,
+use [File info](#file-info).
+
+### Details inside the file {#file-info}
+
+Most files carry details of their own, written by the camera, the editing app or whoever
+prepared them — a photo's caption and copyright, a PDF's title and author. **File info**,
+near the bottom of the **Details** drawer, shows them next to what Aglyn itself measured
+(type, size, dimensions, running time, when it was uploaded and last changed).
+
+The first time you open a file that was uploaded before this existed, Aglyn reads the
+file and keeps what it found, so the next visit is instant. New uploads are read as they
+arrive.
+
+**What is read:**
+
+| File | Details |
+| -- | -- |
+| JPEG, PNG, WebP, TIFF | Title, headline, description, keywords, creator, copyright, credit line, source, usage terms, city/state/country, GPS position, date taken, camera, lens, exposure, rating and label — from XMP, IPTC and EXIF, plus PNG text |
+| HEIC, AVIF, GIF, SVG | The same where the format carries it |
+| PDF | Title, author, subject, keywords, the app it was created with, producer, dates, page count, and any custom document properties |
+| Word, Excel, PowerPoint | Title, subject, author, keywords, comments, category, company, dates, and custom properties |
+| MP4, MOV, WebM | Title, artist, description, recording date, location, camera and encoder tags |
+
+When a photo holds the same detail in more than one place (a caption in XMP, IPTC *and*
+EXIF, say), **File info** shows it once.
+
+**Editing.** Press **Edit** to change a value, clear it, or **Add a field** from the
+list of fields that kind of file can hold, then **Save to file**. The change is written
+into the file itself — the same link, served to every page that uses it, and included in
+every download — without re-encoding it: the picture, the pages and everything else in
+the file stay byte-for-byte the same. Where a photo holds a detail in several places,
+all of them are updated, so no app is left reading the old value.
+
+- JPEG, PNG, WebP, TIFF, PDF and Word/Excel/PowerPoint files can be edited. Video, HEIC,
+  AVIF, GIF and SVG details are read-only.
+- **Encrypted or digitally signed PDFs** are read-only — changing a signed PDF would
+  break its signature.
+- Measured facts (size, dimensions, exposure, page count) cannot be edited, because
+  they describe the file rather than annotate it.
+- If someone replaced or edited the file since you opened the drawer, saving tells you
+  to reopen it instead of writing over their change.
+
+**Remove location.** A photo taken on a phone usually records where it was taken, and
+anyone who downloads it from your site can read that. When a photo carries a GPS
+position, **Remove location from file** erases it from the file itself. It cannot be put
+back afterwards, so Aglyn asks first.
 
 ## Upload
 
