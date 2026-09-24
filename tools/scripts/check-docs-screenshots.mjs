@@ -40,7 +40,12 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { classifyImage, findImageReferences } from './lib/docs-screenshots.mjs'
+import {
+  classifyImage,
+  findImageReferences,
+  findOrphanImages,
+  findStaticImagePaths,
+} from './lib/docs-screenshots.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const DOCS_ROOT = join(repoRoot, 'apps/docs/docs')
@@ -101,6 +106,56 @@ for (const reference of references) {
   if (why) failures.push({ ...reference, why })
 }
 
+// The other direction (AGL-3319): an image under static/img that no page, no
+// site config and no theme component names. Everything the docs app ships is
+// read for names, so an image used only by the config's social card or a
+// React page is not an orphan.
+const DOCS_APP = join(repoRoot, 'apps/docs')
+const namingSources = []
+const walkSources = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) walkSources(full)
+    else if (/\.(mdx?|tsx?|jsx?|css)$/.test(entry.name)) namingSources.push(full)
+  }
+}
+for (const dir of ['docs', 'help', 'learn', 'api', 'src']) {
+  try {
+    if (statSync(join(DOCS_APP, dir)).isDirectory()) walkSources(join(DOCS_APP, dir))
+  } catch {
+    // Not every docs instance exists in every checkout.
+  }
+}
+namingSources.push(join(DOCS_APP, 'docusaurus.config.ts'))
+const named = new Set()
+for (const file of namingSources) {
+  for (const path of findStaticImagePaths(readFileSync(file, 'utf8'))) named.add(path)
+}
+const images = []
+const walkImages = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) walkImages(full)
+    else if (/\.(png|jpe?g|webp|gif)$/.test(entry.name)) {
+      images.push(relative(STATIC_ROOT, full))
+    }
+  }
+}
+walkImages(join(STATIC_ROOT, 'img'))
+const orphans = findOrphanImages(images, named)
+
+if (failures.length || orphans.length) {
+  if (orphans.length) {
+    console.error(`\n${orphans.length} image(s) under apps/docs/static that nothing names:\n`)
+    for (const orphan of orphans) console.error(`  apps/docs/static/${orphan}`)
+    console.error(
+      `\nDelete it, or point a page at it. The capture harness keeps\n` +
+        `re-shooting an image nobody reads.\n`,
+    )
+  }
+}
+
 if (failures.length) {
   console.error(
     `\n${failures.length} docs image reference(s) do not resolve to a picture:\n`,
@@ -115,11 +170,12 @@ if (failures.length) {
       `reference. A page pointing at a missing image ships a broken-image\n` +
       `icon and still builds green.\n`,
   )
-  process.exit(1)
 }
+if (failures.length || orphans.length) process.exit(1)
 
 console.log(
   `check:docs-screenshots — ${references.length} image reference(s) across ` +
     `${markdownFiles.length} docs pages, ${probes.size} distinct files, all ` +
-    `decode to a non-blank image.`,
+    `decode to a non-blank image under the size ceiling, and every image ` +
+    `under static/img is named somewhere.`,
 )

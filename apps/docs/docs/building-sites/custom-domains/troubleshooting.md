@@ -12,7 +12,7 @@ If **Verify & connect** won't go green, it's almost always DNS. Work through the
 **Starter and above.**
 :::
 
-![Domain status in site setup](/img/custom-domains/setup-domains.png)
+![The Custom domain card in the site's Admin area](/img/custom-domains/setup-domains.png)
 
 ## Checklist
 

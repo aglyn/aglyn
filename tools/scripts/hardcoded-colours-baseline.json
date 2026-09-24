@@ -83,6 +83,7 @@
   "libs/shared/util/email/src/lib/marketing-send.ts": 2,
   "libs/shared/util/email/src/lib/text-email-html.ts": 5,
   "tools/e2e/capture-docs-screenshots.mjs": 5,
+  "tools/e2e/render-readme-composites.mjs": 13,
   "tools/scripts/backfill-scheme-dark.mjs": 2,
   "tools/scripts/generate-blog-covers.mjs": 5
 }

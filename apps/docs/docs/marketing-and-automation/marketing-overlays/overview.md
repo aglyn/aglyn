@@ -11,7 +11,7 @@ promote offers and capture emails — without touching your page designs. Manage
 your site's **Marketing** page, and see every site's at once from your
 [organization's](#across-your-sites).
 
-![The Marketing page in the Aglyn console: the at-a-glance channel rollup, and the overlays table with status, scheduling window, page targeting, and per-overlay engagement counts](/img/marketing-overlays/marketing-page.png)
+![The Overlays section of the Marketing hub: the Announcement bars & popups table with each overlay's kind, status, window, page targeting and engagement counts, above the Announcement bar and Promotional popup cards](/img/marketing-overlays/marketing-page.png)
 
 ```mermaid
 flowchart LR

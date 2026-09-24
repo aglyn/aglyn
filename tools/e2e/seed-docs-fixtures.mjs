@@ -33,7 +33,8 @@
 // Idempotent: deterministic `docs-…` ids, merge-set writes.
 
 import { getApps, initializeApp } from 'firebase-admin/app'
-import { getFirestore, Timestamp } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
+import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -264,7 +265,7 @@ await put(hostOrdersRef.doc('docs-order-paid'), {
   status: 'paid',
   channel: 'online',
   customerEmail: 'wholesale@example.com',
-  customerName: 'Robin Wholesale',
+  customerName: 'Robin Hale',
   lineItems: [
     {
       productId: 'seed-product-baguette',
@@ -399,5 +400,255 @@ await put(
     createdAtMs: now.toMillis(),
   },
 )
+
+// ── The staff-only guard's subject (AGL-3319) ─────────────────────────────
+// The capture preflight has to SEE the one nav tab that ships flagged off,
+// Sequences (`release_outreach`), before it can prove the tab is hidden from
+// every shot. The org strip draws that tab only for an org with the plugin on
+// AND its `outreach` entitlement, which no plan carries, so without these two
+// fields there is no marker to find and the preflight refuses to capture
+// anything. Staff still see it ⚑-badged; the harness hides it, which is the
+// strip a customer's console renders.
+console.log('Plugins (Sequences for the staff-only guard, member accounts):')
+await firestore.collection('orgs').doc(orgId).set(
+  {
+    // `accounts` too: the member-accounts guide signs a visitor up on the
+    // published site, and the tenant answers /signup and /signin with a 404
+    // for an org without the plugin that owns them.
+    // `forms` for the same reason: the survey guide's Form element lives in
+    // that bundle, and the base seed's list predates the move.
+    enabledPlugins: FieldValue.arrayUnion('outreach', 'accounts', 'forms'),
+    entitlements: { features: { outreach: true } },
+  },
+  { merge: true },
+)
+console.log(`  orgs/${orgId}`)
+
+// ── Traffic (AGL-3319) ────────────────────────────────────────────────────
+// The site dashboard's Traffic card and the Analytics page read one counter
+// document per UTC day, `hosts/{host}/analytics/{YYYY-MM-DD}`, in the shape
+// the tenant's collector writes (`apps/tenant/app/api/analytics/collect`):
+// map keys with `.` `$` `#` `[` `]` replaced by `_`. Sixty days, so the
+// 30-day range has a prior window to compare against. Deterministic, so two
+// runs photograph the same curve: a weekly rhythm, a slow climb, and a
+// spring-menu campaign in the last fortnight.
+console.log('Traffic:')
+const analyticsRef = firestore.collection('hosts').doc(hostId).collection('analytics')
+const DAY_MS = 24 * 60 * 60 * 1000
+for (let back = 0; back < 60; back += 1) {
+  const at = now.toMillis() - back * DAY_MS
+  const day = new Date(at).toISOString().slice(0, 10)
+  const weekday = new Date(at).getUTCDay()
+  const weekend = weekday === 0 || weekday === 6
+  const trend = 1 + (60 - back) / 90
+  const campaign = back < 14 ? 1.25 : 1
+  const wobble = 1 + (((back * 37) % 11) - 5) / 40
+  const total = Math.round(120 * trend * campaign * wobble * (weekend ? 1.35 : 1))
+  const share = (fraction) => Math.max(1, Math.round(total * fraction))
+  await analyticsRef.doc(day).set({
+    total,
+    visitors: Math.round(total * 0.62),
+    paths: {
+      '/': share(0.38),
+      '/menu': share(0.24),
+      '/order': share(0.14),
+      '/blog/spring-menu': share(back < 14 ? 0.12 : 0.03),
+      '/about': share(0.07),
+      '/visit': share(0.05),
+    },
+    referrers: {
+      'www_google_com': share(0.21),
+      'instagram_com': share(0.12),
+      'www_yelp_com': share(0.06),
+      'l_facebook_com': share(0.04),
+    },
+    devices: { mobile: share(0.58), desktop: share(0.36), tablet: share(0.06) },
+    ...(back < 14 && {
+      utm: {
+        source: { instagram: share(0.07), newsletter: share(0.05) },
+        medium: { social: share(0.07), email: share(0.05) },
+        campaign: { 'spring-menu': share(0.12) },
+      },
+    }),
+  })
+}
+console.log(`  hosts/${hostId}/analytics (60 days)`)
+
+// ── The storefront and member sign-up (AGL-3319) ──────────────────────────
+// The guide fixtures picture their products with picsum.photos URLs, and the
+// tenant's enforced `img-src` blocks any external host the site has not
+// approved, so the storefront shots showed broken-image icons. Approving the
+// host is what a merchant using an outside image CDN does (Admin → Security);
+// picsum answers from `fastly.picsum.photos`.
+await put(firestore.collection('hosts').doc(hostId), {
+  approvedImageHosts: FieldValue.arrayUnion('picsum.photos', 'fastly.picsum.photos'),
+  // …and the per-site opt-in member accounts need beside the org's switch:
+  // `accounts` is off on a site until the site turns it on.
+  enabledPlugins: FieldValue.arrayUnion('accounts'),
+})
+
+// The CRM book's one product has no photo, and the storefront grid drew it as
+// an empty tile beside three pictured ones.
+await put(
+  firestore.collection('hosts').doc(hostId).collection('products').doc('seed-crm-product-house-blend'),
+  {
+    imageUrl: 'https://picsum.photos/id/766/600/600',
+    mediaUrls: ['https://picsum.photos/id/766/600/600'],
+  },
+)
+
+// ── Inbox (AGL-3319) ──────────────────────────────────────────────────────
+// Contact-form submissions in the shape the tenant's submit route writes
+// (`apps/tenant/app/api/forms/submit/route.ts`), so the Inbox shows people
+// writing in, not only the guide's anonymous survey.
+console.log('Inbox:')
+const submissionsRef = firestore.collection('hosts').doc(hostId).collection('formSubmissions')
+const submissions = [
+  ['docs-submission-cake', 2, false, {
+    name: 'Hannah Ortiz',
+    email: 'hannah.ortiz@example.com',
+    message: 'Do you take orders for a three-tier wedding cake in early June? Around 120 guests.',
+  }],
+  ['docs-submission-wholesale', 20, false, {
+    name: 'Marco Bellini',
+    email: 'marco@bellinideli.example',
+    message: 'We run a deli two streets over and would like a standing weekly order of baguettes.',
+  }],
+  ['docs-submission-allergy', 30, true, {
+    name: 'Leah Park',
+    email: 'leah.park@example.com',
+    message: 'Is the sourdough made in a nut-free kitchen? Asking for my son.',
+  }],
+]
+for (const [id, hoursAgo, read, fields] of submissions) {
+  await put(submissionsRef.doc(id), {
+    orgId,
+    hostId,
+    formName: 'Contact us',
+    path: '/contact',
+    fields,
+    read,
+    createdAt: Timestamp.fromMillis(now.toMillis() - hoursAgo * 60 * 60 * 1000),
+  })
+}
+
+// ── The product-updates prompt (AGL-3319) ─────────────────────────────────
+// The console asks every account that has not answered whether it wants
+// product email, in a banner above the Sites page. A dismissal (not an
+// answer: no consent is recorded either way) snoozes it for ninety days, so
+// the capture account's pages show what an account that has seen it once
+// shows, not an ask sitting on top of every org page.
+await put(firestore.collection('users').doc('e2e-owner'), {
+  marketingConsentPromptDismissedAtMs: now.toMillis(),
+})
+
+// ── Addresses a reader sees (AGL-3319) ────────────────────────────────────
+// The CRM book (`tools/scripts/lib/crm-fixtures.mjs`) names invented people
+// at invented businesses, but on `.com` domains somebody may really own, and
+// one address is a Gmail inbox. A published image must not print an address
+// a real person reads, so the docs frame moves every one of them onto the
+// reserved `.example` TLD (RFC 2606), which can never be registered.
+console.log('CRM addresses:')
+const reserve = (value) =>
+  typeof value === 'string'
+    ? value
+        .replace(/@gmail\.com\b/g, '@mail.example')
+        .replace(/\b([a-z0-9-]+)\.com\b/g, (match, name) =>
+          name === 'example' ? match : `${name}.example`,
+        )
+    : Array.isArray(value)
+      ? value.map(reserve)
+      : value && typeof value === 'object' && value.constructor === Object
+        ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, reserve(v)]))
+        : value
+for (const name of ['contacts', 'leads', 'companies', 'crmActivities', 'crmTasks', 'deals']) {
+  const snapshot = await firestore.collection('orgs').doc(orgId).collection(name).get()
+  let moved = 0
+  for (const doc of snapshot.docs) {
+    const data = doc.data()
+    const next = reserve(data)
+    if (JSON.stringify(next) !== JSON.stringify(data)) {
+      await doc.ref.set(next)
+      moved += 1
+    }
+  }
+  console.log(`  orgs/${orgId}/${name}: ${moved}`)
+}
+
+// The base seed's placeholder people: two bookings named for famous
+// computer scientists, and three contacts named for the inbox they wrote
+// from. Ordinary, invented names in their place.
+console.log('People:')
+const bookingsRef = firestore.collection('hosts').doc(hostId).collection('bookings')
+await put(bookingsRef.doc('seed-booking-past'), {
+  name: 'Ada Brennan',
+  email: 'ada.brennan@example.com',
+})
+await put(bookingsRef.doc('seed-booking-next'), {
+  name: 'Grace Whitaker',
+  email: 'grace.whitaker@example.com',
+})
+const contactsRef = firestore.collection('orgs').doc(orgId).collection('contacts')
+await put(contactsRef.doc('seed-contact-1'), { name: 'Robin Hale' })
+await put(contactsRef.doc('seed-contact-2'), { name: 'Casey Morales' })
+await put(contactsRef.doc('seed-contact-3'), { name: 'Alex Kim' })
+await put(
+  firestore.collection('hosts').doc(hostId).collection('siteMembers').doc('seed-site-member'),
+  { displayName: 'Rae Donovan' },
+)
+
+// ── Names a reader sees (AGL-3319) ────────────────────────────────────────
+// `seed-e2e.mjs` names its fixtures for the suite that asserts on them —
+// `E2E Bakery Co`, `E2E Owner` — and every console header, team row and avatar
+// in a published image printed that. The docs frame gets ordinary, fictional
+// names instead. Renamed here rather than in the base seed, whose specs wait
+// on the old strings; `seed:e2e` converges them back on its next run.
+console.log('Display names:')
+const ORG_NAMES = {
+  'E2E Bakery Co': 'Demo Bakery Co',
+  'E2E Studio': 'Northside Studio',
+  'E2E Client Co': 'Lakeview Florist',
+  'E2E Unverified Co': 'Copper Kettle Cafe',
+  'E2E Corner Cafe': 'Corner Cafe',
+}
+const PERSON_NAMES = {
+  'E2E Owner': 'Sam Rivera',
+  'E2E Teammate': 'Priya Shah',
+  'E2E Org Owner': 'Jordan Blake',
+  'E2E Unverified Owner': 'Casey Morgan',
+  'E2E Free Owner': 'Dana Whitfield',
+}
+for (const doc of (await firestore.collection('orgs').get()).docs) {
+  const renamed = ORG_NAMES[doc.get('name')]
+  if (renamed) await put(doc.ref, { name: renamed })
+}
+for (const doc of (await firestore.collectionGroup('orgs').get()).docs) {
+  // users/{uid}/orgs/{orgId}, the switcher's mirror of the org name.
+  const renamed = ORG_NAMES[doc.get('orgName')]
+  if (doc.ref.parent.parent && renamed) await put(doc.ref, { orgName: renamed })
+}
+for (const doc of (await firestore.collectionGroup('members').get()).docs) {
+  const renamed = PERSON_NAMES[doc.get('displayName')]
+  if (renamed) await put(doc.ref, { displayName: renamed })
+}
+// The CRM timeline stamps who logged each call or note by name.
+for (const doc of (
+  await firestore.collection('orgs').doc(orgId).collection('crmActivities').get()
+).docs) {
+  const renamed = PERSON_NAMES[doc.get('byName')]
+  if (renamed) await put(doc.ref, { byName: renamed })
+}
+for (const doc of (await firestore.collection('users').get()).docs) {
+  const renamed = PERSON_NAMES[doc.get('displayName')]
+  if (renamed) await put(doc.ref, { displayName: renamed })
+}
+const auth = getAuth()
+for (const user of (await auth.listUsers(1000)).users) {
+  const renamed = PERSON_NAMES[user.displayName]
+  if (renamed) {
+    await auth.updateUser(user.uid, { displayName: renamed })
+    console.log(`  auth/${user.uid}`)
+  }
+}
 
 console.log('\nDocs fixtures seeded.')

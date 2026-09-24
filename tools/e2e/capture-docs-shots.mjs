@@ -55,6 +55,7 @@ import {
   installStaffOnlyChromeStyles,
   preflightStaffOnlyChrome,
 } from './lib/staff-only-chrome.mjs'
+import { optimizePng } from './lib/optimize-png.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img/guides')
@@ -150,6 +151,13 @@ async function seedGuideFixtures() {
   for (const record of staleRecords.docs) {
     if (!record.id.startsWith('seed-guide-')) await record.ref.delete()
   }
+  // …and the inbox rows the same walks left, one per run, so the Inbox shot
+  // shows one survey submission rather than a stack of identical ones.
+  const staleSubmissions = await hostRef
+    .collection('formSubmissions')
+    .where('formName', '==', 'Visitor survey')
+    .get()
+  for (const submission of staleSubmissions.docs) await submission.ref.delete()
   const surveyRows = [
     [5, 'Weekly', 'Products', 'Great pastries, friendly staff.'],
     [4, 'First time', 'Products, Pricing', 'Found you through the market.'],
@@ -210,7 +218,7 @@ async function seedGuideFixtures() {
       form: {
         $id: 'form',
         componentId: 'form',
-        pluginId: 'mui',
+        pluginId: 'forms',
         parentId: 'stack',
         nodes: ['f1', 'f2', 'f3', 'f4'],
         props: {
@@ -223,7 +231,7 @@ async function seedGuideFixtures() {
       f1: {
         $id: 'f1',
         componentId: 'formField',
-        pluginId: 'mui',
+        pluginId: 'forms',
         parentId: 'form',
         props: {
           fieldName: 'satisfaction',
@@ -234,7 +242,7 @@ async function seedGuideFixtures() {
       f2: {
         $id: 'f2',
         componentId: 'formField',
-        pluginId: 'mui',
+        pluginId: 'forms',
         parentId: 'form',
         props: {
           fieldName: 'visit',
@@ -246,7 +254,7 @@ async function seedGuideFixtures() {
       f3: {
         $id: 'f3',
         componentId: 'formField',
-        pluginId: 'mui',
+        pluginId: 'forms',
         parentId: 'form',
         props: {
           fieldName: 'topics',
@@ -258,7 +266,7 @@ async function seedGuideFixtures() {
       f4: {
         $id: 'f4',
         componentId: 'formField',
-        pluginId: 'mui',
+        pluginId: 'forms',
         parentId: 'form',
         props: {
           fieldName: 'comments',
@@ -404,7 +412,9 @@ async function seedGuideFixtures() {
 
   // Products across the three billing modes (AGL-545). Variants carry the
   // canonical prices; the flat priceUsd/inventory/imageUrl legacy fields
-  // stay denormalized like the product editor writes them.
+  // stay denormalized like the product editor writes them. Photos are fixed
+  // picsum ids chosen to fit a bakery (a pour-over, a poured jar, a tray of
+  // bakes); a `seed/<word>` URL is a random landscape.
   const products = [
     {
       id: 'seed-guide-candle',
@@ -418,10 +428,10 @@ async function seedGuideFixtures() {
         variants: [
           { id: 'default', priceUsd: 24, compareAtPriceUsd: 32, inventory: 12 },
         ],
-        mediaUrls: ['https://picsum.photos/seed/candle/600/600'],
+        mediaUrls: ['https://picsum.photos/id/312/600/600'],
         priceUsd: 24,
         inventory: 12,
-        imageUrl: 'https://picsum.photos/seed/candle/600/600',
+        imageUrl: 'https://picsum.photos/id/312/600/600',
       },
     },
     {
@@ -436,13 +446,13 @@ async function seedGuideFixtures() {
         subscription: { interval: 'month', trialDays: 14 },
         digitalFiles: [
           {
-            url: 'https://picsum.photos/seed/course/600/400',
+            url: 'https://picsum.photos/id/835/600/400',
             fileName: 'starter-guide.pdf',
           },
         ],
-        mediaUrls: ['https://picsum.photos/seed/course/600/400'],
+        mediaUrls: ['https://picsum.photos/id/835/600/400'],
         priceUsd: 12,
-        imageUrl: 'https://picsum.photos/seed/course/600/400',
+        imageUrl: 'https://picsum.photos/id/835/600/400',
       },
     },
     {
@@ -456,9 +466,9 @@ async function seedGuideFixtures() {
         variants: [{ id: 'default', priceUsd: 18, inventory: null }],
         subscription: { interval: 'month' },
         subscriptionOptional: true,
-        mediaUrls: ['https://picsum.photos/seed/coffeeclub/600/600'],
+        mediaUrls: ['https://picsum.photos/id/1060/600/600'],
         priceUsd: 18,
-        imageUrl: 'https://picsum.photos/seed/coffeeclub/600/600',
+        imageUrl: 'https://picsum.photos/id/1060/600/600',
       },
     },
   ]
@@ -478,7 +488,7 @@ async function seedGuideFixtures() {
   const memberPassword = 'Maya-Demo-Pass-1'
   await put(hostRef.collection('siteMembers').doc('seed-guide-member'), {
     email: memberEmail,
-    displayName: 'Maya Member',
+    displayName: 'Maya Chen',
     createdAt: Timestamp.now(),
   })
   await put(hostRef.collection('siteMemberCredentials').doc('seed-guide-member'), {
@@ -494,7 +504,7 @@ async function seedGuideFixtures() {
         status: 'paid',
         channel: 'online',
         customerEmail: memberEmail,
-        customerName: 'Maya Member',
+        customerName: 'Maya Chen',
         lineItems: [
           {
             productId: 'seed-guide-candle',
@@ -526,7 +536,7 @@ async function seedGuideFixtures() {
         status: 'fulfilled',
         channel: 'online',
         customerEmail: memberEmail,
-        customerName: 'Maya Member',
+        customerName: 'Maya Chen',
         lineItems: [
           {
             productId: 'seed-guide-candle',
@@ -570,7 +580,7 @@ async function seedGuideFixtures() {
   await put(hostRef.collection('subscriptions').doc('seed-guide-sub-1'), {
     productId: 'seed-guide-course',
     customerEmail: memberEmail,
-    customerName: 'Maya Member',
+    customerName: 'Maya Chen',
     status: 'active',
     currentPeriodEndMs: Date.now() + 30 * dayMs,
     createdAtMs: Date.now() - 5 * dayMs,
@@ -763,6 +773,34 @@ async function seedGuideFixtures() {
 
 if (!skipSeed) await seedGuideFixtures()
 
+// The tenant caches a host's document (its routing map and its plugin set)
+// for an hour, so a screen or plugin the seeds just wrote is a 404 on the
+// published site until that cache is dropped. The console's publish drops it
+// through `/api/revalidate`; so does this, which is why the tenant dev server
+// is started with `REVALIDATE_SECRET=local` (docs/E2E_LOCAL.md). A refusal
+// fails the run: shooting a stale site photographs the wrong one.
+{
+  const response = await fetch(`${TENANT_BASE}/api/revalidate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-revalidate-secret': process.env.E2E_REVALIDATE_SECRET ?? 'local',
+    },
+    body: JSON.stringify({
+      host: HOST_ID,
+      hostId: HOST_ID,
+      paths: ['/', '/survey', '/signup', '/signin', '/account', '/shop', '/products/coffee-club'],
+    }),
+  }).catch((error) => ({ status: 0, text: async () => String(error) }))
+  if (response.status !== 200) {
+    console.error(
+      `tenant /api/revalidate answered ${response.status} ${await response.text()} — ` +
+        'start the tenant with REVALIDATE_SECRET=local (or pass E2E_REVALIDATE_SECRET).',
+    )
+    process.exit(1)
+  }
+}
+
 // ── 2. Browser setup (same conventions as capture-docs-screenshots.mjs) ────
 
 function chromeExecutable() {
@@ -840,8 +878,10 @@ await installStaffOnlyChromeStyles(context)
   await fetch(`${CONSOLE_BASE}/${HOST_BASE}`).catch(() => undefined)
   const page = await context.newPage()
   const hidden = await preflightStaffOnlyChrome(page, {
-    url: `${CONSOLE_BASE}/${HOST_BASE}`,
-    waitFor: 'Demo Bakery',
+    urls: [
+      { url: `${CONSOLE_BASE}/${HOST_BASE}`, waitFor: 'Demo Bakery' },
+      { url: `${CONSOLE_BASE}/${ORG_SLUG}/hosts`, waitFor: 'Demo Bakery' },
+    ],
     timeout: TIMEOUT_MS,
   }).catch((error) => error)
   await page.close()
@@ -866,6 +906,12 @@ const stripDevChrome = (page) =>
       '[data-nextjs-toast]',
     ]) {
       document.querySelectorAll(selector).forEach((el) => el.remove())
+    }
+    // The emulated server holds no Stripe key by design (AGL-2828), so the
+    // console says payments are not configured on this deployment. That is
+    // a fact about the capture stack, not the product a reader runs.
+    for (const alert of document.querySelectorAll('.MuiAlert-root')) {
+      if (/Payments are not configured/.test(alert.textContent ?? '')) alert.remove()
     }
   })
 
@@ -921,7 +967,8 @@ async function shot({ out, base, path, waitFor, actions = [], settleMs, clip }) 
     const outPath = join(IMG_ROOT, out)
     mkdirSync(dirname(outPath), { recursive: true })
     await page.screenshot({ path: outPath, ...(clip ? { clip } : {}) })
-    console.log(`SHOT  ${out}`)
+    const bytes = await optimizePng(outPath)
+    console.log(`SHOT  ${out} (${Math.round(bytes / 1024)} KB)`)
   } catch (error) {
     failures += 1
     console.error(
@@ -1039,13 +1086,14 @@ await shot({
   actions: [
     { click: 'text=Document', optional: true, settleMs: 1000 },
     { click: 'text=Container', optional: true, settleMs: 1000 },
-    { click: 'text=Stack', optional: true, settleMs: 1500 },
-    // The repeat notice + Repeat over dataset props are on Attributes.
-    {
-      click: 'role=tab[name="Attributes"]',
-      optional: true,
-      waitFor: 'Repeats over dataset',
-    },
+    { click: 'text=Stack', settleMs: 1500 },
+    // The Repeat section closes the Attributes panel (AGL-3111): bring its
+    // first field into view so Repeat over dataset, the scope, limit and
+    // filter sit in frame below it. Not optional — without it the frame
+    // shows the Stack's layout fields and none of what the caption names.
+    { click: 'role=tab[name="Attributes"]', settleMs: 800 },
+    { scroll: 'text=Repeat sort', settleMs: 600 },
+    { scroll: 'text=Repeat over dataset', settleMs: 1200 },
   ],
 })
 
@@ -1097,12 +1145,9 @@ await shot({
   actions: [
     { click: 'text=Document', optional: true, settleMs: 1000 },
     { click: 'text=Stack', optional: true, settleMs: 1000 },
-    { click: 'text=Mega Menu', optional: true, settleMs: 1500 },
-    {
-      click: 'role=tab[name="Attributes"]',
-      optional: true,
-      waitFor: 'Interactions',
-    },
+    { click: 'text=Mega Menu', settleMs: 1500 },
+    // Interactions have their own inspector tab beside Attributes and Styles.
+    { click: 'role=tab[name="Interactions"]', settleMs: 1500 },
     { click: 'role=combobox[name="Add interaction"]', settleMs: 1000 },
     { click: 'role=option[name="When hovered…"]', settleMs: 1500 },
     { click: 'role=combobox[name="Action"]', optional: true, settleMs: 800 },
@@ -1127,11 +1172,7 @@ await shot({
     { click: 'text=Dropdown Panel', settleMs: 1000 },
     { click: 'text=CONFIRM', settleMs: 2500 },
     { waitFor: 'interactions wired and enabled', optional: true },
-    {
-      click: 'role=tab[name="Attributes"]',
-      optional: true,
-      waitFor: 'Interactions',
-    },
+    { click: 'role=tab[name="Interactions"]', settleMs: 1500 },
     { scroll: 'text=Dropdown panel — open on hover', optional: true, settleMs: 1000 },
   ],
 })
@@ -1152,7 +1193,9 @@ await shot({
   waitFor: 'Coffee club',
   actions: [
     {
-      click: 'tr:has-text("Coffee club") button:has-text("Edit")',
+      // `role=row` rather than `tr`: the products list is a data grid now
+      // (AGL-3317), whose rows are not table rows.
+      click: '[role="row"]:has-text("Coffee club") button:has-text("Edit")',
       waitFor: 'Save product',
       settleMs: 1200,
     },
@@ -1175,14 +1218,16 @@ await shot({
 await shot({
   out: 'commerce-orders-tab.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_BASE}/products?tab=orders`,
+  // Orders is its own section of the Products hub, not a `?tab=`.
+  path: `/${HOST_BASE}/products/orders`,
   waitFor: '1001',
   settleMs: 2500,
 })
 await shot({
   out: 'commerce-order-detail.png',
   base: CONSOLE_BASE,
-  path: `/${HOST_BASE}/products?tab=orders`,
+  // Orders is its own section of the Products hub, not a `?tab=`.
+  path: `/${HOST_BASE}/products/orders`,
   waitFor: '1001',
   actions: [{ click: 'text=1001', waitFor: 'Timeline', settleMs: 1500 }],
 })
@@ -1222,8 +1267,8 @@ await shot({
 await shot({
   out: 'marketplace-browse.png',
   base: CONSOLE_BASE,
-  path: `/${ORG_SLUG}/marketplace?tab=browse`,
-  waitFor: 'Marketplace',
+  path: `/${ORG_SLUG}/marketplace/browse`,
+  waitFor: 'Browse All',
   // The grid is populated by Firestore subscriptions that settle after first
   // paint; wait for a seeded listing rather than the frame, or the shot
   // catches the empty state.
@@ -1232,7 +1277,7 @@ await shot({
 await shot({
   out: 'marketplace-publish.png',
   base: CONSOLE_BASE,
-  path: `/${ORG_SLUG}/marketplace?tab=publish`,
+  path: `/${ORG_SLUG}/marketplace/upload`,
   waitFor: 'Publish to the marketplace',
   actions: [{ settleMs: 800 }],
 })

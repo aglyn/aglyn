@@ -160,22 +160,35 @@ export async function assertNoStaffOnlyChrome(page, label) {
  * apps/console/specs/nav-staff-only-marker.spec.ts, keeps proving that the
  * gate marks a flagged-off tab in the meantime.
  */
-export async function preflightStaffOnlyChrome(page, { url, waitFor, timeout }) {
+export async function preflightStaffOnlyChrome(page, { url, urls, waitFor, timeout }) {
   const expected = flaggedOffNavTabKeys()
   if (!expected.length) return []
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout })
-  await page.waitForSelector(`text=${waitFor}`, { timeout })
-  // The staff claim lands on a forced token refresh, so the flagged tabs are
-  // not in the first commit.
-  await page.waitForSelector(STAFF_ONLY_SELECTOR, {
-    state: 'attached',
-    timeout,
-  })
-  const found = await readStaffOnlyChrome(page)
-  if (!found.some((node) => expected.includes(node.key))) {
+  // A flagged tab sits in the HOST strip or the ORG strip, and each strip
+  // renders only on its own pages — `release_outreach` is an org tab, which
+  // no host page draws. So the caller names a page of each, and the marker
+  // is required on whichever of them carries it.
+  const pages = urls ?? [{ url, waitFor }]
+  const found = []
+  for (const target of pages) {
+    await page.goto(target.url, { waitUntil: 'domcontentloaded', timeout })
+    await page.waitForSelector(`text=${target.waitFor}`, { timeout })
+    // The staff claim lands on a forced token refresh, so the flagged tabs
+    // are not in the first commit — and a page whose strip carries no
+    // flagged tab never grows a marker at all, so the wait is bounded.
+    await page
+      .waitForSelector(STAFF_ONLY_SELECTOR, {
+        state: 'attached',
+        timeout: Math.min(timeout, 15_000),
+      })
+      .catch(() => undefined)
+    found.push(...(await readStaffOnlyChrome(page)))
+  }
+  const where = pages.map((target) => target.url).join(', ')
+  const missing = expected.filter((key) => !found.some((node) => node.key === key))
+  if (missing.length) {
     throw new Error(
       `staff-only chrome guard found no ${STAFF_ONLY_SELECTOR} for ` +
-        `${expected.join(', ')} on ${url}. ` +
+        `${missing.join(', ')} on ${where}. ` +
         'Either the capture account lost its staff claim, or the marker moved ' +
         '— fix it before capturing, or the run will publish whatever staff ' +
         'see (AGL-1600).',
@@ -184,10 +197,10 @@ export async function preflightStaffOnlyChrome(page, { url, waitFor, timeout }) 
   const stillVisible = found.filter((node) => node.visible)
   if (stillVisible.length) {
     throw new Error(
-      `staff-only chrome is marked but still visible on ${url}: ` +
+      `staff-only chrome is marked but still visible on ${where}: ` +
         `${stillVisible.map((node) => node.key).join(', ')}. ` +
         'The hiding rule is not applying.',
     )
   }
-  return found.map((node) => node.key)
+  return [...new Set(found.map((node) => node.key))]
 }

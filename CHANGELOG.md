@@ -9,6 +9,28 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.192 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.191...v1.0.0-beta.192)
+
+### Fixed
+
+- **commerce:** the dashboard's latest orders read the order's own number and buyer ([AGL-3319](https://linear.app/aglyn/issue/AGL-3319))
+
+### Documentation
+
+- **docs:** re-shoot the docs and README screenshots from the harness ([AGL-3319](https://linear.app/aglyn/issue/AGL-3319), [AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+
+<details>
+<summary>Also in this release: 4 chore</summary>
+
+- **tools:** the README art renderer's brand palette joins the colour baseline ([AGL-3319](https://linear.app/aglyn/issue/AGL-3319))
+- **tools:** the screenshot guard caps size and refuses orphans ([AGL-3319](https://linear.app/aglyn/issue/AGL-3319))
+- **tools:** the Linear id ceiling reads AGL-3319 ([AGL-3319](https://linear.app/aglyn/issue/AGL-3319))
+- **tools:** one command re-shoots every docs screenshot, on fictional data ([AGL-3319](https://linear.app/aglyn/issue/AGL-3319))
+
+</details>
+
 ## v1.0.0-beta.191 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/b994d6d1f...v1.0.0-beta.191)

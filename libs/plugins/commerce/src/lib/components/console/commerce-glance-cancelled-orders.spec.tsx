@@ -200,6 +200,27 @@ describe('CommerceGlanceCard revenue window', () => {
     expect(queryByText('$165.00')).toBeNull()
   })
 
+  it('labels a latest order by its number and buyer, not its document id', () => {
+    // `HostOrder` stores `number` and `customerEmail`. The card read
+    // `orderNumber` and `email`, which no order carries, so every row of the
+    // latest-orders list printed the first eight characters of its doc id.
+    orderRows = [
+      {
+        ...order('paid', 10000),
+        $id: 'docs-order-paid',
+        number: 1043,
+        customerEmail: 'robin@example.com',
+      },
+    ]
+
+    const { getByText, queryByText } = render(
+      <CommerceGlanceCard hostId="host-1" />,
+    )
+
+    expect(getByText('#1043 · robin@example.com')).toBeTruthy()
+    expect(queryByText(/docs-ord/)).toBeNull()
+  })
+
   /**
    * A REHEARSAL IS NOT REVENUE, AND IS NOT HIDDEN EITHER.
    *

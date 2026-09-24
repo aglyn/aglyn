@@ -13,7 +13,7 @@ can pick their language.
 **Paid**.
 :::
 
-![Site languages in setup](/img/multilingual/setup-languages.png)
+![The Languages card in Setup → Basic details](/img/multilingual/setup-languages.png)
 
 ## Steps
 

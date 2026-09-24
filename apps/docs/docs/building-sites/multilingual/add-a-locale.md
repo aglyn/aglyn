@@ -12,11 +12,12 @@ Publish your site in another language by adding a **locale variant**.
 **Paid**. This is **multilingual v1**.
 :::
 
-![Adding a locale in site setup](/img/multilingual/setup-languages.png)
+![The Languages card in Setup → Basic details, where a locale is added](/img/multilingual/setup-languages.png)
 
 ## Steps
 
-1. Add a **locale** (e.g. `es`, `fr`) to your site.
+1. Add a **locale** (e.g. `es`, `fr`) to your site, in the **Languages** card under
+   **Setup → Basic details**.
 2. Aglyn creates **locale variants** of your content, sharing the same structure as your
    default language.
 3. Translate the screens' text for that locale.

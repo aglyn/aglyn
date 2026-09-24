@@ -93,13 +93,14 @@ Out of the box, **clicking** the nav item already toggles the panel — no
 setup. To add the classic hover behavior:
 
 1. Select the **Mega Menu** element itself.
-2. In the inspector, open **Add interaction**.
-3. Set the **Trigger** to **When hovered**.
-4. Add the action **Open a menu**. Leave the target empty — it defaults to
+2. In the inspector's **Interactions** tab, open **Add interaction** and
+   choose **When hovered…**.
+3. Check that **When** reads **This element is hovered**.
+4. Set the **Action** to **Open a menu**. Leave **Menu** on **This element**,
    the element you're editing.
-5. Leave **Frequency** on **Every time** (the default) so the menu keeps
+5. Leave **How often** on **Every time** (the default) so the menu keeps
    working on every hover, not just once.
-6. **Save**. The interaction is enabled immediately and appears in the
+6. **Create**. The interaction is enabled immediately and appears in the
    element's Interactions list with edit, enable/disable, and remove
    controls.
 

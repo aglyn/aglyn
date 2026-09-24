@@ -14,11 +14,11 @@ site's Admin page.
 **Starter and above.**
 :::
 
-![The custom domain card in site setup](/img/custom-domains/setup-domains.png)
+![The Custom domain card in the site's Admin area](/img/custom-domains/setup-domains.png)
 
 ## Connect a domain
 
-1. In **Admin**, open the **Custom Domain** tab.
+1. In **Admin**, choose **Custom Domain** in its navigation.
 2. Add **one DNS record** at your registrar — a **CNAME** to `sites.aglyn.app` for a
    subdomain, or an **ALIAS/ANAME** to the same hostname for a bare apex (an **A record**
    where your registrar offers no ALIAS).

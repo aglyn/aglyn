@@ -10,7 +10,7 @@ The **console** is where you manage a site. Here's what each part of the chrome 
 
 ![The console chrome with its main areas numbered](/img/getting-started/console-chrome-annotated.png)
 
-1. **App bar** — the Aglyn console wordmark, notifications, and your account menu.
+1. **App bar** — the Aglyn console wordmark, search, notifications, and your account menu.
 2. **Workspace switcher** — jump between the organizations you belong to.
 3. **Site sections** — every area of the selected site (Dashboard,
    Screens, Media, Content, …).
@@ -179,8 +179,10 @@ edit it — every card is a summary with a link to the section that owns the det
   to a person. The full, paginated log lives under **Admin → Activity**.
 
 Plugins contribute the rest, so this list is a floor rather than an exact match for your
-own dashboard: **Last campaign** appears once you've sent an email campaign, and
-**Commerce** where the commerce plugin is enabled and the site has products or orders.
+own dashboard: **Last campaign** appears once you've sent an email campaign,
+**Commerce** where the commerce plugin is enabled and the site has products or orders,
+**Tasks due** and **CRM at a glance** where the CRM is on, and **Inbox** with the site's
+unread form submissions.
 A brand-new site shows the same cards with empty states — "No pageviews recorded yet",
 "No activity yet" — which is what a first visit should look like.
 
@@ -192,7 +194,7 @@ and the **announcement bar** and **promotional popup** live under **Marketing**.
 from a site's own dashboard to the site itself, without going back out to the Sites list
 and in through a card action.
 
-![The site dashboard: a Traffic card with its 14-day range picker, a Newest site users card, a Last campaign card counting sends, opens and clicks, and the Recent Activity feed across the bottom](/img/getting-started/console-dashboard.png)
+![The site dashboard: the Traffic card with its 14-day range picker, top pages, referrers and campaigns, then the Commerce, Newest site users, Tasks due, CRM at a glance, Inbox and Last campaign cards, and the Recent Activity feed across the bottom](/img/getting-started/console-dashboard.png)
 
 ## Next
 
@@ -206,7 +208,7 @@ Single sign-on, Privacy, Ownership and Delete. Turning plugins on and off for th
 workspace is its own section, **Organization → Plugins** — **Marketplace** is
 for finding and installing new ones, not for administering what you already run:
 
-![The Organization Settings page: a Navigation card listing General, Profile, Plugins, API keys, Branding, Single sign-on, Ownership and Delete, beside the General card with the organization name and workspace URL](/img/getting-started/org-settings-page.png)
+![The Organization Settings page: a Navigation card listing General, Profile, Plugins, API keys, Branding, Single sign-on, Privacy, Ownership and Delete, beside the General card with the organization name and workspace URL](/img/getting-started/org-settings-page.png)
 
 ### The notifications feed
 

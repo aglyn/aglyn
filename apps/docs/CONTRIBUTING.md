@@ -116,10 +116,13 @@ Follow the runbook below so they're consistent.
 
 #### Screenshot capture runbook
 
-1. Preferred: run `node tools/e2e/capture-docs-screenshots.mjs` against the seeded
-   emulator stack (see `docs/E2E_LOCAL.md`) — it signs in, waits for seeded content,
-   strips dev chrome, and writes every shot (including the annotated ones) in one pass.
-   For surfaces it doesn't cover yet, add a shot spec there rather than capturing by hand.
+1. Run `npm run docs:screenshots` against the seeded emulator stack (see
+   `docs/E2E_LOCAL.md` → Docs screenshots). It seeds the docs fixtures, signs in,
+   waits for seeded content, strips dev chrome, and writes every shot (including the
+   annotated ones) through `tools/e2e/capture-docs-screenshots.mjs`. Every image has a
+   shot spec there or in its sibling below; a new image gets one too, never a hand
+   capture. An annotation's `badge` option (`center`, `right`, `below`) moves a badge
+   off content, and a mark that matches nothing fails the shot.
    The `guides/` walkthrough images come from its sibling
    `tools/e2e/capture-docs-shots.mjs`, which also needs the tenant server
    (`npm run serve:tenant:emulated`, with `AGLYN_DISABLE_BOOT_WARMUP=1` —
@@ -128,8 +131,8 @@ Follow the runbook below so they're consistent.
 3. Capture the specific surface (crop tightly to the relevant panel): a static
    `clip` box, or `clipTo: { locator, include, padding }` to crop to whatever the
    element actually measures at capture time.
-4. Save as `static/img/<area>/<page>-<step>.png`, optimize (e.g. `pngquant`), and keep files
-   under ~300 KB — the captures land around 60–130 KB unlaboured.
+4. Save as `static/img/<area>/<page>-<step>.png`. The harness optimizes each capture
+   and refuses one over 300 KB, and `check:docs-screenshots` holds the same ceiling.
 5. Add the image with descriptive alt text right where the step is described.
 
 ##### The account the harness signs in as

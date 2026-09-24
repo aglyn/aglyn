@@ -23,7 +23,7 @@ opens at the **organization** level, over every site at once, at
 `…/contacts` address, under a site or under the organization — still opens the
 hub.
 
-![The Contacts section of the CRM: the contacts table with two rows selected and the bulk bar offering Add tag, Set stage, Set owner, Add to list, Export CSV and Remove](/img/contacts/crm-contacts.png)
+![The Contacts section of the CRM: the contacts table with two rows selected, the bulk bar offering Add tag, Remove tag, Set owner, Set stage, Set company, Add to list, Export CSV, Export all and Remove from this site, and the table's own Columns, Filters, Export and Search controls](/img/contacts/crm-contacts.png)
 
 ```mermaid
 flowchart LR

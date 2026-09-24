@@ -23,7 +23,7 @@ a person, from
 See [What each plan includes](./overview.md#what-each-plan-includes).
 :::
 
-![A contact record in the CRM: the header with the person's name, stage and owner, and the Properties, Custom fields, Timeline, Deals and Tasks cards](/img/contacts/crm-record.png)
+![A contact record in the CRM: the header with the person's email, stage, owner and lifetime orders beside Add to list, Call, Log a call, Send email and Book a meeting, and the Properties card below it](/img/contacts/crm-record.png)
 
 ## Adding a contact by hand
 

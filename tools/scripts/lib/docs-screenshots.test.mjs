@@ -26,9 +26,12 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  MAX_BYTES,
   MIN_BYTES,
   classifyImage,
   findImageReferences,
+  findOrphanImages,
+  findStaticImagePaths,
   isFlatColour,
 } from './docs-screenshots.mjs'
 
@@ -111,12 +114,45 @@ test('an undecodable file fails as its own reason, not silently', () => {
 })
 
 test('the byte floor sits below every real capture in the tree', () => {
-  // The smallest genuine release-docs capture is ~16 KB
-  // (guides/site-members-invite.png). If the floor ever climbs near that, the
-  // floor becomes the thing that fails and the flat-colour check stops being
-  // what carries the guard.
-  assert.ok(MIN_BYTES < 16_000)
-  assert.equal(classifyImage({ size: 16_012, stats: realStats, error: null }), null)
+  // The smallest genuine capture is ~6 KB (a cropped Besigner panel, once the
+  // harness has optimized it). If the floor ever climbs near that, the floor
+  // becomes the thing that fails and the flat-colour check stops being what
+  // carries the guard.
+  assert.ok(MIN_BYTES < 6_000)
+  assert.equal(classifyImage({ size: 6_012, stats: realStats, error: null }), null)
+})
+
+test('a capture over the size ceiling fails, and one just under it passes', () => {
+  const over = classifyImage({ size: MAX_BYTES + 1, stats: realStats, error: null })
+  assert.match(String(over), /over the 300 KB ceiling/)
+  assert.equal(classifyImage({ size: MAX_BYTES, stats: realStats, error: null }), null)
+})
+
+test('finds static image paths in a page and in the site config alike', () => {
+  const page = '![Chrome](/img/getting-started/console-chrome-annotated.png)'
+  const config = "  image: 'img/aglyn-social-card.png',\n  favicon: 'img/favicon.ico',"
+  assert.deepEqual(findStaticImagePaths(page), [
+    'img/getting-started/console-chrome-annotated.png',
+  ])
+  assert.deepEqual(findStaticImagePaths(config), [
+    'img/aglyn-social-card.png',
+    'img/favicon.ico',
+  ])
+})
+
+test('does not read a remote URL or a nested path as a static image', () => {
+  // The negative control: `https://cdn.example/img/x.png` and `assets/img/x.png`
+  // are not files under static/, and naming them would hide a real orphan.
+  const source = 'https://cdn.example/img/x.png and ./assets/img/y.png'
+  assert.deepEqual(findStaticImagePaths(source), [])
+})
+
+test('an image nothing names is an orphan; a named one is not', () => {
+  const images = ['img/a.png', 'img/plugins/unused-page.png', 'img/b.png']
+  assert.deepEqual(findOrphanImages(images, ['img/a.png', 'img/b.png']), [
+    'img/plugins/unused-page.png',
+  ])
+  assert.deepEqual(findOrphanImages(images, images), [])
 })
 
 test('isFlatColour does not call an empty stats object flat', () => {

@@ -26,10 +26,19 @@
 /**
  * A screenshot smaller than this is a flat fill whatever else it claims —
  * PNG's filters leave a real console capture far above it. Deliberately well
- * below the smallest genuine capture in the tree (~16 KB) so the floor is
- * never the thing that fails; `isFlatColour` is the assertion meant to bite.
+ * below the smallest genuine capture in the tree (~6 KB, a cropped panel
+ * after the harness optimizes it) so the floor is never the thing that
+ * fails; `isFlatColour` is the assertion meant to bite.
  */
 export const MIN_BYTES = 1024
+
+/**
+ * The ceiling every docs image is held to (AGL-3319), the same number the
+ * capture harness optimizes toward (`tools/e2e/lib/optimize-png.mjs`). A
+ * frame over it is a composition problem, too much page or a photograph where
+ * a UI crop was meant, and it is what a reader on a slow line pays for.
+ */
+export const MAX_BYTES = 300 * 1024
 
 /**
  * Both spellings a docs page can use for a static image: the markdown
@@ -98,8 +107,44 @@ export function classifyImage(probe) {
   if (probe.size < MIN_BYTES) {
     return `only ${probe.size} bytes — not a screenshot`
   }
+  if (probe.size > MAX_BYTES) {
+    return `${Math.round(probe.size / 1024)} KB — over the ${MAX_BYTES / 1024} KB ceiling`
+  }
   if (isFlatColour(probe.stats)) {
     return 'decodes to a single flat colour — a capture of nothing'
   }
   return null
+}
+
+/**
+ * Every root-absolute `img/…` path a source names, with or without the
+ * leading slash: `docusaurus.config.ts` writes `img/aglyn-social-card.png`,
+ * a page writes `/img/…`.
+ *
+ * @param {string} source any text file
+ * @returns {string[]} paths relative to `static/`, e.g. `img/api/x.png`
+ */
+export function findStaticImagePaths(source) {
+  const found = new Set()
+  const pattern = /(?:^|[^\w/.-])\/?(img\/[\w./-]+\.(?:png|jpe?g|webp|gif|svg|ico))/g
+  let match
+  while ((match = pattern.exec(source))) found.add(match[1])
+  return [...found]
+}
+
+/**
+ * The images under `static/img` that nothing points at (AGL-3319).
+ *
+ * An orphan is not harmless: the capture harness keeps re-shooting it, the
+ * inventory keeps counting it, and nobody can tell from the file whether a
+ * page lost it on purpose. A page that stops using an image deletes it.
+ *
+ * @param {string[]} images every image path under static/, as `img/…`
+ * @param {Iterable<string>} referenced the `img/…` paths any page, the site
+ *   config or a theme component names
+ * @returns {string[]} the orphans, sorted
+ */
+export function findOrphanImages(images, referenced) {
+  const named = new Set(referenced)
+  return images.filter((image) => !named.has(image)).sort()
 }
