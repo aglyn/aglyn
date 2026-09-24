@@ -9,6 +9,20 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.198 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.197...v1.0.0-beta.198)
+
+### Added
+
+- **outreach:** predict gateway blocks before a send — MX intel, ledger, hold, pause ([AGL-3326](https://linear.app/aglyn/issue/AGL-3326))
+
+### Fixed
+
+- **shared-ui-jsx:** a column made a filter select keeps the text it drew ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **outreach:** a card's save and discard buttons live in its header ([AGL-3333](https://linear.app/aglyn/issue/AGL-3333))
+- **tools:** the console's emulator specs run one at a time, clear of the lockdown drill ([AGL-3320](https://linear.app/aglyn/issue/AGL-3320))
+
 ## v1.0.0-beta.197 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.196...v1.0.0-beta.197)
