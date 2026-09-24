@@ -100,6 +100,8 @@ a chip above the table. The filter and the search add up. The search matches the
 of the address, because the list holds addresses rather than names. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
+![A site's Users card: the add-by-email row with its Site access picker, then the collaborators table with the owner first, an Editor and an invited Viewer, their AI access and credits, under the table's Columns, Filters, Export and Search controls](/img/teams-and-roles/site-collaborators.png)
+
 ### AI access for collaborators {#collaborator-ai-access}
 
 A site collaborator's AI access is decided **per site**, on the site's **Users**

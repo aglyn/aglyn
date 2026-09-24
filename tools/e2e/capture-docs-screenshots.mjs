@@ -250,6 +250,14 @@ const shots = [
     waitFor: 'Site users',
   },
   {
+    // The Users card below Site users: the site's collaborators table, with
+    // the seeded site roster (seed-docs-fixtures.mjs, A11).
+    out: 'teams-and-roles/site-collaborators.png',
+    path: `/${HOST_BASE}/users`,
+    waitFor: 'docs-reviewer@aglyn.test',
+    actions: [{ scroll: 'text=docs-reviewer@aglyn.test', settleMs: 1500 }],
+  },
+  {
     // Password section inside the site member drawer (AGL-921). Opening the
     // drawer takes a click on the member row — there is no direct URL for it.
     out: 'guides/member-drawer-password.png',
