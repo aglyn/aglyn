@@ -113,6 +113,13 @@ export interface ListFilterField {
    * keeps the composite index that combination needs an ordinary one.
    */
   containsOrderBy?: string
+  /**
+   * Which way a `contains` orders by `containsOrderBy`. Ascending unless the
+   * field says otherwise; a list sorted newest-first orders its `contains`
+   * the same way, so the composite it needs is the one it already declares
+   * (AGL-3321).
+   */
+  containsOrderDirection?: 'asc' | 'desc'
   /** The reversed key, for `endsWith`. */
   reversedPath?: string
   /**
@@ -456,10 +463,12 @@ const asTime = (value: unknown): number | null => {
  * evening anywhere west of UTC. Travelled through `toISOString`, the same
  * day arrives as `YYYY-MM-DDT00:00:00.000Z`. Either spelling is read by its
  * date parts, so "on or after Sep 17" starts on Sep 17 wherever the reader
- * is. Any other value is an instant and is read as one.
+ * is. Any other value is an instant and is read as one. The query
+ * translators read a date clause through it too, so the day a query asks for
+ * is the day the rows are matched by.
  */
 const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.000)?Z)?$/
-const askedDay = (raw: string): Date => {
+export const listFilterDay = (raw: string): Date => {
   const day = DAY_ONLY.exec(raw)
   return day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(raw)
 }
@@ -548,7 +557,7 @@ export function matchListFilter(
 
   if (field.kind === 'date') {
     const at = asTime(value)
-    const day = askedDay(raw)
+    const day = listFilterDay(raw)
     if (at === null || Number.isNaN(day.getTime())) return false
     const start = new Date(day)
     start.setHours(0, 0, 0, 0)

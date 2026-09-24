@@ -21,7 +21,7 @@ import {
   nameSearchReversed,
   nameSearchToken,
 } from '@aglyn/aglyn/app-utils/name-search'
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { type ListFilterField, listFilterDay } from '@aglyn/shared-ui-jsx/const/list-filter'
 
 /**
  * The query half of the list-filter contract (AGL-2501).
@@ -57,7 +57,8 @@ export interface ListFilterOptions {
 const IN_LIMIT = 30
 
 const toDate = (value: string): Date | null => {
-  const parsed = new Date(value)
+  // The calendar day the clause names — see `listFilterDay`.
+  const parsed = listFilterDay(value)
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
 
@@ -164,7 +165,7 @@ export function applyListFilter(
       if (!token) return null
       const sortBy = field.containsOrderBy ?? options.containsOrderBy ?? field.lowerPath ?? field.path
       const contains = ref.where(field.tokensPath, 'array-contains', token)
-      return pinned ? contains : contains.orderBy(sortBy)
+      return pinned ? contains : contains.orderBy(sortBy, field.containsOrderDirection ?? 'asc')
     }
     if (op === 'equals' && field.lowerPath) {
       return ordered(ref.where(field.lowerPath, '==', nameSearchKey(raw)), byId)
@@ -236,8 +237,14 @@ export function applyListFilter(
      */
     if (!rangeAllowed(field.path)) return null
     if (op === 'is') {
-      const bounded = pinned ? ref : ref.orderBy(field.path)
-      return bounded.startAt(stamp(start)).endAt(stamp(end))
+      // Two bounds as `where`s, not a cursor: a cursor must FOLLOW the
+      // query's `orderBy`, which a feed that owns its sort appends after this
+      // returns — the Admin SDK throws on that order — and a descending sort
+      // would read the day backwards (AGL-3321).
+      return ordered(
+        ref.where(field.path, '>=', stamp(start)).where(field.path, '<', stamp(end)),
+        field.path,
+      )
     }
     const bound: Record<string, [FirebaseFirestore.WhereFilterOp, Date]> = {
       after: ['>=', end],

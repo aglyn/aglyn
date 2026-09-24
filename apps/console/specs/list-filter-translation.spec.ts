@@ -242,10 +242,16 @@ describe('a date filter is a DAY, not an instant', () => {
       op: 'is',
       value: '2026-07-18',
     })
-    expect(log.wheres).toEqual([])
-    expect(new Date((log.endAt as any).__ts).getTime()).toBeGreaterThan(
-      new Date((log.startAt as any).__ts).getTime(),
-    )
+    // Two bounds, not a cursor, so a feed that owns its sort can carry it
+    // (AGL-3321) — and the day asked for is the calendar day named.
+    expect(log.wheres.map(([path, op]: any[]) => [path, op])).toEqual([
+      ['createdAt', '>='],
+      ['createdAt', '<'],
+    ])
+    const start = new Date((log.wheres[0][2] as any).__ts)
+    const end = new Date((log.wheres[1][2] as any).__ts)
+    expect(end.getTime()).toBeGreaterThan(start.getTime())
+    expect([start.getFullYear(), start.getMonth() + 1, start.getDate()]).toEqual([2026, 7, 18])
   })
 
   it('`before` bounds below the start of the day', () => {

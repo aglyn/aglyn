@@ -315,9 +315,22 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * and every other narrows the thousand the query returned. The caption
    * under the bar says which is which; the chips mark the served one.
    */
+  /*
+   * Under a site the listener already carries the `visibleTo`
+   * `array-contains-any`, so the translator serves no second array clause
+   * beside it and keeps an `in` inside the disjunction budget the two share
+   * (AGL-3321). `formIds` is exempt: its listener drops the scope clause.
+   */
   const plan = useMemo(
-    () => listFilterPlan(filterFields, views.state.filters),
-    [filterFields, views.state.filters],
+    () =>
+      listFilterPlan(
+        filterFields,
+        views.state.filters,
+        visibleToTokens
+          ? { arrayScope: { values: visibleToTokens.length, exempt: ['formIds'] } }
+          : {},
+      ),
+    [filterFields, views.state.filters, visibleToTokens],
   )
   const filter = plan.served
   /**

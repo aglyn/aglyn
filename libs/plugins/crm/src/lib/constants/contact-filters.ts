@@ -68,6 +68,9 @@ export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     // array — `orderBy` on the same field an `array-contains` matches is a
     // composite index nobody wants to explain.
     containsOrderBy: 'updatedAt',
+    // Newest first, as the unfiltered list, which is the composite declared
+    // for it (AGL-3321).
+    containsOrderDirection: 'desc',
     // `isAnyOf` is a saved segment's "any of these tags" (AGL-2617). The
     // query cannot serve it — `array-contains-any` is the scope clause's
     // — so the translator refuses it and the list matches it over the
@@ -94,6 +97,9 @@ export const CONTACT_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     tokensPath: 'formIds',
     verbatimTokens: true,
     containsOrderBy: 'updatedAt',
+    // Newest first, as the unfiltered list, which is the composite declared
+    // for it (AGL-3321).
+    containsOrderDirection: 'desc',
     operators: ['contains'],
   },
   { column: 'hostId', kind: 'exact', path: 'hostId', presence: 'always' },
