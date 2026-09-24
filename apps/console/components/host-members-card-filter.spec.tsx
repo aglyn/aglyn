@@ -207,6 +207,13 @@ describe('the collaborator roster filters through its query (AGL-3321)', () => {
     await act(async () => undefined)
   })
 
+  it('counts the pinned owner row in the footer, once', async () => {
+    render(<HostMembersCard hostId="host-1" />)
+    // Two roster rows and the owner above them: three on screen, three counted.
+    expect(screen.getByText('1–3 of 3')).toBeTruthy()
+    await act(async () => undefined)
+  })
+
   it('serves a search as a range on the stored address, beneath the same order', async () => {
     render(<HostMembersCard hostId="host-1" />)
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Ann' } })
