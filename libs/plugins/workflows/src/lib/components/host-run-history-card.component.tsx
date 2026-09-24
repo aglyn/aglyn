@@ -187,11 +187,12 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
    * workflow that had run all day.
    *
    * `target.id` equality is what makes the read proportional to the card:
-   * it asks for this workflow's rows rather than the site's. It carries no
-   * `orderBy` deliberately — an equality plus an ordering on a second field
-   * needs a composite index, and the client sort below already puts the
-   * newest first. The untargeted case has no equality to pair, so it orders
-   * server-side instead.
+   * it asks for this workflow's rows rather than the site's. Both shapes
+   * order by `createdAt` descending, so the ceiling keeps the NEWEST entries;
+   * an equality with no ordering would keep an arbitrary `__name__` slice of
+   * the automation's history once it outgrew the window. The targeted shape
+   * is served by the `activity` (`target.id` ↑, `createdAt` ↓) composite the
+   * console's organization activity route already uses.
    */
   const { data: entries } = useFirestoreCollection<any>(
     () => {
@@ -208,7 +209,12 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
        * is dropped below and never rendered.
        */
       return targetId
-        ? query(base, where('target.id', '==', targetId), limit(WINDOW + 1))
+        ? query(
+            base,
+            where('target.id', '==', targetId),
+            orderBy('createdAt', 'desc'),
+            limit(WINDOW + 1),
+          )
         : query(base, orderBy('createdAt', 'desc'), limit(WINDOW + 1))
     },
     // `targetId` belongs here: it now shapes the query, so a card that
@@ -397,8 +403,8 @@ export function HostRunHistoryCard(props: HostRunHistoryCardProps) {
         {truncated ? (
           <Alert severity="info">
             {`Runs found in the ${WINDOW} most recent activity entries for ` +
-              'this site. Older runs than that are recorded and are not ' +
-              'listed here.'}
+              (targetId ? 'this automation' : 'this site') +
+              '. Older runs than that are recorded and are not listed here.'}
           </Alert>
         ) : null}
         </Stack>

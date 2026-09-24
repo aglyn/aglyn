@@ -261,8 +261,9 @@ Every automation row has a **Runs** button. It opens **Runs — *your automation
 The table's toolbar narrows it. **Filters** offers **Trigger** and **Result** as picked
 values, **Time** by day, and **What happened** as typed text; **Search** finds words in
 the trigger or in what happened. Both reach every run the table read — the runs among
-up to 200 of the activity entries this automation wrote — not only the page on screen,
-and each filter in force shows as a chip above the table. See
+the 200 most recent activity entries this automation wrote — not only the page on screen,
+and each filter in force shows as a chip above the table. When the automation has
+written more than that, a note under the table says so. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 **Skipped** is a result, not an absence — see

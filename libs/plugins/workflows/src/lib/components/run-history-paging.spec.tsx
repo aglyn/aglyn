@@ -93,12 +93,14 @@ const allEntries = [...runEntries, ...otherEntries, ...filler]
 
 /** Every cap the card asked for, so a ceiling that stopped probing is visible. */
 let mockCapsAsked: number[] = []
+let mockConstraintsAsked: any[][] = []
 const FIRESTORE = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useFirestoreCollection: (build: () => any) => {
     const built = build()
+    if (built) mockConstraintsAsked.push(built.constraints ?? [])
     const cap = (built?.constraints ?? []).find(
       (item: any) => 'limit' in item,
     )?.limit
@@ -135,6 +137,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 beforeEach(() => {
   mockCapsAsked = []
+  mockConstraintsAsked = []
 })
 
 const renderedSummaries = () =>
@@ -202,5 +205,39 @@ describe('the run history pages its runs (AGL-2501)', () => {
     // is on the count of runs the card believes it has.
     const countLine = document.querySelector('.MuiTablePagination-displayedRows')
     expect(countLine?.textContent).toContain(`of ${RUNS}`)
+  })
+})
+
+describe('the run history window is the newest entries (AGL-3321)', () => {
+  it('orders the targeted read newest first, so the ceiling keeps the latest runs', () => {
+    render(<HostRunHistoryCard hostId="host-1" targetId="wf-1" />)
+    const constraints = mockConstraintsAsked[0]
+    expect(constraints).toEqual(
+      expect.arrayContaining([
+        { field: 'target.id', op: '==', value: 'wf-1' },
+        { orderBy: 'createdAt', direction: 'desc' },
+      ]),
+    )
+  })
+
+  it('orders the site-wide read newest first too', () => {
+    render(<HostRunHistoryCard hostId="host-1" />)
+    expect(mockConstraintsAsked[0]).toEqual(
+      expect.arrayContaining([{ orderBy: 'createdAt', direction: 'desc' }]),
+    )
+  })
+
+  it('names the automation in the ceiling notice when one is set', () => {
+    render(<HostRunHistoryCard hostId="host-1" targetId="wf-1" />)
+    expect(
+      screen.getByText(/most recent activity entries for this automation\./),
+    ).toBeTruthy()
+  })
+
+  it('names the site in the ceiling notice when no automation is set', () => {
+    render(<HostRunHistoryCard hostId="host-1" />)
+    expect(
+      screen.getByText(/most recent activity entries for this site\./),
+    ).toBeTruthy()
   })
 })
