@@ -453,7 +453,8 @@ The setting is off by default, because the header is what makes mail apps
 present an email as coming from a mailing list. Gmail and Yahoo require it of
 bulk senders — 5,000 or more emails a day — which a mailbox sending a
 sequence is not. With it on, an email whose link cannot be made waits rather
-than going out without it.
+than going out without it. [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md#list-unsubscribe)
+carry the same setting, on by default there because a campaign is bulk mail.
 
 Either one stops the person's sequences, puts the address on your
 do-not-contact list and unsubscribes it from the site's **Sales outreach**

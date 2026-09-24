@@ -855,13 +855,60 @@ close the tab.
 
 ## Compliance
 
-- Every send includes an **unsubscribe** link, and the header mailbox
-  providers look for — Gmail and Yahoo's one-click `List-Unsubscribe`.
+- Every send includes an **unsubscribe** link in its footer, and by default the
+  header mailbox providers look for — Gmail and Yahoo's one-click
+  `List-Unsubscribe` — which is what makes a mail app show its own
+  **Unsubscribe** button. See [the mail-client unsubscribe button](#list-unsubscribe).
 - Clicking it opens a page; only submitting that page actually changes
   anything. That matters because corporate mail scanners open every link in a
   message before the recipient sees it, and a link that unsubscribed on open
   would quietly shrink your list.
 - Unsubscribes are honored automatically so you stay compliant.
+
+### The mail-client unsubscribe button {#list-unsubscribe}
+
+Open a campaign, choose **Edit campaign**, and **Add a mail-client unsubscribe
+button** is the switch for the `List-Unsubscribe` and `List-Unsubscribe-Post`
+headers on every email in it. It is **on** for every new campaign and for every
+campaign made before the switch existed. It is the same setting a
+[sequence](../../content-and-data/crm/sequences.md#unsubscribe)
+has, where it starts off because a sequence is one-to-one mail.
+
+Turning it off is allowed, and the drawer warns you when you do. Without the
+header, Gmail and Yahoo can reject or spam-folder a bulk sender's mail, and
+more people press "report spam" when their mail app offers no unsubscribe
+button.
+
+**It comes back on by itself when it has to.** Gmail and Yahoo treat an
+organization that sends 5,000 or more emails a day as a bulk sender and require
+the one-click header from it. So an email in a campaign with the switch off
+still carries the header when:
+
+- it would take your organization to **5,000 campaign emails in 24 hours**,
+  counting what you sent today and yesterday plus everyone this email is about
+  to reach — so a large email carries it from its first message, not from the
+  batch that crosses the line;
+- it leaves on the **shared sending address**, where every campaign carries it
+  because that address's reputation belongs to every site on it; or
+- your sending volume could not be read at the moment it went out.
+
+The campaign's page then says the button was turned back on, for which email,
+and why. Every email records what it did, so an email sent over several runs
+keeps the header for the rest of its audience once it has been turned back on.
+
+What the switch never changes:
+
+- The **unsubscribe link in the footer** is in every email either way.
+- **Test sends** follow the campaign's switch, so what lands in your inbox is
+  what your audience gets; the volume check applies to real sends.
+- **Transactional mail** — receipts, reminders, password resets — is not
+  affected.
+- Links in mail already delivered keep working whatever the switch says now.
+
+Self-hosting? The 5,000 is a setting,
+[`EMAIL_LIST_UNSUBSCRIBE_BULK_THRESHOLD`](../../developers/self-hosting-environment.md),
+and the header is two ordinary headers on the message, so it works with any
+sending provider.
 
 ### Topics {#topics}
 

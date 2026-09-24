@@ -30,6 +30,8 @@ export * from './lib/host-email-render'
 export * from './lib/email-render'
 export * from './lib/text-email-html'
 export * from './lib/marketing-send'
+// The List-Unsubscribe setting sequences and campaigns share (AGL-3307).
+export * from './lib/list-unsubscribe'
 export * from './lib/email-delivery-events'
 // The received-mail reader the CRM's capture route files from (AGL-2657).
 // Its neighbor `./lib/svix-signature` is deliberately NOT re-exported here:

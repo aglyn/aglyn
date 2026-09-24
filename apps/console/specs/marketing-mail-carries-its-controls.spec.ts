@@ -235,11 +235,19 @@ describe('the campaign sender earns its exemption', () => {
         path === 'libs/plugins/marketing/src/lib/server/campaign-send.ts',
     )!.text
 
-  it('adds the RFC 8058 pair itself', () => {
+  it('adds the RFC 8058 pair itself, through the shared builder', () => {
     // The pair, not the header alone: `List-Unsubscribe` on its own does not
-    // satisfy Gmail's and Yahoo's bulk-sender rules.
-    expect(sender()).toContain("'List-Unsubscribe'")
-    expect(sender()).toContain("'List-Unsubscribe-Post'")
+    // satisfy Gmail's and Yahoo's bulk-sender rules. Written by the builder
+    // sequences use (AGL-3307), which always writes both beside a URL.
+    expect(sender()).toMatch(/headers:\s*listUnsubscribeHeaders\(\{\s*url:/)
+  })
+
+  it('leaves the header to the campaign’s setting only under the bulk guard', () => {
+    // A campaign may turn the header off (AGL-3307), but only through the
+    // guard that turns it back on for a send that makes the organization a
+    // bulk sender — never by skipping the decision.
+    expect(sender()).toMatch(/decideListUnsubscribe\s*\(/)
+    expect(sender()).toMatch(/readListUnsubscribeSetting\s*\(/)
   })
 
   it('mints its link through the one signer', () => {

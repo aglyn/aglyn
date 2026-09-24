@@ -75,6 +75,8 @@ import {
   useFirestoreDoc,
 } from '@aglyn/tenant-feature-instance'
 import {
+  campaignForcedListUnsubscribeSends,
+  campaignListUnsubscribe,
   campaignRollup,
   campaignSendDisplay,
   campaignSiteIds,
@@ -368,6 +370,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
           endAtMs: values.endAtMs,
           listIds: values.listIds,
           topicId: values.topicId ? values.topicId : deleteField(),
+          listUnsubscribe: values.listUnsubscribe,
           ...(!hostId && values.siteIds !== undefined
             ? { visibleTo: campaignVisibleTo(values.siteIds) }
             : {}),
@@ -687,6 +690,14 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
   ]
 
   const windowState = campaignWindowState(campaign, Date.now())
+  /*
+   * The mail-client unsubscribe button (AGL-3307): the campaign's setting,
+   * and the emails whose header the bulk guard turned back on while it was
+   * off — read off the sends this page already holds, each of which records
+   * what it did and why.
+   */
+  const listUnsubscribeOn = campaignListUnsubscribe(campaign)
+  const forcedSends = campaignForcedListUnsubscribeSends(sends)
   const start = campaign.startAtMs
     ? new Date(campaign.startAtMs).toLocaleDateString()
     : ''
@@ -807,6 +818,29 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
                     .join(', ')}`
                 : 'Not offered on any site yet — edit the campaign to place it'}
           </Typography>
+        ) : null}
+
+        <Typography variant="body2" color="text.secondary">
+          {listUnsubscribeOn
+            ? 'Mail-client unsubscribe button: on'
+            : 'Mail-client unsubscribe button: off — the footer link is ' +
+              'the way out, and the button comes back for any email that ' +
+              'would make your organization a bulk sender'}
+        </Typography>
+        {forcedSends.length ? (
+          <Alert severity="info">
+            {`The mail-client unsubscribe button was turned back on for ` +
+              `${forcedSends.length === 1 ? 'one email' : `${forcedSends.length.toLocaleString()} emails`} ` +
+              'in this campaign, though the campaign has it off. '}
+            {forcedSends
+              .map(
+                (send) =>
+                  `${send.subject || send.$id}: ` +
+                  (send.listUnsubscribe?.detail ||
+                    'turned back on by the bulk-sender guard.'),
+              )
+              .join(' ')}
+          </Alert>
         ) : null}
 
         <Divider />

@@ -144,6 +144,19 @@ import {
   type SendingIdentitySource,
   type EmailRampVerdict,
 } from '@aglyn/shared-util-email'
+/*
+ * The List-Unsubscribe setting sequences share (AGL-3307), from its LEAF
+ * module: the specs that reach this file spread the real barrel under their
+ * own stubs, and a decision that turns a header off must be the real one.
+ */
+import {
+  decideListUnsubscribe,
+  listUnsubscribeForcedDetail,
+  listUnsubscribeHeaders,
+  readListUnsubscribeSetting,
+  type ListUnsubscribeDecision,
+  type ListUnsubscribeForcedReason,
+} from '@aglyn/shared-util-email/list-unsubscribe'
 
 /**
  * Recipients one send may address.
@@ -759,7 +772,20 @@ export interface CampaignSendResult {
   nextAtMs?: number
   /** Batches this email has run, including this one. */
   batch?: number
+  /**
+   * Whether this send carried the mail-client unsubscribe button, and why
+   * (AGL-3307): the campaign's setting, or the bulk guard turning it back
+   * on. Absent on a dry run, which sends nothing.
+   */
+  listUnsubscribe?: Pick<ListUnsubscribeDecision, 'on' | 'forced' | 'reason'>
 }
+
+/**
+ * The field on a SEND recording what it did with the List-Unsubscribe header
+ * (AGL-3307) — see {@link CampaignListUnsubscribeRecord} in
+ * `@aglyn/shared-ui-email-campaigns`, which the campaign page reads.
+ */
+const LIST_UNSUBSCRIBE_RECORD_FIELD = 'listUnsubscribe'
 
 export async function performCampaignSend(
   options: CampaignSendOptions,
@@ -878,6 +904,8 @@ export async function performCampaignSend(
    * from the twentieth. Zero on every first send.
    */
   let batchesSoFar = 0
+  /** Why an earlier batch of this email carried a forced header, if one did. */
+  let forcedBefore: ListUnsubscribeForcedReason | null = null
   /*==========================================
    * THE NEXT BATCH'S ADMISSION CHECKS.
    *
@@ -939,6 +967,22 @@ export async function performCampaignSend(
       0,
       Math.floor(Number(sendSnapshot.get('resume')?.batch ?? 0)) || 0,
     )
+    /*
+     * An earlier batch the bulk guard turned the header back on for keeps
+     * it on for the rest of the email (AGL-3307): one mailing does not lose
+     * its unsubscribe button halfway through because a day rolled over.
+     */
+    const earlier = sendSnapshot.get(LIST_UNSUBSCRIBE_RECORD_FIELD) as
+      | { forced?: unknown; reason?: unknown }
+      | undefined
+    if (
+      earlier?.forced === true &&
+      (earlier.reason === 'bulk-volume' ||
+        earlier.reason === 'pooled-identity' ||
+        earlier.reason === 'volume-unknown')
+    ) {
+      forcedBefore = earlier.reason
+    }
   }
   /**
    * A batch that found nothing left to do: the email is FINISHED, not broken.
@@ -1556,6 +1600,13 @@ export async function performCampaignSend(
   let batchCap = MAX_RECIPIENTS_PER_SEND
   /** Today's ramp, resolved once and claimed against below. */
   let ramp: EmailRampVerdict | null = null
+  /**
+   * Campaign messages this workspace has sent in the last day, for the
+   * List-Unsubscribe bulk guard (AGL-3307). `null` when the window could not
+   * be read, which the guard answers by carrying the header. Zero on a test
+   * send, which is one message to somebody on the workspace.
+   */
+  let recentCampaignVolume: number | null = 0
   if (!proofOnly) {
     /** This workspace's seven-day grade, and the window both controls read. */
     const reputation: SenderReputationRead = await readSenderReputation({
@@ -1565,6 +1616,9 @@ export async function performCampaignSend(
         orgForHost?.org as Record<string, unknown> | undefined
       )?.['emailReputationReinstatedUntilMs'],
     })
+    recentCampaignVolume = reputation.degraded
+      ? null
+      : reputation.window.acceptedLastTwoDays
     /*
      * THE CIRCUIT BREAKER.
      *
@@ -2149,6 +2203,56 @@ export async function performCampaignSend(
    * the provider never even looked at while the campaign closed as complete.
    * They break the loop into `deferred` instead; see the branch below.
    */
+  /*==========================================
+   * THE MAIL-CLIENT UNSUBSCRIBE BUTTON (AGL-3307).
+   *
+   * The campaign's `listUnsubscribe` setting, ON unless somebody turned it
+   * off — and turned back on for this send when leaving it off would break
+   * Gmail's and Yahoo's bulk-sender rule, see `decideListUnsubscribe`. The
+   * volume is what the workspace sent in the last day plus EVERYONE this
+   * email still has to reach, not just this batch, so an email that will
+   * make the workspace a bulk sender carries the header from its first
+   * message rather than from the batch that crosses the line.
+   *
+   * The footer link is not part of this: `renderRecipientEmail` writes it
+   * into every message whatever the header does.
+   *
+   * An unreadable campaign reads as the default, ON, and an unreadable
+   * volume forces it on: the header is the safe direction to be wrong in.
+   *=========================================*/
+  let listUnsubscribeRequested = true
+  if (options.emailCampaignId) {
+    try {
+      const container = await orgEmailCampaigns(firestore, orgId)
+        .doc(options.emailCampaignId)
+        .get()
+      listUnsubscribeRequested = readListUnsubscribeSetting(
+        container.exists ? container.get('listUnsubscribe') : undefined,
+        true,
+      )
+    } catch (error) {
+      console.error(
+        '[campaign] campaign unreadable — keeping the unsubscribe header on',
+        error,
+      )
+    }
+  }
+  const listUnsubscribe = decideListUnsubscribe({
+    requested: listUnsubscribeRequested,
+    recentVolume: recentCampaignVolume ?? 0,
+    sendVolume: proofOnly ? sendable.length : consentSplit.mailable.length,
+    pooled: sendingIdentity.source === 'shared',
+    forcedBefore:
+      recentCampaignVolume === null ? 'volume-unknown' : forcedBefore,
+  })
+  if (listUnsubscribe.forced) {
+    console.warn(
+      `[campaign] ${options.campaignId || 'new send'}: unsubscribe header ` +
+        `forced on (${listUnsubscribe.reason}, ` +
+        `${listUnsubscribe.volume}/${listUnsubscribe.threshold})`,
+    )
+  }
+
   const sendableSet = new Set(sendable)
   const settledOut: string[] = recipients.filter(
     (email) => !sendableSet.has(email),
@@ -2206,7 +2310,9 @@ export async function performCampaignSend(
        * where you go to unsubscribe — with "Unsubscribe from everything" on
        * it, one button away.
        */
-      const oneClickUrl = buildUnsubscribeUrl({ ...link, surface: 'one-click' })
+      const oneClickUrl = listUnsubscribe.on
+        ? buildUnsubscribeUrl({ ...link, surface: 'one-click' })
+        : ''
       const unsubscribeUrl = buildUnsubscribeUrl({
         ...link,
         surface: 'preferences',
@@ -2284,10 +2390,11 @@ export async function performCampaignSend(
         // person can choose on a page; they change nothing about what a
         // machine POSTing this header is promised, which is that the
         // recipient stops hearing from this site.
-        headers: {
-          'List-Unsubscribe': `<${oneClickUrl}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
+        //
+        // Only when the campaign's setting — or the bulk guard — says so
+        // (AGL-3307). Off, the footer link above is the way out, and the
+        // pair is written by the builder sequences use.
+        headers: listUnsubscribeHeaders({ url: oneClickUrl }),
         // The campaign's own display name where the composer set one, and the
         // org's branding default otherwise. Either way the ADDRESS is the
         // resolved identity's — `applyFromName` replaces the display name in
@@ -2507,6 +2614,11 @@ export async function performCampaignSend(
    */
   const nextAtMs = plan.resuming ? Date.now() : 0
 
+  const listUnsubscribeResult = {
+    on: listUnsubscribe.on,
+    forced: listUnsubscribe.forced,
+    reason: listUnsubscribe.reason,
+  }
   if (options.recordCampaign === false) {
     return {
       campaignId,
@@ -2515,6 +2627,7 @@ export async function performCampaignSend(
       ...(audienceTruncated ? { audienceTruncated: true } : {}),
       sent,
       ...(deferred ? { deferred } : {}),
+      listUnsubscribe: listUnsubscribeResult,
     }
   }
   /*==========================================
@@ -2633,6 +2746,26 @@ export async function performCampaignSend(
       ...(options.emailCampaignId
         ? { emailCampaignId: options.emailCampaignId }
         : {}),
+      /*
+       * WHAT THIS EMAIL DID WITH THE UNSUBSCRIBE HEADER, and why (AGL-3307).
+       * Written absolutely on every batch; a batch after a forced one is
+       * forced too, so the last write is the email's answer. The campaign
+       * page reads `forced` and `detail` to say it was turned back on.
+       */
+      [LIST_UNSUBSCRIBE_RECORD_FIELD]: {
+        requested: listUnsubscribe.requested,
+        on: listUnsubscribe.on,
+        forced: listUnsubscribe.forced,
+        ...(listUnsubscribe.reason
+          ? {
+              reason: listUnsubscribe.reason,
+              detail: listUnsubscribeForcedDetail(listUnsubscribe),
+            }
+          : {}),
+        volume: listUnsubscribe.volume,
+        threshold: listUnsubscribe.threshold,
+        atMs: Date.now(),
+      },
       ...(experiment ? { experimentId: experiment.$id } : {}),
       stats: {
         recipients: additive(sendable.length),
@@ -2803,6 +2936,7 @@ export async function performCampaignSend(
     resuming: plan.resuming,
     batch: plan.batch,
     ...(plan.resuming ? { nextAtMs } : {}),
+    listUnsubscribe: listUnsubscribeResult,
   }
 }
 
@@ -3676,6 +3810,10 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         ...(senderId ? { senderId } : {}),
         preheader,
         ...(persona ? { proofPersona: persona } : {}),
+        // The campaign it is written in, so the proof carries the header the
+        // campaign's setting asks for (AGL-3307) — what a merchant checks in
+        // their own inbox is what the audience gets.
+        ...(emailCampaignId ? { emailCampaignId } : {}),
         recordCampaign: false,
         senderUid: decoded.uid,
         // Not marketing: the recipient holds an account on this workspace.

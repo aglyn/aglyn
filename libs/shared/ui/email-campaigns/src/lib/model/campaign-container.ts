@@ -69,6 +69,10 @@
  */
 
 import {
+  readListUnsubscribeSetting,
+  type ListUnsubscribeForcedReason,
+} from '@aglyn/shared-util-email/list-unsubscribe'
+import {
   CAMPAIGN_SEQUENCE_REPORTS_COLLECTION,
   campaignRate,
   type CampaignRate,
@@ -211,9 +215,59 @@ export interface EmailCampaign {
    * every site, `['host:{id}', …]` for a set. See {@link campaignSiteIds}.
    */
   visibleTo?: string[]
+  /**
+   * Whether its emails carry `List-Unsubscribe` and `List-Unsubscribe-Post`
+   * (RFC 8058), the header mail clients draw their own Unsubscribe button
+   * from (AGL-3307). ON unless stored `false` — absent on every campaign
+   * written before the setting existed, which read as on because that is
+   * what they always did. Read it through {@link campaignListUnsubscribe}.
+   *
+   * Off is overridden per send by the bulk guard; see
+   * {@link CampaignListUnsubscribeRecord}. The footer's unsubscribe link is
+   * in every email either way.
+   */
+  listUnsubscribe?: boolean
   createdAtMs?: number
   createdBy?: string
   deletedAt?: unknown
+}
+
+/**
+ * Whether a campaign's emails carry the mail-client unsubscribe button:
+ * the shared reader sequences use, with a campaign's default of ON.
+ */
+export function campaignListUnsubscribe(
+  campaign: Pick<EmailCampaign, 'listUnsubscribe'> | null | undefined,
+): boolean {
+  return readListUnsubscribeSetting(campaign?.listUnsubscribe, true)
+}
+
+/**
+ * What one SEND did with the List-Unsubscribe header, written by the
+ * campaign sender on every batch (AGL-3307).
+ */
+export interface CampaignListUnsubscribeRecord {
+  /** The campaign's setting when it went out. */
+  requested?: boolean
+  /** Whether the header was on the messages. */
+  on?: boolean
+  /** True when the setting said off and the bulk guard turned it back on. */
+  forced?: boolean
+  reason?: ListUnsubscribeForcedReason
+  /** One sentence saying why, for the campaign page. */
+  detail?: string
+  /** Campaign messages in the day, this email included, it was judged on. */
+  volume?: number
+  /** The threshold it was judged against. */
+  threshold?: number
+  atMs?: number
+}
+
+/** The sends among these whose header the bulk guard forced back on. */
+export function campaignForcedListUnsubscribeSends<
+  T extends Pick<CampaignSend, 'listUnsubscribe'>,
+>(sends: readonly T[] | null | undefined): T[] {
+  return (sends ?? []).filter((send) => send?.listUnsubscribe?.forced === true)
 }
 
 /** One send, as much of it as a list or a rollup needs. */
@@ -245,6 +299,8 @@ export interface CampaignSend {
   stats?: CampaignStats
   /** How far a send that goes out over several batches has got. */
   resume?: CampaignResume
+  /** What it did with the List-Unsubscribe header. Absent before AGL-3307. */
+  listUnsubscribe?: CampaignListUnsubscribeRecord
 }
 
 /**

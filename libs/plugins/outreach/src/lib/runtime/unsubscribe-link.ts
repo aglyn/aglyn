@@ -16,6 +16,7 @@
  */
 
 import { normalizeContactEmail } from '@aglyn/aglyn/app-utils/contacts'
+import { resolveListUnsubscribe } from '@aglyn/shared-util-email/list-unsubscribe'
 import {
   signedLinkSignature,
   signedLinkSignatureMatches,
@@ -173,8 +174,16 @@ export function outreachListUnsubscribe(input: {
   mintUrl: () => string | null
   mailboxEmail: string
 }): OutreachListUnsubscribe {
-  if (input.enabled !== true) return { status: 'off' }
-  const url = input.mintUrl()
-  const mailto = outreachUnsubscribeMailbox(input.mailboxEmail)?.uri
-  return url && mailto ? { status: 'ready', url, mailto } : { status: 'unavailable' }
+  // The resolver campaigns share (AGL-3307), with the mailbox's +unsubscribe
+  // address as the mailto a sequence always carries beside the URL.
+  const resolved = resolveListUnsubscribe({
+    enabled: input.enabled,
+    mintUrl: input.mintUrl,
+    mintMailto: () => outreachUnsubscribeMailbox(input.mailboxEmail)?.uri ?? null,
+  })
+  return resolved.status === 'ready' && resolved.mailto
+    ? { status: 'ready', url: resolved.url, mailto: resolved.mailto }
+    : resolved.status === 'off'
+      ? { status: 'off' }
+      : { status: 'unavailable' }
 }

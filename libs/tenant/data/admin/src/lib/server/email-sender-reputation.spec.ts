@@ -206,6 +206,24 @@ describe('the window', () => {
     expect(window.degraded).toBe(false)
   })
 
+  it('sums today and yesterday for the List-Unsubscribe bulk guard (AGL-3307)', async () => {
+    await recordCampaignAccepted(ORG, 100, { atMs: NOW, firestore: db() })
+    await recordCampaignAccepted(ORG, 200, { atMs: YESTERDAY, firestore: db() })
+    // Two days ago is inside the reputation window and outside the guard's.
+    await recordCampaignAccepted(ORG, 400, {
+      atMs: NOW - 2 * 86_400_000,
+      firestore: db(),
+    })
+
+    const window = await readSenderReputationWindow({
+      orgId: ORG,
+      now: NOW,
+      firestore: db(),
+    })
+    expect(window.accepted).toBe(700)
+    expect(window.acceptedLastTwoDays).toBe(300)
+  })
+
   it('reads today’s ramp claim without a second query', async () => {
     await claimOrgEmailSendDay({
       orgId: ORG,

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { LIST_UNSUBSCRIBE_ONE_CLICK } from '@aglyn/shared-util-email/list-unsubscribe'
 import { randomUUID } from 'node:crypto'
 
 /**
@@ -186,8 +187,11 @@ const EXTRA_HEADERS: Record<string, string> = {
   'list-unsubscribe-post': 'List-Unsubscribe-Post',
 }
 
-/** The one value RFC 8058 defines for `List-Unsubscribe-Post`. */
-export const LIST_UNSUBSCRIBE_ONE_CLICK = 'List-Unsubscribe=One-Click'
+/**
+ * The one value RFC 8058 defines for `List-Unsubscribe-Post`, re-exported
+ * from the module campaigns and sequences share (AGL-3307).
+ */
+export { LIST_UNSUBSCRIBE_ONE_CLICK }
 
 const isAscii = (value: string) => isPrintableAscii(value)
 
