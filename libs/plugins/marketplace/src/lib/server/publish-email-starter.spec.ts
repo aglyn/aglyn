@@ -37,6 +37,8 @@ const ROOT = '_@_'
 const state = {
   screen: {} as Record<string, unknown>,
   version: {} as Record<string, unknown>,
+  /** The seller site's component documents, by id (AGL-3287). */
+  components: {} as Record<string, Record<string, unknown>>,
   writes: [] as Array<{ path: string; data: Record<string, unknown> }>,
 }
 
@@ -78,6 +80,10 @@ jest.mock('@aglyn/tenant-data-admin', () => {
       }
       if (path.startsWith('hosts/host-1/screens/screen-1/versions/')) {
         return snapshotOf(state.version)
+      }
+      const component = /^hosts\/host-1\/components\/([^/]+)$/.exec(path)
+      if (component && state.components[component[1]]) {
+        return snapshotOf(state.components[component[1]])
       }
       return snapshotOf({}, false)
     },
@@ -165,6 +171,7 @@ const versionWrite = () =>
 
 beforeEach(() => {
   state.writes = []
+  state.components = {}
   state.screen = {
     kind: 'email',
     versionId: 'v1',
@@ -315,5 +322,111 @@ describe('the source has to be a saved campaign email', () => {
   it('refuses a deleted screen', async () => {
     state.screen = { kind: 'email', versionId: 'v1', deletedAt: 'THEN' }
     expect((await publish()).statusCode).toBe(404)
+  })
+})
+
+/**
+ * THE SELLER'S REUSABLE BLOCKS TRAVEL AS BLOCKS (AGL-3287).
+ *
+ * A shared footer placed in a campaign email is a reference to a component on
+ * the SELLER'S site. The buyer's org has none of those, so a listing that kept
+ * the reference would install with the footer missing — and the allowlist
+ * refuses a component reference outright. The design is published with each
+ * placement replaced by the blocks it renders, and inspected as such.
+ */
+describe('a design placing one of the site’s components', () => {
+  const FOOTER = {
+    rootId: 'ftr',
+    nodes: {
+      ftr: { $id: 'ftr', componentId: 'emailSection', nodes: ['ftrText', 'ftrLink'] },
+      ftrText: {
+        $id: 'ftrText',
+        componentId: 'emailText',
+        parentId: 'ftr',
+        props: { children: 'Acme footer' },
+      },
+      ftrLink: {
+        $id: 'ftrLink',
+        componentId: 'emailButton',
+        parentId: 'ftr',
+        props: { children: 'Visit', href: 'https://footer.example/visit' },
+      },
+    },
+  }
+  const placed = () => ({
+    [ROOT]: { $id: ROOT, componentId: 'div', nodes: ['sec', 'foot'] },
+    sec: {
+      $id: 'sec',
+      componentId: 'emailSection',
+      pluginId: 'email',
+      parentId: ROOT,
+      nodes: ['one'],
+    },
+    one: {
+      $id: 'one',
+      componentId: 'emailText',
+      pluginId: 'email',
+      parentId: 'sec',
+      props: { children: 'Hi there' },
+    },
+    foot: {
+      $id: 'foot',
+      componentId: 'reusableInstance',
+      pluginId: 'mui',
+      parentId: ROOT,
+      props: { refId: 'footer-1' },
+      nodes: [],
+    },
+  })
+
+  it('publishes the footer’s blocks in place of the reference', async () => {
+    state.components['footer-1'] = FOOTER
+    state.version = { nodes: placed() }
+    const res = await publish()
+    expect(res.statusCode).toBe(200)
+    const nodes = versionWrite()?.data['nodes'] as Record<string, any>
+    const published = Object.values(nodes)
+    expect(published.some((node) => node.componentId === 'reusableInstance')).toBe(
+      false,
+    )
+    expect(published.map((node) => node.props?.children)).toContain('Acme footer')
+    // The placement IS the footer's section now, under the id the design
+    // gave it, so the root still lists it where the author put it.
+    expect(nodes['foot'].componentId).toBe('emailSection')
+    // Inspected as it will be mailed: the footer's link host is disclosed.
+    expect(res.body.linkHosts).toContain('footer.example')
+  })
+
+  it('refuses a placement whose component was deleted, naming the fix', async () => {
+    state.components['footer-1'] = { ...FOOTER, deletedAt: 'THEN' }
+    state.version = { nodes: placed() }
+    const spy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const res = await publish()
+      expect(res.statusCode).toBe(422)
+      expect(res.body.error).toMatch(/reusable block/i)
+      expect(state.writes).toHaveLength(0)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('inspects what the footer draws, and refuses its tracking pixel', async () => {
+    state.components['footer-1'] = {
+      ...FOOTER,
+      nodes: {
+        ...FOOTER.nodes,
+        ftrText: {
+          $id: 'ftrText',
+          componentId: 'emailImage',
+          parentId: 'ftr',
+          props: { src: 'https://publisher.example/open.gif' },
+        },
+      },
+    }
+    state.version = { nodes: placed() }
+    const res = await publish()
+    expect(res.statusCode).toBe(422)
+    expect(res.body.violations[0]).toMatchObject({ code: 'remote-asset' })
   })
 })

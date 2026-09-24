@@ -21,6 +21,8 @@ import {
   createResourceUid,
 } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
+import { inlineReusableBlocks } from './publish-email-blocks'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
@@ -140,10 +142,32 @@ export const publishEmailStarterHandler: PluginApiHandler = async (req, res) => 
       .doc(String(activeVersionId))
       .get()
 
+    /*
+     * The site's reusable blocks INLINED before anything is judged (AGL-3287).
+     * A buyer's org has none of this site's components, so a placement has to
+     * travel as the blocks it renders — and inlining first is what puts a
+     * shared footer's links and images in front of the inspection below, as
+     * the send path would mail them. An undecodable payload is left as stored,
+     * so the inspection still refuses it by name.
+     */
+    const stored = versionSnapshot.get('nodes')
+    const readable = decodeStoredNodes<Record<string, unknown>>(stored)
+    let design: unknown = stored
+    if (readable && typeof readable === 'object' && !Array.isArray(readable)) {
+      const inlined = await inlineReusableBlocks(readable, {
+        firestore,
+        hostId,
+        rootId: CANVAS_ROOT_ELEMENT_ID,
+      })
+      if (inlined.ok === false) {
+        return res.status(422).json({ error: inlined.error })
+      }
+      design = inlined.nodes
+    }
     // The inspection decodes, so it is also the guard against publishing a
     // node map nothing could read — it refuses rather than reporting a
     // compressed payload as a clean design.
-    const inspection = inspectEmailStarter(versionSnapshot.get('nodes'))
+    const inspection = inspectEmailStarter(design)
     const violation = emailStarterRefusal(inspection)
     if (violation) {
       return res.status(422).json({
