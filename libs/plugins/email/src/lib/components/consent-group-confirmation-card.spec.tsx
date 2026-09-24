@@ -16,9 +16,9 @@
  */
 
 /**
- * "Wait for confirmation across a consent group" (AGL-3316): one switch on the
- * organization's Topics page, off unless somebody turns it on, read from the
- * org document the shell keeps live and written only through
+ * "Wait for confirmation across a consent group" (AGL-3316): one switch under
+ * the organization's consent groups (AGL-3320), off unless somebody turns it
+ * on, read from the org document the shell keeps live and written only through
  * `/api/orgs/settings` — never Firestore, which denies the field to every
  * client. It moves only for a member holding both permissions that action
  * asks for, and says which one is missing to anybody else.
@@ -33,6 +33,8 @@ import { EmailOrgMountProvider } from './email-org-mount'
 let mockDocs: Record<string, Record<string, unknown>> = {}
 /** Paths whose read has not answered yet. */
 let mockPending = new Set<string>()
+/** Every document reference the card built, in order. */
+const mockBuilt: string[] = []
 
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
@@ -49,6 +51,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
    */
   useFirestoreDoc: (buildRef: () => { path: string } | null) => {
     const ref = buildRef()
+    if (ref) mockBuilt.push(ref.path)
     if (!ref || mockPending.has(ref.path)) return { data: undefined, status: 'loading' }
     return { data: mockDocs[ref.path], status: 'success' }
   },
@@ -99,6 +102,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockDocs = { [MEMBER]: { role: 'owner', allHosts: true } }
   mockPending = new Set()
+  mockBuilt.length = 0
   mockAuthorizedFetch.mockResolvedValue({
     ok: true,
     json: async () => ({ ok: true, awaitConfirmation: true }),
@@ -247,5 +251,22 @@ describe('who may move it', () => {
     mockDocs[MEMBER] = { role: 'admin', allHosts: true }
     renderCard(DECLARED)
     expect(theSwitch().disabled).toBe(false)
+  })
+
+  it('reads no membership of its own when its section hands it the answer', () => {
+    render(
+      <EmailOrgMountProvider
+        mount={{ orgId: 'org-1', orgSlug: 'acme', hosts: [], hostsReady: true, hostsPath: '/acme/hosts' }}
+        basePath="/acme/emails"
+      >
+        <ConsentGroupConfirmationCard
+          org={DECLARED}
+          access={{ missing: 'Manage data', ready: true }}
+        />
+      </EmailOrgMountProvider>,
+    )
+    expect(mockBuilt).toEqual([])
+    expect(theSwitch().disabled).toBe(true)
+    expect(screen.getByText('You need the Manage data permission to change this.')).toBeTruthy()
   })
 })

@@ -55,6 +55,7 @@ import {
   IconButton,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import Button from '@mui/material/Button'
@@ -80,6 +81,7 @@ import {
   SUPPRESSION_REASONS,
   type SuppressionTotals,
 } from './suppression-totals'
+import { orgSiteName, useEmailOrgMount } from './email-org-mount'
 
 export interface SuppressionsCardProps {
   hostId: string
@@ -92,6 +94,11 @@ interface SuppressionRow {
   reason?: string
   suppressedAt?: { seconds?: number } | null
   createdAt?: { seconds?: number } | null
+  /**
+   * The site this entry was copied from when the two stopped being one
+   * sender (AGL-3320). The copy keeps the original's reason and dates.
+   */
+  carriedFromHostId?: string
 }
 
 /*
@@ -188,6 +195,8 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
+  // Present on the organization's page, which can name the other site.
+  const orgMount = useEmailOrgMount()
   const [adding, setAdding] = useState(false)
 
   const [addInput, setAddInput] = useState('')
@@ -478,17 +487,39 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
     {
       field: 'reason',
       headerName: 'Reason',
-      width: 170,
+      width: 230,
       valueGetter: (_value, row) => row.reasonKey,
       renderCell: ({ row }) => {
         const described = describeReason(row.reason)
         return (
-          <Chip
-            size="small"
-            color={described.color}
-            variant="outlined"
-            label={described.label}
-          />
+          <Stack
+            direction="row"
+            spacing={0.5}
+            sx={{ alignItems: 'center', height: '100%' }}
+          >
+            <Chip
+              size="small"
+              color={described.color}
+              variant="outlined"
+              label={described.label}
+            />
+            {/*
+              A copy made when sites stopped being one sender. It is an
+              entry like any other; the marker says why an address nobody
+              on this site acted on is on its list.
+             */}
+            {row.carriedFromHostId ? (
+              <Tooltip
+                title={`Copied from ${
+                  orgMount
+                    ? orgSiteName(orgMount, row.carriedFromHostId)
+                    : 'another site'
+                } when the two stopped being one sender`}
+              >
+                <Chip size="small" variant="outlined" label="Copied" />
+              </Tooltip>
+            ) : null}
+          </Stack>
         )
       },
     },
