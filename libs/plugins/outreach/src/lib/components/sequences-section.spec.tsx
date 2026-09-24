@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { OutreachMailbox, OutreachSequence } from '../model/outreach.types'
 import { OutreachSequencesSection } from './sequences-section'
@@ -200,6 +200,26 @@ describe('the sequence list (AGL-2980)', () => {
     expect(mockPush).toHaveBeenCalledWith(`${SECTION}/seq-1`)
     // With sequences listed, New sequence sits in the header.
     expect(screen.getByRole('link', { name: 'New sequence' })).toBeTruthy()
+  })
+})
+
+describe('the sequence list filters through the grid (AGL-3317)', () => {
+  it('searches every sequence it read, not only the page on screen', async () => {
+    mockSequences = {
+      status: 'ready',
+      data: Array.from({ length: 12 }, (_unused, at) =>
+        sequence(`seq-${at}`, at === 11 ? 'Renewal nudge' : `Outbound ${at}`, 'active'),
+      ),
+    }
+    renderSection()
+    const grid = screen.getByRole('grid', { name: 'Sequences' })
+    // Page one holds ten; the twelfth is past it.
+    expect(grid.textContent).not.toContain('Renewal nudge')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'renewal' } })
+    await waitFor(() => {
+      expect(screen.getByRole('grid', { name: 'Sequences' }).textContent).toContain('Renewal nudge')
+      expect(screen.getByRole('grid', { name: 'Sequences' }).textContent).not.toContain('Outbound 1')
+    })
   })
 })
 

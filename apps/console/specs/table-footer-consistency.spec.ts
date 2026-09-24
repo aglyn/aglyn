@@ -1981,3 +1981,41 @@ describe('CRM lists filter through the grid, by the shared path', () => {
     expect(off).toEqual([])
   })
 })
+
+/**
+ * Every other list converted to the same path (AGL-3317), area by area.
+ *
+ * A converted list holds its clauses in `useListGridFilter`, hands the grid
+ * the model with `filterMode="server"` so the grid never narrows a page on
+ * its own, and answers the clauses itself — over every row it read
+ * (`filterListRows`), or on its query where one is served. The file list
+ * grows with each area; one that falls off the path, or turns the panel
+ * off, is red here.
+ */
+const GRID_FILTER_LISTS: readonly string[] = [
+  // Sequences
+  'libs/plugins/outreach/src/lib/components/sequences-section.tsx',
+  'libs/plugins/outreach/src/lib/components/enrollments-table.tsx',
+  'libs/plugins/outreach/src/lib/components/do-not-contact-domains.tsx',
+]
+
+describe('converted lists filter through the grid, by the shared path (AGL-3317)', () => {
+  it('THE CONTROL: every named list exists and renders a ListTable', () => {
+    const missing = GRID_FILTER_LISTS.filter((path) => !read(path).includes('<ListTable'))
+    expect(missing).toEqual([])
+  })
+
+  it('each one binds the panel with useListGridFilter and never turns it off', () => {
+    const off = GRID_FILTER_LISTS.filter((path) => {
+      const source = read(path)
+      return (
+        source.includes('disableColumnFilter') ||
+        source.includes('quickFilter={false}') ||
+        !source.includes('useListGridFilter(') ||
+        !source.includes('filterMode="server"') ||
+        !source.includes('onFilterModelChange={gridFilter.onFilterModelChange}')
+      )
+    })
+    expect(off).toEqual([])
+  })
+})
