@@ -39,7 +39,10 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { ENTRY_LIST_SORT_FIELDS } from '../components/content/entry-list-query'
+import {
+  ENTRY_LIST_SORT_FIELDS,
+  entryListStoredSort,
+} from '../components/content/entry-list-query'
 import { ENTRY_LIST_FILTER_FIELDS } from '../utils/list-filters'
 
 interface IndexField {
@@ -69,8 +72,17 @@ const ENTRY_SIGNATURES = new Set(
   ).map((index) => signature(index.fields)),
 )
 
+/*
+ * The STORED field each column walks, not the column's name: the Published
+ * column is `publishedAt` to the grid and `publishSortAt` to the query
+ * (AGL-3323), and an index on the name would be one no read ever uses.
+ */
+const STORED_SORT_FIELDS = ENTRY_LIST_SORT_FIELDS.map(
+  (field) => entryListStoredSort({ field, direction: 'asc' }).field,
+)
+
 const REQUIRED = ENTRY_LIST_FILTER_FIELDS.flatMap((filter) =>
-  ENTRY_LIST_SORT_FIELDS.filter((sort) => sort !== filter.path).flatMap(
+  STORED_SORT_FIELDS.filter((sort) => sort !== filter.path).flatMap(
     (sort) =>
       (['ASCENDING', 'DESCENDING'] as const).map((order) => ({
         what: `${filter.column} filter, sorted by ${sort} ${order.toLowerCase()}`,
@@ -88,6 +100,11 @@ describe('content entries composite indexes (AGL-2853)', () => {
     expect(ENTRY_LIST_FILTER_FIELDS.length).toBeGreaterThan(0)
     expect(ENTRY_LIST_SORT_FIELDS.length).toBeGreaterThan(0)
     expect(REQUIRED.length).toBe(14)
+  })
+
+  it('walks the Published column on its stored sort key (AGL-3323)', () => {
+    expect(STORED_SORT_FIELDS).toContain('publishSortAt')
+    expect(STORED_SORT_FIELDS).not.toContain('publishedAt')
   })
 
   it.each(REQUIRED)('covers $what', ({ index }) => {

@@ -422,7 +422,13 @@ describe('the entry editor carries the publication controls (AGL-2498)', () => {
     expect(payload.status).toBe('scheduled')
     // `publishAt` — the DEFERRED field. Reaching this control from a second
     // place must not change which field it writes.
-    expect(Object.keys(payload).sort()).toEqual(['publishAt', 'status'])
+    expect(Object.keys(payload).sort()).toEqual([
+      'publishAt',
+      'publishSortAt',
+      'status',
+    ])
+    // The console's Published sort key follows the schedule (AGL-3323).
+    expect(payload.publishSortAt).toBe(payload.publishAt)
     expect(payload.publishAt.seconds).toBe(Math.floor(future.getTime() / 1000))
   })
 
@@ -462,7 +468,10 @@ describe('the entry editor carries the publication controls (AGL-2498)', () => {
 
     await waitFor(() => expect(mockUpdateDoc).toHaveBeenCalledTimes(1))
     const [, payload] = mockUpdateDoc.mock.calls[0]
-    expect(Object.keys(payload)).toEqual(['publishedAt'])
+    expect(Object.keys(payload)).toEqual(['publishedAt', 'publishSortAt'])
+    // …and the console's Published sort key, which a published entry takes
+    // from `publishedAt` (AGL-3323).
+    expect(payload.publishSortAt).toBe(payload.publishedAt)
     expect(payload.publishedAt.seconds).toBe(
       Math.floor(backdated.getTime() / 1000),
     )

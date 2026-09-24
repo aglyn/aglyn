@@ -51,6 +51,10 @@ import {
   SITE_EXPORT_FORMAT,
   SITE_EXPORT_VERSION,
 } from '../../_lib/site-export'
+import {
+  ENTRY_PUBLISH_SORT_FIELD,
+  entryPublishSortStamp,
+} from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { decodeBundleTimestamps } from '../../_lib/bundle-timestamps'
 import {
@@ -1024,9 +1028,17 @@ async function handler(request: Request): Promise<Response> {
         const entries: any[] = Array.isArray(item.entries) ? item.entries : []
         for (const entry of entries.slice(0, 200)) {
           if (!entry?.$id) continue
+          const cleanedEntry = cleanDoc('entries', entry)
+          // The console's Published sort key is DERIVED, never carried in a
+          // bundle (AGL-3323): it is recomputed from the restored `status`,
+          // `publishedAt` and `publishAt`, and left off an undated draft so
+          // it lists after every dated entry.
+          const publishSortAt = entryPublishSortStamp(cleanedEntry as any)
           await write(
             docRef.collection('entries').doc(String(entry.$id)),
-            cleanDoc('entries', entry),
+            publishSortAt
+              ? { ...cleanedEntry, [ENTRY_PUBLISH_SORT_FIELD]: publishSortAt }
+              : cleanedEntry,
           )
         }
       }

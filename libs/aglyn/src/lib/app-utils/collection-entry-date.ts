@@ -306,3 +306,50 @@ export function collectionEntryPublishedAtIso(
   const date = new Date(seconds * 1000)
   return Number.isNaN(date.getTime()) ? '' : date.toISOString()
 }
+
+/**
+ * The stored field the console's entries table sorts its Published column by
+ * (AGL-3323): the instant {@link entryPublishSortStamp} names, kept on the
+ * entry beside the two fields it is derived from.
+ *
+ * It exists because Firestore cannot sort on a fallback. `orderBy` reads one
+ * field, and an entry that lacks it is not sorted last, it is left out of the
+ * ordered read entirely. A scheduled entry has no `publishedAt` until it goes
+ * live, so a table ordered on `publishedAt` could only append it after every
+ * published entry — the last page, in both directions — while the cell above
+ * it showed its `publishAt`. One stored field holding the date the cell shows
+ * is the only shape an index can walk.
+ *
+ * It is a CONSOLE key. The public site's listings go on sorting and filtering
+ * `publishedAt`, which only a live entry carries; this field must never become
+ * what decides what a visitor sees, because a scheduled entry carries it too.
+ */
+export const ENTRY_PUBLISH_SORT_FIELD = 'publishSortAt'
+
+/**
+ * The one instant an entry is listed under in the console (AGL-3206,
+ * AGL-3323): its scheduled `publishAt` while it waits to go out, its
+ * `publishedAt` otherwise, and `null` when it has neither.
+ *
+ * Scheduled wins over `publishedAt` because a SCHEDULED entry is not on the
+ * site: scheduling a published entry takes it off the live set until the date
+ * arrives, and it keeps the old `publishedAt` only until the runtime flips it
+ * back and overwrites that with `publishAt`. The date it will go out on is
+ * the true one for it.
+ *
+ * The `status` guard is load-bearing in the other direction too. A draft that
+ * still holds a `publishAt` from a cancelled schedule is undated here rather
+ * than sorting among the dated rows on a date it never displays.
+ *
+ * Every writer of `status`, `publishedAt` or `publishAt` stores this value
+ * under {@link ENTRY_PUBLISH_SORT_FIELD} — and removes the field on `null` —
+ * so the stored key and the rendered cell answer from the same rule.
+ */
+export function entryPublishSortStamp<T>(entry: {
+  status?: unknown
+  publishedAt?: T | null
+  publishAt?: T | null
+} | null | undefined): T | null {
+  if (entry?.status === 'scheduled' && entry.publishAt) return entry.publishAt
+  return entry?.publishedAt ?? null
+}

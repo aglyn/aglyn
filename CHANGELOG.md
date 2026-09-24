@@ -9,6 +9,14 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.195 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.194...v1.0.0-beta.195)
+
+### Fixed
+
+- **content:** scheduled entries sort by their due date in the entries table ([AGL-3323](https://linear.app/aglyn/issue/AGL-3323))
+
 ## v1.0.0-beta.194 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.193...v1.0.0-beta.194)

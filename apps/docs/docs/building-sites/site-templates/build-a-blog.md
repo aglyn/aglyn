@@ -80,7 +80,9 @@ through or paste the link to a colleague and they land on the same one. **Back t
 entries** — or your browser's Back button — returns to the list; if the entry has edits
 you haven't saved, you're asked before they're dropped.
 
-The table opens with the most recently **Published** entries first. Click the **Title**,
+The table opens with the most recently **Published** entries first. A scheduled entry sorts
+by the date it's due to go out, so the next posts in your queue open the list, and when you
+reverse the column they come last among the dated entries. Click the **Title**,
 **Status**, **Updated** or **Published** header to sort by that column, and again to
 reverse it. Entries with nothing in the sorted column, such as a draft with no published
 date, follow the rest in either direction rather than dropping out. **Filters** in the

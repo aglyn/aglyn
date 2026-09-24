@@ -238,8 +238,10 @@ describe('a schedule that HAS come due is published (AGL-123)', () => {
     // The date the article goes on to CLAIM (`Article.datePublished`) is the
     // instant it was scheduled for, not the moment a crawler happened to
     // trigger the render.
+    // The console's sort key takes the same instant (AGL-3323), so the entry
+    // keeps its place in the console's Published order across the flip.
     expect(flips['entry-1']).toEqual([
-      { status: 'published', publishedAt: due },
+      { status: 'published', publishedAt: due, publishSortAt: due },
     ])
   })
 

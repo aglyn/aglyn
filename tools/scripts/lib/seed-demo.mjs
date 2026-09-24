@@ -259,6 +259,8 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
         ...fields,
         status: 'published',
         publishedAt: now,
+        // The console's Published sort key (AGL-3323).
+        publishSortAt: now,
         createdAt: now,
       })
     }

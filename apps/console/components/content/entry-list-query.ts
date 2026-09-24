@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { ENTRY_PUBLISH_SORT_FIELD } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterConstraints } from '@aglyn/tenant-feature-instance/hooks/list-filter-constraints'
 import type { CollectionSort } from '@aglyn/tenant-feature-instance/hooks/sorted-collection-window'
@@ -32,9 +33,9 @@ import { ENTRY_LIST_FILTER_FIELDS } from '../../utils/list-filters'
  *
  * The sorts are the table's four data columns. Each is walked by
  * `useSortedPagedCollection`, which is what lets a sort name a field some
- * entries do not carry: a draft has no `publishedAt` (unpublishing deletes
- * it), an imported entry has no `createdAt`, and `/api/hosts/resources`
- * validates no field for presence, so an entry created through it can lack a
+ * entries do not carry: a draft has no `publishSortAt` (see
+ * `entryListStoredSort`), an imported entry has no `createdAt`, and
+ * `/api/hosts/resources` validates no field for presence, so an entry created through it can lack a
  * `title`. Those entries follow every entry that has the value, in both
  * directions, rather than dropping out of the list.
  */
@@ -87,6 +88,27 @@ export function entryListSortFromModel(
   return { field: first.field, direction: first.sort }
 }
 
+/**
+ * The stored field a table sort walks (AGL-3323).
+ *
+ * The Published column is named `publishedAt` in the grid's sort model, but
+ * the walk orders on `publishSortAt`: the date the cell shows, stored.
+ * Ordering on `publishedAt` itself cannot place a scheduled entry, which has
+ * no `publishedAt` until it goes live — it fell into the unkeyed segment and
+ * sat on the last page in both directions. On `publishSortAt` it is keyed by
+ * its `publishAt`, so newest-first opens on the furthest-future schedule and
+ * oldest-first ends on it.
+ *
+ * A draft carries neither date and so no `publishSortAt`: it follows every
+ * dated entry in BOTH directions, which is where the grid itself puts an
+ * empty value and where an author looks for what has not gone out.
+ */
+export function entryListStoredSort(sort: CollectionSort): CollectionSort {
+  return sort.field === 'publishedAt'
+    ? { field: ENTRY_PUBLISH_SORT_FIELD, direction: sort.direction }
+    : sort
+}
+
 /** A filter's identity as a string, for a dependency list. */
 export const entryListFilterKey = (filter: ListFilterRequest | null): string =>
   filter ? `${filter.field}\n${filter.op}\n${filter.value}` : ''
@@ -133,7 +155,7 @@ export function entryListBase(
     'entries',
   )
   const constraints = listFilterConstraints(ENTRY_LIST_FILTER_FIELDS, filter, {
-    fixedOrderBy: sort.field,
+    fixedOrderBy: entryListStoredSort(sort).field,
   })
   return constraints ? query(entries, ...constraints) : entries
 }

@@ -1096,13 +1096,16 @@ await put(emailScreen.collection('versions').doc('seed-email-v1'), {
 // Content collections + entries.
 const blog = hostRef.collection('collections').doc('seed-blog')
 await put(blog, { displayName: 'Blog', slug: 'blog', createdAt: now })
+const sourdoughPublishedAt = Timestamp.now()
 await put(blog.collection('entries').doc('seed-sourdough'), {
   title: 'Why our sourdough takes three days',
   slug: 'three-day-sourdough',
   excerpt: 'Slow fermentation is the whole secret.',
   status: 'published',
   body: '## The starter\n\nOur starter is nine years old.',
-  publishedAt: Timestamp.now(),
+  publishedAt: sourdoughPublishedAt,
+  // The console's Published sort key (AGL-3323).
+  publishSortAt: sourdoughPublishedAt,
   createdAt: now,
 })
 

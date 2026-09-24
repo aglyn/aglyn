@@ -494,6 +494,10 @@ async function main() {
       body: entry.body,
       status: 'published',
       publishedAt,
+      // The console's Published sort key (AGL-3323): a published entry lists
+      // under its `publishedAt`, and an entry without it drops to the end of
+      // the console's table.
+      publishSortAt: publishedAt,
       ...AUTHOR,
       seoTitle: '',
       seoDescription: '',

@@ -42,7 +42,15 @@
  * leaving a green suite over a column that is broken again.
  */
 
-import { entryPublishStamp } from '../components/content/content-scope.context'
+import { deleteField } from 'firebase/firestore'
+import {
+  entryPublishSortPatch,
+  entryPublishStamp,
+} from '../components/content/content-scope.context'
+import {
+  ENTRY_LIST_DEFAULT_SORT,
+  entryListStoredSort,
+} from '../components/content/entry-list-query'
 
 /** A Firestore `Timestamp` as far as anything here is concerned. */
 const stamp = (iso: string) => ({ toDate: () => new Date(iso) })
@@ -168,5 +176,70 @@ describe('descending by Published', () => {
       raw.indexOf('Collect survey responses in 10 minutes'),
     )
     expect(raw).not.toEqual(sortsBy(ROWS, sharedKey))
+  })
+})
+
+/*
+  AGL-3323: the same rule, stored. The grid's comparator above only ever saw
+  the rows of one page; the table sorts on the SERVER, which cannot fall back
+  from one field to another, so every writer stores the stamp as
+  `publishSortAt` and the walk orders on that. The ordering across pages is
+  proved against a real Firestore in
+  `content-entries-total-order.emulator.spec.ts`; this is the rule the writers
+  and the query share.
+*/
+describe('the stored sort key (AGL-3323)', () => {
+  it('is what the Published column walks, in both directions', () => {
+    expect(entryListStoredSort(ENTRY_LIST_DEFAULT_SORT)).toEqual({
+      field: 'publishSortAt',
+      direction: 'desc',
+    })
+    expect(
+      entryListStoredSort({ field: 'publishedAt', direction: 'asc' }),
+    ).toEqual({ field: 'publishSortAt', direction: 'asc' })
+  })
+
+  it('leaves every other column on its own field', () => {
+    for (const field of ['title', 'status', 'updatedAt']) {
+      expect(entryListStoredSort({ field, direction: 'asc' })).toEqual({
+        field,
+        direction: 'asc',
+      })
+    }
+  })
+
+  it('stores the schedule while an entry waits', () => {
+    expect(entryPublishSortPatch(SCHEDULED_SEP_30)).toEqual({
+      publishSortAt: SCHEDULED_SEP_30.publishAt,
+    })
+  })
+
+  it('stores the publish date once it has gone out', () => {
+    expect(entryPublishSortPatch(PUBLISHED_AUG)).toEqual({
+      publishSortAt: PUBLISHED_AUG.publishedAt,
+    })
+  })
+
+  it('removes the key from a draft, so it lists after every dated entry', () => {
+    expect(entryPublishSortPatch(DRAFT)).toEqual({
+      publishSortAt: deleteField(),
+    })
+    expect(entryPublishSortPatch(DRAFT_WITH_STALE_PUBLISH_AT)).toEqual({
+      publishSortAt: deleteField(),
+    })
+  })
+
+  it('lists a rescheduled published entry under its new date', () => {
+    // Scheduling a live entry takes it off the site until the date arrives,
+    // and it keeps its old `publishedAt` only until the flip overwrites it.
+    const rescheduled = {
+      status: 'scheduled',
+      publishedAt: stamp('2026-08-08T12:00:00Z'),
+      publishAt: stamp('2026-10-01T12:00:00Z'),
+    }
+    expect(entryPublishStamp(rescheduled)).toBe(rescheduled.publishAt)
+    expect(entryPublishSortPatch(rescheduled)).toEqual({
+      publishSortAt: rescheduled.publishAt,
+    })
   })
 })

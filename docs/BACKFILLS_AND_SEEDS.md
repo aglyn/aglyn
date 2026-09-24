@@ -114,6 +114,12 @@ automation references is the expected state for all of them.
 | `backfill-scheme-dark.mjs` | Outstanding | Generates the dark-scheme `sx` slices. Slices are recomputed from the light base every run, so it self-corrects. ⚠️ `--open-gate` is the flag to be careful with: it is host-wide and publishes dark mode across every page at once. Same coverage set as the icon backfill. |
 | `backfill-theme-history.mjs` | **Blocked** | Moves the theme undo buffer into a subcollection. Two preconditions, both read out of the tree: the rules must deny clients the new collection (satisfied), and the revert action must read the new location (**not** satisfied — it still reads the host field, and the marker this leaves has no reader). It refuses `--apply` until both hold. Do not work around the refusal: the buffer it relocates is the theme a site was wearing before the swap. |
 
+## Content
+
+| Script | State | What to know |
+| --- | --- | --- |
+| `backfill-entry-publish-sort.mjs` | ⚑ Outstanding — run after the promotion that ships AGL-3323 | Stamps every content entry with `publishSortAt`, the key the console's entries table sorts its **Published** column by: `publishAt` while scheduled, `publishedAt` otherwise, no key on an undated draft. The console's publish, unpublish, schedule and re-date, the tenant's due-schedule flip, the import route and the changelog scripts write it from AGL-3323 on. Idempotent; `--host=<id>` narrows, `--apply` writes. |
+
 ## Plugins and marketplace
 
 | Script | State | What to know |

@@ -668,7 +668,13 @@ describe('the entry detail is its OWN route (AGL-2498)', () => {
     const [, payload] = mockUpdateDoc.mock.calls[0]
     // `publishAt`, the DEFERRED field — one letter from `publishedAt`, which
     // is when the entry SAYS it went out.
-    expect(Object.keys(payload).sort()).toEqual(['publishAt', 'status'])
+    expect(Object.keys(payload).sort()).toEqual([
+      'publishAt',
+      'publishSortAt',
+      'status',
+    ])
+    // The console's Published sort key follows the schedule (AGL-3323).
+    expect(payload.publishSortAt).toBe(payload.publishAt)
     expect(payload.status).toBe('scheduled')
   })
 
