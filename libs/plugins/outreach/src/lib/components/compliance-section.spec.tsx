@@ -15,7 +15,13 @@
  * limitations under the License.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type { OutreachComplianceSettingsDocument } from '../model/outreach.types'
 import {
@@ -54,10 +60,17 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({
     children,
     header,
+    HeaderProps,
   }: {
     children: ReactNode
     header: ReactNode
-  }) => <section aria-label={String(header)}>{children}</section>,
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <section aria-label={String(header)}>
+      {HeaderProps?.action}
+      {children}
+    </section>
+  ),
 }))
 jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => undefined }))
 // The domain list is its own card with its own spec (AGL-3244).
@@ -87,6 +100,12 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockLoad = ready()
 })
+
+/** A button in one card's header: each settings card saves its own fields. */
+const cardButton = (card: string, name: string) =>
+  within(screen.getByRole('region', { name: card })).getByRole('button', {
+    name,
+  }) as HTMLButtonElement
 
 describe('Sequences → Compliance: what it shows (AGL-2980)', () => {
   it('shows progress while the settings load', () => {
@@ -163,14 +182,14 @@ describe('Sequences → Compliance: saving (AGL-2980)', () => {
       settings: { ...stored, legalName: 'Example Co Inc' },
     })
     render(<OutreachComplianceSection orgId="org-1" />)
-    const save = screen.getByRole('button', {
-      name: 'Save',
-    }) as HTMLButtonElement
+    const save = cardButton('Sender identity', 'Save')
     expect(save.disabled).toBe(true)
     fireEvent.change(screen.getByLabelText('Legal name'), {
       target: { value: '  Example Co   Inc ' },
     })
     expect(save.disabled).toBe(false)
+    // The other card has nothing to save.
+    expect(cardButton('Allowed countries', 'Save').disabled).toBe(true)
     fireEvent.click(save)
     await waitFor(() =>
       expect(mockApi.saveSettings).toHaveBeenCalledWith({
@@ -182,7 +201,7 @@ describe('Sequences → Compliance: saving (AGL-2980)', () => {
     )
     await waitFor(() =>
       expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
-        'Compliance settings saved.',
+        'Sender identity saved.',
         { variant: 'success' },
       ),
     )
@@ -207,7 +226,7 @@ describe('Sequences → Compliance: saving (AGL-2980)', () => {
     fireEvent.change(screen.getByLabelText('Legal name'), {
       target: { value: 'Example Holdings LLC' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(cardButton('Sender identity', 'Save'))
     expect(
       await screen.findAllByText('Keep the legal name under 120 characters.'),
     ).not.toHaveLength(0)
@@ -229,9 +248,58 @@ describe('Sequences → Compliance: saving (AGL-2980)', () => {
     expect(
       screen.getByText('Choose at least one country a sequence may send to.'),
     ).toBeTruthy()
+    expect(cardButton('Allowed countries', 'Save').disabled).toBe(true)
+  })
+
+  it('saves one card without committing, or wiping, the other card’s edits (AGL-3333)', async () => {
+    mockLoad = ready({ ...stored, allowedCountries: ['US', 'CA'] })
+    mockApi.saveSettings.mockResolvedValue({
+      ok: true,
+      changed: true,
+      settings: { ...stored, allowedCountries: ['US'] },
+    })
+    const { rerender } = render(<OutreachComplianceSection orgId="org-1" />)
+    fireEvent.change(screen.getByLabelText('Legal name'), {
+      target: { value: 'Unsaved Holdings LLC' },
+    })
+    const input = screen.getByLabelText('Countries')
+    fireEvent.focus(input)
+    fireEvent.keyDown(input, { key: 'Backspace' })
+    expect(cardButton('Sender identity', 'Save').disabled).toBe(false)
+    fireEvent.click(cardButton('Allowed countries', 'Save'))
+    await waitFor(() =>
+      expect(mockApi.saveSettings).toHaveBeenCalledWith({
+        legalName: 'Example Co LLC',
+        brandName: 'Example Co',
+        postalAddress: '100 Example St\nSpringfield, IL 62701',
+        allowedCountries: ['US'],
+      }),
+    )
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        'Allowed countries saved.',
+        { variant: 'success' },
+      ),
+    )
+    // The reload brings the stored countries back; the typed name survives it.
+    mockLoad = ready({ ...stored, allowedCountries: ['US'], updatedAtMs: 2 })
+    rerender(<OutreachComplianceSection orgId="org-1" />)
     expect(
-      (screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true)
+      (screen.getByLabelText('Legal name') as HTMLInputElement).value,
+    ).toBe('Unsaved Holdings LLC')
+    expect(cardButton('Sender identity', 'Save').disabled).toBe(false)
+    expect(cardButton('Allowed countries', 'Save').disabled).toBe(true)
+  })
+
+  it('discards one card’s edits and keeps the other’s (AGL-3333)', () => {
+    render(<OutreachComplianceSection orgId="org-1" />)
+    fireEvent.change(screen.getByLabelText('Legal name'), {
+      target: { value: 'Unsaved Holdings LLC' },
+    })
+    fireEvent.click(cardButton('Sender identity', 'Discard changes'))
+    expect(
+      (screen.getByLabelText('Legal name') as HTMLInputElement).value,
+    ).toBe('Example Co LLC')
+    expect(cardButton('Sender identity', 'Save').disabled).toBe(true)
   })
 })
