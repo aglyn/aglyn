@@ -170,11 +170,27 @@ describe('`consentGroups` is written by the executor’s declare step alone', ()
   const WRITE =
     /\[CONSENT_GROUPS_FIELD\]\s*:|(?:^|[\s{,(])['"]?consentGroups['"]?\s*:(?!:)|['"`]consentGroups\./
 
+  /**
+   * Files that spell the field as an object key without writing it, each
+   * with the reason. Kept honest below: an entry whose file no longer spells
+   * it fails, so the list only ever names a real exception.
+   */
+  const NOT_WRITERS: Record<string, string> = {
+    'libs/plugins/email/src/lib/components/consent-group-dialog.tsx':
+      'Lists the groups of the declaration a 409 answered with by handing `listConsentGroups` the org with that declaration in place. A browser cannot write the field: the rules deny it.',
+  }
+  const spells = (path: string) => codeOf(read(path)).split('\n').some((line) => WRITE.test(line))
+
   it('has no other writer anywhere in the tracked source', () => {
     const writers = trackedSource('CONSENT_GROUPS_FIELD|consentGroups')
       .filter((path) => !path.endsWith('.types.ts'))
-      .filter((path) => codeOf(read(path)).split('\n').some((line) => WRITE.test(line)))
+      .filter((path) => !(path in NOT_WRITERS))
+      .filter(spells)
     expect(writers).toEqual([EXECUTOR])
+  })
+
+  it('exempts only files that still spell the field', () => {
+    expect(Object.keys(NOT_WRITERS).filter((path) => !spells(path))).toEqual([])
   })
 
   it('writes it inside the declare step, once', () => {

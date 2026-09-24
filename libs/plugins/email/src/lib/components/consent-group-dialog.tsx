@@ -166,7 +166,10 @@ export function ConsentGroupDialog(props: ConsentGroupDialogProps) {
    */
   const load = useCallback(
     (raw: Record<string, unknown> | null, keepDraft = false) => {
-      const groups = listConsentGroups(raw ? { consentGroups: raw } : {})
+      // The org as it stands with `raw` as its declaration, so the listing
+      // refuses exactly what the route's reader refuses — a group id that
+      // is also one of the org's sites among them.
+      const groups = listConsentGroups({ ...(orgRef.current ?? {}), consentGroups: raw })
       setSnapshot({ expected: raw, groups })
       setPreview(null)
       setIssues(NO_ISSUES)

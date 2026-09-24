@@ -96,7 +96,7 @@ const text = (result: ConsentGroupReview) =>
 
 const CRM = (lines: Array<{ id: string; count: number | null }>) => ({
   pluginId: 'crm',
-  lines: lines.map((line) => ({ ...line, text: `${line.id} said`, severity: 'info' })),
+  lines: lines.map((line) => ({ ...line, text: `${line.id} said`, severity: 'info' as const })),
 })
 
 describe('names', () => {
@@ -434,11 +434,11 @@ describe('what the plugins reported', () => {
     const said = text(
       review(
         { mode: 'dissolve', groupId: 'g_acme', name: 'Acme' },
-        preview({ discarded: [{ id: 'old', name: 'Old brand' }, 'stray'] }),
+        preview({ discarded: ['cg_old', 'stray'] }),
       ),
     )
     expect(said.find((line) => line.startsWith('2 saved consent groups'))).toMatch(
-      /This change removes them: Old brand and stray\.$/,
+      /This change removes them: cg_old and stray\.$/,
     )
   })
 })
