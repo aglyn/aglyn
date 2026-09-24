@@ -601,29 +601,6 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   {'Export CSV'}
                 </Button>
               </CrmListToolbar>
-              {paged.status === 'success' && paged.rows.length === 0 && paged.page === 0 ? (
-                <EmptyStateComponent
-                  label={statusFilter === 'all' ? 'No deals yet' : `No ${statusFilter} deals`}
-                  description={
-                    statusFilter === 'all'
-                      ? 'A deal is a sale in progress, moved across the pipeline as it advances.'
-                      : undefined
-                  }
-                  action={
-                    statusFilter === 'all' ? (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
-                        disabled={!pipeline || !scope.orgId}
-                        onClick={() => setCreating(true)}
-                      >
-                        {'New deal'}
-                      </Button>
-                    ) : undefined
-                  }
-                />
-              ) : (
                 <>
                   <DealsBulkBar
                     hostId={hostId}
@@ -651,6 +628,27 @@ export function DealsSection(props: ConsolePluginPageProps) {
                       filterModel={gridFilter.filterModel}
                       onFilterModelChange={gridFilter.onFilterModelChange}
                       quickFilter={false}
+                      // An empty table is said inside the grid, so its toolbar
+                      // stays to change the status that emptied it.
+                      noRowsLabel={statusFilter === 'all' ? 'No deals yet' : `No ${statusFilter} deals`}
+                      noRowsDescription={
+                        statusFilter === 'all'
+                          ? 'A deal is a sale in progress, moved across the pipeline as it advances.'
+                          : undefined
+                      }
+                      noRowsAction={
+                        statusFilter === 'all' ? (
+                          <Button
+                            size="small"
+                            variant="contained"
+                            startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+                            disabled={!pipeline || !scope.orgId}
+                            onClick={() => setCreating(true)}
+                          >
+                            {'New deal'}
+                          </Button>
+                        ) : undefined
+                      }
                       // Columns and sort are the view's, controlled (AGL-2617).
                       columnVisibilityModel={grid.columnVisibilityModel}
                       onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
@@ -668,7 +666,6 @@ export function DealsSection(props: ConsolePluginPageProps) {
                     onPageSizeChange={paged.setPageSize}
                   />
                 </>
-              )}
             </Stack>
           )}
         </Stack>

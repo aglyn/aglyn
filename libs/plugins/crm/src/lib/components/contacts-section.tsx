@@ -1043,13 +1043,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                 'cannot be narrowed to them — an organization administrator ' +
                 'can see it.'}
             </Alert>
-          ) : contacts.length === 0 && filter ? (
-            <Typography variant="body2" color="text.secondary">
-              {contactsStatus === 'loading'
-                ? 'Loading…'
-                : 'No contacts match this filter.'}
-            </Typography>
-          ) : contacts.length === 0 ? (
+          ) : contacts.length === 0 && !views.state.filters.length ? (
             <EmptyStateComponent
               label={contactsStatus === 'loading' ? 'Loading contacts…' : 'No contacts yet'}
               description={
@@ -1126,6 +1120,11 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   onFilterModelChange={gridFilter.onFilterModelChange}
                   quickFilter
                   onPreferencePanelOpen={() => setFilterOpened(true)}
+                  // A filter that matched nothing is said inside the grid,
+                  // so the toolbar that set it stays to change it.
+                  noRowsLabel={
+                    contactsStatus === 'loading' ? 'Loading…' : 'No contacts match these filters'
+                  }
                   columnVisibilityModel={grid.columnVisibilityModel}
                   onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
                   sortModel={grid.sortModel}
