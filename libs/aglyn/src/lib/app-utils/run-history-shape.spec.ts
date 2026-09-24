@@ -98,8 +98,13 @@ function activityPayloads(source: string): string[] {
   return payloads
 }
 
-/** A payload is a RUN record when it targets a workflow or an action. */
-const RUN_TARGET = /target:\s*\{[^}]*type:\s*'workflow'/
+/**
+ * A payload is a RUN record when it targets a workflow or an action — or an
+ * org automation's run on the site it ran on (AGL-3302), whose writers pick
+ * the type with a constant beside the literal rather than spelling it alone.
+ */
+const RUN_TARGET =
+  /target:\s*\{[^}]*type:[^,}]*(?:'workflow'|ORG_AUTOMATION_RUN_TARGET)/
 
 const runWriters = sources().flatMap(({ file, source }) =>
   activityPayloads(source)

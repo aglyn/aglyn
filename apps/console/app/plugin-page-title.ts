@@ -104,7 +104,9 @@ export const PLUGIN_SECTIONS: Readonly<Record<string, readonly string[]>> = {
     'experiments',
     'emails',
   ],
-  automation: ['workflows', 'actions', 'webhooks'],
+  // One table for both levels: the site rail's sections, and `automations`,
+  // which only the organization's hub declares (AGL-3302).
+  automation: ['workflows', 'actions', 'webhooks', 'automations'],
   inbox: ['submissions', 'contacts', 'campaigns'],
   crm: ['contacts', 'leads', 'companies', 'deals', 'tasks', 'reports', 'fields', 'settings'],
   // Sequences, an ORGANIZATION-level surface (AGL-2974), titled by the org
@@ -130,6 +132,9 @@ export const PLUGIN_SECTION_TITLES: Readonly<Record<string, string>> = {
   // too: the shell prints section and surface together. The id stays
   // `sequences`, which is the URL segment.
   'outreach/sequences': 'All sequences',
+  // The org hub's own section: "Automations" under a surface already called
+  // Automation would say the same word twice (AGL-3302).
+  'automation/automations': 'Org automations',
 }
 
 /**

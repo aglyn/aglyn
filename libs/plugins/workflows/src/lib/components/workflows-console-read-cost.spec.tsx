@@ -48,7 +48,10 @@ import {
   waitFor,
 } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { WORKFLOWS_CONSOLE_SECTIONS } from './workflows-console-sections'
+import {
+  WORKFLOWS_CONSOLE_SECTIONS,
+  WORKFLOWS_ORG_CONSOLE_SECTIONS,
+} from './workflows-console-sections'
 
 /**
  * Every query built during a render, as `path` + the `limit()` on it.
@@ -278,6 +281,22 @@ function listenedCollections(): Set<string> {
 }
 
 /**
+ * Waits for the Actions section's org automation panel to open its listen.
+ *
+ * The panel reads the organization's collection, and the organization is
+ * resolved from the site's `hostIndex` entry after the first render — so its
+ * listen lands a tick after the section's own. A reading taken before it
+ * would miss a read the page does pay for.
+ */
+async function orgPanelListening(): Promise<void> {
+  await waitFor(() =>
+    expect(mockListens.map((listen) => listen.path)).toContain(
+      'orgs/org1/automations',
+    ),
+  )
+}
+
+/**
  * The section list the SHELL would hand the page, resolved from the registry's
  * own declaration rather than retyped here — a second copy would let this spec
  * go on passing after a section was renamed out from under it.
@@ -368,13 +387,22 @@ describe('workflows console read cost (AGL-2501)', () => {
    */
   it('the actions section reads its own rows and NOTHING for the pickers', async () => {
     await renderConsole('actions')
+    await orgPanelListening()
     summarize('actions section', mockListens)
     // The run counter is one document; the actions ceiling is a hundred plus
-    // the probe row that makes "there are more" a fact.
+    // the probe row that makes "there are more" a fact. The organization's
+    // automations placed on this site (AGL-3302) are one filtered read,
+    // ceilinged at the organization's cap plus the probe — billed per
+    // automation actually placed here, which is the handful an organization
+    // shares, and never a picker.
     expect(
       mockListens.map((listen) => `${listen.path}#${listen.limit}`).sort(),
-    ).toEqual(['hosts/site1/actions#101', 'hosts/site1/counters/actionRuns#1'])
-    expect(documentCeiling(mockListens)).toBe(102)
+    ).toEqual([
+      'hosts/site1/actions#101',
+      'hosts/site1/counters/actionRuns#1',
+      'orgs/org1/automations#101',
+    ])
+    expect(documentCeiling(mockListens)).toBe(203)
   })
 
   it('the webhooks section does not buy a workflow picker to sit closed', async () => {
@@ -409,6 +437,7 @@ describe('workflows console read cost (AGL-2501)', () => {
    */
   it('opening the action editor is what buys the six option lists', async () => {
     await renderConsole('actions')
+    await orgPanelListening()
     const before = mockListens.map((listen) => `${listen.path}#${listen.limit}`)
 
     await act(async () => {
@@ -494,5 +523,135 @@ describe('workflows console read cost (AGL-2501)', () => {
       'orgs/org1/emailCampaigns#101',
       'orgs/org1/lists#101',
     ])
+  })
+})
+
+/*==========================================
+ * THE ORGANIZATION'S HUB, `/[orgSlug]/automation` (AGL-3302).
+ *
+ * Mounted with no site and an org mount. The org automations section is one
+ * ceilinged read of the organization's own collection and nothing under
+ * `hosts/`; the three cross-site lists read each site's collection, one
+ * ceilinged window per OPEN site, so the hub costs a bounded number of sites
+ * however many the organization has.
+ *=========================================*/
+describe('the org Automation hub’s read cost', () => {
+  const ORG_BASE = '/acme/automation'
+
+  afterEach(() => {
+    mockSection = ''
+    mockListens.length = 0
+  })
+
+  const hosts = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `site${index + 1}`,
+      name: `Site ${index + 1}`,
+      subdomain: `site${index + 1}`,
+    }))
+
+  async function renderOrgConsole(
+    section: string,
+    options: { sites?: number; editHosts?: boolean } = {},
+  ) {
+    mockSection = section
+    mockListens.length = 0
+    const { WorkflowsConsolePage } = await import('./workflows-console-page')
+    return render(
+      <WorkflowsConsolePage
+        hostId={null}
+        orgMount={{
+          orgId: 'org1',
+          orgSlug: 'acme',
+          hosts: hosts(options.sites ?? 1),
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+        }}
+        entitled
+        org={{ plan: 'business' } as never}
+        permissions={{ editHosts: options.editHosts ?? true } as never}
+        basePath={ORG_BASE}
+        sections={WORKFLOWS_ORG_CONSOLE_SECTIONS.map((item) => ({
+          id: item.id,
+          label: item.label,
+          href: `${ORG_BASE}/${item.id}`,
+          visible: true,
+        }))}
+        section={section || undefined}
+        segments={section ? [section] : []}
+      /> as ReactNode as never,
+    )
+  }
+
+  const pinned = () =>
+    mockListens.map((listen) => `${listen.path}#${listen.limit}`).sort()
+
+  it('the sectionless URL reads nothing', async () => {
+    await renderOrgConsole('')
+    expect(mockListens).toHaveLength(0)
+  })
+
+  it('lists the org automations from one read of the org, and nothing of any site', async () => {
+    await renderOrgConsole('automations', { sites: 7 })
+    summarize('org automations section', mockListens)
+    expect(pinned()).toEqual(['orgs/org1/automations#101'])
+  })
+
+  it('opening the org editor buys the organization’s three pickers, and no site’s', async () => {
+    await renderOrgConsole('automations', { sites: 3 })
+    const before = pinned()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add org automation' }))
+    })
+    summarize('org automations section, editor open', mockListens)
+
+    expect(pinned().filter((listen) => !before.includes(listen))).toEqual([
+      'orgs/org1/datasets#101',
+      'orgs/org1/emailCampaigns#101',
+      'orgs/org1/lists#101',
+    ])
+    expect(mockListens.some((listen) => listen.path.startsWith('hosts/'))).toBe(
+      false,
+    )
+  })
+
+  it('a viewer is offered no editor to open', async () => {
+    await renderOrgConsole('automations', { editHosts: false })
+    expect(screen.queryByRole('button', { name: 'Add org automation' })).toBeNull()
+  })
+
+  it('lists each OPEN site’s workflows in one small window apiece', async () => {
+    await renderOrgConsole('workflows', { sites: 7 })
+    summarize('org workflows section', mockListens)
+    // The first five sites on arrival, ten rows and the probe apiece.
+    expect(pinned()).toEqual(
+      ['site1', 'site2', 'site3', 'site4', 'site5'].map(
+        (site) => `hosts/${site}/workflows#11`,
+      ),
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Show 2 more sites' }))
+    })
+    expect(mockListens.map((listen) => listen.path)).toEqual(
+      expect.arrayContaining(['hosts/site6/workflows', 'hosts/site7/workflows']),
+    )
+  })
+
+  it('lists actions the same way, and reads no picker', async () => {
+    await renderOrgConsole('actions', { sites: 2 })
+    expect(pinned()).toEqual([
+      'hosts/site1/actions#11',
+      'hosts/site2/actions#11',
+    ])
+  })
+
+  it('reads webhooks for an admin or editor, and nothing for a viewer', async () => {
+    await renderOrgConsole('webhooks', { sites: 1 })
+    expect(pinned()).toEqual(['hosts/site1/webhooks#11'])
+
+    await renderOrgConsole('webhooks', { sites: 1, editHosts: false })
+    expect(mockListens).toHaveLength(0)
   })
 })

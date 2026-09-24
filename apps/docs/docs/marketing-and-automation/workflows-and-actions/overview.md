@@ -65,6 +65,15 @@ server-side and advanced steps are **Pro+** with metered runs.
 **Outbound** and **inbound** webhooks let Aglyn notify other systems and receive events from
 them. Webhooks are a **Business**-tier feature.
 
+## Org automations
+
+An organization with several sites can write an automation **once** and run it on every
+site, or on the sites it chooses, from **Automation → Org automations** at the
+organization level. Each run belongs to the site it runs on — that site's sender, its
+action runs, its run history — and each site can pause it for itself. The organization's
+Automation page also lists every site's own workflows, actions and webhooks side by side.
+See [Org automations](org-automations.md).
+
 ## Run history and the run allowance {#run-history}
 
 The **Workflows** and **Actions** tabs each open with a line reading
@@ -92,5 +101,6 @@ Recipes for common automations (notify on form submit, sync orders, etc.) are on
 
 - [Build a workflow](build-a-workflow.md)
 - [Actions builder](actions-builder.md)
+- [Org automations](org-automations.md)
 - [Bindings, variables & functions](../../building-sites/bindings/overview.md)
 - [Billing & plans](../../workspace-and-billing/billing-and-plans/overview.md)

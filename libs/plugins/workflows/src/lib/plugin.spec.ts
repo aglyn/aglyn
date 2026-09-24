@@ -31,4 +31,24 @@ describe('workflows plugin', () => {
     // Console-only: it contributes no besigner/canvas bundle.
     expect(Aglyn.plugins.getDependency(BUNDLE_ID)).toBeUndefined()
   })
+
+  it('mounts the same page at the organization, org automations first (AGL-3302)', () => {
+    registerWorkflowsConsole()
+    const extension = Aglyn.listConsoleExtensions().find(
+      (entry) => entry.pluginId === BUNDLE_ID,
+    )
+    const [orgItem] = extension?.orgNavItems ?? []
+    expect(orgItem?.href).toBe('/automation')
+    // The site tab's release flag gates both levels.
+    expect(orgItem?.navTabId).toBe(extension?.navItems?.[0]?.navTabId)
+    expect(orgItem?.Component).toBe(extension?.navItems?.[0]?.Component)
+    expect(orgItem?.sections?.map((section) => section.id)).toEqual([
+      'automations',
+      'workflows',
+      'actions',
+      'webhooks',
+    ])
+    // Built from the actions builder's steps, so it takes that plan's flag.
+    expect(orgItem?.sections?.[0]?.featureFlag).toBe('actions')
+  })
 })

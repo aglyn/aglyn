@@ -818,7 +818,8 @@
         "serverDeclarations": "registerWorkflowsServerDeclarations"
       },
       "apiPrefixes": [
-        "hooks"
+        "hooks",
+        "automations"
       ],
       "catalog": {
         "order": 16,
@@ -842,10 +843,23 @@
           "routeSlug": "automation"
         }
       ],
+      "orgCollections": [
+        {
+          "name": "automations",
+          "mediaScan": "none",
+          "mediaScanReason": "An org automation (AGL-3302) — a trigger, its conditions, the sites it is placed on, and a step list drawn from the server steps only: email subject and body as plain text, list, dataset and campaign ids, CRM fields and waits. No step it may hold carries a media reference, the in-page steps that could (custom HTML, popups) are refused by its save route, and it is written only by that route."
+        }
+      ],
+      "activityMutationPaths": [
+        "libs/plugins/workflows/src/lib/server/org-automations-routes.ts"
+      ],
       "contributes": {
         "console": {
           "shell": true,
           "routes": [
+            "/automation"
+          ],
+          "orgRoutes": [
             "/automation"
           ],
           "slots": [

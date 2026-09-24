@@ -1817,6 +1817,32 @@ service cloud.firestore {
         allow write: if false;
       }
 
+      /**
+       * Org automations (AGL-3302): one automation the organization places on
+       * the sites it chooses, each run executing AS the site the event
+       * happened on.
+       *
+       * Read through `canReadScoped()`, the predicate a campaign container
+       * answers to: an org-wide member reads every one, and a site
+       * collaborator reads the ones placed on their sites — `['org']` runs on
+       * every site, theirs included. That is deliberate: an org automation
+       * sends mail AS their site, so the people who run the site can see what
+       * runs under its name, and the site's admins and editors pause it there
+       * from the site hub. Their listener filters on `visibleTo` with their
+       * site's tokens, which is what makes the list provable.
+       *
+       * Server-written only, like the outreach collections: the trigger, the
+       * steps and the placement are checked by `automations/manage` against
+       * the org vocabulary, the org's own sites and the plan, and a per-site
+       * pause changes one site's entry through `automations/pause`. A client
+       * that could write here could place a step on every site of the
+       * organization, or pause somebody else's site.
+       */
+      match /automations/{automationId} {
+        allow read: if isStaff() || canReadScoped();
+        allow write: if false;
+      }
+
       // Email lists (AGL-254): static audiences shared across the org's
       // hosts; the enrollList automation step writes members server-side.
       // Deleting the LIST doc is API-only (AGL-946): its `members` are
