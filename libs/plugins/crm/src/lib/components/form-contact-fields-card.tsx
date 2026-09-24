@@ -172,6 +172,9 @@ export function FormContactFieldsCard(props: FormContactFieldsCardProps) {
 
   const settled = scopeReady && !loading && (!scope || ready)
   const anyMapped = fields.some((decl) => decl.contactFieldKey)
+  // The mapping is offered once there is something to map, and saved from the header.
+  const mapping =
+    settled && Boolean(scope) && fields.length > 0 && (active.length > 0 || anyMapped)
 
   return (
     <CardDisplay
@@ -179,6 +182,26 @@ export function FormContactFieldsCard(props: FormContactFieldsCardProps) {
       help={pluginDocsHelp('contactFields', { anchor: '#save-a-form-field' })}
       contentGutterX
       contentGutterY
+      HeaderProps={{
+        action: mapping ? (
+          <Stack direction="row" spacing={1}>
+            {changed.length ? (
+              <Button size="small" onClick={() => setDraft({})} disabled={saving}>
+                {'Discard'}
+              </Button>
+            ) : null}
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              disabled={!changed.length || saving}
+              onClick={handleSave}
+            >
+              {'Save'}
+            </Button>
+          </Stack>
+        ) : null,
+      }}
     >
       <Stack spacing={2}>
         {!settled ? null : !scope ? (
@@ -236,22 +259,6 @@ export function FormContactFieldsCard(props: FormContactFieldsCardProps) {
               {'The sender’s name and email are read from fields named name and email, ' +
                 'so they never need mapping.'}
             </Typography>
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="contained"
-                color="primary"
-                size="small"
-                disabled={!changed.length || saving}
-                onClick={handleSave}
-              >
-                {'Save'}
-              </Button>
-              {changed.length ? (
-                <Button size="small" onClick={() => setDraft({})} disabled={saving}>
-                  {'Discard'}
-                </Button>
-              ) : null}
-            </Stack>
           </>
         )}
       </Stack>

@@ -186,7 +186,11 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
     { label: 'Address', value: address },
     { label: 'Tags', value: (company.tags ?? []).join(', ') },
     { label: 'Notes', value: company.notes },
-    ...fields.active.map((definition) => {
+  ]
+  // The org's own company fields (AGL-2661), after the built-in ones under
+  // "More fields", as a record's Details keep them; none defined, none drawn.
+  const moreRows: Array<{ label: string; value: ReactNode }> = fields.active.map(
+    (definition) => {
       const text = formatContactCustomValue(definition, company.custom?.[definition.key])
       return {
         label: definition.label || definition.key,
@@ -199,8 +203,32 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
             text
           ),
       }
-    }),
-  ]
+    },
+  )
+  const factRows = (list: Array<{ label: string; value: ReactNode }>) =>
+    list.map((row) => (
+      <Stack
+        key={row.label}
+        direction="row"
+        spacing={2}
+        sx={{ alignItems: 'baseline' }}
+      >
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ minWidth: 96, flexShrink: 0 }}
+        >
+          {row.label}
+        </Typography>
+        <Typography
+          variant="body2"
+          color={row.value ? 'text.primary' : 'text.secondary'}
+          sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
+        >
+          {row.value || '—'}
+        </Typography>
+      </Stack>
+    ))
 
   return (
     <CrmRecordHeader
@@ -257,29 +285,15 @@ export function CompanyPropertiesCard(props: CompanyPropertiesCardProps) {
       }
     >
       <Stack spacing={1}>
-        {rows.map((row) => (
-          <Stack
-            key={row.label}
-            direction="row"
-            spacing={2}
-            sx={{ alignItems: 'baseline' }}
-          >
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ minWidth: 96, flexShrink: 0 }}
-            >
-              {row.label}
+        {factRows(rows)}
+        {moreRows.length ? (
+          <>
+            <Typography variant="subtitle2" sx={{ pt: 1 }}>
+              {'More fields'}
             </Typography>
-            <Typography
-              variant="body2"
-              color={row.value ? 'text.primary' : 'text.secondary'}
-              sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
-            >
-              {row.value || '—'}
-            </Typography>
-          </Stack>
-        ))}
+            {factRows(moreRows)}
+          </>
+        ) : null}
       </Stack>
       {editing ? (
         <CompanyEditDrawer

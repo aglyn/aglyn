@@ -68,7 +68,7 @@ import {
 import { listFilterGridColumns, listRowMatchesSearch } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import { CrmListToolbar } from './crm-list-toolbar'
+import { CrmListActions, CrmListToolbar } from './crm-list-toolbar'
 import {
   TaskDueText,
   TaskKindCell,
@@ -474,15 +474,22 @@ export function TasksSection(props: ConsolePluginPageProps) {
         contentGutterX
         contentGutterY
         HeaderProps={{
+          // The record actions, top right and never clipped (AGL-3311).
           action: (
-            <Button
-              size="small"
-              variant="contained"
-              color="primary"
-              onClick={() => setDrawer({ open: true, task: null })}
-            >
-              {'New task'}
-            </Button>
+            <CrmListActions>
+              <TaskImportButton hostId={hostId} />
+              <Button size="small" onClick={handleExport} disabled={!tasks.length}>
+                {'Export CSV'}
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={() => setDrawer({ open: true, task: null })}
+              >
+                {'New task'}
+              </Button>
+            </CrmListActions>
           ),
         }}
       >
@@ -514,11 +521,6 @@ export function TasksSection(props: ConsolePluginPageProps) {
               <ToggleButton value="list">{'List'}</ToggleButton>
               <ToggleButton value="calendar">{'Calendar'}</ToggleButton>
             </ToggleButtonGroup>
-            <Stack sx={{ flex: 1 }} />
-            <TaskImportButton hostId={hostId} />
-            <Button size="small" onClick={handleExport} disabled={!tasks.length}>
-              {'Export CSV'}
-            </Button>
           </CrmListToolbar>
           {status === 'error' ? (
             <Typography variant="body2" color="error">

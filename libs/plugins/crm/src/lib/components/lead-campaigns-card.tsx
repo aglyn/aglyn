@@ -98,7 +98,7 @@ export interface LeadCampaignsCardProps {
  * `hosts/{hostId}/leads`, as the properties card writes status and notes —
  * guarded by the seed like every draft edited over a cached read, and
  * `campaignMembershipUnchanged` keeps Save quiet while the picker only
- * reorders what is stored.
+ * reorders what is stored. **Save filing** sits in the card header.
  *
  * It is FILING, not audience: the helper says so, in the sentence the
  * contact card uses, because a reader who finds a campaign picker on a
@@ -166,6 +166,25 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
       help={pluginDocsHelp('crmLeads', { anchor: '#a-leads-page' })}
       contentGutterX
       contentGutterY
+      HeaderProps={{
+        action: empty ? null : (
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={saving || unchanged}
+            onClick={() => void save().catch((error: unknown) => {
+              console.error(error)
+              enqueueSnackbar(
+                error instanceof Error && error.message ? error.message : 'An error has occurred',
+                { variant: 'error', allowDuplicate: true },
+              )
+              setSaving(false)
+            })}
+          >
+            {saving ? 'Saving…' : 'Save filing'}
+          </Button>
+        ),
+      }}
     >
       <Stack spacing={2}>
         <CampaignPicker
@@ -181,25 +200,6 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
           empty={empty}
           emptyText="There are no campaigns to file this lead under yet. Create one from Marketing."
         />
-        {empty ? null : (
-          <Stack direction="row">
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={saving || unchanged}
-              onClick={() => void save().catch((error: unknown) => {
-                console.error(error)
-                enqueueSnackbar(
-                  error instanceof Error && error.message ? error.message : 'An error has occurred',
-                  { variant: 'error', allowDuplicate: true },
-                )
-                setSaving(false)
-              })}
-            >
-              {saving ? 'Saving…' : 'Save filing'}
-            </Button>
-          </Stack>
-        )}
       </Stack>
     </CardDisplay>
   )

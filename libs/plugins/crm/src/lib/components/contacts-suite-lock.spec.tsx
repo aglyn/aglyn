@@ -57,10 +57,11 @@ let mockContacts: Array<Record<string, unknown>> = CONTACT_ROWS
 const FIRESTORE = {}
 const DATA_SCOPE = { scope: ['orgs', 'org-1'] as const }
 
+// The feed has a spec of its own; here it is a marker, to say where it is drawn.
 jest.mock('./recent-activity-feed', () => ({
   __esModule: true,
-  default: () => null,
-  RecentActivityFeed: () => null,
+  default: () => <aside data-testid="recent-activity" />,
+  RecentActivityFeed: () => <aside data-testid="recent-activity" />,
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual('@aglyn/tenant-feature-instance')
@@ -104,7 +105,18 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ href, children }: { href: string; children: ReactNode }) => (
     <a href={href}>{children}</a>
   ),
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({
+    children,
+    HeaderProps,
+  }: {
+    children: ReactNode
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <div>
+      <div data-testid="card-header">{HeaderProps?.action}</div>
+      <div data-testid="card-body">{children}</div>
+    </div>
+  ),
   HelpTip: () => null,
   MdiIcon: () => null,
   useConfirmationContext: () => ({
@@ -141,7 +153,9 @@ const mount = (org: Record<string, unknown>) =>
     />,
   )
 
-const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement
+/** One of the list's record actions, which sit in the card header (AGL-3334). */
+const button = (name: string) =>
+  within(screen.getByTestId('card-header')).getByRole('button', { name }) as HTMLButtonElement
 
 beforeEach(() => {
   mockContacts = CONTACT_ROWS
@@ -179,9 +193,11 @@ describe('the Contacts list on Free', () => {
     mount(FREE)
     const creates = screen.getAllByRole('button', { name: 'New contact' })
     const imports = screen.getAllByRole('button', { name: 'Import CSV' })
-    // The toolbar's and the empty state's.
+    // The header's and the empty state's.
     expect(creates).toHaveLength(2)
     expect(imports).toHaveLength(2)
+    expect(button('New contact').disabled).toBe(true)
+    expect(button('Import CSV').disabled).toBe(true)
     for (const locked of [...creates, ...imports]) {
       expect((locked as HTMLButtonElement).disabled).toBe(true)
     }
@@ -190,6 +206,19 @@ describe('the Contacts list on Free', () => {
         'Form submissions, member sign-ups, orders and bookings become contacts on their own.',
       ),
     ).toBeTruthy()
+  })
+})
+
+describe('the Contacts list card (AGL-3334)', () => {
+  it('holds its record actions in its header and ends at its list, the feed a card of its own', () => {
+    mount(STARTER)
+    const body = screen.getByTestId('card-body')
+    for (const name of ['Import CSV', 'Export CSV', 'New contact']) {
+      expect(button(name)).toBeTruthy()
+      expect(within(body).queryByRole('button', { name })).toBeNull()
+    }
+    const feed = screen.getByTestId('recent-activity')
+    expect(body.contains(feed)).toBe(false)
   })
 })
 

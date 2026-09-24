@@ -60,10 +60,10 @@ fields, each read by its own type.
 
 | Record | Where its fields show |
 | --- | --- |
-| **Contacts** | The **Custom fields** card on a contact's page, optional columns and filters on the contacts list, the CSV import, a form field's [destination](#save-a-form-field), and `custom` on `/v1/contacts`. |
-| **Companies** | Rows on a company's page and controls on its **Edit** form, optional columns on the companies list, the [companies CSV import](./companies.md#import-from-csv), and `custom` on `/v1/companies`. |
-| **Deals** | Rows on a deal's page and controls on its **Edit** form, optional columns on the deals table, and `custom` on `/v1/deals`. |
-| **Leads** | Controls on a lead's page beside its profile and in the **New lead** drawer, optional columns on the leads list, and `custom` on `/v1/leads`. |
+| **Contacts** | **More fields** in the **Properties** card on a contact's page, optional columns and filters on the contacts list, the CSV import, a form field's [destination](#save-a-form-field), and `custom` on `/v1/contacts`. |
+| **Companies** | **More fields** on a company's page and controls on its **Edit** form, optional columns on the companies list, the [companies CSV import](./companies.md#import-from-csv), and `custom` on `/v1/companies`. |
+| **Deals** | **More fields** in the **Properties** card on a deal's page and controls on its **Edit** form, optional columns on the deals table, and `custom` on `/v1/deals`. |
+| **Leads** | **More fields** in the **Details** card on a lead's page and in the **New lead** drawer, optional columns on the leads list, and `custom` on `/v1/leads`. |
 
 Only a **contact** field can be the destination of a website form field, because a
 submission is a fact about a person; the drawer on the other tabs says so. Company, deal
@@ -79,16 +79,21 @@ need nothing done to them.
 
 ## Where values show {#where-values-show}
 
-- **A contact's page** carries a **Custom fields** card with one control per field — a
-  text box, a number box, a date picker, a choice list, a checkbox or a link box. **Save**
-  writes only the fields you changed; clearing a control clears the value.
+- **A contact's page** carries its fields in the **Properties** card, under **More
+  fields** after the built-in properties, with one control per field — a text box, a
+  number box, a date picker, a choice list, a checkbox or a link box. The card's one
+  **Save**, in its header, writes the profile and only the fields you changed; clearing a
+  control clears the value. With no field defined, there is no **More fields** at all.
 - **The contacts list** offers one optional column per field. The columns show the value
   as it reads — a date as a day, a checkbox as *Yes* or *No*, a link as a link — and are
   not sortable or filterable.
-- **A lead's page** carries its fields under **Custom fields**, below the profile and
-  saved with it by the same **Save**. The **New lead** drawer offers the same controls,
-  so a lead can be entered complete. A converted lead's are read-only with the rest of
-  the record. The **leads list** offers one optional column per field.
+- **A lead's page** carries its fields in the **Details** card, under **More fields**
+  after the profile and saved with it by the same **Save** in the card's header. The **New
+  lead** drawer offers the same controls, so a lead can be entered complete. A converted
+  lead's are read-only with the rest of the record. The **leads list** offers one
+  optional column per field.
+- **A company's page and a deal's** list their fields under **More fields**, after the
+  built-in properties; **Edit** changes them.
 - **Exports and the API** carry the values under their keys.
 
 A value belongs to the site that recorded it. Two sites in one organization that both

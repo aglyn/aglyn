@@ -90,8 +90,9 @@ export interface ContactAssociationsCardProps {
  *    lists and each email's own picker, and the helper says so where a
  *    reader would otherwise assume the opposite.
  *
- * The filing is the one editable thing here and has its own Save, through
- * the same stale-seed guard the properties card uses: a campaign membership
+ * The filing is the one editable thing here and has its own **Save filing**
+ * in the card header, through the same stale-seed guard the properties card
+ * uses: a campaign membership
  * written over a cached read could revert somebody else's filing. The save
  * goes to `crm/contact-update` (AGL-2804), because the filing is this
  * holder's facet and a facet is the server's to write; like every field that
@@ -211,6 +212,18 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
       help={Aglyn.pluginDocsHelp('contactRecord', { anchor: '#what-each-site-keeps-to-itself' })}
       contentGutterX
       contentGutterY
+      HeaderProps={{
+        action: (
+          <Button
+            size="small"
+            variant="outlined"
+            disabled={saving || (siteCampaigns.ready && !siteCampaigns.options.length)}
+            onClick={() => void handleSaveFiling()}
+          >
+            {saving ? 'Saving…' : 'Save filing'}
+          </Button>
+        ),
+      }}
     >
       <Stack spacing={2}>
         <Stack spacing={0.5}>
@@ -302,16 +315,6 @@ export function ContactAssociationsCard(props: ContactAssociationsCardProps) {
           empty={siteCampaigns.ready && !siteCampaigns.options.length}
           emptyText={hostId ? 'This site has no campaigns yet.' : 'There are no campaigns yet.'}
         />
-        <Stack direction="row">
-          <Button
-            size="small"
-            variant="outlined"
-            disabled={saving || (siteCampaigns.ready && !siteCampaigns.options.length)}
-            onClick={() => void handleSaveFiling()}
-          >
-            {saving ? 'Saving…' : 'Save filing'}
-          </Button>
-        </Stack>
       </Stack>
     </CardDisplay>
   )

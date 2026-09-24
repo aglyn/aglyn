@@ -41,13 +41,20 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
 import { useContactUpdate } from '../hooks/use-contact-update'
 import { useCrmActivityLogger } from '../hooks/use-crm-activity-logger'
 import { useLeadSourcePicklist } from '../hooks/use-lead-source-picklist'
 import { type ContactRecord, parseContactTags } from '../model/contact-record'
 import type { ContactUpdateFields } from '../model/contact-update'
 import { setContactStage } from '../model/crm-api'
+import {
+  type CrmCustomDraft,
+  crmCustomDraftChanges,
+  crmCustomDraftMissingRequired,
+  crmCustomDraftValue,
+} from '../model/crm-custom-draft'
 import {
   CompanyPicker,
   useCompanyOptions,
@@ -58,6 +65,7 @@ import {
   ContactAddressFields,
   type AddressDraft,
 } from './contact-address-fields'
+import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { crmSuiteLockedReason } from './crm-suite-lock'
 import { LeadSourceSelect } from './lead-source-select'
 import type { OrgMembers } from './use-org-members'
@@ -71,8 +79,9 @@ export interface ContactPropertiesCardProps {
   record: ContactRecord
   /**
    * The org the record belongs to, as the page resolved it — for the org's
-   * lead source values (AGL-3298). Null while it settles, when the select
-   * offers the starter list and the save still sends only what changed.
+   * lead source values (AGL-3298) and its custom contact fields (AGL-2601).
+   * Null while it settles, when the select offers the starter list, no
+   * custom field is drawn yet, and the save still sends only what changed.
    */
   orgId?: string | null
   /** The controller whose facet the edits are saved into. */
@@ -88,14 +97,30 @@ export interface ContactPropertiesCardProps {
    * The org's plan lacks the CRM (AGL-2788), which the shell mounts no CRM
    * page for (AGL-2851). The owner, the lifecycle stage and the company
    * show, locked, and are left out of a save; `crm/contact-update` refuses
-   * such a plan the rest of the profile, the tags and the notes too.
+   * such a plan the rest of the profile, the tags and the notes too. The
+   * custom fields are the CRM's as well, and are not drawn.
    */
   suiteLocked?: boolean
 }
 
 /**
  * THE RECORD ITSELF: every field a team keeps on a person, in one card with
- * one Save (AGL-2596).
+ * one Save in its header (AGL-2596).
+ *
+ * ## Custom fields sit with the built-in ones
+ *
+ * The org's own contact fields (AGL-2601) are drawn under **More fields**,
+ * after the built-in properties, the way Salesforce keeps custom fields in
+ * the record's Details beside the standard ones — and they save with them.
+ * An org with no active field draws no subsection at all.
+ *
+ * A custom value is THIS holder's (`facets.{group}.custom.{key}`), so the
+ * draft holds only the keys the reader touched and the save sends only the
+ * keys that changed: the route writes each at its own dotted path, and a
+ * `custom` map sent whole would take every key this card did not touch out
+ * with it. A cleared control sends `null`, the explicit "cleared" the model
+ * keeps the key present with, and a required field left empty is refused
+ * before anything is sent.
  *
  * ## One save, one request, one guard
  *
@@ -195,15 +220,29 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
   )
   const [phoneError, setPhoneError] = useState('')
   const [saving, setSaving] = useState(false)
+  /** The custom values the reader touched; every other key reads from the record. */
+  const [custom, setCustom] = useState<CrmCustomDraft>({})
+  /** Something was edited since the card was seeded or last saved. */
+  const [edited, setEdited] = useState(false)
+  const fields = useContactFieldDefinitions(suiteLocked ? null : orgId)
+  // The custom fields are the CRM's; a plan without it draws and sends none.
+  const customFields = suiteLocked ? [] : fields.active
+  const storedCustom = useMemo(() => record.custom ?? {}, [record.custom])
+  const customChanges = useMemo(
+    () => crmCustomDraftChanges(storedCustom, custom),
+    [storedCustom, custom],
+  )
+  const clearingRequired =
+    crmCustomDraftMissingRequired(customFields, storedCustom, custom, 'edit').length > 0
 
-  /*
-   * Re-seeded when the RECORD changes, not when it re-renders. The listener
-   * delivers a fresh row on every snapshot, including the one this card's
-   * own save produces; re-seeding on each would overwrite what somebody is
-   * in the middle of typing with what the server last confirmed.
-   */
-  const recordId = record.$id
-  useEffect(() => {
+  /** One field's edit: the value, and the card now has something to save. */
+  const change = useCallback(<T,>(set: (value: T) => void, value: T) => {
+    set(value)
+    setEdited(true)
+  }, [])
+
+  /** Every draft back to what the record holds — the seed, and Discard. */
+  const reseed = () => {
     setNameOverride(record.nameOverride)
     setPhone(record.phone)
     setJobTitle(record.jobTitle)
@@ -216,10 +255,24 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     setNotes(record.notes)
     setAddress(addressDraftFrom(record.address))
     setPhoneError('')
+    setCustom({})
+    setEdited(false)
+  }
+
+  /*
+   * Re-seeded when the RECORD changes, not when it re-renders. The listener
+   * delivers a fresh row on every snapshot, including the one this card's
+   * own save produces; re-seeding on each would overwrite what somebody is
+   * in the middle of typing with what the server last confirmed.
+   */
+  const recordId = record.$id
+  useEffect(() => {
+    reseed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordId])
 
   const handleSave = useCallback(async () => {
+    if (clearingRequired) return
     const trimmedPhone = phone.trim()
     const normalizedPhone = trimmedPhone ? normalizePhone(trimmedPhone) : ''
     if (trimmedPhone && !normalizedPhone) {
@@ -244,6 +297,10 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       ...(suiteLocked
         ? {}
         : { ownerUid, companyId, companyName: companyName.trim().slice(0, 120) }),
+      // Only the custom keys that changed — see the note above.
+      ...(!suiteLocked && customChanges.length
+        ? { custom: Object.fromEntries(customChanges) }
+        : {}),
     }
     setSaving(true)
     try {
@@ -266,6 +323,8 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
         id: record.$id,
         name: record.name || record.email,
       })
+      // The custom values are stored; the controls read the record again.
+      setCustom({})
       if (stageChanged && siteHostId) {
         try {
           await setContactStage(user, siteHostId, record.$id, lifecycleStage || null)
@@ -280,6 +339,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
           )
         }
       }
+      setEdited(false)
       enqueueSnackbar('Contact saved', { variant: 'success', persist: false })
     } catch (error) {
       console.error(error)
@@ -292,9 +352,11 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
     }
   }, [
     address,
+    clearingRequired,
     companyId,
     companyName,
     contactUpdate,
+    customChanges,
     enqueueSnackbar,
     siteHostId,
     jobTitle,
@@ -336,15 +398,22 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
       contentGutterY
       HeaderProps={{
         action: (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            disabled={saving}
-            onClick={() => void handleSave()}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            {edited ? (
+              <Button size="small" disabled={saving} onClick={reseed}>
+                {'Discard changes'}
+              </Button>
+            ) : null}
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              disabled={saving || !edited || clearingRequired}
+              onClick={() => void handleSave()}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </Stack>
         ),
       }}
     >
@@ -364,7 +433,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             size="small"
             label="Name"
             value={nameOverride}
-            onChange={(event) => setNameOverride(event.target.value)}
+            onChange={(event) => change(setNameOverride, event.target.value)}
             slotProps={{ htmlInput: { maxLength: 120 } }}
             helperText={
               record.canonicalName
@@ -379,7 +448,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             size="small"
             label="Phone"
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
+            onChange={(event) => change(setPhone, event.target.value)}
             error={Boolean(phoneError)}
             helperText={phoneError || 'With the country code, like +1 512 555 0107'}
             fullWidth
@@ -415,7 +484,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             size="small"
             label="Job title"
             value={jobTitle}
-            onChange={(event) => setJobTitle(event.target.value)}
+            onChange={(event) => change(setJobTitle, event.target.value)}
             slotProps={{ htmlInput: { maxLength: 120 } }}
             fullWidth
           />
@@ -425,7 +494,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             picklist={leadSources.picklist}
             value={leadSource}
             stored={record.leadSource}
-            onChange={setLeadSource}
+            onChange={(value) => change(setLeadSource, value)}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6 }}>
@@ -435,7 +504,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             truncated={companies.truncated}
             value={companyId}
             onChange={(id, company) => {
-              setCompanyId(id)
+              change(setCompanyId, id)
               // The label follows the link: the picked name, or nothing
               // once the link is cleared. A company the list cannot name
               // keeps whatever label the record already had.
@@ -455,7 +524,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             label="Lifecycle stage"
             value={lifecycleStage}
             onChange={(event) =>
-              setLifecycleStage(event.target.value as ContactLifecycleStage | '')
+              change(setLifecycleStage, event.target.value as ContactLifecycleStage | '')
             }
             disabled={suiteLocked}
             helperText={suiteLocked ? crmSuiteLockedReason() : undefined}
@@ -475,7 +544,7 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             size="small"
             label="Owner"
             value={ownerUid}
-            onChange={(event) => setOwnerUid(event.target.value)}
+            onChange={(event) => change(setOwnerUid, event.target.value)}
             disabled={suiteLocked}
             helperText={
               suiteLocked
@@ -504,14 +573,17 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             placeholder="vip, beta"
             helperText="Comma-separated"
             value={tags}
-            onChange={(event) => setTags(event.target.value)}
+            onChange={(event) => change(setTags, event.target.value)}
             fullWidth
           />
         </Grid>
         <Grid size={{ xs: 12 }}>
           <Stack spacing={1}>
             <Typography variant="subtitle2">{'Address'}</Typography>
-            <ContactAddressFields value={address} onChange={setAddress} />
+            <ContactAddressFields
+              value={address}
+              onChange={(value) => change(setAddress, value)}
+            />
           </Stack>
         </Grid>
         <Grid size={{ xs: 12 }}>
@@ -519,13 +591,43 @@ export function ContactPropertiesCard(props: ContactPropertiesCardProps) {
             size="small"
             label="About"
             value={notes}
-            onChange={(event) => setNotes(event.target.value)}
+            onChange={(event) => change(setNotes, event.target.value)}
             helperText="Notes for your team. Nobody outside this site's group can read them."
             multiline
             minRows={3}
             fullWidth
           />
         </Grid>
+        {/*
+          The org's own fields (AGL-2601), after the built-in ones and saved
+          with them. Absent, not an empty box, while the org defines none.
+        */}
+        {customFields.length ? (
+          <>
+            <Grid size={{ xs: 12 }}>
+              <Typography variant="subtitle2">{'More fields'}</Typography>
+            </Grid>
+            {customFields.map((definition) => (
+              <Grid key={definition.$id} size={{ xs: 12, sm: 6 }}>
+                <CrmCustomFieldControl
+                  definition={definition}
+                  value={crmCustomDraftValue(storedCustom, custom, definition.key)}
+                  onChange={(value) =>
+                    change(setCustom, { ...custom, [definition.key]: value })
+                  }
+                  disabled={saving}
+                />
+              </Grid>
+            ))}
+            {clearingRequired ? (
+              <Grid size={{ xs: 12 }}>
+                <Typography variant="caption" color="error">
+                  {'A required field cannot be left empty.'}
+                </Typography>
+              </Grid>
+            ) : null}
+          </>
+        ) : null}
       </Grid>
     </CardDisplay>
   )

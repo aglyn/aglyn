@@ -162,6 +162,16 @@ const SHARED_FOOTER: Array<[string, string]> = [
     'billing workspace picker',
     'apps/console/app/(app)/billing/page.tsx',
   ],
+  /*
+   * The CRM's activity histories (AGL-3334): a record's Activity card and
+   * the contacts landing's Recent activity feed, which share the list, and
+   * the contact's Timeline. Each pages a SLICE of its listener's window —
+   * the timeline merges sources that share no cursor, so only the merged
+   * stream can be turned — and widens the window when a page is turned past
+   * it, the way the workspace pickers grow theirs.
+   */
+  ['CRM activity list', 'libs/plugins/crm/src/lib/components/activity-list.tsx'],
+  ['CRM contact timeline', 'libs/plugins/crm/src/lib/components/contact-timeline-card.tsx'],
 ]
 
 /**
@@ -180,14 +190,6 @@ const SHARED_FOOTER: Array<[string, string]> = [
 const LOAD_MORE_ALLOWED = [
   'apps/console/components/media/media-library.component.tsx',
   'libs/plugins/commerce/src/lib/components/product-grid.tsx',
-  // The CRM's two FEEDS (AGL-2600): a record's logged activities, and the
-  // contact timeline that merges them with the facet's captured interactions.
-  // A feed is read down, not jumped into — the question it answers is "what
-  // happened lately" — and the timeline's two sources cannot share a page
-  // cursor, so each grows by one page of activities per "Show more", bounded
-  // at a hundred by `activity-queries`.
-  'libs/plugins/crm/src/lib/components/activity-list.tsx',
-  'libs/plugins/crm/src/lib/components/contact-timeline-card.tsx',
 ]
 
 /**
