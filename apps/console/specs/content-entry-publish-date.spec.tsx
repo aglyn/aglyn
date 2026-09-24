@@ -433,7 +433,10 @@ describe('an entry publish date can be set, and BACKDATED (AGL-2497)', () => {
     // ONE field. `status` is untouched (re-dating is not publishing) and so
     // is `updatedAt` — that is what `Article.dateModified` reads, and it must
     // go on meaning "last edited".
-    expect(Object.keys(payload)).toEqual(['publishedAt'])
+    expect(Object.keys(payload)).toEqual(['publishedAt', 'publishSortAt'])
+    // …and the console's Published sort key, which a published entry takes
+    // from `publishedAt` (AGL-3323).
+    expect(payload.publishSortAt).toBe(payload.publishedAt)
   })
 
   it('seeds the dialog from the entry OWN date, not from today', () => {
@@ -530,6 +533,8 @@ describe('publishing keeps a date the author already chose (AGL-2497)', () => {
     expect(mockUpdateDoc.mock.calls[0][1]).toEqual({
       status: 'draft',
       publishedAt: '__delete__',
+      // The console's Published sort key goes with it (AGL-3323).
+      publishSortAt: '__delete__',
     })
   })
 
@@ -594,7 +599,13 @@ describe('future scheduling is UNCHANGED (AGL-123 regression control)', () => {
     // `publishAt`, the deferred field — NOT `publishedAt`, which is the one
     // the publish date owns. Conflating the two is the other half of the
     // failure this suite guards.
-    expect(Object.keys(payload).sort()).toEqual(['publishAt', 'status'])
+    expect(Object.keys(payload).sort()).toEqual([
+      'publishAt',
+      'publishSortAt',
+      'status',
+    ])
+    // The console's Published sort key follows the schedule (AGL-3323).
+    expect(payload.publishSortAt).toBe(payload.publishAt)
     expect(payload.publishAt.seconds).toBe(Math.floor(future.getTime() / 1000))
   })
 

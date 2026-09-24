@@ -32,8 +32,8 @@
  *     is what makes "there is more" a fact rather than a comparison against
  *     the cap. Paging forward widens by one page, not by a collection.
  *  2. THE WALK NAMES ITS ORDER, and drops nothing that lacks the field. The
- *     list opens on `publishedAt`, newest first, and a draft has no
- *     `publishedAt` — so the dated entries are walked in that order and the
+ *     list opens on `publishSortAt` (the Published column's stored key,
+ *     AGL-3323), newest first, and a draft has none — so the dated entries are walked in that order and the
  *     rest by document NAME after them (AGL-2853). Nothing re-sorts the page
  *     it was handed, either: rows in one order within a page and another
  *     across pages is the same lie an unordered cap tells. The double below
@@ -112,15 +112,21 @@ const fillCollection = (count: number) => {
   }
 }
 
-/** Publishes the entries at `indexes`, each dated by its own index. */
+/**
+ * Publishes the entries at `indexes`, each dated by its own index — and
+ * stamped with the console's Published sort key, as every publish writes it
+ * (AGL-3323).
+ */
 const publishEntries = (indexes: number[]) => {
   for (const index of indexes) {
+    const publishedAt = {
+      seconds: 1_000 + index,
+      toDate: () => new Date((1_000 + index) * 1000),
+    }
     Object.assign(mockEntryDocs[index], {
       status: 'published',
-      publishedAt: {
-        seconds: 1_000 + index,
-        toDate: () => new Date((1_000 + index) * 1000),
-      },
+      publishedAt,
+      publishSortAt: publishedAt,
     })
   }
 }
@@ -511,13 +517,14 @@ describe('the walk names its order, and nothing re-sorts the page', () => {
     render(<List />)
 
     expect(entriesOrderings()[0]).toEqual([
-      'publishedAt desc',
+      // The Published column walks its stored key (AGL-3323).
+      'publishSortAt desc',
       '__name__ desc',
     ])
   })
 
   it('walks what the date sort cannot see by NAME, not by a field', () => {
-    // Every entry here is a draft, and a draft carries no `publishedAt`: the
+    // Every entry here is a draft, and a draft carries no `publishSortAt`: the
     // dated walk comes back empty, and the list is still full.
     render(<List />)
 
