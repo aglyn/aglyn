@@ -588,6 +588,9 @@ export async function runEmailDeliverabilityPreflight(
  * Idempotent; the closure holds no state of its own.
  */
 export function installEmailDeliverabilityPreflight(): void {
+  // A harness that stands a partial email library in for the real one
+  // still loads this module; the seam is simply not there to install on.
+  if (typeof setEmailDeliverabilityPreflight !== 'function') return
   setEmailDeliverabilityPreflight((request) => runEmailDeliverabilityPreflight(request))
 }
 
