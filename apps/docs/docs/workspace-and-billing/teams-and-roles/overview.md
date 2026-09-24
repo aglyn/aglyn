@@ -15,6 +15,11 @@ Aglyn has two kinds of people: your **team** (who build and manage the site) and
 
 ![The organization team page: roster, roles, and invites](/img/teams-and-roles/org-team-page.png)
 
+The **Team** page's roster filters through its table's toolbar: **Filters** narrows it
+by **Role** or by **Access** (team manager or site collaborator), and **Search** matches
+any word of a member's name, email, or title. Each filter in force shows as a chip above
+the table. The role pickers and **Permissions** in each row work as before.
+
 ## Team roles
 
 - Invite teammates to a site and assign **roles**.

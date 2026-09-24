@@ -139,6 +139,11 @@ Entries name the thing that changed and link straight to it, so "Saved the scree
 takes you to that screen. Entries recorded before this shipped show a plain description
 instead of a link.
 
+A site's own activity log, on its **Setup** page, filters through its table's toolbar:
+**Filters** narrows it to one **Action** (or several, with **is any of**) or to entries
+before or after a date, across the whole log rather than the page on screen. It has no
+search box, because nothing can search the whole log by word.
+
 ### AI actions in the log {#ai-actions}
 
 Everything the AI does in your workspace is recorded in the same feed, attributed to the

@@ -85,7 +85,8 @@ The table opens with the most recently **Published** entries first. Click the **
 reverse it. Entries with nothing in the sorted column, such as a draft with no published
 date, follow the rest in either direction rather than dropping out. **Filters** in the
 table's toolbar narrows the list to one **Status** or one **Category** across the whole
-collection, not only the page you're on.
+collection, not only the page you're on, and the filter in force shows as a chip above the
+table.
 
 Each entry carries, besides the title, excerpt, cover image, and markdown body:
 
@@ -138,6 +139,10 @@ record rather than a user: open the **Authors** tab on the Content page to creat
 them, and pick one per entry.
 
 <!-- screenshot: content/authors-tab.png per SCREENSHOT_PLAN.md -->
+
+The Authors table's toolbar filters it: **Filters** narrows it by name or **Type**
+(Person or Organization), and **Search** matches any word of an author's name, job
+title, or page address.
 
 Each author is either a **Person** or an **Organization**, and the choice is a real
 one — they are different `schema.org` types with different fields, so the editor shows
