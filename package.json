@@ -143,7 +143,6 @@
     "test:org-lead-backfill": "node --test tools/scripts/lib/org-lead-backfill.test.mjs",
     "test:org-campaign-backfill": "node --test tools/scripts/lib/org-campaign-backfill.test.mjs",
     "test:account-acquisition-backfill": "node --test tools/scripts/lib/account-acquisition-backfill.test.mjs",
-    "test:submission-scope-backfill": "node --test tools/scripts/lib/submission-scope-backfill.test.mjs",
     "test:site-member-credentials-backfill": "node --test tools/scripts/lib/site-member-credentials-backfill.test.mjs",
     "test:email-state-backfill": "node --test tools/scripts/lib/email-state-backfill.test.mjs",
     "test:enrollment-activity-backfill": "node --test tools/scripts/lib/enrollment-activity-backfill.test.mjs",

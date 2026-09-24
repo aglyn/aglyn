@@ -282,10 +282,11 @@ export function SubmissionsCard({
                * rules admit a group read only when it is narrowed to an org
                * the reader spans, so an unfiltered group query is refused
                * outright. Served by the `orgId ASC, createdAt DESC`
-               * COLLECTION_GROUP index. A row written before the submit route
-               * stamped `orgId` is in no organization's list until the scope
-               * backfill (`docs/SUBMISSION_SCOPE_BACKFILL.md`) stamps it; its
-               * own site's Inbox lists it either way.
+               * COLLECTION_GROUP index. Every submission carries `orgId`: the
+               * submit route stamps it, and the rows written before it did
+               * were stamped once (AGL-3303). A row without one would be in no
+               * organization's list, though its own site's Inbox lists it
+               * either way.
                */
               collectionGroup(firestore, 'formSubmissions'),
               where('orgId', '==', orgId),

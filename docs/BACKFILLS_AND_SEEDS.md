@@ -98,7 +98,6 @@ automation references is the expected state for all of them.
 | `backfill-crm-salesforce-model.mjs` | ⚑ **Outstanding — Zach's call, after the P-AGL-136 promotion** | The one-record migration: folds every contact that is only a lead onto its lead (archived, then deleted), closes every open lead whose person is already a contact, and points enrollments, activities and tasks at the record the person is — [`CRM_SALESFORCE_BACKFILL.md`](CRM_SALESFORCE_BACKFILL.md). Re-points live sequence enrollments, so it runs between sends and with whoever runs Sequences told. Guarded by `test:one-record-backfill`, whose preconditions refuse `--apply` on a tree without the model. |
 | `backfill-org-campaigns.mjs` | Converged 2026-09-23, **kept** — runs recorded in the runbook | Moves every campaign container, email send (with its `reports/*`) and sequence rollup from `hosts/{hostId}/…` to `orgs/{orgId}/…` under the same ids, stamping the site scope — [`MARKETING_ORG_CAMPAIGNS_BACKFILL.md`](MARKETING_ORG_CAMPAIGNS_BACKFILL.md). The scheduled-send cron leaves a send still under a site alone, so a send scheduled between the deploy and this run waits for it. Guarded by `test:org-campaign-backfill`. |
 | `backfill-form-ids.mjs` | ⚠️ Outstanding, **zero is a blindfold** | Stamps `formId` onto the submissions an adopted form already collected, matching on the `(formName, path)` pair and leaving anything ambiguous alone. The lifecycle backfill's form attribution reads what this stamps. A census run reported 0 of 0 submissions — **which is not evidence.** Its input is a form carrying `legacyMatch`, minted by the discover-and-adopt flow of [`reusable-forms.md`](specs/reusable-forms.md) §2d, and that flow has no console surface yet: `scan-discoverable-forms.ts` exists with a spec and no caller. The zero measures an unshipped feature, so this is step three of a phase waiting on steps one and two. |
-| `backfill-submission-scope.mjs` | ⚑ Outstanding — **after** the AGL-3303 promotion | Stamps `orgId` and `hostId` on every form submission written before the submit route stamped them, so the organization's Inbox — one collection-group query on `orgId` — lists it; until then such a row is only in its own site's Inbox — [`SUBMISSION_SCOPE_BACKFILL.md`](SUBMISSION_SCOPE_BACKFILL.md). The org comes from the host document and `hostIndex`, in the route's order, and a site whose two name different orgs is refused (exit 1). Touches no other field; a second run plans nothing. `--apply` is refused on a checkout whose route does not stamp the pair or whose rules do not freeze it. Guarded by `test:submission-scope-backfill`. Dry run by default; `--org=<id>` narrows, `--apply` writes. |
 | `backfills/` (3 scripts) | Outstanding | The commerce money-record repairs — [`COMMERCE_BACKFILLS.md`](COMMERCE_BACKFILLS.md). Dry run recorded, nothing applied. Run order is 1745 → 1752 → 1753. Guarded by `test:backfill-core`. AGL-1727 had a fourth and no longer needs one: its population is zero and AGL-1711 closed the shape. |
 
 ## Media
@@ -161,6 +160,11 @@ rule at the top of this page. Fifteen went this way under AGL-2670 —
 `backfill-plugin-id-crm` and `backfills/backfill-agl1727-buy-now-orders`.
 Three were run down to a zero first; the rest were already at one. The commit
 for each carries the count it scanned and what writes the value now.
+
+Since then each converged one-shot has gone in the commit that read its zero,
+with its runbook: `backfill-submission-scope` (AGL-3303) read 20 form
+submissions across 18 sites on 2026-09-24 and found all 20 stamped with
+`orgId` and `hostId`, which the submit route writes on every new one.
 
 A module whose only caller was one of those went with it —
 `lib/plugin-id-rename.mjs`, `lib/media-content-sha256-backfill.mjs`,
