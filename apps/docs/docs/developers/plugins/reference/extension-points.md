@@ -19,7 +19,7 @@ The surface matrix: what a plugin can extend, from which entry
 | Staff pages (`ConsoleExtension.staffPages`) | barrel (`staff`) | The staff area — a tab in the staff strip and a page at `/admin/{id}` | Once the staff area has loaded its plugins, behind the staff guard |
 | Site runtimes (`registerSiteRuntime`) | barrel (`site`) | Every published page | Client render, reading enricher props |
 | Redirect resolvers / page resolvers / enrichers | `/server` | Tenant page pipeline | Per request, in that order; enricher errors isolated |
-| API routes (`registerPluginApiRoute`) | `/server` | `/api/*` on both apps | Per request behind the org + release gates |
+| API routes (`registerPluginApiRoute`) | `/server` (`tenantApi` / `consoleApi`) | `/api/*` of the app whose surface registered the route: `tenantApi` routes answer on the published site, `consoleApi` routes on the console. Neither app loads the other's, so a route the console calls is registered from `consoleApi` | Per request behind the org + release gates |
 | Billing webhook handlers | `/server` | Platform Stripe events | Per event; errors → redelivery |
 | Platform events (`registerPluginEventHandler`) | `/server` (`serverDeclarations`) | A core route's write — the AI add-on bought or dropped, a permission moved | After the write, in the route; errors logged, never the route's |
 | Account erasure (`registerPluginUserEraser`) | `/server` (`serverDeclarations`) | The data a plugin keeps about a person where core's deletes do not reach | During the erasure, once the memberships are removed; a failure recorded as `null`, never the erasure's |
