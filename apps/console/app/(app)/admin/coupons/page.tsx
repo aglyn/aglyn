@@ -697,8 +697,8 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
 
             <CardDisplay
               header={`Existing coupons (${coupons.length})`}
-              help={docsHelp('billing', {
-                anchor: '#tiers--entitlements',
+              help={docsHelp('staffConsole', {
+                anchor: '#existing-coupons',
                 excerpt:
                   'Every Stripe coupon and its promotion codes, with redemption counts and validity.',
               })}

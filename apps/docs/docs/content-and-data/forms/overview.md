@@ -281,6 +281,8 @@ row actions.
   read; **Mark unread** puts it back.
 - **Delete** removes a submission permanently (it asks first).
 
+#### Filter the Inbox tables {#filter-the-inbox}
+
 The submissions table filters through its toolbar. **Filters** narrows it by
 **Form**, **Read** (read or unread), sender and message, and on your organization's
 Inbox by **Site**; **Search** matches a sender, a form name or anything in the

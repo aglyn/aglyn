@@ -148,6 +148,8 @@ Each row carries:
 | **Campaign** | The campaigns the lead is filed under, by name. Under a site only — a campaign belongs to one site. |
 | **Last seen** | When the person last did something on your site. |
 
+### Filter and search the leads {#filter-the-leads}
+
 The table's own toolbar filters the list: **Filters** opens the filter
 panel, and **Search** finds a lead by name, email, company, title or tag.
 **Status**, **Email**, **Owner**, **Lead source** and **Campaign** are

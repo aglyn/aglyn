@@ -658,7 +658,7 @@ export function HostMembersCard(props: HostMembersCardProps) {
     <CardDisplay
       header={'Users'}
       help={docsHelp('team', {
-        anchor: '#site-membership',
+        anchor: '#site-collaborators',
         excerpt:
           'Teammates with console access to this site — add by email ' +
           'with a role; membership uses your plan’s member seats.',

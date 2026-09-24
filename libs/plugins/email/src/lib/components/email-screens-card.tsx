@@ -334,7 +334,7 @@ export function EmailScreensCard(props: {
   return (
     <CardDisplay
       header={'Templates'}
-      help={pluginDocsHelp('designedEmails', { anchor: '#create-a-template' })}
+      help={pluginDocsHelp('designedEmails', { anchor: '#find-a-template' })}
       contentGutterX
       contentGutterY
       HeaderProps={{

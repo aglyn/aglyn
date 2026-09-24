@@ -78,6 +78,8 @@ and GDPR-erasure flags, per organization. The directory is listed server-side wi
 the Admin SDK (so it shows *every* org, not the subset client rules would return),
 ordered by organization id, 10 per page by default (25 or 50 from the page-size menu).
 
+#### Filter the directory {#filter-the-directory}
+
 The grid's toolbar filters the whole directory, not the page on screen. **Filters**
 offers the organization name, slug, id, owner, created and updated dates, and two
 pickers: **Stored plan** (the plan written on the org, which is not always the plan it
@@ -629,6 +631,8 @@ nothing else. Support, customer acquisition and overhead are not in the figure a
 so treat it as a ceiling rather than a profit. The infrastructure number behind it is a
 per-site floor for almost every organization — measured usage only replaces it once it
 costs more than the floor, which no organization's usage does yet.
+
+#### Existing coupons {#existing-coupons}
 
 **Existing coupons** lists Stripe coupons with their promotion codes, redemption
 count, and a **valid** or **expired** state — the first 100 coupons and 100 promotion

@@ -625,7 +625,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
       <CardDisplay
         header="Forms"
         help={pluginDocsHelp('forms', {
-          anchor: '#build-a-form',
+          anchor: '#find-a-form',
           excerpt:
             'A form collects submissions into the Inbox, and its design is ' +
             'drawn in the besigner like any other artifact.',

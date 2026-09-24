@@ -89,6 +89,8 @@ as they like. Someone with a publishing role reviews the draft and publishes it.
 This is enforced in the database itself, not just hidden in the console — an Author
 cannot publish through any route into Aglyn.
 
+#### A site's collaborators {#site-collaborators}
+
 A site's collaborators are listed in the **Users** card on that site's **Users** page,
 ordered by email address with the organization's owner first. **Filters** in the table's
 toolbar narrows it by **Site access** — one role, or several at once — and the search box

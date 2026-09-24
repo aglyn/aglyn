@@ -586,8 +586,8 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
           <StaffOnly>
             <CardDisplay
               header={'Organizations'}
-              help={docsHelp('billing', {
-                anchor: '#tiers--entitlements',
+              help={docsHelp('staffConsole', {
+                anchor: '#filter-the-directory',
                 excerpt:
                   'Audited staff controls per organization — override the plan and entitlements, inspect usage, suspend its sites, or flag GDPR erasure.',
               })}
