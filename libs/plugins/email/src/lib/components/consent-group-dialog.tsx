@@ -47,7 +47,6 @@ import { describeConsentGroupReview, joinNames } from './consent-group-review'
 import ConsentGroupSitePicker from './consent-group-site-picker'
 import {
   CONSENT_GROUP_NAME_MAX,
-  consentGroupIssueCode,
   consentGroupIssueMessage,
   postConsentGroups,
   type ConsentGroupChangePreview,
@@ -210,7 +209,7 @@ export function ConsentGroupDialog(props: ConsentGroupDialogProps) {
       const placed: Issues = { hostIds: new Set(), general: [] }
       const posted = buildConsentGroupDeclaration(snapshot.groups, draft).groups
       for (const issue of errors) {
-        const code = consentGroupIssueCode(issue.code)
+        const code = issue.code
         const message = consentGroupIssueMessage(issue, siteName)
         // A dissolve has no fields on screen, so everything goes to the banner.
         const ours =

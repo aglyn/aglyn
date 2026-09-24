@@ -45,7 +45,11 @@ import {
   readConsentGroupsChange,
   validateConsentGroupDeclaration,
 } from './consent-group-change'
-import { CONSENT_GROUPS_FIELD, MAX_CONSENT_GROUP_HOSTS } from './consent-groups'
+import {
+  CONSENT_GROUPS_FIELD,
+  consentGroupSiteHold,
+  MAX_CONSENT_GROUP_HOSTS,
+} from './consent-groups'
 
 const SITES = ['a', 'b', 'c', 'd', 'r1', 'r2', 'x']
 
@@ -539,6 +543,16 @@ describe('the marker', () => {
     expect(consentGroupHoldersInMotion(org('carry'), 'a')).toBe(false)
     expect(consentGroupHoldersInMotion(org('rehome'), 'elsewhere')).toBe(false)
     expect(consentGroupHoldersInMotion({}, 'a')).toBe(false)
+  })
+
+  it('is the marker the site-delete hold reads, in every phase', () => {
+    // `consent-groups.ts` spells the field itself, since this module imports
+    // that one; this pins the two spellings together.
+    for (const phase of ['carry', 'rehome', 'sweep']) {
+      const org = { [CONSENT_GROUPS_CHANGE_FIELD]: { ...marker, phase } }
+      expect(consentGroupSiteHold(org, 'a')).toEqual({ reason: 'changing' })
+      expect(consentGroupSiteHold(org, 'elsewhere')).toBeNull()
+    }
   })
 })
 

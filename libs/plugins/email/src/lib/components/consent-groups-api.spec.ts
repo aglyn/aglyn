@@ -81,9 +81,12 @@ describe('every validation refusal says what to fix', () => {
     ).toBe('Shop can be in only one consent group.')
   })
 
-  it('reads another spelling of a refusal as the same refusal', () => {
-    expect(consentGroupIssueMessage({ code: 'name-required' })).toBe(
-      CONSENT_GROUP_ISSUE_MESSAGES['name-empty'],
+  it('has a sentence for the refusals only a hand-built request can earn', () => {
+    expect(consentGroupIssueMessage({ code: 'malformed' })).toBe(
+      CONSENT_GROUP_ISSUE_MESSAGES.malformed,
+    )
+    expect(consentGroupIssueMessage({ code: 'duplicate-group' })).toBe(
+      CONSENT_GROUP_ISSUE_MESSAGES['duplicate-group'],
     )
   })
 

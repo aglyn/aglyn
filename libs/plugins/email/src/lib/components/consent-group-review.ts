@@ -487,13 +487,11 @@ export function describeConsentGroupReview(
       )
     }
     const forward = preview?.forwardPolicyWarning
-    if (typeof forward === 'string' && forward) {
-      say(records, 'records.forward', forward, 'warning')
-    } else if (forward && typeof forward === 'object') {
+    if (forward && typeof forward === 'object') {
       const hostIds = Array.isArray(forward.hostIds) ? forward.hostIds : joining
       const before =
-        typeof forward.capturedBeforeMs === 'number'
-          ? ` before ${dateFormat.format(new Date(forward.capturedBeforeMs))}`
+        typeof forward.enforceFromMs === 'number'
+          ? ` before ${dateFormat.format(new Date(forward.enforceFromMs))}`
           : ''
       say(
         records,
@@ -516,11 +514,9 @@ export function describeConsentGroupReview(
       'Part of this change couldn’t be counted ahead of time. It still runs, and nobody who opted out starts getting email.',
     )
   }
-  const discarded = (preview?.discarded ?? [])
-    .map((entry) =>
-      typeof entry === 'string' ? entry : String(entry?.name || entry?.id || ''),
-    )
-    .filter(Boolean)
+  const discarded = (preview?.discarded ?? []).filter(
+    (id) => typeof id === 'string' && id !== '',
+  )
   if (discarded.length) {
     say(
       other,

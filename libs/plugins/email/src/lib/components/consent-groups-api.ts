@@ -30,58 +30,60 @@
  * it, and drive it with `continue` while somebody is watching. Everything
  * else is the server's.
  *
- * ## The wire shapes are declared here, field for field
+ * ## The wire shapes are the route's own
  *
- * The route and its planner live in core, and this plugin keeps its own copy
- * of the request and response shapes rather than importing the planner's
- * module, so a browser bundle never carries server planning code. The shapes
- * are the route's contract; a field renamed there must be renamed here.
+ * Every request and response type below is the planner module's
+ * (`@aglyn/aglyn/app-utils/consent-group-change`), imported as a type and
+ * erased from the bundle, so a field the route renames fails this plugin's
+ * type check instead of rendering a sentence with a hole in it. The constants
+ * come from the same module; it is pure, with no read and no server import.
  *
- * Nothing the server says is trusted to be well formed: every reader below
- * accepts a missing or mistyped field and answers the narrow value, because a
- * progress banner that throws on a field it did not expect would hide the
- * one change an org cannot afford to lose track of.
+ * Nothing the server says is trusted to be well formed all the same: every
+ * reader below accepts a missing or mistyped field and answers the narrow
+ * value, because a progress banner that throws on a field it did not expect
+ * would hide the one change an org cannot afford to lose track of.
  */
 
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
+import {
+  CONSENT_GROUP_CHANGES_COLLECTION,
+  CONSENT_GROUP_NAME_MAX,
+  CONSENT_GROUP_SWEEP_DELAY_MS,
+  CONSENT_GROUPS_CHANGE_FIELD,
+  type ConsentGroupChangeEstimate,
+  type ConsentGroupChangePreview,
+  type ConsentGroupChangePreviewLine,
+  type ConsentGroupDraft,
+  type ConsentGroupsApiChangeRequest,
+  type ConsentGroupsApiChangeResponse,
+  type ConsentGroupsApiDeclarationRequest,
+  type ConsentGroupsApiPreviewResponse,
+  type ConsentGroupsApiRequest,
+  type ConsentGroupsChangeMarker,
+  type ConsentGroupsChangePhase,
+  type ConsentGroupValidationCode,
+} from '@aglyn/aglyn/app-utils/consent-group-change'
 import { MAX_CONSENT_GROUP_HOSTS } from '@aglyn/aglyn/app-utils/consent-groups'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
 /** The route every call below posts to. */
 export const CONSENT_GROUPS_ROUTE = '/api/orgs/consent-groups'
 
-/** The org field holding the in-flight change's marker. */
-export const CONSENT_GROUPS_CHANGE_FIELD = 'consentGroupsChange'
-
-/** `orgs/{orgId}/{this}/{changeId}` — one change's job document. */
-export const CONSENT_GROUP_CHANGES_COLLECTION = 'consentGroupChanges'
-
-/** The longest name a group may carry — the route refuses a longer one. */
-export const CONSENT_GROUP_NAME_MAX = 80
-
-/**
- * How long after the flip the final sweep waits: the window in which a send
- * that resolved the old declaration can still be writing.
- */
-export const CONSENT_GROUP_SWEEP_DELAY_MS = 6 * 60_000
+export {
+  CONSENT_GROUP_CHANGES_COLLECTION,
+  CONSENT_GROUP_NAME_MAX,
+  CONSENT_GROUP_SWEEP_DELAY_MS,
+  CONSENT_GROUPS_CHANGE_FIELD,
+  MAX_CONSENT_GROUP_HOSTS,
+}
 
 /** The fewest sites a group may name; one site is already its own sender. */
 export const CONSENT_GROUP_MIN_HOSTS = 2
 
-/** The most, re-exported so the editor reads one ceiling. */
-export { MAX_CONSENT_GROUP_HOSTS }
+export type { ConsentGroupChangeEstimate, ConsentGroupChangePreview }
 
-/*==========================================
- * REQUESTS
- *=========================================*/
-
-/** One group of the complete next declaration. */
-export interface ConsentGroupDeclarationEntry {
-  /** Absent for a new group: the server mints its id. */
-  id?: string
-  name: string
-  hostIds: string[]
-}
+/** One group of the complete next declaration; a new group has no id. */
+export type ConsentGroupDeclarationEntry = ConsentGroupDraft
 
 /**
  * `preview` or `apply` a declaration.
@@ -91,27 +93,12 @@ export interface ConsentGroupDeclarationEntry {
  * opened against, or `null` when the org had none, so a change made by
  * somebody else in the meantime is refused rather than overwritten.
  */
-export interface ConsentGroupsDeclareRequest {
-  orgId: string
-  action: 'preview' | 'apply'
-  expected: Record<string, unknown> | null
-  groups: ConsentGroupDeclarationEntry[]
-}
+export type ConsentGroupsDeclareRequest = ConsentGroupsApiDeclarationRequest
 
 /** Drive, stop or read one change that is already running. */
-export interface ConsentGroupsChangeRequest {
-  orgId: string
-  action: 'continue' | 'cancel' | 'status'
-  changeId: string
-}
+export type ConsentGroupsChangeRequest = ConsentGroupsApiChangeRequest
 
-export type ConsentGroupsRequest =
-  | ConsentGroupsDeclareRequest
-  | ConsentGroupsChangeRequest
-
-/*==========================================
- * THE CHANGE WHILE IT RUNS
- *=========================================*/
+export type ConsentGroupsRequest = ConsentGroupsApiRequest
 
 /**
  * Where a running change is.
@@ -120,152 +107,22 @@ export type ConsentGroupsRequest =
  * - `rehome` — the new declaration is in force; CRM records are moving.
  * - `sweep` — a last pass for anything written while it changed.
  */
-export type ConsentGroupChangePhase = 'carry' | 'rehome' | 'sweep'
+export type ConsentGroupChangePhase = ConsentGroupsChangePhase
 
 /** `org.consentGroupsChange`, present exactly while a change runs. */
-export interface ConsentGroupChangeMarker {
-  changeId: string
-  phase: ConsentGroupChangePhase
-  /** Every site the change touches. */
-  hostIds: string[]
-  startedAtMs: number
-  /** When the new declaration took effect; absent until it has. */
-  declaredAtMs?: number
-}
-
-/** What `continue` and `status` report beside the phase. */
-export interface ConsentGroupChangeProgressReport {
-  /** Five consecutive failures: the change waits for a retry. */
-  stalled?: boolean
-  /** The last failure, already stripped of anything private. */
-  lastError?: string | null
-  failures?: number
-  /** Running totals by step, e.g. opt-outs copied so far. */
-  counts?: Record<string, number>
-}
-
-/*==========================================
- * THE PREVIEW
- *=========================================*/
-
-/** A declared group as the planner reads it: usable, named, sorted. */
-export interface ConsentGroupPreviewGroup {
-  name: string
-  hostIds: string[]
-}
-
-/** One line of what the change does to the declaration. */
-export interface ConsentGroupChangeLine {
-  kind: 'created' | 'renamed' | 'added' | 'removed' | 'moved' | 'dissolved'
-  groupId?: string
-  name?: string
-  hostId?: string
-  hostIds?: string[]
-  /** The sentence the activity log records for this line. */
-  text?: string
-  [field: string]: unknown
-}
-
-/** What signup forms said before, and will say after, for one group. */
-export interface ConsentGroupDisclosureChange {
-  groupId: string
-  hostIds: string[]
-  before: string | null
-  after: string | null
-}
-
-/** Refusals one site will copy from another, counted before anything moves. */
-export interface ConsentGroupCarryCount {
-  toHostId: string
-  fromHostId: string
-  siteSuppressions: number
-  topicOptOuts: number
-  paces: number
-}
-
-/** Refusals a site starts honoring by reading its new siblings. */
-export interface ConsentGroupInheritedCount {
-  hostId: string
-  refusals: number
-}
-
-/** Confirmations that stop holding a sibling's mail once sites separate. */
-export interface ConsentGroupPendingHold {
-  hostId: string
-  topicId: string
-  count: number
-  releasedHostIds: string[]
-}
+export type ConsentGroupChangeMarker = ConsentGroupsChangeMarker
 
 /**
  * A plugin's own account of what the change does to its data, in its words.
  * The editor prints these as given; `count` is `null` when it was not
  * counted.
  */
-export interface ConsentGroupParticipantLine {
-  id: string
-  text: string
-  count: number | null
-  severity: 'info' | 'warning' | string
-}
+export type ConsentGroupParticipantLine = ConsentGroupChangePreviewLine
 
-export interface ConsentGroupParticipantPreview {
-  pluginId: string
-  /** `null` when the plugin could not answer in time. */
-  lines: ConsentGroupParticipantLine[] | null
-}
+export type ConsentGroupsPreviewResponse = ConsentGroupsApiPreviewResponse
 
-/**
- * A site joining a group under the org's `forward` consent policy, which
- * would let it mail people its new siblings captured before a cutoff.
- */
-export interface ConsentGroupForwardPolicyWarning {
-  hostIds: string[]
-  capturedBeforeMs: number | null
-}
-
-/** How long the change is expected to take, from the volumes it counted. */
-export type ConsentGroupChangeEstimate =
-  | 'instant'
-  | 'under-a-minute'
-  | 'minutes'
-  | 'long'
-
-export interface ConsentGroupChangePreview {
-  before: Record<string, ConsentGroupPreviewGroup>
-  after: Record<string, ConsentGroupPreviewGroup>
-  /** Stored entries nothing honors today, which the write removes. */
-  discarded: Array<{ id?: string; name?: string | null } | string>
-  lines: ConsentGroupChangeLine[]
-  disclosures: ConsentGroupDisclosureChange[]
-  carries: ConsentGroupCarryCount[]
-  inherited: ConsentGroupInheritedCount[]
-  /** Only when the org's sites wait for each other's confirmation. */
-  pendingHolds: ConsentGroupPendingHold[]
-  partialAccessMembers: number
-  forwardPolicyWarning: ConsentGroupForwardPolicyWarning | string | null
-  participants: ConsentGroupParticipantPreview[]
-  /** The capture surfaces that show a group's name today, e.g. `form`. */
-  capturesDisclosing: string[]
-  estimate: ConsentGroupChangeEstimate
-}
-
-/*==========================================
- * RESPONSES
- *=========================================*/
-
-export interface ConsentGroupsPreviewResponse {
-  ok: true
-  preview: ConsentGroupChangePreview
-}
-
-export interface ConsentGroupsProgressResponse {
-  ok: true
-  changeId: string
-  phase: ConsentGroupChangePhase | 'done' | string
-  done: boolean
-  progress?: ConsentGroupChangeProgressReport | null
-}
+/** `apply`, `continue`, `cancel` and `status` all answer the change's state. */
+export type ConsentGroupsProgressResponse = ConsentGroupsApiChangeResponse
 
 /** One refusal from the route's validation, pointing at what it refused. */
 export interface ConsentGroupValidationIssue {
@@ -323,10 +180,14 @@ export type ConsentGroupsCallResult<T> =
  *
  * The route is authoritative — the editor checks only what it can check
  * without asking (a name, a site count) and shows the rest when the route
- * answers. A code this table does not know is shown as the route's own
- * sentence rather than dropped.
+ * answers. The table is keyed by the route's own codes, so a code added there
+ * without a sentence here fails the type check; one it still does not know —
+ * a server newer than this bundle — gets a general sentence rather than none.
  */
-export const CONSENT_GROUP_ISSUE_MESSAGES: Readonly<Record<string, string>> = {
+export const CONSENT_GROUP_ISSUE_MESSAGES: Readonly<
+  Record<ConsentGroupValidationCode, string>
+> = {
+  malformed: 'This change couldn’t be read. Reload the page and try again.',
   'name-empty':
     'Give the group a name. Signup forms show it, so it can’t be blank.',
   'name-too-long': `Keep the name to ${CONSENT_GROUP_NAME_MAX} characters or fewer.`,
@@ -339,31 +200,9 @@ export const CONSENT_GROUP_ISSUE_MESSAGES: Readonly<Record<string, string>> = {
     'This consent group no longer exists. Close this and start again.',
   'group-replaced':
     'Every site in this group would be replaced. Create a new group for these sites instead.',
+  'duplicate-group':
+    'The same consent group appears twice. Reload the page and try again.',
   'no-change': 'Nothing has changed yet.',
-}
-
-/**
- * Other spellings of the same refusals, folded onto the table's keys so one
- * message answers each refusal however it is spelled on the wire.
- */
-const ISSUE_ALIASES: Readonly<Record<string, string>> = {
-  'name-required': 'name-empty',
-  'name-missing': 'name-empty',
-  'name-taken': 'name-duplicate',
-  'duplicate-name': 'name-duplicate',
-  'too-few-hosts': 'too-few-sites',
-  'too-many-hosts': 'too-many-sites',
-  'unknown-host': 'unknown-site',
-  'host-not-in-org': 'unknown-site',
-  'site-not-in-org': 'unknown-site',
-  'host-in-two-groups': 'site-in-two-groups',
-  'site-claimed-twice': 'site-in-two-groups',
-  unchanged: 'no-change',
-}
-
-/** The table key a wire code names, or the code itself when unknown. */
-export function consentGroupIssueCode(code: string): string {
-  return ISSUE_ALIASES[code] ?? code
 }
 
 /** The sentence for one validation refusal, naming the site when it can. */
@@ -371,7 +210,7 @@ export function consentGroupIssueMessage(
   issue: ConsentGroupValidationIssue,
   siteName?: (hostId: string) => string,
 ): string {
-  const code = consentGroupIssueCode(issue.code)
+  const code = issue.code
   const site = issue.hostId && siteName ? siteName(issue.hostId) : ''
   if (site && code === 'unknown-site') {
     return `${site} is no longer part of your organization.`
@@ -380,7 +219,7 @@ export function consentGroupIssueMessage(
     return `${site} can be in only one consent group.`
   }
   return (
-    CONSENT_GROUP_ISSUE_MESSAGES[code] ??
+    CONSENT_GROUP_ISSUE_MESSAGES[code as ConsentGroupValidationCode] ??
     'This change can’t be made as it stands. Check the name and sites and try again.'
   )
 }

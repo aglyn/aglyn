@@ -210,6 +210,18 @@ describe('adding a site', () => {
       'People who signed up before now keep what they agreed to: nobody who signed up on Camp is shared with Acme’s other sites, or the other way around. Only people who sign up after this change, on a form that shows this name, are.',
     )
   })
+
+  it('warns, with the cutoff date, when the org grandfathers earlier captures', () => {
+    const forward = review(
+      { mode: 'edit', groupId: 'g_acme', name: 'Acme', hostIds: ['acme-a', 'acme-b', 'camp'] },
+      preview({
+        forwardPolicyWarning: { hostIds: ['camp'], enforceFromMs: Date.UTC(2026, 2, 1, 12) },
+      }),
+    )
+    expect(text(forward)).toContain(
+      'Camp will be able to email people these sites captured before March 1, 2026 without a recorded opt-in.',
+    )
+  })
 })
 
 describe('removing a site', () => {

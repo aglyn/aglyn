@@ -117,14 +117,6 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-/**
- * Whether the prerequisites' delete guard is in this tree: the route's
- * refusal and `eraseHost`'s ship together, with `SiteInConsentGroupError`.
- * I9 exercises that guard and is skipped — by name — in a tree without it.
- */
-const DELETE_GUARD =
-  EMULATED && typeof (admin as Record<string, unknown>)['SiteInConsentGroupError'] === 'function'
-
 describeEmulated('a consent group change, against Firestore (AGL-3320)', () => {
   let db: Firestore
   const key = personKey(EMAIL) as string
@@ -377,7 +369,7 @@ describeEmulated('a consent group change, against Firestore (AGL-3320)', () => {
     expect(results.find((result) => !result.ok)).toMatchObject({ status: 409 })
   })
 
-  ;(DELETE_GUARD ? it : it.skip)('I9: a site in a declared group, or named by a change in flight, cannot be deleted', async () => {
+  it('I9: a site in a declared group, or named by a change in flight, cannot be deleted', async () => {
     const ORG = 'e2e-cgc-delete'
     const A = 'e2e-cgc-delete-a'
     const B = 'e2e-cgc-delete-b'
