@@ -360,3 +360,30 @@ describe('an org that bills nothing', () => {
     expect(screen.getByText(/no margin to report/i)).toBeTruthy()
   })
 })
+
+describe('the per-org table filters from the grid toolbar', () => {
+  it('searches every row the scan read, not just the ones drawn', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse({
+        rows: [
+          rowFor(),
+          rowFor({ orgId: 'org-2', name: 'Globex', plan: 'business' }),
+        ],
+        nextCursor: null,
+        scanned: 2,
+        reads: 8,
+      }),
+    )
+    render(<Page />)
+    fireEvent.click(screen.getByRole('button', { name: /scan organizations/i }))
+    await waitFor(() => expect(screen.getByText('Globex')).toBeTruthy())
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'globex' } })
+    await waitFor(() => {
+      const grid = screen.getByRole('grid', {
+        name: 'By organization, worst margin first',
+      })
+      expect(grid.textContent).toContain('Globex')
+      expect(grid.textContent).not.toContain('Acme')
+    })
+  })
+})
