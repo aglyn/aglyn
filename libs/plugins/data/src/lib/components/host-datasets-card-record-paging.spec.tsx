@@ -217,10 +217,11 @@ const mountCard = async () => {
   })
 }
 
-/** The `Name` cell of every rendered row, top to bottom. */
+/** The `Name` cell of every rendered grid row, top to bottom. */
 const renderedRows = () =>
-  Array.from(document.querySelectorAll('tbody tr')).map(
-    (row) => row.querySelector('td')?.textContent?.trim() ?? '',
+  Array.from(document.querySelectorAll('[role="row"][data-id]')).map(
+    (row) =>
+      row.querySelector('[data-field="values.name"]')?.textContent?.trim() ?? '',
   )
 
 describe('the records table walks the collection (AGL-2501)', () => {

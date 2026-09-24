@@ -325,11 +325,16 @@ describe('the policies still apply, over the whole collection', () => {
     expect(batchUpdate.mock.calls[0][1]).toEqual({
       values: {},
       referencedIds: DELETE_FIELD,
+      // The filter tokens move with the values too, and a record left with
+      // nothing filterable loses the field rather than keeping stale ones.
+      filterKeys: DELETE_FIELD,
     })
     // An array reference keeps its other ids, and the index keeps pace.
     expect(batchUpdate.mock.calls[1][1]).toEqual({
       values: { attendee: ['rec-9'] },
       referencedIds: ['rec-9'],
+      // A reference is not filterable by value, so there are no tokens.
+      filterKeys: DELETE_FIELD,
     })
     expect(deleteDocSpy).toHaveBeenCalled()
   })

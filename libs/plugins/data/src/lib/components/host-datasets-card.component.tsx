@@ -18,7 +18,6 @@
 
 import {
   type AglynOrgBilling,
-  applyDatasetQuery,
   checkDatasetQuota,
   checkEntitlement,
   checkQuota,
@@ -30,16 +29,20 @@ import {
   getCustomFieldType,
   modelFromFieldEntries,
   parseDatasetFieldEntries,
-  parseDatasetFilter,
-  parseDatasetSort,
   pluginDocsHelp,
   validateDocument,
 } from '@aglyn/aglyn'
 import { exportShortfall, mapImportColumns, parseImportRows } from '../model'
 import { CardDisplay, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -50,12 +53,7 @@ import {
   DialogTitle,
   MenuItem,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -86,6 +84,13 @@ import {
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { DatasetSchemaDialog } from './dataset-schema-dialog.component'
 import { DatasetRecordDialog } from './dataset-record-dialog.component'
+import {
+  datasetRecordFilter,
+  matchRecordWindow,
+  planRecordFilter,
+  RECORD_FILTER_WINDOW,
+  recordColumn,
+} from './dataset-record-filter'
 
 export interface HostDatasetsCardProps {
   /** Host context: resolves the owning org and logs host activity. */
@@ -299,6 +304,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     [selected],
   )
   const fields: string[] = useMemo(() => model.order, [model])
+  // The records grid's Filters panel, from the dataset's own schema.
+  const recordFilter = useMemo(() => datasetRecordFilter(model), [model])
 
   // Guarded on BOTH the scope and a real selection (AGL-1440): with no
   // datasets, `selected` never resolves, and `datasets/-none-/records` is not
@@ -348,16 +355,44 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * `sortDatasetRecords` is deliberately NOT applied to the page. Re-sorting a
    * window of an id-ordered walk by `order` is the same lie the old code told:
    * rows would run in one order within a page and another across pages.
+   * The grid's column sort is off for the same reason.
+   *
+   * ## Filtering, and what reaches every record
+   *
+   * The grid's Filters panel and quick search narrow the walk through the
+   * record's `filterKeys` (`datasetFilterKeys`): a token array Firestore's
+   * automatic single-field index serves with `array-contains` beside the same
+   * document-name order, so it needs no composite index and no index
+   * deploy. ONE condition is served that way — the first clause a token can
+   * answer (`datasetFilterToken`), else the first search word — and when it is
+   * the only condition, the walk pages through every matching record exactly
+   * as it pages through all of them.
+   *
+   * Anything more — a second clause, a second word, a multi-word `contains`,
+   * or a clause no token answers (number and date ranges, empty checks,
+   * negations) — cannot be one `array-contains`. Those read a WINDOW of
+   * {@link RECORD_FILTER_WINDOW} records under the served condition (or the
+   * plain walk when none is servable), match the rest in memory, and page the
+   * matches here; the caption says when the window was full. Ranges on
+   * numbers and dates are therefore always window-only.
    */
-  const {
-    rows: records,
-    hasMore: hasMoreRecords,
-    page: recordPage,
-    setPage: setRecordPage,
-    pageSize: recordPageSize,
-    setPageSize: setRecordPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) =>
+  const gridFilter = useListGridFilter({ selectFields: recordFilter.selectFields })
+  // A clause on a field this dataset does not have (the reader switched
+  // datasets) narrows nothing and is not shown.
+  const recordClauses = useMemo(
+    () =>
+      gridFilter.clauses.filter((clause) =>
+        recordFilter.fields.some((field) => field.column === clause.field),
+      ),
+    [gridFilter.clauses, recordFilter.fields],
+  )
+  const recordPlan = useMemo(
+    () => planRecordFilter(model, recordClauses, gridFilter.searchWords),
+    [model, recordClauses, gridFilter.searchWords],
+  )
+  /** The walk, narrowed by the served token when there is one. */
+  const recordsQuery = useCallback(
+    (cap: number) =>
       dataScope && selected?.$id
         ? query(
             collection(
@@ -368,13 +403,71 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
               selected.$id,
               'records',
             ),
+            ...(recordPlan.token
+              ? [where('filterKeys', 'array-contains', recordPlan.token)]
+              : []),
             orderBy(documentId()),
-            limit(pageLimit),
+            limit(cap),
           )
         : null,
-    [firestore, dataScope, selected?.$id],
+    [firestore, dataScope, selected?.$id, recordPlan.token],
+  )
+  const {
+    rows: pagedRecords,
+    hasMore: hasMorePaged,
+    page: pagedPage,
+    setPage: setPagedPage,
+    pageSize: recordPageSize,
+    setPageSize: setPagedPageSize,
+  } = usePagedCollection<any>(
+    (pageLimit) => (recordPlan.windowed ? null : recordsQuery(pageLimit)),
+    [recordsQuery, recordPlan.windowed],
     { idField: '$id' },
   )
+  // The window: one read past the cap, so "the window was full" is a fact.
+  const { data: windowDocs } = useFirestoreCollection<any>(
+    () => (recordPlan.windowed ? recordsQuery(RECORD_FILTER_WINDOW + 1) : null),
+    [recordsQuery, recordPlan.windowed],
+    { idField: '$id' },
+  )
+  const windowRecords = useMemo(
+    () => (recordPlan.windowed ? (windowDocs ?? []).slice(0, RECORD_FILTER_WINDOW) : []),
+    [recordPlan.windowed, windowDocs],
+  )
+  const windowFull = recordPlan.windowed && (windowDocs?.length ?? 0) > RECORD_FILTER_WINDOW
+  const windowMatches = useMemo(
+    () =>
+      recordPlan.windowed
+        ? matchRecordWindow(model, recordFilter.fields, windowRecords, recordPlan)
+        : [],
+    [recordPlan, model, recordFilter.fields, windowRecords],
+  )
+  const [windowPage, setWindowPage] = useState(0)
+  const [windowPageSize, setWindowPageSize] = useState(recordPageSize)
+  useEffect(() => {
+    setWindowPage(0)
+  }, [recordPlan, selected?.$id])
+  /** Every record this card has read: the page, or the whole window. */
+  const records = recordPlan.windowed ? windowRecords : pagedRecords
+  /** The rows on screen. */
+  const shownRecords = recordPlan.windowed
+    ? windowMatches.slice(windowPage * windowPageSize, (windowPage + 1) * windowPageSize)
+    : pagedRecords
+  const recordPage = recordPlan.windowed ? windowPage : pagedPage
+  const setRecordPage = recordPlan.windowed ? setWindowPage : setPagedPage
+  const hasMoreRecords = recordPlan.windowed
+    ? (windowPage + 1) * windowPageSize < windowMatches.length
+    : hasMorePaged
+  const setRecordPageSize = useCallback(
+    (next: number) => {
+      setPagedPageSize(next)
+      setWindowPageSize(next)
+      setWindowPage(0)
+    },
+    [setPagedPageSize],
+  )
+  const filteringRecords =
+    recordClauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
   /**
    * The two HEAD-COUNTS on this card are server aggregates, not the lengths
    * of the two capped listeners above (AGL-1716, the AGL-1706 shape).
@@ -487,36 +580,6 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     serverRecordCount && serverRecordCount.datasetId === countedDatasetId
       ? serverRecordCount.count
       : records.length
-  /*
-   * NO FILTERS PANEL AND NO SEARCH over the records (AGL-3317). The walk is
-   * cursor-paged by document name, and a record's fields live under
-   * `values`, which the index configuration exempts from single-field
-   * indexing — so no `where` on any field can be served, and a filter or a
-   * search over the loaded page would present one page as the dataset. The
-   * Filter and Sort boxes stay because they say they apply to this page, and
-   * the Dataset select is a scope: it picks which collection is walked.
-   */
-  // Query layer (AGL-181): the same evaluator the renderer uses, applied in
-  // memory over the rows in front of the reader. That window is now one PAGE
-  // rather than a 500-row sample (AGL-2501), which is a smaller claim and a
-  // true one — the helper text says which, because a filter box that looks
-  // like it searches the collection and does not is worse than one that says
-  // so.
-  const [filterText, setFilterText] = useState('')
-  const [sortText, setSortText] = useState('')
-  const visibleRecords = useMemo(() => {
-    const where = parseDatasetFilter(filterText)
-    const orderBy = parseDatasetSort(sortText)
-    if (!where && !orderBy) return records
-    const rows = records.map((record: any) => ({
-      __record: record,
-      ...(record.values ?? {}),
-    }))
-    return applyDatasetQuery(model, rows, {
-      ...(where ? { where: [where] } : {}),
-      ...(orderBy ? { orderBy } : {}),
-    }).map((row: any) => row.__record)
-  }, [records, filterText, sortText, model])
 
   // --- Create dataset -----------------------------------------------------
   const [creator, setCreator] = useState<{
@@ -801,7 +864,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
    * an edit landing underneath updates the open dialog. When the row leaves
    * the page — deleted, or paged past — this answers `null` and the dialog
    * closes, which is the honest response to a record no longer in front of
-   * this reader. Nothing here queries: `records` is the page query's answer.
+   * this reader. Nothing here queries: `records` is the page (or filter window)
+   * query's answer.
    */
   const [viewerId, setViewerId] = useState<string | null>(null)
   const viewerRecord = useMemo(
@@ -883,7 +947,7 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             ...datasetIntegrityUpdate(model, coerced, deleteField()),
             updatedAt: Timestamp.now(),
           },
-          { mergeFields: ['values', 'referencedIds', 'updatedAt'] },
+          { mergeFields: ['values', 'referencedIds', 'filterKeys', 'updatedAt'] },
         )
         await announceRecords(selected.$id)
       } else {
@@ -1355,6 +1419,72 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
     logActivity,
   ])
 
+  /*
+   * One column per schema field, filterable as far as `datasetRecordFilter`
+   * declares it. The row OPENS the record, read-only (`onOpen`); the actions
+   * column holds the keyboard's way in (`View`, a real button) beside Edit
+   * and Delete, and a press anywhere in it never opens the row.
+   */
+  const recordGridColumns = useMemo(
+    () =>
+      listFilterGridColumns(
+        [
+          ...fields.map((fieldId) => {
+            const field = model.fields[fieldId]
+            return {
+              field: recordColumn(fieldId),
+              headerName: field?.name ?? fieldId,
+              // Field descriptions (AGL-560) surface as header hints.
+              description: field?.description,
+              flex: 1,
+              minWidth: 140,
+              sortable: false,
+              renderCell: ({ row }: { row: any }) =>
+                field?.type === 'reference'
+                  ? referenceLabel(fieldId, row.values?.[fieldId]) || '--'
+                  : field
+                    ? formatDatasetValue(field, row.values?.[fieldId]) || '--'
+                    : '--',
+            }
+          }),
+          listActionsColumn(
+            (record: any) => (
+              <Stack
+                direction="row"
+                sx={{ height: '100%', alignItems: 'center', justifyContent: 'flex-end' }}
+              >
+                <Button size="small" onClick={() => setViewerId(record.$id)}>
+                  {'View'}
+                </Button>
+                <Button size="small" onClick={handleOpenRecord(record)}>
+                  {'Edit'}
+                </Button>
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={handleDeleteRecord(record)}
+                >
+                  {'Delete'}
+                </Button>
+              </Stack>
+            ),
+            { width: 220 },
+          ),
+        ] as Parameters<typeof listFilterGridColumns>[0],
+        recordFilter.fields,
+        recordFilter.options,
+        recordFilter.headers,
+      ),
+    [
+      fields,
+      model,
+      referenceLabel,
+      handleOpenRecord,
+      handleDeleteRecord,
+      recordFilter,
+    ],
+  )
+
   return (
     <CardDisplay
       header={'Data'}
@@ -1378,6 +1508,8 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
           </Typography>
         ) : (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+            {/* A scope, not a filter: it picks which collection the table
+                walks, and the grid's own Filters panel narrows within it. */}
             <TextField
               select
               size="small"
@@ -1446,130 +1578,51 @@ export function HostDatasetsCard(props: HostDatasetsCardProps) {
             noun="record"
           />
         ) : null}
-        {selected && records.length > 0 ? (
-          <Stack direction="row" spacing={1}>
-            <TextField
-              size="small"
-              label="Filter"
-              value={filterText}
-              onChange={(event) => setFilterText(event.target.value)}
-              helperText={'e.g. price <= 20 · applies to this page'}
-              sx={{ minWidth: 220 }}
-            />
-            <TextField
-              size="small"
-              label="Sort"
-              value={sortText}
-              onChange={(event) => setSortText(event.target.value)}
-              helperText={'e.g. price desc'}
-              sx={{ minWidth: 140 }}
-            />
-          </Stack>
-        ) : null}
-        {selected && (records.length > 0 || recordPage > 0) ? (
+        {selected && (records.length > 0 || recordPage > 0 || filteringRecords) ? (
           <>
-          <ScrollTable size="small">
-            <TableHead>
-              <TableRow>
-                {fields.map((fieldId) => {
-                  const field = model.fields[fieldId]
-                  // Field descriptions (AGL-560) surface as header hints.
-                  return (
-                    <TableCell key={fieldId}>
-                      {field?.description ? (
-                        <Tooltip title={field.description}>
-                          <span style={{ cursor: 'help' }}>
-                            {field.name ?? fieldId}
-                          </span>
-                        </Tooltip>
-                      ) : (
-                        (field?.name ?? fieldId)
-                      )}
-                    </TableCell>
-                  )
-                })}
-                <TableCell align="right">{'Actions'}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {visibleRecords.map((record: any) => (
-                /*
-                  The row OPENS the record, read-only. Reading a record and
-                  changing one used to be the same gesture: `Edit` was the only
-                  way to see a document's full contents, so every look opened a
-                  form whose primary button writes.
-
-                  The click is the mouse affordance and nothing else — a `<tr>`
-                  cannot be made into a real activatable control without
-                  overriding the `row` role a table depends on. The keyboard's
-                  affordance is the `View` button in the actions cluster: a
-                  genuine `<button>`, in the tab order, announced as one, with
-                  the theme's focus ring. Both reach the same handler.
-                */
-                <TableRow
-                  key={record.$id}
-                  hover
-                  onClick={() => setViewerId(record.$id)}
-                  sx={{ cursor: 'pointer' }}
-                >
-                  {fields.map((fieldId) => (
-                    <TableCell key={fieldId}>
-                      {model.fields[fieldId]?.type === 'reference'
-                        ? referenceLabel(fieldId, record.values?.[fieldId]) ||
-                          '--'
-                        : model.fields[fieldId]
-                          ? formatDatasetValue(
-                              model.fields[fieldId],
-                              record.values?.[fieldId],
-                            ) || '--'
-                          : '--'}
-                    </TableCell>
-                  ))}
-                  <TableCell
-                    align="right"
-                    sx={{ whiteSpace: 'nowrap' }}
-                    /*
-                      Every control in this cell is its OWN action. Without
-                      this the row's handler fires too, so `Delete` would open
-                      the viewer behind its own destructive write and `Edit`
-                      would leave a read-only dialog stacked under the form —
-                      the kind of defect nobody reports and everybody works
-                      around.
-                    */
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <Button
-                      size="small"
-                      onClick={() => setViewerId(record.$id)}
-                    >
-                      {'View'}
-                    </Button>
-                    <Button size="small" onClick={handleOpenRecord(record)}>
-                      {'Edit'}
-                    </Button>
-                    <Button
-                      size="small"
-                      color="error"
-                      onClick={handleDeleteRecord(record)}
-                    >
-                      {'Delete'}
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </ScrollTable>
+          <ListFilterChips
+            fields={recordFilter.fields}
+            headers={recordFilter.headers}
+            clauses={recordClauses}
+            onChange={gridFilter.setClauses}
+            options={recordFilter.options}
+            servedField={recordPlan.windowed ? null : recordPlan.servedField}
+          />
+          {windowFull ? (
+            <Typography variant="caption" color="text.secondary">
+              {`Filtering the first ${RECORD_FILTER_WINDOW.toLocaleString()} records` +
+                (recordPlan.token ? ' that match the first condition' : '') +
+                ' — one filter or one search word on its own reaches every record.'}
+            </Typography>
+          ) : null}
+          <ListTable
+            aria-label="Records"
+            rows={shownRecords}
+            columns={recordGridColumns}
+            onOpen={(id) => setViewerId(id)}
+            // One page of the walk (or of the window's matches), turned by
+            // the footer below: the grid neither slices nor filters it.
+            hideFooter
+            filterMode="server"
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            quickFilter
+            disableColumnSorting
+            noRowsLabel={
+              filteringRecords ? 'No records match these filters' : 'No records yet.'
+            }
+          />
           {/* The count line is the PAGE's, deliberately. `recordCount` is the
               dataset's real size and it already has its own readout above —
               handing it to the footer as `count` would tell MUI the walk is
-              that long and leave Next live past the end of it whenever a rule
-              or a scope has narrowed what this reader may list. `hasMore` is
-              a fact from the probe row, so the footer answers for the walk it
-              is actually paging. */}
+              that long and leave Next live past the end of it whenever a rule,
+              a scope or a filter has narrowed what this reader may list.
+              `hasMore` is a fact from the probe row (or from the window's
+              matches), so the footer answers for what it is actually paging. */}
           <ListPagination
             page={recordPage}
             pageSize={recordPageSize}
-            rowCount={records.length}
+            rowCount={shownRecords.length}
             hasMore={hasMoreRecords}
             onPageChange={setRecordPage}
             onPageSizeChange={setRecordPageSize}

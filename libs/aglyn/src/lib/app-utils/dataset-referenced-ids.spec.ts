@@ -142,12 +142,12 @@ describe('the field is OMITTED when a record references nothing', () => {
     // cleared would go on answering the `array-contains` for a document it no
     // longer points at — a `restrict` refusing a delete nothing is holding.
     const clear = Symbol('deleteField')
-    expect(datasetIntegrityUpdate(model, { title: 'Standup' }, clear)).toEqual({
-      referencedIds: clear,
-    })
     expect(
-      datasetIntegrityUpdate(model, { owner: 'person-1' }, clear),
-    ).toEqual({ referencedIds: ['person-1'] })
+      datasetIntegrityUpdate(model, { title: 'Standup' }, clear).referencedIds,
+    ).toBe(clear)
+    expect(
+      datasetIntegrityUpdate(model, { owner: 'person-1' }, clear).referencedIds,
+    ).toEqual(['person-1'])
   })
 })
 
@@ -185,6 +185,20 @@ describe('every record write path carries the index', () => {
     [SITE_IMPORT, 1],
   ])('%s derives it at every write', (path, expected) => {
     expect({ path, sites: callSites(path) }).toEqual({ path, sites: expected })
+  })
+
+  it('a `mergeFields` write names every field the helper returns', () => {
+    // `mergeFields` writes ONLY the paths it lists, so a field the helper
+    // returns but the list omits is silently dropped from the write — the
+    // filter tokens would describe the record's previous values.
+    const card = read(CARD)
+    const lists = card.match(/mergeFields: \[[^\]]*\]/g) ?? []
+    expect(lists.length).toBeGreaterThan(0)
+    for (const list of lists) {
+      if (!list.includes("'values'")) continue
+      expect(list).toContain("'referencedIds'")
+      expect(list).toContain("'filterKeys'")
+    }
   })
 
   it('the merging writes CLEAR rather than omit', () => {

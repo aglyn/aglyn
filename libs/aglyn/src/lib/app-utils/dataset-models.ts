@@ -16,6 +16,7 @@
  */
 
 import { validateCustomFieldValue } from '../plugin-manager/custom-fields'
+import { datasetFilterKeys } from './dataset-filter-keys'
 import { type DatasetFieldEntry, humanizeDatasetFieldId } from './datasets'
 
 /**
@@ -517,9 +518,17 @@ export function datasetReferencedIds(
 export function datasetIntegrityFields(
   model: DatasetModel,
   values: Record<string, unknown> | undefined,
-): { referencedIds?: string[] } {
+): { referencedIds?: string[]; filterKeys?: string[] } {
   const referencedIds = datasetReferencedIds(model, values)
-  return referencedIds.length ? { referencedIds } : {}
+  // The records table's filter tokens (`datasetFilterKeys`) travel on the
+  // same writes for the same reason: a record written without them is
+  // invisible to every filter the query serves. Omitted when empty, like
+  // `referencedIds`.
+  const filterKeys = datasetFilterKeys(model, values)
+  return {
+    ...(referencedIds.length ? { referencedIds } : {}),
+    ...(filterKeys.length ? { filterKeys } : {}),
+  }
 }
 
 /**
@@ -532,13 +541,19 @@ export function datasetIntegrityFields(
  * at — a `restrict` that refuses a delete nothing is holding. `clear` is the
  * caller's delete sentinel: `deleteField()` in the web SDK,
  * `FieldValue.delete()` in the Admin SDK. It is passed in rather than imported
- * because this module is shared by both and must stay SDK-free.
+ * because this module is shared by both and must stay SDK-free. The filter
+ * tokens are cleared the same way, so a record emptied of every filterable
+ * value stops answering the filters its old values did.
  */
 export function datasetIntegrityUpdate<TClear>(
   model: DatasetModel,
   values: Record<string, unknown> | undefined,
   clear: TClear,
-): { referencedIds: string[] | TClear } {
+): { referencedIds: string[] | TClear; filterKeys: string[] | TClear } {
   const referencedIds = datasetReferencedIds(model, values)
-  return { referencedIds: referencedIds.length ? referencedIds : clear }
+  const filterKeys = datasetFilterKeys(model, values)
+  return {
+    referencedIds: referencedIds.length ? referencedIds : clear,
+    filterKeys: filterKeys.length ? filterKeys : clear,
+  }
 }
