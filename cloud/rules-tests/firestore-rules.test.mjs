@@ -5801,6 +5801,35 @@ describe('a consent group change is the executor’s to write (AGL-3320)', () =>
     await mustDeny('an outsider reading the job', getDoc(job(authed(OUTSIDER))))
   })
 
+  it('lets a custom role the route admits read the job — both of its permissions, org-wide', async () => {
+    // The route runs a change for any member granted `org.settings` AND
+    // `data.manage`, a custom role included; the progress panel listens here
+    // under the same gate, so a narrower rule is a denied listen.
+    const CUSTOM = 'uid-custom-consent'
+    const HALF = 'uid-half-consent'
+    const SCOPED = 'uid-scoped-consent'
+    const both = { 'org.settings': true, 'data.manage': true }
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(job(db), JOB)
+      await setDoc(doc(db, 'orgs', ORG, 'members', CUSTOM), {
+        role: 'viewer', allHosts: true, roleId: 'consent-editor', resolvedPermissions: both,
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', HALF), {
+        role: 'viewer', allHosts: true, roleId: 'settings-only',
+        resolvedPermissions: { 'org.settings': true },
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'members', SCOPED), {
+        role: 'editor', allHosts: false, hostAccess: { [HOST]: 'editor' },
+        resolvedPermissions: both,
+      })
+    })
+    await mustAllow('a custom role stamped with both permissions', getDoc(job(authed(CUSTOM))))
+    await mustDeny('a custom role stamped with only one', getDoc(job(authed(HALF))))
+    await mustDeny('a site collaborator stamped with both', getDoc(job(authed(SCOPED))))
+    await mustDeny('the custom role writing it', updateDoc(job(authed(CUSTOM)), { lease: null }))
+  })
+
   it('lets nobody write the job', async () => {
     await mustDeny('the owner creating a job', setDoc(job(authed(OWNER)), JOB))
     await env.withSecurityRulesDisabled(async (context) => {

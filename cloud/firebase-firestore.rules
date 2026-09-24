@@ -2080,10 +2080,13 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // A consent group change's job (AGL-3320): read by the managers whose
-      // editor shows its progress; written only by the Admin-SDK executor.
+      // A consent group change's job (AGL-3320): read by whoever the route
+      // lets run one — a manager, or an org-wide member stamped with both of
+      // its permissions — and written only by the Admin-SDK executor.
       match /consentGroupChanges/{changeId} {
-        allow read: if isStaff() || canManageOrg();
+        allow read: if isStaff() || canManageOrg() ||
+          (isOrgWideMember() && memberStamps('org.settings') &&
+           memberStamps('data.manage'));
         allow write: if false;
       }
 
