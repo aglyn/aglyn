@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-import { components } from '@aglyn/aglyn'
+import { components, HostViewType } from '@aglyn/aglyn'
 
 /**
  * Every word the Styles and Attributes tabs show about changing ONE placement
  * of a shared definition — a reusable component, a form placed from the Forms
- * page, and (by the same API) a shared layout (AGL-3288).
+ * page, and (by the same API) a shared layout (AGL-3288), and a reusable block
+ * placed in an email (AGL-3287).
  *
  * The people reading these words have never built a website. The storage
  * layer's vocabulary — override, instance, target, root, attribute — is
@@ -30,15 +31,49 @@ import { components } from '@aglyn/aglyn'
  * vocabulary leaks (`placement-override-copy.spec.ts`).
  */
 
-/** What kind of shared thing the selected node is one placement of. */
-export type PlacementKind = 'component' | 'form' | 'layout'
+/**
+ * What kind of shared thing the selected node is one placement of. `email`
+ * is a reusable component placed in an email (AGL-3287): the same placement,
+ * worded for a block in an email rather than a component on a page.
+ */
+export type PlacementKind = 'component' | 'form' | 'layout' | 'email'
+
+/**
+ * Which kind of placement a selected node is, for both tabs: a form placed
+ * from the Forms page, a reusable block in an email (AGL-3287) — every
+ * instance on an email's canvas is one, since the email's drawer offers
+ * nothing else — or a component on a page.
+ */
+export function placementKindFor(
+  isPlacedForm: boolean,
+  viewType: unknown,
+): PlacementKind {
+  if (isPlacedForm) return 'form'
+  return viewType === HostViewType.EMAIL ? 'email' : 'component'
+}
 
 /** The noun an author knows each kind by. */
 const PLACEMENT_NOUN: Record<PlacementKind, string> = {
   component: 'component',
   form: 'form',
   layout: 'layout',
+  // Every element an email's drawer offers is a block, the saved ones too.
+  email: 'block',
 }
+
+/**
+ * What the Styles tab says about a block placed in an email (AGL-3287), in
+ * place of its "change it here" section: an email is built from each block's
+ * own settings and never reads a style, so a restyle there would show on the
+ * canvas and reach no inbox.
+ *
+ * Kept out of {@link allPlacementCopyStrings} on purpose. It names the
+ * Attributes tab by the label that tab carries on screen, which is the one
+ * way that word reaches an author as something they can see, rather than as
+ * the storage vocabulary the sweep keeps off the screen.
+ */
+export const EMAIL_PLACEMENT_STYLE_NOTE =
+  "In emails, change a block's look with its settings in the Attributes tab."
 
 /** The strings one placement's "change it here" section shows. */
 export interface PlacementCopy {
@@ -91,19 +126,29 @@ export function placementCopy(kind: PlacementKind = 'component'): PlacementCopy 
   const noun = PLACEMENT_NOUN[kind] ?? PLACEMENT_NOUN.component
   const the = `the ${noun}`
   const whole = `Whole ${noun}`
+  // Where a change lands: the page, or — for a block placed in an email
+  // (AGL-3287) — the email, which is the thing its author has open.
+  const inEmail = kind === 'email'
+  const here = inEmail ? 'in this email' : 'on this page'
   return {
-    sectionTitle: 'Change it on this page only',
-    intro:
-      `Changes here affect this spot only. The ${noun} itself, and every ` +
-      'other page using it, stay the same.',
+    sectionTitle: `Change it ${here} only`,
+    intro: inEmail
+      ? 'Changes here affect this email only. The block itself, and every ' +
+        'other email using it, stay the same.'
+      : `Changes here affect this spot only. The ${noun} itself, and every ` +
+        'other page using it, stay the same.',
     helpExcerpt:
       kind === 'form'
         ? 'Give this form its own labels, placeholders or button text on ' +
           'this page. What the form collects stays the same. Leave a box ' +
           "empty to keep the form's own value."
-        : `Give this spot its own settings, like a different button style ` +
-          `or link, without changing ${the} anywhere else. Leave a box ` +
-          `empty to keep ${the}'s own value.`,
+        : inEmail
+          ? 'Give this block its own settings in this email, like a ' +
+            'different color or link, without changing it in any other ' +
+            "email. Leave a box empty to keep the block's own value."
+          : `Give this spot its own settings, like a different button style ` +
+            `or link, without changing ${the} anywhere else. Leave a box ` +
+            `empty to keep ${the}'s own value.`,
     styleHelpExcerpt:
       `Restyle this spot without changing ${the} anywhere else. Pick a ` +
       'part to restyle just that piece.',
@@ -125,10 +170,10 @@ export function placementCopy(kind: PlacementKind = 'component'): PlacementCopy 
     changedListLabel: 'Changed here:',
     summary: (count) =>
       count > 0
-        ? `${count} ${count === 1 ? 'change' : 'changes'} on this page`
-        : 'No changes on this page yet',
+        ? `${count} ${count === 1 ? 'change' : 'changes'} ${here}`
+        : `No changes ${here} yet`,
     resetAll: 'Reset all',
-    resetAllAria: `Reset every change on this page back to ${the}'s values`,
+    resetAllAria: `Reset every change ${here} back to ${the}'s values`,
     resetField: (fieldLabel) =>
       `Reset ${fieldLabel} to ${the}'s value`,
     nothingToChange: `This part of ${the} has nothing to change here.`,
@@ -241,6 +286,18 @@ const FRIENDLY_TYPE: Record<string, string> = {
   form: 'Form',
   formField: 'Field',
   reusableInstance: 'Component',
+  // An email's elements (AGL-3287), by what each one is rather than by the
+  // "Email …" label the drawer gives it: inside an email every element is an
+  // email element, so the prefix tells an author nothing.
+  emailSection: 'Section',
+  emailText: 'Text',
+  emailRichtext: 'Text',
+  emailImage: 'Image',
+  emailButton: 'Button',
+  emailDivider: 'Divider',
+  emailSpacer: 'Spacer',
+  emailProduct: 'Product',
+  emailHtml: 'Custom HTML',
 }
 
 /** The name every plain wrapper shares. */

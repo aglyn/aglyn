@@ -19,7 +19,9 @@
 import {
   canvas,
   PLATFORM_BRAND_NAME,
+  REUSABLE_COMPONENT_KIND_EMAIL,
   REUSABLE_INSTANCE_COMPONENT_ID,
+  reusableComponentKindForRoot,
   type NodeSchema,
 } from '@aglyn/aglyn'
 import { openEditorSession } from '@aglyn/aglyn/plugin-manager/editor-sessions'
@@ -133,6 +135,15 @@ export function AiSaveAsComponent(props: AiSaveAsComponentProps) {
 
   const writer: AssistEditComponentWriter = {
     createComponent: async (input) => {
+      // A block saved out of an email is an email block (AGL-3287), so it is
+      // offered in emails and never on a page. Read off the element being
+      // saved, because this panel sees the canvas and not the editor's view;
+      // an email offers email blocks alone, so the two cannot disagree.
+      const kind = reusableComponentKindForRoot(
+        (input.nodes as Record<string, { pluginId?: unknown } | undefined>)[
+          input.rootId
+        ],
+      )
       const created = await createHostResource({
         hostId: String(hostId),
         resource: 'reusableComponent',
@@ -141,6 +152,7 @@ export function AiSaveAsComponent(props: AiSaveAsComponentProps) {
           rootId: input.rootId,
           nodes: input.nodes,
           ...(input.props.length ? { props: input.props } : {}),
+          ...(kind === REUSABLE_COMPONENT_KIND_EMAIL ? { kind } : {}),
         },
       })
       return created.id

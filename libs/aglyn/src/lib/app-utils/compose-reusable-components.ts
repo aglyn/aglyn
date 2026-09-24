@@ -457,8 +457,13 @@ export function listInstanceStyleTargets(
 /**
  * Definitions may nest instances of other definitions; expansion runs in
  * passes capped here so a self-referencing definition can't recurse forever.
+ *
+ * Exported for the one reader that has to agree with it: a loader fetching
+ * only the definitions a document references (`load-referenced-components`)
+ * follows nesting exactly this deep, so it never reads a level the graft
+ * would not expand, and never stops short of one it would.
  */
-const MAX_COMPONENT_DEPTH = 5
+export const MAX_COMPONENT_DEPTH = 5
 
 type NormalizedNodes<N extends AglynNodeSchema> = Record<NodeId, N>
 

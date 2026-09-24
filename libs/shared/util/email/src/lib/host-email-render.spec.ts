@@ -21,6 +21,7 @@ import {
   renderHostEmail,
   renderLoadedHostEmail,
   type AdminFirestoreLike,
+  type HostEmailComposer,
 } from './host-email-render'
 
 /** A Firestore-ish snapshot over a plain object. */
@@ -87,6 +88,15 @@ const NODES = {
  */
 const SANITIZE = (html: string) => html
 
+/**
+ * The composer these tests hand the loader: the map as stored. Nothing here
+ * places a reusable block — what the graft does is the core's to prove
+ * (`load-referenced-components.spec.ts`), and the senders pass the real one.
+ * What THIS layer owes is calling it and rendering what it returns, which the
+ * `reusable blocks` block below holds.
+ */
+const COMPOSE: HostEmailComposer = async (nodes) => nodes
+
 describe('renderHostEmail (AGL-770)', () => {
   beforeEach(() => jest.spyOn(console, 'error').mockImplementation(() => undefined))
 
@@ -96,6 +106,7 @@ describe('renderHostEmail (AGL-770)', () => {
     expect(
       await renderHostEmail(fs, 'h1', 'not-a-real-email', {}, {
         sanitize: SANITIZE,
+        compose: COMPOSE,
       }),
     ).toBeNull()
     expect(reads.templates).toBe(0)
@@ -108,11 +119,13 @@ describe('renderHostEmail (AGL-770)', () => {
     expect(
       await renderHostEmail(fs, 'h1', 'member-post', {}, {
         sanitize: SANITIZE,
+        compose: COMPOSE,
       }),
     ).toBeNull()
     expect(
       await renderHostEmail(fs, 'h1', 'campaign', {}, {
         sanitize: SANITIZE,
+        compose: COMPOSE,
       }),
     ).toBeNull()
     expect(reads.templates).toBe(0)
@@ -124,6 +137,7 @@ describe('renderHostEmail (AGL-770)', () => {
     expect(
       await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
         sanitize: SANITIZE,
+        compose: COMPOSE,
       }),
     ).toBeNull()
   })
@@ -137,7 +151,7 @@ describe('renderHostEmail (AGL-770)', () => {
     )
     const result = await renderHostEmail(fs, 'h1', 'booking-confirmed', {
       name: 'Alex',
-    }, { sanitize: SANITIZE })
+    }, { sanitize: SANITIZE, compose: COMPOSE })
     expect(result?.subject).toBe('See you Alex')
     expect(result?.html).toContain('Hi Alex')
   })
@@ -149,7 +163,9 @@ describe('renderHostEmail (AGL-770)', () => {
       { nodes: NODES },
       reads,
     )
-    const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder')
+    const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder', {
+      compose: COMPOSE,
+    })
     expect(loaded).not.toBeNull()
     expect(reads.templates).toBe(1)
     expect(reads.versions).toBe(1)
@@ -192,7 +208,7 @@ describe('renderHostEmail (AGL-770)', () => {
         'h1',
         'booking-confirmed',
         {},
-        { sanitize: SANITIZE },
+        { sanitize: SANITIZE, compose: COMPOSE },
       )
       expect(result?.html).toContain(
         'src="https://shop.acme.com/api/media/cdn/org:o1:h1/med7"',
@@ -209,7 +225,7 @@ describe('renderHostEmail (AGL-770)', () => {
         'h1',
         'booking-confirmed',
         {},
-        { sanitize: SANITIZE },
+        { sanitize: SANITIZE, compose: COMPOSE },
       )
       expect(result?.html).toContain(
         'src="https://acme.aglyn.app/api/media/cdn/org:o1:h1/med7"',
@@ -224,7 +240,7 @@ describe('renderHostEmail (AGL-770)', () => {
         'h1',
         'booking-confirmed',
         {},
-        { sanitize: SANITIZE },
+        { sanitize: SANITIZE, compose: COMPOSE },
       )
       expect(result?.html).not.toContain('media:org')
       expect(result?.html).not.toContain('src="/api/media/cdn')
@@ -240,7 +256,11 @@ describe('renderHostEmail (AGL-770)', () => {
         'h1',
         'booking-confirmed',
         {},
-        { origin: 'https://passed.test', sanitize: SANITIZE },
+        {
+          origin: 'https://passed.test',
+          sanitize: SANITIZE,
+          compose: COMPOSE,
+        },
       )
       expect(result?.html).toContain('src="https://passed.test/api/media/cdn/')
       expect(reads.hosts).toBe(0)
@@ -251,7 +271,9 @@ describe('renderHostEmail (AGL-770)', () => {
       const fs = fakeFirestore(published, { nodes: IMAGE_NODES }, reads, {
         subdomain: 'acme',
       })
-      const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder')
+      const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder', {
+      compose: COMPOSE,
+    })
       renderLoadedHostEmail(loaded!, { name: 'Alex' }, SANITIZE)
       renderLoadedHostEmail(loaded!, { name: 'Sam' }, SANITIZE)
       expect(reads.hosts).toBe(1)
@@ -267,6 +289,7 @@ describe('renderHostEmail (AGL-770)', () => {
       expect(
         await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
           sanitize: SANITIZE,
+          compose: COMPOSE,
         }),
       ).toBeNull()
       expect(reads.hosts).toBe(0)
@@ -285,7 +308,7 @@ describe('renderHostEmail (AGL-770)', () => {
       'h1',
       'booking-confirmed',
       {},
-      { sanitize: SANITIZE },
+      { sanitize: SANITIZE, compose: COMPOSE },
     )
     expect(result?.subject).not.toContain('{{')
     expect(result?.html).not.toContain('{{')
@@ -337,7 +360,7 @@ describe('renderHostEmail (AGL-770)', () => {
         'h1',
         'booking-confirmed',
         { name: 'Alex' },
-        { sanitize: SANITIZE },
+        { sanitize: SANITIZE, compose: COMPOSE },
       )
       expect(result?.subject).toBe('See you Alex')
       expect(result?.html).toContain('Hi Alex')
@@ -355,7 +378,7 @@ describe('renderHostEmail (AGL-770)', () => {
           'h1',
           'booking-confirmed',
           { name: 'Alex' },
-          { sanitize: SANITIZE },
+          { sanitize: SANITIZE, compose: COMPOSE },
         )
       }
       expect(await render(pooledNodes())).toEqual(await render(NODES))
@@ -375,6 +398,7 @@ describe('renderHostEmail (AGL-770)', () => {
         expect(
           await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
             sanitize: SANITIZE,
+            compose: COMPOSE,
           }),
         ).toBeNull()
         // Silence is how an undecodable design becomes an empty send.
@@ -383,5 +407,116 @@ describe('renderHostEmail (AGL-770)', () => {
         spy.mockRestore()
       }
     })
+  })
+})
+
+/**
+ * A site's reusable blocks reach the mail through the composer (AGL-3287).
+ *
+ * A header or footer the site owner placed is a `reusableInstance` node, which
+ * `renderEmailHtml` draws as nothing. This lib cannot graft it — the component
+ * model is the core's, and `scope:shared` may not import it — so the loader
+ * takes a composer and renders exactly what that composer returns. These pin
+ * the contract from this side: called once per LOAD with the handle and site
+ * the template was read with, its output the thing every recipient receives,
+ * its failure the built-in copy rather than an email with its header missing.
+ */
+describe('reusable blocks go through the composer (AGL-3287)', () => {
+  beforeEach(() =>
+    jest.spyOn(console, 'error').mockImplementation(() => undefined),
+  )
+  afterEach(() => jest.restoreAllMocks())
+
+  /** As stored: one placement of the site's header component. */
+  const PLACED = {
+    '_@_': { $id: '_@_', componentId: 'div', nodes: ['hdr'] },
+    hdr: {
+      $id: 'hdr',
+      componentId: 'reusableInstance',
+      parentId: '_@_',
+      props: { refId: 'header' },
+      nodes: [],
+    },
+  }
+  /** As composed: the placement is the header's own block now. */
+  const COMPOSED = {
+    '_@_': { $id: '_@_', componentId: 'div', nodes: ['hdr'] },
+    hdr: {
+      $id: 'hdr',
+      componentId: 'emailText',
+      pluginId: 'email',
+      parentId: '_@_',
+      props: { children: 'Acme header for {{name}}' },
+    },
+  }
+  const published = { versionId: 'v1', subject: 'Hello {{name}}' }
+
+  it('renders what the composer returns, composed once for every recipient', async () => {
+    const reads = { templates: 0, versions: 0 }
+    const fs = fakeFirestore(published, { nodes: PLACED }, reads)
+    const compose = jest.fn<
+      ReturnType<HostEmailComposer>,
+      Parameters<HostEmailComposer>
+    >(async () => COMPOSED)
+
+    const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder', {
+      compose,
+    })
+    const a = renderLoadedHostEmail(loaded!, { name: 'Alex' }, SANITIZE)
+    const b = renderLoadedHostEmail(loaded!, { name: 'Sam' }, SANITIZE)
+
+    expect(a?.html).toContain('Acme header for Alex')
+    expect(b?.html).toContain('Acme header for Sam')
+    // Handed the DECODED map, with the handle and site the template came
+    // from — and asked once, however many recipients render from it.
+    expect(compose).toHaveBeenCalledTimes(1)
+    expect(compose.mock.calls[0][0]).toEqual(PLACED)
+    expect(compose.mock.calls[0][1]).toEqual({ firestore: fs, hostId: 'h1' })
+  })
+
+  it('THE CONTROL: the stored map alone draws no header', async () => {
+    const reads = { templates: 0, versions: 0 }
+    const fs = fakeFirestore(published, { nodes: PLACED }, reads)
+    const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder', {
+      compose: COMPOSE,
+    })
+    // What every host email did before a composer was required: the
+    // placement renders as nothing, and the header the author placed is gone.
+    expect(
+      renderLoadedHostEmail(loaded!, { name: 'Alex' }, SANITIZE)?.html,
+    ).not.toContain('Acme header')
+  })
+
+  it('falls back to the built-in copy when the components cannot be read', async () => {
+    const reads = { templates: 0, versions: 0 }
+    const fs = fakeFirestore(published, { nodes: PLACED }, reads)
+    const loaded = await loadHostEmail(fs, 'h1', 'booking-reminder', {
+      compose: async () => {
+        throw new Error('unavailable')
+      },
+    })
+    // Null is the sender's cue to send its own copy: the customer gets an
+    // email, just not one missing half its design.
+    expect(loaded).toBeNull()
+  })
+
+  it('does not compile without a composer', async () => {
+    const reads = { templates: 0, versions: 0 }
+    const fs = fakeFirestore(published, { nodes: PLACED }, reads)
+    // A composer a sender may leave out is one the next sender leaves out, so
+    // leaving it out is a type error. At runtime, anything that got around the
+    // type still falls back rather than mailing the design without its blocks.
+    // @ts-expect-error — `compose` is required
+    expect(await loadHostEmail(fs, 'h1', 'booking-reminder', {})).toBeNull()
+    expect(
+      // @ts-expect-error — and so are the options that carry it
+      await loadHostEmail(fs, 'h1', 'booking-reminder'),
+    ).toBeNull()
+    expect(
+      // @ts-expect-error — the one-shot renderer asks for it too
+      await renderHostEmail(fs, 'h1', 'booking-confirmed', {}, {
+        sanitize: SANITIZE,
+      }),
+    ).toBeNull()
   })
 })

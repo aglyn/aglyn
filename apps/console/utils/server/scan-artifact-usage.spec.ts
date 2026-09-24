@@ -156,6 +156,64 @@ describe('scanComponentUsage', () => {
       scanComponentUsage('', { screens, layouts, components }),
     ).toEqual([])
   })
+
+  /**
+   * A header or footer placed in one of the site's own transactional emails
+   * is grafted into every one sent (AGL-3287), so deleting it changes mail a
+   * customer receives. "Used nowhere" on the strength of a scan that never
+   * read the emails would be exactly the answer this card exists to prevent.
+   */
+  it('lists the site’s own emails that place the component', () => {
+    const emailTemplates: UsageCandidate[] = [
+      {
+        id: 'booking-confirmed',
+        displayName: 'Booking confirmed',
+        versionId: 'v7',
+        nodes: treeWithInstance('cmp-footer'),
+      },
+      { id: 'order-receipt', displayName: 'Order receipt', nodes: emptyTree },
+    ]
+    const found = scanComponentUsage('cmp-footer', {
+      screens,
+      layouts,
+      components,
+      emailTemplates,
+    })
+    expect(found).toContainEqual({
+      type: 'emailTemplate',
+      id: 'booking-confirmed',
+      name: 'Booking confirmed',
+      via: ['id'],
+      versionId: 'v7',
+    })
+    expect(found.map((entry) => entry.id)).not.toContain('order-receipt')
+  })
+
+  it('reports a campaign email design as the screen it is', () => {
+    // A campaign's email is a `kind: 'email'` SCREEN, read with every other
+    // screen on its published version — no second corpus needed.
+    const found = scanComponentUsage('cmp-badge', {
+      screens: [
+        {
+          id: 'scr-newsletter',
+          displayName: 'August newsletter',
+          versionId: 'v4',
+          nodes: treeWithInstance('cmp-badge'),
+        },
+      ],
+      layouts: [],
+      components: [],
+    })
+    expect(found).toEqual([
+      {
+        type: 'screen',
+        id: 'scr-newsletter',
+        name: 'August newsletter',
+        via: ['id'],
+        versionId: 'v4',
+      },
+    ])
+  })
 })
 
 describe('scanLayoutUsage', () => {

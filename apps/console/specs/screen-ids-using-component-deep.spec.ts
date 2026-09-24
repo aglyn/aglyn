@@ -173,4 +173,29 @@ describe('screenIdsUsingComponentDeep (AGL-1161)', () => {
     expect(deep('C', { screens: [screen('s1', { uses: 'other' })] })).toEqual([])
     expect(deep('', { screens: [screen('s1', { uses: 'C' })] })).toEqual([])
   })
+
+  /**
+   * A component placed only in the site's transactional emails (AGL-3287).
+   * Emails are not pages — nothing caches them — so publishing it has no
+   * page to drop, and the walk must neither turn an email into a screen nor
+   * follow its catalog key as though it were a component id. The route then
+   * answers `not-routed`, which the editor treats as a quiet success.
+   */
+  it('drops no page for a component only an email places', () => {
+    const emailTemplates = [
+      { id: 'booking-confirmed', nodes: uses('C') },
+      // A key that happens to equal a component's id is still not one.
+      { id: 'outer', nodes: uses('C') },
+    ]
+    const components = [component('outer', { uses: 'unrelated' })]
+    const screens = [screen('s1', { uses: 'outer' })]
+    expect(
+      screenIdsUsingComponentDeep('C', {
+        screens,
+        layouts: [],
+        components,
+        emailTemplates,
+      }),
+    ).toEqual([])
+  })
 })

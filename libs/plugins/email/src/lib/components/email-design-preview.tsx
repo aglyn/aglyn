@@ -23,8 +23,35 @@ import {
   renderTextEmailHtml,
 } from '@aglyn/shared-util-email'
 import { sanitizeAuthorHtml } from '@aglyn/aglyn/app-utils/author-html'
+import { collectReferencedComponentIds } from '@aglyn/aglyn/app-utils/compose-reusable-components'
+import {
+  composeReferencedComponents,
+  type ReadComponentDocument,
+  type StoredComponentDocument,
+} from '@aglyn/aglyn/app-utils/load-referenced-components'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { Box, Stack, Typography } from '@mui/material'
+import { doc, getDoc, type Firestore } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
+
+/**
+ * One of the site's component documents through the CLIENT SDK, as the
+ * on-demand loader reads it. `snapshot.data()` hands a compressed definition
+ * back as a Firestore `Bytes`, which `readStoredComponentTree` decodes.
+ */
+function clientComponentReader(
+  firestore: Firestore,
+  hostId: string,
+): ReadComponentDocument {
+  return async (componentId) => {
+    const snapshot = await getDoc(
+      doc(firestore, 'hosts', hostId, 'components', componentId),
+    )
+    return snapshot.exists()
+      ? (snapshot.data() as StoredComponentDocument)
+      : null
+  }
+}
 
 export interface EmailDesignPreviewProps {
   hostId: string
@@ -72,6 +99,13 @@ export interface EmailDesignPreviewProps {
  * doing so would put a catalog read on every preview for a picture that can
  * change between now and the send anyway.
  *
+ * The site's reusable blocks are NOT one of the differences (AGL-3287). A
+ * shared header or footer placed in the design is grafted from the site's
+ * published components before rendering, by the same composition the send
+ * runs, so the preview shows the header the inbox will get. Only the
+ * components the design places are read, in parallel, and a design that
+ * places none costs no read.
+ *
  * ## Sandboxed, because the HTML is tenant-authored
  *
  * The design is written by a site's own editors — or by a marketplace
@@ -110,18 +144,76 @@ export function EmailDesignPreview(props: EmailDesignPreviewProps) {
   const [origin, setOrigin] = useState('')
   useEffect(() => setOrigin(window.location.origin), [])
 
-  const nodes = useMemo(
+  const firestore = useFirestore()
+  const stored = useMemo(
     () => decodeStoredNodes<Record<string, any>>(rawNodes) ?? {},
     [rawNodes],
   )
+  /*
+   * THE SITE'S REUSABLE BLOCKS, GRAFTED AS THE SEND GRAFTS THEM (AGL-3287).
+   *
+   * Tagged with the map it was composed FROM, so a stale answer — the design
+   * changed while its components were being read — is never drawn as the
+   * current one. Until the answer for this map arrives the frame shows the
+   * loading line rather than the email with its header missing, which would be
+   * a preview of a message nobody sends.
+   *
+   * A failed read draws the design without the blocks it could not load, and
+   * says so: an empty space presented as the mail is the one thing a preview
+   * must not do silently.
+   */
+  const placesComponents = useMemo(
+    () => collectReferencedComponentIds(stored).size > 0,
+    [stored],
+  )
+  const [composition, setComposition] = useState<{
+    source: Record<string, any>
+    hostId: string
+    nodes: Record<string, any>
+    failed: boolean
+  } | null>(null)
+  /** The composition of THIS map for THIS site, once there is one. */
+  const composed =
+    composition?.source === stored && composition.hostId === hostId
+      ? composition
+      : null
+  useEffect(() => {
+    // Composed already: a re-render asks for nothing more, so the reads are
+    // one per design shown rather than one per render.
+    if (!placesComponents || composed) return
+    let active = true
+    const settle = (nodes: Record<string, any>, failed: boolean) => {
+      if (active) setComposition({ source: stored, hostId, nodes, failed })
+    }
+    composeReferencedComponents(
+      stored,
+      clientComponentReader(firestore, hostId),
+    )
+      .then((nodes) => settle(nodes, false))
+      .catch((error) => {
+        console.error(error)
+        settle(stored, true)
+      })
+    return () => {
+      active = false
+    }
+  }, [stored, placesComponents, composed, firestore, hostId])
+  const composing = placesComponents && !composed
+  /** What is drawn: the design with its blocks grafted; `null` while grafting. */
+  const nodes: Record<string, any> | null = !placesComponents
+    ? stored
+    : (composed?.nodes ?? null)
+
   const productBlocks = useMemo(
     () =>
-      Object.values(nodes).filter(
+      Object.values(nodes ?? {}).filter(
         (node: any) => node?.componentId === 'emailProduct',
       ).length,
     [nodes],
   )
   const rendered = useMemo(() => {
+    // Still reading the components this design places.
+    if (!nodes) return null
     if (!Object.keys(nodes).length) {
       /*
        * A plain-text message renders through the send path's own text
@@ -156,7 +248,7 @@ export function EmailDesignPreview(props: EmailDesignPreviewProps) {
   if (!rendered) {
     return (
       <Typography variant="body2" color="text.secondary">
-        {loading ? 'Loading this email…' : emptyMessage}
+        {loading || composing ? 'Loading this email…' : emptyMessage}
       </Typography>
     )
   }
@@ -204,6 +296,12 @@ export function EmailDesignPreview(props: EmailDesignPreviewProps) {
             productBlocks === 1 ? 'block is' : 'blocks are'
           } not drawn here — each resolves against the catalog when an email ` +
             'sends, so what it shows depends on the product at that moment.'}
+        </Typography>
+      ) : null}
+      {composed?.failed ? (
+        <Typography variant="caption" color="warning.main">
+          {'A reusable block in this email could not be loaded, so it is ' +
+            'not drawn here.'}
         </Typography>
       ) : null}
       {note ? (

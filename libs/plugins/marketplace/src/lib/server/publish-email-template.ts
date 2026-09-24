@@ -21,6 +21,7 @@ import {
   decodeStoredNodes,
 } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
+import { inlineReusableBlocks } from './publish-email-blocks'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import {
@@ -149,16 +150,28 @@ export const publishEmailTemplateHandler: PluginApiHandler = async (
     // `sanitizeMarketplaceDefinition` below would refuse an undecoded tree
     // rather than publish garbage, so this is the difference between the
     // feature working and a publish that always says the design is invalid.
-    const nodes = decodeStoredNodes<Record<string, any>>(
+    const stored = decodeStoredNodes<Record<string, any>>(
       versionSnapshot.get('nodes'),
     )
-    if (!nodes || !Object.keys(nodes).length) {
+    if (!stored || !Object.keys(stored).length) {
       return res.status(404).json({ error: 'This email design is empty' })
     }
+    const rootId = versionSnapshot.get('rootId') ?? EMAIL_NODE_ROOT_ID
+    // The site's reusable blocks INLINED (AGL-3287): a listing is installed
+    // into another org, which has none of this site's components, and the
+    // sanitizer below refuses a component reference outright.
+    const inlined = await inlineReusableBlocks(stored, {
+      firestore,
+      hostId,
+      rootId,
+    })
+    if (inlined.ok === false) {
+      return res.status(422).json({ error: inlined.error })
+    }
+    const nodes = inlined.nodes
     // Emails are built from `plugins-email` blocks only, so the page allowlist
     // is REPLACED rather than extended — see MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST
     // for why `emailHtml` is not on the list.
-    const rootId = versionSnapshot.get('rootId') ?? EMAIL_NODE_ROOT_ID
     const sanitized = sanitizeMarketplaceDefinition(
       { rootId, nodes },
       { componentIds: MARKETPLACE_EMAIL_COMPONENT_ID_ALLOWLIST },

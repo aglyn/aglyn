@@ -58,6 +58,38 @@ export interface RenderedHostEmail {
 }
 
 /**
+ * Expands the reusable blocks a site's email places into the blocks they stand
+ * for (AGL-3287): a shared header or footer is a `reusableInstance` node naming
+ * one of the site's components, and `renderEmailHtml` draws an unknown node as
+ * nothing at all. Given the decoded node map and the handle and site it was
+ * read with; resolves to the map to render.
+ *
+ * REQUIRED, for the reason `sanitize` is (see
+ * {@link EmailRenderOptions.sanitize}): this module is `scope:shared` and the
+ * composition — the component graft, the document reads — is the core's, which
+ * nx forbids it to import. A composer a caller may omit is one a new send path
+ * omits, and its customers then receive every designed email with the header
+ * and footer missing while the canvas shows them in place. So the type makes
+ * each caller hand one in; every sender passes the core's
+ * `composeHostComponentNodes`.
+ *
+ * Only style overrides are lost on the way through, and not by the composer:
+ * a placement's `styleOverrides` land in `sx`, which the mail renderer never
+ * reads. Property values and attribute overrides reach the blocks.
+ */
+export type HostEmailComposer = (
+  nodes: Record<string, unknown>,
+  context: { firestore: AdminFirestoreLike; hostId: string },
+) => Promise<Record<string, unknown>>
+
+export interface LoadHostEmailOptions {
+  /** The site's origin when the caller already knows it; saves the host read. */
+  origin?: string
+  /** See {@link HostEmailComposer} — required, deliberately. */
+  compose: HostEmailComposer
+}
+
+/**
  * A site-owner-designed template loaded once, ready to render for any number
  * of recipients without another Firestore read (AGL-770) — the booking
  * reminder job renders one per booking.
@@ -98,12 +130,17 @@ function blankUnresolvedTokens(value: string): string {
  * published still costs a single read — and it is skipped entirely when the
  * caller already knows the origin and passes it. Still once per batch, not
  * once per recipient, which is the property AGL-770 cared about.
+ *
+ * The components the template places are read and grafted HERE, through
+ * `options.compose`, for the same reason: once per load, so a batch renders
+ * every recipient's copy from one composed map. A template that places none
+ * costs no extra read.
  */
 export async function loadHostEmail(
   firestore: AdminFirestoreLike,
   hostId: string,
   templateKey: string,
-  options: { origin?: string } = {},
+  options: LoadHostEmailOptions,
 ): Promise<LoadedHostEmail | null> {
   const entry = getTenantEmail(templateKey)
   if (!entry || !isTenantEmailEditable(entry)) return null
@@ -133,10 +170,15 @@ export async function loadHostEmail(
     // a `Buffer`, `Object.keys` counts BYTE INDICES, so the emptiness test
     // passes and the caller renders an empty email instead of falling back to
     // its built-in copy (AGL-1223).
-    const nodes = decodeEmailNodes<Record<string, unknown>>(
+    const stored = decodeEmailNodes<Record<string, unknown>>(
       versionSnapshot.get('nodes'),
     )
-    if (!nodes || !Object.keys(nodes).length) return null
+    if (!stored || !Object.keys(stored).length) return null
+    // Reusable blocks (AGL-3287), BEFORE anything reads the tree: a header or
+    // footer the site owner placed is a component reference until this runs.
+    // A failed component read throws into the catch below and falls back to
+    // the built-in copy — never a send with half its design missing.
+    const nodes = await options.compose(stored, { firestore, hostId })
 
     let origin = options.origin
     if (!origin) {
@@ -214,8 +256,7 @@ export async function renderHostEmail(
   hostId: string,
   templateKey: string,
   merge: Record<string, string> = {},
-  options: {
-    origin?: string
+  options: LoadHostEmailOptions & {
     /** See {@link EmailRenderOptions.sanitize} — required, deliberately. */
     sanitize: EmailRenderOptions['sanitize']
   },
