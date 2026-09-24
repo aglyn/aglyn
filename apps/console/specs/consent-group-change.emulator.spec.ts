@@ -56,6 +56,10 @@
  *     --testPathPatterns consent-group-change.emulator
  */
 
+import { consentGroupForHost } from '@aglyn/aglyn/app-utils/consent-groups'
+import { readMarketingBasis } from '@aglyn/aglyn/app-utils/marketing-consent'
+import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import * as admin from '@aglyn/tenant-data-admin'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { type Firestore, getFirestore, Timestamp } from 'firebase-admin/firestore'
 
@@ -113,23 +117,17 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-type Admin = typeof import('@aglyn/tenant-data-admin')
-
 /**
  * Whether the prerequisites' delete guard is in this tree: the route's
  * refusal and `eraseHost`'s ship together, with `SiteInConsentGroupError`.
  * I9 exercises that guard and is skipped — by name — in a tree without it.
  */
 const DELETE_GUARD =
-  EMULATED &&
-  typeof (jest.requireMock('@aglyn/tenant-data-admin') as Record<string, unknown>)[
-    'SiteInConsentGroupError'
-  ] === 'function'
+  EMULATED && typeof (admin as Record<string, unknown>)['SiteInConsentGroupError'] === 'function'
 
 describeEmulated('a consent group change, against Firestore (AGL-3320)', () => {
   let db: Firestore
-  let admin: Admin
-  let key: string
+  const key = personKey(EMAIL) as string
   /*
    * The executor's clock, started at the wall clock: the participant pages
    * against the deadline the executor hands it on its own clock, so the two
@@ -152,9 +150,6 @@ describeEmulated('a consent group change, against Firestore (AGL-3320)', () => {
       '../constants/plugins.declarations.server.generated'
     )
     await registerPluginServerDeclarations()
-    admin = await import('@aglyn/tenant-data-admin')
-    const { personKey } = await import('@aglyn/aglyn/app-utils/person-key')
-    key = personKey(EMAIL) as string
   })
 
   beforeEach(() => {
@@ -257,8 +252,6 @@ describeEmulated('a consent group change, against Firestore (AGL-3320)', () => {
     expect(org['consentGroups']).toEqual({ g1: { name: 'Northwind', hostIds: [R, S].sort() } })
     expect(org).not.toHaveProperty('consentGroupsChange')
 
-    const { consentGroupForHost } = await import('@aglyn/aglyn/app-utils/consent-groups')
-    const { readMarketingBasis } = await import('@aglyn/aglyn/app-utils/marketing-consent')
     const blog = consentGroupForHost(org, R)
     const shop = consentGroupForHost(org, X)
     expect(shop.hostIds).toEqual([X])
