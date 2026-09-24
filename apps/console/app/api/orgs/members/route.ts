@@ -412,7 +412,7 @@ async function handler(request: Request): Promise<Response> {
               'member.role': role,
               signInUrl: origin,
             },
-            { brandLogoUrl: branding.emailLogoUrl },
+            { brandLogoUrl: branding.emailLogoUrl, brandHomeUrl: branding.homeUrl },
           )
           await sendEmail({
             to: email,

@@ -22,6 +22,8 @@
 
 import {
   OUTREACH_TIMELINE_BY_NAME,
+  outreachCuratedEntry,
+  outreachCuratedEntryKey,
   outreachEnrolledEntry,
   outreachEnrolledEntryKey,
   outreachStoppedEntry,
@@ -61,6 +63,24 @@ describe('outreachStoppedEntry', () => {
     expect(outreachStoppedEntry({ enrollmentId: 'e-1', sequenceName: '', reason: 'opted_out' }).body).toBe(
       'The sequence stopped: they opted out',
     )
+  })
+})
+
+describe('outreachCuratedEntry (AGL-3324)', () => {
+  it('says who wrote the person’s copy of the step, keyed once per confirmation', () => {
+    expect(
+      outreachCuratedEntry({ enrollmentId: 'e-1', stepIndex: 1, source: 'ai', edited: true, memberName: 'Zach', atMs: 5 }),
+    ).toEqual({ dedupeKey: 'curated:e-1:1:5', body: 'Curated step 2 — AI draft, edited by Zach' })
+    expect(
+      outreachCuratedEntry({ enrollmentId: 'e-1', stepIndex: 0, source: 'ai', edited: false, memberName: 'Zach', atMs: 5 }).body,
+    ).toBe('Curated step 1 — AI draft, confirmed by Zach')
+    expect(
+      outreachCuratedEntry({ enrollmentId: 'e-1', stepIndex: 2, source: 'member', edited: false, memberName: 'zach@example.com', atMs: 5 }).body,
+    ).toBe('Curated step 3 — written by zach@example.com')
+    expect(
+      outreachCuratedEntry({ enrollmentId: 'e-1', stepIndex: 2, source: 'member', edited: false, memberName: '  ', atMs: 5 }).body,
+    ).toBe('Curated step 3 — written by a member')
+    expect(outreachCuratedEntryKey('e-1', 3, 9)).toBe('curated:e-1:3:9')
   })
 })
 

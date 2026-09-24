@@ -1,0 +1,389 @@
+{
+  "note": "Worked examples for the dataset filter-token builder (AGL-3321). Asserted by libs/aglyn/src/lib/app-utils/dataset-filter-keys.spec.ts against datasetFilterKeys in dataset-models.ts, and by tools/scripts/backfill-dataset-filter-keys.mjs --self-test against its own copy. Regenerate only from the library, never by hand.",
+  "model": {
+    "order": [
+      "title",
+      "status",
+      "done",
+      "price",
+      "tags",
+      "due",
+      "owner",
+      "notes"
+    ],
+    "fields": {
+      "title": {
+        "name": "Title",
+        "type": "text"
+      },
+      "status": {
+        "name": "Status",
+        "type": "text",
+        "validation": {
+          "options": [
+            "Open",
+            "Closed"
+          ]
+        }
+      },
+      "done": {
+        "name": "Done",
+        "type": "bool"
+      },
+      "price": {
+        "name": "Price",
+        "type": "float"
+      },
+      "tags": {
+        "name": "Tags",
+        "type": "sorted"
+      },
+      "due": {
+        "name": "Due",
+        "type": "timestamp"
+      },
+      "owner": {
+        "name": "Owner",
+        "type": "reference",
+        "reference": {
+          "datasetId": "people"
+        }
+      },
+      "notes": {
+        "name": "Notes",
+        "type": "text"
+      }
+    }
+  },
+  "keys": [
+    {
+      "values": {
+        "title": "Red Kettle — 1.7 L",
+        "status": "Open",
+        "done": false,
+        "price": 57.5,
+        "tags": [
+          "kitchen",
+          "Gift"
+        ],
+        "due": {
+          "seconds": 1
+        },
+        "owner": "p1",
+        "notes": ""
+      },
+      "expected": [
+        "f:done=false",
+        "f:price=57.5",
+        "f:status=Open",
+        "f:tags=Gift",
+        "f:tags=kitchen",
+        "f:title=red kettle — 1.7 l",
+        "f:title^1",
+        "f:title^7",
+        "f:title^k",
+        "f:title^ke",
+        "f:title^ket",
+        "f:title^kett",
+        "f:title^kettl",
+        "f:title^kettle",
+        "f:title^l",
+        "f:title^r",
+        "f:title^re",
+        "f:title^red",
+        "s:1",
+        "s:7",
+        "s:g",
+        "s:gi",
+        "s:gif",
+        "s:gift",
+        "s:k",
+        "s:ke",
+        "s:ket",
+        "s:kett",
+        "s:kettl",
+        "s:kettle",
+        "s:ki",
+        "s:kit",
+        "s:kitc",
+        "s:kitch",
+        "s:kitche",
+        "s:kitchen",
+        "s:l",
+        "s:o",
+        "s:op",
+        "s:ope",
+        "s:open",
+        "s:r",
+        "s:re",
+        "s:red"
+      ]
+    },
+    {
+      "values": {
+        "title": "  Café au lait  ",
+        "status": "Closed",
+        "done": "true",
+        "price": "12",
+        "tags": []
+      },
+      "expected": [
+        "f:done=true",
+        "f:price=12",
+        "f:status=Closed",
+        "f:title=café au lait",
+        "f:title^a",
+        "f:title^au",
+        "f:title^c",
+        "f:title^ca",
+        "f:title^caf",
+        "f:title^café",
+        "f:title^l",
+        "f:title^la",
+        "f:title^lai",
+        "f:title^lait",
+        "s:a",
+        "s:au",
+        "s:c",
+        "s:ca",
+        "s:caf",
+        "s:café",
+        "s:cl",
+        "s:clo",
+        "s:clos",
+        "s:close",
+        "s:closed",
+        "s:l",
+        "s:la",
+        "s:lai",
+        "s:lait"
+      ]
+    },
+    {
+      "values": {
+        "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx supercalifragilistic",
+        "notes": "word0 word1 word2 word3 word4 word5 word6 word7 word8 word9 word10 word11 word12 word13 word14 word15 word16 word17 word18 word19 word20 word21 word22 word23 word24 word25 word26 word27 word28 word29 word30 word31 word32 word33 word34 word35 word36 word37 word38 word39 word40 word41 word42 word43 word44 word45 word46 word47 word48 word49 word50 word51 word52 word53 word54 word55 word56 word57 word58 word59"
+      },
+      "expected": [
+        "f:notes=word0 word1 word2 word3 word4 word5 word6 word7 word8 word9 word",
+        "f:notes^w",
+        "f:notes^wo",
+        "f:notes^wor",
+        "f:notes^word",
+        "f:notes^word0",
+        "f:notes^word1",
+        "f:notes^word10",
+        "f:notes^word11",
+        "f:notes^word12",
+        "f:notes^word13",
+        "f:notes^word14",
+        "f:notes^word15",
+        "f:notes^word16",
+        "f:notes^word17",
+        "f:notes^word18",
+        "f:notes^word19",
+        "f:notes^word2",
+        "f:notes^word20",
+        "f:notes^word21",
+        "f:notes^word22",
+        "f:notes^word23",
+        "f:notes^word24",
+        "f:notes^word25",
+        "f:notes^word26",
+        "f:notes^word27",
+        "f:notes^word28",
+        "f:notes^word29",
+        "f:notes^word3",
+        "f:notes^word30",
+        "f:notes^word31",
+        "f:notes^word32",
+        "f:notes^word33",
+        "f:notes^word34",
+        "f:notes^word35",
+        "f:notes^word36",
+        "f:notes^word37",
+        "f:notes^word38",
+        "f:notes^word39",
+        "f:notes^word4",
+        "f:notes^word5",
+        "f:notes^word6",
+        "f:notes^word7",
+        "f:notes^word8",
+        "f:notes^word9",
+        "f:title=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "f:title^s",
+        "f:title^su",
+        "f:title^sup",
+        "f:title^supe",
+        "f:title^super",
+        "f:title^superc",
+        "f:title^superca",
+        "f:title^supercal",
+        "f:title^supercali",
+        "f:title^supercalif",
+        "f:title^supercalifr",
+        "f:title^supercalifra",
+        "f:title^x",
+        "f:title^xx",
+        "f:title^xxx",
+        "f:title^xxxx",
+        "f:title^xxxxx",
+        "f:title^xxxxxx",
+        "f:title^xxxxxxx",
+        "f:title^xxxxxxxx",
+        "f:title^xxxxxxxxx",
+        "f:title^xxxxxxxxxx",
+        "f:title^xxxxxxxxxxx",
+        "f:title^xxxxxxxxxxxx",
+        "s:s",
+        "s:su",
+        "s:sup",
+        "s:supe",
+        "s:super",
+        "s:superc",
+        "s:superca",
+        "s:supercal",
+        "s:supercali",
+        "s:supercalif",
+        "s:supercalifr",
+        "s:supercalifra",
+        "s:w",
+        "s:wo",
+        "s:wor",
+        "s:word",
+        "s:word0",
+        "s:word1",
+        "s:word10",
+        "s:word11",
+        "s:word12",
+        "s:word13",
+        "s:word14",
+        "s:word15",
+        "s:word16",
+        "s:word17",
+        "s:word18",
+        "s:word19",
+        "s:word2",
+        "s:word20",
+        "s:word21",
+        "s:word22",
+        "s:word23",
+        "s:word24",
+        "s:word25",
+        "s:word26",
+        "s:word27",
+        "s:word28",
+        "s:word29",
+        "s:word3",
+        "s:word30",
+        "s:word31",
+        "s:word32",
+        "s:word33",
+        "s:word34",
+        "s:word35",
+        "s:word36",
+        "s:word37",
+        "s:word38",
+        "s:word39",
+        "s:word4",
+        "s:word5",
+        "s:word6",
+        "s:word7",
+        "s:word8",
+        "s:word9",
+        "s:x",
+        "s:xx",
+        "s:xxx",
+        "s:xxxx",
+        "s:xxxxx",
+        "s:xxxxxx",
+        "s:xxxxxxx",
+        "s:xxxxxxxx",
+        "s:xxxxxxxxx",
+        "s:xxxxxxxxxx",
+        "s:xxxxxxxxxxx",
+        "s:xxxxxxxxxxxx"
+      ]
+    },
+    {
+      "values": {},
+      "expected": []
+    }
+  ],
+  "tokens": [
+    {
+      "clause": {
+        "field": "status",
+        "op": "equals",
+        "value": "Open"
+      },
+      "expected": "f:status=Open"
+    },
+    {
+      "clause": {
+        "field": "title",
+        "op": "equals",
+        "value": "Red Kettle"
+      },
+      "expected": "f:title=red kettle"
+    },
+    {
+      "clause": {
+        "field": "title",
+        "op": "contains",
+        "value": "kettle red"
+      },
+      "expected": "f:title^kettle"
+    },
+    {
+      "clause": {
+        "field": "done",
+        "op": "equals",
+        "value": "true"
+      },
+      "expected": "f:done=true"
+    },
+    {
+      "clause": {
+        "field": "price",
+        "op": ">",
+        "value": "5"
+      },
+      "expected": null
+    },
+    {
+      "clause": {
+        "field": "tags",
+        "op": "contains",
+        "value": "Gift"
+      },
+      "expected": "f:tags=Gift"
+    },
+    {
+      "clause": {
+        "field": "due",
+        "op": "after",
+        "value": "2026-01-01"
+      },
+      "expected": null
+    }
+  ],
+  "search": [
+    {
+      "word": "Kettle",
+      "expected": "s:kettle"
+    },
+    {
+      "word": "CAFÉ",
+      "expected": "s:café"
+    },
+    {
+      "word": "",
+      "expected": null
+    },
+    {
+      "word": "aaaaaaaaaaaaaaaaaaaa",
+      "expected": "s:aaaaaaaaaaaa"
+    }
+  ]
+}

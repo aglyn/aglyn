@@ -211,6 +211,16 @@ describe('the lead a sign-up no longer leaves behind (AGL-3232)', () => {
     await register({})
     expect('displayName' in mockState.members[0]).toBe(false)
   })
+
+  /*
+   * The console's Status filter asks `suspended == false` for the active
+   * members (AGL-3321), and a query cannot find a document that lacks the
+   * field, so a new member states it.
+   */
+  it('stores the member as not suspended, explicitly', async () => {
+    await register({ displayName: 'Dana Reed' })
+    expect(mockState.members[0]?.['suspended']).toBe(false)
+  })
 })
 
 /**

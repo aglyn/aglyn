@@ -23,18 +23,14 @@ import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import {
-  hiddenFilterColumns,
-  hiddenFilterVisibility,
-  listFilterColumn,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { Box, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { collection, limit, orderBy, query } from 'firebase/firestore'
 import { useMemo, useState } from 'react'
 import {
-  listFilterConstraints,
   useFirestore,
   usePagedCollection,
 } from '@aglyn/tenant-feature-instance'
@@ -46,7 +42,12 @@ import { useHostSubdomain } from './host-id-provider'
 import {
   SITE_MEMBER_LIST_FILTER_FIELDS,
   SITE_MEMBER_LIST_FILTER_HEADERS,
+  SITE_MEMBER_LIST_FILTER_OPTIONS,
 } from '../utils/list-filters'
+import {
+  isSiteAccountStatusClause,
+  siteAccountQueryConstraints,
+} from '../utils/site-account-query'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
 
 import SiteMemberDrawer from './site-member-drawer.component'
@@ -65,18 +66,31 @@ import SiteMemberDrawer from './site-member-drawer.component'
  * The filterable fields that get a column. The rest of
  * `SITE_MEMBER_LIST_FILTER_FIELDS` still reaches the filter panel, hidden.
  */
-const MEMBER_FILTER_COLUMNS = ['email', 'displayName', 'createdAt']
+const MEMBER_FILTER_COLUMNS = ['email', 'displayName', 'createdAt', 'suspended']
 
 export function SiteAccountsCard(props: { hostId: string }) {
   const { hostId } = props
   const firestore = useFirestore()
   /*
-   * The panel's clause IS the query's (AGL-3317): one at a time, because the
-   * query serves one predicate and there is no loaded window for a second to
-   * narrow. No quick search, since no word index covers these documents.
+   * The panel's clauses ARE the query's (AGL-3317): one field clause at a
+   * time, because the query serves one predicate and there is no loaded
+   * window for a second to narrow, with Status beside it (AGL-3321), an
+   * equality every one of those queries takes. No quick search, since no word
+   * index covers these documents.
    */
-  const gridFilter = useListGridFilter({ single: true })
-  const filter = gridFilter.clauses[0] ?? null
+  const gridFilter = useListGridFilter({
+    single: true,
+    selectFields: ['suspended'],
+    keepAlongside: isSiteAccountStatusClause,
+  })
+  const filtering = gridFilter.clauses.length > 0
+  const constraints = useMemo(
+    () =>
+      siteAccountQueryConstraints(gridFilter.clauses, [
+        orderBy('createdAt', 'desc'),
+      ]),
+    [gridFilter.clauses],
+  )
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /*
    * The console's shared paging (AGL-2501). "Load more" decided there was more
@@ -105,19 +119,16 @@ export function SiteAccountsCard(props: { hostId: string }) {
        * No `fixedOrderBy`: the window here is a growing `limit`, not a
        * document cursor, so a filter that needs its own ordering can have
        * one — nothing is holding a position in the old sort. Unfiltered, the
-       * card keeps its newest-first order.
+       * card keeps its newest-first order. See `siteAccountQueryConstraints`
+       * for every shape, and the index each reads.
        */
-      const constraints = listFilterConstraints(
-        SITE_MEMBER_LIST_FILTER_FIELDS,
-        filter,
-      )
       return query(
         collection(firestore, 'hosts', hostId, 'siteMembers'),
-        ...(constraints ?? [orderBy('createdAt', 'desc')]),
+        ...constraints,
         limit(pageLimit),
       )
     },
-    [firestore, hostId, filter],
+    [firestore, hostId, constraints],
     { idField: '$id' },
   )
 
@@ -146,110 +157,101 @@ export function SiteAccountsCard(props: { hostId: string }) {
 
   /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
   const memberColumns: GridColDef[] = useMemo(
-    () => [
-      {
-        field: 'email',
-        headerName: 'Email',
-        flex: 1.4,
-        minWidth: 220,
-        ...listFilterColumn(SITE_MEMBER_LIST_FILTER_FIELDS, 'email'),
-        valueGetter: (_value, row: any) => String(row.email ?? row.$id),
-      },
-      {
-        field: 'displayName',
-        headerName: 'Name',
-        flex: 1,
-        minWidth: 160,
-        ...listFilterColumn(SITE_MEMBER_LIST_FILTER_FIELDS, 'displayName'),
-        valueGetter: (_value, row: any) =>
-          String(row.displayName ?? row.name ?? ''),
-        renderCell: ({ row }: any) => row.displayName ?? row.name ?? '—',
-      },
-      {
-        field: 'createdAt',
-        headerName: 'Joined',
-        flex: 0.8,
-        minWidth: 130,
-        // `type: 'date'` is what gives the panel a date PICKER rather than a
-        // free-text box for a value the query reads as a day.
-        type: 'date',
-        ...listFilterColumn(SITE_MEMBER_LIST_FILTER_FIELDS, 'createdAt'),
-        valueGetter: (_value, row: any) => row.createdAt?.toDate?.() ?? null,
-        renderCell: ({ row }: any) =>
-          row.createdAt?.toDate?.()
-            ? row.createdAt.toDate().toLocaleDateString()
-            : '—',
-      },
-      {
-        field: 'suspended',
-        headerName: 'Status',
-        flex: 0.6,
-        minWidth: 110,
-        align: 'right',
-        headerAlign: 'right',
-        /*
-         * Not filterable, and not an oversight. `suspended` is written only
-         * when a member IS suspended, so `is false` would return nothing
-         * rather than everyone else — a filter that lies in exactly one
-         * direction. It needs the writers to store `false` explicitly first.
-         */
-        filterable: false,
-        valueGetter: (_value, row: any) =>
-          row.suspended === true ? 'Suspended' : 'Active',
-        renderCell: ({ row }: any) =>
-          row.suspended === true ? (
-            <Chip label="Suspended" size="small" color="error" />
-          ) : (
-            <Chip label="Active" size="small" variant="outlined" />
-          ),
-      },
-      ...(crmReachable
-        ? [
-            {
-              field: 'actions',
-              headerName: '',
-              width: 56,
-              sortable: false,
-              filterable: false,
-              disableColumnMenu: true,
-              renderCell: ({ row }: any) => (
-                <Box
-                  onClick={(event) => event.stopPropagation()}
-                  sx={{ display: 'flex', alignItems: 'center', height: '100%' }}
-                >
-                  <RowActionsMenu
-                    label={String(row.email ?? row.$id)}
-                    items={[
-                      {
-                        key: 'crm',
-                        label: 'Open in CRM',
-                        icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
-                        ...(row.email
-                          ? {
-                              href: crmContactByEmailHref(
-                                { orgSlug, host: String(host) },
-                                String(row.email),
-                              ),
-                            }
-                          : {
-                              disabled: true,
-                              disabledReason:
-                                'This account has no email address, so no contact was updated.',
-                            }),
-                      },
-                    ]}
-                  />
-                </Box>
+    () =>
+      listFilterGridColumns(
+        [
+          {
+            field: 'email',
+            headerName: 'Email',
+            flex: 1.4,
+            minWidth: 220,
+            valueGetter: (_value, row: any) => String(row.email ?? row.$id),
+          },
+          {
+            field: 'displayName',
+            headerName: 'Name',
+            flex: 1,
+            minWidth: 160,
+            valueGetter: (_value, row: any) =>
+              String(row.displayName ?? row.name ?? ''),
+            renderCell: ({ row }: any) => row.displayName ?? row.name ?? '—',
+          },
+          {
+            field: 'createdAt',
+            headerName: 'Joined',
+            flex: 0.8,
+            minWidth: 130,
+            // `type: 'date'` is what gives the panel a date PICKER rather than a
+            // free-text box for a value the query reads as a day.
+            type: 'date',
+            valueGetter: (_value, row: any) => row.createdAt?.toDate?.() ?? null,
+            renderCell: ({ row }: any) =>
+              row.createdAt?.toDate?.()
+                ? row.createdAt.toDate().toLocaleDateString()
+                : '—',
+          },
+          {
+            field: 'suspended',
+            headerName: 'Status',
+            flex: 0.6,
+            minWidth: 110,
+            align: 'right',
+            headerAlign: 'right',
+            // The stored boolean, as the Status filter's choices spell it.
+            valueGetter: (_value, row: any) => String(row.suspended === true),
+            renderCell: ({ row }: any) =>
+              row.suspended === true ? (
+                <Chip label="Suspended" size="small" color="error" />
+              ) : (
+                <Chip label="Active" size="small" variant="outlined" />
               ),
-            } satisfies GridColDef,
-          ]
-        : []),
-      ...hiddenFilterColumns(
+          },
+          ...(crmReachable
+            ? [
+                {
+                  field: 'actions',
+                  headerName: '',
+                  width: 56,
+                  sortable: false,
+                  filterable: false,
+                  disableColumnMenu: true,
+                  renderCell: ({ row }: any) => (
+                    <Box
+                      onClick={(event) => event.stopPropagation()}
+                      sx={{ display: 'flex', alignItems: 'center', height: '100%' }}
+                    >
+                      <RowActionsMenu
+                        label={String(row.email ?? row.$id)}
+                        items={[
+                          {
+                            key: 'crm',
+                            label: 'Open in CRM',
+                            icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
+                            ...(row.email
+                              ? {
+                                  href: crmContactByEmailHref(
+                                    { orgSlug, host: String(host) },
+                                    String(row.email),
+                                  ),
+                                }
+                              : {
+                                  disabled: true,
+                                  disabledReason:
+                                    'This account has no email address, so no contact was updated.',
+                                }),
+                          },
+                        ]}
+                      />
+                    </Box>
+                  ),
+                } satisfies GridColDef,
+              ]
+            : []),
+        ],
         SITE_MEMBER_LIST_FILTER_FIELDS,
-        MEMBER_FILTER_COLUMNS,
+        SITE_MEMBER_LIST_FILTER_OPTIONS,
         SITE_MEMBER_LIST_FILTER_HEADERS,
       ),
-    ],
     [crmReachable, orgSlug, host],
   )
 
@@ -274,8 +276,9 @@ export function SiteAccountsCard(props: { hostId: string }) {
         headers={SITE_MEMBER_LIST_FILTER_HEADERS}
         clauses={gridFilter.clauses}
         onChange={gridFilter.setClauses}
+        options={SITE_MEMBER_LIST_FILTER_OPTIONS}
       />
-      {visible.length || filter ? (
+      {visible.length || filtering ? (
         <Stack spacing={1}>
           <ListTable
             aria-label="Site users"

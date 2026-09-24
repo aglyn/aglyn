@@ -113,19 +113,24 @@ export const PLATFORM_BRAND_LEGAL_NAME =
  * exists — it is the one support address that needs nothing interpolated
  * into it, which is exactly what this constant is.
  *
- * ⚠️ The residual, stated rather than hidden: on a SELF-HOSTED install that
- * configured neither variable above, this now points a stranger's customers
- * at our console, where they have no account. That was already true of the
- * old value and is not made worse by fixing it — and the step above is the
- * real answer, which is why it is the operator's support MAILBOX rather than
- * a second URL variable they would have to discover.
+ * The console is THIS install's (AGL-3322). `/support` is a console route, so
+ * every console serves its own, and `NEXT_PUBLIC_CONSOLE_URL` is required of
+ * every self-hosted install — so one that configured neither variable above
+ * sends its customers to its own support page rather than to ours, where they
+ * have no account. The line is in the footer of every system email the
+ * platform sends. `app.aglyn.com` is left only for a build that names no
+ * console at all.
  */
 export const PLATFORM_SUPPORT_URL: string = (() => {
   const configured = clean(process.env.NEXT_PUBLIC_PLATFORM_SUPPORT_URL)
   if (configured) return configured
   const operatorEmail = clean(process.env.NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL)
   if (operatorEmail) return `mailto:${operatorEmail}`
-  return 'https://app.aglyn.com/support'
+  const consoleOrigin = clean(process.env.NEXT_PUBLIC_CONSOLE_URL)?.replace(
+    /\/+$/,
+    '',
+  )
+  return `${consoleOrigin || 'https://app.aglyn.com'}/support`
 })()
 
 /** True when this deployment still answers to Aglyn's own brand. */
@@ -182,6 +187,75 @@ export const PLATFORM_MARK_URL: string | null =
   clean(process.env.NEXT_PUBLIC_PLATFORM_MARK_URL) ??
   (isAglynOperatedBrand()
     ? '/_static/images/brand/aglyn-logo-mark-white.svg'
+    : null)
+
+/** An absolute `https://` URL, else undefined — anything else has no origin in an inbox. */
+const httpsUrl = (value: string | undefined): string | undefined => {
+  if (!value) return undefined
+  try {
+    return new URL(value).protocol === 'https:' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The platform's logo as its own system email draws it: the header of mail
+ * sent under the platform's brand (AGL-3322).
+ *
+ * ABSOLUTE and https, unlike {@link PLATFORM_MARK_URL}. That mark is a
+ * site-relative path because every app that draws it serves the file from its
+ * own origin; an inbox has no origin, so a relative path there is a
+ * broken-image box. A configured value that is not an absolute `https://` URL
+ * is ignored rather than handed on to fail in somebody's inbox.
+ *
+ * The WORDMARK rather than the square mark: a header is read at a glance, and
+ * the wordmark names the sender where the mark would need the reader to
+ * already know it. This one is the file the Aglyn marketing site's own email
+ * header block draws, served from that site's media CDN.
+ *
+ * Null unless this is the Aglyn-operated brand, for the reason
+ * {@link PLATFORM_HOME_URL} is: a renamed deployment must not put our logo at
+ * the top of its customers' mail. Such an operator sets
+ * `NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL`, or gets its product name as the
+ * header, in bold text.
+ *
+ * Deliberately NOT `PLATFORM_BRANDING_PROFILE.emailLogoUrl`, which stays null.
+ * That field is an ORG's email logo: a white-label profile inherits it when
+ * the org set none, and a send that carries one is read as an org's own mail.
+ * Putting the platform's logo there would stamp it on every white-label org
+ * that left the field blank.
+ */
+export const PLATFORM_EMAIL_LOGO_URL: string | null =
+  httpsUrl(clean(process.env.NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL)) ??
+  (isAglynOperatedBrand()
+    ? 'https://aglyn.com/api/media/cdn/org:jWmGooWE3L:aglyn-marketing/YwrD-IDzcf'
+    : null)
+
+/**
+ * The postal address printed beside {@link PLATFORM_BRAND_LEGAL_NAME} at the
+ * foot of the platform's own system email (AGL-3322).
+ *
+ * A BRAND string, beside the legal name whose line it completes, rather than
+ * a field of `operatorIdentity()`, and the difference is the default. The
+ * operator identity is what a statutory notice is addressed to and refuses to
+ * guess; this is a line in a footer the operator sees in their own mail and
+ * can correct, and for the Aglyn-operated brand the right value is known: the
+ * registered agent's address the Aglyn marketing site's email footer prints.
+ *
+ * Null unless this is the Aglyn-operated brand: a renamed deployment must
+ * never print our address as its own. Such an operator sets
+ * `NEXT_PUBLIC_PLATFORM_POSTAL_ADDRESS`, or their footer carries the legal
+ * name alone. Line breaks in a configured value are folded into commas,
+ * because the footer prints the address on one line.
+ */
+export const PLATFORM_POSTAL_ADDRESS: string | null =
+  clean(process.env.NEXT_PUBLIC_PLATFORM_POSTAL_ADDRESS)
+    ?.split(/\s*\n\s*/)
+    .filter(Boolean)
+    .join(', ') ??
+  (isAglynOperatedBrand()
+    ? 'c/o Northwest Registered Agent, LLC, 5900 Balcones Drive STE 100, Austin, TX 78731'
     : null)
 
 /**

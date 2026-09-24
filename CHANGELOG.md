@@ -9,6 +9,49 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.196 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.195...v1.0.0-beta.196)
+
+### Added
+
+- **email:** an added address is confirmed by its own system email ([AGL-3322](https://linear.app/aglyn/issue/AGL-3322))
+- **email:** coded system emails carry a brand-aware header and footer ([AGL-3322](https://linear.app/aglyn/issue/AGL-3322))
+- **outreach:** curate each send per prospect with editable AI-drafted step overrides ([AGL-3324](https://linear.app/aglyn/issue/AGL-3324))
+- **console:** staff email suppressions filter and search by address, served by the route ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **tools:** backfill suspended: false onto site members that predate it ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** site users filter by Status, beside their one field clause ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** site collaborators filter by Site access and search by address ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** the sites list filters by status, domain and date through the grid ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **data:** a dataset's records filter and search across every record ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** the notifications feed filters by Type and New/read, served by its query ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+### Fixed
+
+- **aglyn:** a self-hosted install's support link is its own console's ([AGL-3322](https://linear.app/aglyn/issue/AGL-3322))
+- **tools:** the dataset backfill drops the one builder helper it never calls ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **tools:** the dataset backfill carries its token builder copy inline ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **aglyn:** the dataset filter-token builder lives in dataset-models, not a new core file ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** staff suppressions search runs on its own, on eight composites ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **crm, console:** served list filters get their indexes and query shapes ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321), [AGL-3313](https://linear.app/aglyn/issue/AGL-3313))
+
+### Documentation
+
+- **staff-console:** platform suppressions say what they filter and search ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- site members-only accounts and roster filters say what they filter ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- dataset records, sites list and upgrade steps say what they filter ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+<details>
+<summary>Also in this release: 4 test, 1 chore</summary>
+
+- **ai:** the text-generation seam joins the three AI ledgers ([AGL-3324](https://linear.app/aglyn/issue/AGL-3324))
+- **tools:** the Linear id ceiling reads AGL-3324 ([AGL-3324](https://linear.app/aglyn/issue/AGL-3324))
+- **content:** the entry write specs expect the Published sort key ([AGL-3323](https://linear.app/aglyn/issue/AGL-3323))
+- **data:** the record viewer spec's row lookup is typed as an element ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** the sweep holds the AGL-3321 lists to the shared grid filter path ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+</details>
+
 ## v1.0.0-beta.195 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.194...v1.0.0-beta.195)

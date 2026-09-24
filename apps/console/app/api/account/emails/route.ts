@@ -160,8 +160,12 @@ async function sendConfirmation(
     `${confirmUrl}\n\n` +
     'If you did not ask to add this address, you can ignore this email — ' +
     'nothing has changed and the address has not been added to any account.'
-  const designed = await renderSystemEmail('email-verification', {
-    verifyUrl: confirmUrl,
+  // Its own template, not the sign-up confirmation's, whose every line is
+  // about creating an account. The staff design when one is published, else
+  // the built-in copy in the platform's header and footer (AGL-3322); the
+  // copy above is the last resort behind both.
+  const designed = await renderSystemEmail('email-address-confirmation', {
+    confirmUrl,
   })
   const result = await sendEmail({
     to: address,

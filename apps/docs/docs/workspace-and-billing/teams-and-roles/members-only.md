@@ -71,7 +71,9 @@ link on the sign-in form (or by visiting `/recover` directly):
 ## Manage your members
 
 The site's **Users** page lists everyone who signed up on your published site —
-searchable and paged, newest first. Click a member to open their detail drawer:
+searchable and paged, newest first. **Filters** in the table's toolbar narrows the
+list by email, name, join date or **Status** (Active or Suspended), across every
+member rather than the page on screen. Click a member to open their detail drawer:
 
 - **Profile** — email, display name, join date, and saved addresses.
 - **Order history** — the member's payment records, newest first: order number,

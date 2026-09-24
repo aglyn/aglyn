@@ -68,9 +68,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   setPrimaryAccountEmail: async () => ({ ok: true }),
 }))
 
+/** What the confirmation's template renders; null unless a test says. */
+const mockRender = jest.fn(
+  async (
+    _key: string,
+    _merge?: Record<string, string>,
+  ): Promise<Record<string, string> | null> => null,
+)
+
 jest.mock('../../_lib/render-system-email', () => ({
   __esModule: true,
-  renderSystemEmail: async () => null,
+  renderSystemEmail: (key: string, merge?: Record<string, string>) =>
+    mockRender(key, merge),
 }))
 
 import { POST } from './route'
@@ -95,6 +104,8 @@ const linkInLastMail = () =>
 
 beforeEach(() => {
   mockSent.length = 0
+  mockRender.mockReset()
+  mockRender.mockResolvedValue(null)
   delete process.env['NEXT_PUBLIC_CONSOLE_URL']
   delete process.env['AUTH_ACTION_ALLOWED_ORIGINS']
 })
@@ -110,5 +121,46 @@ describe('POST /api/account/emails — the confirmation link’s host (AGL-2983)
     process.env['AUTH_ACTION_ALLOWED_ORIGINS'] = 'https://preview.aglyn.example'
     await add('https://preview.aglyn.example')
     expect(linkInLastMail()).toBe('https://preview.aglyn.example/manage/user?confirmEmail=tokenid.secret')
+  })
+})
+
+/**
+ * Which copy confirms an ADDED address (AGL-3322).
+ *
+ * Its own template, not the sign-up confirmation's: that one's copy is all
+ * about creating an account, and this mail goes to an address someone is
+ * adding to an account that already exists. What the template renders — a
+ * staff design, or the built-in copy in the platform's header and footer — is
+ * what goes out; the route's own copy is the last resort behind it.
+ */
+describe('POST /api/account/emails — the confirmation’s copy (AGL-3322)', () => {
+  const lastMail = () => mockSent[mockSent.length - 1] ?? {}
+
+  it('renders its own template, with the link as its token', async () => {
+    await add('https://app.aglyn.com')
+    expect(mockRender).toHaveBeenCalledTimes(1)
+    expect(mockRender).toHaveBeenCalledWith('email-address-confirmation', {
+      confirmUrl: 'https://app.aglyn.com/manage/user?confirmEmail=tokenid.secret',
+    })
+  })
+
+  it('sends what the template renders', async () => {
+    mockRender.mockResolvedValue({
+      subject: 'Rendered subject',
+      html: '<p>Rendered body</p>',
+      text: 'Rendered body',
+      source: 'default',
+    })
+    await add('https://app.aglyn.com')
+    expect(lastMail()['subject']).toBe('Rendered subject')
+    expect(lastMail()['text']).toBe('Rendered body')
+    expect(lastMail()['html']).toBe('<p>Rendered body</p>')
+  })
+
+  it('falls back to its own copy when nothing renders', async () => {
+    await add('https://app.aglyn.com')
+    expect(lastMail()['subject']).toBe('Confirm your email address')
+    expect(lastMail()['text']).toContain('If you did not ask to add this address')
+    expect(lastMail()['html']).toBeUndefined()
   })
 })

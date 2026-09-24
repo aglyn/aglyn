@@ -213,10 +213,10 @@ beforeEach(() => {
 
 const mount = () => render(<HostDatasetsCard orgId="org-1" org={ORG} />)
 
-/** The `<tr>` holding a cell with this text. */
+/** The grid row holding a cell with this text. */
 const rowFor = (text: string) => {
   const cell = screen.getByText(text)
-  const row = cell.closest('tr')
+  const row = cell.closest<HTMLElement>('[role="row"]')
   if (!row) throw new Error(`no row for ${text}`)
   return row
 }

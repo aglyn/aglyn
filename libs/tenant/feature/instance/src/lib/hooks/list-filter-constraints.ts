@@ -24,9 +24,10 @@ import {
   where,
   type QueryConstraint,
 } from 'firebase/firestore'
-import type {
-  ListFilterField,
-  ListFilterRequest,
+import {
+  type ListFilterField,
+  type ListFilterRequest,
+  listFilterDay,
 } from '@aglyn/shared-ui-jsx/const/list-filter'
 
 /**
@@ -60,7 +61,6 @@ const csv = (raw: string): string[] =>
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean)
-    .slice(0, IN_LIMIT)
 
 const key = (value: string): string =>
   value.trim().replace(/\s+/g, ' ').toLowerCase()
@@ -69,7 +69,10 @@ const key = (value: string): string =>
 const reversed = (value: string): string => [...key(value)].reverse().join('')
 
 const toDay = (value: string): { start: Date; end: Date } | null => {
-  const parsed = new Date(value)
+  // The calendar day the clause names, in the reader's zone — see
+  // `listFilterDay`; `new Date('YYYY-MM-DD')` is UTC midnight, the evening
+  // before anywhere west of UTC.
+  const parsed = listFilterDay(value)
   if (Number.isNaN(parsed.getTime())) return null
   const start = new Date(parsed)
   start.setHours(0, 0, 0, 0)
@@ -87,7 +90,22 @@ export interface ListFilterConstraintOptions {
   fixedOrderBy?: string
   /** Sort field for a `contains`, which cannot order by its token array. */
   containsOrderBy?: string
+  /**
+   * The query already carries an `array-contains-any` over `values` scope
+   * tokens (AGL-3321).
+   *
+   * Firestore takes ONE array clause per query, so a `contains` on a token
+   * array cannot stand beside it and is left to the window. `exempt` names
+   * the fields whose caller drops the scope clause for them instead. And an
+   * `in` multiplies with the scope's values into disjunctions, which
+   * Firestore caps at thirty, so an `isAnyOf` longer than the budget left is
+   * left to the window too rather than refused at query time.
+   */
+  arrayScope?: { values: number; exempt?: readonly string[] }
 }
+
+/** The disjunctions Firestore allows one query. */
+const DISJUNCTION_LIMIT = 30
 
 /**
  * Constraints for one declared filter, or `null` when this list cannot serve
@@ -110,6 +128,16 @@ export function listFilterConstraints(
   const raw = (input.value ?? '').trim()
   const op = input.op
   const pinned = options.fixedOrderBy
+  const scope = options.arrayScope
+  const scoped = Boolean(scope) && !scope?.exempt?.includes(field.column)
+  /** How many `in` values fit beside the scope clause's own. */
+  const inBudget = scoped
+    ? Math.floor(DISJUNCTION_LIMIT / Math.max(1, scope?.values ?? 1))
+    : IN_LIMIT
+  const inValues = (raw: string): string[] | null => {
+    const values = csv(raw)
+    return values.length && values.length <= inBudget ? values : null
+  }
   const sorted = (by: string | ReturnType<typeof documentId>) =>
     pinned ? [] : [orderBy(by as never)]
   const rangeAllowed = (path: string) => !pinned || pinned === path
@@ -141,13 +169,15 @@ export function listFilterConstraints(
 
   if (field.kind === 'text') {
     if (op === 'contains' && field.tokensPath) {
+      // One array clause per query, and the scope clause is one.
+      if (scoped) return null
       // An id array is matched as typed — see `verbatimTokens`.
       const token = field.verbatimTokens ? raw : key(raw).split(' ')[0]
       if (!token) return null
       const sortBy = field.containsOrderBy ?? options.containsOrderBy ?? field.lowerPath ?? field.path
       return [
         where(field.tokensPath, 'array-contains', token),
-        ...(pinned ? [] : [orderBy(sortBy)]),
+        ...(pinned ? [] : [orderBy(sortBy, field.containsOrderDirection ?? 'asc')]),
       ]
     }
     if (op === 'equals' && field.lowerPath) {
@@ -171,10 +201,8 @@ export function listFilterConstraints(
       return [orderBy(documentId()), startAt(raw), endAt(`${raw}${HIGH}`)]
     }
     if (op === 'isAnyOf') {
-      const values = csv(raw)
-      return values.length
-        ? [where(documentId(), 'in', values), ...sorted(documentId())]
-        : null
+      const values = inValues(raw)
+      return values ? [where(documentId(), 'in', values), ...sorted(documentId())] : null
     }
     return null
   }
@@ -191,10 +219,8 @@ export function listFilterConstraints(
       return [where(field.path, '==', raw), ...sorted(documentId())]
     }
     if (op === 'isAnyOf') {
-      const values = csv(raw)
-      return values.length
-        ? [where(field.path, 'in', values), ...sorted(documentId())]
-        : null
+      const values = inValues(raw)
+      return values ? [where(field.path, 'in', values), ...sorted(documentId())] : null
     }
     return null
   }
@@ -227,10 +253,13 @@ export function listFilterConstraints(
      * `is` would answer "none" for every row, every time.
      */
     if (op === 'is') {
+      // Two bounds as `where`s, not a cursor: a cursor must follow the
+      // query's own `orderBy`, and a list that owns its sort (and sorts it
+      // descending) would have the day read backwards (AGL-3321).
       return [
-        ...(pinned ? [] : [orderBy(field.path)]),
-        startAt(stamp(day.start)),
-        endAt(stamp(day.end)),
+        where(field.path, '>=', stamp(day.start)),
+        where(field.path, '<', stamp(day.end)),
+        ...sorted(field.path),
       ]
     }
     const bound: Record<string, ['>=' | '<', Date]> = {

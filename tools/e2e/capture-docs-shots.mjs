@@ -489,6 +489,8 @@ async function seedGuideFixtures() {
   await put(hostRef.collection('siteMembers').doc('seed-guide-member'), {
     email: memberEmail,
     displayName: 'Maya Chen',
+    // As sign-up writes it: the console's Status filter reads the boolean.
+    suspended: false,
     createdAt: Timestamp.now(),
   })
   await put(hostRef.collection('siteMemberCredentials').doc('seed-guide-member'), {

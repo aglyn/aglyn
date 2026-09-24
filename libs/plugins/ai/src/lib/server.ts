@@ -34,6 +34,7 @@ import { registerAiSiteJob } from './jobs/ai-job-site-step'
 import { registerAiWorkflowJob } from './jobs/ai-job-workflow-step'
 import { registerAiInsightJob } from './jobs/ai-job-insight-step'
 import { registerAiFigureReaders } from './insights/ai-figure-readers'
+import { registerAiTextGenerator } from './server/plugin-text-generation'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { ensureFirstPartyAiProviders } from './providers/registry'
 import { aiAssistHandler } from './server/ai-assist'
@@ -143,6 +144,10 @@ export function registerAiConsoleApi(): void {
   registerAiDeclarations()
   registerFirstPartyProviders()
   registerAiJobKinds()
+  // This plugin as the workspace's text generator on the core's seam
+  // (AGL-3324): another plugin drafts a paragraph through it under the
+  // generation doors' own rules, metered as a text job is.
+  registerAiTextGenerator()
   registerPluginApiRoute('assist/chat', { web: assistChat })
   registerPluginApiRoute('assist/feedback', { web: assistFeedback })
   // The applied-edit record (AGL-2906): counts of a proposal the author

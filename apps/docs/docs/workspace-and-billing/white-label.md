@@ -50,11 +50,12 @@ Every field is optional. **Leave one blank and it keeps the Aglyn default for
 that field** — the grayed-out placeholder text in each box is that default, so
 a blank box is showing you exactly what will be used.
 
-Two fields are the exception, and both fall back to **nothing** rather than to
-an Aglyn value: **Support URL** and **Email logo URL**. Their placeholders say
-so. Leaving Support URL blank means no support link is shown anywhere — your
-customers are never sent to Aglyn's support desk, which could not help them
-and would name us to someone who was never told we exist.
+Two fields are the exception, and neither falls back to an Aglyn value:
+**Support URL** falls back to nothing, as its placeholder says, and **Email
+logo URL** to your product name, set as text. Leaving Support URL blank means
+no support link is shown anywhere — your customers are never sent to Aglyn's
+support desk, which could not help them and would name us to someone who was
+never told we exist.
 
 | Field | Helper text under it | What it replaces |
 | --- | --- | --- |
@@ -64,7 +65,7 @@ and would name us to someone who was never told we exist.
 | **Primary color** | CSS hex color used for the console primary and site badge. | The console's primary color, live |
 | **Logo URL** | Console chrome + site badge. Browse the org media library or paste an https URL. | The Aglyn wordmark in the console header |
 | **Favicon URL** | Browser tab icon for branded console surfaces. | The browser-tab icon |
-| **Email logo URL** | Logo shown in transactional email headers (a hosted PNG works best). | Nothing — it *adds* a header to your email. See [below](#email) |
+| **Email logo URL** | Logo shown in transactional email headers (a hosted PNG works best). | Your product name, which heads your system email as text until a logo is set. See [below](#email) |
 | **Custom console domain** | Saved now; domain routing to it ships in a later phase. | Nothing yet. See [below](#custom-console-domain) |
 
 **Logo URL**, **Favicon URL** and **Email logo URL** each carry a **Browse**
@@ -144,10 +145,9 @@ square mark both land at a sensible size without you supplying dimensions.
 
 Two details are deliberate and quiet:
 
-- **A blank Email logo URL emits nothing at all** — not an empty row, not a
-  spacer. (Support URL behaves the same way, for the same reason.) An email with a gap where a logo should be reads as broken; an email
-  with no logo reads as plain, which is the right appearance for an
-  organization that has not set one.
+- **A blank Email logo URL puts your product name there instead**, in bold
+  text — never Aglyn's logo, and never an empty row or a broken image. The same
+  happens when the logo is set but cannot be fetched from an inbox.
 - **The image's `alt` text is your product name.** Most inboxes block remote
   images by default, so for a large share of recipients the alt text *is* the
   header. Setting **Email logo URL** without setting **Product name** gives
@@ -156,6 +156,18 @@ Two details are deliberate and quiet:
 There is no `{{brand.logoUrl}}` token, and that is on purpose: the logo is
 structural, placed by the renderer, so a template can never forget to include
 it or place it twice.
+
+### The email footer {#email-footer}
+
+Under the message, system email carries a short footer: a line saying why the
+recipient is getting it, which names your product — "You're receiving this
+because someone invited you to join Client Co on Acme Sites." — and a link to
+your **Support URL**, when you set one. There is no copyright or postal line.
+Aglyn's own mail carries Aglyn's; yours never shows Aglyn's name or address.
+
+Aglyn's own mail can also carry a header and footer that staff design on the
+Aglyn marketing site. Mail to your organization's people always leaves those
+out and wears yours instead.
 
 ### The sending address does not change {#sending-address}
 

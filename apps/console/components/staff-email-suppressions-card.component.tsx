@@ -17,7 +17,14 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -26,16 +33,22 @@ import {
   Button,
   Chip,
   Stack,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useState } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { TABLE_ROW_HEIGHT } from '../constants/shared'
 import useStaffListPagination from '../hooks/use-staff-list-pagination'
+import {
+  SUPPRESSION_FILTER_FIELDS,
+  SUPPRESSION_FILTER_HEADERS,
+  SUPPRESSION_FILTER_OPTIONS,
+  SUPPRESSION_REASON_LABELS,
+  SUPPRESSION_SELECT_FIELDS,
+  suppressionClauseStandsAlongside,
+} from '../utils/email-suppression-filters'
 import StaffListPaginationControls from './staff-list-pagination.component'
 
 interface PlatformSuppression {
@@ -44,31 +57,29 @@ interface PlatformSuppression {
   reason?: string
   context?: string | null
   hostId?: string | null
-  releasedAt?: unknown | null
+  releasedAt?: { seconds?: number } | null
   suppressedAt?: { seconds?: number } | null
   createdAt?: { seconds?: number } | null
 }
 
-const REASONS: Record<
-  string,
-  { label: string; color: 'default' | 'warning' | 'error' }
-> = {
-  bounce: { label: 'Bounced', color: 'warning' },
-  complaint: { label: 'Marked as spam', color: 'error' },
-  staff: { label: 'Recorded by staff', color: 'default' },
-}
-
 const describeReason = (reason: unknown) =>
-  REASONS[String(reason ?? '')] ?? {
+  SUPPRESSION_REASON_LABELS[String(reason ?? '')] ?? {
     label: String(reason ?? 'Unknown'),
     color: 'default' as const,
   }
 
+const day = (seconds: number | undefined): string =>
+  seconds ? new Date(seconds * 1000).toISOString().slice(0, 10) : '—'
+
 function onDate(row: PlatformSuppression): string {
-  const seconds = row.createdAt?.seconds ?? row.suppressedAt?.seconds
-  if (!seconds) return '—'
-  return new Date(seconds * 1000).toISOString().slice(0, 10)
+  return day(row.createdAt?.seconds ?? row.suppressedAt?.seconds)
 }
+
+/** The one filter the route serves beside a search: a range over its sort. */
+const SEARCH_ALONGSIDE = 'suppressedAt'
+
+/** Columns the table draws; the other filter fields reach the panel hidden. */
+const VISIBLE_COLUMNS = ['email', 'reason', 'context', 'status', 'createdAt']
 
 /**
  * THE PLATFORM-WIDE SUPPRESSION LIST, with a reader and a release.
@@ -112,6 +123,37 @@ export default function StaffEmailSuppressionsCard() {
   const [busy, setBusy] = useState(false)
 
   /*
+   * The Filters panel and the search, SERVED by the route (AGL-3321): every
+   * clause is a predicate beneath the list's cursor, so each page the footer
+   * turns is a page of the narrowed list. Status and Last reported stand
+   * beside anything; Reason, Learned from and Site ID are one at a time,
+   * because each pair would need an index of its own. See
+   * `utils/email-suppression-filters.ts`.
+   *
+   * The search wins over the filters: with a search in force only the Last
+   * reported range travels beside it, the other clauses wait, and an Alert
+   * says so — the route answers the two together with no index.
+   */
+  const gridFilter = useListGridFilter({
+    selectFields: SUPPRESSION_SELECT_FIELDS,
+    single: true,
+    keepAlongside: suppressionClauseStandsAlongside,
+  })
+  const searchKey = gridFilter.searchWords.join(' ').trim()
+  /** The debounced search the route was last asked, one query per settled term. */
+  const [search, setSearch] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchKey), 300)
+    return () => clearTimeout(timer)
+  }, [searchKey])
+  const sent = search
+    ? gridFilter.clauses.filter((clause) => clause.field === SEARCH_ALONGSIDE)
+    : gridFilter.clauses
+  const setAside = sent.length < gridFilter.clauses.length
+  const filtersKey = JSON.stringify(sent.map(({ field, op, value }) => ({ field, op, value })))
+  const filtering = gridFilter.clauses.length > 0 || Boolean(searchKey)
+
+  /*
    * THE CONSOLE'S ONE CURSOR WALK, not a second one that resembles it.
    *
    * A list this long is a window over something that grows — one row per
@@ -119,18 +161,25 @@ export default function StaffEmailSuppressionsCard() {
    * the product — so a fixed read would hide whichever entries fell past it,
    * with nothing on screen to say so. That is the exact defect this list
    * exists to explain, and it would be a poor screen that reproduced it.
+   *
+   * A new filter or search is a new walk: `fetchPage` changes with them, and
+   * the walk restarts at its first page.
    */
-  const pagination = useStaffListPagination<PlatformSuppression>({
-    fetchPage: async (cursor, _pageIndex, pageSize) => {
+  const fetchPage = useCallback(
+    async (cursor: string | null, _pageIndex: number, pageSize: number) => {
       const params = new URLSearchParams({ limit: String(pageSize) })
       if (cursor) params.set('cursor', cursor)
+      if (filtersKey !== '[]') params.set('filters', filtersKey)
+      if (search) params.set('search', search)
       const response = await authorizedFetch(
         user,
         `/api/admin/emails/suppressions?${params.toString()}`,
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(payload?.error ?? 'Could not read the suppression list')
+        const message = payload?.error ?? 'Could not read the suppression list'
+        setError(message)
+        throw new Error(message)
       }
       setError(null)
       return {
@@ -139,10 +188,24 @@ export default function StaffEmailSuppressionsCard() {
         hasMore: Boolean(payload?.hasMore),
       }
     },
-    // Held at an error rather than an empty list. "Nothing is suppressed" is a
-    // confident wrong answer in the reassuring direction, and this card exists
-    // to explain mail that is not arriving.
-    onError: () => setError('Could not read the suppression list'),
+    [user, filtersKey, search],
+  )
+  // Held at an error rather than an empty list. "Nothing is suppressed" is a
+  // confident wrong answer in the reassuring direction, and this card exists
+  // to explain mail that is not arriving.
+  const onError = useCallback(
+    (reason: unknown) =>
+      setError((current) =>
+        current ??
+        (reason instanceof Error && reason.message
+          ? reason.message
+          : 'Could not read the suppression list'),
+      ),
+    [],
+  )
+  const pagination = useStaffListPagination<PlatformSuppression>({
+    fetchPage,
+    onError,
   })
   const entries = pagination.rows
 
@@ -185,14 +248,142 @@ export default function StaffEmailSuppressionsCard() {
     [busy, user, note, enqueueSnackbar, pagination],
   )
 
-  /*
-   * No filter and no search. The route pages the list by cursor and serves
-   * no predicate, so a filter here could only narrow the page on screen and
-   * would answer "not suppressed" for every address past it — the wrong
-   * answer in the reassuring direction. Filtering needs the route to serve
-   * one first.
-   */
-  const live = (entries ?? []).filter((row) => !row.releasedAt)
+  const columns = useMemo<GridColDef[]>(
+    () =>
+      listFilterGridColumns(
+        [
+          {
+            field: 'email',
+            headerName: 'Address',
+            flex: 1.4,
+            minWidth: 200,
+            filterable: false,
+            renderCell: ({ row }) =>
+              row.email || (
+                <Typography variant="body2" color="text.secondary">
+                  {'(address not recorded)'}
+                </Typography>
+              ),
+          },
+          {
+            field: 'reason',
+            headerName: 'Reason',
+            width: 150,
+            renderCell: ({ row }) => {
+              const described = describeReason(row.reason)
+              return (
+                <Chip
+                  size="small"
+                  color={described.color}
+                  variant="outlined"
+                  label={described.label}
+                />
+              )
+            },
+          },
+          {
+            /*
+             * WHICH SENDER produced the address that died. It is the first
+             * thing a support question needs — an invite that bounced is a
+             * mistyped address, and a receipt that bounced is a customer who
+             * has lost their mailbox. Filtered by the sender's tag; the site
+             * beside it is the hidden Site ID filter.
+             */
+            field: 'context',
+            headerName: 'Learned from',
+            flex: 1,
+            minWidth: 140,
+            renderCell: ({ row }) => (
+              <Typography variant="caption" color="text.secondary">
+                {row.context || '—'}
+                {row.hostId ? ` · ${row.hostId}` : ''}
+              </Typography>
+            ),
+          },
+          {
+            field: 'status',
+            headerName: 'Status',
+            width: 150,
+            valueGetter: (_value, row: PlatformSuppression) =>
+              row.releasedAt ? 'Released' : 'Active',
+            renderCell: ({ row }) =>
+              row.releasedAt ? (
+                <Typography variant="caption" color="text.secondary">
+                  {`Released ${day(row.releasedAt?.seconds)}`}
+                </Typography>
+              ) : (
+                <Chip size="small" color="error" label="Active" />
+              ),
+          },
+          {
+            field: 'createdAt',
+            headerName: 'Since',
+            width: 120,
+            filterable: false,
+            valueGetter: (_value, row: PlatformSuppression) => onDate(row),
+          },
+          listActionsColumn(
+            (row: PlatformSuppression) => {
+              const address = row.email ?? ''
+              // A released entry suppresses nothing, so there is nothing to lift.
+              if (row.releasedAt) return null
+              return releasing === address ? (
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  sx={{ alignItems: 'center', justifyContent: 'flex-end', py: 0.5 }}
+                >
+                  <TextField
+                    size="small"
+                    label="Why"
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    // The grid's own cell keys (arrows, space) stay out of the box.
+                    onKeyDown={(event) => event.stopPropagation()}
+                    slotProps={{ htmlInput: { maxLength: 200 } }}
+                  />
+                  <Button
+                    size="small"
+                    color="error"
+                    disabled={busy || note.trim().length < 8}
+                    onClick={() => void release(address)}
+                  >
+                    {'Release'}
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={() => {
+                      setReleasing(null)
+                      setNote('')
+                    }}
+                  >
+                    {'Cancel'}
+                  </Button>
+                </Stack>
+              ) : (
+                <Button
+                  size="small"
+                  color="error"
+                  disabled={!address}
+                  onClick={() => {
+                    setReleasing(address)
+                    setNote('')
+                  }}
+                >
+                  {'Release'}
+                </Button>
+              )
+            },
+            { width: releasing ? 380 : 110 },
+          ),
+        ],
+        SUPPRESSION_FILTER_FIELDS,
+        SUPPRESSION_FILTER_OPTIONS,
+        SUPPRESSION_FILTER_HEADERS,
+      ),
+    [busy, note, release, releasing],
+  )
+
   const loading = pagination.loading && !entries.length
 
   return (
@@ -218,111 +409,58 @@ export default function StaffEmailSuppressionsCard() {
             'these — which is why an address can keep being skipped after ' +
             'they have already removed it from their list.'}
         </Alert>
+        <ListFilterChips
+          fields={SUPPRESSION_FILTER_FIELDS}
+          headers={SUPPRESSION_FILTER_HEADERS}
+          options={SUPPRESSION_FILTER_OPTIONS}
+          clauses={gridFilter.clauses}
+          onChange={gridFilter.setClauses}
+        />
+        {setAside ? (
+          <Alert severity="info">
+            {'The search is in force, so only Last reported applies beside ' +
+              'it — the other filters are set aside. Clear the search to ' +
+              'filter by them.'}
+          </Alert>
+        ) : null}
         {error ? (
           <Alert severity="warning">{error}</Alert>
         ) : loading ? (
           <Typography variant="body2">{'Loading…'}</Typography>
-        ) : live.length === 0 ? (
+        ) : entries.length === 0 && !filtering ? (
           <Typography variant="body2" color="text.secondary">
             {'Nothing is suppressed platform-wide.'}
           </Typography>
-        ) : (
-          <ScrollTable size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>{'Address'}</TableCell>
-                <TableCell>{'Reason'}</TableCell>
-                <TableCell>{'Learned from'}</TableCell>
-                <TableCell>{'Since'}</TableCell>
-                <TableCell align="right" />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {live.map((row) => {
-                const described = describeReason(row.reason)
-                const address = row.email ?? ''
-                return (
-                  <TableRow key={row.$id}>
-                    <TableCell>
-                      {address || (
-                        <Typography variant="body2" color="text.secondary">
-                          {'(address not recorded)'}
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        size="small"
-                        color={described.color}
-                        variant="outlined"
-                        label={described.label}
-                      />
-                    </TableCell>
-                    {/*
-                      WHICH SENDER produced the address that died. It is the
-                      first thing a support question needs — an invite that
-                      bounced is a mistyped address, and a receipt that
-                      bounced is a customer who has lost their mailbox.
-                    */}
-                    <TableCell>
-                      <Typography variant="caption" color="text.secondary">
-                        {row.context || '—'}
-                        {row.hostId ? ` · ${row.hostId}` : ''}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{onDate(row)}</TableCell>
-                    <TableCell align="right">
-                      {releasing === address ? (
-                        <Stack
-                          direction="row"
-                          spacing={1}
-                          sx={{ alignItems: 'center', justifyContent: 'flex-end' }}
-                        >
-                          <TextField
-                            size="small"
-                            label="Why"
-                            value={note}
-                            onChange={(event) => setNote(event.target.value)}
-                            slotProps={{ htmlInput: { maxLength: 200 } }}
-                          />
-                          <Button
-                            size="small"
-                            color="error"
-                            disabled={busy || note.trim().length < 8}
-                            onClick={() => void release(address)}
-                          >
-                            {'Release'}
-                          </Button>
-                          <Button
-                            size="small"
-                            onClick={() => {
-                              setReleasing(null)
-                              setNote('')
-                            }}
-                          >
-                            {'Cancel'}
-                          </Button>
-                        </Stack>
-                      ) : (
-                        <Button
-                          size="small"
-                          color="error"
-                          disabled={!address}
-                          onClick={() => {
-                            setReleasing(address)
-                            setNote('')
-                          }}
-                        >
-                          {'Release'}
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </ScrollTable>
-        )}
+        ) : null}
+        {!error && (entries.length > 0 || filtering) ? (
+          <ListTable
+            aria-label="Platform suppressions"
+            rows={entries}
+            columns={columns}
+            getRowId={(row: PlatformSuppression) => row.$id}
+            loading={pagination.loading}
+            rowHeight={TABLE_ROW_HEIGHT}
+            // The row holding the Why box is as tall as the box.
+            getRowHeight={() => 'auto'}
+            // One page of a cursor walk, turned by the footer below: the grid
+            // neither slices it nor filters it and calls that the list. The
+            // route answers the panel and the search.
+            hideFooter
+            filterMode="server"
+            quickFilter
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            initialState={{
+              columns: {
+                columnVisibilityModel: hiddenFilterVisibility(
+                  SUPPRESSION_FILTER_FIELDS,
+                  VISIBLE_COLUMNS,
+                ),
+              },
+            }}
+            noRowsLabel="No suppressions match these filters"
+          />
+        ) : null}
         {/*
           The console's shared footer, so this list is the same control as
           every other staff list rather than a third grammar that resembles
@@ -331,7 +469,7 @@ export default function StaffEmailSuppressionsCard() {
         */}
         <StaffListPaginationControls
           pagination={pagination}
-          shown={live.length}
+          shown={entries.length}
           sizeMenu={false}
         />
       </Stack>

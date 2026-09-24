@@ -362,13 +362,17 @@ const ALLOWED: Array<{ file: string; count: number; reason: string }> = [
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/platform-brand.ts',
-    count: 2,
+    count: 3,
     reason:
       'PLATFORM_SUPPORT_URL — last fallback after the operator support ' +
       'address. Plus PLATFORM_HOME_URL, the badge destination, whose literal ' +
       'is reached ONLY when `isAglynOperatedBrand()` — a renamed self-host ' +
       'deployment resolves it to null and gets an unlinked badge rather than ' +
-      'a link advertising us on its own customers\' sites.',
+      'a link advertising us on its own customers\' sites. Plus ' +
+      'PLATFORM_EMAIL_LOGO_URL (AGL-3322), the wordmark at the head of the ' +
+      'platform\'s own system email, gated the same way: a renamed ' +
+      'deployment reads NEXT_PUBLIC_PLATFORM_EMAIL_LOGO_URL or draws its ' +
+      'product name as text, never our logo.',
   },
   {
     file: 'libs/aglyn/src/lib/app-utils/published-legal-pages.ts',

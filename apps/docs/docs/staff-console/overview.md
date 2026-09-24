@@ -465,14 +465,24 @@ system emails that exist — adding one is a code change. Password reset and ema
 verification are Aglyn's own and are fully editable. Billing emails — receipts, failed
 payments, refunds — are sent by Stripe from its Dashboard and are listed read-only.
 
+The built-in copy goes out with a header and footer of its own: the Aglyn wordmark,
+linked to aglyn.com, above it, and below it a line saying why the recipient is getting
+the mail, a link to support, and the copyright line with Aglyn's postal address. A
+designed template that places none of the marketing site's email blocks goes out in the
+same header and footer. The editor's canvas doesn't draw them, because they are added
+when the mail is sent; a test send shows them.
+
 The editor also offers the platform marketing site's email blocks, such as its header
 and footer, under **Your email blocks**, and draws them where you place them. They come
 from the site that `PLATFORM_MARKETING_HOST_ID` names; without one, the drawer offers
 none. Blocks are made and changed on that site, so **Save as reusable component** isn't
-offered here. Mail sent under the Aglyn brand carries them. Mail to the people of a
-white-label organization leaves them out, so the organization's own email logo is the
-only header it has. On the marketing site, a block's **Used by** lists the system
-emails that place it.
+offered here. Mail sent under the Aglyn brand carries them, and a design that places
+them uses them **instead of** the built-in header and footer — nothing is added around
+them. Mail to the people of a white-label organization leaves them out and never
+carries Aglyn's header or footer: it gets the organization's own email logo, or its
+product name, and a footer with the reason and the organization's support link, if it
+set one. On the marketing site, a block's **Used by** lists the system emails that place
+it.
 
 #### Platform send rate {#platform-send-rate}
 
@@ -507,6 +517,29 @@ hourly firing on the 1st and 2nd of the month mails them.
 Reading the value needs any staff role; **changing it needs `super`**, the same
 bar as feature flags, and every change writes an audit row with the before, the
 after and the reason typed into the **Why** box.
+
+#### Platform suppressions {#platform-suppressions}
+
+Also on the System emails page: every address that bounced permanently or
+reported spam on any send from any site. Nothing in the product mails one
+until it is released with **Release**, which asks for a reason in its **Why**
+box and writes an audit row. A released entry stays on the list, marked
+**Released** with its date, as the record that the suppression was honored
+while it stood.
+
+The list's **Filters** narrows it by **Status** (**Active** or **Released**),
+**Reason** (one or several), **Learned from** (the tag of the send that
+failed, such as `invite`), **Site ID**, and **Last reported** (on or after, or
+before, a date). Status and Last reported combine with any other filter;
+Reason, Learned from and Site ID apply one at a time, so choosing one replaces
+another. The search box finds an address by the start of any part of it: the
+local part, a piece of it such as `doe` in `jane.doe`, or the domain, with or
+without the `@`. It matches up to the first twelve characters typed. A search
+runs on its own, alongside **Last reported** only: while a search is in the
+box, the other filters are set aside, and a note above the list says so;
+clear the search to apply them again. Filters and search apply to the whole
+list rather than the page on screen, and each filter in force shows as a chip
+above the list; remove the chip to drop it.
 
 ### [Feature flags](feature-flags.md) {#feature-flags}
 

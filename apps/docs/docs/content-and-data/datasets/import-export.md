@@ -31,7 +31,7 @@ data toolbar export the **whole dataset**, not the page of records currently on 
   ISO-8601, coordinates as `latitude, longitude`, lists and references comma-joined, and
   map fields as JSON. That is what makes the round-trip lossless.
 
-The file is named after the dataset. Nothing is filtered out — a search or sort you have
+The file is named after the dataset. Nothing is filtered out — a filter or search you have
 applied in the table does not narrow the export.
 
 ### Large datasets {#large-exports}

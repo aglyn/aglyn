@@ -654,6 +654,8 @@ for (const [id, fileName, tags, seed] of mediaFixtures) {
 await put(hostRef.collection('siteMembers').doc('seed-site-member'), {
   email: 'visitor@aglyn.test',
   displayName: 'Rae Visitor',
+  // As sign-up writes it: the console's Status filter reads the boolean.
+  suspended: false,
   createdAt: now,
 })
 await put(hostRef.collection('siteMemberCredentials').doc('seed-site-member'), {
@@ -1261,6 +1263,7 @@ await put(
     body: '401 of 500 used — upgrade in Billing to raise the limit.',
     link: '/org/billing',
     orgId,
+    read: false,
     createdAt: now,
   },
 )

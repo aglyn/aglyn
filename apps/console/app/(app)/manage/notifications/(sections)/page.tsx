@@ -17,6 +17,7 @@
 'use client'
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Button, Stack } from '@mui/material'
 import {
@@ -29,6 +30,7 @@ import {
   serverTimestamp,
   startAfter,
   updateDoc,
+  where,
   writeBatch,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
@@ -46,6 +48,7 @@ import {
   resolveNotificationOrgSlug,
   resolveNotificationWorkspace,
 } from '../../../../../utils/notification-links'
+import { notificationFilterWheres } from '../../../../../utils/notification-filters'
 
 /**
  * The notifications feed (AGL-260): the full, cursor-paginated list behind
@@ -79,6 +82,16 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
+  /*
+   * Type and Status, served by the feed's query (AGL-3321). A new set of
+   * clauses is a new feed, so the cursors of the old one are dropped and the
+   * reader starts on its first page.
+   */
+  const gridFilter = useListGridFilter({ selectFields: ['type', 'readAt'] })
+  const wheres = useMemo(
+    () => notificationFilterWheres(gridFilter.clauses),
+    [gridFilter.clauses],
+  )
 
   const loadPage = useCallback(
     async (targetPage: number, cursor?: QueryDocumentSnapshot) => {
@@ -88,6 +101,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
         const snapshot = await getDocs(
           query(
             collection(firestore, 'users', uid, 'notifications'),
+            ...wheres.map(([path, op, value]) => where(path, op, value)),
             orderBy('createdAt', 'desc'),
             ...(cursor ? [startAfter(cursor)] : []),
             limit(pageSize + 1),
@@ -109,7 +123,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
         setLoading(false)
       }
     },
-    [firestore, uid, pageSize],
+    [firestore, uid, pageSize, wheres],
   )
 
   useEffect(() => {
@@ -133,7 +147,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
       let count = 0
       snapshot.forEach((entry) => {
         if (!entry.get('readAt')) {
-          batch.update(entry.ref, { readAt: serverTimestamp() })
+          batch.update(entry.ref, { read: true, readAt: serverTimestamp() })
           count += 1
         }
       })
@@ -176,7 +190,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
     if (!notification.readAt) {
       void updateDoc(
         doc(firestore, 'users', uid, 'notifications', notification.$id),
-        { readAt: serverTimestamp() },
+        { read: true, readAt: serverTimestamp() },
       ).catch(console.error)
     }
     const target = normalizeNotificationLink(notification.link, {
@@ -245,6 +259,7 @@ const ManageNotifications: NextPageWithLayout<Record<string, never>> = () => {
             void loadPage(next, next > page ? cursors[page] : cursors[next - 1])
           }
           onPageSizeChange={setPageSize}
+          gridFilter={gridFilter}
         />
       </Stack>
     </CardDisplay>

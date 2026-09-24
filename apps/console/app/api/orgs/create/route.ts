@@ -226,8 +226,8 @@ async function handler(request: Request): Promise<Response> {
     // creates their second workspace does not get welcomed again. Counted
     // after creation — they now own exactly one — and wrapped so nothing in
     // the send can turn a created org into a 500. Best-effort like every
-    // other send; `renderSystemEmail` returns null to fall back to the copy
-    // below, `sendEmail` never throws.
+    // other send; the copy below is the last resort behind the rendered
+    // template, and `sendEmail` never throws.
     try {
       if (decoded.email && isEmailConfigured()) {
         const ownedCount = (

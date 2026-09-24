@@ -43,6 +43,50 @@ automation steps store their values as text without validating them.
 Edit records in the **typed document editor** — each field renders the right input for its
 type, so data stays clean.
 
+## Filter and search the records {#filter-records}
+
+The records table filters through its own toolbar: **Filters** opens the filter panel,
+where every field of the dataset's model is a column, and **Search** finds records by the
+words in their text. A field with a fixed list of options, and a true/false field, are
+picked from a list; numbers and dates take a value; reference, map, bytes, coordinates
+and null fields are not filterable. Each filter shows as a chip above the table, and
+removing the chip removes the filter.
+
+**One condition reaches every record.** A single filter or a single search word is
+answered across the whole dataset and paged like the unfiltered table, when it is:
+
+- a field **equals** a value — for a text field, ignoring case;
+- a text field **contains** a word, which matches words that **start with** what you
+  typed (`kett` finds *Kettle*, `ttle` does not);
+- a list field **contains** one of its entries;
+- one **search** word, which likewise matches the start of any word in the record's text
+  fields, option fields and lists.
+
+Its chip is highlighted. **Anything more is matched over the first 1,000 records** that
+the first condition finds (or the first 1,000 records of the dataset, when none of the
+conditions can be answered that way): a second filter or search word, a filter that
+contains several words, **number and date ranges**, *is empty*, *is not*, and *is any
+of*. When there were more than 1,000 to look through, the table says so. A word is matched
+on its first 12 characters, and a text value's first 40 words are searchable.
+
+This needs no database index — nothing to deploy on a self-hosted project. Records keep
+their filter terms in a `filterKeys` field that every write keeps current. **Records
+written before the field existed** are found only once it is stamped onto them, which the
+operator does once per project:
+
+```bash
+# Dry run: counts what would change and writes nothing.
+GOOGLE_CLOUD_PROJECT=<project-id> node tools/scripts/backfill-dataset-filter-keys.mjs
+
+# Write.
+GOOGLE_CLOUD_PROJECT=<project-id> node tools/scripts/backfill-dataset-filter-keys.mjs --apply
+```
+
+It uses Application Default Credentials (`gcloud auth application-default login`), is
+safe to re-run, and `--org=<orgId>` limits it to one organization. Run it again after
+changing a field's type or options in the schema dialog: a schema change does not rewrite
+records, so until a record is edited or re-stamped its filter terms follow the old model.
+
 ## Relations
 
 Fields can **reference** other records, including **many-to-many** relations, letting you

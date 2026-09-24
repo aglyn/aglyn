@@ -132,3 +132,62 @@ describe('the plan serves the first SERVABLE clause and windows the rest', () =>
     })
   })
 })
+
+describe('what a query already carrying a scope clause can serve (AGL-3321)', () => {
+  const SCOPED = { arrayScope: { values: 3, exempt: ['formIds'] } }
+  const WITH_IDS: readonly ListFilterField[] = [
+    ...FIELDS,
+    { column: 'formIds', kind: 'text', path: 'formIds', tokensPath: 'formIds', verbatimTokens: true, operators: ['contains'] },
+    { column: 'hostId', kind: 'exact', path: 'hostId' },
+    { column: 'createdAt', kind: 'date', path: 'createdAt' },
+  ]
+
+  it('serves no second array clause beside the scope, except for an exempt field', () => {
+    expect(
+      listFilterConstraints(WITH_IDS, { field: 'tags', op: 'contains', value: 'vip' }, SCOPED),
+    ).toBeNull()
+    expect(
+      listFilterConstraints(WITH_IDS, { field: 'formIds', op: 'contains', value: 'F1' }, SCOPED),
+    ).toEqual([
+      { where: 'formIds', op: 'array-contains', value: 'F1' },
+      { orderBy: 'formIds', direction: 'asc' },
+    ])
+  })
+
+  it('keeps an `in` inside the thirty disjunctions it shares with the scope', () => {
+    const ten = Array.from({ length: 10 }, (_unused, at) => `h${at}`).join(',')
+    const eleven = `${ten},h10`
+    // 3 scope values × 10 = 30: served. × 11 = 33: left to the window.
+    expect(
+      listFilterConstraints(WITH_IDS, { field: 'hostId', op: 'isAnyOf', value: ten }, SCOPED),
+    ).not.toBeNull()
+    expect(
+      listFilterConstraints(WITH_IDS, { field: 'hostId', op: 'isAnyOf', value: eleven }, SCOPED),
+    ).toBeNull()
+  })
+
+  it('leaves more than thirty values to the window rather than dropping some', () => {
+    const many = Array.from({ length: 31 }, (_unused, at) => `h${at}`).join(',')
+    expect(listFilterConstraints(WITH_IDS, { field: 'hostId', op: 'isAnyOf', value: many })).toBeNull()
+  })
+
+  it('orders a contains the way its field declares', () => {
+    const DESC: readonly ListFilterField[] = [
+      { column: 'tags', kind: 'text', path: 'tags', tokensPath: 'tags', containsOrderBy: 'updatedAt', containsOrderDirection: 'desc' },
+    ]
+    expect(listFilterConstraints(DESC, { field: 'tags', op: 'contains', value: 'vip' })).toEqual([
+      { where: 'tags', op: 'array-contains', value: 'vip' },
+      { orderBy: 'updatedAt', direction: 'desc' },
+    ])
+  })
+
+  it('serves a day as two bounds, which a list that owns its sort can carry', () => {
+    const built = listFilterConstraints(
+      WITH_IDS,
+      { field: 'createdAt', op: 'is', value: '2026-09-17' },
+      { fixedOrderBy: 'createdAt' },
+    )
+    expect(built?.map((entry: any) => entry.op)).toEqual(['>=', '<'])
+    expect(built?.some((entry: any) => 'startAt' in entry || 'orderBy' in entry)).toBe(false)
+  })
+})

@@ -175,6 +175,23 @@ describe('NotificationsTable (AGL-3045)', () => {
     expect(onPageChange).toHaveBeenCalledWith(1)
   })
 
+  it('offers Type and Status in the Filters panel when the page serves them (AGL-3321)', () => {
+    const onFilterModelChange = jest.fn()
+    renderTable({
+      gridFilter: {
+        filterModel: { items: [] },
+        onFilterModelChange,
+        searchWords: [],
+        clauses: [{ field: 'readAt', op: 'equals', value: 'false' }],
+        setClauses: jest.fn(),
+      },
+    })
+    expect(screen.getByRole('button', { name: /Filters/ })).toBeTruthy()
+    expect(screen.queryByRole('searchbox')).toBeNull()
+    // The clause in force shows as a chip, by its label.
+    expect(screen.getByText('Status is New')).toBeTruthy()
+  })
+
   it('says the feed is empty rather than drawing an empty grid', () => {
     renderTable({ rows: [], hasMore: false })
     expect(screen.getByText("You're all caught up.")).toBeTruthy()

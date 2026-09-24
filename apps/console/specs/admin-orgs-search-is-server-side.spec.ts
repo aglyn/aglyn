@@ -366,12 +366,14 @@ describe('the column filter reaches the query', () => {
      */
     expect((await filterFor('createdAt', 'is', '2026-07-18')).status).toBe(200)
     expect(ordering).toEqual(['createdAt'])
-    expect(wheres).toEqual([])
-    expect((startAt as any).__ts).toBeDefined()
-    expect((endAt as any).__ts).toBeDefined()
-    expect(new Date((endAt as any).__ts).getTime()).toBeGreaterThan(
-      new Date((startAt as any).__ts).getTime(),
-    )
+    // Two bounds on the day, not a cursor (AGL-3321).
+    expect(wheres.map(([path, op]: any[]) => [path, op])).toEqual([
+      ['createdAt', '>='],
+      ['createdAt', '<'],
+    ])
+    const start = new Date((wheres[0][2] as any).__ts)
+    expect(new Date((wheres[1][2] as any).__ts).getTime()).toBeGreaterThan(start.getTime())
+    expect([start.getFullYear(), start.getMonth() + 1, start.getDate()]).toEqual([2026, 7, 18])
   })
 
   it('createdAt · before is a bound, not a range', async () => {
