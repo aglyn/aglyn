@@ -741,6 +741,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
       <CardDisplay
         header="Activity"
         subheader="Newest first"
+        help={pluginDocsHelp('sequences', { anchor: '#person-history' })}
         contentGutterX
         contentGutterY
         HeaderProps={
@@ -791,6 +792,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
 
       <CardDisplay
         header="Details"
+        help={pluginDocsHelp('sequences', { anchor: '#person-history' })}
         contentGutterX
         HeaderProps={{
           action: (
