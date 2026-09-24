@@ -46,6 +46,8 @@ const SITE_CAMPAIGNS = {
   ready: true,
 }
 const mockPush = jest.fn()
+/** Every site the campaign picker was read for, in order. */
+const campaignsAskedFor: string[] = []
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: () => undefined }),
@@ -61,8 +63,12 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The site's campaigns behind the "In campaign" picker. Offered rather than
   // empty, so a rule that already names one renders the campaign it names —
   // a picker whose value is not among its options draws blank, and a save
-  // from that screen would erase the reference.
-  useHostCampaigns: () => SITE_CAMPAIGNS,
+  // from that screen would erase the reference. The site it was asked for is
+  // recorded, because that is the site whose people the filters read.
+  useHostCampaigns: (hostId: string) => {
+    campaignsAskedFor.push(hostId)
+    return SITE_CAMPAIGNS
+  },
   // The org roster behind the "Owned by" audience control (AGL-2603): empty
   // and settled, so the control renders and the rule round-trips without a
   // members read this suite has no business making.
@@ -124,6 +130,7 @@ const FULL_RULE = {
 const mount = async () => {
   updateDoc.mockClear()
   mockPush.mockClear()
+  campaignsAskedFor.length = 0
   render(
     <ListEditCard hostId="host-1" listId="list-1" basePath={BASE_PATH} />,
   )
@@ -298,3 +305,174 @@ describe('live and fixed are told apart in words', () => {
     expect(document.body.textContent).not.toContain('match nobody')
   })
 })
+
+/*==========================================
+ * WHOSE PEOPLE THE FILTERS READ IS WRITTEN WHEN SOMEBODY CHOOSES IT.
+ *
+ * A list is the organization's and its rule reads one site's people — the
+ * list's `hostId`. A save that wrote the site whose page it was made on would
+ * let a rename on another site's page quietly move the whole audience onto
+ * that site's customers at the next sweep.
+ *=========================================*/
+describe('the site the filters read', () => {
+  it('is not moved by a save made on another site’s page', async () => {
+    listDoc = { name: 'VIPs', kind: 'dynamic', rule: FULL_RULE, hostId: 'host-2' }
+    await mount()
+    fireEvent.change(screen.getByLabelText('List name'), {
+      target: { value: 'VIP customers' },
+    })
+    save()
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(written().name).toBe('VIP customers')
+    expect(written()).not.toHaveProperty('hostId')
+  })
+
+  it('reads the pickers for the stored site, and says it is another one', async () => {
+    listDoc = { name: 'VIPs', kind: 'dynamic', rule: FULL_RULE, hostId: 'host-2' }
+    await mount()
+    expect(campaignsAskedFor).toContain('host-2')
+    expect(campaignsAskedFor).not.toContain('host-1')
+    expect(document.body.textContent).toContain('read another site’s people')
+  })
+
+  it('moves to this site when the author says so', async () => {
+    listDoc = { name: 'VIPs', kind: 'dynamic', rule: FULL_RULE, hostId: 'host-2' }
+    await mount()
+    fireEvent.click(screen.getByText('Use this site'))
+    save()
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(written().hostId).toBe('host-1')
+  })
+
+  it('THE CONTROL: a list that names no site takes the one it is set up on', async () => {
+    // Otherwise "never written" above is satisfied by a card that never
+    // writes the field at all, and a new list would reach the sweep with no
+    // site to read and be skipped forever.
+    listDoc = { name: 'Newsletter', kind: 'manual', rule: { sources: [] } }
+    await mount()
+    save()
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(written().hostId).toBe('host-1')
+  })
+
+  it('writes nothing new for a list already on this site', async () => {
+    listDoc = { name: 'VIPs', kind: 'dynamic', rule: FULL_RULE, hostId: 'host-1' }
+    await mount()
+    save()
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(written()).not.toHaveProperty('hostId')
+    expect(document.body.textContent).not.toContain('another site’s people')
+  })
+})
+
+/*==========================================
+ * ON THE ORGANIZATION'S EMAILS PAGE.
+ *
+ * No site in the URL, so the site the filters read is a picker: the stored
+ * one when the org still has it, else the reader's pick, else the only site.
+ *=========================================*/
+describe('editing a list on the organization’s page', () => {
+  const TWO_SITES = [
+    { id: 'host-1', name: 'Store', subdomain: 'store' },
+    { id: 'host-2', name: 'Blog', subdomain: 'blog' },
+  ]
+
+  const mountAtOrg = async (hosts = TWO_SITES) => {
+    updateDoc.mockClear()
+    mockPush.mockClear()
+    campaignsAskedFor.length = 0
+    // A pick made in one test is the session's pick in the next; each starts
+    // from a session that has chosen nothing.
+    window.sessionStorage.clear()
+    const { EmailOrgMountProvider } = await import('./email-org-mount')
+    render(
+      <EmailOrgMountProvider
+        mount={{
+          orgId: 'org-1',
+          orgSlug: 'acme',
+          hosts,
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+        }}
+        basePath="/acme/emails"
+      >
+        <ListEditCard hostId={null} listId="list-1" basePath="/acme/emails" />
+      </EmailOrgMountProvider>,
+    )
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+
+  it('starts on the stored site and leaves it alone on save', async () => {
+    listDoc = { name: 'VIPs', kind: 'dynamic', rule: FULL_RULE, hostId: 'host-2' }
+    await mountAtOrg()
+    expect(new Set(campaignsAskedFor)).toEqual(new Set(['host-2']))
+    save()
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(updateDoc.mock.calls[0][0].path).toBe(LIST_PATH)
+    expect(written()).not.toHaveProperty('hostId')
+  })
+
+  it('writes the site the author picks', async () => {
+    listDoc = { name: 'VIPs', kind: 'dynamic', rule: FULL_RULE, hostId: 'host-2' }
+    await mountAtOrg()
+    fireEvent.mouseDown(screen.getByLabelText('Site'))
+    fireEvent.click(screen.getByRole('option', { name: 'Store' }))
+    save()
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(written().hostId).toBe('host-1')
+  })
+
+  it('asks before drawing the filters for a list with no site, when there is a choice', async () => {
+    listDoc = { name: 'Newsletter', kind: 'manual', rule: { sources: [] } }
+    await mountAtOrg()
+    expect(campaignsAskedFor).toHaveLength(0)
+    expect(document.body.textContent).toContain('Choose the site whose people')
+  })
+
+  it('takes the only site without asking', async () => {
+    listDoc = { name: 'Newsletter', kind: 'manual', rule: { sources: [] } }
+    await mountAtOrg([TWO_SITES[0]])
+    expect(new Set(campaignsAskedFor)).toEqual(new Set(['host-1']))
+    save()
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(written().hostId).toBe('host-1')
+  })
+})
+
+describe('the session’s pick on the organization’s page', () => {
+  it('defaults a list with no site to the site picked earlier in the session', async () => {
+    window.sessionStorage.setItem('aglyn.emails.site.org-1', 'host-2')
+    listDoc = { name: 'Newsletter', kind: 'manual', rule: { sources: [] } }
+    updateDoc.mockClear()
+    campaignsAskedFor.length = 0
+    const { EmailOrgMountProvider } = await import('./email-org-mount')
+    render(
+      <EmailOrgMountProvider
+        mount={{
+          orgId: 'org-1',
+          orgSlug: 'acme',
+          hosts: [
+            { id: 'host-1', name: 'Store', subdomain: 'store' },
+            { id: 'host-2', name: 'Blog', subdomain: 'blog' },
+          ],
+          hostsReady: true,
+          hostsPath: '/acme/hosts',
+        }}
+        basePath="/acme/emails"
+      >
+        <ListEditCard hostId={null} listId="list-1" basePath="/acme/emails" />
+      </EmailOrgMountProvider>,
+    )
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(new Set(campaignsAskedFor)).toEqual(new Set(['host-2']))
+    save()
+    await waitFor(() => expect(updateDoc).toHaveBeenCalled())
+    expect(written().hostId).toBe('host-2')
+    window.sessionStorage.clear()
+  })
+})
+

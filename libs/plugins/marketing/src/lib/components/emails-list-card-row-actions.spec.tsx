@@ -543,13 +543,16 @@ describe('the figures line up', () => {
 /*==========================================
  * ON THE ORG HUB, EVERY ACTION NAMES THE ROW'S OWN SITE.
  *
- * The org hub lists every site's messages. A message is sent AS one site, and
- * only that site can duplicate it, discard it or open its template — so each
- * row's actions carry that row's `hostId`, and a send that records no site
- * has nothing to act as and says so.
+ * The organization's Emails page lists every site's messages. A message is
+ * sent AS one site, and only that site can duplicate it, discard it or open
+ * its template — so each row's actions carry that row's `hostId`, and a send
+ * that records no site has nothing to act as and says so.
  *=========================================*/
 describe('the message rows on the org hub', () => {
+  /** The organization's Marketing page, where a campaign's own page is. */
   const ORG_BASE = '/acme/marketing'
+  /** The organization's Emails page, which this list is the body of. */
+  const ORG_EMAILS = '/acme/emails'
 
   const mountAtOrg = async () => {
     mockPush.mockClear()
@@ -567,7 +570,7 @@ describe('the message rows on the org hub', () => {
           basePath: ORG_BASE,
         }}
       >
-        <EmailsListCard hostId={null} basePath={ORG_BASE} />
+        <EmailsListCard hostId={null} basePath={ORG_EMAILS} />
       </MarketingOrgMountProvider>,
     )
     await act(async () => {
@@ -608,7 +611,7 @@ describe('the message rows on the org hub', () => {
     expect(rowFor('Half-written').textContent).toContain('Blog')
   })
 
-  it('opens a message on the org hub, its campaign there, its template on its site', async () => {
+  it('opens a message on the org Emails page, its campaign on the org Marketing page, its template on its site', async () => {
     await mountAtOrg()
     openMenuFor('Spring sale')
     const hrefs = screen
@@ -616,7 +619,7 @@ describe('the message rows on the org hub', () => {
       .slice(0, 3)
       .map((item) => item.getAttribute('href'))
     expect(hrefs).toEqual([
-      `${ORG_BASE}/emails/msg-modern`,
+      `${ORG_EMAILS}/messages/msg-modern`,
       `${ORG_BASE}/campaigns/camp-1`,
       '/acme/hosts/store/emails/templates/screen-9',
     ])

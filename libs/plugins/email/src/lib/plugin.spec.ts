@@ -149,3 +149,57 @@ describe('the email console surface declares its own authorization', () => {
     expect(Aglyn.DEFAULT_ROLE_PERMISSIONS.viewer[permission]).toBe(false)
   })
 })
+
+/*==========================================
+ * THE ORGANIZATION'S EMAILS PAGE (AGL-3301).
+ *
+ * The same page, mounted at `/[orgSlug]/emails` through the shell's generic
+ * org route, with the same six sections. Declared as the site item's twin so
+ * the two cannot drift: a section added to one and not the other would be a
+ * route that exists at one level only.
+ *=========================================*/
+describe('the email console’s organization page', () => {
+  const consoleExtension = () =>
+    Aglyn.listConsoleExtensions().find((entry) => entry.pluginId === BUNDLE_ID)
+
+  beforeEach(() => {
+    registerEmailConsole()
+  })
+
+  it('declares one org surface at `/emails`', () => {
+    const orgItems = consoleExtension()?.orgNavItems ?? []
+    expect(orgItems).toHaveLength(1)
+    expect(orgItems[0].href).toBe('/emails')
+    expect(orgItems[0].label).toBe('Emails')
+  })
+
+  it('renders the same page with the same sections as the site surface', () => {
+    const site = consoleExtension()?.navItems?.[0]
+    const org = consoleExtension()?.orgNavItems?.[0]
+    expect(org?.Component).toBe(site?.Component)
+    expect(org?.sections).toBe(site?.sections)
+    expect(org?.sections?.map((section) => section.id)).toEqual([
+      'messages',
+      'templates',
+      'audiences',
+      'topics',
+      'sending',
+      'suppressions',
+    ])
+  })
+
+  it('carries no tab id at either level, so the plugin’s own flag gates both', () => {
+    // `release_email` gates the PLUGIN; a tab id here would add a second,
+    // separately switchable gate to one half of the surface.
+    expect(consoleExtension()?.navItems?.[0]?.navTabId).toBeUndefined()
+    expect(consoleExtension()?.orgNavItems?.[0]?.navTabId).toBeUndefined()
+  })
+
+  it('is resolved by the org route, sections included', () => {
+    const resolved = Aglyn.resolveConsoleOrgPluginPage('/emails/sending', [
+      BUNDLE_ID,
+    ])
+    expect(resolved?.extension.pluginId).toBe(BUNDLE_ID)
+    expect(resolved?.section?.id).toBe('sending')
+  })
+})

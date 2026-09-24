@@ -78,7 +78,7 @@ export const CONSOLE_PLUGIN_MANIFEST: PluginLoadManifest = [
     id: 'email',
     apiPrefixes: ["email"],
     register: {"site":"registerEmailPlugin","console":"registerEmailConsole"},
-    contributes: {"console":{"shell":true,"routes":["/emails"],"slots":["campaignDesignCreate","campaignDesignPreview","campaignSenderEditor","campaignTopicOptions","campaignTopicSelect"]}},
+    contributes: {"console":{"shell":true,"routes":["/emails"],"orgRoutes":["/emails"],"slots":["campaignDesignCreate","campaignDesignPreview","campaignSenderEditor","campaignTopicOptions","campaignTopicSelect"]}},
     load: () => import('@aglyn/plugins-email'),
     loads: {
       site: () => import('@aglyn/plugins-email/site'),

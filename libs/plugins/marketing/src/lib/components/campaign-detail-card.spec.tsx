@@ -979,13 +979,13 @@ describe('a campaign on the org hub', () => {
     }))
   })
 
-  it('lists every site’s emails, unfiltered, and opens them on the org hub', async () => {
+  it('lists every site’s emails, unfiltered, and opens them on the org Emails page', async () => {
     await mountAtOrg()
 
     expect(filters.some((item) => item.where === 'visibleTo')).toBe(false)
     expect(
       screen.getByText('Second mailing').closest('a')?.getAttribute('href'),
-    ).toBe('/acme/marketing/emails/send-2')
+    ).toBe('/acme/emails/messages/send-2')
     expect(screen.getByText('Offered on every site')).toBeTruthy()
   })
 

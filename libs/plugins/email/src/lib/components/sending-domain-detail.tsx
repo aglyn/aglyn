@@ -51,8 +51,14 @@ export interface SendingDomainDetailProps {
   basePath: string
 }
 
-/** The record block, in the shape a registrar's own form asks for. */
-function RecordRow(props: { record: SendingDnsRecordView; missing: boolean }) {
+/**
+ * The record block, in the shape a registrar's own form asks for. Shared with
+ * the organization's page for a domain, which prints the same records.
+ */
+export function RecordRow(props: {
+  record: SendingDnsRecordView
+  missing: boolean
+}) {
   const { record, missing } = props
   const target = record.priority
     ? `${record.priority} ${record.value}`

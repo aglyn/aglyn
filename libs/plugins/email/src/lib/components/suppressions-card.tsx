@@ -58,14 +58,11 @@ import Button from '@mui/material/Button'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
   collection,
-  count,
   deleteDoc,
   doc,
-  getAggregateFromServer,
   limit,
   orderBy,
   query,
-  where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 import {
@@ -74,6 +71,11 @@ import {
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import {
+  describeSuppressionReason as describeReason,
+  readSuppressionTotals,
+  type SuppressionTotals,
+} from './suppression-totals'
 
 export interface SuppressionsCardProps {
   hostId: string
@@ -88,36 +90,6 @@ interface SuppressionRow {
   createdAt?: { seconds?: number } | null
 }
 
-/**
- * What a reason means to a merchant, and how much it should worry them.
- *
- * An ABSENT reason reads as "Unsubscribed", and that is a compatibility rule
- * rather than a guess: until AGL-2408 the unsubscribe handler wrote
- * `{ email, createdAt }` and nothing else, while the Resend webhook has
- * stamped `'bounce'`/`'complaint'` since AGL-1918 — so an entry with no reason
- * can only have come from somebody clicking the link. New unsubscribes write
- * the reason explicitly, so this fallback covers history and nothing else.
- */
-const REASONS: Record<string, { label: string; color: 'default' | 'warning' | 'error' }> = {
-  unsubscribe: { label: 'Unsubscribed', color: 'default' },
-  bounce: { label: 'Bounced', color: 'warning' },
-  complaint: { label: 'Marked as spam', color: 'error' },
-  /*
-   * Recorded by a person, through the Add control.
-   *
-   * Its OWN value rather than a reuse of `unsubscribe`: an opt-out arriving
-   * by reply, phone or in person is not somebody clicking a link, and the
-   * difference is exactly what a merchant asked to prove the request was
-   * honored has to be able to show.
-   */
-  manual: { label: 'Added by hand', color: 'default' },
-}
-
-const describeReason = (reason: unknown) =>
-  REASONS[String(reason ?? 'unsubscribe')] ?? {
-    label: String(reason),
-    color: 'default' as const,
-  }
 
 /**
  * `YYYY-MM-DD` from a Firestore timestamp shape, or an em dash.
@@ -236,50 +208,17 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
    * a ten-row page it would have meant 140 of ten. A bounce rate computed
    * from a sample is not a bounce rate, and nothing on screen said it was one.
    *
-   * Three reads, not one per reason. `where('reason','==','unsubscribe')`
-   * cannot be asked, because an entry written before AGL-2408 carries no
-   * `reason` at all and an equality filter excludes it — the same
-   * field-presence trap as the ordering above. Unsubscribes are therefore the
-   * REMAINDER: total minus the two reasons that are always written
-   * explicitly, which is exactly the compatibility rule `describeReason`
-   * applies row by row.
+   * `readSuppressionTotals` holds the four reads and the remainder rule for
+   * unsubscribes, and the organization's summary of every site's list asks
+   * the same function, so a site's figures read the same on both pages.
    *=========================================*/
   const [totalsEpoch, setTotalsEpoch] = useState(0)
-  const [totals, setTotals] = useState<Record<string, number> | null>(null)
+  const [totals, setTotals] = useState<SuppressionTotals | null>(null)
   useEffect(() => {
     let active = true
-    const suppressionsRef = collection(firestore, 'hosts', hostId, 'suppressions')
-    void Promise.all([
-      getAggregateFromServer(suppressionsRef, { total: count() }),
-      getAggregateFromServer(
-        query(suppressionsRef, where('reason', '==', 'bounce')),
-        { total: count() },
-      ),
-      getAggregateFromServer(
-        query(suppressionsRef, where('reason', '==', 'complaint')),
-        { total: count() },
-      ),
-      // A FOURTH read, and it is not optional. Unsubscribes are the
-      // REMAINDER, so every reason that is counted explicitly has to be
-      // subtracted — a hand-added entry left out of this list would be
-      // reported as somebody who clicked unsubscribe.
-      getAggregateFromServer(
-        query(suppressionsRef, where('reason', '==', 'manual')),
-        { total: count() },
-      ),
-    ])
-      .then(([all, bounced, complained, added]) => {
-        if (!active) return
-        const total = Number(all.data().total ?? 0)
-        const bounce = Number(bounced.data().total ?? 0)
-        const complaint = Number(complained.data().total ?? 0)
-        const manual = Number(added.data().total ?? 0)
-        setTotals({
-          unsubscribe: Math.max(0, total - bounce - complaint - manual),
-          bounce,
-          complaint,
-          manual,
-        })
+    void readSuppressionTotals(firestore, hostId)
+      .then((read) => {
+        if (active) setTotals(read)
       })
       .catch(() => {
         // Held at null rather than zeroed. "Bounced: 0" is a confident wrong

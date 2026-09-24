@@ -64,9 +64,36 @@ and the leads they produce.
 - **Which site an email is sent as.** Each email goes out **as one site**: that site's
   sender, its unsubscribe page and the consent people gave it. Writing an email from the
   organization's page asks which site first. A site's **Marketing** and **Emails** pages
-  list the emails sent as that site; the organization's lists all of them.
+  list the emails sent as that site; the organization's **Emails** page lists all of
+  them.
 - **The monthly allowance** was always your organization's, not a site's, and is
   unchanged.
+
+### Your organization's Emails page {#organization-emails-page}
+
+Your organization has its own **Emails** page beside CRM and Marketing, with the same
+six sections a site's has, each answering for every site at once:
+
+- **Messages** — every site's emails in one list, each with the site it is sent as.
+  Writing one asks which site it is sent as, unless you have one site.
+- **Templates** — every site's templates in one table. A template is designed on one
+  site, so each opens on its own site's page, and a new one asks which site to design
+  it on.
+- **Audiences** and **Topics** — your organization's own, the same lists and topics every
+  site sees. On a list's page, **Enroll as** picks the site people are added as, and the
+  **Consent** column reads what they agreed to with that site. On its edit page, **Site**
+  picks whose people its filters read.
+- **Sending** — what each site sends as right now and its default sender, and the domains
+  your organization has proved, with the sites sending as each. Sending a site's email as
+  a domain asks which site.
+- **Suppressions** — each site's list counted by reason. Every site keeps its own list, so
+  open a site's row to see who is on it, or to add or remove an address.
+
+Where a section reads each site in turn, it reads one page of sites at a time, in order
+of name. **Sending** and **Suppressions** page their sites with the footer under the
+table, and **Templates** offers a **Sites** filter once you have more sites than one page
+holds. The page is for members who can see the whole organization — somebody invited to
+one site keeps using that site's **Emails** page.
 
 ### A campaign holds many emails {#campaigns-group-emails}
 
@@ -542,8 +569,9 @@ read until you open a list.
 **How** tells a rule match apart from somebody who was added. A person a rule enrolled
 leaves when they stop matching; a person who was added stays.
 
-**Consent** is the basis the membership carries, read for the site you are on. The
-kinds are not the same fact and the column keeps them apart:
+**Consent** is the basis the membership carries, read for the site you are on — or, on
+your [organization's Emails page](#organization-emails-page), for the site chosen under
+**Enroll as**. The kinds are not the same fact and the column keeps them apart:
 
 - **Opted in** — this person ticked a box, on the date shown. Their own decision.
 - **Attested by your team** — somebody on your team stated they had this person's
@@ -667,8 +695,11 @@ check it against what you meant.
 The list row shows when the rule last ran. If it says **not yet evaluated**, the next
 sweep has not reached it — a list created a moment ago is normal; hours is not.
 
-Three things worth knowing:
+Four things worth knowing:
 
+- **A rule reads one site's people** — the site the list was set up on. Saving the list
+  from another site's page leaves it on that site; press **Use this site** on the edit
+  page to move it. On your organization's Emails page, choose it under **Site**.
 - **People leave when they stop matching**, but only the ones the rule enrolled. Anyone
   you added by hand stays until you remove them.
 - **A rule is never trimmed to fit a limit.** If it matches more people than a single
@@ -948,6 +979,10 @@ reason and the date:
 This is where the gap between a campaign's recipient count and what it
 actually sent comes from, and a rising **Bounced** count is the earliest sign
 a list is going stale.
+
+Each site keeps its own list: somebody who unsubscribed from one site can still
+be emailed by another. Your [organization's Emails page](#organization-emails-page)
+counts every site's list by reason, and opens a site's list from its row.
 
 An unsubscribe now records **which campaign** the link was in, so the campaign
 report can show an unsubscribe rate for that send. Links in mail sent before

@@ -34,10 +34,12 @@ import {
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { useEmailOrgMount } from './email-org-mount'
 import { useOrgEmailTopics, writeEmailTopic } from './use-org-email-topics'
 
 export interface EmailTopicDetailProps {
-  hostId: string
+  /** The site, or `null` on the organization's Emails page. */
+  hostId: string | null
   topicId: string
   /** `/…/emails`, so the page can route back to the list. */
   basePath: string
@@ -72,7 +74,12 @@ export function EmailTopicDetail(props: EmailTopicDetailProps) {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
   const { confirm } = useConfirmationContext()
-  const { topics, scope } = useOrgEmailTopics(hostId)
+  // The catalog is the org's: read through the site under one, and straight
+  // from the organization on its own page.
+  const orgMount = useEmailOrgMount()
+  const { topics, scope } = useOrgEmailTopics(hostId, {
+    orgId: orgMount?.orgId,
+  })
 
   /*
    * `resolveCampaignTopic` rather than a bare `find`, so an id that no longer

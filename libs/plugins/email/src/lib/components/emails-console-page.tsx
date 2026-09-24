@@ -19,6 +19,7 @@
 import {
   consentGroupForHost,
   type ConsentGroup,
+  type ConsolePluginOrgMount,
   type ConsolePluginPageProps,
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
@@ -31,10 +32,16 @@ import EmailTopicsCard from './email-topics-card'
 import ListDetailCard from './list-detail-card'
 import ListEditCard from './list-edit-card'
 import ListsCard from './lists-card'
+import OrgEmailTemplatesCard from './org-email-templates-card'
+import OrgSendingCard from './org-sending-card'
+import OrgSendingDomainDetail from './org-sending-domain-detail'
+import OrgSiteSuppressions from './org-site-suppressions'
+import OrgSuppressionsCard from './org-suppressions-card'
 import SendingDomainDetail from './sending-domain-detail'
 import SendingDomainsCard from './sending-domains-card'
 import SuppressionsCard from './suppressions-card'
 import type { EmailsConsoleSectionId } from './emails-console-sections'
+import { EmailOrgMountProvider } from './email-org-mount'
 import { EMAIL_MESSAGES_ZONE, type EmailMessagesZoneProps } from './email-zones'
 
 /**
@@ -198,6 +205,101 @@ function sectionBody(
 }
 
 /**
+ * The body of one ORGANIZATION-level section, at `/[orgSlug]/emails`.
+ *
+ * The same six sections as a site's, each answering over the organization.
+ * Two of them are already the org's — an audience and a topic are shared by
+ * every site — so their cards render unchanged with no site. The other four
+ * are site facts: a message is sent as one site, a template is one site's
+ * screen, a sending identity and a suppression list are one site's. Those
+ * sections read each site in turn, a page of sites at a time, and link a row
+ * into the site that holds it.
+ *
+ * Built only when that section is the one being read, for the reason
+ * {@link sectionBody} is: every card opens its reads on mount.
+ */
+function orgSectionBody(
+  section: EmailsConsoleSectionId,
+  detail: readonly string[],
+  basePath: string,
+  orgMount: ConsolePluginOrgMount,
+  /** The org document, from which an audience's consent group is resolved. */
+  org: Record<string, unknown> | undefined,
+): ReactNode {
+  switch (section) {
+    case 'messages':
+      // Every site's messages, drawn by the plugin that sends; it is handed
+      // the org mount so it can say which site each was sent as.
+      return (
+        <EmailMessagesSection
+          hostId={null}
+          orgMount={orgMount}
+          basePath={basePath}
+          detail={detail}
+        />
+      )
+    case 'templates':
+      /*
+       * One table over every site's templates. A template is a screen on one
+       * site, so its own page stays that site's: each row links there, and
+       * nothing beneath this section is an org route.
+       */
+      return <OrgEmailTemplatesCard />
+    case 'audiences':
+      return detail[0] ? (
+        detail[1] === 'edit' ? (
+          <ListEditCard hostId={null} listId={detail[0]} basePath={basePath} />
+        ) : (
+          <ListDetailCard
+            hostId={null}
+            org={org}
+            listId={detail[0]}
+            basePath={basePath}
+          />
+        )
+      ) : (
+        <ListsCard hostId={null} basePath={basePath} />
+      )
+    case 'topics':
+      return detail[0] ? (
+        <EmailTopicDetail
+          hostId={null}
+          topicId={detail[0]}
+          basePath={basePath}
+        />
+      ) : (
+        <EmailTopicsCard hostId={null} basePath={basePath} />
+      )
+    case 'sending':
+      /*
+       * A domain is proved by the organization, so its page is an org route
+       * here as it is under a site. What each SITE sends as is the other half,
+       * and the section's own page lists it per site.
+       */
+      return detail[0] ? (
+        <OrgSendingDomainDetail
+          domain={decodeURIComponent(detail[0])}
+          basePath={basePath}
+        />
+      ) : (
+        <OrgSendingCard basePath={basePath} />
+      )
+    case 'suppressions':
+      /*
+       * `…/suppressions` totals every site's list; `…/suppressions/{hostId}`
+       * is one site's list itself, the same card a site's own page draws.
+       */
+      return detail[0] ? (
+        <OrgSiteSuppressions hostId={detail[0]} />
+      ) : (
+        <OrgSuppressionsCard />
+      )
+    default:
+      return null
+  }
+}
+
+/**
  * Emails page (AGL-395): the console surface owned by the email plugin,
  * rendered by the shell's generic plugin route.
  *
@@ -222,9 +324,14 @@ function sectionBody(
  * linkable, the back button walks sections, the breadcrumb says where you are,
  * and "mount only what is open" is structural rather than a `lazy` flag
  * somebody has to remember on the next surface.
+ *
+ * The same page is the ORGANIZATION's Emails page at `/[orgSlug]/emails`.
+ * Handed no site, it publishes the org mount to its cards and renders
+ * {@link orgSectionBody} instead: the same six sections, over every site.
  */
 export function EmailsConsolePage(props: ConsolePluginPageProps) {
-  const { hostId, org, section, sections, basePath, segments } = props
+  const { hostId, orgMount, org, section, sections, basePath, segments } =
+    props
 
   /*==========================================
    * THE CONTROLLER THIS SURFACE IS BEING VIEWED AS.
@@ -238,9 +345,16 @@ export function EmailsConsolePage(props: ConsolePluginPageProps) {
    *
    * Pure, from the org document the shell already passed, so it costs no read.
    * An absent org resolves to the group of one, which is the narrow answer.
+   *
+   * Only under a site. The organization's page has no site to resolve a group
+   * FOR, and `consentGroupForHost` refuses to invent one — the audience page
+   * there resolves it for the site the reader enrolls as, once one is chosen.
    *=========================================*/
   const consentGroup = useMemo(
-    () => consentGroupForHost(org as Record<string, unknown>, hostId),
+    () =>
+      hostId == null
+        ? null
+        : consentGroupForHost(org as Record<string, unknown>, hostId),
     [org, hostId],
   )
 
@@ -250,17 +364,36 @@ export function EmailsConsolePage(props: ConsolePluginPageProps) {
    * replaced — on every arrival at `/emails`, which is every nav-tab click.
    */
   if (!section || !sections?.length || !basePath) return null
+  // `segments[0]` IS the section — the shell resolved it into `section`
+  // already — so what a section owns is everything after it.
+  const detail = (segments ?? []).slice(1)
+
+  if (hostId == null) {
+    // No site and no org to stand in for it: nothing this page can scope.
+    if (!orgMount) return null
+    return (
+      <EmailOrgMountProvider mount={orgMount} basePath={basePath}>
+        <HubSections sections={sections}>
+          {orgSectionBody(
+            section as EmailsConsoleSectionId,
+            detail,
+            basePath,
+            orgMount,
+            org as Record<string, unknown> | undefined,
+          )}
+        </HubSections>
+      </EmailOrgMountProvider>
+    )
+  }
 
   return (
     <HubSections sections={sections}>
       {sectionBody(
         section as EmailsConsoleSectionId,
         hostId,
-        // `segments[0]` IS the section — the shell resolved it into `section`
-        // already — so what a section owns is everything after it.
-        (segments ?? []).slice(1),
+        detail,
         basePath,
-        consentGroup,
+        consentGroup as ConsentGroup,
       )}
     </HubSections>
   )
