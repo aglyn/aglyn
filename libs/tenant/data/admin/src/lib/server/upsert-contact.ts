@@ -44,6 +44,7 @@ import {
   type ResolvedCampaignTouch,
 } from './campaign-conversion-attribution'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+import { consentGroupForGrant } from '@aglyn/aglyn/app-utils/consent-groups'
 import {
   declineMarketingConsentFields,
   MARKETING_CONSENT_SOURCE_FIELD,
@@ -303,9 +304,23 @@ export interface UpsertHostContactOptions {
   interaction: Omit<ContactInteraction, 'type' | 'atMs'> & { atMs?: number }
   /**
    * Explicit marketing opt-in (AGL-301) with a consent timestamp, recorded
-   * against {@link hostId} — the brand whose form carried the checkbox.
+   * against {@link hostId} — the brand whose form carried the checkbox — and
+   * against the rest of its consent group only as far as
+   * {@link disclosedConsentGroup} proves the group was shown.
    */
   marketingConsent?: boolean
+  /**
+   * The `consentGroupDisclosureKey` of the sentence the capture surface
+   * rendered beside the checkbox (AGL-3320), as the surface sent it back.
+   *
+   * The grant pools across the site's consent group only when this is the
+   * group's CURRENT key; absent, stale or mistyped, it is recorded for
+   * {@link hostId} alone. Every surface that renders no disclosure passes
+   * none, so its grant is one site's however the org is grouped. Only the
+   * grant narrows: the record's `visibleTo` and its holder are the group's
+   * either way, because who may see a person is not who may mail them.
+   */
+  disclosedConsentGroup?: string | null
   /**
    * An explicit REFUSAL, recorded against {@link hostId} (AGL-3185).
    *
@@ -509,7 +524,7 @@ export async function upsertHostContact(
      * one sender, or this site alone. Resolved once and used for three
      * different decisions below, which must all agree: which controller the
      * basis is recorded for, which sites the row becomes visible to, and
-     * whether the capture surface had to disclose anything.
+     * which holder the profile is filed under.
      */
     const group = await consentGroupForSite(options.hostId)
     /*
@@ -520,12 +535,21 @@ export async function upsertHostContact(
      * an unticked box stays the third state. The provenance rides inside the
      * per-host entry, where the reader looks for it, never at the top of a
      * document every brand in the org shares.
+     *
+     * The grant covers the group only when the capture surface proved it
+     * showed the group's current disclosure — `consentGroupForGrant` answers
+     * the site alone for every other capture. The visibility and the holder
+     * below keep the whole group.
      */
     const consentExtra = options.marketingConsentSource
       ? { [MARKETING_CONSENT_SOURCE_FIELD]: options.marketingConsentSource }
       : undefined
     const consentFields = options.marketingConsent
-      ? marketingConsentFieldsForGroup(group, Date.now(), consentExtra)
+      ? marketingConsentFieldsForGroup(
+          consentGroupForGrant(group, options.disclosedConsentGroup),
+          Date.now(),
+          consentExtra,
+        )
       : options.declineMarketingConsent
         ? declineMarketingConsentFields(options.hostId, Date.now(), consentExtra)
         : {}

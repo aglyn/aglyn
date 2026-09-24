@@ -112,7 +112,15 @@ describe('the generic form block', () => {
     const form = renderForm()
     fireEvent.submit(form)
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    // The SUBMIT's answer, not the disclosure lookup the form makes when it
+    // mounts (AGL-3320) — waiting on any call would pass before the refusal
+    // arrived.
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([url]) => url === '/api/forms/submit'),
+      ).toBe(true),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
     expect(hitsFor('generate_lead')).toHaveLength(0)
   })
 

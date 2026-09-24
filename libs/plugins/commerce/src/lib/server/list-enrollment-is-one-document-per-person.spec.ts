@@ -139,6 +139,12 @@ const firestoreHandle: any = {
   getAll: async (...refs: any[]) => refs.map((ref) => snapshotFor(ref.path)),
 }
 
+/**
+ * The org's consent-group declaration, when a case declares one; `null` is
+ * the org that declared no pooling, which every other case in this file is.
+ */
+let mockConsentGroups: Record<string, unknown> | null = null
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
    * The campaign-touch lookup, answering "no campaign".
@@ -154,13 +160,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // The real resolution's shape: an org that declared no pooling resolves
   // every site to a group of ONE — the narrow answer, which is the direction
   // a wrong group may fail in.
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
-  }),
+  consentGroupForSite: async (hostId: string) =>
+    jest
+      .requireActual('@aglyn/aglyn/app-utils/consent-groups')
+      .consentGroupForHost(
+        mockConsentGroups ? { consentGroups: mockConsentGroups } : null,
+        hostId,
+      ),
   // The literal three call sites compare against — the unsubscribe writes
   // it, the resubscribe link refuses to reverse anything else, and the
   // preference page reads it. A mock that omitted it would write `undefined`
@@ -206,7 +212,13 @@ import { listMemberDocIds } from '@aglyn/tenant-data-admin/server/list-members'
 import { newsletterHandler } from './newsletter'
 
 /** Drives the commerce newsletter route the footer form posts to. */
-const subscribeByNewsletterForm = async (email: string) => {
+const subscribeByNewsletterForm = async (
+  email: string,
+  extra: Record<string, unknown> = {},
+  // The route damps more than ten signups a minute from one address, so a
+  // case that must not share the file's budget brings its own.
+  remoteAddress = '203.0.113.7',
+) => {
   const res: any = {
     statusCode: 0,
     body: null,
@@ -222,9 +234,9 @@ const subscribeByNewsletterForm = async (email: string) => {
   await newsletterHandler(
     {
       method: 'POST',
-      body: { hostId: HOST_ID, email, listId: LIST_ID },
+      body: { hostId: HOST_ID, email, listId: LIST_ID, ...extra },
       headers: {},
-      socket: { remoteAddress: '203.0.113.7' },
+      socket: { remoteAddress },
     } as any,
     res,
   )
@@ -236,6 +248,7 @@ const sharedId = (email: string) => listMemberDocIds(email)[0]
 
 beforeEach(() => {
   store = {}
+  mockConsentGroups = null
   seed(LIST_PATH, { name: 'Newsletter' })
 })
 
@@ -369,5 +382,42 @@ describe('the consent a list membership records', () => {
     expect(memberIds()).toEqual([sharedId('bob@example.com')])
     expect(entry()).toMatchObject({ marketingConsent: true })
     expect(memberDoc()?.['addedAt']).toBe('enrolled-by-automation')
+  })
+})
+
+/*
+ * A SIGNUP ON A SITE IN A DECLARED GROUP (AGL-3320). The membership's basis
+ * reaches the group's other sites only when the signup sent back the key of
+ * the group's current sentence; a footer box that shows no sentence sends
+ * none, and subscribes the person to this site alone.
+ */
+describe('the sites a newsletter membership covers', () => {
+  const groups = jest.requireActual('@aglyn/aglyn/app-utils/consent-groups')
+  const NORTHWIND = { nw: { name: 'Northwind', hostIds: [HOST_ID, 'site-2'] } }
+  const memberSites = () => {
+    const path = Object.keys(store).find((key) => key.startsWith(`${MEMBERS_PATH}/`))
+    return Object.keys((path && store[path]?.['marketingConsentByHost']) ?? {}).sort()
+  }
+
+  beforeEach(() => {
+    mockConsentGroups = NORTHWIND
+  })
+
+  it('subscribes the person to this site alone when no sentence was shown', async () => {
+    await subscribeByNewsletterForm('bob@example.com', {}, '198.51.100.1')
+    expect(memberSites()).toEqual([HOST_ID])
+  })
+
+  it('reaches the group on the current key of the sentence the signup showed', async () => {
+    const key = groups.consentGroupDisclosureKey(
+      groups.consentGroupForHost({ consentGroups: NORTHWIND }, HOST_ID),
+    )
+    await subscribeByNewsletterForm('bob@example.com', { __consentGroup: key }, '198.51.100.2')
+    expect(memberSites()).toEqual([HOST_ID, 'site-2'].sort())
+  })
+
+  it('stays with this site on a key the group has moved past', async () => {
+    await subscribeByNewsletterForm('bob@example.com', { __consentGroup: 'stale' }, '198.51.100.3')
+    expect(memberSites()).toEqual([HOST_ID])
   })
 })

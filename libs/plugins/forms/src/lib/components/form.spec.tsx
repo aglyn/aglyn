@@ -18,12 +18,14 @@
 import * as Aglyn from '@aglyn/aglyn'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import Form, {
+  CONSENT_GROUP_INPUT,
   FORM_SUBMITTED_EVENT,
   FormField,
   formNavigation,
   formFieldSchema,
   formSchema,
   parseFieldOptions,
+  readFormConsentDisclosure,
   resolveRedirectTarget,
   sanitizeRedirectUrl,
   type FormProps,
@@ -45,9 +47,16 @@ const renderForm = (
   return { ...utils, form }
 }
 
+/**
+ * The calls that SUBMIT, as opposed to the disclosure lookup a form on a
+ * rendered site makes when it mounts (AGL-3320).
+ */
+const submitCalls = (fetchMock: jest.Mock) =>
+  fetchMock.mock.calls.filter(([url]) => url === '/api/forms/submit')
+
 /** Body payload of the (single) mocked submit call. */
 const submittedBody = (fetchMock: jest.Mock): Record<string, any> => {
-  const [, init] = fetchMock.mock.calls[0]
+  const [, init] = submitCalls(fetchMock)[0]
   return JSON.parse(init.body)
 }
 
@@ -332,7 +341,7 @@ describe('form survey fields (AGL-544)', () => {
       fireEvent.click(boxes[0])
       fireEvent.click(boxes[2])
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       expect(submittedFields(fetchMock)).toEqual({
         toppings: 'Cheese, Peppers',
       })
@@ -344,7 +353,7 @@ describe('form survey fields (AGL-544)', () => {
       )
       fireEvent.click(screen.getByRole('radio', { name: '4 Stars' }))
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       // Only the hidden input submits; the `__`-prefixed radios do not.
       expect(submittedFields(fetchMock)).toEqual({ satisfaction: '4' })
     })
@@ -479,7 +488,7 @@ describe('form survey fields (AGL-544)', () => {
         { screens: { 'scr-1': 'thank-you' }, suppressNavigation: true },
       )
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       expect(assign).not.toHaveBeenCalled()
       restore()
     })
@@ -573,7 +582,7 @@ describe('form survey fields (AGL-544)', () => {
       })
       fireEvent.click(screen.getByRole('checkbox'))
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       return submittedFields(fetchMock)
     }
 
@@ -676,7 +685,7 @@ describe('form survey fields (AGL-544)', () => {
         { target: { value: 'Great' } },
       )
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       const body = submittedBody(fetchMock)
       expect(body.datasetBinding).toBe(TOKEN)
       expect(body).not.toHaveProperty('datasetId')
@@ -691,7 +700,7 @@ describe('form survey fields (AGL-544)', () => {
         datasetId: 'ds-1',
       })
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       expect(submittedBody(fetchMock)).not.toHaveProperty('datasetBinding')
     })
 
@@ -715,7 +724,7 @@ describe('form survey fields (AGL-544)', () => {
       )
       fireEvent.click(screen.getByRole('radio', { name: '4 Stars' }))
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       expect(submittedBody(fetchMock).fields).toEqual({ stars: '4' })
     })
 
@@ -787,7 +796,7 @@ describe('form survey fields (AGL-544)', () => {
         formName: 'Contact us',
       })
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       const body = submittedBody(fetchMock)
       expect(body.formId).toBe('form-1')
       // The pre-entity `?form=` filter reads the caption, and adopting a
@@ -800,7 +809,7 @@ describe('form survey fields (AGL-544)', () => {
         formName: 'Contact us',
       })
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       const body = submittedBody(fetchMock)
       expect(body.formId).toBeUndefined()
       expect(body.formName).toBe('Contact us')
@@ -814,7 +823,7 @@ describe('form survey fields (AGL-544)', () => {
         formName: 'Get in touch',
       })
       fireEvent.submit(form)
-      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
       expect(submittedBody(fetchMock).formId).toBe('form-1')
     })
   })
@@ -876,7 +885,7 @@ describe('AGL-1511 · a refused submit', () => {
       </Aglyn.SiteContext.Provider>,
     )
     fireEvent.submit(container.querySelector('form') as HTMLFormElement)
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
     return container
   }
 
@@ -969,7 +978,7 @@ describe('AGL-1666 · a form refused by the site’s abuse ceiling', () => {
       </Aglyn.SiteContext.Provider>,
     )
     fireEvent.submit(container.querySelector('form') as HTMLFormElement)
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
     return container
   }
 
@@ -1055,5 +1064,129 @@ describe('AGL-1666 · a form refused by the site’s abuse ceiling', () => {
       expect(container.textContent).toContain('Something went wrong'),
     )
     expect(container.textContent).not.toContain('was not sent')
+  })
+})
+
+/**
+ * THE CONSENT-GROUP SENTENCE, under the opt-in it describes (AGL-3320).
+ *
+ * A site that sends as part of a consent group pools an opt-in across the
+ * group only when the person was shown the group's name. The Form asks the
+ * site for its sentence, the consent field renders it, and the key of what
+ * was rendered rides the submission — so an opt-in reaches the other sites
+ * only from a page that actually said so.
+ */
+describe('the consent-group sentence under the opt-in (AGL-3320)', () => {
+  const DISCLOSURE = {
+    fieldName: 'optIn',
+    text: 'You’ll receive marketing email from Northwind, which covers 2 sites.',
+    key: 'abcd1234',
+  }
+  let fetchMock: jest.Mock
+  let disclosureBody: unknown
+
+  beforeEach(() => {
+    disclosureBody = DISCLOSURE
+    fetchMock = jest.fn(async (url: string) =>
+      String(url).startsWith('/api/consent/disclosure')
+        ? { ok: true, json: async () => disclosureBody }
+        : { ok: true, json: async () => ({}) },
+    )
+    global.fetch = fetchMock as unknown as typeof fetch
+  })
+
+  const optInField = (fieldName = 'optIn') => (
+    <FormField
+      fieldName={fieldName}
+      label="Marketing emails"
+      fieldType="checkbox"
+      options="Email me news and offers"
+    />
+  )
+
+  it('asks for the site’s sentence with the form it is for', async () => {
+    renderForm(optInField(), { formId: 'form-1' })
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/consent/disclosure?hostId=host-1&formId=form-1',
+        undefined,
+      ),
+    )
+  })
+
+  it('renders it under the declared opt-in field and posts its key', async () => {
+    const { form } = renderForm(
+      <>
+        <FormField fieldName="email" fieldType="email" />
+        {optInField()}
+      </>,
+    )
+    await screen.findByText(DISCLOSURE.text)
+    fireEvent.submit(form)
+    await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
+    const body = submittedBody(fetchMock)
+    expect(body[CONSENT_GROUP_INPUT]).toBe('abcd1234')
+    // The key is a control, never an answer the visitor typed.
+    expect(body.fields).not.toHaveProperty(CONSENT_GROUP_INPUT)
+  })
+
+  it('places it by the opt-in names the route reads when the form declares none', async () => {
+    disclosureBody = { ...DISCLOSURE, fieldName: null }
+    const { form } = renderForm(
+      <>
+        <FormField fieldName="email" fieldType="email" />
+        {optInField('marketingConsent')}
+      </>,
+    )
+    await screen.findByText(DISCLOSURE.text)
+    fireEvent.submit(form)
+    await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
+    expect(submittedBody(fetchMock)[CONSENT_GROUP_INPUT]).toBe('abcd1234')
+  })
+
+  it('posts no key when no field on the form rendered the sentence', async () => {
+    const { form } = renderForm(<FormField fieldName="email" fieldType="email" />)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.queryByText(DISCLOSURE.text)).toBeNull()
+    fireEvent.submit(form)
+    await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
+    expect(submittedBody(fetchMock)).not.toHaveProperty(CONSENT_GROUP_INPUT)
+  })
+
+  it('THE CONTROL: a site that sends on its own shows nothing and posts nothing', async () => {
+    disclosureBody = { fieldName: null, text: null, key: null }
+    const { form } = renderForm(optInField())
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    fireEvent.submit(form)
+    await waitFor(() => expect(submitCalls(fetchMock)).toHaveLength(1))
+    expect(submittedBody(fetchMock)).not.toHaveProperty(CONSENT_GROUP_INPUT)
+  })
+
+  it('asks nothing on the canvas, where there is no site', () => {
+    render(
+      <Form formName="Survey">
+        <FormField fieldName="optIn" fieldType="checkbox" options="Yes" />
+      </Form>,
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('reads only a sentence with its key as something to render', () => {
+    expect(readFormConsentDisclosure(DISCLOSURE)).toEqual(DISCLOSURE)
+    expect(readFormConsentDisclosure({ ...DISCLOSURE, fieldName: '  ' })).toEqual({
+      ...DISCLOSURE,
+      fieldName: null,
+    })
+    for (const broken of [
+      null,
+      {},
+      { ...DISCLOSURE, text: null },
+      { ...DISCLOSURE, key: '' },
+      { ...DISCLOSURE, text: 42 },
+    ]) {
+      expect(readFormConsentDisclosure(broken)).toBeNull()
+    }
   })
 })

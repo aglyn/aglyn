@@ -47,6 +47,15 @@ const mockNotifications: Array<Record<string, unknown>> = []
 let mockLeads: any = null
 /** Every `scopedToHost` narrowing asked for — the ceiling claim reads this. */
 let mockScopeNarrowings: string[] = []
+/**
+ * The declared consent group the site is in, when a case declares one;
+ * `null` is the site alone, which every other case in this file is.
+ */
+let mockGroup: {
+  groupId: string
+  name: string
+  hostIds: string[]
+} | null = null
 
 jest.mock('./notifications', () => ({
   __esModule: true,
@@ -82,13 +91,16 @@ jest.mock('./organizations', () => ({
   __esModule: true,
   orgDataCollectionForHost: async () => mockLeads,
   resolveOrgIdForHost: async () => 'org-1',
-  consentGroupForSite: async (hostId: string) => ({
-    hostId,
-    groupId: hostId,
-    name: null,
-    hostIds: [hostId],
-    declared: false,
-  }),
+  consentGroupForSite: async (hostId: string) =>
+    mockGroup
+      ? { hostId, ...mockGroup, declared: true, awaitsConfirmation: false }
+      : {
+          hostId,
+          groupId: hostId,
+          name: null,
+          hostIds: [hostId],
+          declared: false,
+        },
   /*
    * Identity, but RECORDED. The ceiling now counts what a site may see rather
    * than the whole org collection, and a double that silently dropped the
@@ -216,6 +228,7 @@ const add = (state: Harness, ceiling?: number) =>
 beforeEach(() => {
   mockNotifications.length = 0
   mockScopeNarrowings = []
+  mockGroup = null
 })
 
 describe('addHostLead is bounded by LEADS_MAX_PER_HOST (AGL-1529)', () => {
@@ -377,5 +390,63 @@ describe('the lead is written as an org-scoped record (AGL-3275)', () => {
     expect(state.written[0]).toMatchObject({
       capturedByHostIds: { __arrayUnion: ['host-1'] },
     })
+  })
+})
+
+/*
+ * A LEAD'S OPT-IN COVERS THE SITES ITS FORM NAMED (AGL-3320) — the rule the
+ * contact door keeps, on the silo the same capture reaches first.
+ */
+describe('the sites a lead’s opt-in covers', () => {
+  const { consentGroupDisclosureKey } = jest.requireActual(
+    '@aglyn/aglyn/app-utils/consent-groups',
+  )
+  const GROUP = { groupId: 'nw', name: 'Northwind', hostIds: ['host-1', 'host-2'] }
+  const optIn = (state: Harness, disclosedConsentGroup?: string) =>
+    addHostLead({
+      hostRef: state.hostRef,
+      hostId: 'host-1',
+      lead: {
+        email: 'dana@example.com',
+        source: 'form:quote',
+        marketingConsent: true,
+        ...(disclosedConsentGroup ? { disclosedConsentGroup } : {}),
+      },
+    })
+
+  it('records a grouped capture without a key for the capturing site alone', async () => {
+    mockGroup = GROUP
+    const state = harness(0)
+    await optIn(state)
+    expect(Object.keys(state.written[0]['marketingConsentByHost'] as object)).toEqual([
+      'host-1',
+    ])
+    // The row is still the group's to see.
+    expect(state.written[0]).toMatchObject({
+      visibleTo: { __arrayUnion: ['host:host-1', 'host:host-2'] },
+    })
+  })
+
+  it('pools it across the group on the current disclosure key', async () => {
+    mockGroup = GROUP
+    const key = consentGroupDisclosureKey({
+      hostId: 'host-1',
+      ...GROUP,
+      declared: true,
+      awaitsConfirmation: false,
+    })
+    const state = harness(0)
+    await optIn(state, key)
+    const byHost = state.written[0]['marketingConsentByHost'] as Record<string, any>
+    expect(Object.keys(byHost).sort()).toEqual(['host-1', 'host-2'])
+    expect(byHost['host-2']).toMatchObject({ consentGroupId: 'nw', consentGroupName: 'Northwind' })
+  })
+
+  it('THE CONTROL: a site alone records itself', async () => {
+    const state = harness(0)
+    await optIn(state, 'any-key')
+    expect(Object.keys(state.written[0]['marketingConsentByHost'] as object)).toEqual([
+      'host-1',
+    ])
   })
 })

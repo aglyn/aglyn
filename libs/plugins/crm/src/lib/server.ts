@@ -313,7 +313,8 @@ export const CONTACT_BAND_FULL_MESSAGE =
  *
  * Body: `{ hostId, email, name?, phone?, jobTitle?, companyName?,
  * companyId?, address?, ownerUid?, lifecycleStage?, tags?,
- * marketingConsent? }`. Answers `{ contactId, created }`: `created` is
+ * marketingConsent?, disclosedConsentGroup? }`. Answers
+ * `{ contactId, created }`: `created` is
  * false when the address already belonged to somebody, in which case what
  * was typed MERGES into the existing row — the dedupe the shared address
  * book exists for, and the reason a second "create" of one person is not
@@ -399,6 +400,10 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       : null
   const tags = normalizeTags(body['tags'])
   const marketingConsent = body['marketingConsent'] === true
+  // The key of the consent-group sentence the drawer showed beside the box
+  // (AGL-3320): the opt-in covers the site's group only while it is the
+  // group's current one, and the capturing site alone otherwise.
+  const disclosedConsentGroup = typed(body['disclosedConsentGroup'], 64)
 
   const authorization = String(req.headers.authorization ?? '')
   const idToken = authorization.startsWith('Bearer ')
@@ -475,6 +480,9 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
       source: 'manual',
       interaction: { summary: 'Added by hand' },
       marketingConsent,
+      ...(marketingConsent && disclosedConsentGroup
+        ? { disclosedConsentGroup }
+        : {}),
       facet: {
         ...(phone ? { phone } : {}),
         ...(jobTitle ? { jobTitle } : {}),

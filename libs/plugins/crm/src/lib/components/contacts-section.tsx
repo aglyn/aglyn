@@ -824,6 +824,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             : {}),
           ...(values.tags.length ? { tags: values.tags } : {}),
           marketingConsent: values.marketingConsent,
+          ...(values.marketingConsent && values.disclosedConsentGroup
+            ? { disclosedConsentGroup: values.disclosedConsentGroup }
+            : {}),
         })
         if (!response.ok) {
           // The route's own sentence, shown above the form unchanged: the

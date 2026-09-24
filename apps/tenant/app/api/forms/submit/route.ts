@@ -497,6 +497,22 @@ export async function POST(request: Request): Promise<Response> {
         )
       : readDeclaredMarketingConsent(payload, fields, formFieldDecls)
     /*
+     * THE DISCLOSURE THE FORM SHOWED beside that opt-in (AGL-3320).
+     *
+     * The Form block renders the site's consent-group sentence under its
+     * consent field and posts back the key of what it rendered
+     * (`/api/consent/disclosure`). Passed to the record system as it arrived:
+     * the writer pools the opt-in across the group only when this is the
+     * group's CURRENT key, so a page rendered before a rename or before a
+     * site joined records the one site the visitor was on. Trusting it costs
+     * nothing — it can only ever narrow what the checkbox above already
+     * claims, never widen it past the declaration.
+     */
+    const disclosedConsentGroup =
+      typeof payload['__consentGroup'] === 'string'
+        ? payload['__consentGroup'].trim().slice(0, 64)
+        : ''
+    /*
      * THE CAMPAIGNS THE FORM IS FILED UNDER.
      *
      * Off the form document this route has already read, so it costs nothing,
@@ -709,6 +725,9 @@ export async function POST(request: Request): Promise<Response> {
         },
         surface: routed ? 'lead' : 'touch',
         ...(declaredMarketingConsent ? { marketingConsent: true } : {}),
+        ...(declaredMarketingConsent && disclosedConsentGroup
+          ? { disclosedConsentGroup }
+          : {}),
         // Filed under the form's campaigns, inside this site's own facet on a
         // row the whole org shares. Membership is not consent, and this passes
         // none: `marketingConsent` above is the only input that records one.

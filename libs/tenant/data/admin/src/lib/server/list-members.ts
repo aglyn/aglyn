@@ -43,10 +43,14 @@ import {
   normalizeContactEmail,
   personKey,
   CAPTURED_BY_HOST_FIELD,
+  MARKETING_CONSENT_BASIS_FIELD,
+  MARKETING_CONSENT_BY_HOST_FIELD,
+  MARKETING_CONSENT_FIELD,
   marketingConsentFieldsForGroup,
   readMarketingBasis,
   type ConsentGroup,
 } from '@aglyn/aglyn/server'
+import { consentGroupForGrant } from '@aglyn/aglyn/app-utils/consent-groups'
 import { createHash, createHmac } from 'node:crypto'
 
 /**
@@ -175,6 +179,29 @@ export interface EnrollListMemberInput {
    * anything is written, so there is a single writer of the consent fields.
    */
   consent?: ListMemberConsent
+  /**
+   * The person's own grants, as `grantEntriesAsRecorded` read them off their
+   * record — what a PASS-THROUGH carries (AGL-3320).
+   *
+   * A `contact-opt-in` consent with these writes exactly these sites, with
+   * each grant's own moment and the disclosure it was given under: an opt-in
+   * given to one site before the group existed stays that site's on the list,
+   * and one given under the group's sentence reaches the sites it named.
+   * Re-recording the pass-through over {@link group} instead would widen the
+   * first to every site the group names today.
+   */
+  grantEntries?: Readonly<Record<string, Readonly<Record<string, unknown>>>>
+  /**
+   * The `consentGroupDisclosureKey` a capture surface rendered beside its
+   * checkbox, for a {@link marketingConsent} captured just now. The grant
+   * pools across {@link group} only when it is the group's current key.
+   *
+   * Every other basis without {@link grantEntries} — an attestation, a
+   * capture that rendered no disclosure — is recorded for the enrolling site
+   * alone: an operator's word about one site's list is not a disclosure
+   * anybody read about the rest.
+   */
+  disclosedConsentGroup?: string | null
   /**
    * How the person got here: enrolled by hand or by an automation
    * (`'manual'`), or selected by a dynamic list's rule (`'rule'`).
@@ -342,14 +369,11 @@ export async function enrollListMember(
        * always written, `''` for a pass-through, so a later real opt-in
        * cannot inherit the sentence an earlier import wrote about where the
        * merchant said the address came from.
+       *
+       * WHICH sites the basis covers is `membershipConsentFields`' to say,
+       * and it never re-derives a grant from the group as it stands now.
        */
-      ...(consent
-        ? marketingConsentFieldsForGroup(input.group, consent.atMs, {
-            marketingConsentBasis: consent.basis,
-            marketingConsentByUid: consent.byUid ?? null,
-            marketingConsentReason: consent.reason ?? '',
-          })
-        : {}),
+      ...(consent ? membershipConsentFields(input, consent) : {}),
       ...(existing
         ? {}
         : {
@@ -366,4 +390,61 @@ export async function enrollListMember(
     adopted: target.id !== key,
     created: !existing,
   }
+}
+
+/**
+ * The consent fields one enrollment writes: the basis, its attribution, and
+ * the sites it covers (AGL-3320).
+ *
+ * Three ways in, and the sites follow from which one it is:
+ *
+ *  - a PASS-THROUGH with the person's {@link EnrollListMemberInput.grantEntries}
+ *    writes those sites and no others, each grant with its own moment and
+ *    the disclosure it was given under;
+ *  - a capture's checkbox pools over the group only when its surface sent
+ *    back the group's current disclosure key — `consentGroupForGrant`;
+ *  - everything else, an attestation among them, is the enrolling site's
+ *    alone.
+ *
+ * The attribution is the membership's own on every entry, the pass-through's
+ * included, for the reason the write explains: an entry that kept an earlier
+ * attestation's account under a person's own opt-in would be a false claim
+ * about who vouched for them.
+ */
+function membershipConsentFields(
+  input: EnrollListMemberInput,
+  consent: ListMemberConsent,
+): Record<string, unknown> {
+  const attribution = {
+    [MARKETING_CONSENT_BASIS_FIELD]: consent.basis,
+    marketingConsentByUid: consent.byUid ?? null,
+    marketingConsentReason: consent.reason ?? '',
+  }
+  const carried =
+    consent.basis === 'contact-opt-in'
+      ? Object.entries(input.grantEntries ?? {})
+      : []
+  if (carried.length) {
+    return {
+      [MARKETING_CONSENT_BY_HOST_FIELD]: Object.fromEntries(
+        carried.map(([hostId, entry]) => [
+          hostId,
+          {
+            ...entry,
+            [MARKETING_CONSENT_FIELD]: true,
+            // The grant's own moment; the pass-through's only when the
+            // person's record never stamped one, as the basis itself falls
+            // back to now.
+            marketingConsentAtMs: entry['marketingConsentAtMs'] ?? consent.atMs,
+            ...attribution,
+          },
+        ]),
+      ),
+    }
+  }
+  return marketingConsentFieldsForGroup(
+    consentGroupForGrant(input.group, input.disclosedConsentGroup),
+    consent.atMs,
+    attribution,
+  )
 }

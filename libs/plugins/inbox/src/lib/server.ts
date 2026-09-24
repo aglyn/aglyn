@@ -97,6 +97,7 @@ import {
   ASSIGNMENT_REFUSAL_MESSAGES,
   assignmentBasis,
   assignmentReadout,
+  grantEntriesAsRecorded,
   isOrgWideMember,
   readMarketingBasis,
   registerPluginApiRoute,
@@ -519,19 +520,28 @@ async function resolveAssignmentContext(
  * from the other side: a refusal recorded on a record that was later
  * merged into another is the survivor's refusal, and the sender's address
  * may be the one that became an alternate.
+ *
+ * The person's grants come back beside the verdict, off the same document
+ * (AGL-3320): a pass-through carries them onto the membership as the record
+ * holds them, rather than re-recording the opt-in over the group as it
+ * stands today.
  */
 async function storedConsentForAddress(
   hostId: string,
   group: ConsentGroup,
   email: string,
-): Promise<MarketingConsentRecord> {
+): Promise<{
+  stored: MarketingConsentRecord
+  grants: Record<string, Record<string, unknown>>
+}> {
   try {
     const contacts = await orgDataCollectionForHost(hostId, 'contacts')
     const found = await findContactByEmail(contacts, email)
-    return readMarketingBasis(
-      found ? (found.data() as Record<string, unknown>) : null,
-      group,
-    )
+    const data = found ? (found.data() as Record<string, unknown>) : null
+    return {
+      stored: readMarketingBasis(data, group),
+      grants: grantEntriesAsRecorded(data, group),
+    }
   } catch (error) {
     console.error('[inbox] consent lookup failed', error)
     /*
@@ -543,16 +553,19 @@ async function storedConsentForAddress(
      * later surface would ever revisit it. A refusal costs a retry.
      */
     return {
-      ...readMarketingBasis(null, group),
-      basis: 'declined',
-      // Attributed to nobody, because nobody asserted this: it is what a
-      // failed read falls back to, not a refusal anyone recorded. Claiming
-      // `'person'` here would put a refusal in the audit trail that the
-      // person never made.
-      assertedBy: null,
-      source: null,
-      basisAtMs: null,
-      capturedAtMs: null,
+      stored: {
+        ...readMarketingBasis(null, group),
+        basis: 'declined',
+        // Attributed to nobody, because nobody asserted this: it is what a
+        // failed read falls back to, not a refusal anyone recorded. Claiming
+        // `'person'` here would put a refusal in the audit trail that the
+        // person never made.
+        assertedBy: null,
+        source: null,
+        basisAtMs: null,
+        capturedAtMs: null,
+      },
+      grants: {},
     }
   }
 }
@@ -592,7 +605,11 @@ export const inboxListOptionsHandler: PluginApiHandler = async (req, res) => {
       undefined,
       group,
     )
-    const stored = await storedConsentForAddress(hostId, group, context.email)
+    const { stored } = await storedConsentForAddress(
+      hostId,
+      group,
+      context.email,
+    )
     const readout = assignmentReadout({ stored, suppression })
 
     const listsRef = context.firestore
@@ -696,7 +713,11 @@ export const inboxAssignListHandler: PluginApiHandler = async (req, res) => {
       return res.status(404).json({ error: 'Unknown list' })
     }
 
-    const stored = await storedConsentForAddress(hostId, group, context.email)
+    const { stored, grants } = await storedConsentForAddress(
+      hostId,
+      group,
+      context.email,
+    )
     const nowMs = Date.now()
     const decision = assignmentBasis({
       stored,
@@ -721,6 +742,9 @@ export const inboxAssignListHandler: PluginApiHandler = async (req, res) => {
       // hand is not a rule match that lapsed.
       via: 'manual',
       consent: decision,
+      // A pass-through carries the person's grants as their record holds
+      // them (AGL-3320); an attestation carries none and is this site's.
+      ...(decision.basis === 'contact-opt-in' ? { grantEntries: grants } : {}),
     })
     if (enrollment.enrolled === false) {
       /*

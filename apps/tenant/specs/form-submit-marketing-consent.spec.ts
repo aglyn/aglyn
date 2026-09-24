@@ -347,3 +347,42 @@ describe('⛔ submitting a form is not opting in', () => {
     expect(mockContactUpserts[0]).not.toHaveProperty('marketingConsent')
   })
 })
+
+/**
+ * THE DISCLOSURE KEY THE FORM RENDERED (AGL-3320).
+ *
+ * The Form block shows the site's consent-group sentence under its opt-in and
+ * posts back the key of what it showed; the writer pools the opt-in across the
+ * group only on the group's current key. The route's part is to hand the key
+ * on beside the opt-in it describes — through the capture contract and the
+ * record system's adapter, to the writer — and nowhere else.
+ */
+describe('the consent-group key a form posts', () => {
+  it('reaches the writer beside a ticked opt-in', async () => {
+    await submit({
+      __consentGroup: 'abcd1234',
+      fields: { email: 'visitor@example.com', marketingConsent: 'true' },
+    })
+    expect(mockContactUpserts).toHaveLength(1)
+    expect(mockContactUpserts[0]).toMatchObject({
+      marketingConsent: true,
+      disclosedConsentGroup: 'abcd1234',
+    })
+  })
+
+  it('is dropped when the box was left unticked, which records no opt-in to widen', async () => {
+    await submit({
+      __consentGroup: 'abcd1234',
+      fields: { email: 'visitor@example.com', marketingConsent: 'false' },
+    })
+    expect(mockContactUpserts[0]).not.toHaveProperty('disclosedConsentGroup')
+  })
+
+  it('THE CONTROL: a form that rendered no sentence sends no key, and none arrives', async () => {
+    await submit({
+      fields: { email: 'visitor@example.com', marketingConsent: 'true' },
+    })
+    expect(mockContactUpserts[0]).toMatchObject({ marketingConsent: true })
+    expect(mockContactUpserts[0]).not.toHaveProperty('disclosedConsentGroup')
+  })
+})
