@@ -30,11 +30,16 @@ import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas
 import {
   registerPluginResourceDraftWriter,
   type PluginDraftCheck,
+  type PluginDraftCheckContext,
   type PluginDraftRecord,
   type PluginDraftRefusal,
   type PluginDraftWrite,
   type PluginResourceDraftWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
+import {
+  composeReusableComponentNodes,
+  REUSABLE_INSTANCE_COMPONENT_ID,
+} from '@aglyn/aglyn/app-utils/compose-reusable-components'
 import { hasSafeLinkScheme } from '@aglyn/shared-util-http/safe-url-scheme'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
 import {
@@ -227,20 +232,43 @@ function linkProblem(label: string, raw: unknown, required: boolean): string | n
   return hasSafeLinkScheme(href) ? null : `${label} links to something that is not a web address`
 }
 
+/** A placement still standing once the site's components are grafted. */
+export const EMAIL_DESIGN_UNRESOLVED_BLOCK_PROBLEM =
+  'A reusable block names a component this site has not published, so it would send empty'
+
 /**
  * Whether content renders as an email: well-formed, every link one an inbox
  * can open, and a message once rendered through the send path's own renderer.
+ *
+ * Judged COMPOSED (AGL-3287). The reusable blocks the design places — a shared
+ * header, a footer — are grafted from `context.components` first, as every send
+ * grafts them, so a link inside a footer is checked like any other and a
+ * header's text counts toward the message. A placement still standing after
+ * that names a component the caller could not supply, and would go out as
+ * nothing; it is refused rather than passed as a design that renders.
  */
 export function checkEmailDesignContent(
   content: Readonly<Record<string, unknown>>,
-  context: { hostId: string },
+  context: PluginDraftCheckContext,
 ): PluginDraftCheck {
   const read = readEmailDesignContent(content)
   if (read.ok === false) return read
-  const { value, reachable } = read
+  const { value } = read
+  // Property values and attribute overrides apply in the graft; style
+  // overrides land in `sx`, which the mail renderer never reads.
+  const nodes = composeReusableComponentNodes(
+    value.nodes as never,
+    context.components as never,
+  ) as unknown as Record<string, EmailDesignNode>
+  const reachable =
+    nodes === value.nodes ? read.reachable : reachableIds(nodes).ids
   const problems: string[] = []
   for (const id of reachable) {
-    const node = value.nodes[id]
+    const node = nodes[id]
+    if (node.componentId === REUSABLE_INSTANCE_COMPONENT_ID) {
+      problems.push(EMAIL_DESIGN_UNRESOLVED_BLOCK_PROBLEM)
+      continue
+    }
     if (node.componentId === 'emailButton') {
       const problem = linkProblem('A button', node.props?.['href'], true)
       if (problem) problems.push(problem)
@@ -255,7 +283,7 @@ export function checkEmailDesignContent(
     preheader: value.preheader,
     content: {
       mode: 'design',
-      template: { nodes: value.nodes, subject: value.subject, preheader: value.preheader },
+      template: { nodes, subject: value.subject, preheader: value.preheader },
     },
     recipient: CHECK_RECIPIENT,
     siteBase: CHECK_SITE_BASE,
@@ -270,7 +298,9 @@ export function checkEmailDesignContent(
     facts: {
       htmlBytes: new TextEncoder().encode(rendered.html).length,
       messageText: rendered.messageText,
-      blocks: reachable.size,
+      // The blocks the design itself holds, as stored — a placed component
+      // counts once, however many blocks it expands into.
+      blocks: read.reachable.size,
       // No part is written by hand, so the text a campaign sends is the design's own.
       plainText: emailPlainTextState({}),
     },

@@ -34,6 +34,9 @@ const mockCreateVersion = jest.fn(async () => ({ id: 'v1' }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostResourceApi: () => mockCreateResource,
   useHostVersionApi: () => mockCreateVersion,
+  // The preview reads the components a design places (AGL-3287); nothing in
+  // this file places one, so the handle is never used.
+  useFirestore: () => ({}),
 }))
 
 jest.mock('./use-org-email-topics', () => ({

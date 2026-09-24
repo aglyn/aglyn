@@ -32,6 +32,7 @@ import {
 } from '@aglyn/aglyn/server'
 import type { PluginRevocation } from '@aglyn/aglyn/server'
 import { renderRecipientEmail } from '@aglyn/aglyn/app-utils/recipient-email-render'
+import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 import type { EmailRenderProduct } from '@aglyn/shared-util-email'
 import { assignExperimentVariant, type HostExperiment } from '../model'
 import { campaignPlacedOnHost } from '@aglyn/shared-ui-email-campaigns/model'
@@ -545,6 +546,11 @@ export interface CampaignSendOptions {
 /**
  * Loads a designed email template's nodes + referenced products for the
  * render pipeline. Throws 400 when the screen isn't an email document.
+ *
+ * The nodes come back COMPOSED: every reusable block the design places — a
+ * shared header, a footer — expanded into the blocks it stands for (AGL-3287).
+ * Everything downstream renders from this one map: each recipient's copy, the
+ * test send and the composer's preview.
  */
 async function loadEmailTemplate(hostId: string, screenId: string) {
   const firestore = firebaseAdmin.app().firestore()
@@ -582,9 +588,9 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
    * makes the guard mean something: `decodeStoredNodes` returns null for an
    * undecodable payload, so the send is refused instead of mailed empty.
    */
-  const nodes = (decodeStoredNodes(versionSnapshot?.get('nodes')) ??
+  const stored = (decodeStoredNodes(versionSnapshot?.get('nodes')) ??
     {}) as Record<string, any>
-  if (!Object.keys(nodes).length) {
+  if (!Object.keys(stored).length) {
     throw new CampaignSendError('The email template is empty', 400)
   }
   /**
@@ -621,6 +627,22 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
     const block = emailStarterSendBlock({ installedFrom, revocation })
     if (block) throw new CampaignSendError(block.reason, 409)
   }
+  /*
+   * THE SITE'S REUSABLE BLOCKS, EXPANDED (AGL-3287).
+   *
+   * A header or footer placed in the design is a `reusableInstance` naming one
+   * of the site's components, and the mail renderer draws a node it does not
+   * know as nothing — so without this every campaign went out without the
+   * blocks its author could see on the canvas. Grafted from the components'
+   * PUBLISHED definitions, read fresh, never from a cache: a send is not a
+   * page, and a header republished a minute ago is the one the author expects.
+   *
+   * BEFORE the product scan below, which is the ordering that matters: a
+   * product block inside a footer only exists once the footer is grafted.
+   * Each placement's property values and attribute overrides apply; its style
+   * overrides land in `sx`, which the mail renderer does not read.
+   */
+  const nodes = await composeHostComponentNodes(stored, { firestore, hostId })
   // Resolve emailProduct references (by id — rename-safe, AGL-343).
   const productIds = [
     ...new Set(

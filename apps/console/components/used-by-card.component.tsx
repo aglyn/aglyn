@@ -34,6 +34,8 @@ interface Dependent {
     | 'workflow'
     | 'variable'
     | 'collection'
+    /** One of the site's transactional emails, by catalog key (AGL-3287). */
+    | 'emailTemplate'
   id: string
   name: string
   versionId?: string
@@ -48,9 +50,9 @@ interface Dependent {
  */
 const SCOPE_NOTE: Record<UsedByKind, string> = {
   component:
-    'Scanned: the published version of every screen and layout, plus other ' +
-    'components — a component can be placed inside another one. Unpublished ' +
-    'drafts and library templates are not scanned.',
+    'Scanned: the published version of every screen, email and layout, plus ' +
+    'other components — a component can be placed inside another one. ' +
+    'Unpublished drafts and library templates are not scanned.',
   layout:
     'Scanned: every screen that renders inside this layout, and every ' +
     'layout nested inside it — deleting this one unwraps the screens ' +
@@ -65,6 +67,14 @@ const SCOPE_NOTE: Record<UsedByKind, string> = {
 
 /** The artifacts this card can scan. */
 export type UsedByKind = 'component' | 'layout' | 'screen'
+
+/**
+ * What a dependent's kind is called on its row, where the stored name is not
+ * a word a reader uses. Anything unlisted shows as it is stored.
+ */
+const TYPE_LABEL: Partial<Record<Dependent['type'], string>> = {
+  emailTemplate: 'email',
+}
 
 /** What a screen dependent's `relation` is called on the row. */
 const RELATION_LABEL: Record<'link' | 'child' | 'template', string> = {
@@ -239,6 +249,11 @@ export function UsedByCard({
         // collection's settings, which is where this lands the reader.
         return buildRoute(Route.HOST_CONTENT, { orgSlug, host })
       }
+      if (dependent.type === 'emailTemplate') {
+        // The site's emails, where each transactional email is opened in
+        // the besigner — a placement is changed there (AGL-3287).
+        return buildRoute(Route.HOST_SETUP_EMAILS, { orgSlug, host })
+      }
       // A screen with no published version has nowhere to link to; the row
       // still has to appear, because it still uses this.
       return null
@@ -268,8 +283,11 @@ export function UsedByCard({
       {status === 'idle' ? (
         <Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
           <Typography variant="body2" color="text.secondary">
-            {`Find every screen, layout, and component that renders this ` +
-              `${noun} before you change or delete it.`}
+            {`Find every ${
+              kind === 'component'
+                ? 'screen, email, layout, and component'
+                : 'screen, layout, and component'
+            } that renders this ${noun} before you change or delete it.`}
           </Typography>
           <Button size="small" variant="outlined" onClick={runScan}>
             {'Find where this is used'}
@@ -358,7 +376,7 @@ export function UsedByCard({
                   <Chip
                     size="small"
                     variant="outlined"
-                    label={dependent.type}
+                    label={TYPE_LABEL[dependent.type] ?? dependent.type}
                   />
                 </Stack>
               </Stack>

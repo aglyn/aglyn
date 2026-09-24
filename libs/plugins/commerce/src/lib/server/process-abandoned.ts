@@ -35,6 +35,7 @@ import {
   type PluginJobHostGate,
   pluginJobHostGate,
 } from '@aglyn/aglyn/server'
+import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 
 const REMIND_AFTER_MS = 60 * 60 * 1000
 const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000
@@ -157,7 +158,11 @@ export async function scanAbandonedCheckouts(
     if (!entitledHosts.get(hostId)) continue
     let loaded = templateCache.get(hostId)
     if (loaded === undefined) {
-      loaded = await loadHostEmail(firestore, hostId, 'abandoned-cart')
+      loaded = await loadHostEmail(firestore, hostId, 'abandoned-cart', {
+        // The site's header and footer blocks, grafted once per site for the
+        // whole sweep (AGL-3287).
+        compose: composeHostComponentNodes,
+      })
       templateCache.set(hostId, loaded)
     }
     const designed = loaded

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { ReusableComponentTree } from '../app-utils/compose-reusable-components'
 import { getRegisteringPluginId } from '../app-utils/registering-plugin'
 import {
   definePluginServiceContract,
@@ -107,6 +108,22 @@ export type PluginDraftCheck =
   | { ok: true; facts: Readonly<Record<string, unknown>> }
   | { ok: false; problems: string[] }
 
+/** What a check is told beside the content. */
+export interface PluginDraftCheckContext {
+  hostId: string
+  /**
+   * The site's published reusable components the content places, keyed by id
+   * — what `loadReferencedComponents` reads (AGL-3287).
+   *
+   * `check` does no I/O, so a caller whose content may place a component loads
+   * the definitions first and hands them in; a writer whose resource renders
+   * placed components composes them before judging, so what passes is what
+   * would render. Absent means none were loaded, and the content is judged as
+   * written.
+   */
+  components?: Readonly<Record<string, ReusableComponentTree | undefined>>
+}
+
 export type PluginDraftWrite =
   | (PluginDraftRecord & { ok: true; replayed: boolean })
   | (PluginDraftRefusal & { ok: false })
@@ -117,7 +134,7 @@ export interface PluginResourceDraftWriter {
   /** Whether content is well-formed, with what the owner derived from it. Pure. */
   check(
     content: Readonly<Record<string, unknown>>,
-    context: { hostId: string },
+    context: PluginDraftCheckContext,
   ): PluginDraftCheck
   /** The draft written under `id`, or `null`. */
   read(context: { hostId: string; id: string }): Promise<PluginDraftRecord | null>

@@ -57,6 +57,7 @@ import {
   EMAIL_DESIGN_DRAFT_RESOURCE,
   EMAIL_DESIGN_LIMIT_REFUSAL,
   EMAIL_DESIGN_ROLE_REFUSAL,
+  EMAIL_DESIGN_UNRESOLVED_BLOCK_PROBLEM,
   emailDesignDraftWriter,
   registerEmailDesignDraftWriter,
 } from './server-email-drafts'
@@ -369,6 +370,81 @@ describe('checkEmailDesignContent', () => {
     expect(checkEmailDesignContent(silent, { hostId: 'host-1' })).toEqual({
       ok: false,
       problems: ['The design renders no message: it needs at least one block of text'],
+    })
+  })
+
+  /**
+   * A design placing one of the site's components is judged as it would SEND
+   * (AGL-3287): grafted first, from the definitions the caller loaded, so the
+   * footer's copy counts toward the message and the footer's links are held to
+   * the same rules as the design's own.
+   */
+  describe('a design placing a reusable block (AGL-3287)', () => {
+    const FOOTER = {
+      rootId: 'ftr',
+      props: [{ name: 'shop', type: 'text' as const, defaultValue: 'our shop' }],
+      nodes: {
+        ftr: { $id: 'ftr', componentId: 'emailSection', nodes: ['ftrText', 'ftrLink'] },
+        ftrText: {
+          $id: 'ftrText',
+          componentId: 'emailText',
+          parentId: 'ftr',
+          props: { children: 'Visit {{prop.shop}}' },
+        },
+        ftrLink: {
+          $id: 'ftrLink',
+          componentId: 'emailButton',
+          parentId: 'ftr',
+          props: { children: 'Shop', href: 'https://example.com/shop' },
+        },
+      },
+    }
+    const PLACED = {
+      nodes: {
+        [CANVAS_ROOT_ELEMENT_ID]: { componentId: 'div', nodes: ['footer'] },
+        footer: {
+          componentId: 'reusableInstance',
+          props: { refId: 'footer-1', propValues: { shop: 'the Harbour Street shop' } },
+          nodes: [],
+        },
+      },
+      subject: 'This weekend',
+    }
+
+    it('renders the component’s copy, with the placement’s value, as the message', () => {
+      const checked = checkEmailDesignContent(PLACED, {
+        hostId: 'host-1',
+        components: { 'footer-1': FOOTER },
+      })
+      expect(checked).toMatchObject({ ok: true, facts: { blocks: 2 } })
+      const facts = (checked as { facts: Record<string, unknown> }).facts
+      expect(facts['messageText']).toContain('Visit the Harbour Street shop')
+    })
+
+    it('holds a link inside the component to the same rules', () => {
+      const pathLink = {
+        ...FOOTER,
+        nodes: {
+          ...FOOTER.nodes,
+          ftrLink: { ...FOOTER.nodes.ftrLink, props: { children: 'Shop', href: '/shop' } },
+        },
+      }
+      expect(
+        checkEmailDesignContent(PLACED, { hostId: 'host-1', components: { 'footer-1': pathLink } }),
+      ).toEqual({
+        ok: false,
+        problems: ['A button links to a path with no site in front of it, which an inbox cannot open'],
+      })
+    })
+
+    it('refuses a placement whose component it was not given, which would send as nothing', () => {
+      expect(checkEmailDesignContent(PLACED, { hostId: 'host-1' })).toEqual({
+        ok: false,
+        problems: [
+          EMAIL_DESIGN_UNRESOLVED_BLOCK_PROBLEM,
+          'The design renders no message: it needs at least one block of text',
+        ],
+      })
     })
   })
 })

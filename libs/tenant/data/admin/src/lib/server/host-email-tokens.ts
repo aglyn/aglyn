@@ -20,6 +20,7 @@ import {
   hostTokenMerge,
   type HostTokenSource,
 } from '@aglyn/aglyn/app-utils/host-tokens'
+import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 import {
   renderHostEmail,
   type RenderedHostEmail,
@@ -84,7 +85,18 @@ export async function renderHostEmailWithTokens(
     // here rather than at each of the nine senders keeps their signatures
     // untouched and gives the tenth one the right policy without knowing it
     // needed to ask.
-    { ...options, sanitize: sanitizeAuthorHtml },
+    //
+    // The component graft joins on the same argument (AGL-3287): a header or
+    // footer the site owner placed is a reference the shared renderer cannot
+    // resolve, so every sender behind this function mails it expanded without
+    // having to know it exists. Style overrides do not survive into mail —
+    // they land in `sx`, which `renderEmailHtml` never reads — but property
+    // values and attribute overrides do.
+    {
+      ...options,
+      sanitize: sanitizeAuthorHtml,
+      compose: composeHostComponentNodes,
+    },
   )
 }
 
