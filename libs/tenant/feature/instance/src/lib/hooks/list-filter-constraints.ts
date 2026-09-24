@@ -305,7 +305,10 @@ export interface ListFilterPlan {
  * First SERVABLE, not first listed: a reader who adds an owner clause (a
  * facet field no query reaches) and then a name prefix should have the
  * name searched, not the owner "served" as nothing.
- */
+  * @deprecated AGL-3321: matches over rows a list has loaded. Serve every clause and search
+ * word on the query instead — `planListQuery` (`@aglyn/shared-ui-jsx/const/list-query-plan`, with `nameSearchNormalizers`)
+ * through `useListQuery` or `applyListQuery`. Removed once no list calls it.
+*/
 export function listFilterPlan(
   fields: readonly ListFilterField[],
   clauses: readonly ListFilterRequest[],
