@@ -1,6 +1,6 @@
 {
   "name": "@aglyn/besigner",
-  "version": "1.0.0-beta.192",
+  "version": "1.0.0-beta.193",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": {
@@ -25,11 +25,11 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@aglyn/aglyn": "1.0.0-beta.192",
-    "@aglyn/shared-data-types": "1.0.0-beta.192",
-    "@aglyn/shared-util-logger": "1.0.0-beta.192",
-    "@aglyn/shared-util-tools": "1.0.0-beta.192",
-    "@aglyn/shared-util-vendor": "1.0.0-beta.192",
+    "@aglyn/aglyn": "1.0.0-beta.193",
+    "@aglyn/shared-data-types": "1.0.0-beta.193",
+    "@aglyn/shared-util-logger": "1.0.0-beta.193",
+    "@aglyn/shared-util-tools": "1.0.0-beta.193",
+    "@aglyn/shared-util-vendor": "1.0.0-beta.193",
     "@swc/helpers": "0.5.23",
     "lodash-es": "^4.18.1",
     "mobx": "^6.16.1",

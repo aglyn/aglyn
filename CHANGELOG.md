@@ -9,6 +9,26 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.193 — 2026-09-24
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.192...v1.0.0-beta.193)
+
+### Added
+
+- **console:** the team roster and billing history filter through the grid ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+- **console:** a site's lists filter through the grid's own toolbar ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+
+### Documentation
+
+- the site and team lists say what their toolbars filter ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+
+<details>
+<summary>Also in this release: 1 test</summary>
+
+- **console:** the sweep holds the site and team lists to the shared grid filter path ([AGL-3317](https://linear.app/aglyn/issue/AGL-3317))
+
+</details>
+
 ## v1.0.0-beta.192 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.191...v1.0.0-beta.192)
