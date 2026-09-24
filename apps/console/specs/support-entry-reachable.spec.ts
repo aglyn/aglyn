@@ -19,7 +19,11 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { RESERVED_SUBDOMAINS } from '@aglyn/aglyn/app-utils/host-naming'
 import { Route } from '../constants/route-links'
-import { CONSOLE_TOP_LEVEL_SEGMENTS } from '../constants/console-routes'
+import {
+  APEX_PATH_SEGMENTS,
+  CONSOLE_TOP_LEVEL_SEGMENTS,
+  orgScopedPathname,
+} from '../constants/console-routes'
 
 /**
  * `/support` IS A LITERAL SEGMENT IN AN ORG-SCOPED NAMESPACE (AGL-3265).
@@ -93,15 +97,16 @@ describe('the org-agnostic support entry point (AGL-3265)', () => {
    * the address already said. The rewrite itself is driven in
    * `middleware.spec.ts`; this pins the intent beside the route so the next
    * author does not "fix" the omission.
+   *
+   * Read from the constant itself since AGL-3314 moved it out of the
+   * middleware so the client could share the rule — and asked of the rule
+   * too, which is what both of them now call.
    */
   it('is deliberately absent from the apex rewrite exemptions', () => {
-    const middleware = read('apps/console/middleware.ts')
-    const list = /const APEX_PATH_SEGMENTS = new Set\(\[([\s\S]*?)\]\)/.exec(
-      middleware,
-    )
-    // Anti-vacuity: a renamed constant must fail here rather than pass by
-    // finding nothing to look in.
-    expect(list?.[1]).toContain("'manage'")
-    expect(list?.[1]).not.toContain("'support'")
+    // Anti-vacuity: an emptied list must fail here rather than pass by
+    // having nothing to look in.
+    expect(APEX_PATH_SEGMENTS.has('manage')).toBe(true)
+    expect(APEX_PATH_SEGMENTS.has('support')).toBe(false)
+    expect(orgScopedPathname('/support', 'acme')).toBe('/acme/support')
   })
 })

@@ -30,6 +30,54 @@
  * are unchanged.
  */
 
+import { orgScopedPathname } from '../constants/console-routes'
+
+/**
+ * The path the console's ROUTES see, from the path the address bar shows
+ * (AGL-3314).
+ *
+ * On a host that names the workspace — `acme.<workspace domain>`, or a custom
+ * console domain — the middleware serves `/hosts` from `/acme/hosts`, and the
+ * address bar keeps `/hosts`. `usePathname()` answers with the address bar,
+ * so every parser below read `hosts` as a workspace slug: the switcher named
+ * nothing, the tab strip found no such workspace, and `/hosts/{site}` never
+ * read as a site. Rebuilding the rewritten path with the middleware's own rule
+ * hands the parsers the canonical `/{orgSlug}/…` they were written for, on
+ * every host.
+ *
+ * `hostOrgSlug` is the workspace the HOST names (`useOrgScope().hostOrgSlug`),
+ * or nothing on the apex, where the path already carries it.
+ */
+export function consolePathFor(
+  pathname: string | null,
+  hostOrgSlug: string | null | undefined,
+): string {
+  const path = pathname ?? ''
+  if (!hostOrgSlug) return path
+  return orgScopedPathname(path || '/', hostOrgSlug) ?? path
+}
+
+/**
+ * The workspace a HOST names, which the address bar then omits (AGL-3314).
+ *
+ * A subdomain of the workspace domain names its workspace outright
+ * (`subdomainSlug`, the middleware's rule). A custom console domain cannot be
+ * recognized by name on the client, but its rewrite shows through: the
+ * matched route carries an `[orgSlug]` the visible path does not start with.
+ * On the apex the two agree and nothing is implied, so this is `null` there.
+ */
+export function hostOrgSlugFor(input: {
+  subdomainSlug: string | null
+  paramOrgSlug: string | null
+  pathname: string | null
+}): string | null {
+  if (input.subdomainSlug) return input.subdomainSlug
+  const { paramOrgSlug } = input
+  return paramOrgSlug && segmentsOf(input.pathname ?? '')[0] !== paramOrgSlug
+    ? paramOrgSlug
+    : null
+}
+
 export type NavSectionKind = 'host' | 'org' | 'admin' | 'manage' | 'none'
 
 export interface NavSection {

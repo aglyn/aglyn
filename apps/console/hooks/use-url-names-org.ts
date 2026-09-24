@@ -20,6 +20,7 @@ import type { UserOrgMembership } from '@aglyn/aglyn'
 import { usePathname } from 'next/navigation'
 import { useMemo } from 'react'
 import {
+  consolePathFor,
   type NavSection,
   type NavSectionKind,
   resolveNavSection,
@@ -47,6 +48,7 @@ import { useOrgScope } from './use-org-scope'
  * has to move.
  */
 export {
+  consolePathFor,
   type NavSection,
   type NavSectionKind,
   resolveNavSection,
@@ -54,13 +56,26 @@ export {
   urlNamesOrg,
 }
 
+/**
+ * The current path as the console's ROUTES see it (AGL-3314): the address
+ * bar's path, with the workspace the host names put back in front of it the
+ * way the middleware's rewrite put it there. What every path parser here
+ * reads instead of `usePathname()`, which on `acme.<domain>/hosts` answers
+ * `/hosts` and so named a workspace called "hosts".
+ */
+export function useConsolePath(): string {
+  const pathname = usePathname()
+  const { hostOrgSlug } = useOrgScope()
+  return useMemo(() => consolePathFor(pathname, hostOrgSlug), [pathname, hostOrgSlug])
+}
+
 /** `urlNamesOrg` for the current route. */
 export function useUrlNamesOrg(): boolean {
-  const pathname = usePathname()
+  const path = useConsolePath()
   const { orgSlug } = useOrgScope()
   return useMemo(
-    () => urlNamesOrg(resolveNavSection(pathname), orgSlug),
-    [pathname, orgSlug],
+    () => urlNamesOrg(resolveNavSection(path), orgSlug),
+    [path, orgSlug],
   )
 }
 
@@ -94,19 +109,19 @@ export function useUrlNamesOrg(): boolean {
  * chrome already renders as "no chip yet", not as "this page has no org".
  */
 export function useUrlNamedOrg(): UserOrgMembership | null {
-  const pathname = usePathname()
+  const path = useConsolePath()
   const { orgSlug, currentOrg } = useOrgScope()
   return useMemo(() => {
-    const section = resolveNavSection(pathname)
+    const section = resolveNavSection(path)
     if (!urlNamesOrg(section, orgSlug)) return null
     if (!currentOrg) return null
-    // On a workspace subdomain the hostname IS the workspace, and a path slug
-    // (when there is one) has to agree with it — `useOrgScope` resolves the
-    // path first, so comparing against whichever the URL actually carries is
-    // what keeps the two readings honest.
+    // On a workspace host the hostname IS the workspace, and the path the
+    // routes see carries it in front (AGL-3314) — a path that names another
+    // one has to agree with it, and comparing against whichever the URL
+    // actually carries is what keeps the two readings honest.
     const named = section.orgSlug ?? orgSlug
     // A membership with no slug yet can only be matched by id, and the URL
     // cannot name an id — so an unnamed match is not a match.
     return currentOrg.slug && currentOrg.slug === named ? currentOrg : null
-  }, [pathname, orgSlug, currentOrg])
+  }, [path, orgSlug, currentOrg])
 }
