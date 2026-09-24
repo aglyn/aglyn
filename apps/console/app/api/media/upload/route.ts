@@ -16,7 +16,6 @@
  */
 
 import {
-  bytesReader,
   checkEntitlement,
   createResourceUid,
   defaultScopeForNewResource,
@@ -428,7 +427,7 @@ async function handler(request: Request): Promise<Response> {
     // first time its Details drawer opens.
     const embeddedMetadata = await embeddedMetadataAtIngress({
       contentType,
-      reader: bytesReader(new Uint8Array(buffer)),
+      bytes: new Uint8Array(buffer),
       contentSha256,
     })
 
