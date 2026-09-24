@@ -52,8 +52,22 @@ const Card = styled(MuiCard)(({ theme }) => {
         paddingBottom: 'initial',
       },
     },
+    /*
+     * A header action wider than the room beside the title wraps onto its own
+     * line under it, instead of pushing past the card's edge where the card's
+     * `overflow: hidden` clips it (AGL-3311). The title keeps a floor so a
+     * short action still sits beside it, top right.
+     */
     '.MuiCardHeader-root': {
       fontWeight: theme.typography.fontWeightBold,
+      flexWrap: 'wrap',
+      rowGap: theme.spacing(1),
+    },
+    '.MuiCardHeader-content': {
+      flex: `1 1 ${theme.spacing(24)}`,
+    },
+    '.MuiCardHeader-action': {
+      maxWidth: '100%',
     },
     [`&.${classKeys.contentGutterX}`]: {
       '.MuiCardContent-root': {
