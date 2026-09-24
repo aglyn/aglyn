@@ -508,6 +508,29 @@ Reading the value needs any staff role; **changing it needs `super`**, the same
 bar as feature flags, and every change writes an audit row with the before, the
 after and the reason typed into the **Why** box.
 
+#### Platform suppressions {#platform-suppressions}
+
+Also on the System emails page: every address that bounced permanently or
+reported spam on any send from any site. Nothing in the product mails one
+until it is released with **Release**, which asks for a reason in its **Why**
+box and writes an audit row. A released entry stays on the list, marked
+**Released** with its date, as the record that the suppression was honored
+while it stood.
+
+The list's **Filters** narrows it by **Status** (**Active** or **Released**),
+**Reason** (one or several), **Learned from** (the tag of the send that
+failed, such as `invite`), **Site ID**, and **Last reported** (on or after, or
+before, a date). Status and Last reported combine with any other filter;
+Reason, Learned from and Site ID apply one at a time, so choosing one replaces
+another. The search box finds an address by the start of any part of it: the
+local part, a piece of it such as `doe` in `jane.doe`, or the domain, with or
+without the `@`. It matches up to the first twelve characters typed. A search
+runs on its own, alongside **Last reported** only: while a search is in the
+box, the other filters are set aside, and a note above the list says so;
+clear the search to apply them again. Filters and search apply to the whole
+list rather than the page on screen, and each filter in force shows as a chip
+above the list; remove the chip to drop it.
+
 ### [Feature flags](feature-flags.md) {#feature-flags}
 
 Release-gate console features via Remote
