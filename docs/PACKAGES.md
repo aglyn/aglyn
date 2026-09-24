@@ -160,7 +160,7 @@ marked where it sits.
 | `shared-ui-color-picker` | `@aglyn/shared-ui-color-picker` | `libs/shared/ui/color-picker` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-email-campaigns` | `@aglyn/shared-ui-email-campaigns` | `libs/shared/ui/email-campaigns` | `scope:shared` `type:ui` | `.`, `./*` — **a carried violation, not a shared library**: it holds the campaign domain model. See [Violations](#violations); the row goes when the lib is dissolved. |
 | `shared-ui-json-editor` | `@aglyn/shared-ui-json-editor` | `libs/shared/ui/json-editor` | `scope:shared` `type:ui` | `.`, `./*` |
-| `shared-ui-jsx` | `@aglyn/shared-ui-jsx` | `libs/shared/ui/jsx` | `scope:shared` `type:ui` | `.`, `./*` — also the one list-table filter path every plugin's lists use: `./components/list-table.component`, `./const/list-filter`, `./const/list-grid-filter`, `./hooks/use-list-grid-filter`, `./components/list-filter-chips.component` (AGL-3317) |
+| `shared-ui-jsx` | `@aglyn/shared-ui-jsx` | `libs/shared/ui/jsx` | `scope:shared` `type:ui` | `.`, `./*` — also the one list-table filter path every plugin's lists use: `./components/list-table.component`, `./const/list-filter`, `./const/list-grid-filter`, `./hooks/use-list-grid-filter`, `./hooks/use-list-rows-filter`, `./hooks/use-paged-rows-filter`, `./components/list-filter-chips.component` (AGL-3317) |
 | `shared-ui-jsx-forms` | `@aglyn/shared-ui-jsx-forms` | `libs/shared/ui/jsx-forms` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-next` | `@aglyn/shared-ui-next` | `libs/shared/ui/next` | `scope:shared` `type:ui` | `.`, `./*` |
 | `shared-ui-snackstack` | `@aglyn/shared-ui-snackstack` | `libs/shared/ui/snackstack` | `scope:shared` `type:ui` | `.`, `./*` |
