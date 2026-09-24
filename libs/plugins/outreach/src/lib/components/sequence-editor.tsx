@@ -304,6 +304,33 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
           <CardDisplay
             header="Sequence"
             help={pluginDocsHelp('sequences', { anchor: '#build-a-sequence' })}
+            // The whole sequence (steps and sending rules included) saves
+            // from its first card's header, where the console puts a card's
+            // actions (AGL-3333).
+            HeaderProps={{
+              action: archived ? undefined : (
+                <Stack direction="row" spacing={1}>
+                  {props.onCancel ? (
+                    <Button
+                      size="small"
+                      variant="text"
+                      onClick={props.onCancel}
+                      disabled={saving}
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={() => void save()}
+                    disabled={saving}
+                  >
+                    {saving ? 'Saving…' : sequence ? 'Save' : 'Create sequence'}
+                  </Button>
+                </Stack>
+              ),
+            }}
             contentGutterX
             contentGutterY
           >
@@ -606,30 +633,6 @@ export function OutreachSequenceEditor(props: OutreachSequenceEditorProps) {
             </Stack>
           </CardDisplay>
 
-          {archived ? null : (
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              sx={{ justifyContent: 'flex-end' }}
-            >
-              {props.onCancel ? (
-                <Button
-                  variant="text"
-                  onClick={props.onCancel}
-                  disabled={saving}
-                >
-                  Cancel
-                </Button>
-              ) : null}
-              <Button
-                variant="contained"
-                onClick={() => void save()}
-                disabled={saving}
-              >
-                {saving ? 'Saving…' : sequence ? 'Save' : 'Create sequence'}
-              </Button>
-            </Stack>
-          )}
         </Stack>
       </Grid>
       {sequence && testing !== null ? (
