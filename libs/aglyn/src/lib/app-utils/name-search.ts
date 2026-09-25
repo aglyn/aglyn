@@ -154,3 +154,17 @@ export function nameSearchFields(name: string): {
     nameReversed: nameSearchReversed(name),
   }
 }
+
+/**
+ * The normalizers a list query plan (`planListQuery` in
+ * `@aglyn/shared-ui-jsx/const/list-query-plan`) turns typed values into keys
+ * with: the same functions the writers stamp `nameLower`, `nameTokens` and
+ * `nameReversed` with, so a query asks for what was stored (AGL-3321).
+ */
+export const nameSearchNormalizers = {
+  key: (value: string) => nameSearchKey(value),
+  token: (value: string) => nameSearchToken(value),
+  reversed: (value: string) => nameSearchReversed(value),
+  maxPrefix: NAME_TOKEN_MAX_PREFIX,
+} as const
+

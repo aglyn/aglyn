@@ -23,6 +23,7 @@ import {
   isFormArchived,
   PageHeaderActions,
   pluginDocsHelp,
+  readCampaignIds,
   Route,
 } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
@@ -57,6 +58,7 @@ import {
   useConsoleHostRoute,
   useDuplicateResource,
   useFirestore,
+  useHostCampaigns,
   useHostResourceApi,
   useLiveArtifactCount,
   usePagedCollection,
@@ -67,34 +69,85 @@ import { useCallback, useMemo, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 /*
- * What the forms grid's Filters panel offers (AGL-3317). The list is a paged
- * listener, so a filter matches over what its window has read, which the
- * first filter widens (`usePagedRowsFilter`). Status is a hidden column
- * reading `statusKey`, whether the form is retired.
+ * What the forms grid's Filters panel offers (AGL-3317, AGL-3330): every
+ * column the table shows, typed, and the stored fields a site sorts its
+ * forms out by, as columns kept out of sight.
+ *
+ * EVERY ONE NARROWS THE LOADED WINDOW; none is served. The list is a paged
+ * listener over the document id (`collectionPage`), so a filter matches over
+ * what the window has read, which the first filter widens
+ * (`usePagedRowsFilter`) and the caption under the chips owns up to. The
+ * query never changes shape, so no filter here needs an index. The figures
+ * are the `stats` counters `/api/forms/submit` keeps on the form document
+ * itself, read with the row.
+ *
+ *  - Submissions and Leads are numbers. Leads is ABSENT on a form that does
+ *    not route to leads — the column's dash — so `is empty` finds those and
+ *    `= 0` finds a routed form that has produced none.
+ *  - Last submission, Updated and Created are days. Created is a column
+ *    hidden by default: `/api/hosts/resources` stamps it on every form it
+ *    makes.
+ *  - Status (active or retired), Lead routing (`routing.lead`) and Campaign
+ *    (`campaignIds`) are hidden columns, matched on keys derived by
+ *    {@link formFilterRow} so the row keeps the stored fields its menu reads.
+ *    A form's campaigns are ids, matched member by member and byte for byte,
+ *    as the campaigns list matches its `listIds`.
+ *
+ * Nothing else a form stores is a filter. It keeps no type and no template,
+ * and its plan slot is not its own: a retired form keeps one, which is the
+ * Status filter's answer.
  */
-const FORM_FILTER_FIELDS = [
+export const FORM_FILTER_FIELDS = [
   inMemoryListField('displayName', 'text'),
   inMemoryListField('slug', 'text'),
+  inMemoryListField('submissions', 'number', 'stats.submissions'),
+  inMemoryListField('leads', 'number', 'stats.leads'),
+  inMemoryListField('lastSubmission', 'date', 'stats.lastSubmissionAtMs'),
+  inMemoryListField('updatedAt', 'date'),
+  inMemoryListField('createdAt', 'date'),
   inMemoryListField('status', 'select', 'statusKey'),
+  inMemoryListField('leadRouting', 'select', 'leadRoutingKey'),
+  {
+    ...inMemoryListField('campaignIds', 'select', 'campaignKeys'),
+    tokensPath: 'campaignKeys',
+    verbatimTokens: true,
+  },
 ]
-const FORM_FILTER_HEADERS: Readonly<Record<string, string>> = {
+export const FORM_FILTER_HEADERS: Readonly<Record<string, string>> = {
   displayName: 'Display name',
   slug: 'Slug',
+  submissions: 'Submissions',
+  leads: 'Leads',
+  lastSubmission: 'Last submission',
+  updatedAt: 'Updated',
+  createdAt: 'Created',
   status: 'Status',
+  leadRouting: 'Lead routing',
+  campaignIds: 'Campaign',
 }
-const FORM_FILTER_OPTIONS = {
-  status: [
-    { value: 'active', label: 'Active' },
-    { value: 'retired', label: 'Retired' },
-  ],
+const FORM_STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'retired', label: 'Retired' },
+]
+const FORM_LEAD_ROUTING_OPTIONS = [
+  { value: 'on', label: 'On' },
+  { value: 'off', label: 'Off' },
+]
+/** What the quick search reads: the name, the slug and the form's id. */
+export const FORM_SEARCH_FIELDS = ['displayName', 'slug', '$id'] as const
+const FORM_HIDDEN_COLUMNS = {
+  createdAt: false,
+  status: false,
+  leadRouting: false,
+  campaignIds: false,
 }
-const FORM_SEARCH_FIELDS = ['displayName', 'slug'] as const
-const FORM_HIDDEN_COLUMNS = { status: false }
 
-/** A form row with the status its filter matches on. */
-const withStatusKey = (form: any) => ({
+/** A form row with the keys its hidden filters match on. */
+export const formFilterRow = (form: any) => ({
   ...form,
   statusKey: isFormArchived(form) ? 'retired' : 'active',
+  leadRoutingKey: form?.routing?.lead === true ? 'on' : 'off',
+  campaignKeys: readCampaignIds(form),
 })
 
 export interface HostFormsCardProps {
@@ -279,16 +332,50 @@ export function HostFormsCard(props: HostFormsCardProps) {
     () =>
       formWindow
         .filter((form: any) => askedStatus || !isFormArchived(form))
-        .map(withStatusKey),
+        .map(formFilterRow),
     [formWindow, askedStatus],
   )
   const formWindowRows = useMemo(
     () =>
       formData
         ?.filter((form: any) => askedStatus || !isFormArchived(form))
-        .map(withStatusKey),
+        .map(formFilterRow),
     [formData, askedStatus],
   )
+  /*
+   * The Campaign filter's choices: the campaigns placed on this site, by
+   * name, and any campaign a loaded form is filed under that the site's list
+   * does not name — one since taken off this site — by its id, so the form
+   * filed under it can still be found.
+   *
+   * Read only once a loaded form IS filed under a campaign. The names cost
+   * the org lookup and up to fifty campaign documents, which a catalog with
+   * no filed form would pay on every visit for a filter with nothing to find;
+   * there the column has no choices and the panel leaves it out.
+   */
+  const filedCampaignIds = useMemo(
+    () => [...new Set((formData ?? []).flatMap((form: any) => readCampaignIds(form)))],
+    [formData],
+  )
+  const siteCampaigns = useHostCampaigns(hostId, {
+    enabled: filedCampaignIds.length > 0,
+  })
+  const formFilterOptions = useMemo(() => {
+    const named = siteCampaigns.options.map((option) => ({
+      value: option.value,
+      label: option.label,
+    }))
+    const unnamed = siteCampaigns.ready
+      ? filedCampaignIds
+          .filter((id) => !named.some((option) => option.value === id))
+          .map((id) => ({ value: id, label: id }))
+      : []
+    return {
+      status: FORM_STATUS_OPTIONS,
+      leadRouting: FORM_LEAD_ROUTING_OPTIONS,
+      campaignIds: [...named, ...unnamed],
+    }
+  }, [siteCampaigns.options, siteCampaigns.ready, filedCampaignIds])
   const formFilter = usePagedRowsFilter<any>(
     {
       data: formWindowRows,
@@ -301,7 +388,7 @@ export function HostFormsCard(props: HostFormsCardProps) {
     },
     {
       fields: FORM_FILTER_FIELDS,
-      options: FORM_FILTER_OPTIONS,
+      options: formFilterOptions,
       headers: FORM_FILTER_HEADERS,
       search: FORM_SEARCH_FIELDS,
       clauses: formClauses,
@@ -450,6 +537,16 @@ export function HostFormsCard(props: HostFormsCardProps) {
       type: 'date',
       // MUI X v9 passes the value positionally. The v6 object form silently
       // destructures undefined off a Date and every row renders '--'.
+      valueGetter: (value: any) => value?.toDate?.() ?? null,
+      valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
+    },
+    {
+      // Hidden until Columns shows it; filterable either way (AGL-3330).
+      field: 'createdAt',
+      headerName: 'Created',
+      minWidth: 170,
+      flex: 1,
+      type: 'date',
       valueGetter: (value: any) => value?.toDate?.() ?? null,
       valueFormatter: (value: any) => value?.toLocaleString?.() || '--',
     },

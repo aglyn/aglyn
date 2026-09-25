@@ -64,10 +64,6 @@
  */
 export const NEXT_DUE_MAX_AGE_MS = 5 * 60_000
 
-/** Epoch ms of the earliest pending-but-not-due schedule; null = none. */
-let nextDueAt: number | null = null
-let checkedAt = 0
-
 export interface ReadDueSchedulesOptions<T> {
   now: number
   /**
@@ -81,51 +77,87 @@ export interface ReadDueSchedulesOptions<T> {
 }
 
 /**
- * The schedules due now, from the memo when it is fresh enough and says
- * nothing is. Rows without a readable publish time are skipped: they are
- * not due (nothing can compare), and not the next-due either.
+ * One beat's memo. Each beat that probes a DIFFERENT set of schedules holds
+ * its own (AGL-3340): screens and content entries are two queries with two
+ * next-due times, and one shared memo would let an idle probe of one set
+ * answer "nothing due" for the other.
  */
-export async function readDueSchedules<T>(
+export interface NextDueMemo {
+  /**
+   * The schedules due now, from the memo when it is fresh enough and says
+   * nothing is. Rows without a readable publish time are skipped: they are
+   * not due (nothing can compare), and not the next-due either.
+   */
+  readDueSchedules<T>(
+    options: ReadDueSchedulesOptions<T>,
+  ): Promise<readonly T[]>
+  /** Test seam — each memo is module scope by design. */
+  reset(): void
+}
+
+export function createNextDueMemo(): NextDueMemo {
+  /** Epoch ms of the earliest pending-but-not-due schedule; null = none. */
+  let nextDueAt: number | null = null
+  let checkedAt = 0
+
+  return {
+    async readDueSchedules<T>(
+      options: ReadDueSchedulesOptions<T>,
+    ): Promise<readonly T[]> {
+      const { now, read, publishAtMs } = options
+      if (
+        checkedAt &&
+        now - checkedAt < NEXT_DUE_MAX_AGE_MS &&
+        (nextDueAt === null || now < nextDueAt)
+      ) {
+        return []
+      }
+
+      const pending = await read()
+      const due: T[] = []
+      let earliestFuture: number | null = null
+      for (const row of pending) {
+        const at = publishAtMs(row)
+        if (at === null) continue
+        if (at <= now) {
+          due.push(row)
+        } else {
+          // Ascending order: the first future row is the earliest one.
+          earliestFuture = at
+          break
+        }
+      }
+
+      if (due.length === 0) {
+        nextDueAt = earliestFuture
+        checkedAt = now
+      } else {
+        // Due work changes the set, and the batch may have been clipped at
+        // its limit — the next beat must look again rather than trust this
+        // probe.
+        nextDueAt = null
+        checkedAt = 0
+      }
+      return due
+    },
+    reset() {
+      nextDueAt = null
+      checkedAt = 0
+    },
+  }
+}
+
+/** The screens beat's memo (`apply-publish-schedules`). */
+const screensMemo = createNextDueMemo()
+
+/** The screens beat's due read, through its own memo. */
+export function readDueSchedules<T>(
   options: ReadDueSchedulesOptions<T>,
 ): Promise<readonly T[]> {
-  const { now, read, publishAtMs } = options
-  if (
-    checkedAt &&
-    now - checkedAt < NEXT_DUE_MAX_AGE_MS &&
-    (nextDueAt === null || now < nextDueAt)
-  ) {
-    return []
-  }
-
-  const pending = await read()
-  const due: T[] = []
-  let earliestFuture: number | null = null
-  for (const row of pending) {
-    const at = publishAtMs(row)
-    if (at === null) continue
-    if (at <= now) {
-      due.push(row)
-    } else {
-      // Ascending order: the first future row is the earliest one.
-      earliestFuture = at
-      break
-    }
-  }
-
-  if (due.length === 0) {
-    nextDueAt = earliestFuture
-    checkedAt = now
-  } else {
-    // Due work changes the set, and the batch may have been clipped at its
-    // limit — the next beat must look again rather than trust this probe.
-    nextDueAt = null
-    checkedAt = 0
-  }
-  return due
+  return screensMemo.readDueSchedules(options)
 }
 
 /** Test seam — the memo is module scope by design. */
 export function resetPublishScheduleNextDue(): void {
-  nextDueAt = null
-  checkedAt = 0
+  screensMemo.reset()
 }

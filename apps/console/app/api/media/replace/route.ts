@@ -761,6 +761,10 @@ async function handler(request: Request): Promise<Response> {
         poster: videoFields['poster'] ?? remove,
         posterError: videoFields['posterError'] ?? remove,
         videoRenditions: remove,
+        // Read from the previous bytes (AGL-3331). Cleared rather than
+        // re-read here: the Details drawer reads the new file the first
+        // time it opens, and a replace must not wait on a caption.
+        embeddedMetadata: remove,
         // The delivery provider's copies were made from the previous bytes
         // (AGL-2824). The new `contentHash` already stops them being served;
         // clearing the record says so, and the copies themselves are removed

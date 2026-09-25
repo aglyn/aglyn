@@ -166,6 +166,14 @@ const CANNOT_STORE_VIDEO: Record<string, { why: string; proof: string }> = {
     why: 'a listing preview image, whose allowlist is image formats only',
     proof: 'isImageUploadContentType(contentType)',
   },
+  'apps/console/app/api/media/metadata/route.ts': {
+    why:
+      "rewrites the details inside a file the library ALREADY stores, in the " +
+      'format it already has, and only where the patch is valid for a ' +
+      'writable format — images, PDF and Office documents, never a video ' +
+      '(AGL-3331). It stores no new file.',
+    proof: 'sanitizeEmbeddedPatch(current.format, body?.patch)',
+  },
 }
 
 const GATE_CALLS = ['videoUploadPausedRefusal(', 'videoUploadsOpenForOrg(']

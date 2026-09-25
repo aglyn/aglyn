@@ -283,11 +283,12 @@ describe('every ingress door passes the pairing (AGL-2003)', () => {
       }
     }
     // Fails if a door is added and left unpaired, and fails if the doors
-    // vanish — a zero-length sweep must not read as compliance. Six doors: the
+    // vanish — a zero-length sweep must not read as compliance. Seven doors: the
     // direct upload, the mint and finalize legs of both signed routes
-    // (`upload-url` and `replace`), and the /v1 upload in
-    // `utils/api-v1-resources.ts`.
-    expect(callSites.length).toBe(6)
+    // (`upload-url` and `replace`), the /v1 upload in
+    // `utils/api-v1-resources.ts`, and `/api/media/metadata`, whose write
+    // rewrites a file's own details and so changes its size (AGL-3331).
+    expect(callSites.length).toBe(7)
     for (const site of callSites) {
       expect(site).toContain('billsOverage')
       // The scope, not a hardcoded literal: a route that passed `true` would
