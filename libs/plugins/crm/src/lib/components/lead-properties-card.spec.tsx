@@ -27,7 +27,7 @@
  */
 
 import { soloConsentGroup } from '@aglyn/aglyn'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentProps, ReactNode } from 'react'
 import { LeadPropertiesCard } from './lead-properties-card'
 
@@ -140,6 +140,14 @@ function renderCard(props: Partial<ComponentProps<typeof LeadPropertiesCard>> = 
 
 const convert = () => screen.getByRole('button', { name: 'Convert' }) as HTMLButtonElement
 
+/** The Details card's header, where its one Save sits (AGL-3334). */
+const detailsHeader = () => {
+  const header = document.querySelector('.MuiCardHeader-action')
+  expect(header).not.toBeNull()
+  return within(header as HTMLElement)
+}
+const saveButton = () => detailsHeader().getByRole('button', { name: 'Save' }) as HTMLButtonElement
+
 describe('Convert on the lead page', () => {
   it('opens the dialog on an open lead', () => {
     const { onConvert } = renderCard()
@@ -174,7 +182,7 @@ describe('the profile on the lead page', () => {
     fireEvent.change(screen.getByLabelText('Job title'), { target: { value: '' } })
     fireEvent.change(screen.getByLabelText('Website'), { target: { value: 'acme.com' } })
     fireEvent.change(screen.getByLabelText('Tags'), { target: { value: 'ICP2, a-list' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(saveButton())
     await screen.findByRole('button', { name: 'Save' })
     expect(updateDoc).toHaveBeenCalledTimes(1)
     expect(updateDoc.mock.calls[0]?.[1]).toMatchObject({
@@ -191,15 +199,43 @@ describe('the profile on the lead page', () => {
   it('refuses a phone it cannot read under the field, and writes nothing', async () => {
     renderCard()
     fireEvent.change(screen.getByLabelText('Phone'), { target: { value: 'call me' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(saveButton())
     expect(await screen.findByText(/could not be read/)).not.toBeNull()
     expect(updateDoc).not.toHaveBeenCalled()
   })
 
-  it('is read-only once the lead is converted', () => {
+  it('is read-only once the lead is converted, but for the notes', async () => {
     renderCard({ lead: { ...lead, status: 'qualified', convertedContactId: 'c-1' } })
     expect((screen.getByLabelText('Company') as HTMLInputElement).disabled).toBe(true)
-    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
+    expect(saveButton().disabled).toBe(true)
+    // The header's actions are the records the conversion made.
+    expect(screen.getByRole('link', { name: 'Open contact' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Convert' })).toBeNull()
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Signed in March' } })
+    fireEvent.click(saveButton())
+    await screen.findByRole('button', { name: 'Save' })
+    expect(updateDoc).toHaveBeenCalledTimes(1)
+    const written = updateDoc.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(written['notes']).toBe('Signed in March')
+    expect(written).not.toHaveProperty('company')
+  })
+
+  it('saves the profile and the notes in one update from the Details header, and discards both', async () => {
+    renderCard()
+    expect(saveButton().disabled).toBe(true)
+    expect(detailsHeader().queryByRole('button', { name: 'Discard changes' })).toBeNull()
+    fireEvent.change(screen.getByLabelText('Company'), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Met at the fair' } })
+    fireEvent.click(detailsHeader().getByRole('button', { name: 'Discard changes' }))
+    expect((screen.getByLabelText('Company') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Notes') as HTMLInputElement).value).toBe('')
+    expect(saveButton().disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Company'), { target: { value: 'Acme' } })
+    fireEvent.change(screen.getByLabelText('Notes'), { target: { value: 'Met at the fair' } })
+    fireEvent.click(saveButton())
+    await screen.findByRole('button', { name: 'Save' })
+    expect(updateDoc).toHaveBeenCalledTimes(1)
+    expect(updateDoc.mock.calls[0]?.[1]).toMatchObject({ company: 'Acme', notes: 'Met at the fair' })
   })
 })
 
@@ -244,10 +280,16 @@ describe('the custom lead fields on the lead page', () => {
     expect(definitionsFor).toHaveBeenLastCalledWith('org-1', 'lead')
   })
 
+  it('draws them under More fields, after the built-in ones', () => {
+    renderCard({ lead: { ...lead, custom: { budget: '1000' } } })
+    expect(screen.getByText('More fields')).toBeTruthy()
+    expect((screen.getByLabelText('Budget') as HTMLInputElement).value).toBe('1000')
+  })
+
   it('writes one dotted path per touched key, leaving the rest of the map alone', async () => {
     renderCard({ lead: { ...lead, custom: { budget: '1000', untouched: 'keep me' } } })
     fireEvent.change(screen.getByLabelText('Budget'), { target: { value: '5000' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(saveButton())
     await screen.findByRole('button', { name: 'Save' })
     expect(updateDoc).toHaveBeenCalledTimes(1)
     const written = updateDoc.mock.calls[0]?.[1] as Record<string, unknown>
@@ -267,12 +309,12 @@ describe('the custom lead fields on the lead page', () => {
     renderCard({ lead: { ...lead, custom: { budget: '1000' } } })
     // Nothing on the profile was touched, so Save is offered for the
     // custom edit or not at all.
-    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(saveButton().disabled).toBe(true)
     // A required field's label carries MUI's asterisk, so it is matched
     // by its text rather than in full.
     fireEvent.change(screen.getByLabelText(/Budget/), { target: { value: '' } })
-    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false)
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(saveButton().disabled).toBe(false)
+    fireEvent.click(saveButton())
     await screen.findByRole('button', { name: 'Save' })
     expect(updateDoc).not.toHaveBeenCalled()
   })

@@ -215,20 +215,22 @@ export function DealProductsCard(props: DealProductsCardProps) {
       <CardDisplay
         header={'Products'}
         help={pluginDocsHelp('deals', { anchor: '#line-items' })}
-        actions={
-          <Tooltip title={full ? `A deal carries at most ${DEAL_LINE_ITEMS_MAX} lines` : ''}>
-            <span>
-              <Button
-                size="small"
-                startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
-                disabled={busy || full}
-                onClick={() => setAdding(true)}
-              >
-                {'Add line'}
-              </Button>
-            </span>
-          </Tooltip>
-        }
+        HeaderProps={{
+          action: (
+            <Tooltip title={full ? `A deal carries at most ${DEAL_LINE_ITEMS_MAX} lines` : ''}>
+              <span>
+                <Button
+                  size="small"
+                  startIcon={<MdiIcon path={mdiPlus.path} size={0.8} />}
+                  disabled={busy || full}
+                  onClick={() => setAdding(true)}
+                >
+                  {'Add line'}
+                </Button>
+              </span>
+            </Tooltip>
+          ),
+        }}
         contentGutterX
         contentGutterY
       >

@@ -162,6 +162,16 @@ const SHARED_FOOTER: Array<[string, string]> = [
     'billing workspace picker',
     'apps/console/app/(app)/billing/page.tsx',
   ],
+  /*
+   * The CRM's activity histories (AGL-3334): a record's Activity card and
+   * the contacts landing's Recent activity feed, which share the list, and
+   * the contact's Timeline. Each pages a SLICE of its listener's window —
+   * the timeline merges sources that share no cursor, so only the merged
+   * stream can be turned — and widens the window when a page is turned past
+   * it, the way the workspace pickers grow theirs.
+   */
+  ['CRM activity list', 'libs/plugins/crm/src/lib/components/activity-list.tsx'],
+  ['CRM contact timeline', 'libs/plugins/crm/src/lib/components/contact-timeline-card.tsx'],
 ]
 
 /**
@@ -180,14 +190,6 @@ const SHARED_FOOTER: Array<[string, string]> = [
 const LOAD_MORE_ALLOWED = [
   'apps/console/components/media/media-library.component.tsx',
   'libs/plugins/commerce/src/lib/components/product-grid.tsx',
-  // The CRM's two FEEDS (AGL-2600): a record's logged activities, and the
-  // contact timeline that merges them with the facet's captured interactions.
-  // A feed is read down, not jumped into — the question it answers is "what
-  // happened lately" — and the timeline's two sources cannot share a page
-  // cursor, so each grows by one page of activities per "Show more", bounded
-  // at a hundred by `activity-queries`.
-  'libs/plugins/crm/src/lib/components/activity-list.tsx',
-  'libs/plugins/crm/src/lib/components/contact-timeline-card.tsx',
 ]
 
 /**
@@ -986,16 +988,6 @@ const NOT_A_LIST: Array<[string, string]> = [
       'would offer to page a constant the author can see in full while they ' +
       'edit it. It maps rows into itself, which is why the detector sees it: ' +
       'the map is over a parsed prop, not over documents.',
-  ],
-  [
-    'libs/plugins/crm/src/lib/components/fields-section.tsx',
-    'The organization’s custom contact field DEFINITIONS (AGL-2601) — a ' +
-      'settings table, one row per field the merchant declared, bounded by ' +
-      '`CONTACT_FIELDS_MAX_PER_ORG` (100) at the read itself: the collection ' +
-      'has no index, is read whole under that `limit()`, and is ordered in ' +
-      'memory by the stored `order` the arrows on each row move. The bound ' +
-      'is what a profile form can carry, not how long the account has ' +
-      'existed, so there is no second page for a footer to turn to.',
   ],
   [
     'libs/plugins/crm/src/lib/components/lead-source-values-card.tsx',
@@ -1869,7 +1861,11 @@ describe('a table with rows under it has a footer under those (AGL-2501)', () =>
     // new table: the org's declaration of which sites are one sender, read
     // off the org document, which cannot name more groups than half the
     // org's sites.
-    expect(NOT_A_LIST).toHaveLength(68)
+    //
+    // 67 since the CRM's field definitions joined the list table (AGL-3335):
+    // the Fields section pages, sorts, filters and searches under the grid's
+    // own footer, so its settings-table row retires.
+    expect(NOT_A_LIST).toHaveLength(67)
   })
 })
 
@@ -1983,6 +1979,8 @@ describe('CRM lists filter through the grid, by the shared path', () => {
       'companies-section.tsx',
       'contacts-section.tsx',
       'deals-section.tsx',
+      // The field definitions joined the list table (AGL-3335).
+      'fields-section.tsx',
       'leads-section.tsx',
       'tasks-section.tsx',
     ])

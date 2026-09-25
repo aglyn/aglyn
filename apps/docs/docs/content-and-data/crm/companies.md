@@ -132,7 +132,7 @@ it.
 
 ## Import from CSV
 
-**Import CSV**, above the list, takes a spreadsheet of companies — an export
+**Import CSV**, in the card's header, takes a spreadsheet of companies — an export
 from another CRM, an account list — and files each one. A company already in
 your list is **updated** rather than added twice: a row is matched to an
 existing company by its **domain** first, and by its **name** when the row has
@@ -164,7 +164,7 @@ on a plan whose band is a hard limit, rows past it are skipped as
 
 ## Export CSV
 
-**Export CSV**, above the list, downloads the companies on screen as
+**Export CSV**, in the card's header, downloads the companies on screen as
 `companies.csv`; the [bulk bar's](./bulk-actions.md#companies) **Export CSV**
 downloads the selected rows as `companies-selected.csv`. Both write the same
 file: every column above plus the **contacts** count, with the owner written as

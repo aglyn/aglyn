@@ -28,7 +28,7 @@ Three cards ignore the period on purpose. The **Pipeline**, **Forecast by
 close month** and **Tasks** cards describe what is open *now*; "the pipeline
 over the last 30 days" would be a different question.
 
-Every card with a table carries an **Export CSV** button — see
+Every card with a table carries an **Export CSV** button in its header — see
 [Exporting a table](#exporting-a-table).
 
 ## Contacts
@@ -217,7 +217,7 @@ count.
 
 Every card with a table — activity by teammate, conversion by source, the
 lead funnel, open tasks by assignee and the top open deals — has an
-**Export CSV** button beneath the table. The file holds exactly the rows on
+**Export CSV** button in the card's header. The file holds exactly the rows on
 screen, in the same order with the same names and counts, so you can check
 it against the page; it is written in your browser from what the card has
 already read and costs no further reads.

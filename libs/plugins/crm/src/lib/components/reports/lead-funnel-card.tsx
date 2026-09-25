@@ -339,15 +339,36 @@ function LeadFunnelBody(props: {
       contentGutterY
       HeaderProps={{
         action: (
-          <Button
-            component={AppLink as any}
-            {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={routes.section('leads')}
-            size="small"
-            color="primary"
-          >
-            {'Open leads'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <ReportExport
+              filename={reportFilename('lead-funnel', period)}
+              columns={COLUMNS}
+              rows={() => [
+                ...Aglyn.CRM_LEAD_STATUSES.map((leadStatus) => [
+                  'Status',
+                  Aglyn.CRM_LEAD_STATUS_LABELS[leadStatus],
+                  funnel.byStatus[leadStatus],
+                  share(funnel.byStatus[leadStatus], funnel.total) ?? '',
+                ]),
+                ...funnel.reasons.map((reason) => [
+                  'Unqualified reason',
+                  reason.label,
+                  reason.count,
+                  share(reason.count, funnel.byStatus.unqualified) ?? '',
+                ]),
+              ]}
+              disabled={!read || !funnel.total}
+            />
+            <Button
+              component={AppLink as any}
+              {...({ componentVariant: 'naked', nativeButton: false } as any)}
+              href={routes.section('leads')}
+              size="small"
+              color="primary"
+            >
+              {'Open leads'}
+            </Button>
+          </Stack>
         ),
       }}
     >
@@ -432,26 +453,12 @@ function LeadFunnelBody(props: {
             </Typography>
           ) : null}
         </Section>
-        <ReportExport
-          filename={reportFilename('lead-funnel', period)}
-          columns={COLUMNS}
-          rows={() => [
-            ...Aglyn.CRM_LEAD_STATUSES.map((leadStatus) => [
-              'Status',
-              Aglyn.CRM_LEAD_STATUS_LABELS[leadStatus],
-              funnel.byStatus[leadStatus],
-              share(funnel.byStatus[leadStatus], funnel.total) ?? '',
-            ]),
-            ...funnel.reasons.map((reason) => [
-              'Unqualified reason',
-              reason.label,
-              reason.count,
-              share(reason.count, funnel.byStatus.unqualified) ?? '',
-            ]),
-          ]}
-          disabled={!read || !funnel.total}
-          caption={caption}
-        />
+        {/* What the funnel, and so the export, is placed from when that is not everything. */}
+        {caption ? (
+          <Typography variant="caption" color="text.secondary">
+            {caption}
+          </Typography>
+        ) : null}
       </Stack>
     </CardDisplay>
   )

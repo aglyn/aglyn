@@ -60,6 +60,7 @@ import { useCrmRecordsQuota } from '../hooks/use-crm-records-quota'
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import ContactsBulkBar from './contacts-bulk-bar'
+import { CrmListActions } from './crm-list-toolbar'
 import { ContactImportButton } from './contact-import-drawer'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -889,19 +890,60 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
 
   return (
     <>
-      <CardDisplay
-        header={'Contacts'}
-        help={pluginDocsHelp('contacts', { anchor: '#the-contacts-page' })}
-        contentGutterX
-        contentGutterY
-      >
-        <Stack spacing={2}>
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-          >
-            <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+      {/*
+        The list card ends at its pager; the team's recent activity is a
+        card of its own under it, drawn only once there is some.
+      */}
+      <Stack spacing={3}>
+        <CardDisplay
+          header={'Contacts'}
+          help={pluginDocsHelp('contacts', { anchor: '#the-contacts-page' })}
+          contentGutterX
+          contentGutterY
+          HeaderProps={{
+            // The record actions, top right and never clipped (AGL-3311).
+            action: (
+              <CrmListActions>
+                {suiteIncluded ? (
+                  <ContactImportButton hostId={hostId} org={org} />
+                ) : (
+                  <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
+                )}
+                <Button
+                  size="small"
+                  onClick={handleExport}
+                  disabled={!visible.length}
+                >
+                  {'Export CSV'}
+                </Button>
+                {/* A button that opens a drawer — never a create form above the
+                    list. Disabled until the org has resolved, because the route
+                    resolves the org from the site and a click before that has
+                    nowhere to write. */}
+                {suiteIncluded ? (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    color="primary"
+                    disabled={!dataScope}
+                    onClick={() => {
+                      setCreateError(null)
+                      setCreateOpen(true)
+                    }}
+                  >
+                    {'New contact'}
+                  </Button>
+                ) : (
+                  <CrmSuiteLockedButton variant="contained" color="primary">
+                    {'New contact'}
+                  </CrmSuiteLockedButton>
+                )}
+              </CrmListActions>
+            ),
+          }}
+        >
+          <Stack spacing={2}>
+            <Typography variant="body2" color="text.secondary">
               {/* The org's audience, not the page's row count (AGL-1706) —
                   these two stopped being the same number the moment the
                   listener grew a `limit(1000)`. */}
@@ -911,247 +953,213 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   : `${quota.used.toLocaleString()} CRM records`
               }`}
             </Typography>
-            {suiteIncluded ? (
-              <ContactImportButton hostId={hostId} org={org} />
-            ) : (
-              <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
+            {suiteIncluded ? null : (
+              <CrmSuiteNotice>
+                {'Contacts arrive here on their own from your forms, sign-ups, ' +
+                  'orders and bookings. Adding one by hand, importing a CSV, ' +
+                  "saved views, and a contact's owner, stage and company are " +
+                  'part of the CRM.'}
+              </CrmSuiteNotice>
             )}
-            <Button
-              size="small"
-              onClick={handleExport}
-              disabled={!visible.length}
-            >
-              {'Export CSV'}
-            </Button>
-            {/* A button that opens a drawer — never a create form above the
-                list. Disabled until the org has resolved, because the route
-                resolves the org from the site and a click before that has
-                nowhere to write. */}
-            {suiteIncluded ? (
-              <Button
-                size="small"
-                variant="contained"
-                color="primary"
-                disabled={!dataScope}
-                onClick={() => {
-                  setCreateError(null)
-                  setCreateOpen(true)
-                }}
-              >
-                {'New contact'}
-              </Button>
+            {/*
+              The view this list is showing, and the clauses narrowing it
+              (AGL-2617). The control names the view and holds everything a
+              reader does to one; the bar holds the clauses, the seed's
+              included, with the one the query serves marked. Segments are
+              offered in the control's menu and saved from it.
+            */}
+            <Stack spacing={1}>
+              <CrmViewsControl
+                controller={views}
+                allLabel="All contacts"
+                suiteLocked={!suiteIncluded}
+                presets={segmentPresets}
+                onSaveAsSegment={
+                  segmentFilters && dataScope ? () => setSegmentName('') : null
+                }
+              />
+              <ListFilterChips
+                fields={filterFields}
+                headers={filterHeaders}
+                clauses={views.state.filters}
+                onChange={views.setFilters}
+                options={filterOptions}
+                servedField={plan.served?.field ?? null}
+              />
+            </Stack>
+            {!quota.allowed ? (
+              <Alert severity="warning">
+                {'CRM records limit reached — new visitors are no longer ' +
+                  'captured' +
+                  (droppedTotal > 0
+                    ? ` (${droppedTotal.toLocaleString()} missed so far)`
+                    : '') +
+                  '. Upgrade in Billing to keep collecting.'}
+              </Alert>
+            ) : quota.overageRecords > 0 &&
+              quota.overageRateUsd != null &&
+              // No claim about money until the verdict that decides it has
+              // settled (AGL-1662). Before Remote Config activation the flag
+              // reads its registry default, which is no org's verdict, so an
+              // ungated alert could assert the wrong wording for one paint.
+              releaseFlagsReady ? (
+              <Alert severity="info">
+                {contactsBilled
+                  ? // Same sentence as the billing page's caption, and the same
+                    // basis (AGL-2399): the count here is LIVE, the invoice
+                    // charges the last reading before the month closes, so the
+                    // dollar figure is a projection until the month ends. Staff
+                    // and customer must not read different sentences about the
+                    // same org's money — that applies to WHEN it is measured as
+                    // much as to how much.
+                    `${quota.overageRecords.toLocaleString()} CRM records over ` +
+                    `your plan's included ${quota.included.toLocaleString()} — ` +
+                    `metered at $${quota.overageRateUsd}/1,000 per month ` +
+                    `(≈$${quota.overageMonthlyUsd.toFixed(2)} if your list ends ` +
+                    'the month at this size). ' +
+                    'Upgrade in Billing for a larger included audience.'
+                  : // The wording `db5ecdf2b` put on the billing page, which is
+                    // itself the wording `1a2aed5cb` published to
+                    // `billing-and-plans/overview.md` (AGL-1601/1603). Staff and
+                    // customer must not read different sentences about the same
+                    // org's money.
+                    //
+                    // THE COUNT STAYS, THE TOTAL GOES: the head-count is real —
+                    // ingestion captured those records — and is not a claim
+                    // about money. The upgrade nudge goes with the total, since
+                    // it prompts a purchase premised on a charge that is not
+                    // happening.
+                    `${quota.overageRecords.toLocaleString()} CRM records over ` +
+                    `your plan's included ${quota.included.toLocaleString()} — ` +
+                    'not billed while the CRM is unavailable. ' +
+                    `The $${quota.overageRateUsd}/1,000 rate applies once ` +
+                    'Contacts opens.'}
+              </Alert>
+            ) : droppedTotal > 0 ? (
+              <Alert severity="info">
+                {`${droppedTotal.toLocaleString()} earlier visitor${
+                  droppedTotal === 1 ? ' was' : 's were'
+                } not captured while your CRM records band was full.`}
+              </Alert>
+            ) : null}
+            {/*
+              Unlike the band alert above, this one is NOT exclusive with the
+              others: a host can be over its band AND have refunds that landed
+              nowhere, and the two have different remedies. Chaining it into the
+              same ternary would hide whichever fact came second.
+            */}
+            {unmatchedRefundTotal > 0 ? (
+              <Alert severity="warning">
+                {`${unmatchedRefundTotal.toLocaleString()} refund${
+                  unmatchedRefundTotal === 1 ? '' : 's'
+                } could not be recorded against a contact${
+                  UNMATCHED_REFUND_REASON[unmatchedRefundReason]
+                    ? ` — most recently because ${UNMATCHED_REFUND_REASON[unmatchedRefundReason]}`
+                    : ''
+                }. The money moved; the customer's timeline does not show it.`}
+              </Alert>
+            ) : null}
+            {byForm && contactsStatus === 'error' ? (
+              <Alert severity="info">
+                {'The contacts this form captured could not be listed. Your ' +
+                  'access is limited to specific sites, and a form filter ' +
+                  'cannot be narrowed to them — an organization administrator ' +
+                  'can see it.'}
+              </Alert>
+            ) : contacts.length === 0 && !views.state.filters.length ? (
+              <EmptyStateComponent
+                label={contactsStatus === 'loading' ? 'Loading contacts…' : 'No contacts yet'}
+                description={
+                  contactsStatus === 'loading'
+                    ? undefined
+                    : suiteIncluded
+                      ? 'Form submissions, member sign-ups, orders and bookings become contacts on their own; add one by hand or bring a list in from a CSV.'
+                      : 'Form submissions, member sign-ups, orders and bookings become contacts on their own.'
+                }
+                action={
+                  contactsStatus === 'loading' ? undefined : !suiteIncluded ? (
+                    <Stack direction="row" spacing={1}>
+                      <CrmSuiteLockedButton variant="contained" color="primary">
+                        {'New contact'}
+                      </CrmSuiteLockedButton>
+                      <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
+                    </Stack>
+                  ) : (
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        color="primary"
+                        disabled={!dataScope}
+                        onClick={() => {
+                          setCreateError(null)
+                          setCreateOpen(true)
+                        }}
+                      >
+                        {'New contact'}
+                      </Button>
+                      <ContactImportButton hostId={hostId} org={org} />
+                    </Stack>
+                  )
+                }
+              />
             ) : (
-              <CrmSuiteLockedButton variant="contained" color="primary">
-                {'New contact'}
-              </CrmSuiteLockedButton>
+              <>
+                {/* Which clauses reached the whole collection and which
+                    narrowed the loaded window. Said out loud, because a control
+                    that narrows less than it looks like it does is the thing
+                    this page has been fixing. */}
+                {windowClauses.length ? (
+                  <Typography variant="caption" color="text.secondary">
+                    {(windowClauses.length === 1
+                      ? `${filterHeaders[windowClauses[0].field] ?? windowClauses[0].field} narrows `
+                      : `${windowClauses.length} of the filters narrow `) +
+                      'the loaded window — the newest 1,000 contacts' +
+                      (plan.served
+                        ? ` matching ${filterHeaders[plan.served.field] ?? plan.served.field}, which reached every contact.`
+                        : '.') +
+                      ' Sorting reorders that window.'}
+                  </Typography>
+                ) : null}
+                <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} suiteLocked={!suiteIncluded} />
+                <CrmColumnOrderProvider value={grid.columnOrder}>
+                  <ListTable
+                    rows={visible}
+                    columns={grid.columns}
+                    slots={CRM_LIST_SLOTS}
+                    selectable={{ selected: selectedIds, onChange: setSelectedIds }}
+                    onOpen={(id) => router.push(routes.contact(id))}
+                    /*
+                     * The grid's Filters panel and quick search edit the view's
+                     * clauses; the list answers them, onto the query where it
+                     * can and over the loaded window where it cannot, so the
+                     * grid must not filter again itself (AGL-3313). Opening the
+                     * panel is what reads the roster and the companies its
+                     * pickers name. Columns and sort are the view's, controlled
+                     * so a saved arrangement is what the grid shows.
+                     */
+                    filterMode="server"
+                    filterModel={gridFilter.filterModel}
+                    onFilterModelChange={gridFilter.onFilterModelChange}
+                    quickFilter
+                    onPreferencePanelOpen={() => setFilterOpened(true)}
+                    // A filter that matched nothing is said inside the grid,
+                    // so the toolbar that set it stays to change it.
+                    noRowsLabel={
+                      contactsStatus === 'loading' ? 'Loading…' : 'No contacts match these filters'
+                    }
+                    columnVisibilityModel={grid.columnVisibilityModel}
+                    onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+                    sortModel={grid.sortModel}
+                    onSortModelChange={grid.onSortModelChange}
+                  />
+                </CrmColumnOrderProvider>
+              </>
             )}
           </Stack>
-          {suiteIncluded ? null : (
-            <CrmSuiteNotice>
-              {'Contacts arrive here on their own from your forms, sign-ups, ' +
-                'orders and bookings. Adding one by hand, importing a CSV, ' +
-                "saved views, and a contact's owner, stage and company are " +
-                'part of the CRM.'}
-            </CrmSuiteNotice>
-          )}
-          {/*
-            The view this list is showing, and the clauses narrowing it
-            (AGL-2617). The control names the view and holds everything a
-            reader does to one; the bar holds the clauses, the seed's
-            included, with the one the query serves marked. Segments are
-            offered in the control's menu and saved from it.
-          */}
-          <Stack spacing={1}>
-            <CrmViewsControl
-              controller={views}
-              allLabel="All contacts"
-              suiteLocked={!suiteIncluded}
-              presets={segmentPresets}
-              onSaveAsSegment={
-                segmentFilters && dataScope ? () => setSegmentName('') : null
-              }
-            />
-            <ListFilterChips
-              fields={filterFields}
-              headers={filterHeaders}
-              clauses={views.state.filters}
-              onChange={views.setFilters}
-              options={filterOptions}
-              servedField={plan.served?.field ?? null}
-            />
-          </Stack>
-          {!quota.allowed ? (
-            <Alert severity="warning">
-              {'CRM records limit reached — new visitors are no longer ' +
-                'captured' +
-                (droppedTotal > 0
-                  ? ` (${droppedTotal.toLocaleString()} missed so far)`
-                  : '') +
-                '. Upgrade in Billing to keep collecting.'}
-            </Alert>
-          ) : quota.overageRecords > 0 &&
-            quota.overageRateUsd != null &&
-            // No claim about money until the verdict that decides it has
-            // settled (AGL-1662). Before Remote Config activation the flag
-            // reads its registry default, which is no org's verdict, so an
-            // ungated alert could assert the wrong wording for one paint.
-            releaseFlagsReady ? (
-            <Alert severity="info">
-              {contactsBilled
-                ? // Same sentence as the billing page's caption, and the same
-                  // basis (AGL-2399): the count here is LIVE, the invoice
-                  // charges the last reading before the month closes, so the
-                  // dollar figure is a projection until the month ends. Staff
-                  // and customer must not read different sentences about the
-                  // same org's money — that applies to WHEN it is measured as
-                  // much as to how much.
-                  `${quota.overageRecords.toLocaleString()} CRM records over ` +
-                  `your plan's included ${quota.included.toLocaleString()} — ` +
-                  `metered at $${quota.overageRateUsd}/1,000 per month ` +
-                  `(≈$${quota.overageMonthlyUsd.toFixed(2)} if your list ends ` +
-                  'the month at this size). ' +
-                  'Upgrade in Billing for a larger included audience.'
-                : // The wording `db5ecdf2b` put on the billing page, which is
-                  // itself the wording `1a2aed5cb` published to
-                  // `billing-and-plans/overview.md` (AGL-1601/1603). Staff and
-                  // customer must not read different sentences about the same
-                  // org's money.
-                  //
-                  // THE COUNT STAYS, THE TOTAL GOES: the head-count is real —
-                  // ingestion captured those records — and is not a claim
-                  // about money. The upgrade nudge goes with the total, since
-                  // it prompts a purchase premised on a charge that is not
-                  // happening.
-                  `${quota.overageRecords.toLocaleString()} CRM records over ` +
-                  `your plan's included ${quota.included.toLocaleString()} — ` +
-                  'not billed while the CRM is unavailable. ' +
-                  `The $${quota.overageRateUsd}/1,000 rate applies once ` +
-                  'Contacts opens.'}
-            </Alert>
-          ) : droppedTotal > 0 ? (
-            <Alert severity="info">
-              {`${droppedTotal.toLocaleString()} earlier visitor${
-                droppedTotal === 1 ? ' was' : 's were'
-              } not captured while your CRM records band was full.`}
-            </Alert>
-          ) : null}
-          {/*
-            Unlike the band alert above, this one is NOT exclusive with the
-            others: a host can be over its band AND have refunds that landed
-            nowhere, and the two have different remedies. Chaining it into the
-            same ternary would hide whichever fact came second.
-          */}
-          {unmatchedRefundTotal > 0 ? (
-            <Alert severity="warning">
-              {`${unmatchedRefundTotal.toLocaleString()} refund${
-                unmatchedRefundTotal === 1 ? '' : 's'
-              } could not be recorded against a contact${
-                UNMATCHED_REFUND_REASON[unmatchedRefundReason]
-                  ? ` — most recently because ${UNMATCHED_REFUND_REASON[unmatchedRefundReason]}`
-                  : ''
-              }. The money moved; the customer's timeline does not show it.`}
-            </Alert>
-          ) : null}
-          {byForm && contactsStatus === 'error' ? (
-            <Alert severity="info">
-              {'The contacts this form captured could not be listed. Your ' +
-                'access is limited to specific sites, and a form filter ' +
-                'cannot be narrowed to them — an organization administrator ' +
-                'can see it.'}
-            </Alert>
-          ) : contacts.length === 0 && !views.state.filters.length ? (
-            <EmptyStateComponent
-              label={contactsStatus === 'loading' ? 'Loading contacts…' : 'No contacts yet'}
-              description={
-                contactsStatus === 'loading'
-                  ? undefined
-                  : suiteIncluded
-                    ? 'Form submissions, member sign-ups, orders and bookings become contacts on their own; add one by hand or bring a list in from a CSV.'
-                    : 'Form submissions, member sign-ups, orders and bookings become contacts on their own.'
-              }
-              action={
-                contactsStatus === 'loading' ? undefined : !suiteIncluded ? (
-                  <Stack direction="row" spacing={1}>
-                    <CrmSuiteLockedButton variant="contained" color="primary">
-                      {'New contact'}
-                    </CrmSuiteLockedButton>
-                    <CrmSuiteLockedButton>{'Import CSV'}</CrmSuiteLockedButton>
-                  </Stack>
-                ) : (
-                  <Stack direction="row" spacing={1}>
-                    <Button
-                      size="small"
-                      variant="contained"
-                      color="primary"
-                      disabled={!dataScope}
-                      onClick={() => {
-                        setCreateError(null)
-                        setCreateOpen(true)
-                      }}
-                    >
-                      {'New contact'}
-                    </Button>
-                    <ContactImportButton hostId={hostId} org={org} />
-                  </Stack>
-                )
-              }
-            />
-          ) : (
-            <>
-              {/* Which clauses reached the whole collection and which
-                  narrowed the loaded window. Said out loud, because a control
-                  that narrows less than it looks like it does is the thing
-                  this page has been fixing. */}
-              {windowClauses.length ? (
-                <Typography variant="caption" color="text.secondary">
-                  {(windowClauses.length === 1
-                    ? `${filterHeaders[windowClauses[0].field] ?? windowClauses[0].field} narrows `
-                    : `${windowClauses.length} of the filters narrow `) +
-                    'the loaded window — the newest 1,000 contacts' +
-                    (plan.served
-                      ? ` matching ${filterHeaders[plan.served.field] ?? plan.served.field}, which reached every contact.`
-                      : '.') +
-                    ' Sorting reorders that window.'}
-                </Typography>
-              ) : null}
-              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} suiteLocked={!suiteIncluded} />
-              <CrmColumnOrderProvider value={grid.columnOrder}>
-                <ListTable
-                  rows={visible}
-                  columns={grid.columns}
-                  slots={CRM_LIST_SLOTS}
-                  selectable={{ selected: selectedIds, onChange: setSelectedIds }}
-                  onOpen={(id) => router.push(routes.contact(id))}
-                  /*
-                   * The grid's Filters panel and quick search edit the view's
-                   * clauses; the list answers them, onto the query where it
-                   * can and over the loaded window where it cannot, so the
-                   * grid must not filter again itself (AGL-3313). Opening the
-                   * panel is what reads the roster and the companies its
-                   * pickers name. Columns and sort are the view's, controlled
-                   * so a saved arrangement is what the grid shows.
-                   */
-                  filterMode="server"
-                  filterModel={gridFilter.filterModel}
-                  onFilterModelChange={gridFilter.onFilterModelChange}
-                  quickFilter
-                  onPreferencePanelOpen={() => setFilterOpened(true)}
-                  // A filter that matched nothing is said inside the grid,
-                  // so the toolbar that set it stays to change it.
-                  noRowsLabel={
-                    contactsStatus === 'loading' ? 'Loading…' : 'No contacts match these filters'
-                  }
-                  columnVisibilityModel={grid.columnVisibilityModel}
-                  onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-                  sortModel={grid.sortModel}
-                  onSortModelChange={grid.onSortModelChange}
-                />
-              </CrmColumnOrderProvider>
-            </>
-          )}
-          <RecentActivityFeed hostId={hostId} org={org} basePath={props.basePath} />
-        </Stack>
-      </CardDisplay>
+        </CardDisplay>
+        <RecentActivityFeed hostId={hostId} org={org} basePath={props.basePath} />
+      </Stack>
       {/*
         Naming a segment is a dialog, never a form above the list. Open
         while the name is a string; `null` is closed.

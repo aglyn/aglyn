@@ -216,15 +216,32 @@ export function TasksCard(props: TasksCardProps) {
       contentGutterY
       HeaderProps={{
         action: (
-          <Button
-            component={AppLink as any}
-            {...({ componentVariant: 'naked', nativeButton: false } as any)}
-            href={routes.section('tasks')}
-            size="small"
-            color="primary"
-          >
-            {'Open tasks'}
-          </Button>
+          <Stack direction="row" spacing={1}>
+            <ReportExport
+              filename={reportFilename('tasks-by-assignee')}
+              columns={ASSIGNEE_COLUMNS}
+              rows={() =>
+                load.map((row) => [
+                  assigneeName(row),
+                  row.overdue,
+                  row.today,
+                  row.upcoming,
+                  row.undated,
+                  row.open,
+                ])
+              }
+              disabled={tasksStatus !== 'success' || !load.length}
+            />
+            <Button
+              component={AppLink as any}
+              {...({ componentVariant: 'naked', nativeButton: false } as any)}
+              href={routes.section('tasks')}
+              size="small"
+              color="primary"
+            >
+              {'Open tasks'}
+            </Button>
+          </Stack>
         ),
       }}
     >
@@ -288,26 +305,12 @@ export function TasksCard(props: TasksCardProps) {
               {tasksStatus === 'loading' ? 'Reading…' : 'No open tasks.'}
             </Typography>
           )}
-          <ReportExport
-            filename={reportFilename('tasks-by-assignee')}
-            columns={ASSIGNEE_COLUMNS}
-            rows={() =>
-              load.map((row) => [
-                assigneeName(row),
-                row.overdue,
-                row.today,
-                row.upcoming,
-                row.undated,
-                row.open,
-              ])
-            }
-            disabled={tasksStatus !== 'success' || !load.length}
-            caption={
-              taskWindow.truncated
-                ? `Grouped from the ${OPEN_TASK_CEILING.toLocaleString()} soonest-due open tasks; the tiles are counted on the server.`
-                : undefined
-            }
-          />
+          {/* What the table, and so the export, is grouped from when that is not everything. */}
+          {taskWindow.truncated ? (
+            <Typography variant="caption" color="text.secondary">
+              {`Grouped from the ${OPEN_TASK_CEILING.toLocaleString()} soonest-due open tasks; the tiles are counted on the server.`}
+            </Typography>
+          ) : null}
         </Section>
       </Stack>
     </CardDisplay>

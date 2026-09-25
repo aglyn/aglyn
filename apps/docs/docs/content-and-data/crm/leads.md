@@ -267,24 +267,26 @@ alone; the contact, when there is one, is assigned from its own record.
 
 ## A lead's page
 
-Click a row to open the lead. The page has three cards.
+Click a row to open the lead.
 
-**Lead** holds what the team decides: the status, the owner, the lead's
-**profile** — company, job title, phone, website, lead source, tags and
-address, with any [custom lead fields](./custom-fields.md) under it, all edited
-together under one **Save** — and free-text **notes** with a
-**Save notes** button. It also shows the identity the capture recorded —
-email and name — and the person's **marketing consent**: whether they opted
-in (and when), declined, or never recorded a choice. Once the lead converts,
-the profile is read-only here: the contact is the record then. A lead with no recorded
-consent cannot be sent marketing email, which is worth knowing before you
-promise them a newsletter. The card's header carries **Call** and **Log a
-call** beside **Send email** — see
-[click to call](./activities.md#click-to-call). Beside the status, the
-header names every campaign the lead is filed under.
+**Lead** holds what the team decides: the status and the owner. It also shows
+the identity the capture recorded — email and name — and the person's
+**marketing consent**: whether they opted in (and when), declined, or never
+recorded a choice. A lead with no recorded consent cannot be sent marketing
+email, which is worth knowing before you promise them a newsletter. The card's
+header carries **Convert**, **Call** and **Log a call** beside **Send email** — see
+[click to call](./activities.md#click-to-call) — and, once the lead converts,
+**Open contact**, **Open company** and **Open deal** in place of **Convert**.
+Beside the status, the header names every campaign the lead is filed under.
+
+**Details** is the lead's **profile** — company, job title, phone, website,
+lead source, tags and address — with any [custom lead fields](./custom-fields.md)
+under **More fields**, and free-text **notes**, all saved together by the one
+**Save** in the card's header. Once the lead converts, the profile is read-only
+here, because the contact is the record then; the notes can still be written.
 
 **Campaigns** is the filing: **Filed under campaigns** offers the site's
-campaigns by name, and **Save filing** writes the pick. It is your own
+campaigns by name, and **Save filing** in the card's header writes the pick. It is your own
 grouping — it never adds anyone to a send, because a campaign mails its
 lists — and it is the same picker the contact's Relationship card carries,
 so a lead and the contact it becomes are filed the same way.

@@ -30,19 +30,19 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser, useUserName } from '@aglyn/tenant-feature-instance'
-import {
-  Button,
-  Chip,
-  IconButton,
-  Stack,
-  Tooltip,
-  Typography,
-} from '@mui/material'
+import { Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material'
 import { deleteDoc, doc } from 'firebase/firestore'
-import { type ReactNode, useCallback } from 'react'
+import { type ReactNode, useCallback, useState } from 'react'
 import { type ActivityScope, useCanEditActivity } from './activity-queries'
+import {
+  TimelineEntry,
+  type TimelineExpansion,
+  useTimelineExpansion,
+  useTimelinePages,
+} from './activity-timeline'
 
 /**
  * One glyph per kind. Typed against the union so a kind added to the list
@@ -92,6 +92,33 @@ export function useActivityAuthorName(): (
   )
 }
 
+/**
+ * How long a note's own words may run on a collapsed row before it opens to
+ * the rest; a single line under this reads whole, with nothing to open.
+ */
+const ACTIVITY_HEADING_MAX = 80
+
+/**
+ * What a collapsed activity reads as, and whether opening it shows more.
+ *
+ * A subject is the heading and the body is what the row opens to. With no
+ * subject the body's first line is the heading, and a body that runs past
+ * that line, or past what one line holds, opens to the whole text.
+ */
+export function activityHeading(activity: Pick<CrmActivityRow, 'subject' | 'body'>): {
+  heading: string
+  opens: boolean
+} {
+  const body = typeof activity.body === 'string' ? activity.body.trim() : ''
+  const subject = typeof activity.subject === 'string' ? activity.subject.trim() : ''
+  if (subject) return { heading: subject, opens: body !== '' }
+  const firstLine = body.split('\n').find((line) => line.trim() !== '')?.trim() ?? ''
+  return {
+    heading: firstLine,
+    opens: body !== firstLine || firstLine.length > ACTIVITY_HEADING_MAX,
+  }
+}
+
 /** "45 min" or "2 h 05 min" — a duration a manager reads at a glance. */
 function durationLabel(minutes: number): string {
   if (minutes < 60) return `${minutes} min`
@@ -120,12 +147,23 @@ export interface ActivityRowProps {
    * itself would read the member document once per row.
    */
   editable?: boolean
+  /**
+   * Whether the row is open to its body. The list holds it so the card's
+   * "Expand all" reaches every row; a row drawn alone holds its own.
+   */
+  expanded?: boolean
+  onToggle?: () => void
 }
 
 /**
  * One logged activity: the kind's icon and label, what was said, how it
  * went, who logged it and how long ago — with edit and delete for whoever
  * may (AGL-2600).
+ *
+ * Collapsed, the row is its chips, its heading and its caption: the kind,
+ * the direction and delivery state, how a call went, the subject or the
+ * note's first line, and who, to or from whom, and when. Opened, it shows
+ * the body — an email's whole text, a note's every line.
  *
  * Edit and delete appear only when `editable` says this reader may — the
  * author or an org-wide member. That is the console's verdict and not the
@@ -135,6 +173,9 @@ export interface ActivityRowProps {
  */
 export function ActivityRow(props: ActivityRowProps) {
   const { activity, scope, onEdit, subject, nowMs, editable } = props
+  const [ownExpanded, setOwnExpanded] = useState(false)
+  const expanded = props.expanded ?? ownExpanded
+  const onToggle = props.onToggle ?? (() => setOwnExpanded((open) => !open))
   const { firestore, dataScope } = scope
   const authorName = useActivityAuthorName()
   const { confirm } = useConfirmationContext()
@@ -210,27 +251,23 @@ export function ActivityRow(props: ActivityRowProps) {
       : null,
   ].filter(Boolean)
 
+  const { heading, opens } = activityHeading(activity)
+  const hasSubject = typeof activity.subject === 'string' && activity.subject.trim() !== ''
+
   return (
-    <Stack direction="row" spacing={1.5} sx={{ alignItems: 'flex-start' }}>
-      <Stack
-        sx={{
-          color: 'text.secondary',
-          pt: 0.25,
-          fontSize: (theme) => theme.typography.h6.fontSize,
-        }}
-      >
-        {received ? (
+    <TimelineEntry
+      icon={
+        received ? (
           <MdiIcon path={mdiEmailReceiveOutline.path} />
         ) : (
           <ActivityKindIcon kind={activity.kind} />
-        )}
-      </Stack>
-      <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
-        >
+        )
+      }
+      label={heading || label.toLowerCase()}
+      expanded={expanded}
+      onToggle={onToggle}
+      chips={
+        <>
           <Chip label={label} size="small" />
           {received ? (
             <Chip
@@ -271,13 +308,13 @@ export function ActivityRow(props: ActivityRowProps) {
               {detail.join(' · ')}
             </Typography>
           ) : null}
-        </Stack>
-        {activity.subject ? (
-          <Typography variant="subtitle2">{activity.subject}</Typography>
-        ) : null}
-        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-          {activity.body}
-        </Typography>
+        </>
+      }
+      // With no subject the heading IS the body's first line, so an open
+      // row shows the body alone rather than its first line twice.
+      title={hasSubject || !opens || !expanded ? heading : null}
+      titleVariant={hasSubject ? 'subtitle2' : 'body2'}
+      meta={
         <Tooltip title={when.toLocaleString()}>
           <Typography
             variant="caption"
@@ -294,28 +331,37 @@ export function ActivityRow(props: ActivityRowProps) {
               .join(' · ')}
           </Typography>
         </Tooltip>
-      </Stack>
-      {editable ? (
-        <Stack direction="row" spacing={0.5}>
-          {onEdit && !sent && !received ? (
+      }
+      body={
+        opens ? (
+          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+            {activity.body}
+          </Typography>
+        ) : undefined
+      }
+      actions={
+        editable ? (
+          <>
+            {onEdit && !sent && !received ? (
+              <IconButton
+                size="small"
+                aria-label="Edit activity"
+                onClick={() => onEdit(activity)}
+              >
+                <MdiIcon path={mdiPencilOutline.path} size={0.8} />
+              </IconButton>
+            ) : null}
             <IconButton
               size="small"
-              aria-label="Edit activity"
-              onClick={() => onEdit(activity)}
+              aria-label="Delete activity"
+              onClick={handleDelete}
             >
-              <MdiIcon path={mdiPencilOutline.path} size={0.8} />
+              <MdiIcon path={mdiDeleteOutline.path} size={0.8} />
             </IconButton>
-          ) : null}
-          <IconButton
-            size="small"
-            aria-label="Delete activity"
-            onClick={handleDelete}
-          >
-            <MdiIcon path={mdiDeleteOutline.path} size={0.8} />
-          </IconButton>
-        </Stack>
-      ) : null}
-    </Stack>
+          </>
+        ) : null
+      }
+    />
   )
 }
 ActivityRow.displayName = 'ActivityRow'
@@ -329,9 +375,11 @@ export interface ActivityListProps {
   emptyText?: string
   /** The way out of an empty list — the record's "Log activity" button. */
   emptyAction?: ReactNode
-  /** A further page exists; `onShowMore` widens the window. */
+  /** The listener holds less than exists; `onShowMore` widens it. */
   hasMore?: boolean
   onShowMore?: () => void
+  /** The listener is reading, so an empty window is not yet an empty log. */
+  loading?: boolean
   /** The record each row is about, for a list that spans records. */
   subjectFor?: (activity: CrmActivityRow) => ReactNode
   /**
@@ -341,16 +389,22 @@ export interface ActivityListProps {
    * corrected, beside everything else about it.
    */
   readOnly?: boolean
+  /**
+   * Which rows are open, held by the card so its header's "Expand all"
+   * reaches them. A list with no header control holds its own.
+   */
+  expansion?: TimelineExpansion
 }
 
 /**
- * A newest-first list of logged activities with a "show more" foot
- * (AGL-2600).
+ * A newest-first list of logged activities, collapsed to one entry each and
+ * paged by the console's shared footer (AGL-2600).
  *
  * The rows arrive ordered — the query is `orderBy('atMs', 'desc')` — and the
  * list does not sort them again; a second sort here is a second place for
- * the order to be defined. The foot appears only while the probe row says
- * more exists, so it never leads nowhere.
+ * the order to be defined. The footer pages the window the listener holds,
+ * and a page turned past it widens the listener while the probe row says
+ * more exists (`useTimelinePages`).
  *
  * Who may edit is decided here, once, and handed to every row: the verdict
  * reads the member document, and the list is the one place that can ask
@@ -365,12 +419,22 @@ export function ActivityList(props: ActivityListProps) {
     emptyAction,
     hasMore,
     onShowMore,
+    loading,
     subjectFor,
     readOnly,
   } = props
   const canEdit = useCanEditActivity(scope.orgId, !readOnly)
+  const ownExpansion = useTimelineExpansion()
+  const expansion = props.expansion ?? ownExpansion
+  const pages = useTimelinePages(rows.length, { hasMore, showMore: onShowMore, loading })
+  // One clock for every row of one paint.
+  const nowMs = Date.now()
   if (!rows.length) {
-    return (
+    return loading ? (
+      <Typography variant="body2" color="text.secondary">
+        {'Loading…'}
+      </Typography>
+    ) : (
       <EmptyStateComponent
         compact
         label={'Nothing logged yet'}
@@ -381,21 +445,20 @@ export function ActivityList(props: ActivityListProps) {
   }
   return (
     <Stack spacing={2}>
-      {rows.map((activity) => (
+      {pages.slice(rows).map((activity) => (
         <ActivityRow
           key={activity.$id}
           activity={activity}
           scope={scope}
           onEdit={onEdit}
           subject={subjectFor?.(activity)}
+          nowMs={nowMs}
           editable={canEdit(activity)}
+          expanded={expansion.isExpanded(activity.$id)}
+          onToggle={() => expansion.toggle(activity.$id)}
         />
       ))}
-      {hasMore && onShowMore ? (
-        <Button size="small" onClick={onShowMore} sx={{ alignSelf: 'flex-start' }}>
-          {'Show more'}
-        </Button>
-      ) : null}
+      <ListPagination {...pages.footer} />
     </Stack>
   )
 }

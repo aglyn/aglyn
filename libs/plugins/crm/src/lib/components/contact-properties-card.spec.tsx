@@ -24,9 +24,13 @@
  * that leaves the stage alone never calls it; a refused stage is reported in
  * the route's own sentence after the fields that did save; and on a plan
  * without the CRM suite the owner, the stage and the company are not sent.
+ *
+ * The org's custom fields sit in the same card under "More fields" and save
+ * with the profile (AGL-3334): only the keys that changed, in the same one
+ * request, from the one Save in the card header.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { soloConsentGroup } from '@aglyn/aglyn'
 import type { ContactRecord } from '../model/contact-record'
@@ -67,6 +71,21 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostActivityLogger: () => jest.fn(),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+}))
+
+/*
+ * The org's custom contact fields (AGL-2601), which the real hook reads off
+ * a live listen. The controls under them stay real: which values Save sends
+ * is the point, and a doubled control would prove nothing about that.
+ */
+const definitionsFor = jest.fn((..._args: unknown[]) => ({
+  definitions: [] as unknown[],
+  active: [] as unknown[],
+  ready: true,
+  fromCache: false,
+}))
+jest.mock('../hooks/use-contact-field-definitions', () => ({
+  useContactFieldDefinitions: (...args: unknown[]) => definitionsFor(...args),
 }))
 
 /*
@@ -130,8 +149,8 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
     HeaderProps?: { action?: ReactNode }
   }) => (
     <div>
-      {HeaderProps?.action}
-      {children}
+      <div data-testid="card-header">{HeaderProps?.action}</div>
+      <div data-testid="card-body">{children}</div>
     </div>
   ),
 }))
@@ -175,6 +194,7 @@ function renderCard(seeded: Partial<ContactRecord> = {}, suiteLocked = false) {
   return render(
     <ContactPropertiesCard
       hostId="host-1"
+      orgId="org-1"
       record={{ ...record, ...seeded }}
       consentGroup={GROUP}
       seed={{ status: 'success', fromCache: false }}
@@ -190,7 +210,9 @@ const pickStage = (label: string) => {
 }
 const typeJobTitle = (value: string) =>
   fireEvent.change(screen.getByLabelText('Job title'), { target: { value } })
-const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+const header = () => within(screen.getByTestId('card-header'))
+const saveButton = () => header().getByRole('button', { name: 'Save' }) as HTMLButtonElement
+const save = () => fireEvent.click(saveButton())
 const profileSaves = () => posted.filter((call) => call.route === 'contact-update')
 
 beforeEach(() => {
@@ -199,6 +221,7 @@ beforeEach(() => {
   notices = []
   posted = []
   refuseSave = null
+  definitionsFor.mockReturnValue({ definitions: [], active: [], ready: true, fromCache: false })
   setContactStage.mockReset()
   setContactStage.mockResolvedValue({
     ok: true,
@@ -339,5 +362,89 @@ describe('a save that leaves the stage alone', () => {
       expect(notices).toContainEqual({ message: 'Contact saved', variant: 'success' }),
     )
     expect(setContactStage).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * THE CUSTOM FIELDS, IN THE PROPERTIES CARD (AGL-2601, AGL-3334).
+ *
+ * A value lives under the holder's facet, and a facet is the server's to
+ * write: the one Save sends the changed keys alone, beside the profile, in
+ * the same request to `crm/contact-update` — never a `custom` map whole,
+ * which would take out every key the card did not touch.
+ */
+describe('the custom fields', () => {
+  const tier = { $id: 'f-tier', key: 'tier', label: 'Tier', type: 'text', order: 1 }
+  const withTier = (extra: Record<string, unknown> = {}) =>
+    definitionsFor.mockReturnValue({
+      definitions: [{ ...tier, ...extra }],
+      active: [{ ...tier, ...extra }],
+      ready: true,
+      fromCache: false,
+    })
+
+  it('asks for the CONTACT definitions of the record’s org', () => {
+    renderCard()
+    expect(definitionsFor).toHaveBeenLastCalledWith('org-1')
+  })
+
+  it('draws no More fields subsection while the org defines none', () => {
+    renderCard()
+    expect(screen.queryByText('More fields')).toBeNull()
+  })
+
+  it('draws them under More fields, after the built-in ones, seeded from this holder', () => {
+    withTier()
+    renderCard({ custom: { tier: 'gold' } } as Partial<ContactRecord>)
+    const body = screen.getByTestId('card-body').textContent ?? ''
+    expect(body.indexOf('More fields')).toBeGreaterThan(body.indexOf('About'))
+    expect((screen.getByLabelText('Tier') as HTMLInputElement).value).toBe('gold')
+  })
+
+  it('saves only the changed key, with the profile, in one request from the header', async () => {
+    withTier()
+    renderCard({ custom: { tier: 'gold', region: 'west' } } as Partial<ContactRecord>)
+    expect(saveButton().disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('Tier'), { target: { value: 'platinum' } })
+    expect(saveButton().disabled).toBe(false)
+    save()
+    await waitFor(() =>
+      expect(notices).toContainEqual({ message: 'Contact saved', variant: 'success' }),
+    )
+    expect(profileSaves()).toHaveLength(1)
+    const set = profileSaves()[0].payload['set']
+    expect(set['custom']).toEqual({ tier: 'platinum' })
+    expect(set).toMatchObject({ jobTitle: 'Owner', tags: ['wholesale'] })
+    expect(writes).toEqual([])
+  })
+
+  it('refuses a required field left empty, and sends nothing', () => {
+    withTier({ required: true })
+    renderCard({ custom: { tier: 'gold' } } as Partial<ContactRecord>)
+    fireEvent.change(screen.getByLabelText(/Tier/), { target: { value: '' } })
+    expect(screen.getByText('A required field cannot be left empty.')).toBeTruthy()
+    expect(saveButton().disabled).toBe(true)
+    save()
+    expect(profileSaves()).toHaveLength(0)
+  })
+
+  it('discards every unsaved edit from the header', () => {
+    withTier()
+    renderCard({ custom: { tier: 'gold' } } as Partial<ContactRecord>)
+    expect(header().queryByRole('button', { name: 'Discard changes' })).toBeNull()
+    fireEvent.change(screen.getByLabelText('Tier'), { target: { value: 'platinum' } })
+    typeJobTitle('Head roaster')
+    fireEvent.click(header().getByRole('button', { name: 'Discard changes' }))
+    expect((screen.getByLabelText('Tier') as HTMLInputElement).value).toBe('gold')
+    expect((screen.getByLabelText('Job title') as HTMLInputElement).value).toBe('Owner')
+    expect(saveButton().disabled).toBe(true)
+  })
+
+  it('draws none and reads none on a plan without the CRM', () => {
+    withTier()
+    renderCard({ custom: { tier: 'gold' } } as Partial<ContactRecord>, true)
+    expect(definitionsFor).toHaveBeenLastCalledWith(null)
+    expect(screen.queryByText('More fields')).toBeNull()
+    expect(screen.queryByLabelText('Tier')).toBeNull()
   })
 })

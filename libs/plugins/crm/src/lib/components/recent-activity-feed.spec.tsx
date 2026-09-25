@@ -29,10 +29,13 @@
  *     for nothing.
  *  3. Draw nothing at all when nothing has been logged — an empty heading on
  *     the landing is a promise about a feature the reader has not used.
+ *
+ * And, since AGL-3334, be a card of its own whose rows are collapsed to one
+ * line each, opened one at a time or all at once from the card header.
  */
 
 import { useScopeTokens } from '@aglyn/tenant-feature-instance'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { RecentActivityFeed } from './recent-activity-feed'
 
@@ -65,7 +68,8 @@ const activityRows = [
   {
     $id: 'act-3',
     kind: 'note',
-    body: 'Moved offices',
+    subject: 'Moved offices',
+    body: 'The new address is on the company record.',
     atMs: 2_000,
     byUid: 'u-2',
     byName: 'Grace Hopper',
@@ -116,6 +120,21 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ href, children }: { href: string; children: ReactNode }) => (
     <a href={href}>{children}</a>
   ),
+  CardDisplay: ({
+    header,
+    HeaderProps,
+    children,
+  }: {
+    header: ReactNode
+    HeaderProps?: { action?: ReactNode }
+    children: ReactNode
+  }) => (
+    <section aria-label={String(header)}>
+      <h2>{header}</h2>
+      <div data-testid="card-header">{HeaderProps?.action}</div>
+      {children}
+    </section>
+  ),
   MdiIcon: () => null,
   useConfirmationContext: () => ({
     confirm: jest.fn().mockResolvedValue(undefined),
@@ -153,6 +172,21 @@ describe('RecentActivityFeed (AGL-2600)', () => {
     const asked = (useScopeTokens as jest.Mock).mock.calls.map(([orgId]) => orgId)
     expect(asked.length).toBeGreaterThan(0)
     expect(asked.every((orgId) => orgId === undefined)).toBe(true)
+  })
+
+  it('is a card of its own, its rows collapsed and opened from the header (AGL-3334)', () => {
+    renderFeed()
+    expect(screen.getByRole('region', { name: 'Recent activity' })).toBeTruthy()
+    // Collapsed: the subject and who logged it, not the note under it.
+    expect(screen.getByText('Moved offices')).toBeTruthy()
+    expect(screen.getAllByText(/Grace Hopper/)).toHaveLength(2)
+    expect(screen.queryByText('The new address is on the company record.')).toBeNull()
+    fireEvent.click(
+      within(screen.getByTestId('card-header')).getByRole('button', { name: 'Expand all' }),
+    )
+    expect(screen.getByText('The new address is on the company record.')).toBeTruthy()
+    // One page, and the footer says so.
+    expect(screen.getByText('1–3 of 3')).toBeTruthy()
   })
 
   it('draws nothing when nothing has been logged yet', () => {

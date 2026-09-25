@@ -26,7 +26,7 @@
  * any request leaves.
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { soloConsentGroup } from '@aglyn/aglyn'
 import type { ContactRecord } from '../model/contact-record'
@@ -83,8 +83,25 @@ jest.mock('@aglyn/shared-ui-email-campaigns/components/campaign-picker.component
 
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   AppLink: ({ children }: { children: ReactNode }) => <a>{children}</a>,
-  CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CardDisplay: ({
+    children,
+    HeaderProps,
+  }: {
+    children: ReactNode
+    HeaderProps?: { action?: ReactNode }
+  }) => (
+    <div>
+      <div data-testid="card-header">{HeaderProps?.action}</div>
+      <div data-testid="card-body">{children}</div>
+    </div>
+  ),
 }))
+
+/** Save filing, which is the card's action and sits in its header (AGL-3334). */
+const saveFiling = () => {
+  expect(within(screen.getByTestId('card-body')).queryByRole('button', { name: 'Save filing' })).toBeNull()
+  return within(screen.getByTestId('card-header')).getByRole('button', { name: 'Save filing' })
+}
 
 let notices: string[]
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
@@ -141,7 +158,7 @@ describe('saving the filing', () => {
   it('files the person through crm/contact-update, and writes nothing client-direct', async () => {
     renderCard()
     fireEvent.click(screen.getByRole('button', { name: 'File under Spring push' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save filing' }))
+    fireEvent.click(saveFiling())
     await waitFor(() => expect(notices).toContain('Filing saved'))
     expect(posted).toEqual([
       {
@@ -155,7 +172,7 @@ describe('saving the filing', () => {
   it('sends nothing over a read the server never confirmed', async () => {
     renderCard({ status: 'success', fromCache: true })
     fireEvent.click(screen.getByRole('button', { name: 'File under Spring push' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Save filing' }))
+    fireEvent.click(saveFiling())
     await waitFor(() => expect(notices).toHaveLength(1))
     expect(notices[0]).toMatch(/reload/i)
     expect(posted).toEqual([])

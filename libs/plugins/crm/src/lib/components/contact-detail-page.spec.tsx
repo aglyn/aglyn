@@ -48,10 +48,6 @@ jest.mock('./contact-associations-card', () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => double('associations')(props),
 }))
-jest.mock('./contact-custom-fields-card', () => ({
-  __esModule: true,
-  default: (props: Record<string, unknown>) => double('custom-fields')(props),
-}))
 jest.mock('./contact-duplicates-card', () => ({
   __esModule: true,
   default: (props: Record<string, unknown>) => double('duplicates')(props),
@@ -195,7 +191,8 @@ const renderPage = (org: Record<string, unknown>) =>
     />,
   )
 
-const SUITE_CARDS = ['custom-fields', 'deals', 'tasks', 'files']
+// The custom fields are the properties card's own (AGL-3334), locked with it.
+const SUITE_CARDS = ['deals', 'tasks', 'files']
 
 beforeEach(() => {
   for (const key of Object.keys(handed)) delete handed[key]
