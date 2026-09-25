@@ -259,6 +259,25 @@ describe('every Outreach read asks the entitlement, and no client writes (AGL-29
     },
   )
 
+  it.each([
+    // The per-destination click rollup under a sequence (AGL-3239).
+    ['outreachSequences', 'sequenceId', 'reports', 'reportId'],
+    // One person's history under an enrollment (AGL-3332).
+    ['outreachEnrollments', 'enrollmentId', 'history', 'entryId'],
+  ])(
+    '%s/%s/%s reads through canReadOutreach and denies every write',
+    (parent, parentId, name, id) => {
+      const block = rawBlockBody(
+        rawBlockBody(orgs, `match /${parent}/<${parentId}> {`),
+        `match /${name}/<${id}> {`,
+      )
+      expect(allowStatement(block, 'read')).toBe(
+        'allow read: if canReadOutreach()',
+      )
+      expect(allowStatement(block, 'write')).toBe('allow write: if false')
+    },
+  )
+
   it('closes outreachMailboxCredentials to every client', () => {
     const block = rawBlockBody(
       RULES,

@@ -420,6 +420,24 @@ export function ListTable(props: ListTableProps) {
           : undefined
       }
       /*
+       * ENTER OPENS IT TOO. The grid moves focus cell by cell with the arrow
+       * keys, and a row a mouse can open must open from the keyboard as
+       * well. Only when the CELL itself holds focus: Enter on a link or a
+       * button inside one is that control's, and neither the actions cell
+       * nor the grid's own columns (the selection checkbox) open the record.
+       */
+      onCellKeyDown={
+        onOpen
+          ? (params, event) => {
+              if (event.key !== 'Enter') return
+              if (params.field === LIST_ACTIONS_FIELD || params.field.startsWith('__')) return
+              if (event.target !== event.currentTarget) return
+              event.defaultMuiPrevented = true
+              onOpen(String(params.id), params.row)
+            }
+          : undefined
+      }
+      /*
        * The list GROWS; the PAGE scrolls.
        *
        * `DataTableComponent` gives its wrapper a fixed `height: 400`, which

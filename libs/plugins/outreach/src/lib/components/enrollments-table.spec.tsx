@@ -22,6 +22,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import type {
   OutreachEnrollment,
   OutreachSequenceStep,
@@ -110,7 +111,10 @@ const loaded = (
 
 let api: jest.Mocked<Pick<OutreachApi, 'actOnEnrollment' | 'curateDrafts' | 'saveCuratedStep'>>
 
-const renderTable = (enrollments: OutreachEnrollmentsLoad) =>
+const renderTable = (
+  enrollments: OutreachEnrollmentsLoad,
+  extra: Partial<ComponentProps<typeof OutreachEnrollmentsTable>> = {},
+) =>
   render(
     <OutreachEnrollmentsTable
       enrollments={enrollments}
@@ -118,6 +122,7 @@ const renderTable = (enrollments: OutreachEnrollmentsLoad) =>
       timeZone="America/Chicago"
       api={api as unknown as OutreachApi}
       enrollAction={<button>Enroll people</button>}
+      {...extra}
     />,
   )
 
@@ -206,9 +211,10 @@ describe('the enrollments table: what it shows (AGL-2980)', () => {
     expect(within(casey).getByText(/Sep 22, 9:14 AM CDT/)).toBeTruthy()
     const avery = rowOf('avery.quinn@example.org')
     expect(within(avery).getByText('Opted out')).toBeTruthy()
-    expect(
-      within(avery).getByText('On the do-not-contact list — Asked on a call'),
-    ).toBeTruthy()
+    // The reason whole, never cut off: its short label in the cell, and every
+    // word of it on hover (AGL-3332).
+    const reason = within(avery).getByText('On the do-not-contact list')
+    expect(reason.getAttribute('title')).toBe('On the do-not-contact list — Asked on a call')
   })
 
   it('says where a finished person is, and why a stopped one stopped', () => {
@@ -387,5 +393,83 @@ describe('curating the next step (AGL-3324)', () => {
     expect(within(rowOf('Casey Morgan')).getByText('Curated')).toBeTruthy()
     open('Jordan Lee')
     expect(screen.queryByRole('menuitem', { name: 'Curate next step' })).toBeNull()
+  })
+})
+
+describe('each row opens the person’s page (AGL-3332)', () => {
+  it('opens from a click on the row and from Enter on it, and never from the row’s menu', () => {
+    const onOpen = jest.fn()
+    renderTable(loaded([enrollment({})]), { onOpen })
+    const row = rowOf('Casey Morgan')
+    fireEvent.click(within(row).getByRole('button', { name: /More actions|Actions/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pause' }))
+    expect(onOpen).not.toHaveBeenCalled()
+    fireEvent.click(within(row).getByText('Step 2 of 3 · Call'))
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'seq-1_c-1' }))
+    onOpen.mockClear()
+    fireEvent.keyDown(screen.getByRole('gridcell', { name: /Casey Morgan/ }), { key: 'Enter' })
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'seq-1_c-1' }))
+  })
+})
+
+describe('the Clicks column counts, and the click filters (AGL-3332)', () => {
+  const clicked = (id: string, name: string, engagement: Record<string, unknown>) =>
+    enrollment({ id, contactId: id, contactName: name, email: `${id}@example.com`, engagement } as never)
+  const people = [
+    // Two clicks, both listed one by one, on one destination.
+    clicked('c-1', 'Casey Morgan', {
+      clicks: 2,
+      machineClicks: 1,
+      lastClickUrl: 'https://calendar.example.com/book',
+      links: ['https://calendar.example.com/book'],
+      loggedClicks: 2,
+      loggedMachineClicks: 1,
+    }),
+    // Clicks from before the history, which kept only the last link.
+    clicked('c-2', 'Jordan Lee', { clicks: 3, lastClickUrl: 'https://aglyn.com/pricing' }),
+    enrollment({ id: 'c-3', contactId: 'c-3', contactName: 'Avery Quinn', email: 'avery@example.com' }),
+  ]
+
+  it('shows the count and the distinct links, never the destination itself', () => {
+    renderTable(loaded(people), { trackClicks: true })
+    expect(within(rowOf('Casey Morgan')).getByText('2 · 1 link')).toBeTruthy()
+    // How many links three unlisted clicks went to is not known, so only the count is said.
+    expect(within(rowOf('Jordan Lee')).getByText('3')).toBeTruthy()
+    expect(screen.queryByText('https://calendar.example.com/book')).toBeNull()
+  })
+
+  it('narrows to the people who clicked, and to those who followed one destination', () => {
+    const view = renderTable(loaded(people), {
+      trackClicks: true,
+      clauses: [{ field: 'clicked', op: 'equals', value: 'yes' }],
+    })
+    const grid = () => screen.getByRole('grid', { name: 'Enrollments' }).textContent
+    expect(grid()).toContain('Casey Morgan')
+    expect(grid()).toContain('Jordan Lee')
+    expect(grid()).not.toContain('Avery Quinn')
+    expect(screen.getByRole('list', { name: 'Filters' }).textContent).toContain('Clicked is Yes')
+    view.unmount()
+
+    renderTable(loaded(people), {
+      trackClicks: true,
+      clauses: [{ field: 'link', op: 'equals', value: 'https://aglyn.com/pricing' }],
+    })
+    expect(grid()).toContain('Jordan Lee')
+    expect(grid()).not.toContain('Casey Morgan')
+    // Jordan's earlier clicks kept only the last link, and the list says what that can miss.
+    expect(screen.getByText(/kept only the person’s last link/)).toBeTruthy()
+  })
+
+  it('hands every clause change to the page that holds them', () => {
+    const onClausesChange = jest.fn()
+    renderTable(loaded(people), {
+      trackClicks: true,
+      clauses: [{ field: 'clicked', op: 'equals', value: 'yes' }],
+      onClausesChange,
+    })
+    const chips = screen.getByRole('list', { name: 'Filters' })
+    const chip = within(chips).getByRole('listitem')
+    fireEvent.click(chip.querySelector('.MuiChip-deleteIcon') as Element)
+    expect(onClausesChange).toHaveBeenCalledWith([])
   })
 })

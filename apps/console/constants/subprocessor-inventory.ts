@@ -795,6 +795,13 @@ const DECLARED_EGRESS_HOSTS: Record<string, EgressHost> = {
       'Share-link construction in the collection block. Distinct from `connect.facebook.net`, which is the pixel loader and IS declared as a subprocessor.',
     dataReceived: 'Nothing until a visitor clicks.',
   },
+  'mail.google.com': {
+    disposition: 'no-request',
+    reason:
+      "The Sequences enrollment page links a member to a sequence email's thread in the mailbox the organization connected (AGL-3332).",
+    dataReceived:
+      "Nothing. A link is rendered; clicking it opens the member's own Gmail.",
+  },
   'operator-ci.firebaseio.com': {
     disposition: 'no-request',
     reason:

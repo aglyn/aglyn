@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { OutreachSequence } from '../model/outreach.types'
 import { OutreachSequenceReportCard } from './sequence-report-card'
 import type { OutreachSequenceLinksLoad } from './use-outreach-data'
@@ -99,6 +99,36 @@ describe('the sequence report card', () => {
       'https://aglyn.com/pricing4',
       'https://aglyn.com/demo1',
     ])
+  })
+
+  it('leads from "Clicked" and from each destination to the people behind them (AGL-3332)', () => {
+    const onShowClickers = jest.fn()
+    const onShowLink = jest.fn()
+    render(
+      <OutreachSequenceReportCard
+        sequence={{ stats: { sent: 20, people: 20, clicks: 5, uniqueClicks: 4, clickTracked: true }, settings: settings(true) }}
+        links={{ status: 'ready', data: { links: { a: { url: 'https://aglyn.com/pricing', clicks: 4 } } } }}
+        timeZone="America/Chicago"
+        onShowClickers={onShowClickers}
+        onShowLink={onShowLink}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Clicked\. Show who clicked/ }))
+    expect(onShowClickers).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Show who followed https://aglyn.com/pricing' }))
+    expect(onShowLink).toHaveBeenCalledWith('https://aglyn.com/pricing')
+  })
+
+  it('offers no way into the clickers of a sequence nobody clicked', () => {
+    render(
+      <OutreachSequenceReportCard
+        sequence={{ stats: { sent: 20, people: 20, clickTracked: true }, settings: settings(true) }}
+        links={noLinks}
+        timeZone="America/Chicago"
+        onShowClickers={jest.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: /Show who clicked/ })).toBeNull()
   })
 
   it('says nothing is wrong with a sequence that has simply not run', () => {

@@ -886,6 +886,17 @@ service cloud.firestore {
       match /outreachEnrollments/{enrollmentId} {
         allow read: if canReadOutreach();
         allow write: if false;
+        // One person's history (AGL-3332): a row per visit to a tracking
+        // link — which link, from which step, a person's or a scanner's —
+        // and per pause, resume, stop and do-not-contact a member applied.
+        // Its own match, because the parent's does not reach a
+        // subcollection. Read by the enrollment's detail view; written only
+        // by the click route and the action route through the Admin SDK,
+        // because a client that could write it could invent a click.
+        match /history/{entryId} {
+          allow read: if canReadOutreach();
+          allow write: if false;
+        }
       }
       // Compliance settings and the do-not-contact list (AGL-2980).
       match /outreachSettings/{settingsId} {

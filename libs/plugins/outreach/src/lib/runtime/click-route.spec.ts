@@ -36,6 +36,7 @@ import {
   readOutreachStoredLink,
 } from './click-link'
 import { createOutreachClickRoute, createOutreachShortLinkRoute } from './click-route'
+import { OUTREACH_ENROLLMENT_HISTORY, OUTREACH_ENROLLMENT_HISTORY_MAX } from '../model/outreach.types'
 import type { OutreachRuntimeDeps } from './runtime-deps'
 
 /**
@@ -410,6 +411,109 @@ describe('the click route', () => {
     expect(answer.headers.get('Location')).toBe(TARGET)
     expect((docs.get(SEQUENCE_PATH) as Data)['stats']).toEqual({ sent: 3, people: 3, clickTracked: true })
     expect(filed).toHaveLength(0)
+    expect(historyRows()).toEqual([])
+  })
+})
+
+/*==========================================
+ * ONE PERSON'S HISTORY (AGL-3332): a row per visit, beside the totals.
+ *=========================================*/
+
+/** The enrollment's history rows, oldest first. */
+function historyRows(): Data[] {
+  return [...docs.keys()]
+    .filter((key) => key.startsWith(`${ENROLLMENT_PATH}/${OUTREACH_ENROLLMENT_HISTORY}/`))
+    .sort()
+    .map((key) => docs.get(key) as Data)
+}
+
+describe('the click route: one person’s history (AGL-3332)', () => {
+  it('writes a row for a person’s click: the destination as the link table keys it, the step, and when', async () => {
+    await call(visit(token()))
+    expect(historyRows()).toEqual([
+      { kind: 'click', atMs: clock, url: 'https://aglyn.com/pricing', stepIndex: 0, human: true, machineReason: null },
+    ])
+    expect((docs.get(ENROLLMENT_PATH) as Data)['engagement']).toMatchObject({
+      clicks: 1,
+      links: ['https://aglyn.com/pricing'],
+      loggedClicks: 1,
+      loggedMachineClicks: 0,
+    })
+  })
+
+  it('writes a scanner’s visit too, with why it was read as one, and counts it apart', async () => {
+    await call(visit(token(), { method: 'HEAD' }))
+    expect(historyRows()).toEqual([
+      { kind: 'click', atMs: clock, url: 'https://aglyn.com/pricing', stepIndex: 0, human: false, machineReason: 'method' },
+    ])
+    expect((docs.get(ENROLLMENT_PATH) as Data)['engagement']).toMatchObject({
+      clicks: 0,
+      machineClicks: 1,
+      links: [],
+      loggedMachineClicks: 1,
+    })
+  })
+
+  it('keeps each distinct destination once, in the order followed', async () => {
+    await call(visit(token()))
+    clock += 60_000
+    await call(visit(token({ url: 'https://calendar.example.com/book?who=lee', linkIndex: 1 })))
+    clock += 60_000
+    await call(visit(token()))
+    expect(historyRows().map((row) => row['url'])).toEqual([
+      'https://aglyn.com/pricing',
+      'https://calendar.example.com/book',
+      'https://aglyn.com/pricing',
+    ])
+    expect((docs.get(ENROLLMENT_PATH) as Data)['engagement']).toMatchObject({
+      clicks: 3,
+      links: ['https://aglyn.com/pricing', 'https://calendar.example.com/book'],
+      loggedClicks: 3,
+    })
+  })
+
+  it('itemizes from now on for a person whose earlier clicks were counted as totals', async () => {
+    docs.set(ENROLLMENT_PATH, {
+      ...(docs.get(ENROLLMENT_PATH) as Data),
+      engagement: {
+        clicks: 2,
+        firstClickAtMs: SENT_AT + 60_000,
+        lastClickAtMs: SENT_AT + 60_000,
+        lastClickUrl: 'https://calendar.example.com/book',
+        machineClicks: 0,
+      },
+    })
+    await call(visit(token()))
+    expect(historyRows()).toHaveLength(1)
+    // The two earlier clicks stay a total: nothing is written for them.
+    expect((docs.get(ENROLLMENT_PATH) as Data)['engagement']).toMatchObject({
+      clicks: 3,
+      firstClickAtMs: SENT_AT + 60_000,
+      links: ['https://aglyn.com/pricing'],
+      loggedClicks: 1,
+    })
+  })
+
+  it('stops itemizing at the history’s limit and keeps counting', async () => {
+    docs.set(ENROLLMENT_PATH, {
+      ...(docs.get(ENROLLMENT_PATH) as Data),
+      engagement: {
+        clicks: OUTREACH_ENROLLMENT_HISTORY_MAX,
+        machineClicks: 0,
+        loggedClicks: OUTREACH_ENROLLMENT_HISTORY_MAX,
+        loggedMachineClicks: 0,
+        firstClickAtMs: SENT_AT + 60_000,
+        lastClickAtMs: SENT_AT + 60_000,
+        lastClickUrl: 'https://aglyn.com/pricing',
+        links: ['https://aglyn.com/pricing'],
+      },
+    })
+    await call(visit(token()))
+    expect(historyRows()).toEqual([])
+    expect((docs.get(ENROLLMENT_PATH) as Data)['engagement']).toMatchObject({
+      clicks: OUTREACH_ENROLLMENT_HISTORY_MAX + 1,
+      loggedClicks: OUTREACH_ENROLLMENT_HISTORY_MAX,
+    })
   })
 })
 

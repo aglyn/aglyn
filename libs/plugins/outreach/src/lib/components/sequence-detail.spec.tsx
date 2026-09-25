@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import type {
   OutreachComplianceSettingsDocument,
@@ -43,6 +43,10 @@ import type { OutreachSettingsLoad } from './use-outreach-settings'
 const mockApi = { setSequenceStatus: jest.fn(), deleteSequence: jest.fn() }
 let mockSequence: OutreachLoad<OutreachSequence | null>
 const mockPush = jest.fn()
+const mockReplace = jest.fn()
+let mockSearch = ''
+/** What the page handed the enrollments table, for the specs that read it (AGL-3332). */
+let mockTableProps: Record<string, any> = {}
 const mockEnqueueSnackbar = jest.fn()
 
 jest.mock('./use-outreach-api', () => ({
@@ -69,12 +73,15 @@ jest.mock('./enrollments-table', () => ({
   OutreachEnrollmentsTable: (props: {
     timeZone: string | null
     enrollAction?: ReactNode
-  }) => (
-    <div role="table" aria-label="Enrollments">
-      {`zone:${props.timeZone}`}
-      {props.enrollAction}
-    </div>
-  ),
+  }) => {
+    mockTableProps = props
+    return (
+      <div role="table" aria-label="Enrollments">
+        {`zone:${props.timeZone}`}
+        {props.enrollAction}
+      </div>
+    )
+  },
 }))
 jest.mock('./enroll-dialog', () => ({
   OutreachEnrollDialog: (props: { open: boolean; contactGroupId: string }) =>
@@ -85,7 +92,11 @@ jest.mock('./enroll-dialog', () => ({
       >{`group:${props.contactGroupId}`}</div>
     ) : null,
 }))
-jest.mock('next/navigation', () => ({ useRouter: () => ({ push: mockPush }) }))
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  usePathname: () => '/acme/outreach/sequences/seq-1/enrollments',
+  useSearchParams: () => new URLSearchParams(mockSearch),
+}))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { uid: 'uid-rep' } }),
 }))
@@ -165,6 +176,8 @@ const button = (name: string) =>
 beforeEach(() => {
   jest.clearAllMocks()
   mockSequence = { status: 'ready', data: sequence('draft') }
+  mockSearch = ''
+  mockTableProps = {}
 })
 
 describe('a sequence: what it shows (AGL-2980)', () => {
@@ -222,6 +235,42 @@ describe('a sequence: what it shows (AGL-2980)', () => {
     ).toContain('zone:America/Chicago')
     fireEvent.click(screen.getByRole('tab', { name: 'Steps' }))
     expect(mockPush).toHaveBeenCalledWith(`${SECTION}/seq-1`)
+  })
+})
+
+describe('a sequence: each person opens their own page (AGL-3332)', () => {
+  const person = { id: 'seq-1_c-1', sequenceId: 'seq-1' }
+
+  it('hands the table the person’s address, and opens it from a row', () => {
+    mockSequence = { status: 'ready', data: sequence('active') }
+    renderDetail({ tab: 'enrollments' })
+    expect(mockTableProps['hrefFor'](person)).toBe(`${SECTION}/seq-1/enrollments/seq-1_c-1`)
+    mockTableProps['onOpen'](person)
+    expect(mockPush).toHaveBeenCalledWith(`${SECTION}/seq-1/enrollments/seq-1_c-1`)
+  })
+
+  it('narrows the table by the clicks the URL names, and keeps the URL in step when a chip is removed', () => {
+    mockSequence = { status: 'ready', data: sequence('active') }
+    mockSearch = 'clicked=yes&link=https%3A%2F%2Faglyn.com%2Fpricing'
+    renderDetail({ tab: 'enrollments' })
+    expect(mockTableProps['clauses']).toEqual([
+      { field: 'clicked', op: 'equals', value: 'yes' },
+      { field: 'link', op: 'equals', value: 'https://aglyn.com/pricing' },
+    ])
+    // The "Clicked" chip removed: the URL keeps the destination and drops the rest.
+    act(() => mockTableProps['onClausesChange']([{ field: 'link', op: 'equals', value: 'https://aglyn.com/pricing' }]))
+    expect(mockReplace).toHaveBeenCalledWith(
+      '/acme/outreach/sequences/seq-1/enrollments?link=https%3A%2F%2Faglyn.com%2Fpricing',
+      { scroll: false },
+    )
+  })
+
+  it('keeps a clause the URL does not hold as the page’s own, and does not touch the URL for it', () => {
+    mockSequence = { status: 'ready', data: sequence('active') }
+    renderDetail({ tab: 'enrollments' })
+    act(() => mockTableProps['onClausesChange']([{ field: 'status', op: 'equals', value: 'bounced' }]))
+    expect(mockTableProps['clauses']).toEqual([{ field: 'status', op: 'equals', value: 'bounced' }])
+    expect(mockReplace).not.toHaveBeenCalled()
   })
 })
 
