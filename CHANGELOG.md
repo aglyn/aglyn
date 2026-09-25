@@ -9,6 +9,34 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.199 — 2026-09-25
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.198...v1.0.0-beta.199)
+
+### Added
+
+- **media:** the Details drawer shows and edits what a file carries inside it ([AGL-3331](https://linear.app/aglyn/issue/AGL-3331))
+- **media:** read and write the metadata inside a file without re-encoding it ([AGL-3331](https://linear.app/aglyn/issue/AGL-3331))
+- **shared-ui-jsx:** one query plan puts every list clause and search word on Firestore ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321), [AGL-2501](https://linear.app/aglyn/issue/AGL-2501))
+- **forms:** the forms list filters by every column, lead routing, campaign and Created ([AGL-3330](https://linear.app/aglyn/issue/AGL-3330))
+
+### Fixed
+
+- **content:** a scheduled entry goes out on a beat and drops the pages that list it ([AGL-3340](https://linear.app/aglyn/issue/AGL-3340))
+- **media:** a removed or renamed custom field no longer comes back after saving ([AGL-3331](https://linear.app/aglyn/issue/AGL-3331))
+
+### Changed
+
+- **media:** name IIM entries for IPTC rather than for the data plugin ([AGL-3331](https://linear.app/aglyn/issue/AGL-3331))
+
+<details>
+<summary>Also in this release: 2 chore</summary>
+
+- **tools:** the Linear id ceiling reads AGL-3340 ([AGL-3340](https://linear.app/aglyn/issue/AGL-3340))
+- **tools:** the Linear id ceiling reads AGL-3336 ([AGL-3336](https://linear.app/aglyn/issue/AGL-3336), [AGL-3330](https://linear.app/aglyn/issue/AGL-3330))
+
+</details>
+
 ## v1.0.0-beta.198 — 2026-09-24
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.197...v1.0.0-beta.198)
