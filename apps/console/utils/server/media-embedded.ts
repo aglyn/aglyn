@@ -16,6 +16,7 @@
  */
 
 import {
+  bytesReader,
   readMediaEmbeddedMetadata,
   type EmbeddedByteReader,
 } from '@aglyn/aglyn/server'
@@ -62,26 +63,38 @@ export const EMBEDDED_INGRESS_BUDGET_MS = 8_000
  * The embedded metadata to stamp on a new asset, or `null` — never a throw
  * and never a stall. An upload must not fail, or wait, because its caption
  * could not be parsed.
+ *
+ * Takes a ranged `reader` for bytes that are already in the bucket, or the
+ * `bytes` themselves when the route is holding them.
  */
 export async function embeddedMetadataAtIngress(options: {
   contentType: string
-  reader: EmbeddedByteReader
+  reader?: EmbeddedByteReader
+  bytes?: Uint8Array
   contentSha256?: string
   budgetMs?: number
 }): Promise<MediaEmbeddedMetadata | null> {
-  const { budgetMs = EMBEDDED_INGRESS_BUDGET_MS, ...input } = options
+  const {
+    budgetMs = EMBEDDED_INGRESS_BUDGET_MS,
+    reader,
+    bytes,
+    ...input
+  } = options
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<null>((resolve) => {
     timer = setTimeout(() => resolve(null), budgetMs)
   })
+  // An async wrapper, so a throw while the read is being SET UP — not only
+  // one the read rejects with — lands in the same catch.
+  const read = (async () => {
+    const source = reader ?? (bytes ? bytesReader(bytes) : null)
+    return source ? readMediaEmbeddedMetadata({ ...input, reader: source }) : null
+  })().catch((error) => {
+    console.warn('embedded metadata read failed at ingress', error)
+    return null
+  })
   try {
-    return await Promise.race([
-      readMediaEmbeddedMetadata(input).catch((error) => {
-        console.warn('embedded metadata read failed at ingress', error)
-        return null
-      }),
-      timeout,
-    ])
+    return await Promise.race([read, timeout])
   } finally {
     clearTimeout(timer)
   }

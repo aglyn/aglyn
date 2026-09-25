@@ -645,6 +645,9 @@ const INGESTORS = routeFiles(CONSOLE_API)
 describe('AGL-1613 · every ingestion chokepoint consults the deny list', () => {
   it('discovers the chokepoints rather than trusting a list', () => {
     expect(INGESTORS).toEqual([
+      // Rewrites the details inside a stored file (AGL-3331) — new bytes
+      // behind the same URL, so the same takedown has to bind it.
+      'apps/console/app/api/media/metadata/route.ts',
       'apps/console/app/api/media/replace/route.ts',
       'apps/console/app/api/media/upload-url/route.ts',
       'apps/console/app/api/media/upload/route.ts',
