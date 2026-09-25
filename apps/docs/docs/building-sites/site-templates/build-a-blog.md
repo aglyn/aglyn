@@ -114,9 +114,9 @@ and a **Publication** panel at the bottom of the entry's own page.
 - **Publish** / **Unpublish** — takes the entry live, or pulls it back, immediately.
 - **Schedule…** — pick a **Publish at** time in the **future** (the past is refused).
   The status chip reads **Scheduled** with the local time, and the entry goes live
-  once that time passes — applied on the next site refresh, so there's no manual
-  step and its status flips to published on its own. A scheduled entry joins the
-  sitemap and RSS feed at the same moment.
+  within a minute or so of that time. There's no manual step: its status flips to
+  published on its own, and the listing, its category pages, any page that shows the
+  collection, the sitemap and the RSS feed all refresh together.
 - **Edit published date…** — sets the date the entry *claims* it was published, and
   it must be in the **past**. This is what search engines read as the article's
   publication date, so it's the control to use when you've imported an archive and

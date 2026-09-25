@@ -185,6 +185,12 @@ const SCOPE = 'components/content/content-scope.context.tsx'
 const DETAIL = 'components/content/entry-detail-page.component.tsx'
 const ROUTE = 'app/api/screens/revalidate/route.ts'
 const HELPER = 'utils/revalidate-live-pages.ts'
+/**
+ * Where the route's collection scope lives since the tenant's scheduled-entry
+ * beat started asking the same question (AGL-3340).
+ */
+const SCOPE_LIB =
+  '../../libs/tenant/data/admin/src/lib/server/collection-live-pages.ts'
 
 describe('every entry action announces itself', () => {
   it('has ONE definition of the announcement, in the shared scope', () => {
@@ -227,7 +233,12 @@ describe('every entry action announces itself', () => {
   it('the console route accepts a collectionId and scans for it', () => {
     const source = readRepo(ROUTE)
     expect(source).toMatch(/const collectionId = String\(/)
-    expect(source).toMatch(/screenIdsUsingCollectionDeep\(collectionSlug/)
+    // The scan is the shared scope, so a post published on its schedule by the
+    // tenant's beat drops exactly the pages a save does (AGL-3340).
+    expect(source).toMatch(/await collectionLivePageScope\(\{/)
+    expect(readRepo(SCOPE_LIB)).toMatch(
+      /screenIdsUsingCollectionDeep\(collectionSlug/,
+    )
     // The 400 has to name the new key, or a caller sending one gets told the
     // field it just sent is not a field.
     expect(source).toMatch(/formId, collectionId, redirectPath or paths/)
@@ -236,7 +247,7 @@ describe('every entry action announces itself', () => {
   it('the route sends the collection ADDRESSES too, not just screens', () => {
     // The half no routing-map lookup can supply: the catch-all serves
     // /blog/my-post whether or not a template screen exists.
-    const source = readRepo(ROUTE)
+    const source = readRepo(SCOPE_LIB)
     expect(source).toMatch(/collectionListUrl\(\{ collectionSlug \}\)/)
     expect(source).toMatch(/`\/\$\{collectionSlug\}\/\$\{entrySlug\}`/)
     // Commerce shares hosts/{hostId}/collections; its pages are routed by the
