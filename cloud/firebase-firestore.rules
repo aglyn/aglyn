@@ -3139,10 +3139,20 @@ service cloud.firestore {
       match /forms/{formId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
+        // `retired` is the queryable mirror of `archivedAt` the Forms list
+        // asks (AGL-3330): Firestore cannot find a document by a missing
+        // field, so "in use" is `retired == false`. A write that touches
+        // either must leave the two agreeing, or a retired form lists as in
+        // use (or vanishes from the list) while every other reader, which
+        // asks `archivedAt`, says the opposite.
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             !request.resource.data.diff(resource.data)
-              .affectedKeys().hasAny(['stats']));
+              .affectedKeys().hasAny(['stats']) &&
+            (!request.resource.data.diff(resource.data)
+                .affectedKeys().hasAny(['archivedAt', 'retired']) ||
+              request.resource.data.get('retired', false) ==
+                (request.resource.data.get('archivedAt', null) != null)));
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
 

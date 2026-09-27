@@ -74,6 +74,7 @@
 import { Timestamp } from 'firebase-admin/firestore'
 import { withCrmListFields } from './org-record-list-fields.mjs'
 import { displayNameSearchFields } from './name-search-tokens.mjs'
+import { newFormListFields } from './site-form-list-fields.mjs'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const HOUR_MS = 60 * 60 * 1000
@@ -686,8 +687,10 @@ export async function seedCrmFixtures(options) {
         { fieldName: 'marketingConsent', fieldType: 'checkbox', label: 'Send me the roast calendar' },
       ],
       consentFieldName: 'marketingConsent',
-      routing,
       hostId,
+      // What a console create stamps, so the Forms list's query finds the
+      // seeded forms (AGL-3330); the routing is kept with its lead switch.
+      ...newFormListFields({ id, displayName: name, slug, routing }),
       createdAt: stamp(at(40)),
       updatedAt: stamp(at(40)),
     },

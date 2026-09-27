@@ -90,6 +90,7 @@ import { checkFormContract } from '@aglyn/aglyn/app-utils/form-contract'
 import {
   formFieldDeclsFromNodes,
   MARKETING_CONSENT_FORM_FIELD,
+  newFormListFields,
   normalizeFormSlug,
   readFormDeclaredConsent,
 } from '@aglyn/aglyn/app-utils/forms'
@@ -342,14 +343,14 @@ const EXPECTED: Record<
     // The subscribe box the model drew gives way to the platform's own.
     fields: ['firstName', 'email', 'marketingConsent'],
     consent: true,
-    routing: undefined,
+    routing: { lead: false },
     note:
       'Submissions arrive in the Inbox. To add the people who tick "Marketing emails" to your "Monthly Roundup" list, add an action on form submissions in Automation that enrolls them.',
   },
   clinicSurvey: {
     fields: ['satisfaction', 'visitFrequency', 'improvements', 'comments'],
     consent: false,
-    routing: undefined,
+    routing: { lead: false },
     note: null,
   },
 }
@@ -379,10 +380,19 @@ describe.each(Object.keys(EXPECTED))('the %s golden', (key) => {
     expect(commits).toEqual([`hosts/host-1/forms/${FORM_ID}`])
 
     const stored = mockDocs.get(`hosts/host-1/forms/${FORM_ID}`) ?? {}
-    const stamps = ['createdAt', 'updatedAt', 'createdBy']
+    // What Create stamps beside the allow-list: the provenance, and the
+    // fields the Forms list queries (AGL-3330), written by the same helper.
+    const listFields = newFormListFields({
+      id: FORM_ID,
+      displayName: golden.name,
+      slug: normalizeFormSlug(golden.name),
+      routing: expected.routing as never,
+    })
+    const stamps = ['createdAt', 'updatedAt', 'createdBy', ...Object.keys(listFields)]
     for (const field of Object.keys(stored).filter((name) => !stamps.includes(name))) {
       expect([field, AI_DRAFT_FIELDS.form.includes(field)]).toEqual([field, true])
     }
+    expect(stored).toMatchObject(listFields)
     expect(stored).toMatchObject({
       displayName: golden.name,
       slug: normalizeFormSlug(golden.name),
@@ -993,7 +1003,7 @@ describe('the person’s answer about where submissions go', () => {
     const outcome = await createAiJobFormStep()(
       context({ ...goldenJob('roofingQuote'), inputs: { submissions: 'inbox' } }),
     )
-    expect(mockDocs.get(`hosts/host-1/forms/${FORM_ID}`)?.['routing']).toBeUndefined()
+    expect(mockDocs.get(`hosts/host-1/forms/${FORM_ID}`)?.['routing']).toEqual({ lead: false })
     expect(outcome.outputs[0]?.note ?? '').not.toContain('CRM')
   })
 

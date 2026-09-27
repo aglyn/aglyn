@@ -164,6 +164,7 @@
     "test:synthetic-id": "node --test tools/scripts/lib/persisted-synthetic-id.test.mjs",
     "test:media-counter": "node --test tools/scripts/lib/media-counter.test.mjs",
     "test:media-filter-keys": "node --test tools/scripts/lib/media-filter-keys.test.mjs && node tools/scripts/backfill-media-filter-keys.mjs --self-test",
+    "test:site-form-list-fields": "node --test tools/scripts/lib/site-form-list-fields.test.mjs && node tools/scripts/backfill-form-list-fields.mjs --self-test",
     "test:firewall-posture": "node --test tools/scripts/lib/firewall-posture.test.mjs",
     "test:probe-headers": "node --test tools/scripts/lib/probe-headers.test.mjs",
     "test:env-isolation": "node tools/deploy/verify-env-isolation.mjs --self-test",

@@ -77,6 +77,7 @@ import {
   createResourceUid,
   decodeStoredNodes,
   encodeStoredNodes,
+  newFormListFields,
   NON_PAGE_SCREEN_MAX_PER_HOST,
   nonPageScreenIds,
   SCREEN_KIND_EMAIL,
@@ -549,6 +550,16 @@ async function copy(
       // The keys the copy's list finds it by (AGL-3321), from the copy's own
       // name and stamps — see `artifactCreateListKeys`.
       ...artifactCreateListKeys(recipe.collection, { ...doc, ...(recipe.stamps ?? {}) }),
+      // A copied form starts as a new one does, with its own search keys and
+      // nothing counted (AGL-3330); only the routing it copied is kept.
+      ...(kind === 'form'
+        ? newFormListFields({
+            id,
+            displayName: name,
+            slug: doc['slug'],
+            routing: doc['routing'] as Parameters<typeof newFormListFields>[0]['routing'],
+          })
+        : {}),
       ...(versionData && versionId ? { versionId } : {}),
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),

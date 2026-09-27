@@ -41,6 +41,7 @@ import {
   deleteField,
   doc,
   documentId,
+  getCountFromServer,
   getDoc,
   getDocs,
   limit,
@@ -12016,6 +12017,184 @@ describe("a site member's password hash is no client's (AGL-3308)", () => {
       hostServerOnlySubcollections().includes('siteMemberCredentials'),
       '`siteMemberCredentials` is no longer denied outright — something ' +
         're-grants it.',
+    )
+  })
+})
+
+/**
+ * The Forms list's queries, each as a site member runs it (AGL-3330).
+ *
+ * The list (`libs/plugins/forms/src/lib/components/form-list-query.ts`) puts
+ * every filter and the search on one Firestore query, and a list query is
+ * allowed only if the rules can prove every document it could return is
+ * readable. Forms are read at SITE level (`isHostMember`), with no
+ * per-document condition, so each shape below must be allowed for every
+ * member role and refused for a stranger. The search is the plain
+ * `searchTokens` array, not a scoped token field: a site-level read has no
+ * scope clause to fold it into.
+ *
+ * Every fixture carries the keys the queries ask for, because a query no
+ * document can match is allowed vacuously and would prove nothing; the
+ * first case asserts the rows that come back.
+ */
+describe('the Forms list filters and searches the way the rules can prove (AGL-3330)', () => {
+  const stored = (id, displayName, stats, extra = {}) => ({
+    displayName,
+    slug: displayName.toLowerCase().replace(/\s+/g, '-'),
+    nameLower: displayName.toLowerCase(),
+    nameTokens: displayName.toLowerCase().split(' ').flatMap((word) =>
+      [...word].map((_, end) => word.slice(0, end + 1)),
+    ),
+    nameReversed: [...displayName.toLowerCase()].reverse().join(''),
+    searchTokens: displayName.toLowerCase().split(' ').flatMap((word) =>
+      [...word].map((_, end) => word.slice(0, end + 1)),
+    ),
+    retired: false,
+    routing: { lead: true },
+    campaignIds: ['cmp-fall'],
+    stats,
+    updatedAt: new Date('2026-09-21T12:00:00Z'),
+    ...extra,
+  })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(
+        doc(db, 'hosts', HOST, 'forms', 'form-contact'),
+        stored('form-contact', 'Contact', {
+          submissions: 5, leads: 4, lastSubmissionAtMs: Date.parse('2026-09-07T12:00:00Z'),
+        }),
+      )
+      await setDoc(
+        doc(db, 'hosts', HOST, 'forms', 'form-demo'),
+        stored('form-demo', 'Demo request', {
+          submissions: 1, leads: 1, lastSubmissionAtMs: Date.parse('2026-09-01T12:00:00Z'),
+        }),
+      )
+      await setDoc(
+        doc(db, 'hosts', HOST, 'forms', 'form-audit'),
+        stored('form-audit', 'Multi-brand site audit', {
+          submissions: null, leads: null, lastSubmissionAtMs: null,
+        }),
+      )
+      await setDoc(
+        doc(db, 'hosts', HOST, 'forms', 'form-retired'),
+        stored('form-retired', 'Launch notification', {
+          submissions: null, leads: null, lastSubmissionAtMs: null,
+        }, { retired: true, archivedAt: 1788811670330, routing: { lead: false }, campaignIds: [] }),
+      )
+    })
+  })
+
+  const forms = (db) => collection(db, 'hosts', HOST, 'forms')
+  const inUse = where('retired', '==', false)
+  /** Each shape the list's plan can put on the query, by what the reader asked. */
+  const shapes = (db) => [
+    ['the forms in use, in document order', query(forms(db), inUse, orderBy('__name__'), limit(25))],
+    ['the search box', query(forms(db), inUse, where('searchTokens', 'array-contains', 'demo'), limit(25))],
+    ['Submissions > 1', query(forms(db), inUse, where('stats.submissions', '>', 1), orderBy('stats.submissions', 'asc'), limit(25))],
+    ['Submissions is empty', query(forms(db), inUse, where('stats.submissions', '==', null), limit(25))],
+    ['Leads = 0', query(forms(db), inUse, where('stats.leads', '==', 0), limit(25))],
+    ['Leads is empty', query(forms(db), inUse, where('stats.leads', '==', null), limit(25))],
+    ['Last submission after Sep 10', query(forms(db), inUse, where('stats.lastSubmissionAtMs', '>=', Date.parse('2026-09-11T00:00:00Z')), orderBy('stats.lastSubmissionAtMs', 'desc'), limit(25))],
+    ['Updated before Sep 30', query(forms(db), inUse, where('updatedAt', '<', new Date('2026-09-30T00:00:00Z')), orderBy('updatedAt', 'desc'), limit(25))],
+    ['Status is Retired', query(forms(db), where('retired', '==', true), limit(25))],
+    ['Lead routing is off', query(forms(db), inUse, where('routing.lead', '==', false), limit(25))],
+    ['Campaign is any of', query(forms(db), inUse, where('campaignIds', 'array-contains-any', ['cmp-fall', 'cmp-spring']), limit(25))],
+    ['Slug equals', query(forms(db), inUse, where('slug', '==', 'contact'), limit(25))],
+    ['Display name contains', query(forms(db), inUse, where('nameTokens', 'array-contains', 'audit'), limit(25))],
+    ['a range beside every kind of equality', query(
+      forms(db), inUse,
+      where('searchTokens', 'array-contains', 'c'),
+      where('routing.lead', '==', true),
+      where('slug', '==', 'contact'),
+      where('stats.submissions', '>', 1),
+      orderBy('stats.submissions', 'asc'),
+      limit(25),
+    )],
+  ]
+
+  it('answers a site member with the rows the query names', async () => {
+    const [, overOne] = shapes(authed(EDITOR))[2]
+    const snapshot = await getDocs(overOne)
+      .catch((error) => assert.fail(`an editor's Submissions > 1 was denied: ${error}`))
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['form-contact'])
+    const [, empty] = shapes(authed(EDITOR))[5]
+    assert.deepEqual((await getDocs(empty)).docs.map((entry) => entry.id), ['form-audit'])
+  })
+
+  for (const [role, uid] of [['owner', OWNER], ['editor', EDITOR], ['author', AUTHOR], ['viewer', VIEWER]]) {
+    it(`allows every Forms list shape for a site ${role}`, async () => {
+      for (const [label, shape] of shapes(authed(uid))) {
+        await mustAllow(`a site ${role}'s Forms list — ${label}`, getDocs(shape))
+      }
+      await mustAllow(
+        `a site ${role}'s retired-forms count`,
+        getCountFromServer(query(forms(authed(uid)), where('retired', '==', true))),
+      )
+    })
+  }
+
+  it('refuses every Forms list shape to a stranger and to a signed-out reader', async () => {
+    for (const [label, shape] of shapes(authed(OUTSIDER))) {
+      await mustDeny(`an outsider's Forms list — ${label}`, getDocs(shape))
+    }
+    for (const [label, shape] of shapes(anon())) {
+      await mustDeny(`a signed-out Forms list — ${label}`, getDocs(shape))
+    }
+  })
+
+  it('lets an editor retire and rename a form with its list keys, and never write its counters', async () => {
+    const ref = doc(authed(EDITOR), 'hosts', HOST, 'forms', 'form-demo')
+    await mustAllow(
+      "an editor's retire, with the mirror the list asks",
+      updateDoc(ref, { archivedAt: Date.now(), retired: true }),
+    )
+    await mustAllow(
+      "an editor's rename, with the keys the list searches",
+      updateDoc(ref, {
+        displayName: 'Book a demo',
+        nameLower: 'book a demo',
+        nameTokens: ['b', 'bo', 'boo', 'book', 'a', 'd', 'de', 'dem', 'demo'],
+        nameReversed: 'omed a koob',
+        searchTokens: ['b', 'bo', 'boo', 'book', 'a', 'd', 'de', 'dem', 'demo'],
+      }),
+    )
+    await mustDeny(
+      "an editor's write to the counters the list filters by",
+      updateDoc(ref, { 'stats.submissions': 99 }),
+    )
+    // The mirror cannot come apart from the fact it mirrors, either way.
+    await mustDeny(
+      "an editor's restore that leaves the list's mirror saying retired",
+      updateDoc(ref, { archivedAt: null }),
+    )
+    await mustDeny(
+      "an editor's write of the mirror alone",
+      updateDoc(ref, { retired: false }),
+    )
+    await mustAllow(
+      "an editor's restore, with the mirror",
+      updateDoc(ref, { archivedAt: null, retired: false }),
+    )
+    await mustAllow(
+      "an editor's edit that touches neither",
+      updateDoc(ref, { consentFieldName: 'consent' }),
+    )
+  })
+
+  it('lets an editor edit a form the backfill has not reached yet', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'forms', 'form-legacy'), {
+        displayName: 'Legacy', slug: 'legacy',
+      })
+    })
+    const ref = doc(authed(EDITOR), 'hosts', HOST, 'forms', 'form-legacy')
+    await mustAllow("an editor's edit of a form with no mirror", updateDoc(ref, { consentFieldName: 'c' }))
+    await mustAllow(
+      "an editor's retire of a form with no mirror",
+      updateDoc(ref, { archivedAt: Date.now(), retired: true }),
     )
   })
 })

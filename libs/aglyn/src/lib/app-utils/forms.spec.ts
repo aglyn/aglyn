@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { PLAN_ENTITLEMENTS } from './plan-entitlements'
 import {
   collectFormFieldNodeIds,
@@ -22,6 +24,7 @@ import {
   FORMS_MAX_PER_HOST,
   formDesignReboundTo,
   formFieldDeclsFromNodes,
+  formListFields,
   formNodeIdIn,
   formPeriodKey,
   formPeriodSeries,
@@ -31,6 +34,7 @@ import {
   discoverFormNodes,
   isConsentCheckboxTicked,
   matchSubmissionToForm,
+  newFormListFields,
   normalizeFormSlug,
   normalizeSubmissionFormName,
   readFormDeclaredConsent,
@@ -860,5 +864,49 @@ describe('the form node inside a form’s own design', () => {
     expect(formNodeIdIn(tree([['canvas', { componentId: 'div', nodes: [] }]]) as never)).toBeUndefined()
     expect(formNodeIdIn(null)).toBeUndefined()
     expect(formNodeIdIn(undefined)).toBeUndefined()
+  })
+})
+
+describe('the fields the Forms list queries (AGL-3330)', () => {
+  it('answers the worked examples the backfill\'s copy is held to', () => {
+    // `tools/scripts/lib/site-form-list-fields.mjs` restates this builder for the
+    // scripts; its test asserts the same file, so the two cannot drift apart
+    // without one of them going red.
+    const fixtures = JSON.parse(
+      readFileSync(
+        join(__dirname, '..', '..', '..', '..', '..', 'tools', 'scripts', 'lib', 'site-form-list-fields.fixtures.json'),
+        'utf8',
+      ),
+    )
+    expect(fixtures.forms.length).toBeGreaterThan(0)
+    for (const one of fixtures.forms) {
+      expect(formListFields(one.form)).toEqual(one.expected)
+    }
+  })
+
+  it('searches by the name, the slug and the id, from one token each', () => {
+    const { searchTokens, nameTokens } = formListFields({
+      id: 'Kq2mAudit',
+      displayName: 'Book a call',
+      slug: 'contact-us',
+    })
+    expect(searchTokens).toEqual(expect.arrayContaining(['book', 'call', 'contact', 'us', 'kq2m']))
+    // The name's own tokens stay the name's: "contains" on Display name does
+    // not find a slug word.
+    expect(nameTokens).not.toContain('contact')
+  })
+
+  it('writes a new form with nothing counted, not retired, and its lead switch set', () => {
+    const fields = newFormListFields({
+      id: 'f1',
+      displayName: 'Demo request',
+      slug: 'demo-request',
+      routing: { datasetId: 'd1' },
+    })
+    expect(fields.retired).toBe(false)
+    expect(fields.routing).toEqual({ datasetId: 'd1', lead: false })
+    // Null, never zero: a zero would claim a measurement nobody took.
+    expect(fields.stats).toEqual({ submissions: null, leads: null, lastSubmissionAtMs: null })
+    expect(newFormListFields({ id: 'f2', routing: { lead: true } }).routing).toEqual({ lead: true })
   })
 })

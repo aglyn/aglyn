@@ -29,6 +29,7 @@ import {
   createResourceUid,
   encodeStoredNodes,
   ENTRIES_MAX_PER_COLLECTION,
+  newFormListFields,
   NON_PAGE_SCREEN_MAX_PER_HOST,
   type OrgEntitlements,
   type OrgFeatureFlags,
@@ -887,6 +888,18 @@ async function handler(request: Request): Promise<Response> {
     // and the stored kind a component or template is otherwise only READ as.
     // Nothing for any other kind.
     const listKeys = artifactCreateListKeys(resource.collection, doc)
+    // A form is born with the fields its list queries (AGL-3330): the search
+    // keys, and an explicit value for each filter a query could not answer by
+    // a field's absence. `routing` is rewritten with its lead switch set.
+    const formListFields =
+      resourceKey === 'form'
+        ? newFormListFields({
+            id,
+            displayName: doc['displayName'],
+            slug: doc['slug'],
+            routing: doc['routing'] as Parameters<typeof newFormListFields>[0]['routing'],
+          })
+        : {}
 
     /*
      * COUNT AND CREATE IN ONE TRANSACTION (AGL-2231).
@@ -1011,6 +1024,7 @@ async function handler(request: Request): Promise<Response> {
       tx.create(collectionRef.doc(id), {
         ...doc,
         ...listKeys,
+        ...formListFields,
         ...(resourceKey === 'template' ? { source: { type: 'authored' } } : {}),
         // A redirect that leaves the platform carries the uid of the publisher
         // who chose that (AGL-1881). `matchRedirect` refuses to serve an

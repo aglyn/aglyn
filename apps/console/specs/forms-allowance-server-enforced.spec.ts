@@ -133,6 +133,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/stored-nodes'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/actions'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),
+  // The REAL fields a new form is written with for its list (AGL-3330).
+  newFormListFields: jest.requireActual('../../../libs/aglyn/src/lib/app-utils/forms')
+    .newFormListFields,
   createResourceUid: () => 'generated-id',
   nameSearchKey: (value: string) => value.toLowerCase(),
   pluginRequestFromWeb: async (request: Request) => ({

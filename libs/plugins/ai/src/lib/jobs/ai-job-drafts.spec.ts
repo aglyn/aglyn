@@ -54,6 +54,7 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
+import { newFormListFields } from '@aglyn/aglyn/app-utils/forms'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -561,9 +562,15 @@ describe('writeAiDraft — a form', () => {
       slug: 'quote-request',
       fields: [{ fieldName: 'email', label: 'Email', fieldType: 'email' }],
       consentFieldName: 'marketingConsent',
-      routing: { lead: true },
       rootId: CANVAS_ROOT_ELEMENT_ID,
       nodes: expect.any(Buffer),
+      // What the Forms list queries (AGL-3330), as Create writes it.
+      ...newFormListFields({
+        id: 'job-form',
+        displayName: 'Quote request',
+        slug: 'quote-request',
+        routing: { lead: true },
+      }),
       createdAt: NOW,
       updatedAt: NOW,
       createdBy: 'uid-1',
@@ -586,7 +593,8 @@ describe('writeAiDraft — a form', () => {
     expect(result).toMatchObject({ ok: true, name: 'Quote request 2' })
     const form = mockDocs.get('hosts/host-1/forms/job-form') ?? {}
     expect(form['slug']).toBe('quote-request-2')
-    expect(form).not.toHaveProperty('routing')
+    // No routing asked for: the lead switch is written off, and nothing else.
+    expect(form['routing']).toEqual({ lead: false })
     expect(form).not.toHaveProperty('consentFieldName')
     expect(decodeStoredNodes<Record<string, any>>(form['nodes'])?.['quote'].props.formName).toBe('Quote request 2')
   })

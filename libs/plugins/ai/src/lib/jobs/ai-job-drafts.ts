@@ -19,6 +19,7 @@ import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { uniqueDuplicateName } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import {
   FORM_COMPONENT_ID,
+  newFormListFields,
   normalizeFormSlug,
   type FormFieldDecl,
   type FormRouting,
@@ -680,16 +681,19 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
     } else {
       const form = input.form as AiFormDraftDeclaration
       const captioned = encodeStoredNodes(withFormCaption(input.nodes, form.formNodeId, name)) ?? packed
+      const slug = normalizeFormSlug(name) || input.id
       tx.create(draftRef, {
         ...allowListed('form', {
           displayName: name,
-          slug: normalizeFormSlug(name) || input.id,
+          slug,
           fields: form.fields,
           consentFieldName: form.consentFieldName || undefined,
           routing: form.routing ?? undefined,
           rootId: form.rootId,
           nodes: Buffer.from(captioned),
         }),
+        // What the Forms list queries (AGL-3330), as a console create writes it.
+        ...newFormListFields({ id: input.id, displayName: name, slug, routing: form.routing }),
         ...stamps,
       })
     }
