@@ -156,6 +156,41 @@ export function nameSearchFields(name: string): {
 }
 
 /**
+ * The search fields a document NAMED BY `displayName` carries (AGL-3321):
+ * the site artifacts (screens of every kind, layouts, reusable components,
+ * templates) and the marketplace listings.
+ *
+ * `nameSearchFields` is for documents whose name IS `name`. These documents
+ * name themselves `displayName`, and have since before search existed, so
+ * the keys ride beside it under the same three names every list declares —
+ * `lowerPath: 'nameLower'`, `tokensPath: 'nameTokens'`,
+ * `reversedPath: 'nameReversed'` — and one list query grammar reads them all.
+ *
+ * `displayName` is NOT returned. A create that carries no name must not gain
+ * an empty one: readers fall back with `displayName ?? id`, which an empty
+ * string defeats. But the KEYS are always returned, empty for a missing name,
+ * so a create stamps them unconditionally — an `orderBy('nameLower')` drops
+ * any document that lacks the field, and a document created without a name
+ * is still one a list must reach.
+ *
+ * ⚠️ Spread at every write that sets `displayName`, and at every create —
+ * and nowhere else: a partial update that stamped keys for a name it did not
+ * write would make the document unfindable by the name it still shows.
+ */
+export function displayNameSearchFields(displayName: unknown): {
+  nameLower: string
+  nameTokens: string[]
+  nameReversed: string
+} {
+  const name = typeof displayName === 'string' ? displayName : ''
+  return {
+    nameLower: nameSearchKey(name),
+    nameTokens: nameSearchTokens(name),
+    nameReversed: nameSearchReversed(name),
+  }
+}
+
+/**
  * The normalizers a list query plan (`planListQuery` in
  * `@aglyn/shared-ui-jsx/const/list-query-plan`) turns typed values into keys
  * with: the same functions the writers stamp `nameLower`, `nameTokens` and
@@ -168,3 +203,72 @@ export const nameSearchNormalizers = {
   maxPrefix: NAME_TOKEN_MAX_PREFIX,
 } as const
 
+
+/**
+ * What joins a scope token to a search prefix in a SCOPED search token
+ * (AGL-3321): `host:abc~acm`.
+ *
+ * A list under a scope clause — `visibleTo array-contains-any [...]`, the
+ * query the rules can prove for a site collaborator — has spent Firestore's
+ * one array clause on the scope, so its search cannot be a second
+ * `array-contains`. The list query plan folds the typed word INTO the scope
+ * clause instead (`ListQueryDeclaration.search.scoped`), asking for each
+ * scope token joined to the word; the writers stamp every scope token
+ * joined to every prefix, through {@link scopedSearchTokens}. A declaration
+ * names this constant as its `join`, so the writer and the reader cannot
+ * disagree about the character between the two halves.
+ *
+ * `~` appears in no scope token (`org`, `host:{id}`), so the split is never
+ * ambiguous; a prefix that itself holds a `~` is matched whole on both sides
+ * and needs no escaping.
+ */
+export const SCOPED_SEARCH_JOIN = '~'
+
+/**
+ * The `search.scoped` half of a list declaration, over the array the
+ * writers stamp with {@link scopedSearchTokens}.
+ */
+export function scopedSearch(tokensPath: string): {
+  tokensPath: string
+  join: typeof SCOPED_SEARCH_JOIN
+} {
+  return { tokensPath, join: SCOPED_SEARCH_JOIN }
+}
+
+/**
+ * Every scope a record is visible to, joined to every search prefix it
+ * carries: `[org~a, org~ac, host:x~a, …]`, in scope order then token order,
+ * with no duplicates (AGL-3321).
+ *
+ * `visibleTo` is read defensively — a record's stored array — and keeps
+ * every non-empty string in it; anything else answers no scope, and so no
+ * scoped tokens: a record visible to nobody is found by no scoped search.
+ * `tokens` is whatever the record's plain search array holds, so a list that
+ * searches several fields passes their merged prefixes rather than one
+ * name's. Each is stamped beside the plain array on every write that sets
+ * either the searched text or `visibleTo`.
+ *
+ * The count is the product of the two, so a record placed on thirty sites
+ * with a long name carries thousands of entries. That stays far inside
+ * Firestore's per-document index-entry ceiling, and it is the price of a
+ * search a scoped reader can run at all.
+ */
+export function scopedSearchTokens(
+  visibleTo: unknown,
+  tokens: readonly string[],
+): string[] {
+  if (!Array.isArray(visibleTo)) return []
+  const scopes = [
+    ...new Set(
+      visibleTo.filter(
+        (entry): entry is string => typeof entry === 'string' && entry.length > 0,
+      ),
+    ),
+  ]
+  const words = [...new Set(tokens.filter((token) => typeof token === 'string' && token))]
+  const scoped: string[] = []
+  for (const scope of scopes) {
+    for (const word of words) scoped.push(`${scope}${SCOPED_SEARCH_JOIN}${word}`)
+  }
+  return scoped
+}
