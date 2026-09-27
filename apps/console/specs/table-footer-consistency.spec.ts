@@ -2060,8 +2060,8 @@ const GRID_FILTER_LISTS: readonly string[] = [
   'apps/console/components/content/collection-entries-page.component.tsx',
   'apps/console/components/org-members-card.component.tsx',
   'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
-  // AGL-3321
-  'apps/console/app/(app)/[orgSlug]/hosts/page.tsx',
+  // AGL-3321. The org Sites page is not here: it is a card view, and a
+  // filter sweep never turns cards into a table (a855970ab).
   'apps/console/components/host-members-card.component.tsx',
   'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
 ]
