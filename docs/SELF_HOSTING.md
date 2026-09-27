@@ -355,6 +355,10 @@ idempotent, so running it twice changes nothing the second time.
 | AGL-3321 | a dataset's Records table serves its filters and search from a `filterKeys` token array older records lack (no index needed: Firestore's automatic single-field index answers it) | `node tools/scripts/backfill-dataset-filter-keys.mjs --apply` |
 | AGL-3321 | the Site users list's Status filter reads a `suspended` boolean that site members created before it, and never suspended, lack | `node tools/scripts/backfill-site-account-suspended.mjs --apply` |
 | AGL-3321 | the staff Platform suppressions list's Status filter and address search read `released` and `emailTokens` fields older suppressions lack | `node tools/scripts/backfill-email-suppression-filters.mjs --apply` |
+| AGL-3321 | the Site users list's search (a word of the name or the address) and its Name filter read `searchTokens`, `displayNameLower` and `displayNameTokens` fields that site members written before them lack | `node tools/scripts/backfill-site-member-search.mjs --apply` |
+| AGL-3321 | the Sites cards' search, Custom domain filter and Created filter read `searchTokens`, `hasCustomDomain`, `nameLower` and `createdAt` on each member's site rows (`users/{uid}/hostMemberships`) that older rows lack | `node tools/scripts/backfill-host-memberships-list-fields.mjs --apply` |
+| AGL-3321 | the activity logs' search (a site's, the organization's, Team › Activity and the staff actor feed) reads a `searchTokens` field older activity entries lack | `node tools/scripts/backfill-activity-search-tokens.mjs --apply` |
+| AGL-3321 | the organization Members card's Access filter and search read `consoleUserType` and `searchTokens` fields that members nobody has changed since lack | `node tools/scripts/backfill-org-member-list-fields.mjs --apply` |
 
 Each uses Application Default Credentials against the project in
 `GOOGLE_CLOUD_PROJECT`.

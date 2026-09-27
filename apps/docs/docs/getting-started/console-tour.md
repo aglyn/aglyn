@@ -62,7 +62,9 @@ matching section of these docs in a new tab.
 Most lists in the console are tables with the same toolbar above them:
 **Columns** shows and hides columns, **Filters** narrows the rows, **Export**
 downloads the table, and **Search** finds rows by their words. They work the
-same way on every list.
+same way on every list. A list drawn as cards rather than a table — such as
+[All Sites](#the-sites-list) — keeps its cards and has the same **Search** box,
+**Filters** panel and chips above them.
 
 - **Filters** opens a panel that edits one filter at a time: pick a column, an
   operator and a value. Pick another column and set it too, and both apply —
@@ -137,28 +139,36 @@ without opening the editor. When you want to design it, open the
 
 ## The Sites list {#the-sites-list}
 
-**All Sites** is the front door of a workspace: a table with one row per site, for the
-workspace currently selected in the switcher. A site you can reach in another organization
-isn't missing — it's behind the workspace switcher.
+**All Sites** is the front door of a workspace: one card per site, for the workspace
+currently selected in the switcher, in name order. A site you can reach in another
+organization isn't missing — it's behind the workspace switcher.
 
-Each row carries:
+Each card carries:
 
-- The site's **display name**, with its **hostname** underneath — the custom domain when
-  the site has one, otherwise its `name.aglyn.app` address. Both are also columns of their
-  own, **Aglyn domain** and **Custom domain**.
+- The site's **display name** as the title, with its **hostname** underneath as the
+  subheader — the custom domain when the site has one, otherwise its `name.aglyn.app`
+  address. Both are also listed inside the card, as **Aglyn Domain** and **Custom
+  Domain**.
 - A **status pill** (below).
-- When the site was **created** and last **updated**.
 - **Visit**, which opens the live site in a new tab, and **Manage**, which opens that
   site's dashboard in the console.
 
-**Filters** in the table's toolbar narrows the list by name, **Status** (Live, Draft,
-Maintenance or Suspended), either domain, **Custom domain status** (Connected, Pending
-while a connect or disconnect is unfinished, or None), or the date a site was created or
-last updated. **Search** matches any word of the name, the slug, or either domain. Each
-filter in force shows as a chip above the table; remove a chip to drop it. The list holds
-every site you have in the workspace, so a filter or a search looks through all of them,
-not only the page on screen. The site count beside the heading always counts every site.
-See [Filter and search a list](#filter-and-search).
+Above the cards are a **Search** box and a **Filters** button — the same controls a
+table's toolbar has, over the cards. **Search** finds a site by the start of any word of
+its name, its slug (the `name` in `name.aglyn.app`) or its custom domain: `harbor`,
+`bakery` and `shop.harbor` all find *Harbor Bakery* at `shop.harbor-bakery.com`.
+**Filters** narrows the cards by **Custom domain** (Connected or None) and by the date a
+site was **Created** (on, before or after a day). Each filter in force shows as a chip
+above the cards; remove a chip to drop it. A filter on the created date lists the cards
+newest first.
+
+The search and the filters are answered by the query that reads the cards, across every
+site you have in the workspace, not only the cards on screen. The cards come twelve at a
+time; **Load more** adds the next twelve that match. The site count beside the heading
+always counts every site. Status, plan, owner and the last-updated date are not filters:
+a site's status can change with no save at all (a timed suspension ends on its own), and
+a site doesn't store its plan, owner or template. See
+[Filter and search a list](#filter-and-search).
 
 ### The status pill {#the-status-pill}
 

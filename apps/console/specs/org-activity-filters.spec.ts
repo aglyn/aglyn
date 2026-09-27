@@ -18,13 +18,13 @@
 /**
  * The organization's activity log filters on the SERVER (AGL-3321).
  *
- * Every clause the log's toolbar sends lands on a query — Action and When on
- * each subject's, Where on which subjects are read, Who on a collection-group
- * feed kept to the organization — and the search is matched as the log is
- * read, a bounded number of entries per page, with a cursor that resumes
- * after the last entry READ. These cases drive the readers against a fake
- * Firestore that answers the where clauses it is handed, so a filter applied
- * to the page instead of the query shows up as a wrong page.
+ * Every clause the log's toolbar sends and the search word land on a query
+ * — Action, Who, When and the search on each subject's, Where on which
+ * subjects are read — and one member's activity in the organization is their
+ * equality on each of its subjects, so nothing is read and then discarded.
+ * These cases drive the readers against a fake Firestore that answers the
+ * where clauses it is handed, so a filter applied to the page instead of the
+ * query shows up as a wrong page.
  */
 
 interface FakeDoc {
@@ -55,6 +55,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
         return (stored as number) < (wanted as number)
       case '>=':
         return (stored as number) >= (wanted as number)
+      case 'array-contains':
+        return Array.isArray(stored) && stored.includes(wanted)
       default:
         throw new Error(`unexpected operator ${op}`)
     }
@@ -130,37 +132,31 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
-import { readActorActivity, readOrgWideActivity } from '../utils/server/actor-activity'
-import {
-  applyAuditLogFilters,
-  auditLogFilterRefusal,
-  auditLogSearchMatcher,
-  auditLogSearchWords,
-  readAuditLogFilters,
-} from '../utils/server/audit-log-filter'
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
+import { readOrgWideActivity } from '../utils/server/actor-activity'
+import { readAuditLogFilters } from '../utils/server/audit-log-filter'
 import {
   ORG_ACTIVITY_FILTER_FIELDS,
-  ORG_ACTIVITY_SEARCH_PATHS,
-  ORG_FEED_FILTER_FIELDS,
-} from '../utils/audit-log-filters'
+  ORG_ACTIVITY_QUERY,
+  activityActorBase,
+} from '../utils/activity-list-query'
 
 const doc = (
   id: string,
   parent: string,
   seconds: number,
   data: Record<string, unknown> = {},
-): FakeDoc => ({
-  id,
-  parent,
-  seconds,
-  data: {
+): FakeDoc => {
+  const entry: Record<string, unknown> = {
     actorId: 'u1',
     actorEmail: 'ada@example.test',
     action: 'Saved the screen',
     target: { type: 'screen', name: `Screen ${id}` },
     ...data,
-  },
-})
+  }
+  // Stamped the way every writer stamps it.
+  return { id, parent, seconds, data: { ...entry, searchTokens: activitySearchTokens(entry) } }
+}
 
 /** Every page of a reader, followed to the end. */
 async function walk(
@@ -195,41 +191,6 @@ describe('the filters a request carries', () => {
     expect(readAuditLogFilters({ filters: 'not json' }, ORG_ACTIVITY_FILTER_FIELDS)).toBeNull()
     expect(readAuditLogFilters({ filters: '{"field":"action"}' }, ORG_ACTIVITY_FILTER_FIELDS)).toBeNull()
   })
-
-  it('refuses a field, operator or repeat the log does not serve, rather than widening the list', () => {
-    const refuse = (clauses: Array<{ field: string; op: string; value: string }>) =>
-      auditLogFilterRefusal(ORG_ACTIVITY_FILTER_FIELDS, clauses)
-    expect(refuse([{ field: 'action', op: 'equals', value: 'x' }])).toBeNull()
-    expect(refuse([{ field: 'target', op: 'equals', value: 'x' }])).toMatch(/cannot be filtered/)
-    // A whole day under a pinned date sort is not offered.
-    expect(refuse([{ field: 'createdAt', op: 'is', value: '2026-09-01' }])).toMatch(/that way/)
-    expect(refuse([{ field: 'actorId', op: 'equals', value: '' }])).toMatch(/needs a value/)
-    expect(
-      refuse([
-        { field: 'action', op: 'equals', value: 'x' },
-        { field: 'action', op: 'equals', value: 'y' },
-      ]),
-    ).toMatch(/one filter on action/)
-  })
-
-  it('puts Action and When on the query beneath the pinned sort', async () => {
-    const { firebaseAdmin } = jest.requireMock('@aglyn/tenant-data-admin')
-    const ref = firebaseAdmin.app().firestore().collection('orgs').doc('o1').collection()
-    const query = applyAuditLogFilters(ref, ORG_FEED_FILTER_FIELDS, [
-      { field: 'action', op: 'isAnyOf', value: 'a,b' },
-      { field: 'createdAt', op: 'onOrAfter', value: '2026-09-01' },
-    ])
-    await query?.get()
-    expect(mockWheres[0][0]).toBe('action in ["a","b"]')
-    expect(mockWheres[0][1]).toMatch(/^createdAt >= \d+$/)
-  })
-
-  it('matches a search word by word, case-insensitively, over the address and the target name', () => {
-    const matches = auditLogSearchMatcher(auditLogSearchWords(' ADA  home '), ORG_ACTIVITY_SEARCH_PATHS)
-    expect(matches?.({ actorEmail: 'ada@example.test', target: { name: 'Home page' } })).toBe(true)
-    expect(matches?.({ actorEmail: 'ada@example.test', target: { name: 'Pricing' } })).toBe(false)
-    expect(auditLogSearchMatcher([], ORG_ACTIVITY_SEARCH_PATHS)).toBeNull()
-  })
 })
 
 describe('the org-wide log', () => {
@@ -248,11 +209,30 @@ describe('the org-wide log', () => {
     const page = await readOrgWideActivity({
       orgId: 'o1',
       limit: 10,
-      filters: [{ field: 'action', op: 'equals', value: 'Saved the screen' }],
+      declaration: ORG_ACTIVITY_QUERY,
+      clauses: [{ field: 'action', op: 'equals', value: 'Saved the screen' }],
     })
     expect(page.entries.map((entry) => entry.$id)).toEqual(['b', 'c', 'e'])
     expect(mockWheres).toHaveLength(3)
     for (const wheres of mockWheres) expect(wheres).toEqual(['action == "Saved the screen"'])
+  })
+
+  it('puts Who and When on every subject’s query too', async () => {
+    const page = await readOrgWideActivity({
+      orgId: 'o1',
+      limit: 10,
+      declaration: ORG_ACTIVITY_QUERY,
+      clauses: [
+        { field: 'actorId', op: 'equals', value: 'u2' },
+        // A day the whole corpus precedes, wherever the run's clock is.
+        { field: 'createdAt', op: 'before', value: '1970-01-02' },
+      ],
+    })
+    expect(page.entries.map((entry) => entry.$id)).toEqual(['c'])
+    for (const wheres of mockWheres) {
+      expect(wheres[0]).toBe('actorId == "u2"')
+      expect(wheres[1]).toMatch(/^createdAt < \d+$/)
+    }
   })
 
   it('reads only the subjects Where names', async () => {
@@ -271,26 +251,23 @@ describe('the org-wide log', () => {
         orgId: 'o1',
         limit: 1,
         cursor,
-        filters: [{ field: 'action', op: 'equals', value: 'Saved the screen' }],
+        clauses: [{ field: 'action', op: 'equals', value: 'Saved the screen' }],
       }),
     )
     expect(pages).toEqual([['b'], ['c'], ['e']])
   })
 
-  it('matches the search as it reads, and the next page resumes after the last entry READ', async () => {
+  it('puts the search word on every subject’s query, so every page is a full page of matches', async () => {
     mockCorpus = Array.from({ length: 12 }, (_, at) =>
       doc(`n${at}`, at % 2 ? 'hosts/h1' : 'orgs/o1', 1000 - at + 0.5, {
         actorEmail: at % 4 === 0 ? 'ada@example.test' : 'bo@example.test',
       }),
     )
-    const matches = auditLogSearchMatcher(['ada'], ORG_ACTIVITY_SEARCH_PATHS)
-    // A read budget of four entries a page: a page can come back short, and
-    // the walk still reaches every match exactly once.
     const pages = await walk((cursor) =>
-      readOrgWideActivity({ orgId: 'o1', limit: 2, cursor, matches, scanCap: 4 }),
+      readOrgWideActivity({ orgId: 'o1', limit: 2, cursor, search: ['Ada'] }),
     )
-    expect(pages.flat()).toEqual(['n0', 'n4', 'n8'])
-    expect(pages.some((page) => page.length < 2 && page !== pages[pages.length - 1])).toBe(true)
+    expect(pages).toEqual([['n0', 'n4'], ['n8']])
+    for (const wheres of mockWheres) expect(wheres[0]).toBe('searchTokens array-contains "ada"')
   })
 
   it('keeps every entry of a boundary second whose stored time has a fraction', async () => {
@@ -307,8 +284,9 @@ describe('the org-wide log', () => {
   })
 })
 
-describe('the log filtered by Who', () => {
+describe('one member’s activity in the organization', () => {
   beforeEach(() => {
+    mockHostsInOrg = ['h1']
     mockCorpus = [
       doc('a', 'hosts/h1', 900, { action: 'Saved the screen' }),
       doc('b', 'hosts/elsewhere', 800, { action: 'Saved the screen' }),
@@ -318,36 +296,26 @@ describe('the log filtered by Who', () => {
     ]
   })
 
-  it('is the person’s own feed, with Action on the same query, kept to the organization', async () => {
-    const page = await readActorActivity({
-      actorId: 'u1',
-      pageSize: 10,
-      filters: [{ field: 'action', op: 'equals', value: 'Saved the screen' }],
-      scopePaths: new Set(['hosts/h1', 'orgs/o1']),
+  it('is the person’s equality on each of the organization’s subjects, with Action beside it', async () => {
+    const page = await readOrgWideActivity({
+      orgId: 'o1',
+      limit: 10,
+      clauses: [{ field: 'action', op: 'equals', value: 'Saved the screen' }],
+      base: activityActorBase('u1'),
     })
     expect(page.entries.map((entry) => entry.$id)).toEqual(['a', 'e'])
-    expect(mockWheres[0]).toEqual(['actorId == "u1"', 'action == "Saved the screen"'])
+    // Two subjects — the organization and its one site — and nothing from
+    // any other organization is read to be thrown away.
+    expect(mockWheres).toEqual([
+      ['actorId == "u1"', 'action == "Saved the screen"'],
+      ['actorId == "u1"', 'action == "Saved the screen"'],
+    ])
   })
 
-  it('never ends the feed with rows still unread in a short batch', async () => {
-    // Page size 2 reads batches of 3. The first batch keeps one row; the
-    // second is SHORT (two documents) and the page fills on its first —
-    // its second is the next page, not the end of the feed.
-    mockCorpus = [
-      doc('a', 'hosts/h1', 900),
-      doc('b', 'hosts/elsewhere', 800),
-      doc('c', 'hosts/elsewhere', 700),
-      doc('f', 'hosts/h1', 600),
-      doc('g', 'hosts/h1', 500),
-    ]
+  it('pages the person’s feed to its end, every page full', async () => {
     const pages = await walk((cursor) =>
-      readActorActivity({
-        actorId: 'u1',
-        pageSize: 2,
-        cursor,
-        scopePaths: new Set(['hosts/h1']),
-      }),
+      readOrgWideActivity({ orgId: 'o1', limit: 2, cursor, base: activityActorBase('u1') }),
     )
-    expect(pages).toEqual([['a', 'f'], ['g']])
+    expect(pages).toEqual([['a', 'c'], ['e']])
   })
 })

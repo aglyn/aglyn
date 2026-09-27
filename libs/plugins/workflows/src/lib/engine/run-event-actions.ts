@@ -75,6 +75,7 @@ import {
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 // The leaf, not the barrel: this library's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
@@ -1276,6 +1277,8 @@ export async function executeAction(
         id: actionId,
         name: action.name ?? '',
       },
+      // The site log's search finds a run by its action's name (AGL-3321).
+      searchTokens: activitySearchTokens({ target: { name: action.name } }),
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
@@ -1567,6 +1570,7 @@ async function recordSkippedRun(
         id: actionId,
         name: action.name ?? '',
       },
+      searchTokens: activitySearchTokens({ target: { name: action.name } }),
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
@@ -1923,6 +1927,7 @@ export async function stopFlowEnrollment(
         id: enrollment.actionId,
         name: enrollment.actionName ?? '',
       },
+      searchTokens: activitySearchTokens({ target: { name: enrollment.actionName } }),
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)

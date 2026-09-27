@@ -264,8 +264,10 @@ search the recent entries the page read — the newest ten from each of the look
 behind them — by action, target, reason, actor and date, with the note in the search
 too, before they page them, so a match on a later page is never missed. The
 **Audit log** page holds the full record. **Activity by this account** filters by
-action or date through its Filters panel; the action group chips above it are shortcuts
-for the actions a plugin names.
+action or date through its Filters panel, and its search finds entries by the start of a
+word of the address or API key that made them or of the name of what changed — all on the
+query that reads the account's activity across every site and organization, newest first.
+The action group chips above it are shortcuts for the actions a plugin names.
 
 A **Legal acceptances** card on the same page answers the two questions a terms
 dispute asks: which version of the Terms and Privacy Policy this person accepted and

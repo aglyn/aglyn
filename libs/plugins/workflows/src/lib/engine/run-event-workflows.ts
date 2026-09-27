@@ -28,6 +28,7 @@ import {
   resolveOrgEntitlements,
   runWorkflow,
 } from '@aglyn/aglyn/server'
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import type { HostEventPayload } from '@aglyn/tenant-runtime/host-event-listeners'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -68,6 +69,10 @@ async function recordWorkflowRun(
       actorId: null,
       actorEmail: null,
       ...row,
+      // The site log's search finds a run by its workflow's name (AGL-3321).
+      searchTokens: activitySearchTokens({
+        target: row['target'] as { name?: unknown } | undefined,
+      }),
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)

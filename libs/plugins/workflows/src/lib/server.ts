@@ -29,6 +29,7 @@ import {
   registerPluginJob,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -314,6 +315,8 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
           ? String(outcome.error).slice(0, 300)
           : outcome.summary.slice(0, 300),
         target: { type: 'workflow', id: hookId, name: hook.name ?? '' },
+        // The site log's search finds a run by its hook's name (AGL-3321).
+        searchTokens: activitySearchTokens({ target: { name: hook.name } }),
         createdAt: FieldValue.serverTimestamp(),
       })
       .catch(() => undefined)

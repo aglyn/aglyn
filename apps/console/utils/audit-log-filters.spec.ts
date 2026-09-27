@@ -18,10 +18,12 @@
 /**
  * The audit logs' filters are served by indexes that exist (AGL-3321).
  *
- * Every combination of clauses the two logs can send is walked here, and the
- * composite each one needs is looked up in the index file the project
- * deploys. A combination the query would build with no index behind it
- * throws at runtime for every reader, so it fails here instead.
+ * Every combination of clauses the staff audit log can send is walked here,
+ * and the composite each one needs is looked up in the index file the
+ * project deploys. A combination the query would build with no index behind
+ * it throws at runtime for every reader, so it fails here instead. (The
+ * organization's activity logs are pinned by
+ * `specs/activity-list-query-indexes.spec.ts`.)
  */
 
 import { readFileSync } from 'node:fs'
@@ -30,13 +32,9 @@ import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filt
 import {
   ADMIN_AUDIT_FILTER_FIELDS,
   ADMIN_AUDIT_SINGLE_FIELDS,
-  ORG_ACTIVITY_FILTER_FIELDS,
-  ORG_FEED_FILTER_FIELDS,
-  ORG_TARGET_FEED_FILTER_FIELDS,
   adminAuditClauseStandsAlongside,
   adminAuditIndexFor,
   adminAuditPlan,
-  orgActivityIndexFor,
 } from './audit-log-filters'
 
 interface IndexEntry {
@@ -59,66 +57,6 @@ const declared = (collectionGroup: string, queryScope: string, fields: string[])
       index.fields.map((field) => `${field.fieldPath}:${field.order}`).join(',') ===
         fields.join(','),
   )
-
-/** Every subset of `columns`, as one clause each. */
-const combinations = (columns: readonly string[]): ListFilterClause[][] =>
-  columns.reduce<ListFilterClause[][]>(
-    (sets, column) => [
-      ...sets,
-      ...sets.map((set) => [...set, { field: column, op: 'equals', value: 'x' }]),
-    ],
-    [[]],
-  )
-
-describe('the org activity log', () => {
-  const columns = ORG_ACTIVITY_FILTER_FIELDS.map((field) => field.column)
-
-  it('serves every combination of its filters on an index the file declares', () => {
-    const combos = combinations(columns)
-    expect(combos).toHaveLength(16)
-    for (const clauses of combos) {
-      const shape = orgActivityIndexFor(clauses)
-      if (!shape) continue
-      expect({ clauses: clauses.map((clause) => clause.field), shape, declared: true }).toEqual({
-        clauses: clauses.map((clause) => clause.field),
-        shape,
-        declared: declared(shape.collectionGroup, shape.queryScope, shape.fields),
-      })
-    }
-  })
-
-  it('needs exactly the composites it names — no new one', () => {
-    const shapes = new Set(
-      combinations(columns)
-        .map((clauses) => orgActivityIndexFor(clauses))
-        .filter(Boolean)
-        .map((shape) => `${shape?.queryScope} ${shape?.fields.join(',')}`),
-    )
-    expect([...shapes].sort()).toEqual([
-      'COLLECTION action:ASCENDING,createdAt:DESCENDING',
-      'COLLECTION_GROUP actorId:ASCENDING,action:ASCENDING,createdAt:DESCENDING',
-      'COLLECTION_GROUP actorId:ASCENDING,createdAt:DESCENDING',
-    ])
-  })
-
-  it('a date range alone, or a site alone, needs no composite', () => {
-    expect(orgActivityIndexFor([{ field: 'createdAt', op: 'after', value: '2026-09-01' }])).toBeNull()
-    expect(orgActivityIndexFor([{ field: 'scopeId', op: 'equals', value: 'h1' }])).toBeNull()
-  })
-
-  it('the member-target feed filters by date alone, on the target composite', () => {
-    expect(ORG_TARGET_FEED_FILTER_FIELDS.map((field) => field.column)).toEqual(['createdAt'])
-    expect(declared('activity', 'COLLECTION', ['target.id:ASCENDING', 'createdAt:DESCENDING'])).toBe(
-      true,
-    )
-    expect(ORG_FEED_FILTER_FIELDS.map((field) => field.column)).toEqual(['action', 'createdAt'])
-  })
-
-  it('offers no date `is`, which the pinned sort cannot carry', () => {
-    const when = ORG_ACTIVITY_FILTER_FIELDS.find((field) => field.column === 'createdAt')
-    expect(when?.operators).toEqual(['after', 'onOrAfter', 'before', 'onOrBefore'])
-  })
-})
 
 describe('the staff audit log', () => {
   it('serves each equality, one at a time, on an index the file declares', () => {

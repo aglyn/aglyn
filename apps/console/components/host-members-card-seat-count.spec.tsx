@@ -114,6 +114,14 @@ const mockFirestore = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => mockFirestore,
   useUser: () => ({ data: { uid: 'admin-1', getIdToken: async () => 'tok' } }),
+}))
+
+/*
+ * The pager behind `useListQuery`, doubled where it lives: the list-query
+ * hook reaches it by its own module, not through the barrel above.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-paged-collection', () => ({
+  __esModule: true,
   /*
    * Modelled rather than stubbed. The card's whole defect was a PAGE of rows
    * presented as the site's seat usage, so a double that handed back every

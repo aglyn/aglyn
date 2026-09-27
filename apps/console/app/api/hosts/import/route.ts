@@ -55,6 +55,7 @@ import {
   ENTRY_PUBLISH_SORT_FIELD,
   entryPublishSortStamp,
 } from '@aglyn/aglyn/app-utils/collection-entry-date'
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { decodeBundleTimestamps } from '../../_lib/bundle-timestamps'
 import {
@@ -1366,6 +1367,8 @@ async function handler(request: Request): Promise<Response> {
         actorEmail: decoded.email ?? null,
         action: `Restored site from export (${written} documents)`,
         target: { type: 'host', id: hostId },
+        // What the log's search box finds the entry by (AGL-3321).
+        searchTokens: activitySearchTokens({ actorEmail: decoded.email }),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
       .catch(() => undefined)

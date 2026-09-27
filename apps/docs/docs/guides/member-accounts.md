@@ -150,17 +150,23 @@ source entirely.
 The site's **Users** page has two cards: **Site users** (your members — this
 guide) and **Users** (console collaborators). The Site users card is
 paged, newest first, with **Email**, **Name**, **Joined**, and
-**Status** columns, and no search box — filter by email instead. **Filters** in the table's toolbar narrows it by email, name,
-or join date, one filter at a time, across every member rather than the page on
-screen. **Status** (Active or Suspended) is a filter too, and it combines with
-any one of the others — suspended members whose email starts with a given
-address, say. Each filter in force shows as a chip above the table; see
+**Status** columns. Its search box finds a member by the start of any word of
+their name or their email address — `rae`, `donovan` or `example.com` all find
+Rae Donovan at rae@example.com, and a member who never gave a name is found by
+their address. **Filters** in the table's toolbar narrows it by **Email** (the
+whole address), **Name** (a word of it, or the whole name), **Joined** (on a day,
+or before or after a date) and **Status** (Active or Suspended). The filters and
+the search add up, and every one is answered by the query that reads the list,
+across every member rather than the page on screen. **Name contains** and the
+search each look for one word, and one query can look for only one: while a search
+is typed, a Name-contains filter is not applied, and a notice above the table says
+so. Each filter in force shows as a chip above the table; see
 [Filter and search a list](../getting-started/console-tour.md#filter-and-search). For members who may open the
 [CRM](../content-and-data/crm/overview.md), each row's **⋮** menu holds
 **Open in CRM** — the member's contact, found by the address they signed up
 with.
 
-![The console Users page with the Site users card listing members, their join dates and Active status chips, under the table's Columns, Filters and Export controls](/img/guides/members-users-tab.png)
+![The console Users page with the Site users card listing members, their join dates and Active status chips, under the table's Columns, Filters, Export and Search controls](/img/guides/members-users-tab.png)
 
 Click a member to open the **member drawer**:
 

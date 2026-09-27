@@ -54,6 +54,18 @@ import {
   upsertOrgMember,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
+import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  ORG_MEMBER_FILTER_FIELDS,
+  ORG_MEMBER_LIST_PAGE,
+  ORG_MEMBER_LIST_QUERY,
+} from '../../../../utils/org-member-list-query'
+import {
+  auditLogSearchWords,
+  readAuditLogFilters,
+} from '../../../../utils/server/audit-log-filter'
+import { applyListQuery } from '../../../../utils/server/list-filter'
 
 // `author` (AGL-2334) is assignable per site like every other host role —
 // a capability the rules enforce but no door writes is not a feature.
@@ -125,6 +137,60 @@ async function handler(request: Request): Promise<Response> {
         org: (await getOrgDoc(orgId)) ?? undefined,
       })
       if (locked) return locked
+      /*
+       * `?filters=` and `?search=` — the roster narrowed by ITS QUERY
+       * (AGL-3321). Every clause and the search word are planned onto one
+       * query over `orgs/{orgId}/members` (see `ORG_MEMBER_LIST_QUERY`),
+       * paged by document id; what the plan could not put there comes back
+       * as `refused`, unapplied, for the card to say so. Same audience as
+       * the whole roster below, answered with less of it.
+       */
+      if (query.filters !== undefined || query.search !== undefined) {
+        const clauses = readAuditLogFilters(query, ORG_MEMBER_FILTER_FIELDS)
+        if (!clauses) {
+          return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+        }
+        const plan = planListQuery(
+          ORG_MEMBER_LIST_QUERY,
+          { clauses, search: auditLogSearchWords(query.search) },
+          nameSearchNormalizers,
+        )
+        const membersRef = firebaseAdmin
+          .app()
+          .firestore()
+          .collection('orgs')
+          .doc(orgId)
+          .collection('members')
+        const cursor = String(query.cursor ?? '').trim()
+        const after = cursor
+          ? await membersRef
+              .doc(cursor)
+              .get()
+              .catch(() => null)
+          : null
+        let page = applyListQuery(membersRef, plan)
+        if (after?.exists) page = page.startAfter(after)
+        // One extra row answers "is there more" without a second query.
+        const snapshot = await page.limit(ORG_MEMBER_LIST_PAGE + 1).get()
+        const docs = snapshot.docs.slice(0, ORG_MEMBER_LIST_PAGE)
+        return Response.json(
+          {
+            members: docs.map((doc) => {
+              const member = { $id: doc.id, ...doc.data() }
+              // The search's index, not something a reader is shown.
+              delete (member as Record<string, unknown>)['searchTokens']
+              return member
+            }),
+            nextCursor:
+              snapshot.docs.length > ORG_MEMBER_LIST_PAGE
+                ? (docs[docs.length - 1]?.id ?? null)
+                : null,
+            refused: plan.refused,
+            notices: plan.notices,
+          },
+          { status: 200 },
+        )
+      }
       const members = await listOrgMembers(orgId)
       // `?counts=1` — the seat total WITHOUT the roster (AGL-1253).
       //

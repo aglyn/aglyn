@@ -189,6 +189,12 @@ const LOAD_MORE_ALLOWED = [
   // at a hundred by `activity-queries`.
   'libs/plugins/crm/src/lib/components/activity-list.tsx',
   'libs/plugins/crm/src/lib/components/contact-timeline-card.tsx',
+  // The Sites page's site CARDS (AGL-3321): a tile grid, like the media
+  // library and the product grid, and kept a grid of cards rather than made a
+  // table. Each "Load more" widens the served query by a page — the query
+  // over the reader's site memberships, every filter and the search on it —
+  // so what grows is always a page of the answer, never a loaded window.
+  'apps/console/app/(app)/[orgSlug]/hosts/page.tsx',
 ]
 
 /**
@@ -638,7 +644,9 @@ describe('every list that DRAWS a footer names its order (AGL-2501)', () => {
     expect(NAMES_ITS_ORDER.test("orderBy('createdAt', 'desc')")).toBe(true)
     expect(NAMES_ITS_ORDER.test('collectionPage(ref, pageLimit)')).toBe(true)
     expect(NAMES_ITS_ORDER.test('collectionCeiling(ref, CEILING)')).toBe(true)
+    // A list query plan's constraints end in the plan's one order (AGL-3321).
     expect(NAMES_ITS_ORDER.test('listQueryConstraints(plan)')).toBe(true)
+    expect(NAMES_ITS_ORDER.test('query(ref, ...listQueryConstraints(plan), limit(11))')).toBe(true)
     expect(NAMES_ITS_ORDER.test('query(ref, limit(200))')).toBe(false)
   })
 })
@@ -789,7 +797,7 @@ describe('a paged list names its order (AGL-2501)', () => {
       .filter((path) => !UNORDERED_BY_DESIGN.includes(path))
       .filter((path) => {
         const code = withoutComments(read(path))
-        return /\blimit\(/.test(code) && !/\borderBy\(/.test(code)
+        return /\blimit\(/.test(code) && !NAMES_ITS_ORDER.test(code)
       })
     expect(unordered).toEqual([])
   })
@@ -2068,7 +2076,8 @@ const GRID_FILTER_LISTS: readonly string[] = [
   'apps/console/components/org-members-card.component.tsx',
   'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
   // AGL-3321. The org Sites page is not here: it is a card view, and a
-  // filter sweep never turns cards into a table (a855970ab).
+  // filter sweep never turns cards into a table (a855970ab). Its filters and
+  // search are `ListFilterToolbar` over the cards (`sites-cards-filter.spec`).
   'apps/console/components/host-members-card.component.tsx',
   'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
 ]
