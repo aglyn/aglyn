@@ -1302,6 +1302,7 @@ jobs:
       - run: npm run test:staff-list-backfills
       - run: npm run test:org-record-list-fields
       - run: npm run test:outreach-list-search-backfill
+      - run: npm run test:product-collection-ids
 
       # AGL-1877. The Texas data-processing tax code (`txcd_10103001`) on
       # Aglyn's own Stripe products — the single input that decides how much
