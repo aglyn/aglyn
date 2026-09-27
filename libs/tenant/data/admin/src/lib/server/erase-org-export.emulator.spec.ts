@@ -64,6 +64,7 @@
 
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { Timestamp, getFirestore, type Firestore } from 'firebase-admin/firestore'
+import { adminAuditIndexFields } from '@aglyn/aglyn/app-utils/admin-audit-index'
 
 const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 
@@ -293,8 +294,20 @@ describeEmulated('an org erasure persists no copy of the workspace (AGL-1443)', 
     const serialized = JSON.stringify(rows)
     expect(serialized).not.toContain(PII_PROBE)
     expect(serialized).not.toContain(CREDENTIAL_PROBE)
+    // The list index stamped on every audit row (AGL-3321) is derived from
+    // the row's own fields and nothing else, so it can carry nothing the row
+    // does not already say.
+    const indexKeys = Object.keys(adminAuditIndexFields({}))
+    const recorded = rows.map((row) => {
+      expect(
+        Object.fromEntries(indexKeys.map((key) => [key, row[key]])),
+      ).toEqual(adminAuditIndexFields(row))
+      return Object.fromEntries(
+        Object.entries(row).filter(([key]) => !indexKeys.includes(key)),
+      )
+    })
     // Bounded by shape, not only by policy: a record of this size cannot be
     // a copy of a workspace however large the workspace was.
-    expect(serialized.length).toBeLessThan(1024)
+    expect(JSON.stringify(recorded).length).toBeLessThan(1024)
   }, 60_000)
 })
