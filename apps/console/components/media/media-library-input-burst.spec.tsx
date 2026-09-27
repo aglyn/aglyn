@@ -412,8 +412,9 @@ async function openDetails(fileName: string) {
  * looked fine.
  *
  * The loop belonged to neither control alone: it needed one to be typed in
- * and another to be re-rendered. `media-search-field.spec.tsx` drives the
- * same pair in isolation; this one drives the real page.
+ * and another to be re-rendered. That search box has since given way to the
+ * grid toolbar's (AGL-3327), which re-renders with the page just the same,
+ * so this still drives the real page through a burst.
  */
 describe('MediaLibraryComponent under a burst of input events (AGL-2854)', () => {
   beforeEach(() => {

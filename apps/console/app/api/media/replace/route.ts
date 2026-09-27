@@ -33,6 +33,7 @@ import {
   isSvgUploadType,
   sanitizeSvgBuffer,
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   mediaPosterObjectPath,
   mediaRenditionObjectPath,
@@ -736,6 +737,18 @@ async function handler(request: Request): Promise<Response> {
     await mediaRef.set(
       {
         contentType,
+        // What the library filters by (AGL-3327), from the name and alt text
+        // the asset keeps and the type and pixel size the new bytes bring: a
+        // PDF reissued as a Word file is no longer a PDF, and a landscape
+        // photo replaced by a portrait one no longer lands under Landscape.
+        ...mediaFilterKeys({
+          fileName: mediaSnapshot.get('fileName'),
+          alt: mediaSnapshot.get('alt'),
+          contentType,
+          width: dimensions?.width,
+          height: dimensions?.height,
+          video: videoFields['video'],
+        }),
         sizeBytes: uploadedBytes,
         url,
         // Clear stale dimensions if the new header didn't parse — or if the

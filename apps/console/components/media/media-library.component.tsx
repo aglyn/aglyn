@@ -28,6 +28,7 @@ import {
   isSiblingNameTaken,
   MEDIA_ALT_MAX_LENGTH,
   MEDIA_FOLDER_MAX_DEPTH,
+  mediaFilterKeys,
   mediaFolderChoices,
   narrowsScope,
   newMediaFolderDoc,
@@ -49,14 +50,30 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-host-collections'
 import { hostDisplayDomain } from '../../constants/tenant-links'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import {
+  hiddenFilterVisibility,
+  type ListFilterRequest,
+  listFilterOperatorLabel,
+} from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  type ListFilterClause,
+  type ListFilterOption,
+  listFilterGridColumns,
+  listSelectCodec,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 // Subpath, not the barrel: the empty state is console-only and the barrel
 // rule in `shared-ui-jsx/src/index.ts` is enforced in CI.
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useDebounce } from '@aglyn/shared-util-vendor/use-debounce'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined'
+import GridViewIcon from '@mui/icons-material/GridView'
+import ViewListIcon from '@mui/icons-material/ViewList'
 import {
   DndContext,
   type DragEndEvent,
@@ -87,9 +104,15 @@ import {
   Select,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material'
+import {
+  getGridSingleSelectOperators,
+  type GridColumnVisibilityModel,
+} from '@mui/x-data-grid'
 import {
   collection,
   doc,
@@ -97,13 +120,11 @@ import {
   getDoc,
   getDocs,
   limit,
-  orderBy,
   query,
   type QueryConstraint,
   type QueryDocumentSnapshot,
   serverTimestamp,
   startAfter,
-  Timestamp,
   updateDoc,
   where,
   writeBatch,
@@ -121,6 +142,8 @@ import {
   useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { useOrgMemberOptions } from '@aglyn/tenant-feature-instance/hooks/use-org-member-options'
+import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { checkOrgQuota } from '../../constants/entitlements'
 import useCurrentOrg from '../../hooks/use-current-org'
@@ -174,8 +197,25 @@ import {
   moveFailureMessage,
   partialMoveMessage,
 } from './media-move-copy'
-import { parseMediaQuery, searchMedia } from './media-search'
-import { MediaSearchField } from './media-search-field.component'
+import {
+  MEDIA_ALT_OPTIONS,
+  MEDIA_ORIENTATION_OPTIONS,
+  MEDIA_FILTER_HEADERS,
+  MEDIA_SORT_LABELS,
+  MEDIA_SORTS,
+  MEDIA_TYPE_OPTIONS,
+  mediaFilterFields,
+  mediaFolderDescendants,
+  mediaQuery,
+  type MediaSort,
+  mediaSortOf,
+} from './media-filter'
+import {
+  mediaListColumns,
+  mediaSortFromModel,
+  mediaSortModel,
+} from './media-list-view.component'
+import { useMediaLibraryView } from './use-media-library-view'
 import {
   EMPTY_MEDIA_SELECTION,
   forgetMediaSelection,
@@ -248,32 +288,6 @@ const PICKER_KIND_COPY: Readonly<
 const MEDIA_PAGE_SIZE = 60
 
 /**
- * Search read budget (AGL-1460).
- *
- * Search filters the loaded window client-side and always did — Firestore
- * cannot express a wildcard, a typo or a key an author invented in the detail
- * drawer, so no amount of query work moves those server-side. What CAN be
- * fixed is the set: read the rest of the current query once, then answer over
- * all of it, and say plainly when the cap stopped short of that.
- *
- * The three numbers are the whole cost story:
- *
- * - `DEBOUNCE_MS` — a keystroke costs zero reads. Filtering is CPU and runs
- *   undebounced, so the box and the grid never disagree; only the completion
- *   waits, and `loadAll` is idempotent so out-waiting it changes nothing.
- * - `MIN_CHARS` — one character is a typo in progress, not a search.
- * - `MAX_DOCS` — 20 page fetches. On the 174-asset library that made this
- *   issue it never binds: completing costs 2 fetches / 114 documents, once
- *   per filter set. For comparison, AGL-1462 removed 9,165 documents in 187
- *   fetches from a single delete pass; this gives back 1.2% of that, and
- *   only in exchange for the "Load more" clicks a person was already paying
- *   to search their own library.
- */
-const MEDIA_SEARCH_DEBOUNCE_MS = 400
-const MEDIA_SEARCH_MIN_CHARS = 2
-const MEDIA_SEARCH_MAX_DOCS = 1200
-
-/**
  * Docs per request in the folder sharing cascade (AGL-1045). Small enough
  * that the progress bar moves on a folder of a few hundred files and that
  * a failure loses at most this much work; large enough that a 500-file
@@ -299,6 +313,21 @@ const SCOPE_CHUNK_SIZE = 100
  * the tile stops being scannable, so the grid gives up a column instead.
  */
 const TILE_MIN_WIDTH = 160
+
+/** Says what the search box reads: the words of a file's name. */
+const MEDIA_GRID_LOCALE_TEXT = {
+  toolbarQuickFilterPlaceholder: 'Search file names',
+}
+
+/** Held once, so the grid's props stay the same object between renders. */
+const MEDIA_GRID_SLOT_PROPS = {
+  toolbar: { csvOptions: { fileName: 'media' } },
+}
+
+/** The Tags select's operators — see the Tags codec in the library. */
+const MEDIA_TAG_OPERATORS = getGridSingleSelectOperators().filter(
+  (operator) => operator.value === 'is' || operator.value === 'isAnyOf',
+)
 
 /**
  * One "Used on" reference (AGL-845) as returned by /api/media/references —
@@ -686,27 +715,45 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     [user, scopeId, orgId],
   )
 
-  // Organization (AGL-124): search + folder/tag filters over doc metadata.
-  const [search, setSearch] = useState('')
+  // Organization (AGL-124), through the console's one grid-filter model
+  // since AGL-3327: the Filters panel, the chips over the files and the
+  // quick search, over the fields `media-filter` declares, each served by
+  // the query below.
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const search = searchWords.join(' ')
+  const searchState = useMemo(
+    () => ({ words: searchWords, onChange: setSearchWords }),
+    [searchWords],
+  )
   // Folder scoping (AGL-172): 'all' = every file, null = root/no folder.
   const [currentFolder, setCurrentFolder] = useState<string | null | 'all'>(
     'all',
   )
-  const [tagFilter, setTagFilter] = useState('')
-  // Sorting + type/date/size filters (AGL-134).
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name' | 'size'>(
-    'newest',
-  )
-  const [typeChoice, setTypeFilter] = useState('')
+  /** Whether the open folder's subfolders are read with it (AGL-3327). */
+  const [includeSubfolders, setIncludeSubfolders] = useState(false)
+  // Sort (AGL-134): the Grid view's Sort control and the List view's column
+  // headers both set this one value.
+  const [sortBy, setSortBy] = useState<MediaSort>('newest')
+  /** The reader's own clauses: every filter but a picker's fixed kind. */
+  const [clauses, setClauses] = useState<ListFilterClause[]>([])
   /**
-   * The Type the grid filters by: the caller's `kind` in a narrowed library
-   * (AGL-2953), else the person's own choice. The query, the client-side pass
-   * and the Type control all read this value, so a narrowed library can
-   * neither ask for nor draw a file of another kind.
+   * The kind a narrowed library lists (AGL-2953), as the Type clause it
+   * always was. The reader cannot remove it or ask for another type: the
+   * Filters panel offers no Type field in a narrowed library and the chip
+   * that shows it has no delete. The query reads it like any other clause, so
+   * a narrowed library can neither ask for nor draw a file of another kind.
    */
-  const typeFilter: string = kind ?? typeChoice
-  const [dateFilter, setDateFilter] = useState('')
-  const [sizeFilter, setSizeFilter] = useState('')
+  const kindClause = useMemo<ListFilterClause | null>(
+    () => (kind ? { field: 'type', op: 'equals', value: kind } : null),
+    [kind],
+  )
+  const effectiveClauses = useMemo(
+    () =>
+      kindClause
+        ? [kindClause, ...clauses.filter((clause) => clause.field !== 'type')]
+        : clauses,
+    [kindClause, clauses],
+  )
 
   /**
    * Whether a FILTER is hiding things, as opposed to the library being empty
@@ -720,94 +767,132 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
    * it, so a video picker holding no video is empty rather than filtered, and
    * the answer there is also the upload button.
    */
-  const filtersActive = Boolean(
-    search || tagFilter || typeChoice || dateFilter || sizeFilter,
-  )
+  const filtersActive = Boolean(search.trim() || clauses.length)
   const clearFilters = useCallback(() => {
-    setSearch('')
-    setTagFilter('')
-    setTypeFilter('')
-    setDateFilter('')
-    setSizeFilter('')
+    setSearchWords([])
+    setClauses([])
   }, [])
 
-  // Query construction (AGL-174). Query-side: folder scoping, single-tag
-  // array-contains, type facet, date range, and sort. Two deliberate
-  // downgrades keep the composite-index set small (documented in
-  // cloud/firebase-firestore.indexes.json): the type facet goes
-  // client-side when a tag filter is active or the sort isn't by date,
-  // and the date range goes client-side whenever the type facet is
-  // query-side (Firestore allows one range field). The client-side
-  // filter pass below still applies everything within loaded pages, so
-  // downgrades only affect which docs get fetched, never correctness of
-  // what's shown.
-  // Firestore permits ONE array-contains/array-contains-any per query, and
-  // the scope filter has to be the one that survives — it is the security
-  // constraint, and the tag filter already has a client-side twin below.
-  const tagFilterServerSide = Boolean(tagFilter) && !needsScope
+
+  /**
+   * Folder hierarchy (AGL-171): first-class docs replace the AGL-124
+   * free-text `folder` string. Legacy strings migrate lazily below.
+   *
+   * This filter is DELIBERATELY not tolerant of a missing `visibleTo`
+   * (AGL-1466). Every folder it failed to return was a folder nobody had
+   * stamped, and the tempting reading — the editor says "All sites", the
+   * AGL-1037 helpers treat absent as org-wide, so let the query agree — is
+   * the one thing this must not do:
+   *
+   * * There is no narrow version of it. Firestore cannot ask for "field
+   *   absent OR array-contains-any"; tolerating absent means DROPPING the
+   *   `where`, which returns every folder in the org including the ones
+   *   deliberately restricted to another client's site.
+   * * The rules would refuse it anyway for the caller who needs it most. An
+   *   unfiltered list is denied outright for a scoped collaborator — AGL-1047
+   *   removed exactly this escape hatch after proving against the emulator
+   *   that it let one list the whole collection.
+   * * Absent is now a bug, not a legacy state. The backfill has run, the
+   *   affected folders were repaired by hand, and the writes above stamp
+   *   every new one, so failing closed reports the bug instead of hiding it.
+   *
+   * The dialog was the half that was wrong, and the dialog is what changed.
+   */
+  const { data: folderDocs } = useFirestoreCollection<any>(
+    () =>
+      // `null` skips the listener entirely until the read set is known —
+      // see `scopeReady`. Issuing this unfiltered first would be denied.
+      scopeReady
+        ? query(
+            collection(firestore, scopeCollection, scopeId, 'mediaFolders'),
+            ...(needsScope
+              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
+              : []),
+            limit(500),
+          )
+        : null,
+    [firestore, scopeId, needsScope, scopeTokens, scopeReady],
+    { idField: '$id' },
+  )
+  const folderList: Array<Aglyn.AglynHostMediaFolder> = useMemo(
+    () =>
+      [...((folderDocs as any[]) ?? [])].sort(
+        (a, b) =>
+          (a.order ?? 0) - (b.order ?? 0) ||
+          String(a.name).localeCompare(String(b.name)),
+      ),
+    [folderDocs],
+  )
+
+  /**
+   * The folders the grid is inside (AGL-172): every file, the files in no
+   * folder, or the open folder — with "Include subfolders", it and every
+   * folder under it (AGL-3327). Keyed by the ids so a folder listener
+   * delivering the same tree does not re-read the grid.
+   */
+  const folderIdList = useMemo(
+    () =>
+      typeof currentFolder === 'string' && currentFolder !== 'all'
+        ? includeSubfolders
+          ? mediaFolderDescendants(currentFolder, folderList as any)
+          : [currentFolder]
+        : [],
+    [currentFolder, includeSubfolders, folderList],
+  )
+  const folderKey = folderIdList.join(',')
+  const folderScope = useMemo<'all' | 'root' | readonly string[]>(
+    () =>
+      currentFolder === 'all' ? 'all' : currentFolder === null ? 'root' : folderIdList,
+    // `folderKey` stands for the ids, which are a new array each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentFolder, folderKey],
+  )
+
+  /**
+   * The query (AGL-174), planned by the console's list query plan (AGL-3327,
+   * AGL-3321).
+   *
+   * Every filter and the search are predicates on it — nothing is matched
+   * over the pages already read — and `media-scope-indexes.spec.ts` holds the
+   * index file to every shape it can take. The folder and the scope clause
+   * are its base. The scope clause is there for a scoped reader because under
+   * the AGL-1042 rules an unfiltered list is refused outright for them, so it
+   * is required for the page to work at all, not a nicety.
+   *
+   * What one query cannot hold is refused by name, not applied, and said
+   * above the files (`ListQueryNotices`) — never matched over some of them.
+   */
+  const { plan: queryPlan, subfoldersDropped } = useMemo(
+    () =>
+      mediaQuery({
+        clauses: effectiveClauses,
+        sort: sortBy,
+        folder: folderScope,
+        scopeTokens: needsScope ? scopeTokens : null,
+        search: searchWords,
+      }),
+    [effectiveClauses, sortBy, folderScope, needsScope, scopeTokens, searchWords],
+  )
+  /** The order the query reads in — a range filter's field, when one is set. */
+  const effectiveSort = mediaSortOf(queryPlan.orderBy) ?? sortBy
+  // The same predicates and order are the same query: a keystroke that
+  // leaves the searched word alone reads nothing again.
+  const queryKey = JSON.stringify({
+    filters: queryPlan.filters,
+    orderBy: queryPlan.orderBy,
+  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const queryConstraints = useMemo(() => listQueryConstraints(queryPlan), [queryKey])
   const buildConstraints = useCallback(
     (cursor: QueryDocumentSnapshot | null): QueryConstraint[] => {
-      const constraints: QueryConstraint[] = []
-      const dateSort = sortBy === 'newest' || sortBy === 'oldest'
-      if (typeof currentFolder === 'string' && currentFolder !== 'all') {
-        constraints.push(where('folderId', '==', currentFolder))
-      }
-      if (needsScope) {
-        constraints.push(
-          where('visibleTo', 'array-contains-any', scopeTokens),
-        )
-      }
-      if (tagFilterServerSide) {
-        constraints.push(where('tags', 'array-contains', tagFilter))
-      }
-      const typeQuerySide = Boolean(typeFilter) && !tagFilter && dateSort
-      if (typeQuerySide) {
-        if (typeFilter === 'pdf') {
-          constraints.push(where('contentType', '==', 'application/pdf'))
-        } else {
-          const prefix = typeFilter === 'video' ? 'video/' : 'image/'
-          constraints.push(
-            where('contentType', '>=', prefix),
-            // A prefix match as a range (AGL-2952). A content type is ASCII
-            // and U+F8FF sorts above every ASCII character, so each type that
-            // starts with the prefix sorts below this bound. Written as an
-            // escape because the character is invisible, and a bound equal
-            // to `prefix` matches nothing.
-            where('contentType', '<', `${prefix}\uf8ff`),
-            orderBy('contentType'),
-          )
-        }
-      }
-      if (dateFilter && dateSort && (!typeQuerySide || typeFilter === 'pdf')) {
-        const days = dateFilter === '7d' ? 7 : 30
-        if (!typeQuerySide) {
-          constraints.push(
-            where(
-              'createdAt',
-              '>=',
-              Timestamp.fromMillis(Date.now() - days * 86400 * 1000),
-            ),
-          )
-        }
-      }
-      if (sortBy === 'name') constraints.push(orderBy('fileName'))
-      else if (sortBy === 'size') constraints.push(orderBy('sizeBytes', 'desc'))
-      else constraints.push(orderBy('createdAt', sortBy === 'oldest' ? 'asc' : 'desc'))
+      const constraints: QueryConstraint[] = [...queryConstraints]
       if (cursor) constraints.push(startAfter(cursor))
       constraints.push(limit(MEDIA_PAGE_SIZE))
       return constraints
     },
-    [
-      currentFolder,
-      tagFilter,
-      tagFilterServerSide,
-      typeFilter,
-      dateFilter,
-      sortBy,
-      needsScope,
-      scopeTokens,
-    ],
+    [queryConstraints],
   )
+
   const fetchPage = useCallback(
     async (cursor: QueryDocumentSnapshot | null) => {
       const snapshot = await firestoreOneShotRetry(
@@ -858,12 +943,6 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     /** Firestore error code when the last load failed, else null. */
     loadError,
     hasMore,
-    // AGL-1460: whether a client-side pass over `docs` is a pass over the
-    // whole answer, and whether the read cap stopped short of that.
-    complete: windowComplete,
-    truncated: windowTruncated,
-    completing: windowCompleting,
-    loadAll,
     refreshKey,
     loadMore: handleLoadMore,
     // Still the right answer where the SERVER decided something the client
@@ -918,55 +997,6 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     return typeof window !== 'undefined' ? window.location.origin : ''
   }, [hostId, hostDoc])
 
-  /**
-   * Folder hierarchy (AGL-171): first-class docs replace the AGL-124
-   * free-text `folder` string. Legacy strings migrate lazily below.
-   *
-   * This filter is DELIBERATELY not tolerant of a missing `visibleTo`
-   * (AGL-1466). Every folder it failed to return was a folder nobody had
-   * stamped, and the tempting reading — the editor says "All sites", the
-   * AGL-1037 helpers treat absent as org-wide, so let the query agree — is
-   * the one thing this must not do:
-   *
-   * * There is no narrow version of it. Firestore cannot ask for "field
-   *   absent OR array-contains-any"; tolerating absent means DROPPING the
-   *   `where`, which returns every folder in the org including the ones
-   *   deliberately restricted to another client's site.
-   * * The rules would refuse it anyway for the caller who needs it most. An
-   *   unfiltered list is denied outright for a scoped collaborator — AGL-1047
-   *   removed exactly this escape hatch after proving against the emulator
-   *   that it let one list the whole collection.
-   * * Absent is now a bug, not a legacy state. The backfill has run, the
-   *   affected folders were repaired by hand, and the writes above stamp
-   *   every new one, so failing closed reports the bug instead of hiding it.
-   *
-   * The dialog was the half that was wrong, and the dialog is what changed.
-   */
-  const { data: folderDocs } = useFirestoreCollection<any>(
-    () =>
-      // `null` skips the listener entirely until the read set is known —
-      // see `scopeReady`. Issuing this unfiltered first would be denied.
-      scopeReady
-        ? query(
-            collection(firestore, scopeCollection, scopeId, 'mediaFolders'),
-            ...(needsScope
-              ? [where('visibleTo', 'array-contains-any', scopeTokens)]
-              : []),
-            limit(500),
-          )
-        : null,
-    [firestore, scopeId, needsScope, scopeTokens, scopeReady],
-    { idField: '$id' },
-  )
-  const folderList: Array<Aglyn.AglynHostMediaFolder> = useMemo(
-    () =>
-      [...((folderDocs as any[]) ?? [])].sort(
-        (a, b) =>
-          (a.order ?? 0) - (b.order ?? 0) ||
-          String(a.name).localeCompare(String(b.name)),
-      ),
-    [folderDocs],
-  )
   const folderNameById = useMemo(
     () =>
       Object.fromEntries(folderList.map((folder) => [folder.$id, folder.name])),
@@ -1049,98 +1079,145 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
       .catch((error) => console.error('media migration', error))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mediaDocs, folderDocs, firestore, scopeId])
-  const tags = useMemo(
-    () =>
-      [...new Set(items.flatMap((item: any) => item.tags ?? []))].sort(),
-    [items],
-  )
   /**
-   * Completing the window so search can answer over the whole library
-   * (AGL-1460).
-   *
-   * The debounce is on the READ, never on the filter: debouncing the filter
-   * would recreate the reported symptom, a box whose text does not match the
-   * grid. Gated on `hasMore`, so once the query is fully loaded this stops
-   * asking, and `loadAll` itself is idempotent, so a slow typist who
-   * out-waits 400 ms still pays for the pages exactly once.
+   * What the library has seen of the values a reader picks from (AGL-3327):
+   * tags, uploaders and custom-metadata keys, across every page read since
+   * it opened. Accumulated rather than read off the current window, so a
+   * filter that narrows the window does not take the other choices out of
+   * the panel the reader would use to change it.
    */
-  const [debouncedSearch] = useDebounce(search.trim(), MEDIA_SEARCH_DEBOUNCE_MS)
+  const [seen, setSeen] = useState<{
+    tags: string[]
+    uploaders: string[]
+    metaKeys: string[]
+  }>({ tags: [], uploaders: [], metaKeys: [] })
   useEffect(() => {
-    if (debouncedSearch.length < MEDIA_SEARCH_MIN_CHARS) return
-    if (!hasMore) return
-    void loadAll(MEDIA_SEARCH_MAX_DOCS)
-  }, [debouncedSearch, hasMore, loadAll])
+    setSeen((prev) => {
+      const tags = new Set(prev.tags)
+      const uploaders = new Set(prev.uploaders)
+      const metaKeys = new Set(prev.metaKeys)
+      for (const item of items as any[]) {
+        for (const tag of item.tags ?? []) tags.add(String(tag))
+        if (item.uploadedBy) uploaders.add(String(item.uploadedBy))
+        for (const key of Object.keys(item.customMetadata ?? {})) metaKeys.add(key)
+      }
+      const same =
+        tags.size === prev.tags.length &&
+        uploaders.size === prev.uploaders.length &&
+        metaKeys.size === prev.metaKeys.length
+      return same
+        ? prev
+        : {
+            tags: [...tags].sort(),
+            uploaders: [...uploaders].sort(),
+            metaKeys: [...metaKeys].sort(),
+          }
+    })
+  }, [items])
 
-  const searchQuery = useMemo(() => parseMediaQuery(search), [search])
-  const searchContext = useMemo(
-    () => ({ folderNameById }),
-    [folderNameById],
+  /**
+   * Uploaders by name (AGL-3327), for the List view's column, the Uploaded by
+   * filter and its chip. The roster route answers any member of the org,
+   * which is who opens a library or a picker. Until it answers — or if it
+   * cannot — a name is left blank rather than guessed; once it has, a uid it
+   * does not know is someone who has left the workspace.
+   */
+  const rosterOrgId = orgId ?? ((org as any)?.$id as string | undefined)
+  const roster = useOrgMemberOptions(rosterOrgId, { enabled: true })
+  const uploaderLabel = useCallback(
+    (uploadedBy: string | undefined): string => {
+      if (!uploadedBy) return ''
+      if (uploadedBy.startsWith('api:')) return 'API key'
+      const member = roster.options.find((entry) => entry.uid === uploadedBy)
+      if (member) return member.label
+      return roster.ready && !roster.error ? 'Former member' : ''
+    },
+    [roster.options, roster.ready, roster.error],
   )
-  const searchResult = useMemo(() => {
-    const now = Date.now() / 1000
-    const filtered = items.filter((item: any) => {
-      if (currentFolder === null && (item.folderId || item.folder)) {
-        return false
-      }
-      if (
-        typeof currentFolder === 'string' &&
-        currentFolder !== 'all' &&
-        item.folderId !== currentFolder &&
-        // Legacy fallback: unmigrated docs match by folder name.
-        item.folder !== folderNameById[currentFolder]
-      ) {
-        return false
-      }
-      if (tagFilter && !(item.tags ?? []).includes(tagFilter)) return false
-      const contentType = String(item.contentType ?? '')
-      if (typeFilter === 'image' && !contentType.startsWith('image/')) {
-        return false
-      }
-      if (typeFilter === 'video' && !contentType.startsWith('video/')) {
-        return false
-      }
-      if (typeFilter === 'pdf' && contentType !== 'application/pdf') {
-        return false
-      }
-      const createdSeconds = item.createdAt?.seconds ?? 0
-      if (dateFilter === '7d' && now - createdSeconds > 7 * 86400) return false
-      if (dateFilter === '30d' && now - createdSeconds > 30 * 86400) {
-        return false
-      }
-      const sizeBytes = item.sizeBytes ?? 0
-      if (sizeFilter === '1mb' && sizeBytes < 1024 * 1024) return false
-      if (sizeFilter === '5mb' && sizeBytes < 5 * 1024 * 1024) return false
-      return true
-    })
-    const sorted = [...filtered].sort((a: any, b: any) => {
-      if (sortBy === 'name') {
-        return String(a.fileName ?? '').localeCompare(String(b.fileName ?? ''))
-      }
-      if (sortBy === 'size') return (b.sizeBytes ?? 0) - (a.sizeBytes ?? 0)
-      if (sortBy === 'oldest') {
-        return (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0)
-      }
-      return (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
-    })
-    // Search runs LAST, over the sorted list (AGL-1460). A literal result set
-    // keeps the order the Sort control produced; only the fuzzy fallback
-    // replaces it with relevance, and only when the literal reading found
-    // nothing — which the field's caption discloses rather than quietly
-    // overriding the author's chosen sort on every keystroke.
-    return searchMedia(sorted, searchQuery, searchContext)
+
+  /**
+   * The fields the Filters panel offers (AGL-3327): each one the query can
+   * serve for this reader. Type goes where a picker fixes it, and Tags where
+   * the scope clause already holds the query's one array filter.
+   */
+  const panelFields = useMemo(
+    () => mediaFilterFields({ typeLocked: Boolean(kind), scoped: needsScope }),
+    [kind, needsScope],
+  )
+  const filterOptions = useMemo(() => {
+    const clauseValues = (field: string) =>
+      effectiveClauses
+        .filter((clause) => clause.field === field)
+        .flatMap((clause) => clause.value.split(','))
+        .map((value) => value.trim())
+        .filter(Boolean)
+    const tags = [...new Set([...seen.tags, ...clauseValues('tags')])].sort()
+    // Every member of the workspace, not only the uploaders read so far, so
+    // a file on a page not yet loaded can still be asked for by who
+    // uploaded it; plus the REST API keys and former members seen.
+    const uploaders = [
+      ...new Set([
+        ...roster.options.map((member) => member.uid),
+        ...seen.uploaders,
+        ...clauseValues('uploadedBy'),
+      ]),
+    ]
+    const options: Record<string, readonly ListFilterOption[]> = {
+      tags: tags.map((tag) => ({ value: tag, label: tag })),
+      uploadedBy: uploaders
+        .map((uid) => ({ value: uid, label: uploaderLabel(uid) || uid }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+      alt: MEDIA_ALT_OPTIONS,
+      orientation: MEDIA_ORIENTATION_OPTIONS,
+    }
+    if (!kind) options['type'] = MEDIA_TYPE_OPTIONS
+    return options
   }, [
-    items,
-    searchQuery,
-    searchContext,
-    currentFolder,
-    folderNameById,
-    tagFilter,
-    typeFilter,
-    dateFilter,
-    sizeFilter,
-    sortBy,
+    seen.tags,
+    seen.uploaders,
+    roster.options,
+    effectiveClauses,
+    uploaderLabel,
+    kind,
   ])
-  const visibleItems = searchResult.items
+  const selectFields = useMemo(() => Object.keys(filterOptions), [filterOptions])
+  /**
+   * Tags is a select over the tags the library has seen, asked as the
+   * query's `array-contains` over the tag array (`MEDIA_FILTER_FIELDS`): the
+   * panel shows that clause as "is", and writes "is" back as "contains";
+   * "is any of" is the select's own.
+   */
+  const filterCodecs = useMemo(
+    () => ({
+      tags: {
+        toItem: (clause: ListFilterClause) =>
+          clause.op === 'contains'
+            ? { operator: 'is', value: clause.value }
+            : listSelectCodec.toItem(clause),
+        toClause: (item: { field: string; operator: string; value?: unknown }) =>
+          item.operator === 'is'
+            ? item.value
+              ? { field: 'tags', op: 'contains', value: String(item.value) }
+              : null
+            : listSelectCodec.toClause(item as never),
+      },
+    }),
+    [],
+  )
+  const gridFilter = useListGridFilter({
+    clauses,
+    onChange: setClauses,
+    selectFields,
+    codecs: filterCodecs,
+    search: searchState,
+  })
+
+  /**
+   * The files on screen: the query's answer, in the query's order. Every
+   * filter and the search are on the query (AGL-3327), so there is nothing
+   * left to match here.
+   */
+  const visibleItems = items
   /**
    * The order a ⇧-click measures against (AGL-1462): the cards as drawn,
    * after filtering and sorting. Deriving it here rather than inside the
@@ -1915,6 +1992,14 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           tags: normalizeMediaTags(editor.tags),
           alt: editor.alt.trim().slice(0, MEDIA_ALT_MAX_LENGTH),
           description: editor.description.trim(),
+          // The library's filter and search keys (AGL-3327), re-derived from
+          // the document as this save leaves it, so a rename is found by its
+          // new name and an alt text added leaves "Alt text is missing".
+          ...mediaFilterKeys({
+            ...editor.media,
+            fileName: editor.fileName.trim().slice(0, 200) || editor.media?.fileName,
+            alt: editor.alt.trim().slice(0, MEDIA_ALT_MAX_LENGTH),
+          }),
         },
       )
       if (metaChanged) {
@@ -2268,9 +2353,9 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     setBulkTag(null)
     // Same tag arithmetic the batch just wrote, applied to the loaded window
     // (AGL-1462). Tagging 40 files and losing the window is the same cost as
-    // deleting one and losing it. Where the tag FILTER is query-side the
-    // client-side pass below still drops an asset that no longer carries it,
-    // so the grid stays truthful without a re-read.
+    // deleting one and losing it. A file untagged under a Tags filter stays
+    // on screen, showing its new tags, until the next read: the query decides
+    // what matches, never a pass over the rows already read (AGL-3327).
     patchLocal(selected, (item: any) => {
       const tags: string[] = item.tags ?? []
       return {
@@ -3556,6 +3641,322 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
     ],
   )
 
+  /**
+   * Open a file's Details drawer — from its card, or its row in the List
+   * view.
+   *
+   * The third AGL-1466 surface, and the busiest (AGL-1480). This seeded the
+   * "Shared with" control with the org token whenever the field was absent,
+   * so the drawer said "All sites" about a file both enforcement layers hide
+   * from every one of them. `?? []` and the flag below say the true thing
+   * instead; persisting the default on open was the other option and
+   * AGL-1466 ruled it out — opening a drawer would write, the write
+   * cascades, the AGL-1042 rules refuse it from anyone who is not org-wide,
+   * and it repairs only what somebody happens to look at.
+   */
+  const openDetails = useCallback((media: Aglyn.AglynHostMedia) => {
+    const storedVisibleTo = storedScope(media.visibleTo)
+    setEditor({
+      id: media.$id as string,
+      media,
+      fileName: (media as any).fileName ?? '',
+      folderId: (media as any).folderId ?? '',
+      tags: ((media as any).tags ?? []).join(', '),
+      alt: (media as any).alt ?? '',
+      description: (media as any).description ?? '',
+      customMeta: Object.entries((media as any).customMetadata ?? {}).map(
+        ([key, value]) => ({ key, value: String(value) }),
+      ),
+      visibleTo: storedVisibleTo ?? [],
+      scopeUnset: !storedVisibleTo,
+    })
+  }, [])
+
+  // The two views (AGL-3327): the thumbnail Grid every library opened on,
+  // and the List — the console's shared table. The reader's choice is kept
+  // on their profile, so it holds on every library and every device.
+  const [view, setView] = useMediaLibraryView()
+  /**
+   * The List view's columns, typed for the Filters panel. The Grid view's
+   * toolbar is the same grid with its body collapsed, so these are also the
+   * columns its panel lists and its Export writes.
+   */
+  /**
+   * The row actions, read at click time rather than captured by the columns.
+   *
+   * Several of these handlers are rebuilt on every render of the library,
+   * and the grid treats a new `columns` array as new columns — it re-derives
+   * its column state in an effect. Capturing them would hand the grid new
+   * columns on every keystroke anywhere on the page, which is the AGL-2854
+   * shape: an update per commit, counted until React throws #185. Through a
+   * ref the columns change only when what they draw changes.
+   */
+  const rowActionsRef = useRef({
+    handleCopyUrl,
+    handleCopySignedLink,
+    setAssetPrivate,
+    handleDownload,
+    requestCardReplace,
+    openDetails,
+    handleDelete,
+  })
+  rowActionsRef.current = {
+    handleCopyUrl,
+    handleCopySignedLink,
+    setAssetPrivate,
+    handleDownload,
+    requestCardReplace,
+    openDetails,
+    handleDelete,
+  }
+  const listColumns = useMemo(
+    () =>
+      listFilterGridColumns(
+        mediaListColumns({
+          formatBytes,
+          folderLabel: (media) =>
+            media.folderId
+              ? (folderPathById[media.folderId] ?? '')
+              : String(media.folder ?? ''),
+          uploaderLabel,
+          draggable: onSelect
+            ? undefined
+            : (media, children) => (
+                <DraggableCard mediaId={media.$id as string}>
+                  {children}
+                </DraggableCard>
+              ),
+          quarantine: (media) => quarantined[media.$id as string] ?? null,
+          actions: onSelect
+            ? undefined
+            : (media) => {
+                const run = () => rowActionsRef.current
+                return {
+                  onCopyUrl: () => run().handleCopyUrl(media)(),
+                  onCopySignedLink:
+                    orgId && viewerOrgWide
+                      ? () => void run().handleCopySignedLink(media)()
+                      : undefined,
+                  onSetPrivate:
+                    orgId && viewerOrgWide
+                      ? (makePrivate) =>
+                          void run().setAssetPrivate(
+                            media.$id as string,
+                            makePrivate,
+                          )
+                      : undefined,
+                  onDownload: () => void run().handleDownload(media)(),
+                  onReplace: () => run().requestCardReplace(media),
+                  onDetails: () => run().openDetails(media),
+                  onDelete: () => void run().handleDelete(media)(),
+                }
+              },
+        }),
+        panelFields,
+        filterOptions,
+        MEDIA_FILTER_HEADERS,
+      ).map((column) =>
+        // Tags is asked as the query's `contains` and picked from the tags
+        // seen, so its select offers the one operator its codec reads.
+        column.field === 'tags' && column.type === 'singleSelect'
+          ? { ...column, filterable: true, filterOperators: MEDIA_TAG_OPERATORS }
+          : column,
+      ),
+    [
+      folderPathById,
+      uploaderLabel,
+      onSelect,
+      quarantined,
+      orgId,
+      viewerOrgWide,
+      panelFields,
+      filterOptions,
+    ],
+  )
+  /**
+   * The reader's column choices, with every filter-only field kept hidden:
+   * those are columns only so the panel can reach them, and have nothing to
+   * draw (`hiddenFilterColumns`).
+   */
+  const [columnChoices, setColumnChoices] = useState<GridColumnVisibilityModel>(
+    {},
+  )
+  const columnVisibilityModel = useMemo(
+    () => ({
+      ...columnChoices,
+      ...hiddenFilterVisibility(
+        panelFields,
+        listColumns
+          .filter((column) => column.hideable !== false || column.renderCell)
+          .map((column) => column.field),
+      ),
+    }),
+    [columnChoices, panelFields, listColumns],
+  )
+  /**
+   * What both views' grids share: the columns, the filter model, the search
+   * (AGL-3327). The chips over the files show every clause in force; the
+   * toolbar's Filters panel adds them and its search is the library search,
+   * which a library limited to some sites does not offer — its query's one
+   * array filter is the scope clause. In the List view the toolbar is the
+   * table's own; in the Grid view it is the same grid with its body
+   * collapsed, beside the Sort control a card grid needs because it has no
+   * column headers to click.
+   */
+  const gridToolbarProps = useMemo(
+    () => ({
+      columns: listColumns,
+      filterMode: 'server' as const,
+      filterModel: gridFilter.filterModel,
+      onFilterModelChange: gridFilter.onFilterModelChange,
+      columnVisibilityModel,
+      onColumnVisibilityModelChange: setColumnChoices,
+      localeText: MEDIA_GRID_LOCALE_TEXT,
+      slotProps: MEDIA_GRID_SLOT_PROPS,
+    }),
+    [
+      listColumns,
+      gridFilter.filterModel,
+      gridFilter.onFilterModelChange,
+      columnVisibilityModel,
+    ],
+  )
+  /**
+   * The Grid view's toolbar, as ONE element for as long as its props hold
+   * (AGL-2854). A keystroke anywhere on the page re-renders the library, and
+   * a toolbar re-rendered with it re-runs the quick filter's adornment
+   * effect, which sets state during the commit; a burst of those passes
+   * React's nested-update limit. The same element is skipped instead.
+   */
+  const gridViewToolbar = useMemo(
+    () => <ListTable {...gridToolbarProps} toolbarOnly />,
+    [gridToolbarProps],
+  )
+  const listSelection = useMemo(
+    () =>
+      onSelect
+        ? undefined
+        : {
+            selected: [...selected],
+            onChange: (ids: string[]) =>
+              setSelection((prev) => ({ ...prev, ids: new Set(ids) })),
+          },
+    [onSelect, selected],
+  )
+  const listSortModel = useMemo(
+    () => mediaSortModel(effectiveSort),
+    [effectiveSort],
+  )
+  /**
+   * The List view's table, held as one element for as long as what it draws
+   * holds, for the reason the Grid view's toolbar is (AGL-2854).
+   */
+  const listViewTable = useMemo(
+    () => (
+      <ListTable
+        {...gridToolbarProps}
+        rows={visibleItems}
+        loading={loadingMedia}
+        hideFooter
+        sortingMode="server"
+        sortModel={listSortModel}
+        onSortModelChange={(model) =>
+          setSortBy(mediaSortFromModel(model, sortBy))
+        }
+        selectable={listSelection}
+        onOpen={(_id, row) =>
+          onSelect ? onSelect(row as Aglyn.AglynHostMedia) : openDetails(row)
+        }
+        noRowsLabel={
+          filtersActive
+            ? 'No media matches these filters'
+            : kind
+              ? `No ${PICKER_KIND_COPY[kind].plural} here yet`
+              : 'No media here yet'
+        }
+        noRowsDescription={
+          filtersActive
+            ? 'Try a different search, folder, or type — or clear the ' +
+              'filters to see everything in this library.'
+            : 'Drop files here or use Upload media above.'
+        }
+        noRowsAction={
+          filtersActive ? (
+            <Button size="small" onClick={clearFilters}>
+              {'Clear filters'}
+            </Button>
+          ) : null
+        }
+      />
+    ),
+    [
+      gridToolbarProps,
+      visibleItems,
+      loadingMedia,
+      listSortModel,
+      sortBy,
+      listSelection,
+      onSelect,
+      openDetails,
+      filtersActive,
+      kind,
+      clearFilters,
+    ],
+  )
+  /**
+   * What the query could not take, as the chip would read it: the header,
+   * the operator and the value by its label (AGL-3327).
+   */
+  const refusedNotices = useMemo(
+    () =>
+      queryPlan.refused.map((entry) => {
+        if (entry.clause === 'search') return { label: 'Search', reason: entry.reason }
+        const clause = entry.clause as ListFilterRequest
+        const named = (value: string) =>
+          filterOptions[clause.field]?.find((option) => option.value === value)
+            ?.label ?? value
+        const value = clause.value
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map(named)
+          .join(', ')
+        return {
+          label: [
+            MEDIA_FILTER_HEADERS[clause.field] ?? clause.field,
+            listFilterOperatorLabel(clause.op),
+            value,
+          ]
+            .filter(Boolean)
+            .join(' '),
+          reason: entry.reason,
+        }
+      }),
+    [queryPlan.refused, filterOptions],
+  )
+  const queryNotices = useMemo(
+    () => [
+      ...queryPlan.notices,
+      ...(subfoldersDropped
+        ? [
+            'Include subfolders is off for this folder: it has more ' +
+              'subfolders than one query can look through, so only the ' +
+              'files directly in it are shown.',
+          ]
+        : []),
+      ...(effectiveSort !== sortBy
+        ? [
+            `Sorted ${MEDIA_SORT_LABELS[effectiveSort].toLowerCase()} first: ` +
+              'a range filter orders the files by the field it ranges over.',
+          ]
+        : []),
+    ],
+    [queryPlan.notices, subfoldersDropped, effectiveSort, sortBy],
+  )
+  const kindLabel = kind
+    ? (MEDIA_TYPE_OPTIONS.find((option) => option.value === kind)?.label ?? kind)
+    : null
+
   const currentFolderName =
     typeof currentFolder === 'string' && currentFolder !== 'all'
       ? folderNameById[currentFolder]
@@ -3668,6 +4069,27 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             />
           </Tooltip>
         ) : null}
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={view}
+          onChange={(_event, next) => {
+            if (next) setView(next)
+          }}
+          aria-label="View"
+          sx={{ ml: 'auto !important' }}
+        >
+          <ToggleButton value="grid" aria-label="Grid view">
+            <Tooltip title="Grid view">
+              <GridViewIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="list" aria-label="List view">
+            <Tooltip title="List view">
+              <ViewListIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
         <Box
           component="input"
           ref={inputRef}
@@ -3689,92 +4111,70 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
           sx={{ display: 'none' }}
         />
       </Stack>
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
-      >
-        <MediaSearchField
-          value={search}
-          onChange={setSearch}
-          loaded={items.length}
-          total={totalCount}
-          complete={windowComplete}
-          completing={windowCompleting}
-          truncated={windowTruncated}
-          mode={searchResult.mode}
-          matches={visibleItems.length}
-        />
-        <TextField
-          select
-          size="small"
-          label="Type"
-          value={typeFilter}
-          onChange={(event) => setTypeFilter(event.target.value)}
-          // Fixed in a narrowed library (AGL-2953). Disabled rather than
-          // hidden, so the control still says why only one kind is listed.
-          disabled={Boolean(kind)}
-          sx={{ minWidth: 110 }}
+      {kindLabel || gridFilter.clauses.length ? (
+        <Stack
+          direction="row"
+          spacing={1}
+          useFlexGap
+          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
         >
-          <MenuItem value="">{'All types'}</MenuItem>
-          <MenuItem value="image">{'Images'}</MenuItem>
-          <MenuItem value="video">{'Video'}</MenuItem>
-          <MenuItem value="pdf">{'PDF'}</MenuItem>
-        </TextField>
-        <TextField
-          select
-          size="small"
-          label="Uploaded"
-          value={dateFilter}
-          onChange={(event) => setDateFilter(event.target.value)}
-          sx={{ minWidth: 120 }}
-        >
-          <MenuItem value="">{'Any time'}</MenuItem>
-          <MenuItem value="7d">{'Last 7 days'}</MenuItem>
-          <MenuItem value="30d">{'Last 30 days'}</MenuItem>
-        </TextField>
-        <TextField
-          select
-          size="small"
-          label="Size"
-          value={sizeFilter}
-          onChange={(event) => setSizeFilter(event.target.value)}
-          sx={{ minWidth: 110 }}
-        >
-          <MenuItem value="">{'Any size'}</MenuItem>
-          <MenuItem value="1mb">{'Over 1 MB'}</MenuItem>
-          <MenuItem value="5mb">{'Over 5 MB'}</MenuItem>
-        </TextField>
-        <TextField
-          select
-          size="small"
-          label="Sort"
-          value={sortBy}
-          onChange={(event) => setSortBy(event.target.value as any)}
-          sx={{ minWidth: 120 }}
-        >
-          <MenuItem value="newest">{'Newest'}</MenuItem>
-          <MenuItem value="oldest">{'Oldest'}</MenuItem>
-          <MenuItem value="name">{'Name'}</MenuItem>
-          <MenuItem value="size">{'Largest'}</MenuItem>
-        </TextField>
-        {tags.length ? (
-          <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
-            {tags.map((tag) => (
+          {kindLabel && kind ? (
+            // Fixed by the picker (AGL-2953): shown, so the reader knows why
+            // only one kind is listed, and not removable.
+            <Tooltip
+              title={`This picker only takes ${PICKER_KIND_COPY[kind].plural}`}
+            >
               <Chip
-                key={tag}
-                label={tag}
                 size="small"
-                color={tagFilter === tag ? 'primary' : 'default'}
-                onClick={() =>
-                  setTagFilter((prev) => (prev === tag ? '' : tag))
-                }
+                color="primary"
+                label={`Type is ${kindLabel}`}
               />
+            </Tooltip>
+          ) : null}
+          <ListFilterChips
+            fields={panelFields}
+            headers={MEDIA_FILTER_HEADERS}
+            clauses={gridFilter.clauses}
+            onChange={gridFilter.setClauses}
+            options={filterOptions}
+          />
+        </Stack>
+      ) : null}
+      {view === 'grid' ? (
+        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            {gridViewToolbar}
+          </Box>
+          <TextField
+            select
+            size="small"
+            label="Sort"
+            value={effectiveSort}
+            onChange={(event) => setSortBy(event.target.value as MediaSort)}
+            sx={{ minWidth: 120 }}
+          >
+            {MEDIA_SORTS.map((sort) => (
+              <MenuItem key={sort} value={sort}>
+                {MEDIA_SORT_LABELS[sort]}
+              </MenuItem>
             ))}
-          </Stack>
-        ) : null}
-      </Stack>
+          </TextField>
+        </Stack>
+      ) : null}
+      {/* What the query could not take, said above the files (AGL-3327). */}
+      <ListQueryNotices refused={refusedNotices} notices={queryNotices} />
+      {needsScope && !onSelect ? (
+        <Typography variant="caption" color="text.secondary">
+          {'The Tags filter isn’t available in a library limited to some ' +
+            'sites.'}
+        </Typography>
+      ) : null}
       {breadcrumb.length ? (
+        <Stack
+          direction="row"
+          spacing={2}
+          sx={{ alignItems: 'center', flexWrap: 'wrap' }}
+        >
         <Breadcrumbs>
           <CrumbDropZone targetId={null}>
             <Link
@@ -3807,6 +4207,17 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             ),
           )}
         </Breadcrumbs>
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={includeSubfolders}
+                onChange={(event) => setIncludeSubfolders(event.target.checked)}
+              />
+            }
+            label={<Typography variant="body2">{'Include subfolders'}</Typography>}
+          />
+        </Stack>
       ) : null}
       {moveProgress ? (
         // A nineteen-asset move is nineteen serial round trips to Cloud
@@ -3898,6 +4309,12 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
             ? 'Your media could not be loaded — this account may not have access to this library, or the session needs refreshing. Nothing has been deleted.'
             : 'Your media could not be loaded. Nothing has been deleted — try again in a moment.'}
         </Alert>
+      ) : view === 'list' ? (
+        // The List view (AGL-3327). Files only: folders are the rail and the
+        // breadcrumbs here, which are also where a dragged row is dropped. The
+        // table keeps its toolbar when nothing matches, so the filter that
+        // emptied it can be changed from where it was set.
+        listViewTable
       ) : visibleFolders.length === 0 && visibleItems.length === 0 ? (
         /*
           The same empty state every other list in the console draws (AGL-2501).
@@ -4080,33 +4497,7 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
                   // capability shipped in AGL-184 and was invisible on every
                   // asset that was not a picture.
                   onReplace={() => requestCardReplace(media)}
-                  onDetails={() => {
-                    // The third AGL-1466 surface, and the busiest (AGL-1480).
-                    // This seeded the "Shared with" control with the org token
-                    // whenever the field was absent, so the drawer said "All
-                    // sites" about a file both enforcement layers hide from
-                    // every one of them. `?? []` and the flag below say the
-                    // true thing instead; persisting the default on open was
-                    // the other option and AGL-1466 ruled it out — opening a
-                    // drawer would write, the write cascades, the AGL-1042
-                    // rules refuse it from anyone who is not org-wide, and it
-                    // repairs only what somebody happens to look at.
-                    const storedVisibleTo = storedScope(media.visibleTo)
-                    setEditor({
-                      id: media.$id as string,
-                      media,
-                      fileName: (media as any).fileName ?? '',
-                      folderId: (media as any).folderId ?? '',
-                      tags: ((media as any).tags ?? []).join(', '),
-                      alt: (media as any).alt ?? '',
-                      description: (media as any).description ?? '',
-                      customMeta: Object.entries(
-                        (media as any).customMetadata ?? {},
-                      ).map(([key, value]) => ({ key, value: String(value) })),
-                      visibleTo: storedVisibleTo ?? [],
-                      scopeUnset: !storedVisibleTo,
-                    })
-                  }}
+                  onDetails={() => openDetails(media)}
                   onDelete={handleDelete(media)}
                   // Org library only, and org-wide members only (AGL-1051).
                   // A host's own library is already unreachable from other

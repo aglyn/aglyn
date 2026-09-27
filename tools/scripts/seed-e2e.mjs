@@ -624,6 +624,10 @@ const mediaFixtures = [
 // (AGL-1488) — this seed is re-run constantly, and the helper's delta rule is
 // what keeps a second run from over-counting what the first already counted.
 for (const [id, fileName, tags, seed] of mediaFixtures) {
+  // The size in the picsum path is the image's own, and an upload writes it
+  // as `width`/`height` with its uploader (AGL-3327): the media List view's
+  // Dimensions and Uploaded by columns, and the filters that read them.
+  const [width, height] = seed.split('/').slice(1).map(Number)
   await putMediaDocument({
     firestore,
     scopeRef: hostRef,
@@ -635,6 +639,9 @@ for (const [id, fileName, tags, seed] of mediaFixtures) {
       url: `https://picsum.photos/seed/${seed}`,
       tags,
       alt: fileName.replace('.jpg', ''),
+      width,
+      height,
+      uploadedBy: E2E_UID,
       createdAt: now,
       updatedAt: now,
     },
@@ -681,6 +688,9 @@ await putMediaDocument({
     folderId: 'seed-folder-blog',
     tags: ['blog'],
     alt: 'blog cover',
+    width: 600,
+    height: 400,
+    uploadedBy: E2E_UID,
     createdAt: now,
     updatedAt: now,
   },

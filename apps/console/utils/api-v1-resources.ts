@@ -20,6 +20,7 @@
  * org-scoped from the authenticated key (see api-v1.ts). Datasets/records are
  * the headline CRUD surface; sites, form submissions, and contacts are read.
  */
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
@@ -2273,6 +2274,13 @@ async function createMedia(
       folderId,
       ...dimensions,
       ...(body.alt ? { alt: String(body.alt).slice(0, 500) } : {}),
+      // What the console library filters and searches by (AGL-3327).
+      ...mediaFilterKeys({
+        fileName,
+        contentType,
+        alt: body.alt ? String(body.alt).slice(0, 500) : '',
+        ...dimensions,
+      }),
       contentHash,
       contentSha256,
       variants: (variants as { variants?: number[] })?.variants ?? [],

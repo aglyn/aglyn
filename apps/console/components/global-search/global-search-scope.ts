@@ -40,8 +40,10 @@
  *
  * ## The mechanism now, and why it is the DAM's and not the switcher's
  *
- * `media-search.ts` faced this exact fork and chose: read a bounded set, match
- * richly over all of it, and describe the bound. Its reasoning applies here
+ * The media library's search (AGL-1460) faced this exact fork and chose: read
+ * a bounded set, match richly over all of it, and describe the bound — until
+ * AGL-3327 bought the prefix shape for that one collection, a stored token
+ * field, its backfill and its indexes. The reasoning applies here
  * word for word — Firestore has no `LIKE` and no full-text index, so a
  * word-anywhere match has no server expression at any price, and buying the
  * prefix shape for eleven more collections costs a schema field, a backfill of

@@ -167,10 +167,11 @@ const SHARED_FOOTER: Array<[string, string]> = [
 /**
  * The two lists that keep "Load more", and why.
  *
- * Neither is a table. The DAM grid completes a SEARCH as it loads — it reads
- * until the filter is satisfied or a document ceiling is hit (AGL-1460), so
- * "how many pages" is not a question it can answer, and a page number would
- * be a number about the wrong thing. The storefront product grid is a
+ * Neither is a table. The DAM is a thumbnail grid read down a page at a
+ * time, and its List view shares that one cursor so the two views never
+ * disagree about what is loaded (AGL-3327). Every filter and the search are
+ * on its query, which has no count to divide into pages beside the
+ * cursor, so a page number would be a number about the wrong thing. The storefront product grid is a
  * shopper's browse surface on a published site, where a pager is a different
  * design decision from a console list's.
  *
@@ -562,8 +563,12 @@ const withoutComments = (source: string) =>
  * moved theirs into `hostArtifactQuery`: the decision is subtle, identical
  * everywhere, and wrong in a way nobody sees. A guard that only knew the word
  * would have reported every one of those conversions as unordered.
+ * `listQueryConstraints` is the same for a list whose query is planned
+ * (AGL-3321): the plan always carries one order, and the constraints end in
+ * it.
  */
-const NAMES_ITS_ORDER = /\borderBy\(|\bcollectionPage\(|\bcollectionCeiling\(/
+const NAMES_ITS_ORDER =
+  /\borderBy\(|\bcollectionPage\(|\bcollectionCeiling\(|\blistQueryConstraints\(/
 
 const DRAWS_A_FOOTER =
   /<ListPagination|<ListTable|<DataTableComponent|<TablePagination|<DataGrid|<ScreensHierarchyTable/
@@ -633,6 +638,7 @@ describe('every list that DRAWS a footer names its order (AGL-2501)', () => {
     expect(NAMES_ITS_ORDER.test("orderBy('createdAt', 'desc')")).toBe(true)
     expect(NAMES_ITS_ORDER.test('collectionPage(ref, pageLimit)')).toBe(true)
     expect(NAMES_ITS_ORDER.test('collectionCeiling(ref, CEILING)')).toBe(true)
+    expect(NAMES_ITS_ORDER.test('listQueryConstraints(plan)')).toBe(true)
     expect(NAMES_ITS_ORDER.test('query(ref, limit(200))')).toBe(false)
   })
 })
@@ -1220,9 +1226,10 @@ const NOT_A_LIST: Array<[string, string]> = [
   ],
   [
     'apps/console/components/media/media-library.component.tsx',
-    'The DAM grid, already exempt and already explained: it completes a ' +
-      'SEARCH as it loads (AGL-1460), so "how many pages" is not a question ' +
-      'it can answer. Named here too because the widened shape reaches it.',
+    'The DAM grid, already exempt and already explained: it reads down ' +
+      'one cursor that its Grid and List views share (AGL-3327), so "how ' +
+      'many pages" is not a question it answers. Named here too because ' +
+      'the widened shape reaches it.',
   ],
   [
     'libs/plugins/commerce/src/lib/components/console/commerce-analytics-card.component.tsx',

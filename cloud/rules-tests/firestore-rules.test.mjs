@@ -4937,6 +4937,111 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
     )
   })
 
+  /**
+   * The media library's served filters and search, as each reader's query
+   * actually runs (AGL-3327). Every fixture below carries the keys the query
+   * asks for, because a list no document can match is allowed vacuously and
+   * would prove nothing.
+   */
+  it('the media library filters and searches the way the rules can prove (AGL-3327)', async () => {
+    const at = new Date('2026-09-20T12:00:00Z')
+    const keys = (visibleTo) => ({
+      url: 'u', createdAt: at, sizeBytes: 1000, folderId: null, visibleTo,
+      kind: 'image', hasAlt: false, orientation: 'landscape',
+      nameLower: 'hero.png', nameTokens: ['h', 'he', 'her', 'hero', 'p', 'pn', 'png'],
+      // What a search folded into the scope clause would need stamped.
+      scopedNameTokens: visibleTo.map((scope) => `${scope}~hero`),
+    })
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'me-hero-mine'), keys([`host:${HOST}`]))
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'me-hero-theirs'), keys([`host:${OTHER_HOST}`]))
+      await setDoc(doc(db, 'hosts', HOST, 'media', 'site-hero'), keys([]))
+    })
+    const scope = where('visibleTo', 'array-contains-any', ['org', `host:${HOST}`])
+    const orgMedia = (uid) => collection(authed(uid), 'orgs', ORG, 'media')
+
+    // A collaborator's filters: every equality and one range beside the
+    // scope clause, and only their own site's file comes back.
+    const filtered = await getDocs(
+      query(
+        orgMedia(EDITOR),
+        scope,
+        where('folderId', '==', null),
+        where('kind', '==', 'image'),
+        where('hasAlt', '==', false),
+        where('orientation', 'in', ['landscape', 'square']),
+        where('createdAt', '>=', new Date('2026-09-01T00:00:00Z')),
+        orderBy('createdAt', 'desc'),
+        limit(60),
+      ),
+    ).catch((error) => assert.fail(`a collaborator's filtered media list was denied: ${error}`))
+    assert.deepEqual(filtered.docs.map((snapshot) => snapshot.id), ['me-hero-mine'])
+
+    // A collaborator's search: a name range beside the scope clause.
+    await mustAllow(
+      "a collaborator's media search, as a name range beside the scope",
+      getDocs(
+        query(
+          orgMedia(EDITOR),
+          scope,
+          where('nameLower', '>=', 'her'),
+          where('nameLower', '<=', 'her\uf8ff'),
+          orderBy('nameLower', 'asc'),
+          limit(60),
+        ),
+      ),
+    )
+    // Why it is not the folded search: a query on the scoped tokens says
+    // nothing about `visibleTo`, which is what the rules read.
+    await mustDeny(
+      "a collaborator's media search folded into scoped tokens",
+      getDocs(
+        query(
+          orgMedia(EDITOR),
+          where('scopedNameTokens', 'array-contains-any', ['org~hero', `host:${HOST}~hero`]),
+          orderBy('createdAt', 'desc'),
+          limit(60),
+        ),
+      ),
+    )
+    await mustDeny(
+      "a collaborator's token search without the scope clause",
+      getDocs(query(orgMedia(EDITOR), where('nameTokens', 'array-contains', 'hero'), limit(60))),
+    )
+
+    // An org-wide member searches by word, with any filter beside it.
+    for (const uid of [OWNER, VIEWER]) {
+      await mustAllow(
+        `an org-wide member's media search (${uid})`,
+        getDocs(
+          query(
+            orgMedia(uid),
+            where('nameTokens', 'array-contains', 'hero'),
+            where('kind', '==', 'image'),
+            where('uploadedBy', 'in', ['u1', 'u2']),
+            orderBy('createdAt', 'desc'),
+            limit(60),
+          ),
+        ),
+      )
+    }
+
+    // A site's own library carries no scope clause: its members search it.
+    await mustAllow(
+      "a site member's search of the site library",
+      getDocs(
+        query(
+          collection(authed(EDITOR), 'hosts', HOST, 'media'),
+          where('nameTokens', 'array-contains', 'hero'),
+          where('orientation', '==', 'landscape'),
+          orderBy('createdAt', 'desc'),
+          limit(60),
+        ),
+      ),
+    )
+  })
+
   it('a collaborator cannot CREATE a folder scoped to a site they lack', async () => {
     const db = authed(EDITOR)
     await assertFails(
