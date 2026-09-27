@@ -73,28 +73,34 @@ same way on every list. A list drawn as cards rather than a table — such as
 - **Chips** above the table show every filter in force, each read as a sentence
   such as "Status is Live". The panel shows one filter at a time; the chips show
   them all. Remove a chip to drop its filter.
-- **Search** matches words. Type several and a row is kept when every word
-  appears, in any order and either case, in one of the things that list
-  searches — each list's page names them. Search adds to the filters, and an
-  empty box shows the list unfiltered again.
+- **Search** finds records by the start of a word in the things that list
+  searches — each list's page names them. It matches one word at a time: type
+  "acm" and "Acme Coffee" is found; type two words and the list searches the
+  first and says so. A word is read up to its first 12 letters. Search adds to
+  the filters, and an empty box shows the list unfiltered again.
 - The **pager** at the foot of the table then turns through the matches, not
   the whole list.
 
-How far a filter or a search reaches depends on how the list reads its rows,
-and each list's page says which:
+Every filter and every search word is answered by the list's query, across
+the whole list — never only the rows already on screen. A record that matches
+is found whether it would have been on the first page or the fortieth. Two
+limits follow from asking one query:
 
-- **The whole list.** A list that reads every row at once, or whose query
-  applies the filter itself, answers across all of it — not only the page on
-  screen.
-- **The rows read.** A long list reads a window of its rows instead: its
-  newest rows up to a cap its page names, or, on a list that reads a page at a
-  time, 100 rows as soon as the first filter or search word is set, and one
-  page more each time you turn past the last match. A filter there looks
-  through what has been read, and the table says when there is more.
-- **One served filter.** Some lists hand one filter to the server, which looks
-  through every record, and apply the rest to the rows it returned. The served
-  filter's chip is filled in; hover a chip to see which kind it is. On such a
-  list a new served filter replaces the previous one.
+- **A filter a query can't answer isn't offered.** The panel lists only the
+  columns and operators the list can look up.
+- **A combination one query can't hold is refused by name.** A note above the
+  list names the filter or search it set aside — for example, two date ranges
+  at once, or a search together with a filter that also matches words — and
+  the list shows what the rest of them match. Remove one to apply the other.
+  Nothing is ever quietly left out of the results.
+
+Someone who can see only some sites searches the lists shared across sites by
+the start of a name (or of an address, where the list has no name), beside the
+sites they can see; the list says so when it does.
+
+A few lists read from somewhere other than the console's database and search
+there instead: billing invoices ask Stripe, and the staff Users list asks the
+sign-in service.
 
 ## Primary navigation
 

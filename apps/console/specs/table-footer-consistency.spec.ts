@@ -2038,10 +2038,9 @@ describe('CRM lists filter through the grid, by the shared path', () => {
  *
  * A converted list holds its clauses in `useListGridFilter`, hands the grid
  * the model with `filterMode="server"` so the grid never narrows a page on
- * its own, and answers the clauses itself — over every row it read
- * (`filterListRows`), or on its query where one is served. The file list
- * grows with each area; one that falls off the path, or turns the panel
- * off, is red here.
+ * its own, and answers the clauses on its query (AGL-3321; the hooks that
+ * matched loaded rows are deleted). The file list grows with each area; one
+ * that falls off the path, or turns the panel off, is red here.
  */
 const GRID_FILTER_LISTS: readonly string[] = [
   // Sequences
@@ -2105,20 +2104,12 @@ describe('converted lists filter through the grid, by the shared path (AGL-3317)
   it('each one binds the panel through the shared hook and never turns it off', () => {
     const off = GRID_FILTER_LISTS.filter((path) => {
       const source = read(path)
-      // The bare hook, wired by hand…
       const bound =
         source.includes('useListGridFilter(') &&
         source.includes('filterMode="server"') &&
         source.includes('onFilterModelChange={gridFilter.onFilterModelChange}')
-      // …or the recipe for a list that holds its rows (or pages a live
-      // window of them), spread whole.
-      const spread =
-        /use(List|Paged)RowsFilter(<[^>]*>)?\(/.test(source) &&
-        /\{\.\.\.\w+\.gridProps\}/.test(source)
       return (
-        source.includes('disableColumnFilter') ||
-        source.includes('quickFilter={false}') ||
-        !(bound || spread)
+        source.includes('disableColumnFilter') || source.includes('quickFilter={false}') || !bound
       )
     })
     expect(off).toEqual([])

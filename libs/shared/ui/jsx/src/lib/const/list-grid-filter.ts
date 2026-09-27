@@ -60,44 +60,6 @@ export interface ListFilterOption {
   label: string
 }
 
-/**
- * A field of a list that holds its rows and answers the panel in memory.
- *
- * The grammar's derived operators describe what a FIRESTORE query can
- * serve, so a text field with no lower-case twin offers nothing. A list
- * that matches over rows it already has is not held to that: plain
- * JavaScript answers a mid-string `contains` and both empty operators, so
- * the field names them (`operators`), and `matchListFilter` answers them.
- * `select` is a field picked from choices — the list passes them as the
- * field's options, and the panel shows a select over them.
-  * @deprecated AGL-3321: matches over rows a list has loaded. Serve every clause and search
- * word on the query instead — `planListQuery` (`@aglyn/shared-ui-jsx/const/list-query-plan`, with `nameSearchNormalizers`)
- * through `useListQuery` or `applyListQuery`. Removed once no list calls it.
-*/
-export function inMemoryListField(
-  column: string,
-  kind: 'text' | 'select' | 'number' | 'date' | 'boolean',
-  path: string = column,
-): ListFilterField {
-  switch (kind) {
-    case 'text':
-      return {
-        column,
-        path,
-        kind: 'text',
-        operators: ['contains', 'doesNotContain', 'equals', 'startsWith', 'endsWith', 'isEmpty', 'isNotEmpty'],
-      }
-    case 'select':
-      return { column, path, kind: 'exact', operators: ['equals', 'doesNotEqual', 'isAnyOf'] }
-    case 'number':
-      return { column, path, kind: 'number', presence: 'nullable' }
-    case 'date':
-      return { column, path, kind: 'date', presence: 'nullable' }
-    default:
-      return { column, path, kind: 'boolean' }
-  }
-}
-
 /** The grid operator each stored select operator shows as. */
 const SELECT_TO_GRID: Readonly<Record<string, string>> = {
   equals: 'is',
@@ -259,30 +221,6 @@ export function listRowMatchesSearch(
     .map((value) => String(value).toLowerCase())
     .filter(Boolean)
   return asked.every((word) => values.some((value) => value.includes(word)))
-}
-
-/**
- * The rows that answer every clause and the quick search — for a list that
- * holds its whole data set (or the window its query already narrowed) and
- * so answers the panel itself. A clause `skip` names is one the query
- * already served, and is not matched again.
-  * @deprecated AGL-3321: matches over rows a list has loaded. Serve every clause and search
- * word on the query instead — `planListQuery` (`@aglyn/shared-ui-jsx/const/list-query-plan`, with `nameSearchNormalizers`)
- * through `useListQuery` or `applyListQuery`. Removed once no list calls it.
-*/
-export function filterListRows<Row extends object>(
-  rows: readonly Row[],
-  fields: readonly ListFilterField[],
-  clauses: readonly ListFilterClause[],
-  search: { paths: readonly string[]; words: readonly string[] },
-  skip?: (clause: ListFilterClause) => boolean,
-): Row[] {
-  const applied = skip ? clauses.filter((clause) => !skip(clause)) : clauses
-  return rows.filter(
-    (row) =>
-      applied.every((clause) => matchListFilter(row, fields, clause)) &&
-      listRowMatchesSearch(row, search.paths, search.words),
-  )
 }
 
 /**
