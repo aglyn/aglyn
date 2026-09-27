@@ -195,6 +195,15 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 // Only the ref builders are stubbed; the real module rides along because
 // `@aglyn/shared-util-timestamp` extends the SDK's `Timestamp`.
+/*
+ * The host's smart collections, which every product write asks the store for
+ * to stamp `collectionIds` (AGL-3321): none on this site.
+ */
+jest.mock('./smart-collections', () => ({
+  readSmartCollections: async () => [],
+  productCollectionFields: async () => ({ collectionIds: [] }),
+}))
+
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
   collection: (_db: unknown, ...segments: string[]) =>
@@ -521,7 +530,7 @@ describe('CatalogOrganizationCard (AGL-1358)', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Edit' }).at(-1)!)
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     const init = fetchMock.mock.calls[0][1] as any
     // Authorized, and unconditionally so: a header assembled only when a
     // token happened to exist would have sent this write anonymously.
@@ -530,5 +539,12 @@ describe('CatalogOrganizationCard (AGL-1358)', () => {
     expect(body.action).toBe('update')
     // The whole membership rides in the payload.
     expect(body.data.productIds).toEqual(['prod-1', 'prod-2'])
+    // …and then the products are re-stamped for the collection it saved
+    // (AGL-3321), which a smart collection's storefront query reads.
+    expect(String(fetchMock.mock.calls[1][0])).toBe('/api/commerce/collection-membership')
+    expect(JSON.parse((fetchMock.mock.calls[1][1] as any).body)).toMatchObject({
+      hostId: 'host-1',
+      collectionId: body.id,
+    })
   })
 })

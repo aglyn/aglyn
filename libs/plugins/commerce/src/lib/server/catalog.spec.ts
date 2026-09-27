@@ -41,7 +41,7 @@ import {
   STOREFRONT_CATALOG_BASE_PATHS,
   STOREFRONT_CATALOG_DECLARATION,
 } from '../constants/storefront-catalog-query'
-import { productSearchFields, productStockFields } from '../model/commerce'
+import { productCollectionIds, productSearchFields, productStockFields } from '../model/commerce'
 import {
   catalogHandler,
   createCatalogReadScope,
@@ -526,17 +526,42 @@ describe('collections', () => {
     ])
   })
 
-  it('says so when a smart collection is matched over a window', async () => {
+  it('reads a smart collection no query can express by its stored membership', async () => {
+    const rules = [{ field: 'name' as const, op: 'contains' as const, value: 'walnut' }]
     fake.seed(`${HOST}/collections/named`, {
       kind: 'catalog',
       name: 'Named',
       slug: 'named',
       mode: 'smart',
-      rules: [{ field: 'name', op: 'contains', value: 'item 1' }],
+      rules,
     })
-    const result = await run({ collectionId: 'named', limit: '5' })
-    expect(result.body.notices).toEqual([
-      'This collection is matched among the first 500 products of the catalog.',
+    // Stamped as every writer (and the membership route) stamps it — the
+    // members sit past the old 500-product window.
+    const named = [{ id: 'named', rules }]
+    const membership = (name: string) =>
+      productCollectionIds({ name, variants: [], type: 'physical' }, named)
+    seedProduct('zz-chair', { name: 'Walnut Chair', tags: ['wood'], collectionIds: membership('Walnut Chair') })
+    seedProduct('zz-table', {
+      name: 'Walnut Table',
+      tags: ['wood'],
+      type: 'digital',
+      collectionIds: membership('Walnut Table'),
+    })
+    seedProduct('zz-draft', {
+      name: 'Walnut Draft',
+      tags: ['wood'],
+      status: 'draft',
+      collectionIds: membership('Walnut Draft'),
+    })
+    expect(membership('Plain Item 3')).toEqual([])
+    const result = await run({ collectionId: 'named' })
+    expect(names(result)).toEqual(['Walnut Chair', 'Walnut Table'])
+    expect(result.body.notices ?? []).toEqual([])
+    // The collection holds the query's one array clause, so the search is
+    // refused by name rather than answered over some of it.
+    const searched = await run({ collectionId: 'named', q: 'walnut' })
+    expect(searched.body.refused?.map((entry: { clause: unknown }) => entry.clause)).toEqual([
+      'search',
     ])
   })
 })
@@ -624,8 +649,8 @@ describe('the index file serves every storefront shape', () => {
     expect(missingListQueryIndexes(indexFile, 'products', hub, 'COLLECTION')).toEqual([])
   })
 
-  it('needs seven predicates under four orders, four of them shared with the table', () => {
-    expect(storefront).toHaveLength(28)
+  it('needs eight predicates under four orders, four of them shared with the table', () => {
+    expect(storefront).toHaveLength(32)
     const hubShapes = new Set(hub.map(shape))
     expect(storefront.map(shape).filter((entry) => hubShapes.has(entry)).sort()).toEqual([
       'deletedAt:ASCENDING,nameLower:ASCENDING',

@@ -76,6 +76,7 @@ import { subscriptionPortalHandler } from './server/subscription-portal'
 import { reviewsHandler } from './server/reviews'
 import { connectHandler } from './server/connect'
 import { cancelOrderHandler } from './server/cancel-order'
+import { collectionMembershipHandler } from './server/collection-membership'
 import { draftOrderHandler } from './server/draft-order'
 import {
   fulfillOrderHandler,
@@ -330,6 +331,9 @@ export function registerCommerceConsoleApi(): void {
   // catch-all in the Firestore rules would otherwise let a client write
   // its own `balanceCents`, which checkout applies as amount-off.
   registerPluginApiRoute('commerce/gift-cards', giftCardsHandler)
+  // A smart collection's rules changed or it was deleted: re-stamp which
+  // products it holds (AGL-3321), the membership the storefront queries.
+  registerPluginApiRoute('commerce/collection-membership', collectionMembershipHandler)
   // A site member's password help (AGL-914) and removal (AGL-3308), from the
   // Users page drawer and the Inbox. Console-auth, not the visitor cookie the
   // storefront's `membership/*` routes take, so they are served where the

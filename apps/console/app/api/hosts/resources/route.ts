@@ -352,6 +352,9 @@ const RESOURCES: Record<string, {
       // `productSearchFields` / `productStockFields` on the same payload.
       'priceFromCents',
       'soldOut',
+      // The smart collections its rules answer (AGL-3321), from
+      // `productCollectionIds` on the same payload and the host's rules.
+      'collectionIds',
       // Legacy Commerce Starter fields, still written by every caller.
       'priceUsd',
       'inventory',

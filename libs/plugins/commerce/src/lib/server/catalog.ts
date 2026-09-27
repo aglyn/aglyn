@@ -159,11 +159,6 @@ const CATALOG_PAGE_DEFAULT = 24
  * all of it rather than over a window of the catalog.
  */
 const MANUAL_COLLECTION_MAX = 1000
-/**
- * Products a smart collection whose rules no query can hold is matched over —
- * see {@link smartCollectionScope} for which rules those are.
- */
-const SMART_SCAN_MAX = 500
 /** Ids per `getAll`, well inside the Admin SDK's comfortable batch. */
 const GET_ALL_CHUNK = 100
 
@@ -414,9 +409,9 @@ const dollars = (cents: number) => `$${(cents / 100).toFixed(cents % 100 ? 2 : 0
  *   - a MANUAL collection, or an explicit id list — read whole by id, which
  *     is a complete set, and answered over all of it;
  *   - a smart collection whose rules no query can hold (a NOT, an OR, a name
- *     rule, a price over) — matched over the first {@link SMART_SCAN_MAX}
- *     active products, the one read here that is a window, and it says so
- *     in `notices` whenever the window was full.
+ *     rule, a price over) — the same query, scoped by the membership every
+ *     product writer stores (`collectionIds array-contains <id>`), which the
+ *     collection-membership route re-stamps whenever the rules change.
  *
  * What one query cannot hold — two array clauses, two ranges — is refused by
  * name in `refused` and not applied, never applied to some rows and not
@@ -656,46 +651,34 @@ async function runPublicCatalog(
       return answerHeld(await readProductsById(productsRef, memberIds), { manualOrder })
     }
     const smart = smartCollectionScope(collection)
-    if ('unservable' in smart) {
-      // The window, stated: the first live, active products by id, matched
-      // against the collection's rules. Complete for a catalog inside the
-      // bound. Equalities ordered by id: the single-field indexes serve it.
-      const scan = await productsRef
-        .where('deletedAt', '==', null)
-        .where('status', '==', 'active')
-        .orderBy(firebaseAdmin.firestore.FieldPath.documentId())
-        .limit(SMART_SCAN_MAX)
-        .get()
-      const held = scan.docs
-        .map(toRow)
-        .filter((row): row is CatalogRow => Boolean(row))
-        .filter((row) =>
-          CommerceModel.matchesCollection(row.product, collection, row.id),
-        )
-      return answerHeld(held, {
-        ...(scan.docs.length >= SMART_SCAN_MAX
-          ? {
-              notices: [
-                `This collection is matched among the first ${SMART_SCAN_MAX} products of the catalog.`,
-              ],
-            }
-          : {}),
-      })
-    }
     if (!(collection.rules ?? []).length) {
       // A smart collection with no rules holds nothing (`matchesCollection`).
       return result([], planFor({ base: STOREFRONT_CATALOG_BASE, clauses: [], sort }, sort))
     }
-    scope = smart.filters
-    // A "type is not" rule is `type in […]`; the visitor's Type chip is the
-    // narrower question, answered inside it or not at all.
-    const typeRule = scope.find((filter) => filter.path === 'type')
-    if (typeRule && type) {
-      const allowed = Array.isArray(typeRule.value) ? typeRule.value : [typeRule.value]
-      if (!allowed.includes(type)) {
-        return result([], planFor({ base: STOREFRONT_CATALOG_BASE, clauses: [], sort }, sort))
+    if ('unservable' in smart) {
+      // Rules no query can express (a NOT, an OR, a name rule, a price over)
+      // are answered by the membership every product writer stores
+      // (`collectionIds`, AGL-3321): one array clause on the same query, so
+      // the grid's other array controls are refused by name beside it.
+      scope = [
+        {
+          path: CommerceModel.PRODUCT_COLLECTION_IDS,
+          op: 'array-contains',
+          value: String(collectionDoc?.id ?? ''),
+        },
+      ]
+    } else {
+      scope = smart.filters
+      // A "type is not" rule is `type in […]`; the visitor's Type chip is the
+      // narrower question, answered inside it or not at all.
+      const typeRule = scope.find((filter) => filter.path === 'type')
+      if (typeRule && type) {
+        const allowed = Array.isArray(typeRule.value) ? typeRule.value : [typeRule.value]
+        if (!allowed.includes(type)) {
+          return result([], planFor({ base: STOREFRONT_CATALOG_BASE, clauses: [], sort }, sort))
+        }
+        scope = scope.filter((filter) => filter !== typeRule)
       }
-      scope = scope.filter((filter) => filter !== typeRule)
     }
   }
 

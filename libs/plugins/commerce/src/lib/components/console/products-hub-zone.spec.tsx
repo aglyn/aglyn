@@ -30,6 +30,15 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostResourceApi: () => mockCreate,
 }))
 
+/*
+ * The host's smart collections, which every product write asks the store for
+ * to stamp `collectionIds` (AGL-3321): none on this site.
+ */
+jest.mock('./smart-collections', () => ({
+  readSmartCollections: async () => [],
+  productCollectionFields: async () => ({ collectionIds: [] }),
+}))
+
 jest.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...path: string[]) => ({ path: path.join('/') }),
   collection: (_db: unknown, ...path: string[]) => path.join('/'),

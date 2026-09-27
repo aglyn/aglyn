@@ -199,6 +199,15 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 // Only the ref builders are stubbed; the real module rides along because
 // `@aglyn/shared-util-timestamp` extends the SDK's `Timestamp`.
+/*
+ * The host's smart collections, which every product write asks the store for
+ * to stamp `collectionIds` (AGL-3321): none on this site.
+ */
+jest.mock('./smart-collections', () => ({
+  readSmartCollections: async () => [],
+  productCollectionFields: async () => ({ collectionIds: [] }),
+}))
+
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
   collection: (_db: unknown, _a: string, _b: string, name: string) => name,

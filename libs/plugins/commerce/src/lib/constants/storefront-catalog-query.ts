@@ -180,10 +180,17 @@ export const STOREFRONT_CATALOG_BASE: readonly ListQueryFilter[] = [
   { path: 'status', op: '==', value: 'active' },
 ]
 
-/** {@link STOREFRONT_CATALOG_BASE} as `listQueryIndexes` takes it. */
+/**
+ * {@link STOREFRONT_CATALOG_BASE} as `listQueryIndexes` takes it, with the
+ * scope a smart collection no query can express adds to it: the membership
+ * every product writer stores (`collectionIds array-contains <id>`,
+ * AGL-3321), one `(collectionIds, order)` composite per sort under index
+ * merging.
+ */
 export const STOREFRONT_CATALOG_BASE_PATHS: readonly { path: string; array?: boolean }[] = [
   { path: 'deletedAt' },
   { path: 'status' },
+  { path: 'collectionIds', array: true },
 ]
 
 /** The smart-collection rule predicates a query can hold, or why it cannot. */
@@ -205,8 +212,10 @@ export type SmartCollectionScope =
  * and what it cannot: a tag or category NOT held (no negated array query), a
  * price `over` or `equals` (they compare the HIGH end, which nothing stores),
  * a name rule (substring, which no index answers), and any-of rules (an OR the
- * visitor's own filters would multiply). Those collections are read the way
- * the catalog handler says, never answered from a window as though complete.
+ * visitor's own filters would multiply). Those collections are read by the
+ * membership each product stores instead — `collectionIds array-contains
+ * <id>`, computed from the same rules by `productCollectionIds` — never from a
+ * window of the catalog.
  */
 export function smartCollectionScope(
   collection: Pick<HostCollection, 'rules' | 'matchAll'>,

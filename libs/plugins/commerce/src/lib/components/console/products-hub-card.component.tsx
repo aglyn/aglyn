@@ -87,6 +87,7 @@ import { useHostResourceApi } from '@aglyn/tenant-feature-instance'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import ProductEditorDialog from './product-editor-dialog.component'
 import { productSlugLedger } from './product-slugs'
+import { productCollectionFields, readSmartCollections } from './smart-collections'
 import ProductsHubZone from './products-hub-zone.component'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { useConsoleWidgetSlot } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
@@ -431,6 +432,11 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
               variants: product.variants,
             }),
             ...CommerceModel.productStockFields(product),
+            // The COPY's smart collections: its name differs from the source's.
+            ...(await productCollectionFields(firestore, hostId, {
+              ...product,
+              name: `${product.name} (copy)`,
+            })),
             slug,
             status: 'draft',
             createdAtMs: Date.now(),
@@ -591,6 +597,8 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
     const created: string[] = []
     try {
       await slugs.ask(parsed.products.map((product) => product.slug))
+      // One read of the host's smart collections for the whole file.
+      const smartCollections = await readSmartCollections(firestore, hostId)
       // Each create rides the quota-enforcing API (AGL-473); the batch cap
       // above short-circuits before we start, so this loop stays bounded.
       for (const product of parsed.products) {
@@ -605,6 +613,8 @@ export function ProductsHubCard(props: ProductsHubCardProps) {
             // searches it by these keys alone.
             ...CommerceModel.productSearchFields(product),
             ...CommerceModel.productStockFields(product),
+            // Its smart collections (AGL-3321).
+            collectionIds: CommerceModel.productCollectionIds(product, smartCollections),
             slug,
             priceUsd: product.variants[0]?.priceUsd ?? 0,
             imageUrl: product.mediaUrls?.[0] ?? null,

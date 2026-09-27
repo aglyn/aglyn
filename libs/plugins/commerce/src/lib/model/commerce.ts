@@ -143,6 +143,11 @@ export interface HostProduct {
   /** Ordered media-library image URLs (first = primary). */
   mediaUrls?: string[]
   categoryIds?: string[]
+  /**
+   * The SMART collections this product's rules answer (AGL-3321), written by
+   * every writer — see `productCollectionIds`.
+   */
+  collectionIds?: string[]
   tags?: string[]
   options?: ProductOption[]
   variants: ProductVariant[]
@@ -1008,6 +1013,36 @@ function ruleMatches(product: HostProduct, rule: CollectionRule): boolean {
 }
 
 /**
+ * Whether a product's own fields answer a SMART collection's rules — its
+ * tags, categories, prices, name and type, and nothing about whether it is
+ * on sale. That is the storefront query's scope (`deletedAt == null`,
+ * `status == 'active'`), so membership stored on the product never goes stale
+ * when a product is archived or brought back.
+ *
+ * A collection with no rules holds nothing.
+ */
+/** What smart-collection membership reads of a product — a draft's too. */
+export interface MembershipProduct {
+  name?: string
+  type?: ProductType
+  tags?: string[]
+  categoryIds?: string[]
+  variants?: ReadonlyArray<{ id?: string; priceUsd?: number | null }>
+}
+
+export function smartCollectionMatches(
+  product: MembershipProduct,
+  collection: Pick<HostCollection, 'rules' | 'matchAll'>,
+): boolean {
+  const rules = collection.rules ?? []
+  if (rules.length === 0) return false
+  const matcher = (rule: CollectionRule) => ruleMatches(product as HostProduct, rule)
+  return collection.matchAll === false
+    ? rules.some(matcher)
+    : rules.every(matcher)
+}
+
+/**
  * Smart-collection membership: draft/archived/deleted products never
  * match; manual collections answer from productIds.
  */
@@ -1021,12 +1056,40 @@ export function matchesCollection(
     return productId != null &&
       (collection.productIds ?? []).includes(productId)
   }
-  const rules = collection.rules ?? []
-  if (rules.length === 0) return false
-  const matcher = (rule: CollectionRule) => ruleMatches(product, rule)
-  return collection.matchAll === false
-    ? rules.some(matcher)
-    : rules.every(matcher)
+  return smartCollectionMatches(product, collection)
+}
+
+/**
+ * The stored membership of a product in the host's SMART collections
+ * (AGL-3321): the ids of those whose rules it answers
+ * ({@link smartCollectionMatches}), sorted.
+ *
+ * The storefront reads a smart collection whose rules no query can hold (a
+ * NOT, an OR, a name rule, a price over) as `collectionIds array-contains
+ * <id>` — so the membership is WRITTEN, by every product writer from the
+ * host's smart collections as they stand, and by the collection-membership
+ * route for every product whenever a smart collection's rules change or it
+ * is deleted. `tools/scripts/backfill-product-collection-ids.mjs` stamps the
+ * products written before; the two answer
+ * `tools/scripts/lib/product-collection-ids.fixtures.json`.
+ */
+export const PRODUCT_COLLECTION_IDS = 'collectionIds'
+
+/** A smart collection as membership is computed from it. */
+export interface SmartCollectionRules {
+  id: string
+  rules?: CollectionRule[]
+  matchAll?: boolean
+}
+
+export function productCollectionIds(
+  product: MembershipProduct,
+  smartCollections: readonly SmartCollectionRules[],
+): string[] {
+  return smartCollections
+    .filter((collection) => smartCollectionMatches(product, collection))
+    .map((collection) => collection.id)
+    .sort()
 }
 
 /**

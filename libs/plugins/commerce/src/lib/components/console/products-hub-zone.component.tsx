@@ -40,6 +40,7 @@ import {
 import { useCallback, useMemo } from 'react'
 import * as CommerceModel from '../../model'
 import { productSlugLedger } from './product-slugs'
+import { readSmartCollections } from './smart-collections'
 
 /**
  * The products hub's zone (AGL-2916): the page of catalog rows the hub's table
@@ -122,13 +123,32 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
   const applyProductCopy = useCallback(
     async (productId: string, values: ConsoleProductCopyValues) => {
       const ref = doc(firestore, 'hosts', hostId, 'products', productId)
+      const smartCollections = await readSmartCollections(firestore, hostId)
       await runTransaction(firestore, async (transaction) => {
         const snapshot = await transaction.get(ref)
         const stored = snapshot.exists() ? (snapshot.data() as CommerceModel.HostProduct) : null
         if (!stored || stored.deletedAt) throw new Error(PRODUCT_GONE_COPY)
-        const patch = CommerceModel.productCopyPatch(CommerceModel.liftLegacyProduct(stored), values)
+        const lifted = CommerceModel.liftLegacyProduct(stored)
+        const patch = CommerceModel.productCopyPatch(lifted, values)
         if (!Object.keys(patch).length) return
-        transaction.update(ref, { ...patch, updatedAtMs: Date.now(), updatedAt: Timestamp.now() })
+        // Tags and categories may move, and with them its smart collections
+        // (AGL-3321).
+        // Written only when it moved, so a copy that changes no rule input
+        // writes only the copy.
+        const collectionIds = CommerceModel.productCollectionIds(
+          { ...lifted, ...patch },
+          smartCollections,
+        )
+        const held = stored.collectionIds ?? []
+        const moved =
+          held.length !== collectionIds.length ||
+          collectionIds.some((id, at) => held[at] !== id)
+        transaction.update(ref, {
+          ...patch,
+          ...(moved ? { collectionIds } : {}),
+          updatedAtMs: Date.now(),
+          updatedAt: Timestamp.now(),
+        })
       })
     },
     [firestore, hostId],
@@ -176,9 +196,15 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
           CommerceModel.unpricedProductDraft(proposal, NO_SLUGS, Date.now()),
         )
         await slugs.ask(drafts.map((draft) => draft.slug))
+        const smartCollections = await readSmartCollections(firestore, hostId)
         for (const draft of drafts) {
           const slug = await slugs.claim(draft.slug)
-          const { id } = await createHostResource({ hostId, resource: 'product', data: { ...draft, slug } })
+          const collectionIds = CommerceModel.productCollectionIds(draft, smartCollections)
+          const { id } = await createHostResource({
+            hostId,
+            resource: 'product',
+            data: { ...draft, slug, collectionIds },
+          })
           created.push(id)
         }
       } finally {

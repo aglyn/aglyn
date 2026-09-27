@@ -41,6 +41,7 @@ import {
   Typography,
 } from '@mui/material'
 import { collection, doc, getDoc, setDoc } from 'firebase/firestore'
+import { productCollectionFields } from './smart-collections'
 import { useCallback, useMemo, useState } from 'react'
 import {
   ceilingedWindow,
@@ -510,6 +511,15 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
           fromCache: Boolean(product) && seedFromCache,
         },
         async () => {
+          // The smart collections this product's rules answer, from the
+          // host's rules as they stand now (AGL-3321).
+          const membership = await productCollectionFields(firestore, hostId, {
+            name: base.name,
+            type: current.type,
+            tags: current.tags,
+            categoryIds: current.categoryIds,
+            variants: current.variants,
+          })
           if (product) {
             /**
              * RESERVATIONS ARE NOT THE EDITOR'S TO WRITE (AGL-2356).
@@ -547,6 +557,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               productRef,
               {
                 ...withoutHolds,
+                ...membership,
                 ...(liveHolds ? { stockHolds: liveHolds } : {}),
                 // The editor edits a LIVE product, and the products table
                 // lists only `deletedAt == null` (AGL-3321): a replace whose
@@ -562,7 +573,7 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
             await createHostResource({
               hostId,
               resource: 'product',
-              data: { ...base, createdAtMs: Date.now() },
+              data: { ...base, ...membership, createdAtMs: Date.now() },
             })
           }
         },
