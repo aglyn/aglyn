@@ -26,7 +26,10 @@
  *
  *     jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
  *       require('@aglyn/tenant-feature-instance/testing/list-query-double')
- *         .listQueryModule(() => mockRows))
+ *         .listQueryModule(
+ *           () => mockRows,
+ *           jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+ *         ))
  *
  * and asserts both what the plan asked for (`lastListQueryPlan()`) and which
  * rows came back — so a spec can prove a match past the first page is found.
@@ -157,12 +160,12 @@ export function useListQueryDouble<T = Row>(
 /**
  * A module to hand `jest.mock('…/hooks/use-list-query', …)`: the double in
  * place of the hook, the real `listQueryConstraints` beside it.
+ *
+ * `actual` is the real module, which the spec's factory passes in as
+ * `jest.requireActual(…)`. Jest injects `jest` into each spec module rather
+ * than setting it on `globalThis`, so this file cannot reach it itself.
  */
-export function listQueryModule(rows: () => readonly Row[]) {
-  // Resolved through the spec runner's module registry, which this file only
-  // ever runs under; see the file comment.
-  const actual = (globalThis as unknown as { jest: { requireActual(id: string): object } }).jest
-    .requireActual('../hooks/use-list-query')
+export function listQueryModule(rows: () => readonly Row[], actual: object) {
   return {
     ...actual,
     useListQuery: (options: UseListQueryOptions) => useListQueryDouble(rows, options),
