@@ -208,15 +208,25 @@ export const nameSearchNormalizers = {
  * What joins a scope token to a search prefix in a SCOPED search token
  * (AGL-3321): `host:abc~acm`.
  *
- * A list under a scope clause — `visibleTo array-contains-any [...]`, the
- * query the rules can prove for a site collaborator — has spent Firestore's
- * one array clause on the scope, so its search cannot be a second
- * `array-contains`. The list query plan folds the typed word INTO the scope
+ * A list under a scope clause (`visibleTo array-contains-any [...]`) has
+ * spent Firestore's one array clause on the scope, so its search cannot be a
+ * second `array-contains`. The list query plan folds the typed word INTO the scope
  * clause instead (`ListQueryDeclaration.search.scoped`), asking for each
  * scope token joined to the word; the writers stamp every scope token
  * joined to every prefix, through {@link scopedSearchTokens}. A declaration
  * names this constant as its `join`, so the writer and the reader cannot
  * disagree about the character between the two halves.
+ *
+ * ⛔ Security rules cannot prove a folded query for a reader limited to some
+ * sites. Rules like `canReadScoped` grant a list from
+ * `visibleTo.hasAny(<the reader's scopes>)`, and a query that constrains only
+ * the scoped-token field says nothing about `visibleTo`, so Firestore denies
+ * it (pinned in cloud/rules-tests/firestore-rules.test.mjs). A folded search
+ * is therefore for readers the rules admit WITHOUT a `visibleTo` term (an
+ * org-wide member, whose rule short-circuits) or for an Admin-SDK route that
+ * checks the reader's scope itself. A partial-reach collaborator's search
+ * stays beside the `visibleTo` clause instead, as a prefix range on one
+ * ordered key (media: `nameLower`; inbox leads: `email`).
  *
  * `~` appears in no scope token (`org`, `host:{id}`), so the split is never
  * ambiguous; a prefix that itself holds a `~` is matched whole on both sides

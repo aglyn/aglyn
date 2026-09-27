@@ -131,6 +131,11 @@ export interface ListQueryDeclaration {
      * scoped list writes `<scopeToken><join><prefix>` tokens and the query
      * asks `array-contains-any` over the scope's tokens joined to the word —
      * one array clause that answers both.
+     *
+     * ⛔ Rules that grant a list from `visibleTo.hasAny(...)` DENY this
+     * query, because it no longer constrains `visibleTo`. Declare it only for
+     * readers whose rule needs no `visibleTo` term, or for an Admin-SDK read;
+     * see `SCOPED_SEARCH_JOIN` in `@aglyn/aglyn/app-utils/name-search`.
      */
     scoped?: { tokensPath: string; join: string }
   }
