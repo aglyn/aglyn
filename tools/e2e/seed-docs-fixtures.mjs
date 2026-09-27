@@ -35,6 +35,8 @@
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
+// The Inbox list's search keys, as the submit route stamps them (AGL-3321).
+import { messageSearchFields } from '../scripts/lib/message-search.mjs'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -551,6 +553,7 @@ for (const [id, hoursAgo, read, fields] of submissions) {
     formName: 'Contact us',
     path: '/contact',
     fields,
+    ...messageSearchFields(fields),
     read,
     createdAt: Timestamp.fromMillis(now.toMillis() - hoursAgo * 60 * 60 * 1000),
   })

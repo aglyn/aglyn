@@ -37,9 +37,11 @@
  */
 
 import { FieldValue } from 'firebase-admin/firestore'
+import { datasetFilterFields, effectiveModel } from './record-filter-keys.mjs'
 import { buildHomeNodes } from './demo-brands.mjs'
 import { putMediaDocument } from './media-counter.mjs'
 import { seedSendId } from './org-campaign-backfill.mjs'
+import { displayNameSearchFields } from './name-search-tokens.mjs'
 
 /** Every host subcollection the seeder writes into. Order is cosmetic. */
 export const HOST_SEEDED_COLLECTIONS = [
@@ -236,9 +238,12 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
       fields: dataset.fields,
       createdAt: now,
     })
+    // The filter fields every record writer stamps (AGL-3321).
+    const model = effectiveModel({ fields: dataset.fields })
     for (const [index, values] of dataset.rows.entries()) {
       await put(ref.collection('records').doc(`seed-${index}`), {
         values,
+        ...datasetFilterFields(model, values),
         order: index,
         createdAt: now,
       })
@@ -545,6 +550,10 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
     const { id, ...fields } = list
     await put(dataRef.collection('lists').doc(scopedId(id, hostRef.id, orgRef)), {
       ...fields,
+      // The keys the Emails lists table queries (AGL-3321).
+      // `nameSearchFields` without `name`, which `fields` already carries.
+      ...displayNameSearchFields(fields.name),
+      kind: fields.kind ?? 'manual',
       ...dataScope,
       createdAt: now,
     })

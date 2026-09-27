@@ -250,9 +250,11 @@ export function emailSuppressionKey(
  * it at the same length, so a typed address longer than that narrows by its
  * first twelve characters rather than matching nothing.
  *
- * Mirrored by `tools/scripts/backfill-email-suppression-filters.mjs`, which
- * stamps the records written before this field existed; the two share the
- * same fixtures.
+ * Mirrored for the backfills that stamp the rows written before the field
+ * (`backfill-email-suppression-filters.mjs`, `backfill-host-suppression-filters.mjs`,
+ * `backfill-email-list-filters.mjs`) by ONE script-side twin,
+ * `tools/scripts/lib/email-search-tokens.mjs`; the spec and the twin's test
+ * both assert `email-search-tokens.fixtures.json`.
  */
 export function emailSearchTokens(email: string | null | undefined): string[] {
   const address = String(email ?? '')
@@ -1011,6 +1013,9 @@ export async function suppressEmailForHostErasure(input: {
   await ref.set(
     {
       email: null,
+      // The address's search tokens are the address in pieces, so an erasure
+      // clears them with it (AGL-3321).
+      emailTokens: [],
       reason: HOST_ERASURE_SUPPRESSION_REASON,
       suppressedAt: FieldValue.serverTimestamp(),
       ...(snapshot.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),

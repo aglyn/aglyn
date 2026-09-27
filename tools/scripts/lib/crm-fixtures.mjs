@@ -72,6 +72,7 @@
 //   is the seed invariant `docs/E2E_LOCAL.md` states.
 
 import { Timestamp } from 'firebase-admin/firestore'
+import { displayNameSearchFields } from './name-search-tokens.mjs'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const HOUR_MS = 60 * 60 * 1000
@@ -619,7 +620,9 @@ export async function seedCrmFixtures(options) {
   // A live audience: the bulk bar's "Add to list" picker offers it, and a
   // dynamic list is the case the dialog explains ("whoever you add stays").
   await write(orgRef.collection('lists').doc(F.listId), {
+    // The name and the keys the Emails lists table queries (AGL-3321).
     name: F.listName,
+    ...displayNameSearchFields(F.listName),
     kind: 'dynamic',
     rule: { sources: ['contacts'], tags: ['wholesale'] },
     createdAt: stamp(at(20)),

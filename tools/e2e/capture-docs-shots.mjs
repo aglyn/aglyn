@@ -56,6 +56,7 @@ import {
   preflightStaffOnlyChrome,
 } from './lib/staff-only-chrome.mjs'
 import { optimizePng } from './lib/optimize-png.mjs'
+import { datasetFilterFields } from '../scripts/lib/record-filter-keys.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img/guides')
@@ -128,20 +129,21 @@ async function seedGuideFixtures() {
   // the Form element's "Write to dataset" matches; field ids are the
   // stable record keys.
   const survey = orgRef.collection('datasets').doc('seed-guide-survey')
+  const surveyModel = {
+    fields: {
+      satisfaction: { name: 'Satisfaction', type: 'int32' },
+      visit: { name: 'Visit', type: 'text' },
+      topics: { name: 'Topics', type: 'text' },
+      comments: { name: 'Comments', type: 'text' },
+    },
+    order: ['satisfaction', 'visit', 'topics', 'comments'],
+  }
   await put(survey, {
     name: 'Survey responses',
     displayName: 'Survey responses',
     singularName: 'Survey response',
     fields: ['satisfaction', 'visit', 'topics', 'comments'],
-    model: {
-      fields: {
-        satisfaction: { name: 'Satisfaction', type: 'int32' },
-        visit: { name: 'Visit', type: 'text' },
-        topics: { name: 'Topics', type: 'text' },
-        comments: { name: 'Comments', type: 'text' },
-      },
-      order: ['satisfaction', 'visit', 'topics', 'comments'],
-    },
+    model: surveyModel,
     createdAt: now,
   })
   // Converge on re-runs: drop records left by previous walk-throughs so
@@ -163,8 +165,11 @@ async function seedGuideFixtures() {
     [4, 'First time', 'Products, Pricing', 'Found you through the market.'],
   ]
   for (const [index, [satisfaction, visit, topics, comments]] of surveyRows.entries()) {
+    const values = { satisfaction, visit, topics, comments }
     await put(survey.collection('records').doc(`seed-guide-${index}`), {
-      values: { satisfaction, visit, topics, comments },
+      values,
+      // The filter fields every record writer stamps (AGL-3321).
+      ...datasetFilterFields(surveyModel, values),
       order: index,
       createdAt: now,
     })

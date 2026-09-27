@@ -40,6 +40,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  documentId,
   getDoc,
   getDocs,
   limit,
@@ -4739,6 +4740,29 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
     await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-org')))
     await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-mine')))
     await assertFails(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-theirs')))
+  })
+
+  it('a collaborator runs the records table’s query on their own site’s dataset, and not another’s (AGL-3321)', async () => {
+    // The one query the records table issues: `filterValues` equalities and
+    // one `filterKeys` clause under the document-id order. The rule reads the
+    // PARENT dataset's scope, so the clauses neither widen nor narrow it.
+    const recordsQuery = (datasetId) =>
+      query(
+        collection(authed(EDITOR), 'orgs', ORG, 'datasets', datasetId, 'records'),
+        where('filterValues.status', '==', 'open'),
+        where('filterKeys', 'array-contains', 's:ope'),
+        orderBy(documentId()),
+      )
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'datasets', 'ds-mine', 'records', 'r2'), {
+        values: { status: 'open' },
+        filterValues: { status: 'open' },
+        filterKeys: ['f:status=open', 's:o', 's:op', 's:ope', 's:open'],
+      })
+    })
+    const snapshot = await assertSucceeds(getDocs(recordsQuery('ds-mine')))
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['r2'])
+    await assertFails(getDocs(recordsQuery('ds-theirs')))
   })
 
   it('a doc with NO visibleTo is DENIED — fail closed (AGL-1047)', async () => {
@@ -9589,6 +9613,144 @@ describe('contacts are per-site, and letting go of one is not a delete', () => {
       updateDoc(doc(authed(OWNER), 'orgs', ORG, 'contacts', 'shared'), {
         'facets.host-a': deleteField(),
       }),
+    )
+  })
+})
+
+/**
+ * THE INBOX'S LISTS ASK WHAT THE RULES CAN PROVE (AGL-3321).
+ *
+ * Every Inbox filter and search is a predicate on the list's query, so each
+ * query shape the cards send is one the rules must admit as the real reader
+ * runs it — and the one they cannot is not sent. A site's Leads list keeps
+ * its `visibleTo` clause beside an Email equality for a collaborator, and
+ * folds a search into that clause (`scopedSearchTokens`) only for an
+ * org-wide member: a query without `visibleTo` proves nothing about a
+ * scoped reader's reach, so it is refused to them, which is why the card
+ * refuses their search by name instead of sending it.
+ */
+describe('the Inbox’s lists ask what the rules can prove (AGL-3321)', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+  const createdAt = new Date('2026-09-20T12:00:00Z')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'lead-mine'), {
+        email: 'dana@acme.test',
+        visibleTo: [MINE],
+        searchTokens: ['d', 'da', 'dan', 'dana'],
+        scopedSearchTokens: [`${MINE}~d`, `${MINE}~da`, `${MINE}~dan`, `${MINE}~dana`],
+        createdAt,
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'lead-theirs'), {
+        email: 'dana@acme.test',
+        visibleTo: [THEIRS],
+        searchTokens: ['d', 'da', 'dan', 'dana'],
+        scopedSearchTokens: [`${THEIRS}~d`, `${THEIRS}~da`, `${THEIRS}~dan`, `${THEIRS}~dana`],
+        createdAt,
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'siteMembers', 'member-ada'), {
+        email: 'ada@acme.test',
+        searchTokens: ['a', 'ad', 'ada'],
+        createdAt,
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'formSubmissions', 'fs-inbox'), {
+        orgId: ORG,
+        hostId: HOST,
+        fields: { email: 'visitor@acme.test' },
+        senderTokens: ['v', 'vi'],
+        searchTokens: ['v', 'vi'],
+        read: false,
+        createdAt,
+      })
+    })
+  })
+
+  const leads = (uid) => collection(authed(uid), 'orgs', ORG, 'leads')
+
+  it('admits a collaborator’s scoped Leads list with an Email equality', async () => {
+    const snapshot = await assertSucceeds(
+      getDocs(
+        query(
+          leads(EDITOR),
+          where('visibleTo', 'array-contains-any', ['org', MINE]),
+          where('email', '==', 'dana@acme.test'),
+          orderBy('createdAt', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['lead-mine'])
+  })
+
+  it('refuses a collaborator the folded search, and admits it to an org-wide member', async () => {
+    const folded = (uid) =>
+      query(
+        leads(uid),
+        where('scopedSearchTokens', 'array-contains-any', ['org~dana', `${MINE}~dana`]),
+        orderBy('createdAt', 'desc'),
+      )
+    // No `visibleTo` clause proves nothing about a scoped reader's reach.
+    await assertFails(getDocs(folded(EDITOR)))
+    // THE CONTROL: the same query, as the org, answers this site's lead only.
+    const snapshot = await assertSucceeds(getDocs(folded(OWNER)))
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['lead-mine'])
+  })
+
+  it('admits a collaborator’s search as an address prefix beside the scope clause', async () => {
+    // What the Leads list asks for a reader whose reach is some sites: the
+    // scope clause stays, and the search is a range on the stored address.
+    const snapshot = await assertSucceeds(
+      getDocs(
+        query(
+          leads(EDITOR),
+          where('visibleTo', 'array-contains-any', ['org', MINE]),
+          where('email', '>=', 'dan'),
+          where('email', '<=', 'dan\uf8ff'),
+          orderBy('email', 'asc'),
+        ),
+      ),
+    )
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['lead-mine'])
+  })
+
+  it('admits a site member’s Members list with its Email and name clauses', async () => {
+    const members = collection(authed(EDITOR), 'hosts', HOST, 'siteMembers')
+    await assertSucceeds(
+      getDocs(query(members, where('email', '==', 'ada@acme.test'), orderBy('createdAt', 'desc'))),
+    )
+    await assertSucceeds(
+      getDocs(
+        query(members, where('searchTokens', 'array-contains', 'ad'), orderBy('createdAt', 'desc')),
+      ),
+    )
+  })
+
+  it('admits the org Inbox’s group query with Read, Site and the search beside the org clause', async () => {
+    const snapshot = await assertSucceeds(
+      getDocs(
+        query(
+          collectionGroup(authed(OWNER), 'formSubmissions'),
+          where('orgId', '==', ORG),
+          where('read', '==', false),
+          where('hostId', '==', HOST),
+          where('searchTokens', 'array-contains', 'vi'),
+          orderBy('createdAt', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['fs-inbox'])
+    // And a site's own list, by a collaborator on it.
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(authed(EDITOR), 'hosts', HOST, 'formSubmissions'),
+          where('senderTokens', 'array-contains', 'vi'),
+          where('read', '==', false),
+          orderBy('createdAt', 'desc'),
+        ),
+      ),
     )
   })
 })

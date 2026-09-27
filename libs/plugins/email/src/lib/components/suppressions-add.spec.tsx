@@ -49,17 +49,13 @@ const FIRESTORE = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'tok' } }),
-  usePagedCollection: () => ({
-    rows: [],
-    hasMore: false,
-    page: 0,
-    setPage: jest.fn(),
-    pageSize: 10,
-    setPageSize: jest.fn(),
-    status: 'success',
-    fromCache: false,
-  }),
 }))
+
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() => [], jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')),
+)
 
 jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => undefined }))
 

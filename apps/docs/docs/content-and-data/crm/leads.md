@@ -15,8 +15,8 @@ decides who owns each one, keeps notes, and either converts the lead into a
 contact or closes it with a reason.
 
 Leads live under the site that captured them, so each site's list is its own.
-Open **CRM → Leads** in the console, or use **Open in CRM** on a lead row in
-the Inbox's **Site Members & Leads** section.
+Open **CRM → Leads** in the console, or use **Open in CRM** on a row of the
+**Leads** list in the Inbox's **Site Members & Leads** section.
 
 :::info Plan availability
 Leads are part of the **CRM**, included from **Starter**. On Free the section is shown

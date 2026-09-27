@@ -283,19 +283,37 @@ row actions.
 
 #### Filter the Inbox tables {#filter-the-inbox}
 
-The submissions table filters through its toolbar. **Filters** narrows it by
-**Form**, **Read** (read or unread), sender and message, and on your organization's
-Inbox by **Site**; **Search** matches a sender, a form name or anything in the
-message. **Form** reaches every submission sent to that form. The other filters and
-the search look through the first 100 submissions the table read — under the chosen
-**Form**, when there is one — and say when there are more; paging forward reads the
-next page. The **Form** chip is filled in to show it reached every submission.
+Every Inbox table filters and searches through its toolbar, and every filter and the
+search reach **everything** the site holds, not only the page on screen: the table asks
+for the matches, newest first, and paging forward shows the next page of them.
 
-The **Members & leads** table filters the same way, by address, **Type** (member, or
-lead by where it came from) and, on your organization's Inbox, **Site**. **Search**
-matches an address, a name or a lead's source. It looks at every contact the table
-read — the newest 200 members and 200 leads — and the note under the table says when a
-site holds more than that. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+The submissions table's **Filters** narrow it by **Form** (when the site has forms),
+**Read** (read or unread), **From** (a word the sender's name or address starts with)
+and, on your organization's Inbox, **Site**. **Search** finds a word at the start of any
+word in the sender's name or address or in the message — the first 40 different words of a
+message are searchable. A form's *name* isn't searched: a form you rename would go on
+being found by the name it had when each message arrived. Use **Form** instead, which
+follows the form through a rename.
+
+The **Members & leads** section lists one of two things at a time, chosen by the
+**Members | Leads** toggle above the table — a person who left their address and later
+signed up is in both, as a member and as a lead:
+
+- **Members** filters by **Email** (the whole address) and searches the start of any
+  word of a member's name or address.
+- **Leads** filters by **Email** and searches a lead's name, address, company, job
+  title and tags. On your organization's Inbox it also filters by **Source** — a
+  booking, added by hand, the API, an import or a sign-up; a lead filed from a form is
+  filed under that form, so there is no single "form" choice — and by **Site**, any of
+  the sites that captured the person.
+
+A table holds one "contains" or "any of" filter at a time, and the search counts as
+one: **From** doesn't combine with the search, nor **Source** with **Site**. When you ask
+for a combination the table can't answer at once, it applies what it can and says, above
+the table, which filter it didn't apply. For a collaborator invited to particular sites,
+**Search** on a site's **Leads** matches the start of a lead's address (the first word
+typed) and lists the matches by address; the table says so. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 #### Who a submission is "from" {#who-a-submission-is-from}
 
@@ -381,12 +399,12 @@ every site. It has the same three tabs, over every site at once:
   from** act as the site the submission was sent to, so a reply leaves on that site's
   sending address.
 - **Members & leads** lists the organization's leads, each with the sites that captured
-  the person. A member signs up to one site, so members are listed once you choose a
-  site. This tab needs the **Manage data** permission, the one the CRM asks for.
+  the person. A member signs up to one site, so the **Members** list waits until you
+  choose a site. This tab needs the **Manage data** permission, the one the CRM asks for.
 - **Campaigns** lists every campaign, as the organization's **Marketing** page does.
 
 The **Site** filter above the tabs narrows the whole page to one site: its submissions
-with their **Form** filter, its members beside its leads, its campaigns, and its
+with their **Form** filter, its members and its leads, its campaigns, and its
 **paused** and **spam** notices, which belong to a single site. Your choice is kept while
 you move between tabs. An organization with only one site goes straight to that site's
 view, with no filter to set.

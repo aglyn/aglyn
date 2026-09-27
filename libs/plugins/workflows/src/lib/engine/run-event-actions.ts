@@ -781,7 +781,13 @@ async function runServerStep(
             ),
             updatedAt: FieldValue.serverTimestamp(),
           },
-          { merge: true },
+          // `mergeFields`, not `merge: true`: a merge would fold the new
+          // `filterValues` map into the stored one key by key, and a value
+          // cleared here would go on answering its old equality. Each named
+          // field is replaced whole; `merged` already holds every value.
+          {
+            mergeFields: ['values', 'referencedIds', 'filterKeys', 'filterValues', 'updatedAt'],
+          },
         )
       } else {
         // The APPEND leg of update-or-append, and the only one of the two

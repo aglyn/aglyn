@@ -46,8 +46,11 @@ import {
   seedFreePlanWorkspace,
 } from './lib/crm-free-plan-fixtures.mjs'
 import { E2E_ORG_RELEASE_FLAGS } from './lib/e2e-release-flags.mjs'
+import { datasetFilterFields, effectiveModel } from './lib/record-filter-keys.mjs'
 import { readLegalDocumentVersion } from './lib/legal-document-version.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
+import { listMemberSearchTokens } from './lib/email-search-tokens.mjs'
+import { displayNameSearchFields } from './lib/name-search-tokens.mjs'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -531,9 +534,14 @@ const teamRows = [
   ['Sam Rivera', 'Pastry Chef', 'https://picsum.photos/seed/sam/240'],
   ['Jordan Lee', 'Front of House', 'https://picsum.photos/seed/jordan/240'],
 ]
+// Every record carries the filter fields its writers stamp (AGL-3321), or
+// the records table's filters and search find none of the seeded rows.
+const teamModel = effectiveModel({ fields: ['name', 'role', 'photo'] })
 for (const [index, [name, role, photo]] of teamRows.entries()) {
+  const values = { name, role, photo }
   await put(teamDataset.collection('records').doc(`seed-${index}`), {
-    values: { name, role, photo },
+    values,
+    ...datasetFilterFields(teamModel, values),
     order: index,
     createdAt: now,
   })
@@ -558,6 +566,9 @@ await put(ratesDataset, {
 })
 await put(ratesDataset.collection('records').doc('seed-rate-1'), {
   values: { name: 'INTERNAL-RATE-CARD-SECRET' },
+  ...datasetFilterFields(effectiveModel({ fields: ['name'] }), {
+    name: 'INTERNAL-RATE-CARD-SECRET',
+  }),
   order: 0,
   createdAt: now,
 })
@@ -605,10 +616,13 @@ for (const [id, email, name, tags] of contacts) {
 }
 
 const list = orgRef.collection('lists').doc('seed-newsletter')
-await put(list, { name: 'Newsletter', createdAt: now })
+// The keys the Emails lists table queries (AGL-3321), as its writers stamp them.
+await put(list, { name: 'Newsletter', ...displayNameSearchFields('Newsletter'), kind: 'manual', createdAt: now })
 await put(list.collection('members').doc('seed-member-1'), {
   email: 'wholesale@example.com',
   name: 'Robin Wholesale',
+  searchTokens: listMemberSearchTokens('wholesale@example.com', 'Robin Wholesale'),
+  via: 'manual',
   createdAt: now,
 })
 

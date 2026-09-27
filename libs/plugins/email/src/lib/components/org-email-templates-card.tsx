@@ -30,23 +30,33 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  type ListFilterClause,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import {
+  type ListQueryPlan,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_ROW_HEIGHT,
 } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  ceilingedWindow,
-  collectionCeiling,
-} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   useFirestore,
   useFirestoreCollection,
@@ -68,18 +78,17 @@ import {
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import {
-  collection,
-  doc,
-  query,
-  Timestamp,
-  updateDoc,
-  where,
-} from 'firebase/firestore'
+import { collection, doc, limit, query, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  EMAIL_TEMPLATE_BASE,
+  EMAIL_TEMPLATE_FILTER_HEADERS,
+  EMAIL_TEMPLATE_QUERY,
+} from '../constants/list-queries'
 import { templateProvenance } from '../model/template-provenance'
 import { createEmailScreen } from '../utils/create-email-screen'
+import { emailTemplateSoftDelete } from '../utils/email-template-soft-delete'
 import {
   OrgSiteSelect,
   orgSiteEmailsPath,
@@ -100,26 +109,47 @@ import {
 export const ORG_TEMPLATE_CEILING = 50
 
 /*
- * What the organization's templates grid's Filters panel offers (AGL-3317).
- * The table holds every template its page of sites read, so it answers the
- * panel over all of them before the footer's slice. Site offers the sites on
- * that page; Origin reads `originKey`, the provenance the column draws.
+ * What the organization's templates grid's Filters panel offers (AGL-3321).
+ *
+ * The template clauses and the search are the site list's own
+ * (`EMAIL_TEMPLATE_QUERY`): ONE plan, put on EVERY site's query, so each
+ * site's read is already the answer and nothing is matched in the browser.
+ * Site is not a field of a screen but a choice of WHICH sites' queries run:
+ * a Site clause reads exactly the sites it names, whichever page of sites
+ * they are on. Origin (yours or installed) is not offered, for the reason the
+ * declaration gives: a query cannot ask for a field to be absent.
  */
-const ORG_TEMPLATE_FILTER_FIELDS = [
-  inMemoryListField('displayName', 'text', 'templateName'),
-  inMemoryListField('site', 'select', 'hostId'),
-  inMemoryListField('origin', 'select', 'originKey'),
+const SITE_FIELD: ListFilterField = {
+  column: 'site',
+  kind: 'exact',
+  path: 'hostId',
+  operators: ['equals', 'isAnyOf'],
+}
+const ORG_TEMPLATE_FILTER_FIELDS: readonly ListFilterField[] = [
+  ...EMAIL_TEMPLATE_QUERY.fields,
+  SITE_FIELD,
 ]
 const ORG_TEMPLATE_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  displayName: 'Template',
+  ...EMAIL_TEMPLATE_FILTER_HEADERS,
   site: 'Site',
-  origin: 'Origin',
 }
-const ORIGIN_OPTIONS = [
-  { value: 'local', label: 'Yours' },
-  { value: 'installed', label: 'Installed' },
-]
-const ORG_TEMPLATE_SEARCH_FIELDS = ['templateName', 'siteName'] as const
+
+/** The sites a Site clause names, or null when none is in force. */
+export function orgTemplateSiteScope(
+  clauses: readonly ListFilterClause[],
+): string[] | null {
+  const named = clauses
+    .filter((clause) => clause.field === SITE_FIELD.column)
+    .map((clause) =>
+      clause.value
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    )
+  if (!named.length) return null
+  // Several Site clauses all hold: a site must be named by each.
+  return named.reduce((kept, next) => kept.filter((id) => next.includes(id)))
+}
 
 /** One site's read, as the table assembles it. */
 interface SiteRead {
@@ -137,26 +167,28 @@ interface SiteRead {
  * changes and a hook's call count may not: each mounted reader is one
  * listener, and a page of sites mounts one per site on it.
  *
- * The equality filter is on the QUERY, so a site with a thousand pages reads
- * its emails and nothing else. `collectionCeiling` orders on the document
- * name, which an equality predicate composes onto without a composite index.
+ * Every predicate is on the QUERY — the email scope, every clause and the
+ * search word, one plan for all the sites (AGL-3321) — so a site's read is
+ * its first templates THAT MATCH, by name, and a site with a thousand pages
+ * reads its matching emails and nothing else. It reads one past the ceiling,
+ * so the table can say when a site holds more matches than it listed.
  */
 function SiteTemplatesReader(props: {
   hostId: string
+  plan: ListQueryPlan
   onRead: (hostId: string, read: SiteRead) => void
 }) {
-  const { hostId, onRead } = props
+  const { hostId, plan, onRead } = props
   const firestore = useFirestore()
+  const planKey = JSON.stringify({ filters: plan.filters, orderBy: plan.orderBy })
   const { data, status } = useFirestoreCollection<Record<string, any>>(
     () =>
-      collectionCeiling(
-        query(
-          collection(firestore, 'hosts', hostId, 'screens'),
-          where('kind', '==', 'email'),
-        ),
-        ORG_TEMPLATE_CEILING,
+      query(
+        collection(firestore, 'hosts', hostId, 'screens'),
+        ...listQueryConstraints(plan),
+        limit(ORG_TEMPLATE_CEILING + 1),
       ),
-    [firestore, hostId],
+    [firestore, hostId, planKey],
     { idField: '$id' },
   )
   // One window per snapshot, so a re-render that brings no new snapshot hands
@@ -187,12 +219,13 @@ SiteTemplatesReader.displayName = 'SiteTemplatesReader'
  * organization-level template page, because there is no such thing.
  *
  * The reads are one listener per site, over one page of sites at a time —
- * ordered by name — each capped at {@link ORG_TEMPLATE_CEILING} templates.
- * The shared footer pages the templates in hand, as a site's own list does;
- * an organization with more sites than one page chooses which page of sites
- * is read with the Sites filter above the table, and only that page's sites
- * are read. Both caps say so on screen when they bite, so a missing template
- * is never mistaken for one that does not exist.
+ * ordered by name — each its site's query for the clauses and search in
+ * force, capped at {@link ORG_TEMPLATE_CEILING} matches. The shared footer
+ * pages the matches in hand; an organization with more sites than one page
+ * chooses which page of sites is read with the Sites picker above the
+ * table, or names sites with the Site filter. Both caps say so on screen when
+ * they bite, so a missing template is never mistaken for one that does not
+ * exist.
  *
  * "New template" asks which site the design is made on — the besigner opens
  * on a site — and skips the question when the org has one site.
@@ -212,7 +245,48 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
   const createHostResource = useHostResourceApi()
   const createHostVersion = useHostVersionApi()
   const sitePage = useOrgSitePage(mount)
-  const { sites } = sitePage
+  const gridFilter = useListGridFilter({ selectFields: [SITE_FIELD.column] })
+  /*
+   * Which sites are read: the ones a Site clause names, else the page of
+   * sites. The other clauses and the search are ONE plan every site's query
+   * carries.
+   */
+  const siteScope = useMemo(
+    () => orgTemplateSiteScope(gridFilter.clauses),
+    [gridFilter.clauses],
+  )
+  const sites = useMemo(
+    () =>
+      siteScope
+        ? mount.hosts.filter((host) => siteScope.includes(host.id))
+        : sitePage.sites,
+    [siteScope, mount.hosts, sitePage.sites],
+  )
+  const plan = useMemo(
+    () =>
+      planListQuery(
+        EMAIL_TEMPLATE_QUERY,
+        {
+          clauses: gridFilter.clauses.filter(
+            (clause) => clause.field !== SITE_FIELD.column,
+          ),
+          search: gridFilter.searchWords,
+          base: EMAIL_TEMPLATE_BASE,
+        },
+        nameSearchNormalizers,
+      ),
+    [gridFilter.clauses, gridFilter.searchWords],
+  )
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: ORG_TEMPLATE_FILTER_FIELDS,
+        headers: ORG_TEMPLATE_FILTER_HEADERS,
+      }),
+    [plan.refused],
+  )
 
   const [reads, setReads] = useState<Record<string, SiteRead>>({})
   const onRead = useCallback(
@@ -236,30 +310,25 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
   /*
    * One row per template, named by site. The row id joins the site to the
    * screen id: two sites can hold a screen with the same id, and a grid that
-   * keyed on the screen alone would draw one of them twice.
+   * keyed on the screen alone would draw one of them twice. Every row is an
+   * answer some site's query gave; the sort only interleaves the sites'
+   * answers by the name each was already ordered by.
    */
   const rows = useMemo(
     () =>
       sites
         .flatMap((site) =>
-          (reads[site.id]?.rows ?? [])
-            .filter((screen) => !screen['deletedAt'])
-            .map((screen) => ({
-              ...screen,
-              $id: `${site.id}:${screen['$id']}`,
-              screenId: String(screen['$id']),
-              hostId: site.id,
-              templateName: String(screen['displayName'] ?? 'Untitled template'),
-              siteName: orgSiteName(mount, site.id),
-              originKey:
-                templateProvenance(screen).origin === 'installed' ? 'installed' : 'local',
-            })),
+          (reads[site.id]?.rows ?? []).map((screen) => ({
+            ...screen,
+            $id: `${site.id}:${screen['$id']}`,
+            screenId: String(screen['$id']),
+            hostId: site.id,
+            siteName: orgSiteName(mount, site.id),
+          })),
         )
         .sort(
           (a, b) =>
-            String(a['displayName'] ?? '').localeCompare(
-              String(b['displayName'] ?? ''),
-            ) ||
+            String(a['nameLower'] ?? '').localeCompare(String(b['nameLower'] ?? '')) ||
             orgSiteName(mount, a.hostId).localeCompare(
               orgSiteName(mount, b.hostId),
             ),
@@ -270,36 +339,27 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
   const crowded = sites.filter((site) => reads[site.id]?.truncated)
 
   /*
-   * The templates in hand, a page at a time on the shared footer. Choosing
-   * another page of sites starts the templates from their first page: page
-   * four of one set of sites is not a position in another.
+   * The matches in hand, a page at a time on the shared footer. Choosing
+   * another page of sites, or another question, starts from the first page:
+   * page four of one answer is not a position in another.
    */
   const filterOptions = useMemo(
     () => ({
-      site: sites.map((site) => ({ value: site.id, label: orgSiteName(mount, site.id) })),
-      origin: ORIGIN_OPTIONS,
+      // Every site the organization has: a Site clause reads the sites it
+      // names wherever they sit in the page of sites.
+      site: mount.hosts.map((site) => ({ value: site.id, label: orgSiteName(mount, site.id) })),
     }),
-    [sites, mount],
+    [mount],
   )
-  const templateFilter = useListRowsFilter({
-    rows,
-    fields: ORG_TEMPLATE_FILTER_FIELDS,
-    options: filterOptions,
-    headers: ORG_TEMPLATE_FILTER_HEADERS,
-    search: ORG_TEMPLATE_SEARCH_FIELDS,
-  })
-  const matched = templateFilter.rows
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const searchKey = templateFilter.gridFilter.searchWords.join(' ')
-  // A narrowed list starts again at its first page.
-  useEffect(
-    () => setPage(0),
-    [sitePage.page, templateFilter.gridFilter.clauses, searchKey],
-  )
+  const planKey = JSON.stringify({ filters: plan.filters, orderBy: plan.orderBy })
+  const siteKey = sites.map((site) => site.id).join(',')
+  // A new answer starts again at its first page.
+  useEffect(() => setPage(0), [siteKey, planKey])
   const shown = useMemo(
-    () => matched.slice(page * pageSize, page * pageSize + pageSize),
-    [matched, page, pageSize],
+    () => rows.slice(page * pageSize, page * pageSize + pageSize),
+    [rows, page, pageSize],
   )
   const sitePageCount = Math.ceil(sitePage.count / sitePage.pageSize)
 
@@ -341,7 +401,7 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
     if (!confirmed) return
     await updateDoc(
       doc(firestore, 'hosts', row['hostId'], 'screens', row['screenId']),
-      { deletedAt: Timestamp.now() },
+      emailTemplateSoftDelete(),
     )
   }
 
@@ -420,7 +480,8 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
       field: 'origin',
       headerName: 'Origin',
       width: 130,
-      valueGetter: (_value, row) => row.originKey,
+      valueGetter: (_value, row) =>
+        templateProvenance(row).origin === 'installed' ? 'installed' : 'local',
       renderCell: ({ value }) =>
         value === 'installed' ? (
           <Chip size="small" label="Installed" />
@@ -508,7 +569,12 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
       }}
     >
       {sites.map((site) => (
-        <SiteTemplatesReader key={site.id} hostId={site.id} onRead={onRead} />
+        <SiteTemplatesReader
+          key={site.id}
+          hostId={site.id}
+          plan={plan}
+          onRead={onRead}
+        />
       ))}
       <Stack spacing={1.5}>
         {/*
@@ -517,7 +583,7 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
           a site of another page is one choice away, not missing. It picks
           what is read, a scope, so it is not one of the grid's filters.
          */}
-        {sitePageCount > 1 ? (
+        {sitePageCount > 1 && !siteScope ? (
           <TextField
             select
             size="small"
@@ -542,7 +608,7 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
             {'This organization has no sites yet. A template is designed on ' +
               'a site, in its besigner, so it appears here once there is one.'}
           </Typography>
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && !filtering ? (
           <Typography variant="body2" color="text.secondary">
             {settled
               ? 'None of these sites has an email template yet. Design one ' +
@@ -552,17 +618,33 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
           </Typography>
         ) : (
           <>
-            <ListFilterChips {...templateFilter.chipsProps} />
+            <ListFilterChips
+              fields={ORG_TEMPLATE_FILTER_FIELDS}
+              headers={ORG_TEMPLATE_FILTER_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+              options={filterOptions}
+            />
+            <ListQueryNotices refused={refusals} notices={plan.notices} />
             <ListTable
               aria-label="Email templates"
               rows={shown}
-              columns={templateFilter.filterColumns(columns)}
+              columns={listFilterGridColumns(
+                columns,
+                ORG_TEMPLATE_FILTER_FIELDS,
+                filterOptions,
+                ORG_TEMPLATE_FILTER_HEADERS,
+              )}
               rowHeight={TABLE_ROW_HEIGHT}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search are the grid's; the table answers
-              // them over every template it read, before the footer's slice.
-              {...templateFilter.gridProps}
+              // The panel and the search go to every site's query; the grid
+              // neither filters nor sorts the rows it holds.
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              disableColumnSorting
               noRowsLabel="No templates match these filters"
               onOpen={(_id, row) => {
                 const href = templateHref(row)
@@ -573,7 +655,7 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
               page={page}
               pageSize={pageSize}
               rowCount={shown.length}
-              count={matched.length}
+              count={rows.length}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
             />
@@ -584,8 +666,8 @@ function OrgEmailTemplatesTable(props: { mount: EmailOrgMount }) {
           return (
             <Alert key={site.id} severity="info">
               {`${orgSiteName(mount, site.id)} has more than ` +
-                `${ORG_TEMPLATE_CEILING} templates, and only the first of them ` +
-                'are listed here. '}
+                `${ORG_TEMPLATE_CEILING} ${filtering ? 'matching templates' : 'templates'}, ` +
+                'and only the first of them are listed here. '}
               {href ? (
                 <AppLink href={href}>{'See all of its templates'}</AppLink>
               ) : null}
