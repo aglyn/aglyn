@@ -15,11 +15,46 @@
  * limitations under the License.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   displayNameSearchFields,
   nameSearchFields,
+  nameSearchKey,
   nameSearchNormalizers,
+  nameSearchReversed,
+  nameSearchTokens,
+  scopedSearchTokens,
 } from './name-search'
+
+/**
+ * The worked examples the script-side restatement
+ * (`tools/scripts/lib/name-search-tokens.mjs`) is held to as well, so a
+ * backfill and a list query cannot spell a token differently.
+ */
+const fixtures = JSON.parse(
+  readFileSync(
+    join(__dirname, '../../../../../tools/scripts/lib/name-search-tokens.fixtures.json'),
+    'utf8',
+  ),
+) as {
+  keys: Array<{ name: string; key: string; reversed: string }>
+  tokens: Array<{ name: string; tokens: string[] }>
+  scoped: Array<{ visibleTo: unknown; tokens: string[]; scoped: string[] }>
+}
+
+describe('the script-side fixtures', () => {
+  it.each(fixtures.keys)('keys $name', ({ name, key, reversed }) => {
+    expect(nameSearchKey(name)).toBe(key)
+    expect(nameSearchReversed(name)).toBe(reversed)
+  })
+  it.each(fixtures.tokens)('tokens $name', ({ name, tokens }) => {
+    expect(nameSearchTokens(name)).toEqual(tokens)
+  })
+  it.each(fixtures.scoped)('scoped $visibleTo', ({ visibleTo, tokens, scoped }) => {
+    expect(scopedSearchTokens(visibleTo, tokens)).toEqual(scoped)
+  })
+})
 
 describe('displayNameSearchFields', () => {
   it('derives the same three keys nameSearchFields derives from a name', () => {
