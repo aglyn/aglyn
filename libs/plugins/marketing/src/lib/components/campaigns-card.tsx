@@ -26,6 +26,7 @@ import {
   ceilingedWindow,
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { mdiDeleteOutline, mdiEyeOutline } from '@aglyn/shared-data-mdi'
 import {
   AppLink,
@@ -34,16 +35,32 @@ import {
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  type ListFilterClause,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
-import { collection, limit, query, setDoc } from 'firebase/firestore'
+import {
+  Alert,
+  Button,
+  Chip,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material'
+import { collection, limit, query, setDoc, where } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
@@ -63,9 +80,19 @@ import {
 } from '@aglyn/shared-ui-email-campaigns/model'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import {
+  CAMPAIGN_SITE_SEARCH_NOTICE,
+  SINGLE_SENDS_BASE,
+  campaignContainerSearchFields,
+  campaignContainersListQuery,
+  campaignContainersScope,
+  campaignSendsScope,
+  campaignSingleSendsListQuery,
+  campaignSiteSearchClause,
+} from '../model/campaign-list-query'
+import {
   campaignContainerDoc,
-  campaignContainersQuery,
-  campaignSendsQuery,
+  campaignContainersCollection,
+  campaignSendsCollection,
 } from './campaign-queries'
 import {
   orgSiteName,
@@ -79,16 +106,20 @@ import { useCampaignManageApi } from './use-campaign-send-api'
 import { useCampaignTopicOptions } from './use-campaign-topic-options'
 
 /**
- * How many sends the list reads.
+ * How many emails one read of a page's campaigns covers, for their figures.
  *
- * A CEILING, not a page size — see the query, which explains why this list
- * cannot be paged by the server until a send carries one date field every
- * writer stamps.
+ * A ceiling on the ROLLUP read, not on the list: the list is paged by its
+ * own query, and this reads the emails of the campaigns on the page on
+ * screen, thirty campaigns to a read (`in` takes thirty ids), so the largest
+ * page is two reads of this many. Past it, the figures say so.
  */
-const CAMPAIGN_CEILING = 30
+const ROLLUP_CEILING = 50
 
-/** How many campaign containers the list reads. */
-const CONTAINER_CEILING = 50
+/** Firestore's cap on an `in` clause's values. */
+const IN_LIMIT = 30
+
+/** Which kind of row the table shows: the two are separate queries. */
+type CampaignListKind = 'campaign' | 'single'
 
 const formatDay = (ms: number | null): string =>
   ms === null ? '' : new Date(ms).toLocaleDateString()
@@ -105,33 +136,22 @@ const WINDOW_LABEL: Record<CampaignListRow['windowState'], string> = {
 }
 
 /*
- * What the campaigns grid's Filters panel offers (AGL-3317). The card reads
- * every campaign under its ceiling, so the panel and the search answer over
- * all of them. A campaign's lists are ids, matched member by member.
+ * What the campaigns grid's Filters panel offers, each clause and the search
+ * on the list's Firestore query (AGL-3321, `campaignContainersListQuery` and
+ * `campaignSingleSendsListQuery`). The Window column is derived from a
+ * campaign's dates against the clock, which no query can ask, so it is not
+ * offered; the one date range is Created, the list's own order.
  */
-const CAMPAIGN_FILTER_FIELDS = [
-  inMemoryListField('name', 'text'),
-  inMemoryListField('windowState', 'select'),
-  { ...inMemoryListField('listIds', 'select'), tokensPath: 'listIds', verbatimTokens: true },
-  inMemoryListField('kind', 'select'),
-  inMemoryListField('sitesLabel', 'text'),
-]
 const CAMPAIGN_FILTER_HEADERS: Readonly<Record<string, string>> = {
   name: 'Campaign',
-  windowState: 'Window',
   listIds: 'Lists',
-  kind: 'Kind',
   sitesLabel: 'Sites',
+  createdAtMs: 'Created',
 }
-const CAMPAIGN_KIND_OPTIONS = [
-  { value: 'campaign', label: 'Campaign' },
-  { value: 'single', label: 'Single send' },
-]
-const CAMPAIGN_WINDOW_OPTIONS = (
-  Object.keys(WINDOW_LABEL) as Array<CampaignListRow['windowState']>
-).map((state) => ({ value: state, label: WINDOW_LABEL[state] }))
-/** What the quick search reads on a campaign row. */
-const CAMPAIGN_SEARCH_FIELDS = ['name', 'sitesLabel'] as const
+const NO_CLAUSES: Record<CampaignListKind, ListFilterClause[]> = {
+  campaign: [],
+  single: [],
+}
 
 /**
  * THE CAMPAIGNS LIST.
@@ -141,12 +161,14 @@ const CAMPAIGN_SEARCH_FIELDS = ['name', 'sitesLabel'] as const
  * messages. Composing is not here: a message belongs to a campaign, and the
  * campaign's own page is where one is written.
  *
- * The rows come from two collections, and the second is why this reads
- * without a migration. `emailCampaigns` holds the containers.
- * `campaigns` holds every send, including thousands written before containers
- * existed; those carry no container id, and `campaignListRows` presents each
- * as a campaign of one rather than dropping it. Nothing is rewritten, so no
- * unsubscribe link and no pasted report URL stops resolving.
+ * The rows come from two collections. `emailCampaigns` holds the
+ * containers. `campaigns` holds every send, including thousands written
+ * before containers existed; those carry no container (`emailCampaignId`
+ * null), and `campaignListRows` presents each as a campaign of one rather
+ * than dropping it. The two are two queries, so the table lists one kind at a
+ * time — Campaigns or Single sends — each paged by its own query (AGL-3321).
+ * No send is re-filed, so no unsubscribe link and no pasted report URL stops
+ * resolving.
  *
  * ## At two levels
  *
@@ -190,44 +212,125 @@ export function HostCampaignsCard(props: {
   // A container is the org's, so deleting one from the org hub names the org.
   const manageApi = useCampaignManageApi(hostId, orgId)
 
+  /*==========================================
+   * TWO KINDS OF ROW, EACH ITS OWN QUERY (AGL-3321).
+   *
+   * A campaign is a CONTAINER (`emailCampaigns`); a single send is an email
+   * filed under none (`campaigns` where `emailCampaignId == null`). The two
+   * live in different collections, and one Firestore query reads one
+   * collection — so a table that merged them could page neither, and every
+   * filter would be matched over whatever window of each it happened to
+   * hold. The toggle above the table picks the kind, and the table shows a
+   * page of that kind's query: newest first on `createdAtMs`, every clause
+   * and the search word on the query, paged by it. Same table, same
+   * columns; a single send still reads as a campaign of one.
+   *
+   * Each kind keeps its own clauses (their Sites values differ: a campaign
+   * is asked by scope token, a send by the site it was sent as); the search
+   * words are the reader's and carry across.
+   *=========================================*/
+  const [kind, setKind] = useState<CampaignListKind>('campaign')
+  const [clausesByKind, setClausesByKind] = useState(NO_CLAUSES)
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const setKindClauses = useCallback(
+    (next: ListFilterClause[]) =>
+      setClausesByKind((current) => ({ ...current, [kind]: next })),
+    [kind],
+  )
+  const gridFilter = useListGridFilter({
+    clauses: clausesByKind[kind],
+    onChange: setKindClauses,
+    selectFields: ['listIds', 'sitesLabel'],
+    search: { words: searchWords, onChange: setSearchWords },
+  })
+  const containerDeclaration = campaignContainersListQuery(!hostId)
+  const singleDeclaration = campaignSingleSendsListQuery(!hostId)
+  const declaration = kind === 'campaign' ? containerDeclaration : singleDeclaration
   /*
-   * ORDERED AND CEILINGED, and not orderable on any DATE.
-   *
-   * No field here is on every send: a sent one is written `{status:'sent',
-   * sentAt}` and a scheduled one `{status:'scheduled', sendAtMs}`, by the two
-   * branches of `campaign-send.ts`, and there is no `createdAt` at all.
-   * `orderBy` on either would not mis-sort the list, it would DROP half of it.
-   *
-   * A bare `limit(30)` is answered in DOCUMENT-ID order, so the window is
-   * thirty sends chosen by id and then sorted by date, which reads as the most
-   * recent thirty and is not. `collectionCeiling` returns that same thirty —
-   * document-id order is what the bare cap already gave — but it says so,
-   * which is what stops the next edit reaching for `sentAt`, and it probes one
-   * past the ceiling so the reader is told the history is longer.
+   * A site's campaigns are searched by the START of the name: a range beside
+   * the site's scope clause, the one array clause the rules can prove for a
+   * site collaborator (see `campaign-list-query.ts`). The org hub keeps the
+   * word search.
    */
-  const { data: sendDocs } = useFirestoreCollection<any>(
-    () => {
-      const sends = campaignSendsQuery(firestore, orgId, hostId)
-      return sends ? collectionCeiling(sends, CAMPAIGN_CEILING) : null
+  const siteSearch =
+    hostId && kind === 'campaign' ? campaignSiteSearchClause(gridFilter.searchWords) : null
+  const containerPage = useListQuery<any>({
+    collection:
+      kind === 'campaign' ? campaignContainersCollection(firestore, orgId) : null,
+    declaration: containerDeclaration,
+    request: {
+      clauses:
+        kind === 'campaign'
+          ? siteSearch
+            ? [siteSearch, ...gridFilter.clauses]
+            : gridFilter.clauses
+          : [],
+      search: hostId ? [] : gridFilter.searchWords,
+      base: campaignContainersScope(hostId),
     },
-    [firestore, orgId, hostId],
-    { idField: '$id' },
-  )
-  const { rows: readSends, truncated: sendsTruncated } = ceilingedWindow<any>(
-    sendDocs,
-    CAMPAIGN_CEILING,
-  )
+    deps: [firestore, orgId, hostId, kind],
+    idField: '$id',
+  })
+  const singlePage = useListQuery<any>({
+    collection: kind === 'single' ? campaignSendsCollection(firestore, orgId) : null,
+    declaration: singleDeclaration,
+    request: {
+      clauses: kind === 'single' ? gridFilter.clauses : [],
+      search: gridFilter.searchWords,
+      base: [SINGLE_SENDS_BASE, ...campaignSendsScope(hostId)],
+    },
+    deps: [firestore, orgId, hostId, kind],
+    idField: '$id',
+  })
+  const page = kind === 'campaign' ? containerPage : singlePage
+  const filtering =
+    gridFilter.clauses.length > 0 ||
+    gridFilter.searchWords.some((word) => word.trim())
 
-  const { data: campaignDocs } = useFirestoreCollection<any>(
-    () => {
-      const containers = campaignContainersQuery(firestore, orgId, hostId)
-      return containers ? collectionCeiling(containers, CONTAINER_CEILING) : null
-    },
-    [firestore, orgId, hostId],
+  /*
+   * THE FIGURES OF THE CAMPAIGNS ON THE PAGE ON SCREEN.
+   *
+   * A container stores no counters; its row sums the emails filed under it.
+   * Those are read for the page's campaigns only — `emailCampaignId in` the
+   * ids on screen, thirty to a read, and under a site the ones sent as it —
+   * and never used to filter: the page is already the query's answer. Past
+   * `ROLLUP_CEILING` emails a read stops, and the table says the figures
+   * are partial.
+   */
+  const pageIds = useMemo(
+    () =>
+      kind === 'campaign'
+        ? containerPage.rows.map((row: any) => String(row.$id))
+        : [],
+    [kind, containerPage.rows],
+  )
+  const rollupRead = (ids: string[]) => () => {
+    const sends = campaignSendsCollection(firestore, orgId)
+    if (!sends || !ids.length) return null
+    return collectionCeiling(
+      query(
+        sends,
+        where('emailCampaignId', 'in', ids),
+        ...(hostId ? [where('hostId', '==', hostId)] : []),
+      ),
+      ROLLUP_CEILING,
+    )
+  }
+  const firstIds = pageIds.slice(0, IN_LIMIT)
+  const restIds = pageIds.slice(IN_LIMIT, IN_LIMIT * 2)
+  const { data: firstSendDocs } = useFirestoreCollection<any>(
+    rollupRead(firstIds),
+    [firestore, orgId, hostId, firstIds.join(',')],
     { idField: '$id' },
   )
-  const { rows: readCampaigns, truncated: campaignsTruncated } =
-    ceilingedWindow<any>(campaignDocs, CONTAINER_CEILING)
+  const { data: restSendDocs } = useFirestoreCollection<any>(
+    rollupRead(restIds),
+    [firestore, orgId, hostId, restIds.join(',')],
+    { idField: '$id' },
+  )
+  const firstSends = ceilingedWindow<any>(firstSendDocs, ROLLUP_CEILING)
+  const restSends = ceilingedWindow<any>(restSendDocs, ROLLUP_CEILING)
+  const rollupTruncated = firstSends.truncated || restSends.truncated
 
   // Org email lists, so a row can name what it is aimed at rather than
   // showing ids.
@@ -280,48 +383,57 @@ export function HostCampaignsCard(props: {
     [listDocs],
   )
 
+  /*
+   * The page's rows, in the QUERY's order. `campaignListRows` builds each
+   * row — a container with its emails summed, or a single send as a
+   * campaign of one — and sorts by date, which is not this list's order, so
+   * the page is put back in the order the query returned it.
+   */
   const rows = useMemo(() => {
-    const campaigns = (readCampaigns as EmailCampaign[]).filter(
-      (campaign: any) => !campaign.deletedAt,
-    )
-    const byId = new Map(campaigns.map((campaign) => [campaign.$id, campaign]))
-    return campaignListRows(
-      campaigns,
-      readSends as CampaignSend[],
-      Date.now(),
-    ).map((row) => ({
-      ...row,
-      $id: row.id,
-      kind: row.legacy ? 'single' : 'campaign',
-      sitesLabel: orgMount
-        ? campaignSitesLabel(orgMount, row, byId.get(row.id))
-        : '',
-    }))
-  }, [readCampaigns, readSends, orgMount])
+    const read = page.rows as any[]
+    const order = new Map(read.map((row, at) => [String(row.$id), at]))
+    const built =
+      kind === 'campaign'
+        ? campaignListRows(
+            read as EmailCampaign[],
+            [...firstSends.rows, ...restSends.rows] as CampaignSend[],
+            Date.now(),
+          )
+        : campaignListRows([], read as CampaignSend[], Date.now())
+    const byId = new Map(read.map((row) => [String(row.$id), row]))
+    return built
+      .filter((row) => order.has(row.id))
+      .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+      .map((row) => ({
+        ...row,
+        $id: row.id,
+        sitesLabel: orgMount
+          ? campaignSitesLabel(orgMount, row, byId.get(row.id))
+          : '',
+      }))
+  }, [kind, page.rows, firstSends.rows, restSends.rows, orgMount])
 
-  const filterOptions = useMemo(
-    () => ({
-      windowState: CAMPAIGN_WINDOW_OPTIONS,
-      listIds: listOptions,
-      kind: CAMPAIGN_KIND_OPTIONS,
-    }),
-    [listOptions],
-  )
-  // Sites is a column on the org hub only; under a site it would say one thing.
-  const filterFields = useMemo(
-    () =>
-      orgMount
-        ? CAMPAIGN_FILTER_FIELDS
-        : CAMPAIGN_FILTER_FIELDS.filter((field) => field.column !== 'sitesLabel'),
-    [orgMount],
-  )
-  const listFilter = useListRowsFilter({
-    rows,
-    fields: filterFields,
-    options: filterOptions,
-    headers: CAMPAIGN_FILTER_HEADERS,
-    search: CAMPAIGN_SEARCH_FIELDS,
-  })
+  /*
+   * The choices the picked fields offer. A campaign's Sites are asked by
+   * scope token — `org` is placed on every site — and a single send's by
+   * the site it was sent as.
+   */
+  const filterOptions = useMemo(() => {
+    if (!orgMount) return {}
+    const sites = orgSiteOptions(orgMount)
+    return kind === 'campaign'
+      ? {
+          listIds: listOptions,
+          sitesLabel: [
+            { value: 'org', label: 'Every site' },
+            ...sites.map((site) => ({
+              value: `host:${site.value}`,
+              label: site.label,
+            })),
+          ],
+        }
+      : { sitesLabel: sites }
+  }, [kind, listOptions, orgMount])
 
   const [createError, setCreateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -364,9 +476,24 @@ export function HostCampaignsCard(props: {
       setCreating(true)
       setCreateError(null)
       const id = createResourceUid()
+      /*
+       * Where it is placed. From a site's hub, that site — the creator is
+       * standing on it, and a campaign that appeared on every sibling site
+       * would be a decision nobody made. From the org hub, the sites picked,
+       * and every site when none are.
+       */
+      const visibleTo = campaignVisibleTo(
+        hostId
+          ? [hostId]
+          : Array.isArray(values.siteIds)
+            ? values.siteIds.map(String)
+            : null,
+      )
       try {
         await setDoc(campaignContainerDoc(firestore, orgId, id), {
           name,
+          // What the list's search reads (AGL-3321), from the name.
+          ...campaignContainerSearchFields(name),
           ...(Number.isFinite(startAtMs) && startAtMs !== null
             ? { startAtMs }
             : {}),
@@ -375,19 +502,7 @@ export function HostCampaignsCard(props: {
             ? values.listIds.map(String)
             : [],
           ...(values.topicId ? { topicId: String(values.topicId) } : {}),
-          /*
-           * Where it is placed. From a site's hub, that site — the creator is
-           * standing on it, and a campaign that appeared on every sibling
-           * site would be a decision nobody made. From the org hub, the sites
-           * picked, and every site when none are.
-           */
-          visibleTo: campaignVisibleTo(
-            hostId
-              ? [hostId]
-              : Array.isArray(values.siteIds)
-                ? values.siteIds.map(String)
-                : null,
-          ),
+          visibleTo,
           createdAtMs: Date.now(),
           createdBy: String((user as any)?.uid ?? ''),
         })
@@ -755,6 +870,10 @@ export function HostCampaignsCard(props: {
     [listNames, campaignHref, deletingId, handleDelete, orgMount],
   )
 
+  /** Nothing of this kind stored at all — not a filter that matched nothing. */
+  const none =
+    page.status !== 'loading' && !rows.length && !filtering && page.page === 0
+
   return (
     <CardDisplay
       header={'Campaigns'}
@@ -783,26 +902,98 @@ export function HostCampaignsCard(props: {
       contentGutterY
     >
       <Stack spacing={1.5}>
-        <ListFilterChips {...listFilter.chipsProps} />
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={kind}
+          onChange={(_event, next: CampaignListKind | null) => {
+            if (next) setKind(next)
+          }}
+          aria-label="Which rows the table lists"
+          sx={{ alignSelf: 'flex-start' }}
+        >
+          <ToggleButton value="campaign">{'Campaigns'}</ToggleButton>
+          <ToggleButton value="single">{'Single sends'}</ToggleButton>
+        </ToggleButtonGroup>
+        <ListFilterChips
+          fields={declaration.fields}
+          headers={CAMPAIGN_FILTER_HEADERS}
+          clauses={gridFilter.clauses}
+          onChange={gridFilter.setClauses}
+          options={filterOptions}
+        />
+        <ListQueryNotices
+          refused={listQueryRefusals(page.plan.refused, {
+            fields: declaration.fields,
+            headers: CAMPAIGN_FILTER_HEADERS,
+            options: filterOptions,
+          })}
+          notices={
+            siteSearch
+              ? [CAMPAIGN_SITE_SEARCH_NOTICE, ...page.plan.notices]
+              : page.plan.notices
+          }
+        />
         <ListTable
-          rows={listFilter.rows}
-          columns={listFilter.filterColumns(columns as any)}
+          rows={rows}
+          columns={listFilterGridColumns(
+            columns as any,
+            declaration.fields,
+            filterOptions,
+            CAMPAIGN_FILTER_HEADERS,
+          )}
           onOpen={(id) => openCampaign(id)}
-          // The panel and the search are the grid's; the card answers them
-          // over every campaign it read (AGL-3317).
-          {...listFilter.gridProps}
-          initialState={{ columns: { columnVisibilityModel: { kind: false } } }}
-          noRowsLabel={rows.length ? 'No campaigns match these filters' : 'No campaigns yet'}
+          loading={page.status === 'loading'}
+          /*
+           * The panel and the search are the grid's; every clause and the
+           * search word are on the list's query (AGL-3321), and the grid
+           * neither filters nor sorts the page it is handed.
+           */
+          filterMode="server"
+          filterModel={gridFilter.filterModel}
+          onFilterModelChange={gridFilter.onFilterModelChange}
+          quickFilter
+          disableColumnSorting
+          hideFooter
+          initialState={{
+            columns: {
+              columnVisibilityModel: hiddenFilterVisibility(
+                declaration.fields,
+                (columns as Array<{ field: string }>).map((column) => column.field),
+              ),
+            },
+          }}
+          noRowsLabel={
+            none
+              ? kind === 'campaign'
+                ? 'No campaigns yet'
+                : 'No single sends'
+              : kind === 'campaign'
+                ? 'No campaigns match these filters'
+                : 'No single sends match these filters'
+          }
           noRowsDescription={
-            rows.length ? undefined : 'A campaign groups the emails you send to a set of lists.'
+            none
+              ? kind === 'campaign'
+                ? 'A campaign groups the emails you send to a set of lists.'
+                : 'An email filed under no campaign is listed here.'
+              : undefined
           }
           noRowsAction={
-            rows.length ? undefined : (
+            none && kind === 'campaign' ? (
               <Button variant="contained" onClick={() => setCreateOpen(true)}>
                 {'Create campaign'}
               </Button>
-            )
+            ) : undefined
           }
+        />
+        <ListPagination
+          page={page.page}
+          pageSize={page.pageSize}
+          rowCount={rows.length}
+          hasMore={page.hasMore}
+          onPageChange={page.setPage}
+          onPageSizeChange={page.setPageSize}
         />
         {/*
           WHAT THIS TABLE MEASURES, said rather than inferred from the column
@@ -818,14 +1009,11 @@ export function HostCampaignsCard(props: {
             'credited to it — and the pages it sent people to are on the ' +
             'campaign’s own page.'}
         </Typography>
-        {sendsTruncated || campaignsTruncated ? (
+        {rollupTruncated ? (
           <Alert severity="info">
-            {`Showing the most recent ${CONTAINER_CEILING} campaigns and ` +
-              `${CAMPAIGN_CEILING} sends. ${
-                hostId ? 'This site' : 'This organization'
-              } has more — the ones ` +
-              'listed are not necessarily the most recent, because a send ' +
-              'carries no date field that every writer stamps.'}
+            {`The campaigns on this page hold more than ${ROLLUP_CEILING} ` +
+              'emails between them, so their figures count the first ' +
+              `${ROLLUP_CEILING} read.`}
           </Alert>
         ) : null}
       </Stack>

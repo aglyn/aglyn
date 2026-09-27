@@ -26,7 +26,9 @@
  * ## Experiments: paged
  *
  * A flat list, sorted by name, with nothing about a row that depends on the
- * row above it. It pages by query.
+ * row above it. It pages by query — the list query (AGL-3321), answered here
+ * by its test double, which runs the real plan and answers it the way
+ * Firestore would.
  *
  * ## Overlays: ordered and ceilinged, deliberately NOT paged
  *
@@ -47,12 +49,15 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+import {
+  lastListQueryPlan,
+  useListQueryDouble,
+} from '@aglyn/tenant-feature-instance/testing/list-query-double'
 
 jest.setTimeout(30_000)
 
 const EXPERIMENTS = 34
-/** How many of those are soft-deleted, which Firestore cannot filter out. */
-const DELETED = 3
 const OVERLAY_CEILING = 50
 const OVERLAYS = 12
 
@@ -61,14 +66,16 @@ const OVERLAYS = 12
  * alphabet and re-sorting it by name — the old behaviour — starts the table on
  * the wrong letter.
  */
-const experimentDocs = Array.from({ length: EXPERIMENTS }, (_, index) => ({
+const mockExperimentDocs = Array.from({ length: EXPERIMENTS }, (_, index) => ({
   $id: `exp-${String(EXPERIMENTS - 1 - index).padStart(2, '0')}`,
-  name: `Test ${String(index).padStart(2, '0')}`,
-  status: 'draft',
+  // The keys every writer stamps beside the name (AGL-3321).
+  ...nameSearchFields(`Test ${String(index).padStart(2, '0')}`),
+  status: index === 30 ? 'running' : 'draft',
   target: 'screen',
+  screenId: 'screen-1',
   variants: [{ id: 'a', name: 'A', weight: 1 }],
-  ...(index % 9 === 0 && index > 0 ? { deletedAt: { seconds: 1 } } : {}),
 }))
+const experimentDocs = mockExperimentDocs
 
 /**
  * Overlays, mostly without `order` — the shape a site actually has, because
@@ -160,6 +167,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
 }))
 
+/*
+ * The list query, answered by its double: the real plan, answered over the
+ * fixture the way Firestore would. Seeded below from the double's static
+ * import — `listQueryModule` reaches `jest` through `globalThis`, which this
+ * project's runner does not set.
+ */
+let mockListQuery: (options: unknown) => unknown = () => {
+  throw new Error('the list query double was not seeded')
+}
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: unknown) => mockListQuery(options),
+}))
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
@@ -170,6 +190,7 @@ jest.mock('firebase/firestore', () => ({
     constraints: [...(base?.constraints ?? []), ...constraints],
   }),
   limit: (value: number) => ({ limit: value }),
+  where: (field: string, op: string, value: unknown) => ({ where: [field, op, value] }),
   orderBy: (field: string, direction?: string) => ({
     orderBy: field,
     direction,
@@ -183,8 +204,9 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/shared-util-timestamp', () => ({
   Timestamp: { now: () => ({ seconds: 0 }) },
 }))
+const mockEnqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
-  useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
+  useSnackbar: () => ({ enqueueSnackbar: mockEnqueueSnackbar }),
 }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
   CardDisplay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -194,6 +216,7 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   }),
 }))
 
+import { getDocs, setDoc } from 'firebase/firestore'
 import { HostExperimentsCard } from './host-experiments-card.component'
 import { HostOverlaysCard } from './host-overlays-card.component'
 
@@ -206,6 +229,7 @@ const ORG = {
 
 beforeEach(() => {
   mockCapsAsked = []
+  mockListQuery = (options) => useListQueryDouble(() => mockExperimentDocs, options as never)
 })
 
 const firstCells = () =>
@@ -231,10 +255,6 @@ describe('the experiments table walks the collection (AGL-2501)', () => {
     ])
     expect(oldWindow[0].name).not.toBe(walked[0].name)
     expect(oldWindow.map((row: any) => row.name)).not.toContain('Test 00')
-    // And the fixture holds soft-deleted rows, which the query cannot exclude.
-    expect(
-      experimentDocs.filter((row: any) => row.deletedAt).length,
-    ).toBe(DELETED)
   })
 
   it('shows the alphabetical first page and pages to the next', async () => {
@@ -244,15 +264,28 @@ describe('the experiments table walks the collection (AGL-2501)', () => {
     await waitFor(() => expect(experimentNames()[0]).toBe('Test 10'))
   })
 
-  it('a page may render FEWER rows than its size, and that is correct', () => {
+  it('a page holds every row the query returned: nothing is dropped after it (AGL-3321)', () => {
     render(<HostExperimentsCard hostId="host-1" org={ORG} />)
-    // `Test 09` is soft-deleted. Firestore cannot ask for documents that LACK
-    // a field, so `deletedAt` is dropped in the browser and page one renders
-    // nine rows of a ten-row page. Asserting the ragged page is what stops a
-    // later change moving that filter into the query, where it would drop
-    // every live experiment instead.
-    expect(experimentNames()).toHaveLength(TABLE_PAGE_SIZE_DEFAULT - 1)
-    expect(experimentNames()).not.toContain('Test 09')
+    // An experiment is never soft-deleted — Delete is a `deleteDoc` — so the
+    // card matches nothing over the page it is handed, and a full page is a
+    // full page.
+    expect(experimentNames()).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
+  })
+})
+
+describe('the experiments search is asked of Firestore (AGL-3321)', () => {
+  it('finds an experiment whose only match is past the first page', async () => {
+    render(<HostExperimentsCard hostId="host-1" org={ORG} />)
+    expect(experimentNames()).not.toContain('Test 33')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '33' } })
+    await waitFor(() => expect(experimentNames()).toEqual(['Test 33']))
+    // On the query, as the written token — not matched over a loaded page.
+    expect(lastListQueryPlan()?.filters).toContainEqual({
+      path: 'nameTokens',
+      op: 'array-contains',
+      value: '33',
+    })
+    expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'name', direction: 'asc' })
   })
 })
 
@@ -303,5 +336,31 @@ describe('the overlays table is ceilinged, not paged (AGL-2501)', () => {
     expect((up.at(-1) as HTMLButtonElement).disabled).toBe(false)
     expect((down.at(-1) as HTMLButtonElement).disabled).toBe(true)
     expect(up).toHaveLength(OVERLAYS)
+  })
+})
+
+describe('starting a test asks Firestore what else runs on its screen (AGL-3321)', () => {
+  it('refuses a second running test on the screen even when the first is on another page', async () => {
+    ;(getDocs as jest.Mock).mockImplementationOnce(async (built: any) => {
+      const clauses = (built?.constraints ?? [])
+        .filter((item: any) => 'where' in item)
+        .map((item: any) => item.where as [string, string, unknown])
+      const docs = mockExperimentDocs
+        .filter((row: any) => clauses.every(([field, , value]) => row[field] === value))
+        .map((row) => ({ id: row.$id, data: () => row }))
+      return { docs }
+    })
+    render(<HostExperimentsCard hostId="host-1" org={ORG} />)
+    // `Test 30`, the running one, is on page four; page one holds `Test 00`.
+    expect(experimentNames()).not.toContain('Test 30')
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Test 01' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Start' }))
+    await waitFor(() =>
+      expect(mockEnqueueSnackbar).toHaveBeenCalledWith(
+        expect.stringContaining('"Test 30" is already running'),
+        expect.anything(),
+      ),
+    )
+    expect(setDoc).not.toHaveBeenCalled()
   })
 })

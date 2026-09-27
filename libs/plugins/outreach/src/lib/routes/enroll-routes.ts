@@ -37,6 +37,7 @@ import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-emai
 import { FieldValue } from 'firebase-admin/firestore'
 import { outreachCuratedEntry, outreachEnrolledEntry } from '../engine/enrollment-activity'
 import { buildOutreachEnrollment, planOutreachFirstDue } from '../engine/enrollment-state'
+import { outreachEnrollmentSearchTokens } from '../enrollment/enrollment-search'
 import type { OutreachGateLookups } from '../engine/gates'
 import {
   decideOutreachEnrollment,
@@ -672,6 +673,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         // The person's own copies of steps (AGL-3324) ride with the
         // enrollment from its first write: nothing sends between.
         if (Object.keys(stepOverrides).length) enrollment.stepOverrides = stepOverrides
+        // What the enrollments table searches the person by (AGL-3321),
+        // from the name and address this document captures for good.
+        enrollment.searchTokens = outreachEnrollmentSearchTokens(enrollment)
         try {
           await enrollments.doc(id).create(enrollment)
         } catch (error) {

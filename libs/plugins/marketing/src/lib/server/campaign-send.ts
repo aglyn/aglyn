@@ -109,6 +109,7 @@ import {
   orgEmailCampaigns,
   sendIsOnHost,
 } from './campaign-org-refs'
+import { campaignSendSearchFields } from '../model/campaign-list-query'
 /*
  * The LEAF module for the reputation controls too, and for the same reason
  * as the three above it: every spec that reaches this file mocks the
@@ -434,6 +435,13 @@ export interface CampaignSendOptions {
   displayName?: string
   /** Test sends (AGL-349) skip the campaign record and stats. */
   recordCampaign?: boolean
+  /**
+   * The `campaignId` names a record that does not exist yet, so this send
+   * MINTS it and stamps what a new record carries — its creation date, and
+   * `emailCampaignId: null` when it is filed under no campaign. Without it a
+   * caller naming an id is taken to address an existing record.
+   */
+  mintsRecord?: boolean
   /**
    * SEND THIS EMAIL AGAIN, TO PEOPLE IT HAS NOT REACHED.
    *
@@ -1970,7 +1978,7 @@ export async function performCampaignSend(
    * move an email's creation date forward every time it was sent again, and
    * the emails list orders drafts on exactly that field.
    */
-  const mintsRecord = !options.campaignId
+  const mintsRecord = !options.campaignId || options.mintsRecord === true
 
   // Designed email template (AGL-349): loaded once; rendered per
   // recipient with their merge values.
@@ -2709,6 +2717,8 @@ export async function performCampaignSend(
        */
       ...campaignSendSiteStamp(hostId),
       subject,
+      // What the lists' search reads (AGL-3321), beside the subject it is of.
+      ...campaignSendSearchFields(subject),
       body,
       audience,
       /*
@@ -2775,9 +2785,18 @@ export async function performCampaignSend(
       }),
       ...(options.preheader ? { preheader: options.preheader } : {}),
       ...(options.displayName ? { displayName: options.displayName } : {}),
+      /*
+       * The campaign it is filed under. A record this send MINTS with none
+       * is stamped `null` — a single send — because the lists ask
+       * `emailCampaignId == null` for those, and a query cannot find a field
+       * that is missing (AGL-3321). A record addressed by id keeps whatever
+       * it was filed under unless this send names a campaign.
+       */
       ...(options.emailCampaignId
         ? { emailCampaignId: options.emailCampaignId }
-        : {}),
+        : mintsRecord
+          ? { emailCampaignId: null }
+          : {}),
       /*
        * WHAT THIS EMAIL DID WITH THE UNSUBSCRIBE HEADER, and why (AGL-3307).
        * Written absolutely on every batch; a batch after a forced one is
@@ -4088,6 +4107,8 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         {
           ...campaignSendSiteStamp(hostId),
           subject,
+          // What the lists' search reads (AGL-3321), beside its subject.
+          ...campaignSendSearchFields(subject),
           body,
           audience,
           /*
@@ -4143,7 +4164,16 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
           ...(senderId ? { senderId } : {}),
           ...(preheader ? { preheader } : {}),
           ...(displayName ? { displayName } : {}),
-          ...(emailCampaignId ? { emailCampaignId } : {}),
+          /*
+           * A record this write CREATES with no campaign is a single send,
+           * stored `null` so the lists can ask for it (AGL-3321); one that
+           * exists keeps its campaign unless a new one is named.
+           */
+          ...(emailCampaignId
+            ? { emailCampaignId }
+            : targetSnapshot.exists
+              ? {}
+              : { emailCampaignId: null }),
           ...(scheduling
             ? {
                 status: 'scheduled',
@@ -4338,11 +4368,14 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
      * earlier sends recorded.
      *=========================================*/
     const sendId = String(req.body?.campaignId ?? '')
+    /** The id names no record yet, so this send mints it (AGL-3321). */
+    let mintsNamedRecord = false
     if (sendId) {
       if (!isDocumentId(sendId)) {
         return res.status(400).json({ error: 'Invalid campaignId' })
       }
       const existing = await orgSends.doc(sendId).get()
+      mintsNamedRecord = !existing.exists
       if (existing.exists && !sendIsOnHost(existing, hostId)) {
         return res.status(404).json({ error: 'Unknown email' })
       }
@@ -4371,6 +4404,7 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       topicId: topicId || undefined,
       emails: Array.isArray(req.body?.emails) ? req.body.emails : undefined,
       campaignId: sendId,
+      ...(mintsNamedRecord ? { mintsRecord: true } : {}),
       experimentId: String(req.body?.experimentId ?? ''),
       templateScreenId: templateScreenId || undefined,
       ...(plainText ? { plainText } : {}),

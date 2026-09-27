@@ -50,7 +50,7 @@ import { datasetFilterFields, effectiveModel } from './lib/record-filter-keys.mj
 import { readLegalDocumentVersion } from './lib/legal-document-version.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
 import { listMemberSearchTokens } from './lib/email-search-tokens.mjs'
-import { displayNameSearchFields } from './lib/name-search-tokens.mjs'
+import { displayNameSearchFields, nameSearchTokens } from './lib/name-search-tokens.mjs'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -1193,6 +1193,10 @@ await put(orgRef.collection('campaigns').doc('seed-campaign'), {
   hostId,
   visibleTo: [`host:${hostId}`],
   subject: 'Welcome to the bakery',
+  // The fields the marketing lists query on (AGL-3321).
+  subjectTokens: nameSearchTokens('Welcome to the bakery'),
+  emailCampaignId: null,
+  createdAtMs: Date.now() - dayMs,
   body: 'Hi {{firstName|there}} — thanks for signing up!',
   audience: 'leads',
   status: 'sent',
@@ -1205,6 +1209,9 @@ await put(orgRef.collection('campaigns').doc('seed-campaign-scheduled'), {
   hostId,
   visibleTo: [`host:${hostId}`],
   subject: 'Holiday preorder window',
+  subjectTokens: nameSearchTokens('Holiday preorder window'),
+  emailCampaignId: null,
+  createdAtMs: Date.now(),
   body: 'Hi {{firstName|there}} — preorders open next week!',
   audience: 'leads',
   status: 'scheduled',
@@ -1215,6 +1222,8 @@ await put(orgRef.collection('campaigns').doc('seed-campaign-scheduled'), {
 // Draft A/B experiment (AGL-252/273): business plan unlocks the card.
 await put(hostRef.collection('experiments').doc('seed-experiment'), {
   name: 'Hero copy test',
+  // The keys the A/B testing list's filter and search read (AGL-3321).
+  ...displayNameSearchFields('Hero copy test'),
   status: 'draft',
   target: 'screen',
   screenId: 'seed-screen',

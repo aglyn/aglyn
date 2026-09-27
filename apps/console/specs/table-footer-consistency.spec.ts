@@ -569,12 +569,13 @@ const withoutComments = (source: string) =>
  * moved theirs into `hostArtifactQuery`: the decision is subtle, identical
  * everywhere, and wrong in a way nobody sees. A guard that only knew the word
  * would have reported every one of those conversions as unordered.
- * `listQueryConstraints` is the same for a list whose query is planned
- * (AGL-3321): the plan always carries one order, and the constraints end in
- * it.
+ *
+ * `useListQuery` and `listQueryConstraints` are the same case for a list
+ * whose query is planned (AGL-3321): the plan always carries one order, and
+ * the query ends in it.
  */
 const NAMES_ITS_ORDER =
-  /\borderBy\(|\bcollectionPage\(|\bcollectionCeiling\(|\blistQueryConstraints\(/
+  /\borderBy\(|\bcollectionPage\(|\bcollectionCeiling\(|\blistQueryConstraints\(|\buseListQuery(<[^>]*>)?\(/
 
 const DRAWS_A_FOOTER =
   /<ListPagination|<ListTable|<DataTableComponent|<TablePagination|<DataGrid|<ScreensHierarchyTable/
@@ -644,6 +645,7 @@ describe('every list that DRAWS a footer names its order (AGL-2501)', () => {
     expect(NAMES_ITS_ORDER.test("orderBy('createdAt', 'desc')")).toBe(true)
     expect(NAMES_ITS_ORDER.test('collectionPage(ref, pageLimit)')).toBe(true)
     expect(NAMES_ITS_ORDER.test('collectionCeiling(ref, CEILING)')).toBe(true)
+    expect(NAMES_ITS_ORDER.test('useListQuery<Row>({ collection, declaration })')).toBe(true)
     // A list query plan's constraints end in the plan's one order (AGL-3321).
     expect(NAMES_ITS_ORDER.test('listQueryConstraints(plan)')).toBe(true)
     expect(NAMES_ITS_ORDER.test('query(ref, ...listQueryConstraints(plan), limit(11))')).toBe(true)

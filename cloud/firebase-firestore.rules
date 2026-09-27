@@ -1839,9 +1839,18 @@ service cloud.firestore {
        * `reports/*` (reach, links, revenue, conversions) is read through the
        * parent's scope, because the parent's match does not reach a
        * subcollection and a report has no `visibleTo` of its own.
+       *
+       * A send is ALSO readable through its `hostId` (AGL-3321): every
+       * writer stamps `hostId` and `visibleTo: ['host:{hostId}']` together
+       * (`campaignSendSiteStamp`), so the two say the same thing. A site
+       * hub's lists ask `hostId == {site}` — an equality, which leaves the
+       * query's one array clause free for search — and this is what proves
+       * that query for the site's collaborators.
        */
       match /campaigns/{sendId} {
-        allow read: if isStaff() || canReadScoped();
+        allow read: if isStaff() || canReadScoped() ||
+          (isOrgMember() &&
+           ('host:' + resource.data.hostId) in orgMember().get('scopeTokens', ['org']));
         allow write: if false;
         match /reports/{reportId} {
           allow read: if isStaff() || isOrgWideMember() ||

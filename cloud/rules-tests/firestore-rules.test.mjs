@@ -4528,6 +4528,19 @@ describe('campaigns and their sends belong to the org (AGL-3273)', () => {
         ),
       ),
     )
+    await mustDeny(
+      'a collaborator listing a sibling site\'s sends by hostId',
+      getDocs(
+        query(
+          collection(db, 'orgs', ORG, 'campaigns'),
+          where('hostId', '==', OTHER_HOST),
+        ),
+      ),
+    )
+    await mustDeny(
+      'a collaborator listing every send unfiltered',
+      getDocs(collection(db, 'orgs', ORG, 'campaigns')),
+    )
     for (const uid of [EDITOR, OWNER]) {
       await mustDeny(
         `forging a send's counters as ${uid}`,
@@ -4568,6 +4581,144 @@ describe('campaigns and their sends belong to the org (AGL-3273)', () => {
     await mustDeny(
       'an outsider reading a send',
       getDoc(doc(db, 'orgs', ORG, 'campaigns', 's-mine')),
+    )
+  })
+})
+
+/**
+ * The Marketing lists' queries, each shape exactly as a SITE COLLABORATOR
+ * runs it (AGL-3321): the Campaigns list's two kinds, a campaign's emails,
+ * the Emails list, and the figures each reads beside them.
+ *
+ * A send is proven through its `hostId` — an equality, so the lists' search
+ * keeps the query's one array clause. A campaign is proven through
+ * `visibleTo`, so a site's campaign search is a NAME RANGE beside that
+ * clause, never the folded scoped-token search: a query on another array
+ * field proves nothing about `visibleTo`, and the rules refuse it.
+ */
+describe('the Marketing lists as a site collaborator runs them (AGL-3321)', () => {
+  const OTHER_HOST = 'host-other'
+  const SCOPE = ['org', `host:${HOST}`]
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-mine'), {
+        name: 'Spring launch', nameLower: 'spring launch', nameTokens: ['s', 'sp', 'spr'],
+        visibleTo: [`host:${HOST}`], createdAtMs: 2, listIds: [],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-theirs'), {
+        name: 'Spring sibling', nameLower: 'spring sibling', nameTokens: ['s', 'sp', 'spr'],
+        visibleTo: [`host:${OTHER_HOST}`], createdAtMs: 3, listIds: [],
+      })
+      for (const [id, hostId, emailCampaignId] of [
+        ['s-mine', HOST, 'c-mine'],
+        ['s-single', HOST, null],
+        ['s-theirs', OTHER_HOST, null],
+      ]) {
+        await setDoc(doc(db, 'orgs', ORG, 'campaigns', id), {
+          subject: 'Hello', subjectTokens: ['h', 'he', 'hel'], status: 'sent',
+          hostId, visibleTo: [`host:${hostId}`], emailCampaignId, createdAtMs: 1,
+        })
+      }
+    })
+  })
+
+  const campaigns = (...constraints) =>
+    getDocs(query(collection(authed(EDITOR), 'orgs', ORG, 'emailCampaigns'), ...constraints))
+  const sends = (...constraints) =>
+    getDocs(query(collection(authed(EDITOR), 'orgs', ORG, 'campaigns'), ...constraints))
+  const scoped = () => where('visibleTo', 'array-contains-any', SCOPE)
+  const mine = () => where('hostId', '==', HOST)
+  const newest = () => orderBy('createdAtMs', 'desc')
+
+  it('pages, filters and searches a site\'s campaigns', async () => {
+    await mustAllow('the campaigns page', campaigns(scoped(), newest(), limit(11)))
+    await mustAllow(
+      'Created on or after',
+      campaigns(scoped(), where('createdAtMs', '>=', 1), newest(), limit(11)),
+    )
+    await mustAllow(
+      'the search, as the start of the name',
+      campaigns(
+        scoped(),
+        where('nameLower', '>=', 'spr'),
+        where('nameLower', '<=', 'spr'),
+        orderBy('nameLower', 'asc'),
+        limit(11),
+      ),
+    )
+    await mustDeny(
+      'the search folded into scoped tokens, which proves nothing about visibleTo',
+      campaigns(
+        where('nameScopedTokens', 'array-contains-any', ['org~spr', `host:${HOST}~spr`]),
+        newest(),
+        limit(11),
+      ),
+    )
+    await mustDeny(
+      'a campaign name range with no scope',
+      campaigns(where('nameLower', '>=', 'spr'), orderBy('nameLower', 'asc')),
+    )
+  })
+
+  it('pages, filters and searches the site\'s emails', async () => {
+    await mustAllow('the emails page', sends(mine(), newest(), limit(11)))
+    await mustAllow(
+      'the search',
+      sends(mine(), where('subjectTokens', 'array-contains', 'hel'), newest(), limit(11)),
+    )
+    await mustAllow('Status is', sends(mine(), where('status', '==', 'sent'), newest()))
+    await mustAllow(
+      'Status is any of',
+      sends(mine(), where('status', 'in', ['sent', 'draft']), newest()),
+    )
+    await mustAllow('Campaign is', sends(mine(), where('emailCampaignId', '==', 'c-mine'), newest()))
+    await mustAllow('Campaign is Single send', sends(mine(), where('emailCampaignId', '==', null), newest()))
+    await mustAllow(
+      'Created on or before',
+      sends(mine(), where('createdAtMs', '<', 5), newest(), limit(11)),
+    )
+    await mustDeny(
+      'a sibling site\'s emails',
+      sends(where('hostId', '==', OTHER_HOST), newest(), limit(11)),
+    )
+  })
+
+  it('lists a campaign\'s emails, the single sends, and the figures beside them', async () => {
+    await mustAllow(
+      'a campaign\'s emails, searched and filtered',
+      sends(
+        where('emailCampaignId', '==', 'c-mine'),
+        mine(),
+        where('subjectTokens', 'array-contains', 'hel'),
+        where('status', 'in', ['sent']),
+        newest(),
+        limit(11),
+      ),
+    )
+    await mustAllow(
+      'the single sends, searched, in a date range',
+      sends(
+        where('emailCampaignId', '==', null),
+        mine(),
+        where('subjectTokens', 'array-contains', 'hel'),
+        where('createdAtMs', '>=', 0),
+        newest(),
+        limit(11),
+      ),
+    )
+    await mustAllow(
+      'the figures of the campaigns on a page',
+      sends(where('emailCampaignId', 'in', ['c-mine']), mine(), orderBy(documentId()), limit(51)),
+    )
+    await mustAllow(
+      'the figures on a campaign\'s own page',
+      sends(
+        where('visibleTo', 'array-contains-any', [`host:${HOST}`]),
+        where('emailCampaignId', '==', 'c-mine'),
+        orderBy(documentId()),
+        limit(51),
+      ),
     )
   })
 })

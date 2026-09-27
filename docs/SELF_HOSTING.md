@@ -362,6 +362,9 @@ idempotent, so running it twice changes nothing the second time.
 | AGL-3321 | the Sites cards' search, Custom domain filter and Created filter read `searchTokens`, `hasCustomDomain`, `nameLower` and `createdAt` on each member's site rows (`users/{uid}/hostMemberships`) that older rows lack | `node tools/scripts/backfill-host-memberships-list-fields.mjs --apply` |
 | AGL-3321 | the activity logs' search (a site's, the organization's, Team › Activity and the staff actor feed) reads a `searchTokens` field older activity entries lack | `node tools/scripts/backfill-activity-search-tokens.mjs --apply` |
 | AGL-3321 | the organization Members card's Access filter and search read `consoleUserType` and `searchTokens` fields that members nobody has changed since lack | `node tools/scripts/backfill-org-member-list-fields.mjs --apply` |
+| AGL-3321 | the Outreach lists' filters and search read fields older records lack: a sequence's `nameLower`, `nameTokens` and `nameReversed`, an enrollment's `searchTokens` and `target`, and a do-not-contact domain's `searchTokens` | `node tools/scripts/backfill-outreach-list-search.mjs --apply` |
+| AGL-3321 | a site's A/B testing list's Experiment filter and search read `nameLower` and `nameTokens` fields older experiments lack | `node tools/scripts/backfill-experiments-name-search.mjs --apply` |
+| AGL-3321 | the Marketing Campaigns list, a campaign's emails and the Emails list order on `createdAtMs` and search `subjectTokens` / `nameTokens` (and `nameLower`), and list single sends as `emailCampaignId == null` — fields older email sends and campaigns lack | `node tools/scripts/backfill-campaign-list-fields.mjs --apply` |
 
 Each uses Application Default Credentials against the project in
 `GOOGLE_CLOUD_PROJECT`.

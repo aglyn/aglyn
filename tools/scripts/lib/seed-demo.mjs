@@ -41,7 +41,7 @@ import { datasetFilterFields, effectiveModel } from './record-filter-keys.mjs'
 import { buildHomeNodes } from './demo-brands.mjs'
 import { putMediaDocument } from './media-counter.mjs'
 import { seedSendId } from './org-campaign-backfill.mjs'
-import { displayNameSearchFields } from './name-search-tokens.mjs'
+import { displayNameSearchFields, nameSearchTokens } from './name-search-tokens.mjs'
 
 /** Every host subcollection the seeder writes into. Order is cosmetic. */
 export const HOST_SEEDED_COLLECTIONS = [
@@ -442,6 +442,11 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
       status: 'sent',
       sentAt: now,
       createdAt: now,
+      // The fields the marketing lists query on (AGL-3321): the order, the
+      // subject's search tokens, and `null` for a send in no campaign.
+      createdAtMs: nowMs,
+      subjectTokens: nameSearchTokens(fields.subject),
+      emailCampaignId: fields.emailCampaignId ?? null,
     })
   }
   if (marketing.email) {
@@ -491,6 +496,8 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
     const { id, ...fields } = experiment
     await put(hostRef.collection('experiments').doc(id), {
       ...fields,
+      // The keys the A/B testing list's filter and search read (AGL-3321).
+      ...displayNameSearchFields(fields.name),
       status: 'running',
       createdAt: now,
     })
