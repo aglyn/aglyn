@@ -1523,7 +1523,8 @@ service cloud.firestore {
        * `emailState` (AGL-3245) stays closed, exactly as the host block had
        * it: the senders write the platform's verdict on an address — a
        * bounce, a gateway block, a do-not-contact mark — and a member who
-       * could clear it could email a person who asked not to be.
+       * could clear it could email a person who asked not to be. So is its
+       * list key `emailStatus` (AGL-3321).
        *
        * DELETE IS SOLE-HOLDER ONLY, for the reason it is on a contact: in a
        * multi-brand org the row is shared, and one brand removing a lead must
@@ -1537,7 +1538,7 @@ service cloud.firestore {
         allow update: if isStaff() ||
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
            orgCarriesCrmSuite(orgId) &&
-           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState']));
+           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState', 'emailStatus']));
         allow delete: if isStaff() ||
           (canWriteScopedOrgData() &&
            resource.data.visibleTo.hasOnly(
@@ -1839,9 +1840,13 @@ service cloud.firestore {
        * `reports/*` (reach, links, revenue, conversions) is read through the
        * parent's scope, because the parent's match does not reach a
        * subcollection and a report has no `visibleTo` of its own.
+       * Also readable by `hostId` (AGL-3321), which writers stamp with the
+       * matching `visibleTo`: it proves a site hub's `hostId ==` list.
        */
       match /campaigns/{sendId} {
-        allow read: if isStaff() || canReadScoped();
+        allow read: if isStaff() || canReadScoped() ||
+          (isOrgMember() &&
+           ('host:' + resource.data.hostId) in orgMember().get('scopeTokens', ['org']));
         allow write: if false;
         match /reports/{reportId} {
           allow read: if isStaff() || isOrgWideMember() ||
@@ -3128,10 +3133,16 @@ service cloud.firestore {
       match /forms/{formId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
+        // `retired` mirrors `archivedAt` for the Forms list (AGL-3330); a
+        // write touching either keeps them agreeing.
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             !request.resource.data.diff(resource.data)
-              .affectedKeys().hasAny(['stats']));
+              .affectedKeys().hasAny(['stats']) &&
+            (!request.resource.data.diff(resource.data)
+                .affectedKeys().hasAny(['archivedAt', 'retired']) ||
+              request.resource.data.get('retired', false) ==
+                (request.resource.data.get('archivedAt', null) != null)));
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
 
@@ -4105,8 +4116,9 @@ service cloud.firestore {
 
     // Listings are public reads. Creates and version snapshots happen ONLY
     // through the publish API (Admin SDK, server-side sanitization) — no
-    // client create. Owners may update/delete their own listing metadata
-    // (unpublish via deletedAt); staff may moderate anything.
+    // client create. Owners may update the publisher-authored copy the
+    // deny-list below leaves them, and delete; staff may moderate anything.
+    // Unpublishing moved to the API with AGL-3321 (`set-published`).
     match /marketplaceListings/{listingId} {
       allow read: if true;
       allow create: if false;
@@ -4122,7 +4134,7 @@ service cloud.firestore {
           get(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid))
             .data.role in ['owner', 'admin'];
       }
-      // Owners toggle metadata (deletedAt un/republish) client-side, but
+      // Owners may write their listing's copy client-side, but
       // must NOT touch server-managed fields (AGL-503): installCount is
       // incremented by the install API (ranking integrity), priceUsd gates
       // purchases, and profileId is the ownership key. The review verdict is
@@ -4227,7 +4239,12 @@ service cloud.firestore {
                      // `/api/marketplace/publish-plugin` (`update-listing`),
                      // and the only client write to a listing in the repo is
                      // the unpublish toggle, which writes `deletedAt` alone.
-                     'logoUrl', 'screenshots']));
+                     'logoUrl', 'screenshots',
+                     // Server-derived list keys (AGL-3321).
+                     'nameLower', 'nameTokens', 'nameReversed',
+                     'browseAudience', 'browseTokens', 'takenDown',
+                     // …and their inputs, written via publish-plugin.
+                     'displayName', 'deletedAt', 'visibility']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/marketplace/install, which

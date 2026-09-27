@@ -28,6 +28,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Download everything the workspace holds (AGL-1974).
@@ -116,25 +117,21 @@ async function handler(request: Request): Promise<Response> {
 
     const exported = await exportOrgData(orgId)
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'org.exported',
-        target: `orgs/${orgId}`,
-        before: null,
-        // Ids and counts, never content (AGL-1443).
-        after: {
-          sources: Object.keys(exported.data),
-          documents: Object.values(exported.data).reduce(
-            (total, rows) => total + rows.length,
-            0,
-          ),
-        },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'org.exported',
+      target: `orgs/${orgId}`,
+      before: null,
+      // Ids and counts, never content (AGL-1443).
+      after: {
+        sources: Object.keys(exported.data),
+        documents: Object.values(exported.data).reduce(
+          (total, rows) => total + rows.length,
+          0,
+        ),
+      },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     return new Response(JSON.stringify(exported, null, 2), {

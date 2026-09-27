@@ -69,14 +69,17 @@ import { mdiAccountRemoveOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
@@ -90,22 +93,16 @@ import {
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  documentId,
-  limit,
-  orderBy,
-  query,
-} from 'firebase/firestore'
+import { collection, deleteDoc, doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  usePagedCollection,
-  useUser,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import {
+  LIST_MEMBER_FILTER_HEADERS,
+  LIST_MEMBER_FILTER_OPTIONS,
+  LIST_MEMBER_QUERY,
+} from '../constants/list-queries'
 
 export interface ListMembersPanelProps {
   hostId: string
@@ -286,50 +283,17 @@ function consentLabel(
   return { key: 'none', label: 'No basis on record', color: 'default' }
 }
 
-/*
- * What the membership grid's Filters panel offers (AGL-3317). The table is a
- * paged listener, so a filter matches over what its window has read, which
- * the first filter widens (`usePagedRowsFilter`). `How` and `Consent` read
- * the keys `withFilterKeys` derives, the same answers the columns draw.
- */
-const MEMBER_FILTER_FIELDS = [
-  inMemoryListField('email', 'text'),
-  inMemoryListField('name', 'text'),
-  inMemoryListField('via', 'select', 'viaKey'),
-  inMemoryListField('consent', 'select', 'consentKey'),
-]
-const MEMBER_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  email: 'Address',
-  name: 'Name',
-  via: 'How',
-  consent: 'Consent',
-}
+/** How a member got here, by the words the column draws. */
 const VIA_LABELS: Readonly<Record<'rule' | 'manual', string>> = {
   rule: 'Rule',
   manual: 'Added',
 }
-const CONSENT_LABELS: Readonly<Record<ConsentKey, string>> = {
-  'opted-in': 'Opted in',
-  attested: 'Attested by your team',
-  'opted-out': 'Opted out',
-  'other-site': 'Opted in to another site',
-  'no-site': 'Opted in — no site recorded',
-  none: 'No basis on record',
-}
-const MEMBER_FILTER_OPTIONS = {
-  via: Object.entries(VIA_LABELS).map(([value, label]) => ({ value, label })),
-  consent: Object.entries(CONSENT_LABELS).map(([value, label]) => ({ value, label })),
-}
-const MEMBER_SEARCH_FIELDS = ['email', 'name', 'source'] as const
+/** The How filter's choices are picked, so the panel shows a select. */
+const MEMBER_SELECT_FIELDS = ['via']
 
-/** A member row with the keys its `How` and `Consent` filters match on. */
-type FilterableMemberRow = MemberRow & { viaKey: 'rule' | 'manual'; consentKey: ConsentKey }
-
-const withFilterKeys = (member: MemberRow, group: ConsentGroup): FilterableMemberRow => ({
-  ...member,
-  viaKey: member.via === 'rule' ? 'rule' : 'manual',
-  consentKey: consentLabel(member, group).key,
-})
+/** How a row reads `via`: a row that predates the field was added by hand. */
+const viaOf = (member: MemberRow): 'rule' | 'manual' =>
+  member.via === 'rule' ? 'rule' : 'manual'
 
 /** Free text — a paste, a typed address, commas or newlines — to addresses. */
 export function splitAddresses(value: string): string[] {
@@ -368,52 +332,38 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
    * oldest members from their own list, silently, which is the failure that
    * turned an audience into a random sample (AGL-2501). The id is the one key
    * every row has.
+   *
+   * Every filter and search word is a predicate on the same query
+   * (AGL-3321) — see `LIST_MEMBER_QUERY` — so a page is a page of the
+   * matches.
    */
+  const gridFilter = useListGridFilter({ selectFields: MEMBER_SELECT_FIELDS })
   const {
-    data: memberData,
-    rows: memberRows,
+    rows: members,
     hasMore,
     page,
     setPage,
     pageSize,
     setPageSize,
-  } = usePagedCollection<MemberRow>(
-    (pageLimit) =>
-      query(
-        collection(firestore, scope[0], scope[1], 'lists', listId, 'members'),
-        orderBy(documentId()),
-        limit(pageLimit),
-      ),
-    [firestore, scope[0], scope[1], listId],
-    { idField: '$id' },
+    plan,
+  } = useListQuery<MemberRow>({
+    collection: collection(firestore, scope[0], scope[1], 'lists', listId, 'members'),
+    declaration: LIST_MEMBER_QUERY,
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    deps: [firestore, scope[0], scope[1], listId],
+    idField: '$id',
+  })
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: LIST_MEMBER_QUERY.fields,
+        headers: LIST_MEMBER_FILTER_HEADERS,
+        options: LIST_MEMBER_FILTER_OPTIONS,
+      }),
+    [plan.refused],
   )
-  const memberWindow = useMemo(
-    () => memberData?.map((member) => withFilterKeys(member, consentGroup)),
-    [memberData, consentGroup],
-  )
-  const memberPage = useMemo(
-    () => memberRows.map((member) => withFilterKeys(member, consentGroup)),
-    [memberRows, consentGroup],
-  )
-  const memberFilter = usePagedRowsFilter<FilterableMemberRow>(
-    {
-      data: memberWindow,
-      rows: memberPage,
-      hasMore,
-      page,
-      setPage,
-      pageSize,
-      setPageSize,
-    },
-    {
-      fields: MEMBER_FILTER_FIELDS,
-      options: MEMBER_FILTER_OPTIONS,
-      headers: MEMBER_FILTER_HEADERS,
-      search: MEMBER_SEARCH_FIELDS,
-    },
-  )
-  // The rows on screen: the page, or the page of the matches.
-  const members = memberFilter.rows
 
   const [addInput, setAddInput] = useState('')
   const [addName, setAddName] = useState('')
@@ -664,7 +614,7 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
       field: 'via',
       headerName: 'How',
       width: 200,
-      valueGetter: (_value, row) => row.viaKey,
+      valueGetter: (_value, row) => viaOf(row),
       /*
         `via` says whether a rule put them here or a person did, which is what
         decides whether they LEAVE on their own: the materializer reconciles its
@@ -673,7 +623,7 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
        */
       renderCell: ({ row }) => (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', minWidth: 0 }}>
-          <Chip size="small" variant="outlined" label={VIA_LABELS[row.viaKey as 'rule' | 'manual']} />
+          <Chip size="small" variant="outlined" label={VIA_LABELS[viaOf(row)]} />
           {row.source ? (
             <Typography variant="caption" color="text.secondary" noWrap>
               {row.source}
@@ -686,7 +636,7 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
       field: 'consent',
       headerName: 'Consent',
       width: 190,
-      valueGetter: (_value, row) => row.consentKey,
+      valueGetter: (_value, row) => consentLabel(row, consentGroup).label,
       renderCell: ({ row }) => {
         const consent = consentLabel(row, consentGroup)
         return (
@@ -920,31 +870,49 @@ export function ListMembersPanel(props: ListMembersPanelProps) {
         </Stack>
       ) : null}
 
-      {memberRows.length === 0 && !hasMore && !memberFilter.filtering ? (
+      {members.length === 0 && !hasMore && !filtering ? (
         <Typography variant="body2" color="text.secondary">
           {'Nobody is on this list yet.'}
         </Typography>
       ) : (
         <>
-          <ListFilterChips {...memberFilter.chipsProps} />
-          {memberFilter.filtering && hasMore ? (
-            <Typography variant="caption" color="text.secondary">
-              {`Filtering the ${memberFilter.read} members read so far — the next page reads more.`}
-            </Typography>
-          ) : null}
+          <ListFilterChips
+            fields={LIST_MEMBER_QUERY.fields}
+            headers={LIST_MEMBER_FILTER_HEADERS}
+            clauses={gridFilter.clauses}
+            onChange={gridFilter.setClauses}
+            options={LIST_MEMBER_FILTER_OPTIONS}
+          />
+          <ListQueryNotices refused={refusals} notices={plan.notices} />
           <ListTable
             aria-label={`Members of ${listName}`}
             rows={members}
-            columns={memberFilter.filterColumns(columns)}
+            columns={listFilterGridColumns(
+              columns,
+              LIST_MEMBER_QUERY.fields,
+              LIST_MEMBER_FILTER_OPTIONS,
+              LIST_MEMBER_FILTER_HEADERS,
+            )}
             rowHeight={TABLE_ROW_HEIGHT}
             // Paged by the footer below, so the grid must not also slice.
             hideFooter
-            // The panel and the search are the grid's; the panel answers
-            // them over what its window read.
-            {...memberFilter.gridProps}
+            // The panel and the search go to the query; the grid neither
+            // filters nor sorts the page it holds.
+            filterMode="server"
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            quickFilter
+            disableColumnSorting
             noRowsLabel="No members match these filters"
           />
-          <ListPagination {...memberFilter.pagination} />
+          <ListPagination
+            page={page}
+            pageSize={pageSize}
+            rowCount={members.length}
+            hasMore={hasMore}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </>
       )}
 

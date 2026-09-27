@@ -27,11 +27,14 @@ once. That is the point, and it is also the thing to keep in mind before you pub
 ## Find a layout {#find-a-layout}
 
 The site's **Layouts** page lists every layout. **Filters** in the table's toolbar
-narrows it by display name, ID, description, or the date it was created or last
-updated, and **Search** matches any word of the name, ID, or description. Each filter in
-force shows as a chip above the table; remove a chip to drop it. The list pages as you
-go, so the first filter or search reads 100 layouts and matches over them, and paging
-past the last match reads further; the table says so while more remain. See
+narrows it by display name (a word of it, or the whole name), ID, or the date it was
+last updated, and **Search** finds a layout by the start of any word of its name.
+Every filter and the search word are part of the list's query, so they look through
+every layout on the site, not only the page on screen, and the pager turns through the
+matches. Each filter in force shows as a chip above the table; remove a chip to drop
+it. Some combinations cannot be asked at once — a name "contains" filter beside a
+search, or a second date range — and the table says which filter it left out and why
+rather than applying it to part of the list. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Nested layouts

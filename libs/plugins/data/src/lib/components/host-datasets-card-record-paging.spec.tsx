@@ -47,7 +47,22 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { datasetRecordFilter } from './dataset-record-filter'
 import { HostDatasetsCard } from './host-datasets-card.component'
+
+/** A model with a field of every type the records table can filter, and one it cannot. */
+const PAGING_MODEL = {
+  order: ['title', 'status', 'done', 'price', 'count', 'tags', 'due'],
+  fields: {
+    title: { name: 'Title', type: 'text' },
+    status: { name: 'Status', type: 'text', validation: { options: ['Open'] } },
+    done: { name: 'Done', type: 'bool' },
+    price: { name: 'Price', type: 'float' },
+    count: { name: 'Count', type: 'int64' },
+    tags: { name: 'Tags', type: 'sorted' },
+    due: { name: 'Due', type: 'timestamp' },
+  },
+}
 
 jest.setTimeout(30_000)
 
@@ -372,7 +387,19 @@ describe('no field on a dataset record is written by every writer', () => {
     const card = readRepo(
       'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
     )
-    expect(card.split('orderBy(documentId())').length - 1).toBe(2)
+    // The import's key index names it outright; the table takes the one
+    // order its query plan holds (AGL-3321), which is the document name
+    // whatever is filtered — no field is offered a range that could lead it.
+    expect(card.split('orderBy(documentId())').length - 1).toBe(1)
+    expect(card).toContain('...listQueryConstraints(recordPlan.plan)')
+    const filter = datasetRecordFilter(PAGING_MODEL as any)
+    expect(filter.declaration.sorts).toEqual([{ path: '__name__', direction: 'asc' }])
+    for (const field of filter.fields) {
+      expect({ column: field.column, ops: field.operators }).toEqual({
+        column: field.column,
+        ops: expect.not.arrayContaining(['>', '>=', '<', '<=', '!=', 'after', 'before', 'is', 'isNotEmpty']),
+      })
+    }
     // And named outright, because these are the three that look right and
     // silently shrink the collection.
     for (const field of ['order', 'createdAt', 'updatedAt']) {

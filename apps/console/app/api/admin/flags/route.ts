@@ -31,6 +31,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Release-flag management (AGL-230). GET returns every registered flag
@@ -149,18 +150,14 @@ async function handler(request: Request): Promise<Response> {
     }
     const published = await remoteConfig.publishTemplate(template)
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'flags.update',
-        target: `remoteConfig/${key}`,
-        before,
-        after: nextValue,
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'flags.update',
+      target: `remoteConfig/${key}`,
+      before,
+      after: nextValue,
+      at: FieldValue.serverTimestamp(),
+    })
 
     return Response.json({ ok: true, etag: published.etag, value: nextValue }, { status: 200 })
   } catch (error) {

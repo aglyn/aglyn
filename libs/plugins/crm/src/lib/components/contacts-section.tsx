@@ -31,24 +31,30 @@ import {
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
-import {
-  hiddenFilterVisibility,
-  matchListFilter,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
+  CONTACT_LIST_DECLARATION,
   CONTACT_LIST_FILTER_FIELDS,
   CONTACT_LIST_FILTER_HEADERS,
+  CONTACT_PREFIX_SEARCH,
+  contactClauseImpliesScope,
+  contactSoloClause,
   contactCustomFilterFields,
   contactCustomFilterHeaders,
+  contactQueryClause,
 } from '../constants/contact-filters'
+import { crmAskClauses, crmQueryRefusals } from '../model/crm-list-query'
+import { useCrmFoldsScope, useCrmListQuery } from '../hooks/use-crm-list-query'
 import {
   type ContactRecord,
   contactPrimaryGroup,
   contactRecordFromDoc,
 } from '../model/contact-record'
 import { useCrmOrgMount } from '../hooks/use-crm-org-mount'
-import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { contactsListSeed } from '../model/contacts-list-seed'
 import { crmRoutes } from '../model/crm-routes'
 import {
@@ -63,7 +69,6 @@ import ContactsBulkBar from './contacts-bulk-bar'
 import { ContactImportButton } from './contact-import-drawer'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
-  listFilterPlan,
   useFirestore,
   useFirestoreCollection,
   useFirestoreDoc,
@@ -88,7 +93,6 @@ import {
   limit,
   orderBy,
   query,
-  where,
 } from 'firebase/firestore'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -111,7 +115,6 @@ import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.c
 import {
   type ListFilterOption,
   listFilterGridColumns,
-  listRowMatchesSearch,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import CrmViewsControl, { type CrmViewPreset } from './crm-views-control'
@@ -124,9 +127,6 @@ import { CrmSuiteLockedButton, CrmSuiteNotice, crmSuiteIncluded } from './crm-su
  * editor and this filter cannot disagree about what `order` is called.
  */
 const SOURCE_LABELS = CONTACT_SOURCE_LABELS
-
-/** What the grid's quick search reads on a contact: who they are, and their tags. */
-const CONTACT_SEARCH_FIELDS = ['name', 'email', 'phone', 'company', 'tags'] as const
 
 /**
  * What the list keeps out of sight until a view says otherwise: the
@@ -276,7 +276,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   const seedFilters = useMemo<CrmViewFilterClause[]>(
     () => [
       ...(seed.filter ? [seed.filter] : []),
-      ...(seed.source
+      // A form's captures all came in through a form: the source beside it
+      // would ask a second array clause of the one query (AGL-3321).
+      ...(seed.source && !seed.formId
         ? [{ field: CRM_CONTACT_VIEW_FIELDS.source, op: 'equals', value: seed.source }]
         : []),
     ],
@@ -307,105 +309,45 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     [customFields.active],
   )
   /*
-   * ONE clause on the query, the rest over the window.
+   * EVERY CLAUSE AND THE SEARCH ON ONE QUERY (AGL-3321).
    *
-   * Firestore takes one array clause per query and composes the rest only
-   * through indexes nobody built for every pair of columns, so the first
-   * clause the translator can serve is the one that reaches every contact
-   * and every other narrows the thousand the query returned. The caption
-   * under the bar says which is which; the chips mark the served one.
+   * Each stored clause is asked through the field its writers keep
+   * (`contactQueryClause`): a holder's owner, stage, source, company, tags,
+   * custom value or "has bought" as that holder's facet key, the verdict as
+   * `emailStatus`, the rest as stored. The query pages the list newest
+   * change first and carries all of it; what one query cannot hold is
+   * refused by name above the list, and nothing is matched over the rows a
+   * page happened to load. Under a site the scope clause is the query's one
+   * array clause — the search folds into it, and a facet or form clause
+   * stands in its place, for a reader whose access is not limited to
+   * particular sites.
    */
-  /*
-   * Under a site the listener already carries the `visibleTo`
-   * `array-contains-any`, so the translator serves no second array clause
-   * beside it and keeps an `in` inside the disjunction budget the two share
-   * (AGL-3321). `formIds` is exempt: its listener drops the scope clause.
-   */
-  const plan = useMemo(
+  const foldsScope = useCrmFoldsScope(orgId, visibleToTokens)
+  const groupId = consentGroup?.groupId ?? null
+  const asked = useMemo(
     () =>
-      listFilterPlan(
-        filterFields,
-        views.state.filters,
-        visibleToTokens
-          ? { arrayScope: { values: visibleToTokens.length, exempt: ['formIds'] } }
-          : {},
+      crmAskClauses(views.state.filters, (clause) =>
+        contactQueryClause(clause, { groupId, foldsScope }),
       ),
-    [filterFields, views.state.filters, visibleToTokens],
+    [views.state.filters, groupId, foldsScope],
   )
-  const filter = plan.served
-  /**
-   * The one filter that cannot carry the scope clause.
-   *
-   * `formIds` is an `array-contains` on the mirror, and Firestore takes one
-   * array clause per query — so this listener drops its `visibleTo`
-   * predicate for it, exactly as the company contacts card does for
-   * `companyIds`, and the rules then admit the read to an org-wide member
-   * only. A scoped member's listener errors instead of listing, and the
-   * alert below says so rather than showing an empty form.
-   */
-  const byForm = filter?.field === 'formIds'
-  const {
-    data: contactDocs,
-    status: contactsStatus,
-    /**
-     * The rows the profile drawer is seeded from are unconfirmed by the
-     * server (AGL-1358). This payload is narrower than most sites in this
-     * issue — `email`, `sources` and `interactions` are not in it — but the
-     * two fields that are, `tags` and `notes`, are BOTH written on every
-     * save and both come off the seed. Edit the notes against a cached read
-     * and the tags go back with them, and tags are what
-     * `contactMatchesSegment` runs on: a saved segment is a campaign
-     * audience, so a rollback here silently changes who gets emailed.
-     */
-    fromCache: contactsFromCache,
-  } = useFirestoreCollection<any>(
-    () => {
-      if (!dataScope) return null
-      /*
-       * ORDERED, and filtered by the QUERY (AGL-2501, AGL-2292).
-       *
-       * Two bugs shared this one line. `limit(1000)` with no `orderBy` returns
-       * documents in ID order — contacts are created with `.add()` and
-       * `createResourceUid()`, so that is a pseudo-random SAMPLE of a thousand,
-       * and the client `.sort()` below made it look reliably newest-first. An
-       * org with forty thousand contacts saw a thousand arbitrary ones,
-       * convincingly sorted.
-       *
-       * The search then ran over that sample, so a name on the wrong side of
-       * the cap answered "no contacts match" — the answer a search must never
-       * give wrongly, on the list a merchant uses to find one person.
-       *
-       * The cap STAYS: nobody needs forty thousand rows streamed into a table,
-       * and the head-count has been a server aggregate since AGL-1706. What
-       * changes is that the thousand are now the newest thousand, and that a
-       * filter reaches the whole collection before the cap applies.
-       */
-      const constraints = plan.constraints
-      /*
-       * SCOPED, and this is the leak it closes.
-       *
-       * The listener had no `where()` at all: `hostId` reached it only to
-       * resolve which ORG owns the data, so every site in the account listed
-       * every contact in the account. An agency's client opened Contacts and
-       * read the other clients' customers.
-       *
-       * `array-contains-any` over the group's tokens is the same predicate
-       * the rules evaluate with `hasAny`, so a filtered query is provable
-       * per-document and an UNFILTERED one is now permission-denied rather
-       * than quietly returning everything.
-       */
-      return query(
-        collection(firestore, dataScope[0], dataScope[1], 'contacts'),
-        // Dropped for the form mirror alone — see `byForm` — and absent at
-        // the organization level, where the tokens are `null` (AGL-2630).
-        ...(byForm ? [] : crmVisibleToClause(visibleToTokens)),
-        ...(constraints ?? [orderBy('updatedAt', 'desc')]),
-        limit(1000),
-      )
-    },
-    [firestore, dataScope, plan.constraints, byForm, visibleToTokens],
-    { idField: '$id' },
-  )
+  const impliesScope = useMemo(() => contactClauseImpliesScope(groupId), [groupId])
+  // The quick search is the grid's box, answered by the same query.
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const paged = useCrmListQuery<any>({
+    scope: dataScope,
+    collection: 'contacts',
+    visibleTo: visibleToTokens,
+    foldsScope,
+    declaration: CONTACT_LIST_DECLARATION,
+    clauses: asked.clauses,
+    search: searchWords,
+    impliesScope,
+    soloClause: contactSoloClause,
+    prefixSearch: CONTACT_PREFIX_SEARCH,
+  })
+  const contactDocs = paged.rows
+  const contactsStatus = paged.status
   /*
    * OPENED FOR ONE ADDRESS: move straight on to the record (AGL-2612).
    *
@@ -422,12 +364,15 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   useEffect(() => {
     if (openedByEmail.current || !seed.openEmail) return
     if (contactsStatus !== 'success') return
-    if (filter?.field !== 'email' || filter.value !== seed.openEmail) return
-    const only = (contactDocs ?? []).length === 1 ? contactDocs?.[0] : null
+    const served = paged.plan.served.some(
+      (clause) => clause.field === 'email' && clause.op === 'equals' && clause.value === seed.openEmail,
+    )
+    if (!served) return
+    const only = contactDocs.length === 1 && !paged.hasMore ? contactDocs[0] : null
     if (!only) return
     openedByEmail.current = true
     router.replace(routes.contact(String(only.$id)))
-  }, [seed.openEmail, contactsStatus, filter, contactDocs, router, routes])
+  }, [seed.openEmail, contactsStatus, paged.plan, paged.hasMore, contactDocs, router, routes])
   /**
    * Every row, flattened through THIS group's facet.
    *
@@ -442,7 +387,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    */
   const contacts: ContactRecord[] = useMemo(
     () =>
-      (contactDocs ?? []).map((row) =>
+      contactDocs.map((row) =>
         contactRecordFromDoc(
           row,
           consentGroup ?? contactPrimaryGroup(row, org as Record<string, unknown>),
@@ -477,10 +422,10 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
   /**
    * The HEAD-COUNT, read as a server-side aggregate (AGL-1706).
    *
-   * The listener above is `limit(1000)` and always will be — nobody needs
-   * 40,000 rows streamed into a table. What it must not do is answer "how
-   * many contacts does this org have", and it did: `contacts.length`
-   * saturated at 1,000, which is *exactly* the smallest paid included band
+   * The list above reads a page at a time (AGL-3321) — nobody needs 40,000
+   * rows streamed into a table. What it must not do is answer "how many
+   * contacts does this org have", and it did when it was a `limit(1000)`
+   * window: `contacts.length` saturated at 1,000, which is *exactly* the smallest paid included band
    * (`starter`). So `overageContacts = max(0, used − included)` was 0 on
    * every stock plan and the alert below could not render at all.
    *
@@ -570,6 +515,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               dataScope[1],
               'contactSegments',
             ),
+            // The first fifty by name — the menu's own order — rather than
+            // whichever fifty the ids happen to sort first.
+            orderBy('name'),
             limit(50),
           )
         : null,
@@ -616,39 +564,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     [segments, dataScope, firestore],
   )
 
-  /*
-   * THE WINDOW CLAUSES narrow in the browser, and the caption says so.
-   *
-   * An owner, a stage, a source, a company and a custom value all live on
-   * the viewing group's FACET, and a facet path is per group, so none of
-   * them is a field the query grammar can reach without an index per
-   * group; a second tag clause, or "any of these tags", is an array clause
-   * the scope predicate already occupies. So every clause the plan could
-   * not serve refines the ordered window rather than the collection —
-   * through the same matcher the grammar declares, so a chip and the rows
-   * under it agree. Ordinary orgs load their whole list into the window
-   * anyway; the caption below says what these narrow for the ones that do
-   * not.
-   */
   const uid = user?.uid ?? ''
-  const windowClauses = plan.window
-  // The quick search is the grid's box, answered here over the same window.
-  const [searchWords, setSearchWords] = useState<string[]>([])
-  const searchKey = searchWords.join(' ')
-  const visible = useMemo(
-    () =>
-      windowClauses.length || searchWords.length
-        ? contacts.filter(
-            (contact) =>
-              windowClauses.every((clause) =>
-                matchListFilter(contact, filterFields, clause),
-              ) && listRowMatchesSearch(contact, CONTACT_SEARCH_FIELDS, searchWords),
-          )
-        : contacts,
-    // `searchKey` stands for the words, which are a new array each render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [contacts, windowClauses, filterFields, searchKey],
-  )
   /*
    * The choices the filter bar picks from. The companies are read only once
    * the reader has reached for a filter or is looking at a view that names
@@ -697,6 +613,17 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     [uid, members.options, companies.options, customFields.active],
   )
 
+  // What the query could not hold, named by the clause the reader set.
+  const refused = useMemo(
+    () =>
+      crmQueryRefusals(paged.plan, asked, {
+        fields: filterFields,
+        headers: filterHeaders,
+        options: filterOptions,
+      }),
+    [paged.plan, asked, filterFields, filterHeaders, filterOptions],
+  )
+
   /* One row grammar, the console's (AGL-2501) — the same table everywhere. */
   const contactColumns = useMemo(
     () => [
@@ -724,7 +651,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
    * chips name them by; the rest keep the operators the grammar declares.
    */
   const filterColumns = useMemo(
-    () => listFilterGridColumns(contactColumns, filterFields, filterOptions, filterHeaders),
+    () =>
+      listFilterGridColumns(contactColumns, filterFields, filterOptions, filterHeaders),
     [contactColumns, filterFields, filterOptions, filterHeaders],
   )
   const gridFilter = useListGridFilter({
@@ -801,6 +729,9 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
 
   /** The rows ticked for a bulk action (AGL-2603); the bar above the table acts on them. */
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  // A filter, a search or a page is a different set of rows; a selection
+  // made on the last one would be a count over rows no longer on screen.
+  useEffect(() => setSelectedIds([]), [paged.plan, paged.page])
   /*==========================================
    * ADDING ONE PERSON BY HAND (AGL-2596).
    *
@@ -884,8 +815,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
     [members.memberEmail, customFields.active],
   )
   const handleExport = useCallback(() => {
-    downloadTextFile('contacts.csv', 'text/csv', contactsCsv(visible, csvOptions))
-  }, [visible, csvOptions])
+    downloadTextFile('contacts.csv', 'text/csv', contactsCsv(contacts, csvOptions))
+  }, [contacts, csvOptions])
 
   return (
     <>
@@ -903,8 +834,8 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
           >
             <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
               {/* The org's audience, not the page's row count (AGL-1706) —
-                  these two stopped being the same number the moment the
-                  listener grew a `limit(1000)`. */}
+                  two different numbers since the list stopped reading the
+                  whole collection. */}
               {`${contactCount.toLocaleString()} contacts · ${
                 Number.isFinite(quota.included)
                   ? `${quota.used.toLocaleString()} of ${quota.included.toLocaleString()} CRM records`
@@ -919,7 +850,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             <Button
               size="small"
               onClick={handleExport}
-              disabled={!visible.length}
+              disabled={!contacts.length}
             >
               {'Export CSV'}
             </Button>
@@ -958,7 +889,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             The view this list is showing, and the clauses narrowing it
             (AGL-2617). The control names the view and holds everything a
             reader does to one; the bar holds the clauses, the seed's
-            included, with the one the query serves marked. Segments are
+            included, every one of them on the query. Segments are
             offered in the control's menu and saved from it.
           */}
           <Stack spacing={1}>
@@ -977,7 +908,7 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               clauses={views.state.filters}
               onChange={views.setFilters}
               options={filterOptions}
-              servedField={plan.served?.field ?? null}
+              marksServed={false}
             />
           </Stack>
           {!quota.allowed ? (
@@ -1052,14 +983,10 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
               }. The money moved; the customer's timeline does not show it.`}
             </Alert>
           ) : null}
-          {byForm && contactsStatus === 'error' ? (
-            <Alert severity="info">
-              {'The contacts this form captured could not be listed. Your ' +
-                'access is limited to specific sites, and a form filter ' +
-                'cannot be narrowed to them — an organization administrator ' +
-                'can see it.'}
-            </Alert>
-          ) : contacts.length === 0 && !views.state.filters.length ? (
+          <ListQueryNotices refused={refused} notices={paged.plan.notices} />
+          {contacts.length === 0 &&
+          !views.state.filters.length &&
+          !searchWords.some((word) => word.trim()) ? (
             <EmptyStateComponent
               label={contactsStatus === 'loading' ? 'Loading contacts…' : 'No contacts yet'}
               description={
@@ -1098,38 +1025,22 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
             />
           ) : (
             <>
-              {/* Which clauses reached the whole collection and which
-                  narrowed the loaded window. Said out loud, because a control
-                  that narrows less than it looks like it does is the thing
-                  this page has been fixing. */}
-              {windowClauses.length ? (
-                <Typography variant="caption" color="text.secondary">
-                  {(windowClauses.length === 1
-                    ? `${filterHeaders[windowClauses[0].field] ?? windowClauses[0].field} narrows `
-                    : `${windowClauses.length} of the filters narrow `) +
-                    'the loaded window — the newest 1,000 contacts' +
-                    (plan.served
-                      ? ` matching ${filterHeaders[plan.served.field] ?? plan.served.field}, which reached every contact.`
-                      : '.') +
-                    ' Sorting reorders that window.'}
-                </Typography>
-              ) : null}
-              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={visible} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} suiteLocked={!suiteIncluded} />
+              <ContactsBulkBar hostId={hostId} org={org} scope={dataScope} consentGroup={consentGroup} rows={contacts} selected={selectedIds} onSelectedChange={setSelectedIds} csv={csvOptions} suiteLocked={!suiteIncluded} />
               <CrmColumnOrderProvider value={grid.columnOrder}>
                 <ListTable
-                  rows={visible}
+                  rows={contacts}
                   columns={grid.columns}
                   slots={CRM_LIST_SLOTS}
                   selectable={{ selected: selectedIds, onChange: setSelectedIds }}
                   onOpen={(id) => router.push(routes.contact(id))}
                   /*
                    * The grid's Filters panel and quick search edit the view's
-                   * clauses; the list answers them, onto the query where it
-                   * can and over the loaded window where it cannot, so the
-                   * grid must not filter again itself (AGL-3313). Opening the
-                   * panel is what reads the roster and the companies its
-                   * pickers name. Columns and sort are the view's, controlled
-                   * so a saved arrangement is what the grid shows.
+                   * clauses; the list's query answers them (AGL-3321), so the
+                   * grid must not filter again itself. Opening the panel is
+                   * what reads the roster and the companies its pickers name.
+                   * Columns are the view's, controlled so a saved arrangement
+                   * is what the grid shows; the query orders the rows —
+                   * newest change first — so the grid sorts nothing itself.
                    */
                   filterMode="server"
                   filterModel={gridFilter.filterModel}
@@ -1143,10 +1054,21 @@ export function ContactsPeopleSection(props: ConsolePluginPageProps) {
                   }
                   columnVisibilityModel={grid.columnVisibilityModel}
                   onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
-                  sortModel={grid.sortModel}
-                  onSortModelChange={grid.onSortModelChange}
+                  sortingMode="server"
+                  disableColumnSorting
+                  loading={contactsStatus === 'loading'}
+                  // Paged by the footer below, so the grid must not also slice.
+                  hideFooter
                 />
               </CrmColumnOrderProvider>
+              <ListPagination
+                page={paged.page}
+                pageSize={paged.pageSize}
+                rowCount={contacts.length}
+                hasMore={paged.hasMore}
+                onPageChange={paged.setPage}
+                onPageSizeChange={paged.setPageSize}
+              />
             </>
           )}
           <RecentActivityFeed hostId={hostId} org={org} basePath={props.basePath} />

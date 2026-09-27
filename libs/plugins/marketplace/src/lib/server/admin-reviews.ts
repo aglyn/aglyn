@@ -65,6 +65,19 @@ import {
 } from '@aglyn/aglyn/app-utils/publisher-agreement'
 import { FieldValue } from 'firebase-admin/firestore'
 import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
+import { refreshListingQueryFields } from './listing-query-fields'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
+import {
+  type ListQueryPlan,
+  planListQuery,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'
+import {
+  REVIEW_QUEUE_QUERY,
+  type ReviewQueueSection,
+  reviewQueueBase,
+  reviewQueueStatusClauses,
+} from '../model/listing-query'
 /*
  * The publisher fan-out lives beside the usage-alert one in `_lib` rather
  * than here. Both are multi-recipient platform sends that have to read the
@@ -73,6 +86,7 @@ import { notifyOrgAdmins } from '@aglyn/tenant-data-admin'
  */
 import { emailPublisher } from './publisher-review-email'
 import { dropCachesForListing } from './revoke-cache-drop'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Marketplace review queue (AGL-432) — Strapi Market's two-phase review
@@ -479,6 +493,183 @@ async function repairLatestApprovedVersion(
   })
 }
 
+/** Rows a queue section reads before it says there are more. */
+const REVIEW_QUEUE_PAGE = 100
+/** The most a reviewer can page the queue out to. */
+const REVIEW_QUEUE_MAX = 1000
+
+const queryParam = (value: unknown): string =>
+  String(Array.isArray(value) ? (value[0] ?? '') : (value ?? ''))
+
+/**
+ * The staff review index (AGL-961), every section on its query (AGL-3321).
+ *
+ * Three sections, each its own query over live plugin listings:
+ *
+ *   - Awaiting review: the newest bytes have no approval. Read from the
+ *     listing's `latestVersionReviewState` summary, whose `pending` and
+ *     `rejected` are exactly "the version's own `reviewState` is not
+ *     `approved`" — `revoked` is the one summary value a version keeps its
+ *     `approved` under, and it is not in `AWAITING_REVIEW_STATES`, so a killed
+ *     version never re-enters the queue looking unread (AGL-1121).
+ *   - Listed: `reviewStatus` listed or verified.
+ *   - Verification requested: the publisher's standing ask (AGL-1217).
+ *
+ * The Status select and the search (`?status=`, `?q=`) are clauses on every
+ * section's query, planned once by `REVIEW_QUEUE_QUERY`; search reads the
+ * listing name's `nameTokens`. It used to be matched over one window of a
+ * hundred plugin listings, so a plugin past it was in no section at all.
+ * `?limit=` pages each section out; a section that holds more than it read
+ * says so rather than presenting a short list as the whole queue.
+ */
+async function reviewQueue(
+  firestore: FirebaseFirestore.Firestore,
+  query: Record<string, unknown>,
+): Promise<Response> {
+  const clauses = reviewQueueStatusClauses(queryParam(query['status']))
+  const words = queryParam(query['q']).split(/\s+/).filter(Boolean)
+  const asked = Math.floor(Number(queryParam(query['limit'])))
+  const pageLimit = Number.isFinite(asked) && asked > 0
+    ? Math.min(asked, REVIEW_QUEUE_MAX)
+    : REVIEW_QUEUE_PAGE
+  const listings = firestore.collection('marketplaceListings')
+
+  let refused: ListQueryPlan['refused'] = []
+  let notices: string[] = []
+  const more: Record<ReviewQueueSection, boolean> = {
+    queue: false,
+    listed: false,
+    verification: false,
+  }
+  const read = async (section: ReviewQueueSection) => {
+    const base = reviewQueueBase(section, clauses)
+    // A Status the section cannot hold: empty by definition, never queried.
+    if (!base) return []
+    const plan = planListQuery(
+      REVIEW_QUEUE_QUERY,
+      { clauses, search: words, base },
+      nameSearchNormalizers,
+    )
+    refused = plan.refused
+    notices = plan.notices
+    const snapshot = await applyListQuery(listings, plan)
+      .limit(pageLimit + 1)
+      .get()
+    more[section] = snapshot.docs.length > pageLimit
+    return snapshot.docs.slice(0, pageLimit)
+  }
+  const [queueDocs, listedDocs, verificationDocs] = await Promise.all([
+    read('queue'),
+    read('listed'),
+    read('verification'),
+  ])
+
+  // Rows only (AGL-961). This used to DOWNLOAD every queued bundle to re-run
+  // the verifier, so the index paid a Storage round trip per submission
+  // before it could paint. The verifier now runs on the detail page, for the
+  // one listing being read.
+  const reviewRow = async (doc: FirebaseFirestore.QueryDocumentSnapshot) => {
+    const listing = doc.data()
+    const version = String(listing.latestVersion ?? '')
+    const latest = version
+      ? await doc.ref.collection('pluginVersions').doc(version).get()
+      : null
+    return {
+      listingId: doc.id,
+      displayName: listing.displayName ?? doc.id,
+      description: listing.description ?? '',
+      license: listing.license ?? '',
+      categories: listing.categories ?? [],
+      profileId: listing.profileId,
+      reviewStatus: listing.reviewStatus ?? 'submitted',
+      priceUsd: Number(listing.priceUsd ?? 0),
+      version,
+      hidden: Boolean(listing.hiddenAt),
+      private: listing.visibility === 'private',
+      latestReviewState: String(latest?.get('reviewState') ?? 'pending'),
+      grandfathered: Boolean(latest?.get('grandfathered')),
+      // The publisher's standing ask for the badge (AGL-1217).
+      verificationRequest: listing.verificationRequest ?? null,
+    }
+  }
+  const queue = await Promise.all(queueDocs.map(reviewRow))
+  // A THIRD section, deliberately not folded into `queue` (AGL-1217).
+  // `queue` means "these bytes have not been read"; a verification request
+  // means "this publisher asked us to vouch for who they are". A listing can
+  // sit in both at once, and merging them would hide one behind the other.
+  const verificationRequests = await Promise.all(verificationDocs.map(reviewRow))
+  // Listed/verified plugins with per-version trust (AGL-885): once a listing
+  // leaves the queue the Grant/Revoke realm-trust actions used to leave with
+  // it. This keeps every listed plugin's version trust state administrable.
+  const listed = await Promise.all(
+    listedDocs.map(async (doc) => {
+      const listing = doc.data()
+      const versionsSnapshot = await doc.ref
+        .collection('pluginVersions')
+        .orderBy('publishedAt', 'desc')
+        .limit(10)
+        .get()
+      const versions = versionsSnapshot.docs.map((versionDoc) => ({
+        version: String(versionDoc.get('version') ?? versionDoc.id),
+        trust: versionDoc.get('trust') ?? null,
+        reviewState: String(versionDoc.get('reviewState') ?? 'pending'),
+      }))
+      return {
+        listingId: doc.id,
+        displayName: listing.displayName ?? doc.id,
+        reviewStatus: listing.reviewStatus,
+        profileId: listing.profileId,
+        latestVersion: String(listing.latestVersion ?? ''),
+        // Takedown state (AGL-952), so a row shows the current verdict rather
+        // than sending a reviewer into the detail page to find out whether
+        // the plugin is stopped.
+        hidden: Boolean(listing.hiddenAt),
+        hiddenReason: String(listing.hiddenReason ?? ''),
+        private: listing.visibility === 'private',
+        pendingVersions: versions.filter((entry) => entry.reviewState !== 'approved')
+          .length,
+        // Summarised for the row; the per-version controls live on the detail
+        // page (AGL-960).
+        realmVersions: versions.filter((entry) => entry.trust === 'realm').length,
+        versionCount: versions.length,
+        versions,
+      }
+    }),
+  )
+
+  // Publisher names for scanning (AGL-961) — a listing id tells a reviewer
+  // nothing. One batched read for every section.
+  const publisherIds = [
+    ...new Set(
+      [...queue, ...listed, ...verificationRequests]
+        .map((entry) => String(entry.profileId ?? ''))
+        .filter(Boolean),
+    ),
+  ]
+  const publishers: Record<string, string> = {}
+  if (publisherIds.length) {
+    const docs = await firestore.getAll(
+      ...publisherIds.map((id) => firestore.collection('orgs').doc(id)),
+    )
+    for (const doc of docs) {
+      if (doc.exists) publishers[doc.id] = String(doc.get('name') ?? doc.id)
+    }
+  }
+  return Response.json(
+    {
+      queue,
+      listed,
+      publishers,
+      verificationRequests,
+      refused,
+      notices,
+      more,
+      limit: pageLimit,
+    },
+    { status: 200 },
+  )
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, body, query, headers: rawHeaders } =
     await pluginRequestFromWeb(request)
@@ -505,133 +696,7 @@ async function handler(request: Request): Promise<Response> {
         return listingDetail(firestore, detailId, String(query['version'] ?? ''))
       }
 
-      // Every plugin listing, bucketed by whether its newest bytes are
-      // waiting on a reviewer (AGL-966). The queue used to ask only for
-      // `reviewStatus in ['submitted','in_review']`, which meant an UPDATE
-      // to an already-listed plugin appeared nowhere: the listing kept its
-      // status, so nobody was ever shown the new version. Reading each
-      // listing's latest version doc costs one read per listing and needs
-      // no new composite index.
-      const snapshot = await firestore
-        .collection('marketplaceListings')
-        .where('type', '==', 'plugin')
-        .limit(100)
-        .get()
-      // Rows only (AGL-961). This used to DOWNLOAD every queued bundle to
-      // re-run the verifier, so the index paid a Storage round trip per
-      // submission before it could paint. The verifier now runs on the
-      // detail page, for the one listing being read.
-      const rows = await Promise.all(
-        snapshot.docs
-          .filter((doc) => !doc.get('deletedAt'))
-          .map(async (doc) => {
-            const listing = doc.data()
-            const version = String(listing.latestVersion ?? '')
-            const latest = version
-              ? await doc.ref.collection('pluginVersions').doc(version).get()
-              : null
-            return {
-              listingId: doc.id,
-              displayName: listing.displayName ?? doc.id,
-              description: listing.description ?? '',
-              license: listing.license ?? '',
-              categories: listing.categories ?? [],
-              profileId: listing.profileId,
-              reviewStatus: listing.reviewStatus ?? 'submitted',
-              priceUsd: Number(listing.priceUsd ?? 0),
-              version,
-              hidden: Boolean(listing.hiddenAt),
-              private: listing.visibility === 'private',
-              latestReviewState: String(latest?.get('reviewState') ?? 'pending'),
-              grandfathered: Boolean(latest?.get('grandfathered')),
-              // The publisher's standing ask for the badge (AGL-1217).
-              verificationRequest: listing.verificationRequest ?? null,
-            }
-          }),
-      )
-      // Awaiting review = the newest bytes have no approval, whatever the
-      // listing says. That is what puts an update in front of staff.
-      const queue = rows.filter((row) => row.latestReviewState !== 'approved')
-      // A THIRD bucket, deliberately not folded into `queue` (AGL-1217).
-      // `queue` means "these bytes have not been read"; a verification request
-      // means "this publisher asked us to vouch for who they are". They are
-      // different questions with different work attached, and a listing can
-      // sit in both at once — an update pending review from a publisher who
-      // has also asked for the badge. Merging them would hide one behind the
-      // other and make the count meaningless.
-      const verificationRequests = rows.filter(
-        (row) => row.verificationRequest?.state === 'pending',
-      )
-      // Listed/verified plugins with per-version trust (AGL-885): once a
-      // listing leaves the queue the Grant/Revoke realm-trust actions used
-      // to leave with it — revoking a live plugin's trust required a
-      // hand-crafted API call. This block keeps every listed plugin's
-      // version trust state administrable.
-      const listedSnapshot = {
-        docs: snapshot.docs.filter((doc) =>
-          ['listed', 'verified'].includes(String(doc.get('reviewStatus') ?? '')),
-        ),
-      }
-      const listed = await Promise.all(
-        listedSnapshot.docs.map(async (doc) => {
-          const listing = doc.data()
-          const versionsSnapshot = await doc.ref
-            .collection('pluginVersions')
-            .orderBy('publishedAt', 'desc')
-            .limit(10)
-            .get()
-          const versions = versionsSnapshot.docs.map((versionDoc) => ({
-            version: String(versionDoc.get('version') ?? versionDoc.id),
-            trust: versionDoc.get('trust') ?? null,
-            reviewState: String(versionDoc.get('reviewState') ?? 'pending'),
-          }))
-          return {
-            listingId: doc.id,
-            displayName: listing.displayName ?? doc.id,
-            reviewStatus: listing.reviewStatus,
-            profileId: listing.profileId,
-            latestVersion: String(listing.latestVersion ?? ''),
-            // Takedown state (AGL-952), so a row shows the current verdict
-            // rather than sending a reviewer into the detail page to find
-            // out whether the plugin is stopped.
-            hidden: Boolean(listing.hiddenAt),
-            hiddenReason: String(listing.hiddenReason ?? ''),
-            private: listing.visibility === 'private',
-            pendingVersions: versions.filter(
-              (entry) => entry.reviewState !== 'approved',
-            ).length,
-            // Summarised for the row; the per-version controls live on the
-            // detail page (AGL-960).
-            realmVersions: versions.filter((entry) => entry.trust === 'realm')
-              .length,
-            versionCount: versions.length,
-            versions,
-          }
-        }),
-      )
-
-      // Publisher names for scanning (AGL-961) — a listing id tells a
-      // reviewer nothing. One batched read for both sections.
-      const publisherIds = [
-        ...new Set(
-          [...queue, ...listed]
-            .map((entry) => String(entry.profileId ?? ''))
-            .filter(Boolean),
-        ),
-      ]
-      const publishers: Record<string, string> = {}
-      if (publisherIds.length) {
-        const docs = await firestore.getAll(
-          ...publisherIds.map((id) => firestore.collection('orgs').doc(id)),
-        )
-        for (const doc of docs) {
-          if (doc.exists) publishers[doc.id] = String(doc.get('name') ?? doc.id)
-        }
-      }
-      return Response.json(
-        { queue, listed, publishers, verificationRequests },
-        { status: 200 },
-      )
+      return reviewQueue(firestore, query)
     }
 
     if (method !== 'POST') {
@@ -703,6 +768,9 @@ async function handler(request: Request): Promise<Response> {
               },
         { merge: true },
       )
+      // A takedown leaves browse for everyone but its publisher, and the
+      // queue's Taken down status reads it (AGL-3321).
+      if (!reviewUid) await refreshListingQueryFields(target)
 
       // Takedown means takedown (AGL-948). Hiding a PLUGIN listing also
       // writes the kill switch, so one staff action has one outcome
@@ -800,7 +868,7 @@ async function handler(request: Request): Promise<Response> {
         }
       }
 
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: `plugins.takedown.${action}`,
         target: reviewUid
@@ -874,7 +942,7 @@ async function handler(request: Request): Promise<Response> {
       // Audited (AGL-971): a checklist tick is the record that a human
       // looked, so it needs the same trail as the verdict it unlocks —
       // including WHICH bytes were looked at.
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: `plugins.review.checklist.${checked ? 'check' : 'uncheck'}`,
         target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
@@ -1029,6 +1097,8 @@ async function handler(request: Request): Promise<Response> {
           reviewStatus: 'listed',
           updatedAt: FieldValue.serverTimestamp(),
         })
+        // Listed is browsable: the browse audience follows (AGL-3321).
+        await refreshListingQueryFields(listingRef)
       }
 
       // Denormalise the newest approved version onto the listing (AGL-1016).
@@ -1062,7 +1132,7 @@ async function handler(request: Request): Promise<Response> {
         await repairLatestApprovedVersion(listingRef, revocation)
       }
 
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: `plugins.review.version.${approving ? 'approve' : 'reject'}`,
         target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
@@ -1241,7 +1311,7 @@ async function handler(request: Request): Promise<Response> {
       // Both directions, because both change what is installable.
       await repairLatestApprovedVersion(listingRef, next)
 
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: `plugins.revocation.${revoking ? 'revoke' : 'restore'}`,
         target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
@@ -1332,7 +1402,7 @@ async function handler(request: Request): Promise<Response> {
        * column and searches it (AGL-1652) — a why nobody can filter on is a
        * why nobody reads.
        */
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         actorEmail: decoded.email ? String(decoded.email) : null,
         action: 'plugins.verification.decline',
@@ -1446,6 +1516,8 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
+    // The verdict decides who browse shows the listing to (AGL-3321).
+    await refreshListingQueryFields(listingRef)
 
     // Tell the publisher their listing moved (rejections especially).
     if (
@@ -1514,7 +1586,7 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: decoded.uid,
       action: `plugins.review.${action}`,
       target: `marketplaceListings/${listingId}`,

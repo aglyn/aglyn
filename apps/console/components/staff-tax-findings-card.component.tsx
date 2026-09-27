@@ -19,14 +19,17 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
-  inMemoryListField,
   type ListFilterOption,
+  listFilterGridColumns,
   upsertListFilterClause,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import {
   Alert,
   AlertTitle,
@@ -36,45 +39,23 @@ import {
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { docsHelp } from '../constants/docs-links'
-import { TABLE_PAGE_SIZE_DEFAULT } from '../constants/shared'
+import useStaffListQuery from '../hooks/use-staff-list-query'
+import {
+  TAX_FINDING_FILTER_FIELDS,
+  TAX_FINDING_FILTER_HEADERS,
+  TAX_FINDING_SELECT_FIELDS,
+  type TaxFindingListRow,
+  taxFindingListRows,
+} from '../utils/tax-findings-list'
 import {
   taxReturnFindingGroups,
-  type TaxReturnFindingRow,
   type TaxReturnPayload,
 } from '../utils/tx-return-webfile'
+import StaffListPaginationControls from './staff-list-pagination.component'
 
-/** One flagged invoice, once, with every finding that lists it. */
-type FindingListRow = TaxReturnFindingRow & {
-  $id: string
-  /** The ids of the finding groups this row appears under. */
-  groups: string[]
-}
-
-/*
- * What the findings grid filters and searches by. The card holds every row
- * the period's findings name (the route caps the read and says so above) and
- * pages them itself, so both answer over all of them before a page is
- * sliced. `groups` is an array of finding ids, matched member by member.
- */
-const FINDING_FILTER_FIELDS = [
-  inMemoryListField('invoiceId', 'text'),
-  {
-    ...inMemoryListField('groups', 'select'),
-    tokensPath: 'groups',
-    verbatimTokens: true,
-  },
-  inMemoryListField('jurisdiction', 'select'),
-  inMemoryListField('paidAt', 'date'),
-]
-const FINDING_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  invoiceId: 'Invoice',
-  groups: 'Finding',
-  jurisdiction: 'Bucketed as',
-  paidAt: 'Paid',
-}
-const FINDING_SEARCH_PATHS = ['invoiceId', 'orgId', 'jurisdiction']
+type FindingListRow = TaxFindingListRow
 
 /** How a bucket reads: `unknown` is the row with no readable address. */
 const bucketLabel = (jurisdiction: string) =>
@@ -127,20 +108,9 @@ export default function StaffTaxFindingsCard({
   loading: boolean
 }) {
   const groups = useMemo(() => taxReturnFindingGroups(payload), [payload])
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-
-  const rows = useMemo((): FindingListRow[] => {
-    const byInvoice = new Map<string, FindingListRow>()
-    for (const group of groups) {
-      for (const row of group.rows) {
-        const held = byInvoice.get(row.invoiceId)
-        if (held) held.groups.push(group.id)
-        else byInvoice.set(row.invoiceId, { ...row, $id: row.invoiceId, groups: [group.id] })
-      }
-    }
-    return [...byInvoice.values()]
-  }, [groups])
+  // Every flagged row of the period — read for the Bucketed-as choices only;
+  // the list itself is the route's answer below.
+  const rows = useMemo(() => taxFindingListRows(payload), [payload])
   const options = useMemo(
     (): Record<string, readonly ListFilterOption[]> => ({
       groups: groups.map((group) => ({ value: group.id, label: group.label })),
@@ -152,15 +122,21 @@ export default function StaffTaxFindingsCard({
     }),
     [groups, rows],
   )
-  const findingFilter = useListRowsFilter({
-    rows,
-    fields: FINDING_FILTER_FIELDS,
-    options,
-    headers: FINDING_FILTER_HEADERS,
-    search: FINDING_SEARCH_PATHS,
+  /*
+   * The Filters panel and the search, SERVED by the route over the period's
+   * complete read (AGL-3321): a finding is computed rather than stored, so
+   * `/api/admin/tax-return?view=findings` answers every clause and the search
+   * where the whole period is, and hands back one page. A period too large
+   * for one read refuses them by name. See `utils/tax-findings-list.ts`.
+   */
+  const gridFilter = useListGridFilter({ selectFields: TAX_FINDING_SELECT_FIELDS })
+  const { clauses, setClauses } = gridFilter
+  const findings = useStaffListQuery<FindingListRow>({
+    endpoint: payload?.period ? '/api/admin/tax-return' : null,
+    clauses,
+    search: gridFilter.searchWords,
+    params: payload?.period ? { period: payload.period, view: 'findings' } : undefined,
   })
-  const { clauses, setClauses } = findingFilter.gridFilter
-  const matched = findingFilter.rows
 
   /*
    * The finding a clause asks for, when it asks for exactly one — the one
@@ -173,19 +149,13 @@ export default function StaffTaxFindingsCard({
   const asked = groups.find((group) => group.id === askedGroupId) ?? null
   const unnamed = groups.filter((group) => !group.namesRows)
 
-  useEffect(() => {
-    setPage(0)
-  }, [payload, clauses])
-  const visible = matched.slice(page * pageSize, page * pageSize + pageSize)
-
   const labelOf = useMemo(
     () => new Map(groups.map((group) => [group.id as string, group.label])),
     [groups],
   )
-  const { filterColumns } = findingFilter
   const columns = useMemo(
     () =>
-      filterColumns([
+      listFilterGridColumns([
         {
           field: 'invoiceId',
           headerName: 'Invoice',
@@ -297,8 +267,8 @@ export default function StaffTaxFindingsCard({
             </Stack>
           ),
         },
-      ] as GridColDef<FindingListRow>[] as GridColDef[]),
-    [filterColumns, labelOf],
+      ] as GridColDef<FindingListRow>[] as GridColDef[], TAX_FINDING_FILTER_FIELDS, options, TAX_FINDING_FILTER_HEADERS),
+    [labelOf, options],
   )
 
   if (!payload) {
@@ -382,27 +352,42 @@ export default function StaffTaxFindingsCard({
 
         {rows.length ? (
           <>
-            <ListFilterChips {...findingFilter.chipsProps} />
+            <ListFilterChips
+              fields={TAX_FINDING_FILTER_FIELDS}
+              headers={TAX_FINDING_FILTER_HEADERS}
+              options={options}
+              clauses={clauses}
+              onChange={setClauses}
+            />
+            <ListQueryNotices
+              refused={listQueryRefusals(findings.refused, {
+                fields: TAX_FINDING_FILTER_FIELDS,
+                headers: TAX_FINDING_FILTER_HEADERS,
+                options,
+              })}
+              notices={findings.notices}
+            />
             <ListTable
               aria-label="Findings"
-              rows={visible}
+              rows={findings.rows}
               columns={columns}
-              {...findingFilter.gridProps}
+              loading={loading || findings.loading}
+              filterMode="server"
+              quickFilter
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              getRowId={(row: FindingListRow) => row.$id}
               // An invoice carries its org beneath it and a row may raise
               // several findings, so a row is as tall as its content.
               getRowHeight={() => 'auto'}
-              // Held whole and paged by the footer below.
+              // One page of the route's answer, turned by the footer below.
               hideFooter
               noRowsLabel="No rows match these filters"
             />
-            <ListPagination
-              page={page}
-              pageSize={pageSize}
-              rowCount={visible.length}
-              count={matched.length}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              disabled={loading}
+            <StaffListPaginationControls
+              pagination={findings}
+              shown={findings.rows.length}
+              sizeMenu={false}
             />
           </>
         ) : null}

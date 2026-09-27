@@ -226,6 +226,10 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
         getRowId={(job: StaffOrgAiJob) => job.id}
         rowHeight={TABLE_ROW_HEIGHT}
         noRowsLabel="No recent jobs"
+        // The route's ten newest jobs: a bounded readout, so no filter over
+        // the rows it holds (AGL-3321).
+        disableColumnFilter
+        quickFilter={false}
       />
     </Stack>
   )
@@ -233,8 +237,8 @@ function JobsSection({ jobs }: { jobs: StaffOrgAiJobs | null }) {
 
 /**
  * The recent jobs, one column per fact. Who started a job is a column of
- * its own rather than a link tucked beside the date, so it sorts and filters
- * like the rest; the credits sort by what was SPENT, which is the figure the
+ * its own rather than a link tucked beside the date, so it sorts like the
+ * rest; the credits sort by what was SPENT, which is the figure the
  * pool was charged.
  */
 const JOB_COLUMNS: GridColDef<StaffOrgAiJob>[] = [
@@ -452,6 +456,10 @@ function TopUsersSection({ users }: { users: StaffOrgAiUser[] }) {
       getRowId={(row: StaffOrgAiUser) => row.uid}
       rowHeight={TABLE_ROW_HEIGHT}
       onOpen={(uid) => router.push(buildRoute(Route.ADMIN_USER_DETAIL, { uid }))}
+      // The route's ten dearest members: a bounded readout, so no filter
+      // over the rows it holds (AGL-3321).
+      disableColumnFilter
+      quickFilter={false}
     />
   )
 }

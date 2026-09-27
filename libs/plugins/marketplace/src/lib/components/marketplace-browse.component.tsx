@@ -19,7 +19,10 @@
 import { mdiCheckDecagram } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import {
   Alert,
   Chip,
@@ -41,6 +44,7 @@ import {
   query,
   where,
 } from 'firebase/firestore'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   buildRoute,
@@ -55,7 +59,6 @@ import {
   useFirestoreCollection,
   useFirestoreDoc,
   useHostOrgId,
-  useUser,
   useScopeTokens,
 } from '@aglyn/tenant-feature-instance'
 /*
@@ -69,13 +72,17 @@ import {
   collectionCeiling,
 } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import {
-  isListingBrowsable,
-  isListingDeleted,
-  isPrivateListing,
+  LISTING_CATEGORIES,
   listingArtifactType,
   listingArtifactLabel,
   resolvePluginInstallState,
 } from '../model/marketplace'
+import {
+  BROWSE_SORTS,
+  type BrowseSort,
+  browseBase,
+  MARKETPLACE_BROWSE_QUERY,
+} from '../model/listing-query'
 import { ListingImage } from './listing-image.component'
 
 // The console route table is shared (AGL-685), so these go through
@@ -92,6 +99,11 @@ import { ListingImage } from './listing-image.component'
  * own cap, and the grid pages what survives the filters.
  */
 const INSTALL_STATE_CEILING = 100
+
+/** How the browse clauses read in a refusal. */
+const BROWSE_HEADERS: Readonly<Record<string, string>> = { category: 'Category' }
+/** How long the search box waits for typing to stop before it asks again. */
+const SEARCH_SETTLE_MS = 300
 
 export interface MarketplaceBrowseProps {
   hostId: string
@@ -129,20 +141,28 @@ export interface MarketplaceBrowseProps {
 export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
   const { hostId } = props
   const firestore = useFirestore()
-  const { data: user } = useUser()
   const { orgScoped, orgSlug: orgSlugProp, publisherId } = props
   const [handles, setHandles] = useState<Record<string, string>>({})
   // Listings are org-owned (AGL-652), so "is this mine" is an org comparison.
   // Resolved from the routing mirror rather than a new prop so the component
-  // stays self-contained; hostIndex is signed-in readable.
-  const [viewerOrgId, setViewerOrgId] = useState<string | null>(null)
+  // stays self-contained; hostIndex is signed-in readable. `undefined` while
+  // it resolves: the shelf's query names the viewer's org in its audience
+  // clause, so it waits for the answer rather than asking twice. A failed
+  // lookup settles at `null` — the public shelf, without the viewer's own
+  // listings in review.
+  const [viewerOrgId, setViewerOrgId] = useState<string | null | undefined>(
+    undefined,
+  )
   useEffect(() => {
     let active = true
+    setViewerOrgId(undefined)
     void getDoc(doc(firestore, 'hostIndex', hostId))
       .then((snapshot) => {
         if (active) setViewerOrgId((snapshot.get('orgId') as string) ?? null)
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (active) setViewerOrgId(null)
+      })
     return () => {
       active = false
     }
@@ -193,69 +213,84 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
           })
         : undefined
 
-  /**
-   * NO `where('deletedAt','==',null)` HERE — soft-deleted listings are dropped
-   * in `items` below instead (AGL-1196).
+  /*
+   * THE SHELF IS ITS QUERY (AGL-3321).
    *
-   * `deletedAt` flips every time a publisher unpublishes or republishes. A
-   * document that stops matching a live query leaves the query target, and the
-   * client can cache a `noDocument` tombstone at its own path — which is then
-   * served to every reader of that path, including the detail page, which
-   * reads `marketplaceListings/{id}` BY ID. So a browse session open across an
-   * unpublish could 404 a listing that exists, and republishing would not
-   * clear it: a resumed listen only pulls deltas, so an otherwise-unchanged
-   * document is never re-sent (AGL-827, AGL-929).
+   * Browse read the newest ninety listings and resolved everything else in
+   * memory — the search box, the category chips, the three sorts, and the
+   * gates that keep deleted, private and unreviewed listings off the shelf.
+   * A listing that was not among those ninety could not be found by any of
+   * them, and "Most installed" sorted a sample.
    *
-   * Dropping the predicate removes the mechanism rather than healing it: with
-   * no `where`, no document can stop matching. The rule permits it —
-   * `marketplaceListings` is `allow read: if true`, with no `resource.data`
-   * term, so an unconstrained list is not denied. (That is NOT true of the
-   * scoped `datasets` query below, which is why this fix does not generalise.)
+   * Every one of them is on the query now. The gates are one clause, the
+   * listing's written `browseAudience` (see `listingBrowseAudience`), asked
+   * with `array-contains-any` for everyone (`*`) and the viewer's own org —
+   * the owner exemption the in-memory gate carried (AGL-432): a publisher
+   * sees their own listing while it waits on review. A publisher page asks
+   * the same scopes joined to that publisher. The search folds into the same
+   * clause through `browseTokens`, a category is an equality, and each sort
+   * is the query's order; `MARKETPLACE_BROWSE_QUERY` declares them and its
+   * spec pins the composites that serve them.
    *
-   * It also fixes a quieter bug: `== null` matches only an EXPLICIT null, and
-   * Firestore cannot express "field is absent". Every publish path stamps
-   * `deletedAt: null` today, so this happens to be exact — but any future
-   * write path that omits the field would make a live listing silently
-   * invisible. An in-memory falsy check treats absent as live, which is what
-   * the dataset and email-template filters in this file already do.
-   *
-   * The cap counts CANDIDATES, not results — private and unreviewed listings
-   * already consume slots and get filtered below, so this is the same class of
-   * consumption, nudged up to leave room for soft-deleted rows. Measured on
-   * production 2026-08-03: 7 listings, 0 soft-deleted, 0 missing the field.
-   *
-   * ## The cap DOES take an `orderBy`, and it is not the same decision
-   *
-   * A `limit` with no ordering is answered in document-id order, and listing
-   * ids are random — so the ninety this loaded were an arbitrary ninety, and
-   * the client sort below then arranged that sample by date and called it
-   * "Newest". The window is now the newest ninety, which is what the default
-   * sort already claimed it was.
-   *
-   * `orderBy` carries the drop the `where` above was removed to avoid — it
-   * matches only documents that HAVE the field, so a listing without
-   * `createdAt` would not be mis-ordered, it would be invisible. That is safe
-   * here for a reason the `deletedAt` predicate could not offer: a listing is
-   * created by exactly two paths, `publish.ts` and `publish-plugin.ts`, and
-   * both stamp `createdAt` in the same `set` that brings the document into
-   * existence. Every other writer resolves an EXISTING listing by id and
-   * refuses when it is absent, so none of them can produce one without the
-   * field.
-   *
-   * It also cannot reproduce the tombstone (AGL-827/929) that made a mutable
-   * `where` unsafe: `createdAt` is written under `existing.empty` and never
-   * rewritten, so no document can stop matching mid-session and leave a
-   * `noDocument` cached at a path the detail page reads by id.
+   * `browseAudience` is MUTABLE — an unpublish, a takedown or a verdict
+   * rewrites it — so a document can stop matching mid-session and be cached
+   * as a `noDocument` tombstone at the path the detail page reads by id
+   * (AGL-827/929). That was why the `deletedAt` predicate came off this query
+   * in AGL-1196; `confirmDisappearances` is the repair that hook documents
+   * for a predicate that cannot be dropped, and this one cannot.
    */
-  const { data: listings } = useFirestoreCollection<any>(
+  const gridFilter = useListGridFilter({ selectFields: ['category'] })
+  const [search, setSearch] = useState('')
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setSearchWords(search.split(/\s+/).filter(Boolean)),
+      SEARCH_SETTLE_MS,
+    )
+    return () => clearTimeout(timer)
+  }, [search])
+  const [sort, setSort] = useState<BrowseSort>('newest')
+  const category =
+    gridFilter.clauses.find((clause) => clause.field === 'category')?.value ??
+    null
+  const listingsRef = useMemo(
     () =>
-      query(
-        collection(firestore, 'marketplaceListings'),
-        orderBy('createdAt', 'desc'),
-        limit(90),
-      ),
-    [firestore],
-    { idField: '$id' },
+      viewerOrgId === undefined
+        ? null
+        : collection(firestore, 'marketplaceListings'),
+    [firestore, viewerOrgId],
+  )
+  const {
+    rows: shown,
+    status: shelfStatus,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    plan,
+  } = useListQuery<any>({
+    collection: listingsRef,
+    declaration: MARKETPLACE_BROWSE_QUERY,
+    request: {
+      clauses: gridFilter.clauses,
+      search: searchWords,
+      sort: BROWSE_SORTS[sort],
+      base: browseBase(viewerOrgId, publisherId),
+    },
+    deps: [firestore, viewerOrgId, publisherId],
+    idField: '$id',
+    confirmDisappearances: true,
+  })
+  const listings = shown
+  const filtering = Boolean(category) || searchWords.length > 0
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: MARKETPLACE_BROWSE_QUERY.fields,
+        headers: BROWSE_HEADERS,
+      }),
+    [plan],
   )
   /*
    * ## The install-state lookups are ORDERED too, and they are not lists
@@ -488,84 +523,6 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
     }
   }, [listings, firestore])
 
-  // Browse controls (AGL-95): client-side search/filter/sort over the
-  // fetched page of listings.
-  const [search, setSearch] = useState('')
-  const [category, setCategory] = useState<string | null>(null)
-  const [sort, setSort] = useState<'newest' | 'installed' | 'rated'>(
-    'newest',
-  )
-  const categories = useMemo(
-    () =>
-      [
-        ...new Set(
-          (listings ?? [])
-            .map((listing: any) => listing.category)
-            .filter(Boolean),
-        ),
-      ].sort() as string[],
-    [listings],
-  )
-  const items = useMemo(() => {
-    const needle = search.trim().toLowerCase()
-    const filtered = (listings ?? []).filter((listing: any) => {
-      // Private plugins never appear here, not even for the org that owns
-      // them (AGL-968/993). The owner exemption below exists so a publisher
-      // can watch their own SUBMISSION move through review — but a private
-      // listing is not waiting to be listed, it is deliberately not for the
-      // marketplace, and showing it in this grid is the one thing "private"
-      // promises will not happen. Owners reach theirs from
-      // Marketplace › Listings, whose View opens the same detail page
-      // installs happen on.
-      // Soft-deleted listings used to be excluded by the query itself; they
-      // are dropped here now so no mutable field sits in a `where`
-      // (AGL-1196). Unconditional — unlike the review gate below, deletion
-      // has no owner exemption.
-      if (isListingDeleted(listing)) return false
-      if (isPrivateListing(listing)) return false
-      // Review queue gate (AGL-432): unreviewed/rejected plugin listings
-      // stay off the public browse; the owner still sees their own (the
-      // detail page shows them the status). UX-level only — the docs are
-      // public-readable by design.
-      if (!isListingBrowsable(listing) && listing.profileId !== viewerOrgId) {
-        return false
-      }
-      // Publisher page (AGL-869): only this publisher's listings.
-      if (publisherId && listing.profileId !== publisherId) return false
-      if (category && listing.category !== category) return false
-      if (!needle) return true
-      return [listing.displayName, listing.description, listing.category]
-        .filter(Boolean)
-        .some((value: string) => value.toLowerCase().includes(needle))
-    })
-    return [...filtered].sort((a: any, b: any) => {
-      if (sort === 'installed') {
-        return (b.installCount ?? 0) - (a.installCount ?? 0)
-      }
-      if (sort === 'rated') {
-        // Unrated listings sort last rather than as zero-stars — a new
-        // listing has not been judged badly, it has not been judged.
-        const byAverage =
-          (b.ratingAverage ?? -1) - (a.ratingAverage ?? -1)
-        return byAverage || (b.ratingCount ?? 0) - (a.ratingCount ?? 0)
-      }
-      return (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
-    })
-  }, [listings, search, category, sort, publisherId, user?.uid])
-
-  /*
-   * The shelf PAGES (AGL-2501). It used to render every card the window held
-   * in one wall, so the only control over how much arrived at once was the
-   * cap in the query — a number the reader cannot see and cannot change.
-   *
-   * Client-side, deliberately, and this is the case `ListPagination`'s
-   * `count` prop exists for. The search box, the category chips and the
-   * owner/review gates are all resolved in memory, so a server page would be
-   * a page of CANDIDATES: a reader filtering to one category would get pages
-   * that were mostly empty and a count that meant nothing. Paging what is
-   * left after the filter is the only version whose numbers are about what is
-   * on screen.
-   */
   /**
    * The install-state lookups did not read everything they were asked about.
    *
@@ -581,21 +538,6 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
     orgPinsTruncated ||
     datasetsTruncated ||
     emailsTruncated
-
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  /*
-   * A new query starts at page one. Page four of a category with two pages
-   * does not exist, and an out-of-range page renders as an empty grid with
-   * nothing saying why — which reads as the filter having broken.
-   */
-  useEffect(() => {
-    setPage(0)
-  }, [search, category, sort, pageSize])
-  const shown = useMemo(
-    () => items.slice(page * pageSize, (page + 1) * pageSize),
-    [items, page, pageSize],
-  )
 
   return (
     <CardDisplay
@@ -616,20 +558,28 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
           size="small"
           sx={{ minWidth: 200 }}
         />
-        {categories.map((value) => (
+        {/* The fixed taxonomy (AGL-430), not the categories the loaded page
+            happened to hold: a chip is a question for the query, and one
+            missing because no listing on this page had it could never be
+            asked. */}
+        {LISTING_CATEGORIES.map((value) => (
           <Chip
             key={value}
             label={value}
             variant={category === value ? 'filled' : 'outlined'}
             color={category === value ? 'primary' : 'default'}
             onClick={() =>
-              setCategory((previous) => (previous === value ? null : value))
+              gridFilter.setClauses(
+                category === value
+                  ? []
+                  : [{ field: 'category', op: 'equals', value }],
+              )
             }
           />
         ))}
         <TextField
           value={sort}
-          onChange={(event) => setSort(event.target.value as any)}
+          onChange={(event) => setSort(event.target.value as BrowseSort)}
           size="small"
           select
           sx={{ ml: 'auto', minWidth: 150 }}
@@ -647,11 +597,16 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             'Open a listing to see what this workspace actually runs.'}
         </Alert>
       ) : null}
-      {items.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          {'No marketplace components published yet — publish one of your ' +
-            'reusable components from the Setup page to be the first.'}
-        </Typography>
+      <ListQueryNotices refused={refusals} notices={plan.notices} />
+      {shown.length === 0 && page === 0 ? (
+        shelfStatus === 'success' ? (
+          <Typography variant="body2" color="text.secondary">
+            {filtering
+              ? 'No components match this search.'
+              : 'No marketplace components published yet — publish one of ' +
+                'your reusable components from the Setup page to be the first.'}
+          </Typography>
+        ) : null
       ) : (
         <>
         <Grid container spacing={2}>
@@ -955,14 +910,13 @@ export function MarketplaceBrowse(props: MarketplaceBrowseProps) {
             )
           })}
         </Grid>
-        {/* `count` is the FILTERED total, which this list genuinely knows —
-            it is the array it just sliced. Handing MUI the window's size
-            instead would count listings the reader has filtered out. */}
+        {/* The query pages the shelf, so the total is not known — only
+            whether another page exists. */}
         <ListPagination
           page={page}
           pageSize={pageSize}
           rowCount={shown.length}
-          count={items.length}
+          hasMore={hasMore}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />

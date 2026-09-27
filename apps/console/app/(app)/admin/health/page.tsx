@@ -49,12 +49,16 @@
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container, GridItems } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
-  inMemoryListField,
+  listFilterGridColumns,
   type ListFilterOption,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useUser } from '@aglyn/tenant-feature-instance'
@@ -76,17 +80,25 @@ import ScopeDriftCard from '../../../../components/scope-drift-card.component'
 import PendingErasuresCard from '../../../../components/pending-erasures-card.component'
 import IdempotencyClaimsCard from '../../../../components/idempotency-claims-card.component'
 import ServerConfigCard from '../../../../components/server-config-card.component'
+import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import {
+  CSP_FILTER_FIELDS,
+  CSP_FILTER_HEADERS,
+  CSP_SEARCH_HINT,
+} from '../../../../utils/csp-report-list-query'
 import {
   HEALTH_PROBES,
   readCspReport,
   readEmailHealthResponse,
   readHealthResponse,
   summarizePlatformHealth,
+  type CspAggregateRow,
   type CspReportView,
   type HealthProbeResult,
   type HealthVerdict,
@@ -110,33 +122,17 @@ const VERDICT_LABEL: Record<HealthVerdict, string> = {
 const CSP_WINDOWS = [7, 14, 30, 60]
 
 /*
- * What the violations grid filters and searches by. The list holds every
- * counter row the window read (capped by the route, which says so when it
- * is), so both answer over all of them. App and Directive are picked from
- * the values the window actually holds — the collector records whatever a
+ * What the violations table filters and searches by — every clause and the
+ * search on the route's query beneath the Window (AGL-3321;
+ * `utils/csp-report-list-query.ts`). App and Directive are picked from the
+ * values the window's rollup holds — the collector records whatever a
  * browser reports, so there is no fixed catalog to offer instead.
  */
-const CSP_FILTER_FIELDS = [
-  inMemoryListField('day', 'text'),
-  inMemoryListField('app', 'select'),
-  inMemoryListField('directive', 'select'),
-  inMemoryListField('disposition', 'select'),
-  inMemoryListField('blockedOrigin', 'text'),
-  inMemoryListField('count', 'number'),
-]
-const CSP_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  day: 'Day',
-  app: 'App',
-  directive: 'Directive',
-  disposition: 'Blocked or measured',
-  blockedOrigin: 'Blocked origin',
-  count: 'Count',
-}
 const CSP_DISPOSITION_OPTIONS: readonly ListFilterOption[] = [
   { value: 'enforce', label: 'Blocked' },
   { value: 'report', label: 'Measured' },
 ]
-const CSP_SEARCH_PATHS = ['day', 'app', 'directive', 'blockedOrigin', 'lastSite', 'lastPath']
+const CSP_SELECT_FIELDS = ['app', 'directive', 'disposition']
 
 /** The distinct values of one field across the rows, as select choices. */
 const distinctOptions = (values: Array<string | undefined>): ListFilterOption[] =>
@@ -164,7 +160,7 @@ const CSP_COLUMNS: GridColDef[] = [
     width: 170,
   },
   {
-    field: 'blockedOrigin',
+    field: 'origin',
     headerName: 'Blocked origin',
     flex: 1.4,
     minWidth: 200,
@@ -198,33 +194,45 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
   const [cspDays, setCspDays] = useState(14)
   const [csp, setCsp] = useState<CspReportView | null>(null)
   const [cspError, setCspError] = useState<string | null>(null)
-  const cspRows = useMemo(
-    () =>
-      (csp?.rows ?? []).map((row, index) => ({
-        ...row,
-        $id: `${row.day}-${row.app}-${row.directive}-${row.blockedOrigin}-${row.disposition}-${index}`,
-      })),
-    [csp],
-  )
+  // The pickers offer what the window's rollup holds.
   const cspOptions = useMemo(
     () => ({
-      app: distinctOptions(cspRows.map((row) => row.app)),
-      directive: distinctOptions(cspRows.map((row) => row.directive)),
+      app: distinctOptions((csp?.rows ?? []).map((row) => row.app)),
+      directive: distinctOptions((csp?.rows ?? []).map((row) => row.directive)),
       disposition: CSP_DISPOSITION_OPTIONS,
     }),
-    [cspRows],
+    [csp],
   )
-  const cspFilter = useListRowsFilter({
-    rows: cspRows,
-    fields: CSP_FILTER_FIELDS,
-    options: cspOptions,
-    headers: CSP_FILTER_HEADERS,
-    search: CSP_SEARCH_PATHS,
+  /*
+   * The table is its own read (AGL-3321): one page at a time of the counters
+   * in the Window, every Filters clause and the search on the route's query.
+   * The rollup above it reads the whole window; the table narrows nothing it
+   * is handed.
+   */
+  const gridFilter = useListGridFilter({ selectFields: CSP_SELECT_FIELDS })
+  const cspListParams = useMemo(
+    () => ({ view: 'rows', days: String(cspDays) }),
+    [cspDays],
+  )
+  const cspList = useStaffListQuery<CspAggregateRow>({
+    endpoint: isStaff ? '/api/admin/csp-reports' : null,
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+    params: cspListParams,
   })
-  const { filterColumns: cspFilterColumns } = cspFilter
+  const { refresh: refreshCspList } = cspList
+  const cspRefusals = useMemo(
+    () =>
+      listQueryRefusals(cspList.refused, {
+        fields: CSP_FILTER_FIELDS,
+        headers: CSP_FILTER_HEADERS,
+        options: cspOptions,
+      }),
+    [cspList.refused, cspOptions],
+  )
   const cspColumns = useMemo(
-    () => cspFilterColumns(CSP_COLUMNS),
-    [cspFilterColumns],
+    () => listFilterGridColumns(CSP_COLUMNS, CSP_FILTER_FIELDS, cspOptions, CSP_FILTER_HEADERS),
+    [cspOptions],
   )
 
   useEffect(() => {
@@ -310,7 +318,10 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
     [results],
   )
 
-  const handleRefresh = useCallback(() => setReloadKey((key) => key + 1), [])
+  const handleRefresh = useCallback(() => {
+    setReloadKey((key) => key + 1)
+    refreshCspList()
+  }, [refreshCspList])
 
   return (
     <DashboardLayout
@@ -522,7 +533,8 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                   sx={{ alignItems: 'center', flexWrap: 'wrap' }}
                 >
                   {/* A SCOPE, not a filter: it picks which days the route
-                      reads, and the grid's panel narrows what came back. */}
+                      reads — the rollup's window, and the range beneath the
+                      table's query. */}
                   <TextField
                     select
                     size="small"
@@ -641,14 +653,40 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                         {`${csp.totalViolations} violations across ` +
                           `${csp.rowCount} rows since ${csp.since}.`}
                       </Typography>
-                      <ListFilterChips {...cspFilter.chipsProps} />
+                      <ListFilterChips
+                        fields={CSP_FILTER_FIELDS}
+                        headers={CSP_FILTER_HEADERS}
+                        options={cspOptions}
+                        clauses={gridFilter.clauses}
+                        onChange={gridFilter.setClauses}
+                      />
+                      <ListQueryNotices refused={cspRefusals} notices={cspList.notices} />
+                      {gridFilter.searchWords.length ? (
+                        <Typography variant="caption" color="text.secondary">
+                          {CSP_SEARCH_HINT}
+                        </Typography>
+                      ) : null}
+                      {cspList.failed ? (
+                        <Alert severity="warning">
+                          {'The violations table could not be read. The rollup above is unaffected.'}
+                        </Alert>
+                      ) : null}
                       <ListTable
                         aria-label="Content-Security-Policy violations"
-                        rows={cspFilter.rows}
+                        rows={cspList.rows}
                         columns={cspColumns}
-                        {...cspFilter.gridProps}
+                        getRowId={(row: CspAggregateRow) => row.id ?? ''}
+                        loading={cspList.loading}
+                        filterMode="server"
+                        filterModel={gridFilter.filterModel}
+                        onFilterModelChange={gridFilter.onFilterModelChange}
+                        quickFilter
+                        // The route answers one page at a time; the footer
+                        // below walks the pages.
+                        hideFooter
                         noRowsLabel="No violations match these filters"
                       />
+                      <StaffListPaginationControls pagination={cspList} />
                     </>
                   )
                 ) : cspError ? null : (

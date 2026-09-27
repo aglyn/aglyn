@@ -106,7 +106,10 @@ describe('backfillMemberIdentity', () => {
       { displayName: 'Zach Gover', photoURL: 'https://cdn.example/z.png' },
       db,
     )
-    expect(Object.keys(db.writes[0]).sort()).toEqual(['displayName', 'photoURL'])
+    // The name, the photo, and the roster search's words for the new name
+    // (AGL-3321) — nothing that decides access.
+    expect(Object.keys(db.writes[0]).sort()).toEqual(['displayName', 'photoURL', 'searchTokens'])
+    expect(db.writes[0]['searchTokens']).toEqual(expect.arrayContaining(['zach', 'gover']))
     expect(db.state.data).toMatchObject({ role: 'admin', allHosts: true })
   })
 

@@ -15,12 +15,18 @@
  * limitations under the License.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   inheritedMediaAlt,
   intrinsicMediaSize,
   videoMediaProps,
   MEDIA_ALT_MAX_LENGTH,
   MEDIA_TAG_MAX_COUNT,
+  mediaFilterKeys,
+  mediaKindOf,
+  mediaOrientationOf,
+  mediaSearchToken,
   normalizeMediaTags,
   readImageDimensions,
 } from './media-metadata'
@@ -369,5 +375,56 @@ describe('videoMediaProps', () => {
 
   it('tolerates being called with nothing at all', () => {
     expect(videoMediaProps({})).toEqual({})
+  })
+})
+
+/**
+ * The fields the media library filters, sorts and searches by (AGL-3327).
+ * The worked examples live in a JSON file the script-side restatement
+ * (`tools/scripts/lib/media-filter-keys.mjs`, which the backfill and every
+ * seed write through) is held to as well, so the two cannot stamp a key
+ * differently.
+ */
+const fixtures = JSON.parse(
+  readFileSync(
+    join(__dirname, '../../../../../tools/scripts/lib/media-filter-keys.fixtures.json'),
+    'utf8',
+  ),
+) as {
+  kinds: Array<{ contentType: string | null; kind: string }>
+  orientations: Array<{ media: Record<string, unknown>; orientation: string | null }>
+  keys: Array<{ media: Record<string, unknown>; keys: Record<string, unknown> }>
+}
+
+describe('mediaFilterKeys (AGL-3327)', () => {
+  it.each(fixtures.kinds)('files $contentType as $kind', ({ contentType, kind }) => {
+    expect(mediaKindOf(contentType)).toBe(kind)
+  })
+
+  it.each(fixtures.orientations)('orients $media as $orientation', ({ media, orientation }) => {
+    expect(mediaOrientationOf(media)).toBe(orientation)
+  })
+
+  it.each(fixtures.keys)('stamps $media.fileName', ({ media, keys }) => {
+    expect(mediaFilterKeys(media)).toEqual(keys)
+  })
+
+  it('THE CONTROL: the fixtures are not empty', () => {
+    expect(fixtures.kinds.length && fixtures.orientations.length && fixtures.keys.length).toBeTruthy()
+  })
+
+  it('splits a file name at every separator, never keeping a joined word', () => {
+    const keys = mediaFilterKeys({ fileName: 'Hero-Banner_2x.PNG' })
+    expect(keys.nameTokens).toEqual(expect.arrayContaining(['hero', 'banner', '2x', 'png']))
+    expect(keys.nameTokens).not.toContain('hero-banner')
+  })
+
+  it('asks for the token a stored name holds, one word, capped', () => {
+    expect(mediaSearchToken('Banner ads')).toBe('banner')
+    expect(mediaSearchToken('hero-banner')).toBe('hero')
+    expect(mediaSearchToken('supercalifragilistic')).toBe('supercalifra')
+    const stored = mediaFilterKeys({ fileName: 'supercalifragilistic.jpg' }).nameTokens
+    expect(stored).toContain(mediaSearchToken('supercalifragilistic'))
+    expect(mediaSearchToken('   ')).toBe('')
   })
 })

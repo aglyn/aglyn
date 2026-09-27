@@ -408,11 +408,14 @@ canvas badge, and in the element drawer under **Your components**. A page assemb
 promoted sections becomes readable at a glance. Components without an icon keep the
 generic package glyph.
 
-**Filters** in the Components table's toolbar narrows the list by name, **Used in**
-(page or email), ID, description, or date, and **Search** matches any word of the name,
-ID, or description. Each filter in force shows as a chip above the table. The list pages
-as you go, so the first filter or search reads 100 components and matches over them, and
-paging past the last match reads further. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+**Filters** in the Components table's toolbar narrows the list by name (a word of it, or
+the whole name), **Used in** (page or email), ID, or the date it was last updated, and
+**Search** finds a component by the start of any word of its name. Every filter and the
+search word are part of the list's query, so they look through every component on the
+site, not only the page on screen. Each filter in force shows as a chip above the table.
+A combination that cannot be asked at once — a name "contains" filter beside a search, or
+a second date range — is left out, and the table says which one and why. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Duplicate
 

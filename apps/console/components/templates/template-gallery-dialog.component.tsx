@@ -18,7 +18,6 @@
 
 import { MdiIcon, useLoading } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 // A listing's preview may be a `media:` reference (AGL-1424), which is not a
 // URL. The marketplace lib's own `ListingImage` cannot be imported here —
@@ -50,14 +49,16 @@ import {
   Typography,
 } from '@mui/material'
 import {
-  collection,
-  documentId,
-  limit,
-  orderBy,
-  query,
-  where,
-} from 'firebase/firestore'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+  nameSearchToken,
+  nameSearchTokens,
+} from '@aglyn/aglyn/app-utils/name-search'
+import type {
+  ListQueryDeclaration,
+  ListQueryFilter,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { collection, query, where } from 'firebase/firestore'
+import { useCallback, useMemo, useState } from 'react'
 import {
   useFirestore,
   useHostResourceApi,
@@ -84,6 +85,30 @@ import createPageFromTemplate, {
 import UseTemplateDialog from './use-template-dialog.component'
 import useCurrentOrg from '../../hooks/use-current-org'
 import useFirestoreCollection from '../../hooks/use-firestore-collection'
+import {
+  ARTIFACT_LIST_ORDER,
+  ARTIFACT_NAME_SEARCH,
+  TEMPLATE_LIST_BASE,
+} from '../../utils/artifact-list-queries'
+import useStarterPages from './use-starter-pages'
+
+/**
+ * What every shelf asks: no Filters panel, the walk's order, and the name
+ * search (AGL-3321).
+ */
+const SHELF_QUERY: ListQueryDeclaration = {
+  fields: [],
+  sorts: [ARTIFACT_LIST_ORDER],
+  search: ARTIFACT_NAME_SEARCH,
+}
+
+/** The marketplace shelf's scope: published site templates. */
+const MARKETPLACE_SHELF_BASE: ListQueryFilter[] = [
+  { path: 'kind', op: '==', value: 'template' },
+]
+
+/** The code-defined starters, by id — at most thirty, one `in`. */
+const STARTER_IDS = STARTER_TEMPLATES.map((starter) => starter.id).slice(0, 30)
 
 /** What one item of each kind is called, for the zero-state copy. */
 const KIND_NOUN: Record<'page' | 'component' | 'layout', string> = {
@@ -146,7 +171,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
     blurb = 'Templates add ready-made, published screens you can restyle in ' +
       'the besigner. Existing screens are never touched.',
   } = props
-  // Search over name and description, like the besigner element picker.
+  // The search box: one word, asked of every shelf's name keys (AGL-3321).
   const [filterOpen, setFilterOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const firestore = useFirestore()
@@ -160,124 +185,132 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
   const orgSlug = useOrgSlug()
   const hostSubdomain = useHostSubdomain()
 
-  /**
-   * Marketplace site templates (AGL-137): published bundles with previews.
+  /*
+   * THE SHELVES ARE QUERIES (AGL-3321).
    *
-   * ## Why the window is ORDERED, and why on the document name (AGL-2501)
+   * Each Firestore-backed shelf puts its scope and the search word on its own
+   * query and pages what it answers, so a template past the first page is
+   * found from the first one. Nothing is matched over the cards a shelf
+   * happened to read. The search reads the NAME — the word-prefix tokens
+   * every writer stamps (`nameTokens`) — so it finds a template by any word
+   * of its name, and no longer by its description or category.
    *
-   * A `limit` with no ordering is answered in document-id order, so an
-   * unordered cap is not "the first thirty" — it is thirty of them, and
-   * running the same query twice need not return the same thirty. The gallery
-   * then presented that sample as the marketplace's template shelf.
-   *
-   * The name is the ordering rather than a date for two reasons. An `orderBy`
-   * matches only documents that HAVE the field, so ordering on one is a
-   * decision about which rows to HIDE; a document's name cannot be absent.
-   * And an equality filter combined with an ordering on any other field needs
-   * a composite index — this pairs with the automatic single-field index on
-   * `kind`, which already ends in `__name__`.
-   *
-   * It is not a date order and does not claim to be. What it is is stable:
-   * the same thirty, in the same places, on every open of this dialog.
+   * The walk is the document name (`ARTIFACT_LIST_ORDER`; `hostArtifactQuery`
+   * says why), which the automatic single-field indexes serve under any mix
+   * of these equalities and the one array clause: no shelf needs a composite.
    */
-  const { data: templateListings } = useFirestoreCollection<any>(
+  const searchWords = useMemo(() => (filter.trim() ? [filter] : []), [filter])
+  const shelfRequest = useCallback(
+    (base: ListQueryFilter[]) => ({ clauses: [], search: searchWords, base }),
+    [searchWords],
+  )
+  const templates = open && hostId ? collection(firestore, 'hosts', hostId, 'templates') : null
+
+  /*
+   * Your templates: this site's own library rows of the kind this surface
+   * picks (AGL-672, AGL-699) — saved here or installed from the marketplace,
+   * never a starter's pages, which the Starters shelf presents as the
+   * bundles they are. `libraryRow` also leaves the deleted ones out.
+   */
+  const savedBase = useMemo<ListQueryFilter[]>(
+    () => [
+      ...TEMPLATE_LIST_BASE,
+      { path: 'kind', op: '==', value: kind },
+      { path: 'source.type', op: 'in', value: ['authored', 'marketplace'] },
+    ],
+    [kind],
+  )
+  const saved = useListQuery<any>({
+    collection: templates,
+    declaration: SHELF_QUERY,
+    request: shelfRequest(savedBase),
+    deps: [firestore, hostId, open],
+    idField: '$id',
+  })
+
+  /*
+   * Starters this site has MATERIALIZED (AGL-687): their library rows, one
+   * per starter, each led by one of its pages and carrying the starter's
+   * name keys, so a search for the starter finds its row. Whole-site page
+   * bundles, so they belong only in the page-kind picker (AGL-699).
+   */
+  const starterBase = useMemo<ListQueryFilter[]>(
+    () => [
+      ...TEMPLATE_LIST_BASE,
+      { path: 'kind', op: '==', value: 'page' },
+      { path: 'source.type', op: '==', value: 'starter' },
+    ],
+    [],
+  )
+  const materialized = useListQuery<any>({
+    collection: kind === 'page' ? templates : null,
+    declaration: SHELF_QUERY,
+    request: shelfRequest(starterBase),
+    deps: [firestore, hostId, open, kind],
+    idField: '$id',
+  })
+  const materializedIds = useMemo(
     () =>
-      query(
-        collection(firestore, 'marketplaceListings'),
-        where('kind', '==', 'template'),
-        orderBy(documentId()),
-        limit(30),
-      ),
-    [firestore],
+      materialized.rows
+        .map((row: any) => row.source?.starterId)
+        .filter((id: unknown): id is string => typeof id === 'string' && id !== ''),
+    [materialized.rows],
+  )
+  const { pages: starterPages } = useStarterPages(firestore, hostId, materializedIds)
+  const starterGroups = useMemo(
+    () =>
+      materialized.rows
+        .filter((lead: any) => !lead.deletedAt)
+        .map((lead: any) => {
+          const starterId = String(lead.source?.starterId ?? lead.$id)
+          return {
+            id: starterId,
+            displayName: lead.source?.starterName ?? lead.displayName,
+            description: lead.source?.starterDescription ?? lead.description,
+            category: lead.category,
+            screens: starterPages.get(starterId) ?? [lead],
+            virtual: false as const,
+          }
+        }),
+    [materialized.rows, starterPages],
+  )
+  /*
+   * Which of the code-defined starters this site has materialized, whatever
+   * the search: a starter in the library shows once, from its documents. A
+   * bounded read — at most one lead row per starter in
+   * `constants/starter-templates.ts`.
+   */
+  const { data: materializedLeads } = useFirestoreCollection<any>(
+    () =>
+      open && kind === 'page' && STARTER_IDS.length
+        ? query(
+            collection(firestore, 'hosts', hostId, 'templates'),
+            where('source.starterId', 'in', STARTER_IDS),
+            where('libraryRow', '==', true),
+          )
+        : null,
+    [firestore, hostId, open, kind],
     { idField: '$id' },
   )
-  // Marketplace listings are whole-site page bundles, so — like the starters
-  // below — they belong only in the page-kind picker (AGL-699). Offering a
-  // five-page site on the components list would install pages nobody asked
-  // for.
-  const marketplaceAll = useMemo(
-    () =>
-      kind !== 'page'
-        ? []
-        : (templateListings ?? []).filter((listing: any) => !listing.deletedAt),
-    [templateListings, kind],
-  )
-  // The host's own library (AGL-672) — saved templates and marketplace
-  // installs, the same collection the Templates page renders, narrowed to
-  // the kind this surface picks (AGL-699).
-  const { data: libraryDocs } = useFirestoreCollection<any>(
-    () =>
-      query(
-        collection(firestore, 'hosts', hostId, 'templates'),
-        // Same reasoning as the marketplace window above: an unordered cap is
-        // an arbitrary fifty, and `templatesPerHost` is UNLIMITED from Pro
-        // upwards, so a library past that cap really does have templates this
-        // dialog cannot show. Ordering on the name makes the fifty stable and
-        // drops nothing — no field on a template document is written by every
-        // path that creates one, since a marketplace install and a
-        // save-as-template build different shapes.
-        orderBy(documentId()),
-        limit(50),
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  // Memoized rather than rebuilt inline: every downstream `useMemo` keys off
-  // these arrays, so a fresh identity each render made the whole filtering
-  // chain recompute on every keystroke for nothing.
-  const libraryPages = useMemo(
-    () =>
-      (libraryDocs ?? []).filter(
-        (entry: any) => !entry.deletedAt && (entry.kind ?? 'page') === kind,
-      ),
-    [libraryDocs, kind],
-  )
-  // Seeded starters are presented as the bundles they were authored as; the
-  // rest of the library stays a flat list of individual templates.
-  const savedPagesAll = useMemo(
-    () =>
-      libraryPages.filter((entry: any) => entry.source?.type !== 'starter'),
-    [libraryPages],
-  )
-  const starterGroups = useMemo(() => {
-    const groups = new Map<string, { id: string; displayName: string; description?: string; category?: string; screens: any[] }>()
-    for (const entry of libraryPages) {
-      if (entry.source?.type !== 'starter') continue
-      const starterId = String(entry.source.starterId ?? entry.$id)
-      const group = groups.get(starterId) ?? {
-        id: starterId,
-        displayName: entry.source.starterName ?? entry.displayName,
-        description: entry.source.starterDescription ?? entry.description,
-        category: entry.category,
-        screens: [],
-      }
-      group.screens.push(entry)
-      groups.set(starterId, group)
-    }
-    for (const group of groups.values()) {
-      // Authored order, not Firestore's: a starter's pages are written in
-      // the order its author intended them to be created.
-      group.screens.sort(
-        (a: any, b: any) =>
-          Number(a.source?.starterOrder ?? 0) - Number(b.source?.starterOrder ?? 0),
-      )
-    }
-    return Array.from(groups.values())
-  }, [libraryPages])
-  // Starters the host has NOT materialized yet, rendered straight from the
-  // code definitions (AGL-687). Anything already in the library is dropped
-  // here so a materialized starter shows once, from its documents.
   const materializedStarterIds = useMemo(
-    () => new Set(starterGroups.map((group) => group.id)),
-    [starterGroups],
-  )
-  const virtualStarters = useMemo(
     () =>
-      // Starters are whole-site page bundles, so they only belong in the
-      // page-kind picker (AGL-699).
-      (kind !== 'page' ? [] : STARTER_TEMPLATES).filter(
-        (starter) => !materializedStarterIds.has(starter.id),
-      ).map((starter) => ({
+      new Set(
+        (materializedLeads ?? []).map((lead: any) => String(lead.source?.starterId ?? '')),
+      ),
+    [materializedLeads],
+  )
+  /*
+   * Starters NOT materialized yet, rendered straight from the code
+   * definitions (AGL-687). They are a constant in this bundle, not
+   * documents, so the search asks them the question the queries ask: does
+   * the typed word begin a word of the name.
+   */
+  const virtualStarters = useMemo(() => {
+    const token = nameSearchToken(filter)
+    return (kind !== 'page' ? [] : STARTER_TEMPLATES)
+      .filter((starter) => !materializedStarterIds.has(starter.id))
+      .filter((starter) => !token || nameSearchTokens(starter.displayName).includes(token))
+      .map((starter) => ({
         id: starter.id,
         displayName: starter.displayName,
         description: starter.description,
@@ -290,99 +323,51 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
           seo: screen.seo,
           nodes: screen.nodes,
         })),
-      })),
-    [materializedStarterIds, kind],
-  )
+      }))
+  }, [materializedStarterIds, kind, filter])
   // One list so the grid does not care which side a card came from.
-  const allStarterCards = useMemo(
-    () => [
-      ...starterGroups.map((group) => ({ ...group, virtual: false as const })),
-      ...virtualStarters,
-    ],
+  const starterCards = useMemo(
+    () => [...starterGroups, ...virtualStarters],
     [starterGroups, virtualStarters],
   )
-  const matches = useCallback(
-    (name?: string, description?: string, category?: string) => {
-      const needle = filter.trim().toLowerCase()
-      if (!needle) return true
-      return [name, description, category]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(needle))
-    },
-    [filter],
-  )
-  const starterCards = useMemo(
-    () =>
-      allStarterCards.filter((entry: any) =>
-        matches(entry.displayName, entry.description, entry.category),
-      ),
-    [allStarterCards, matches],
-  )
-  const savedPages = useMemo(
-    () =>
-      savedPagesAll.filter((entry: any) =>
-        matches(entry.displayName, entry.description, entry.category),
-      ),
-    [savedPagesAll, matches],
-  )
-  // Search covers every section on screen, not just the two local ones —
-  // leaving marketplace cards visible under a query that excluded everything
-  // else would read as a broken filter.
-  const marketplaceTemplates = useMemo(
-    () =>
-      marketplaceAll.filter((listing: any) =>
-        matches(listing.displayName, listing.description, listing.category),
-      ),
-    [marketplaceAll, matches],
-  )
-  const isEmpty =
-    !savedPages.length && !starterCards.length && !marketplaceTemplates.length
 
   /*
-   * The two COLLECTION-backed shelves page (AGL-2501). Both used to render
-   * every card their window held, so the only limit on how much arrived at
-   * once was a cap in the query — a number the reader cannot see and cannot
-   * change, and one a library on an unlimited plan will exceed.
+   * Marketplace site templates (AGL-137): published bundles with previews,
+   * searched by the listing's name keys, which every publish stamps. Whole-
+   * site page bundles, so — like the starters — only in the page-kind picker
+   * (AGL-699); a five-page site on the components list would install pages
+   * nobody asked for.
    *
-   * The starters do not, and it is not an oversight: they are a fixed list in
-   * `constants/starter-templates.ts`, so "how many are there" is answered by
-   * reading the file rather than by a control. A footer under a list that
-   * cannot grow is a control that never does anything.
-   *
-   * Client-side, because the search box and the kind gate are resolved in
-   * memory: a server page would be a page of CANDIDATES, and a reader
-   * searching for one template would get pages that were mostly empty and a
-   * count that meant nothing.
+   * An unpublished listing keeps its document (`deletedAt`), and Firestore
+   * cannot ask for the absence of that field without hiding every listing
+   * written before the field existed — so it is dropped from the page it
+   * falls in. That is the shelf's scope, not a filter: the search is on the
+   * query, and a page can only render fewer cards than its size.
    */
-  const [savedPage, setSavedPage] = useState(0)
-  const [savedPageSize, setSavedPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const [marketPage, setMarketPage] = useState(0)
-  const [marketPageSize, setMarketPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  /*
-   * A new search starts both shelves at page one. Page three of a search with
-   * one page does not exist, and an out-of-range page renders as an empty
-   * grid with nothing saying why — which reads as the search having broken.
-   */
-  useEffect(() => {
-    setSavedPage(0)
-    setMarketPage(0)
-  }, [filter, kind, savedPageSize, marketPageSize])
-  const savedShown = useMemo(
-    () =>
-      savedPages.slice(
-        savedPage * savedPageSize,
-        (savedPage + 1) * savedPageSize,
-      ),
-    [savedPages, savedPage, savedPageSize],
-  )
+  const market = useListQuery<any>({
+    collection:
+      open && kind === 'page' ? collection(firestore, 'marketplaceListings') : null,
+    declaration: SHELF_QUERY,
+    request: shelfRequest(MARKETPLACE_SHELF_BASE),
+    deps: [firestore, open, kind],
+    idField: '$id',
+  })
   const marketShown = useMemo(
-    () =>
-      marketplaceTemplates.slice(
-        marketPage * marketPageSize,
-        (marketPage + 1) * marketPageSize,
-      ),
-    [marketplaceTemplates, marketPage, marketPageSize],
+    () => market.rows.filter((listing: any) => !listing.deletedAt),
+    [market.rows],
   )
+  const savedShown = useMemo(
+    () => saved.rows.filter((entry: any) => !entry.deletedAt),
+    [saved.rows],
+  )
+  const loading = [saved, materialized, market].some((shelf) => shelf.status === 'loading')
+  const isEmpty =
+    !loading &&
+    !savedShown.length &&
+    !starterCards.length &&
+    !marketShown.length &&
+    saved.page === 0 &&
+    market.page === 0
 
   const [useTemplate, setUseTemplate] = useState<Record<string, any> | null>(
     null,
@@ -738,7 +723,7 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
             are the ones a returning user is looking for, and they open the
             same Use flow as the Templates page rather than a second
             implementation. */}
-        {savedPages.length ? (
+        {savedShown.length || saved.hasMore || saved.page > 0 ? (
           <>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
               {'Your templates'}
@@ -781,16 +766,15 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                 </Grid>
               ))}
             </Grid>
-            {/* `count` is the FILTERED total, which this shelf genuinely
-                knows — it is the array it just sliced. The window's own size
-                would count templates the search has excluded. */}
+            {/* Paged by its query: whether a further page exists is the
+                probe row's fact, and no total is claimed. */}
             <ListPagination
-              page={savedPage}
-              pageSize={savedPageSize}
+              page={saved.page}
+              pageSize={saved.pageSize}
               rowCount={savedShown.length}
-              count={savedPages.length}
-              onPageChange={setSavedPage}
-              onPageSizeChange={setSavedPageSize}
+              hasMore={saved.hasMore}
+              onPageChange={saved.setPage}
+              onPageSizeChange={saved.setPageSize}
             />
           </>
         ) : null}
@@ -853,9 +837,19 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
                 </Grid>
               ))}
             </Grid>
+            {materialized.hasMore || materialized.page > 0 ? (
+              <ListPagination
+                page={materialized.page}
+                pageSize={materialized.pageSize}
+                rowCount={starterGroups.length}
+                hasMore={materialized.hasMore}
+                onPageChange={materialized.setPage}
+                onPageSizeChange={materialized.setPageSize}
+              />
+            ) : null}
           </>
         ) : null}
-        {marketplaceTemplates.length ? (
+        {marketShown.length || market.hasMore || market.page > 0 ? (
           <>
             <Typography variant="subtitle1" sx={{ mt: 3, mb: 1 }}>
               {'Marketplace templates'}
@@ -923,12 +917,12 @@ export function TemplateGalleryDialog(props: TemplateGalleryDialogProps) {
               ))}
             </Grid>
             <ListPagination
-              page={marketPage}
-              pageSize={marketPageSize}
+              page={market.page}
+              pageSize={market.pageSize}
               rowCount={marketShown.length}
-              count={marketplaceTemplates.length}
-              onPageChange={setMarketPage}
-              onPageSizeChange={setMarketPageSize}
+              hasMore={market.hasMore}
+              onPageChange={market.setPage}
+              onPageSizeChange={market.setPageSize}
             />
           </>
         ) : null}

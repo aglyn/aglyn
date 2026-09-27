@@ -73,6 +73,16 @@ export interface ActivityTableProps {
   filteredLabel?: string
   /** The clauses in force, as chips (`ListFilterChips`), above the grid. */
   filterChips?: ReactNode
+  /**
+   * What the source could not put on its query, and what it said about what
+   * it did (`ListQueryNotices`), under the chips (AGL-3321).
+   */
+  filterNotices?: ReactNode
+  /**
+   * The source keeps ONE order, so the grid must not re-sort the page it
+   * holds and present that as the feed's order.
+   */
+  disableColumnSorting?: boolean
   page: number
   pageSize: number
   onPageChange: (page: number) => void
@@ -133,6 +143,8 @@ export function ActivityTable(props: ActivityTableProps) {
     filtering = false,
     filteredLabel = 'No activity matches these filters',
     filterChips,
+    filterNotices,
+    disableColumnSorting,
     page,
     pageSize,
     onPageChange,
@@ -160,6 +172,7 @@ export function ActivityTable(props: ActivityTableProps) {
           </Stack>
         ) : null}
         {filterChips}
+        {filterNotices}
         {unreadable ? (
           <Alert severity="warning">{unreadableLabel}</Alert>
         ) : rows.length === 0 && !loading && !filtering ? (
@@ -177,6 +190,7 @@ export function ActivityTable(props: ActivityTableProps) {
              */
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
+            {...(disableColumnSorting ? { disableColumnSorting: true } : {})}
             /*
              * A filter panel that narrows ONE PAGE is worse than none.
              *

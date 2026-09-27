@@ -29,9 +29,11 @@ import {
   registerPluginJob,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
+import { runSummaryFields } from './model/run-history'
 import { BUNDLE_ID as WORKFLOWS_BUNDLE_ID } from './constants/bundle-common'
 import { registerWorkflowsServerDeclarations } from './declarations.server'
 import {
@@ -310,10 +312,14 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
         // is invisible to the Runs table, which reads a verdict and not prose.
         result: failed ? 'failed' : 'succeeded',
         trigger: hookEvent,
-        summary: failed
-          ? String(outcome.error).slice(0, 300)
-          : outcome.summary.slice(0, 300),
+        ...runSummaryFields(
+          failed
+            ? String(outcome.error).slice(0, 300)
+            : outcome.summary.slice(0, 300),
+        ),
         target: { type: 'workflow', id: hookId, name: hook.name ?? '' },
+        // The site log's search finds a run by its hook's name (AGL-3321).
+        searchTokens: activitySearchTokens({ target: { name: hook.name } }),
         createdAt: FieldValue.serverTimestamp(),
       })
       .catch(() => undefined)

@@ -277,6 +277,10 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // preference page reads it. A mock that omitted it would write `undefined`
   // and every one of those comparisons would silently stop matching.
   UNSUBSCRIBE_SUPPRESSION_REASON: 'unsubscribe',
+  // The REAL address tokens the suppression carries for the Suppressions
+  // list's search (AGL-3321).
+  emailSearchTokens: jest.requireActual('@aglyn/tenant-data-admin/server/email-suppression')
+    .emailSearchTokens,
   /*
    * The REAL resolution, over the org this file declares — which declares
    * nothing unless a case says so, so every site is a group of one, the

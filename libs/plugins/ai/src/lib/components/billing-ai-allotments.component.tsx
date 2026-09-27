@@ -133,6 +133,12 @@ const creditsColumn = <Row extends AllotmentListRow>(
  *
  * Read with `billing.view`; the controls appear with `billing.manage`, and
  * the route refuses a write without it whatever this card draws.
+ *
+ * The three tables are the route's whole answer — the roster the plan's
+ * seats bound, the organization's sites, the collaborator allotments — so
+ * they offer no Filters panel and no search: a bounded readout is read
+ * whole, and a grid that narrowed the rows it holds is the pattern every
+ * list is leaving (AGL-3321).
  */
 export function BillingAiAllotments({ orgId }: { orgId?: string }) {
   const { data: user } = useUser()
@@ -177,8 +183,8 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
   const collaborators = data.allotments.filter((row) => row.scope === 'collab')
   const restriction = bySubject.get(AI_ALLOTMENT_ORG_SUBJECT)
   /*
-   * Each list pages, sorts and searches on its own, and a selection is kept
-   * by member and site id rather than by row, so it survives a page change.
+   * Each list pages and sorts on its own, and a selection is kept by member
+   * and site id rather than by row, so it survives a page change.
    */
   const teamRows: MemberRow[] = team.map((member) => ({
     $id: member.uid,
@@ -325,6 +331,8 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
         columns={teamColumns}
         rowHeight={TABLE_ROW_HEIGHT}
         noRowsLabel="No team members"
+        disableColumnFilter
+        quickFilter={false}
         {...(canEdit
           ? { selectable: { selected: members, onChange: setMembers }, onOpen: (_id: string, row: MemberRow) => editMember(row) }
           : {})}
@@ -368,6 +376,8 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
         columns={siteColumns}
         rowHeight={TABLE_ROW_HEIGHT}
         noRowsLabel="No sites"
+        disableColumnFilter
+        quickFilter={false}
         {...(canEdit
           ? { selectable: { selected: sites, onChange: setSites }, onOpen: (_id: string, row: SiteRow) => editSite(row) }
           : {})}
@@ -381,6 +391,8 @@ export function BillingAiAllotments({ orgId }: { orgId?: string }) {
             rows={collaboratorRows}
             columns={collaboratorColumns}
             rowHeight={TABLE_ROW_HEIGHT}
+            disableColumnFilter
+            quickFilter={false}
             {...(canEdit ? { onOpen: (_id: string, row: CollaboratorRow) => editCollaborator(row) } : {})}
           />
         </>

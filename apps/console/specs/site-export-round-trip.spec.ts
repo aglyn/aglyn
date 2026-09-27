@@ -227,6 +227,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/dataset-models'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
+  // And the REAL list keys every restored artifact is stamped with (AGL-3321).
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/artifact-list-keys'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/binding-tokens'),
   // And the REAL page-claim rule, which both of the import route's cap legs
   // read (AGL-1383, AGL-1399) — including the one that decides whether a
@@ -544,7 +546,9 @@ const SEEDS: Array<{
         status: 'pending',
         publishAt: PUBLISH_AT,
       },
-      kind: 'component',
+      // A component's stored kind: `site` or `email` (AGL-3287), the word
+      // the components list filters by (AGL-3321).
+      kind: 'site',
     },
     dropped: ['versionId'],
   },

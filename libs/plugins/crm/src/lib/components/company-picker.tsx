@@ -21,6 +21,7 @@ import {
   createResourceUid,
   CRM_COLLECTIONS,
   CRM_RECORDS_BAND_FULL_MESSAGE,
+  crmNewRecordListFields,
 } from '@aglyn/aglyn'
 import {
   useFirestore,
@@ -181,6 +182,8 @@ export function useCreateCompany(props: {
         doc(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies, id),
         {
           ...result.set,
+          // What the Companies list searches and filters by (AGL-3321).
+          ...crmNewRecordListFields('companies', { ...result.set, visibleTo: [...createTokens] }),
           visibleTo: [...createTokens],
           hostId: createHostId,
           createdByUid: uid,

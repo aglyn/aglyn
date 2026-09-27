@@ -170,6 +170,15 @@ function collectionsNamedIn(source: string): Set<string> {
     expect(value).toBeTruthy()
     found.add((value as RegExpMatchArray)[1])
   }
+  // The audit log is written through its one door (`addAdminAudit` /
+  // `setAdminAudit`, AGL-3321), which names the collection by a constant in
+  // its own module — resolved the same way, for the same reason.
+  if (/\b(?:add|set)AdminAudit\(/.test(source)) {
+    const door = readFileSync(join(__dirname, 'admin-audit-write.ts'), 'utf8')
+    const value = door.match(/ADMIN_AUDIT_COLLECTION\s*=\s*'([^']+)'/)
+    expect(value).toBeTruthy()
+    found.add((value as RegExpMatchArray)[1])
+  }
   return found
 }
 

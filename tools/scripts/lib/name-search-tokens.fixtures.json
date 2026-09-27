@@ -1,0 +1,23 @@
+{
+  "//": "Worked examples for libs/aglyn/src/lib/app-utils/name-search.ts and its script-side restatement tools/scripts/lib/name-search-tokens.mjs. Asserted by name-search.spec.ts and by name-search-tokens.test.mjs (AGL-3321).",
+  "keys": [
+    { "name": "  Dana   SMITH ", "key": "dana smith", "reversed": "htims anad" },
+    { "name": "Café Olé", "key": "café olé", "reversed": "élo éfac" },
+    { "name": "", "key": "", "reversed": "" }
+  ],
+  "tokens": [
+    { "name": "Acme Coffee", "tokens": ["a", "ac", "acm", "acme", "c", "co", "cof", "coff", "coffe", "coffee"] },
+    { "name": "  Why  our   Sourdough ", "tokens": ["w", "wh", "why", "o", "ou", "our", "s", "so", "sou", "sour", "sourd", "sourdo", "sourdou", "sourdoug", "sourdough"] },
+    { "name": "Café", "tokens": ["c", "ca", "caf", "café"] },
+    {
+      "name": "Internationalization matters",
+      "tokens": ["i", "in", "int", "inte", "inter", "intern", "interna", "internat", "internati", "internatio", "internation", "internationa", "m", "ma", "mat", "matt", "matte", "matter", "matters"]
+    },
+    { "name": "", "tokens": [] }
+  ],
+  "scoped": [
+    { "visibleTo": ["org", "host:abc"], "tokens": ["a", "ac"], "scoped": ["org~a", "org~ac", "host:abc~a", "host:abc~ac"] },
+    { "visibleTo": ["org", "org", "", 7], "tokens": ["a", "a"], "scoped": ["org~a"] },
+    { "visibleTo": null, "tokens": ["a"], "scoped": [] }
+  ]
+}

@@ -65,6 +65,10 @@
  * so no other kind is decoded.
  */
 
+// The leaf module, not the server barrel: specs stage that barrel as a
+// closed world, and the list keys every create stamps (AGL-3321) are
+// nothing they have reason to name.
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
   billableScreenIds,
   checkEntitlement,
@@ -73,7 +77,7 @@ import {
   createResourceUid,
   decodeStoredNodes,
   encodeStoredNodes,
-  nameSearchKey,
+  newFormListFields,
   NON_PAGE_SCREEN_MAX_PER_HOST,
   nonPageScreenIds,
   SCREEN_KIND_EMAIL,
@@ -543,7 +547,19 @@ async function copy(
     tx.create(collectionRef.doc(id), {
       ...doc,
       ...(recipe.stamps ?? {}),
-      ...(recipe.collection === 'screens' ? { nameLower: nameSearchKey(name) } : {}),
+      // The keys the copy's list finds it by (AGL-3321), from the copy's own
+      // name and stamps — see `artifactCreateListKeys`.
+      ...artifactCreateListKeys(recipe.collection, { ...doc, ...(recipe.stamps ?? {}) }),
+      // A copied form starts as a new one does, with its own search keys and
+      // nothing counted (AGL-3330); only the routing it copied is kept.
+      ...(kind === 'form'
+        ? newFormListFields({
+            id,
+            displayName: name,
+            slug: doc['slug'],
+            routing: doc['routing'] as Parameters<typeof newFormListFields>[0]['routing'],
+          })
+        : {}),
       ...(versionData && versionId ? { versionId } : {}),
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),

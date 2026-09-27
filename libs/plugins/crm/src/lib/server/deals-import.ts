@@ -52,6 +52,7 @@ import {
   checkCrmRecordsQuota,
   CRM_COLLECTIONS,
   type CrmDealStage,
+  crmNewRecordListFields,
   type CrmPipeline,
   isPipelineArchived,
   nameSearchKey,
@@ -222,6 +223,8 @@ export const crmDealsImportHandler: PluginApiHandler = async (req, res) => {
           : {}),
         ...(row.notes ? { notes: row.notes } : {}),
         ...stamp,
+        // What the Deals list searches and filters by (AGL-3321).
+        ...crmNewRecordListFields('deals', { title: row.title, ...stamp }),
       })
       createdHere += 1
       created += 1

@@ -20,8 +20,6 @@ import {
   type AglynOrgBilling,
   CRM_COLLECTIONS,
   type CrmCompany,
-  filterByNextActivity,
-  isNoNextActivityClause,
   pluginDocsHelp,
   crmMemberPickerLabel,
 } from '@aglyn/aglyn'
@@ -29,10 +27,10 @@ import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import {
-  listFilterColumn,
-  type ListFilterRequest,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterColumn } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { useCrmSavedView } from '../hooks/use-crm-saved-view'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
@@ -41,28 +39,27 @@ import {
   CRM_NEXT_ACTIVITY_FILTER_HEADER,
   nextActivityColumn,
 } from './crm-next-activity-column'
+import { useCrmFoldsScope, useCrmListQuery } from '../hooks/use-crm-list-query'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import CrmViewsControl from './crm-views-control'
 import { CrmListActions, CrmListToolbar } from './crm-list-toolbar'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import {
-  listFilterConstraints,
-  usePagedCollection,
-  useFirestore,
-} from '@aglyn/tenant-feature-instance'
 import { Button, Chip, Stack, Typography } from '@mui/material'
 import {
   getGridSingleSelectOperators,
   type GridColDef,
 } from '@mui/x-data-grid'
-import { collection, limit, orderBy, query, where } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
-import { useCallback, useMemo, useState } from 'react'
-import { COMPANY_LIST_FILTER_FIELDS } from '../constants/company-filters'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  COMPANY_LIST_DECLARATION,
+  COMPANY_LIST_FILTER_FIELDS,
+  COMPANY_PREFIX_SEARCH,
+} from '../constants/company-filters'
 import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitions'
-import { crmVisibleToClause, useCrmScope } from '../hooks/use-crm-scope'
+import { useCrmScope } from '../hooks/use-crm-scope'
 import { useOrgMemberOptions } from '../hooks/use-org-member-options'
 import { type CompanyCsvOptions, companiesCsv } from '../model/companies-csv'
 import { downloadTextFile } from '../model/contacts-csv'
@@ -82,11 +79,8 @@ export interface CompaniesSectionProps {
 
 type CompanyRow = Partial<CrmCompany> & { $id: string; updatedAt?: any }
 
-/** What the companies grid's panel offers: the served fields, and "No next activity". */
-const COMPANY_GRID_FILTER_FIELDS = [
-  ...COMPANY_LIST_FILTER_FIELDS,
-  CRM_NEXT_ACTIVITY_FILTER_FIELD,
-]
+/** What the companies grid's panel offers — every field the query asks. */
+const COMPANY_GRID_FILTER_FIELDS = COMPANY_LIST_FILTER_FIELDS
 const COMPANY_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
   name: 'Company',
   ownerUid: 'Owner',
@@ -114,12 +108,12 @@ const COMPANY_GRID_FILTER_HEADERS: Readonly<Record<string, string>> = {
  *
  * ## What a filter may be
  *
- * The scope predicate is an array clause, and Firestore carries one per
- * query, so the word-prefix search the contact list offers cannot run here.
- * The name is a prefix range and an exact match instead, and the owner is a
- * choice from the roster — each reaching the whole collection, which is the
- * property a search must have: a company on page four is found, not reported
- * missing. `COMPANY_LIST_FILTER_FIELDS` states what the indexes serve.
+ * Every clause and the search word are on the one query (AGL-3321): the
+ * search reads the name's and the domain's word prefixes, the name is also
+ * an exact match and a prefix, the owner a choice from the roster, and "No
+ * next activity" a `null` — each reaching the whole collection, which is
+ * the property a filter must have: a company on page four is found, not
+ * reported missing. `COMPANY_LIST_DECLARATION` states what the query asks.
  *
  * ## Creating is a drawer
  *
@@ -138,7 +132,6 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   const { hostId, org, basePath } = props
   const routes = crmRoutes(basePath)
   const router = useRouter()
-  const firestore = useFirestore()
   const { scope, orgId, visibleTo } = useCrmScope({ hostId, org })
   /*
    * The team, read once for this surface: the Owner column names a person
@@ -150,64 +143,39 @@ export function CompaniesSection(props: CompaniesSectionProps) {
   const companyFields = useContactFieldDefinitions(orgId, 'company')
 
   /*
-   * The column filter is the saved VIEW'S first clause (AGL-2617): this
-   * grid's panel holds one, and a view of companies holds that one beside
-   * the columns and the sort. Declared BEFORE the listener that reads it,
-   * as the filter always was — the query is rebuilt from it.
+   * The clauses are the saved VIEW'S (AGL-2617), beside its columns and
+   * sort; the grid's panel and the chips edit them, and the query answers
+   * every one and the search word together (AGL-3321).
    */
   const views = useCrmSavedView({ section: 'companies', hostId, org, basePath })
-  /*
-   * ...beside the "No next activity" clause (AGL-2661), which is not a
-   * query the listener can run — absence has no index — and narrows the
-   * loaded page below instead. The grid's one clause is the first that is
-   * not it, and setting the grid's clause keeps it.
-   */
   const viewFilters = views.state.filters
-  const filter: ListFilterRequest | null =
-    viewFilters.find((clause) => !isNoNextActivityClause(clause)) ?? null
-  const setFilter = useCallback(
-    (request: ListFilterRequest | null) =>
-      views.setFilters([
-        ...(request ? [request] : []),
-        ...viewFilters.filter(isNoNextActivityClause),
-      ]),
-    [views.setFilters, viewFilters],
-  )
-
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const foldsScope = useCrmFoldsScope(orgId, visibleTo)
   const {
-    rows: loaded,
+    rows: companies,
     status,
     hasMore,
     page,
     setPage,
     pageSize,
     setPageSize,
-  } = usePagedCollection<CompanyRow>(
-    (pageLimit) => {
-      if (!scope) return null
-      const constraints = listFilterConstraints(
-        COMPANY_LIST_FILTER_FIELDS,
-        filter,
-      )
-      return query(
-        collection(firestore, scope[0], scope[1], CRM_COLLECTIONS.companies),
-        // Absent at the organization level, where the tokens are `null` (AGL-2630).
-        ...crmVisibleToClause(visibleTo),
-        ...(constraints ?? [orderBy('updatedAt', 'desc')]),
-        limit(pageLimit),
-      )
-    },
-    [firestore, scope, visibleTo, filter],
-    { idField: '$id' },
-  )
-  const companies = useMemo(
-    () => filterByNextActivity(loaded, viewFilters),
-    [loaded, viewFilters],
-  )
+    plan,
+  } = useCrmListQuery<CompanyRow>({
+    scope,
+    collection: CRM_COLLECTIONS.companies,
+    visibleTo,
+    foldsScope,
+    declaration: COMPANY_LIST_DECLARATION,
+    clauses: viewFilters,
+    search: searchWords,
+    prefixSearch: COMPANY_PREFIX_SEARCH,
+  })
   const nowMs = useMemo(() => Date.now(), [])
 
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  // A filter, a search or a page is a different set of rows.
+  useEffect(() => setSelectedIds([]), [plan, page])
   /*
    * The owner is written by ADDRESS, because the companies import resolves
    * an owner by email; the same options reach the bar, so the page's file
@@ -391,11 +359,7 @@ export function CompaniesSection(props: CompaniesSectionProps) {
 
   /*
    * The grid's own Filters panel and quick search edit the view's clauses
-   * (AGL-3313). The query serves ONE clause — a paged list has no window to
-   * narrow beyond the page — so the panel's clause replaces the last, and
-   * "No next activity", which narrows the loaded page, stands beside it.
-   * The search box is the name's prefix: the one text search the indexes
-   * serve here, so typing in it is the same clause as "Company starts with".
+   * (AGL-3313); the query answers them all (AGL-3321).
    */
   const ownerOptions = useMemo(
     () =>
@@ -410,26 +374,22 @@ export function CompaniesSection(props: CompaniesSectionProps) {
       listFilterGridColumns(columns, COMPANY_GRID_FILTER_FIELDS, { ownerUid: ownerOptions }, COMPANY_GRID_FILTER_HEADERS),
     [columns, ownerOptions],
   )
-  const searchWords = useMemo(
-    () => (filter?.field === 'name' && filter.op === 'startsWith' ? [filter.value] : []),
-    [filter],
-  )
-  const setSearchWords = useCallback(
-    (words: string[]) => {
-      const term = words.join(' ').trim()
-      if (term) setFilter({ field: 'name', op: 'startsWith', value: term })
-      else if (filter?.field === 'name' && filter.op === 'startsWith') setFilter(null)
-    },
-    [filter, setFilter],
-  )
   const gridFilter = useListGridFilter({
     clauses: viewFilters,
     onChange: views.setFilters,
     selectFields: ['ownerUid'],
-    single: true,
-    keepAlongside: isNoNextActivityClause,
     search: { words: searchWords, onChange: setSearchWords },
   })
+  // What the query could not hold, named by the clause the reader set.
+  const refused = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: COMPANY_GRID_FILTER_FIELDS,
+        headers: COMPANY_GRID_FILTER_HEADERS,
+        options: { ownerUid: ownerOptions },
+      }),
+    [plan.refused, ownerOptions],
+  )
   /*
    * The grid's models are the view's (AGL-2617). The filter model shows the
    * view's clause in the panel as a typed one would appear — the owner's
@@ -437,6 +397,9 @@ export function CompaniesSection(props: CompaniesSectionProps) {
    * view opened from its address reads as filtered, not as a mystery.
    */
   const grid = useCrmViewGrid(views, filterColumns)
+
+  /** Whether anything narrows the list, so an empty one is "no match", not "none yet". */
+  const narrowed = viewFilters.length > 0 || searchWords.some((word) => word.trim())
 
   const newCompanyButton = (
     <Button
@@ -486,9 +449,10 @@ export function CompaniesSection(props: CompaniesSectionProps) {
             clauses={viewFilters}
             onChange={views.setFilters}
             options={{ ownerUid: ownerOptions }}
-            servedField={filter?.field ?? null}
+            marksServed={false}
           />
         </CrmListToolbar>
+        <ListQueryNotices refused={refused} notices={plan.notices} />
         <CompaniesBulkBar
           hostId={hostId}
           scope={scope}
@@ -505,16 +469,20 @@ export function CompaniesSection(props: CompaniesSectionProps) {
             slots={CRM_LIST_SLOTS}
             rows={companies}
             selectable={{ selected: selectedIds, onChange: setSelectedIds }}
-            noRowsLabel="No companies yet"
-            noRowsDescription="A company groups the contacts who work at one business, with its domain, owner and address. Create the first one, or link a contact to a company from their page."
-            noRowsAction={newCompanyButton}
+            noRowsLabel={narrowed ? 'No companies match these filters' : 'No companies yet'}
+            noRowsDescription={
+              narrowed
+                ? undefined
+                : 'A company groups the contacts who work at one business, with its domain, owner and address. Create the first one, or link a contact to a company from their page.'
+            }
+            noRowsAction={narrowed ? undefined : newCompanyButton}
             onOpen={(id) => openCompany(String(id))}
             // An empty table while the read is in flight reads as "you have
             // none" rather than "these are on their way".
             loading={!scope || status === 'loading'}
             /*
              * The grid must NOT also filter. The query answers it, so a client
-             * pass could only drop rows the query already matched.
+             * pass could only drop rows the query already matched (AGL-3321).
              */
             filterMode="server"
             filterModel={gridFilter.filterModel}

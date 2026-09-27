@@ -95,6 +95,34 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
 }))
 
+/**
+ * The sends as the list's query reads them once the backfill has run: each
+ * dated, each the site hub's own unless it names another, and a send in no
+ * campaign stored `null` (AGL-3321).
+ */
+const stampedSends = () =>
+  (served.campaigns ?? []).map((send, at) => ({
+    createdAtMs: 1_000_000 - at,
+    hostId: 'site1',
+    emailCampaignId: null,
+    ...send,
+  }))
+
+/*
+ * The list's query, answered by the shared double over the staged sends —
+ * the REAL plan, as Firestore would answer it — and recorded as a listen on
+ * its collection like every other read here.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: any) => {
+    const path = options.collection ? String(options.collection.path ?? '') : ''
+    if (path && !listened.includes(path)) listened.push(path)
+    return jest
+      .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+      .useListQueryDouble(() => stampedSends(), options)
+  },
+}))
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),

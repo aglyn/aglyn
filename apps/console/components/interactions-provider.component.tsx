@@ -33,6 +33,7 @@ import {
   nodeElementSelector,
   type InteractionsContextValue,
 } from '@aglyn/besigner-ui'
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { buildInteractionCandidate } from './interaction-builder-doc'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -358,7 +359,9 @@ export const InteractionsProvider = observer(function InteractionsProvider(
               void setDoc(
                 doc(firestore, 'hosts', hostId, 'experiments', id),
                 {
-                  name: `Section test — ${nodeId.slice(0, 8)}`,
+                  // With the search keys the A/B testing list's filter and
+                  // search read (AGL-3321).
+                  ...nameSearchFields(`Section test — ${nodeId.slice(0, 8)}`),
                   status: 'draft',
                   target: 'section',
                   screenId,

@@ -21,30 +21,26 @@
  */
 
 /**
- * A paged list cannot be searched in the browser.
+ * A paged list cannot be filtered or searched in the browser (AGL-2501,
+ * AGL-3321).
  *
  * The staff organization list filtered the rows it had already fetched — ten
  * of them by default — so it answered "no such organization" for every
  * organization past the first page. That is the one answer a search must
  * never give wrongly, and it gets quietly more wrong as the platform grows.
  *
- * The search is an `array-contains` over `nameTokens` — every prefix of every
- * WORD, written by the same paths that write the name — which reaches the
- * whole collection and matches a word wherever it sits in the name. It
- * replaced a prefix range over `nameLower`, which was anchored at the start
- * of the whole name and so found "Acme Coffee" by "acme" and never by
- * "coffee".
- *
- * What it still cannot do is match MID-word, and a multi-word query narrows
- * by its first word only — one `array-contains` per query is a Firestore
- * limit. Both are the honest edge of doing this without a search service.
+ * So every clause of the Filters panel and the search word are planned onto
+ * ONE Firestore query (`ORG_LIST_QUERY`, `utils/org-list-query.ts`) and the
+ * route matches nothing afterwards. The search is an `array-contains` over
+ * `nameTokens` — every prefix of every WORD — so it finds "Acme Coffee" by
+ * "coffee". What it cannot do is match MID-word, and a multi-word query
+ * narrows by its first word only: one array clause per query. What one query
+ * cannot hold is refused by name and not applied.
  */
 
 /** Everything the query builder was asked for, in order. */
-let ordering: string[] = []
+let ordering: Array<[string, string]> = []
 let wheres: Array<[string, string, unknown]> = []
-let startAt: any = null
-let endAt: any = null
 let startedAfter: string | null = null
 let capped: number | null = null
 
@@ -62,30 +58,24 @@ const orgDoc = (id: string, data: Record<string, unknown>) => ({
   get: (key: string) => data[key],
   ref: {
     id,
+    path: `orgs/${id}`,
     collection: () => ({ doc: () => ({ id, __billing: true }) }),
   },
 })
 
 let orgs: Array<{ id: string; data: Record<string, unknown> }> = []
 
+/** The document id, however the SDK spelled it. */
+const pathOf = (field: unknown) => (typeof field === 'string' ? field : '__name__')
+
 function orgQuery(): any {
   return {
-    orderBy: (field: unknown) => {
-      ordering.push(typeof field === 'string' ? field : '__name__')
+    orderBy: (field: unknown, direction = 'asc') => {
+      ordering.push([pathOf(field), direction])
       return orgQuery()
     },
-    where: (field: string, op: string, value: unknown) => {
-      wheres.push([field, op, value])
-      return orgQuery()
-    },
-    // The range operators (`startsWith`, `endsWith`) build on these; without
-    // them the handler throws and every assertion reads as a 500.
-    startAt: (value: unknown) => {
-      startAt = value
-      return orgQuery()
-    },
-    endAt: (value: unknown) => {
-      endAt = value
+    where: (field: unknown, op: string, value: unknown) => {
+      wheres.push([pathOf(field), op, value])
       return orgQuery()
     },
     startAfter: (cursor: { id?: string }) => {
@@ -97,16 +87,18 @@ function orgQuery(): any {
       return orgQuery()
     },
     get: async () => ({ docs: orgs.map((o) => orgDoc(o.id, o.data)) }),
-    doc: (id: string) => ({
-      get: async () => {
-        const found = orgs.find((o) => o.id === id)
-        return found
-          ? orgDoc(found.id, found.data)
-          : { id, exists: false, data: () => ({}), get: () => undefined }
-      },
-    }),
   }
 }
+
+const docAt = (path: string) => ({
+  get: async () => {
+    const id = path.split('/').pop() as string
+    const found = path.startsWith('orgs/') ? orgs.find((o) => o.id === id) : undefined
+    return found
+      ? orgDoc(found.id, found.data)
+      : { id, exists: false, data: () => ({}), get: () => undefined }
+  },
+})
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -121,21 +113,13 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       }),
       firestore: () => ({
         collection: () => (global as any).__orgQuery(),
+        doc: (path: string) => (global as any).__docAt(path),
         // No billing subdocument for these fixtures; the route falls back to
         // the org's own inline `subscription`, which is the common case.
         getAll: async (...refs: unknown[]) =>
           refs.map(() => ({ exists: false, data: () => ({}) })),
       }),
     }),
-    firestore: {
-      FieldPath: { documentId: () => '__name__' },
-      Timestamp: {
-        fromMillis: (ms: number) => ({ toMillis: () => ms }),
-        // Recorded as an ISO string so a date assertion reads as a date
-        // rather than as an opaque object identity.
-        fromDate: (date: Date) => ({ __ts: date.toISOString() }),
-      },
-    },
   },
   emailUnverifiedResponse: () =>
     Response.json({ error: 'Verify your email' }, { status: 403 }),
@@ -158,6 +142,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   },
 }))
 ;(global as any).__orgQuery = () => orgQuery()
+;(global as any).__docAt = (path: string) => docAt(path)
 
 import { GET } from '../app/api/admin/orgs/route'
 
@@ -169,11 +154,14 @@ const get = (params: Record<string, string> = {}) => {
   )
 }
 
+const filtered = (...clauses: Array<[string, string, string?]>) =>
+  get({
+    filters: JSON.stringify(clauses.map(([field, op, value = '']) => ({ field, op, value }))),
+  })
+
 beforeEach(() => {
   ordering = []
   wheres = []
-  startAt = null
-  endAt = null
   startedAfter = null
   capped = null
   orgs = [
@@ -189,29 +177,25 @@ beforeEach(() => {
 })
 
 describe('the staff organization list searches the COLLECTION', () => {
-  it('orders by document id and filters on nothing when not searching', () => {
+  it('orders by document id and filters on nothing when not searching', async () => {
     // The instrument: without a term the list is the plain paged walk it
     // always was, so the assertions below read as a difference.
-    return get().then(async (response) => {
-      // Asserted FIRST, and in every case below that inspects the query: the
-      // builder records what it was asked for before the handler can throw,
-      // so a route 500ing on every request would leave these green.
-      expect(response.status).toBe(200)
-      expect(ordering).toEqual(['__name__'])
-      expect(wheres).toEqual([])
-    })
+    const response = await get()
+    // Asserted FIRST, and in every case below that inspects the query: the
+    // builder records what it was asked for before the handler can throw,
+    // so a route 500ing on every request would leave these green.
+    expect(response.status).toBe(200)
+    expect(ordering).toEqual([['__name__', 'asc']])
+    expect(wheres).toEqual([])
+    const payload = await response.json()
+    expect(payload.orgs.map((org: any) => org.$id)).toEqual(['org-a'])
+    expect(payload.refused).toEqual([])
   })
 
   it('matches a word ANYWHERE in the name, not just the first', async () => {
-    /*
-     * The whole point of the token array. A prefix range over `nameLower` is
-     * anchored at the start of the WHOLE name — "acme" found "Acme Coffee"
-     * and "coffee" did not — which is the wrong end for a search box, since
-     * the word somebody remembers is rarely the first one.
-     */
     expect((await get({ search: 'coffee' })).status).toBe(200)
     expect(wheres).toEqual([['nameTokens', 'array-contains', 'coffee']])
-    expect(ordering).toEqual(['nameLower'])
+    expect(ordering).toEqual([['__name__', 'asc']])
   })
 
   it('normalizes case and stray whitespace like the stored tokens', async () => {
@@ -219,12 +203,12 @@ describe('the staff organization list searches the COLLECTION', () => {
     expect(wheres).toEqual([['nameTokens', 'array-contains', 'cof']])
   })
 
-  it('narrows a multi-word query by its FIRST word', async () => {
-    // Firestore permits one `array-contains` per query, so a multi-word
-    // search cannot be an AND on the server. Stated rather than silently
-    // dropping the rest.
-    expect((await get({ search: 'acme cof' })).status).toBe(200)
+  it('narrows a multi-word query by its FIRST word, and says so', async () => {
+    const response = await get({ search: 'acme cof' })
+    expect(response.status).toBe(200)
     expect(wheres).toEqual([['nameTokens', 'array-contains', 'acme']])
+    const payload = await response.json()
+    expect(payload.notices.join(' ')).toMatch(/one word at a time/)
   })
 
   it('caps the query at the length the tokens were written to', async () => {
@@ -235,185 +219,150 @@ describe('the staff organization list searches the COLLECTION', () => {
   })
 
   it('a blank search is NOT a search', async () => {
-    // Otherwise an empty box would filter on '' — a token no document holds,
-    // which reads as "there are no organizations".
     expect((await get({ search: '   ' })).status).toBe(200)
-    expect(ordering).toEqual(['__name__'])
+    expect(ordering).toEqual([['__name__', 'asc']])
     expect(wheres).toEqual([])
   })
 
-
   it('resumes from a SNAPSHOT, not a raw cursor value', async () => {
     /*
-     * A search page is ordered by `nameLower`, which is not unique. A raw
-     * string cursor would be compared against that field, so two
-     * organizations sharing a name would make the second one vanish —
-     * silently, from the list whose whole job is that nobody is missing.
      * `startAfter(snapshot)` compares every ordering field including the
-     * `__name__` Firestore appends.
+     * `__name__` Firestore appends, so it is exact in any order — a raw value
+     * compared against a non-unique field would skip a namesake silently.
      */
-    expect((await get({ search: 'acme', after: 'org-a' })).status).toBe(200)
+    expect((await get({ search: 'acme', cursor: 'orgs/org-a' })).status).toBe(200)
+    expect(startedAfter).toBe('org-a')
+  })
+
+  it('takes the staff pickers’ `after` as the same cursor', async () => {
+    // `fetchAllPages` walks this route by `after`; it hands back whatever
+    // `nextCursor` said, which is a document path.
+    expect((await get({ after: 'orgs/org-a' })).status).toBe(200)
     expect(startedAfter).toBe('org-a')
   })
 
   it('a cursor that no longer resolves restarts at the top', async () => {
-    const response = await get({ search: 'acme', after: 'deleted-org' })
+    const response = await get({ search: 'acme', cursor: 'orgs/deleted-org' })
     expect(response.status).toBe(200)
     expect(startedAfter).toBeNull()
   })
 
-  it('asks for one row past the page, in both modes', async () => {
-    await get({ pageSize: '10' })
-    expect(capped).toBe(11)
-    await get({ pageSize: '10', search: 'acme' })
-    expect(capped).toBe(11)
+  it('asks for one row past the page, and reports the next cursor as a path', async () => {
+    orgs = [
+      { id: 'org-a', data: { name: 'A' } },
+      { id: 'org-b', data: { name: 'B' } },
+    ]
+    const payload = await (await get({ pageSize: '1' })).json()
+    expect(capped).toBe(2)
+    expect(payload.hasMore).toBe(true)
+    expect(payload.nextCursor).toBe('orgs/org-a')
+    expect(payload.orgs).toHaveLength(1)
+  })
+
+  it('refuses unreadable filters rather than listing everything under them', async () => {
+    expect((await get({ filters: '{not json' })).status).toBe(400)
   })
 })
 
 /**
- * The column filter panel, answered by the query.
- *
- * `filterMode="server"` stops the grid applying anything itself, so an
- * operator the route does not answer is a control that silently does nothing.
- * These cases pin which operators reach a real predicate — and the last one
- * pins that an unanswerable operator falls back to the unfiltered list rather
- * than to an empty one, because "no results" is the wrong answer to "this
- * console cannot do that".
+ * The Filters panel, answered by the query — every clause at once.
  */
-describe('the column filter reaches the query', () => {
-  const filterFor = (field: string, op: string, value: string) =>
-    get({ filterField: field, filterOp: op, filterValue: value })
-
+describe('every clause reaches the query', () => {
   it('name · contains → array-contains over the word tokens', async () => {
-    expect((await filterFor('name', 'contains', 'Coffee')).status).toBe(200)
+    expect((await filtered(['name', 'contains', 'Coffee'])).status).toBe(200)
     expect(wheres).toEqual([['nameTokens', 'array-contains', 'coffee']])
   })
 
   it('name · equals → equality on the normalized key', async () => {
-    expect((await filterFor('name', 'equals', '  Acme Coffee ')).status).toBe(200)
+    expect((await filtered(['name', 'equals', '  Acme Coffee '])).status).toBe(200)
     expect(wheres).toEqual([['nameLower', '==', 'acme coffee']])
   })
 
-  it('name · startsWith → a range over nameLower', async () => {
-    expect((await filterFor('name', 'startsWith', 'Acme')).status).toBe(200)
-    expect(ordering).toEqual(['nameLower'])
-    expect(startAt).toBe('acme')
-    expect(wheres).toEqual([])
-  })
-
-  it('name · endsWith → the same range, read backwards', async () => {
-    // Firestore anchors a range at the FRONT of the stored value, so "ends
-    // with" is only answerable against a reversed copy of the key.
-    expect((await filterFor('name', 'endsWith', 'Coffee')).status).toBe(200)
-    expect(ordering).toEqual(['nameReversed'])
-    // "coffee" reversed — the stored key is reversed too, so the end of the
-    // name is at the front of the index.
-    expect(startAt).toBe('eeffoc')
-  })
-
-  it('plan · isAnyOf → `in`, and never more than Firestore allows', async () => {
-    expect((await filterFor('plan', 'isAnyOf', 'free, business')).status).toBe(200)
+  it('plan · isAnyOf → `in`', async () => {
+    expect((await filtered(['plan', 'isAnyOf', 'free, business'])).status).toBe(200)
     expect(wheres).toEqual([['plan', 'in', ['free', 'business']]])
-
-    // Cleared, because `wheres` accumulates across calls inside one test and
-    // `wheres[0]` would still be the two-value query above.
-    wheres = []
-    const many = Array.from({ length: 40 }, (_, i) => `p${i}`).join(',')
-    expect((await filterFor('plan', 'isAnyOf', many)).status).toBe(200)
-    expect((wheres[0][2] as string[]).length).toBe(30)
   })
 
   it('subscription · equals reaches the DENORMALIZED status', async () => {
     /*
      * `subscription` is not a field on the org document. It moved to
      * `orgs/{orgId}/billing/stripe` (AGL-1028) and the row merges it in after
-     * the query has run, so a predicate on `subscription.status` matches a
-     * path nothing writes — it returned zero rows for every value, which on a
-     * list reads as "no organization is in that state".
-     *
-     * `billingStatus` is the mirror `writeOrgBilling` keeps on the org
-     * document for the dunning banner, and it is the only status a query can
-     * reach.
+     * the query has run. `billingStatus` is the mirror `writeOrgBilling`
+     * keeps on the org document, and it is the only status a query can reach.
      */
-    expect((await filterFor('subscription', 'equals', 'canceled')).status).toBe(200)
+    expect((await filtered(['subscription', 'equals', 'canceled'])).status).toBe(200)
     expect(wheres).toEqual([['billingStatus', '==', 'canceled']])
   })
 
-  it('$id · startsWith → a range over the document id', async () => {
-    expect((await filterFor('$id', 'startsWith', 'org-')).status).toBe(200)
-    expect(ordering).toEqual(['__name__'])
-    expect(startAt).toBe('org-')
+  it('$id · isAnyOf → the document id', async () => {
+    expect((await filtered(['$id', 'isAnyOf', 'org-a,org-b'])).status).toBe(200)
+    expect(wheres).toEqual([['__name__', 'in', ['org-a', 'org-b']]])
   })
 
-  it('slug · startsWith needs no lower-case twin', async () => {
-    // A slug is lower-case by construction, so the stored value IS its own
-    // normalized key.
-    expect((await filterFor('slug', 'startsWith', 'Acme')).status).toBe(200)
-    expect(ordering).toEqual(['slug'])
-    expect(startAt).toBe('acme')
+  it('several clauses and the search compose into ONE query', async () => {
+    const response = await get({
+      search: 'acme',
+      filters: JSON.stringify([
+        { field: 'plan', op: 'equals', value: 'pro' },
+        { field: 'subscription', op: 'equals', value: 'active' },
+        { field: 'ownerUid', op: 'equals', value: 'uid-1' },
+        { field: 'slug', op: 'equals', value: 'Acme' },
+      ]),
+    })
+    expect(response.status).toBe(200)
+    expect(wheres).toEqual([
+      ['nameTokens', 'array-contains', 'acme'],
+      ['plan', '==', 'pro'],
+      ['billingStatus', '==', 'active'],
+      ['ownerUid', '==', 'uid-1'],
+      ['slug', '==', 'acme'],
+    ])
+    expect(ordering).toEqual([['__name__', 'asc']])
+    expect((await response.json()).refused).toEqual([])
   })
 
-  it('ownerUid · equals is filterable without being a column', async () => {
-    expect((await filterFor('ownerUid', 'equals', 'uid-1')).status).toBe(200)
-    expect(wheres).toEqual([['ownerUid', '==', 'uid-1']])
-  })
-
-  it('createdAt · is covers the DAY, not an instant', async () => {
+  it('createdAt · is covers the DAY, and Created leads the order', async () => {
     /*
      * A stored timestamp carries a time of day, so equality against midnight
-     * matches nothing — a date column filtered by `is` would answer "none"
-     * for every row, every time. It is a range across the day instead.
+     * matches nothing. It is a range across the day instead, and a range
+     * orders the list by the field it ranges over.
      */
-    expect((await filterFor('createdAt', 'is', '2026-07-18')).status).toBe(200)
-    expect(ordering).toEqual(['createdAt'])
-    // Two bounds on the day, not a cursor (AGL-3321).
-    expect(wheres.map(([path, op]: any[]) => [path, op])).toEqual([
+    expect(
+      (await filtered(['createdAt', 'is', '2026-07-18'], ['plan', 'equals', 'pro'])).status,
+    ).toBe(200)
+    expect(ordering).toEqual([['createdAt', 'desc']])
+    expect(wheres.map(([path, op]) => [path, op])).toEqual([
       ['createdAt', '>='],
       ['createdAt', '<'],
+      ['plan', '=='],
     ])
-    const start = new Date((wheres[0][2] as any).__ts)
-    expect(new Date((wheres[1][2] as any).__ts).getTime()).toBeGreaterThan(start.getTime())
+    const start = (wheres[0][2] as any).toDate() as Date
+    expect((wheres[1][2] as any).toDate().getTime()).toBeGreaterThan(start.getTime())
     expect([start.getFullYear(), start.getMonth() + 1, start.getDate()]).toEqual([2026, 7, 18])
   })
 
-  it('createdAt · before is a bound, not a range', async () => {
-    expect((await filterFor('createdAt', 'before', '2026-07-18')).status).toBe(200)
-    expect(wheres.length).toBe(1)
-    expect(wheres[0][0]).toBe('createdAt')
-    expect(wheres[0][1]).toBe('<')
-  })
-
-  it('plan · isNotEmpty requires the field to EXIST', async () => {
-    // `!= null` in Firestore also excludes documents that lack the field,
-    // which is exactly what "is not empty" should mean.
-    expect((await filterFor('plan', 'isNotEmpty', '')).status).toBe(200)
-    expect(wheres).toEqual([['plan', '!=', null]])
-  })
-
-  it('isEmpty on a field writers OMIT lists everything, not nothing', async () => {
-    /*
-     * Firestore cannot query for absence: `== null` matches an explicit null
-     * and never a missing field. `plan` is simply absent on organizations
-     * that never had one, so answering this would report "none" to a question
-     * with real answers. The panel does not offer it — this pins that a
-     * hand-built request degrades to unfiltered rather than to empty.
-     */
-    expect((await filterFor('plan', 'isEmpty', '')).status).toBe(200)
-    expect(ordering).toEqual(['__name__'])
-    expect(wheres).toEqual([])
-  })
-
-  it('an unanswerable operator lists everything rather than nothing', async () => {
-    // `doesNotContain` has no Firestore predicate. The panel does not offer
-    // it, but a hand-built request must not read as "no such organization".
-    expect((await filterFor('name', 'doesNotContain', 'acme')).status).toBe(200)
-    expect(ordering).toEqual(['__name__'])
-    expect(wheres).toEqual([])
-  })
-
-  it('a blank filter value is not a filter', async () => {
-    expect((await filterFor('name', 'equals', '   ')).status).toBe(200)
-    expect(ordering).toEqual(['__name__'])
-    expect(wheres).toEqual([])
+  it('refuses by name what one query cannot hold, and applies none of it', async () => {
+    // The search took the one array clause; a second range is not offered;
+    // an operator Firestore cannot answer is not either.
+    const response = await get({
+      search: 'acme',
+      filters: JSON.stringify([
+        { field: 'name', op: 'contains', value: 'coffee' },
+        { field: 'name', op: 'doesNotContain', value: 'x' },
+        { field: 'nonesuch', op: 'equals', value: 'x' },
+        { field: 'plan', op: 'equals', value: '   ' },
+      ]),
+    })
+    expect(response.status).toBe(200)
+    expect(wheres).toEqual([['nameTokens', 'array-contains', 'acme']])
+    const payload = await response.json()
+    expect(payload.refused.map((entry: any) => entry.clause.field)).toEqual([
+      'name',
+      'name',
+      'nonesuch',
+      'plan',
+    ])
+    // Refused is NOT "no such organization": the rows still come back.
+    expect(payload.orgs).toHaveLength(1)
   })
 })

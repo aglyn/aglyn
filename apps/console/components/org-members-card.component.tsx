@@ -23,7 +23,6 @@ import {
   consoleUserType,
   countManagerSeats,
   ORG_PERMISSIONS,
-  ORG_ROLES,
   resolveOrgPermissions,
   type AglynOrgCustomRole,
   type AglynOrgMember,
@@ -36,9 +35,13 @@ import {
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import ListTable from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Box,
@@ -67,6 +70,12 @@ import useBranding from '../hooks/use-branding'
 import useCurrentOrg from '../hooks/use-current-org'
 import { useOrgHosts } from '../hooks/use-org-hosts'
 import { useOrgScope, useOrgSlug } from '../hooks/use-org-scope'
+import {
+  ORG_MEMBER_FILTER_FIELDS,
+  ORG_MEMBER_FILTER_HEADERS,
+  ORG_MEMBER_FILTER_OPTIONS,
+  ORG_MEMBER_SELECT_FIELDS,
+} from '../utils/org-member-list-query'
 import MemberAvatar from './member-avatar.component'
 import {
   pluginGridColumns,
@@ -106,34 +115,15 @@ const HOST_ROLE_HINTS: Record<HostAccessRole | 'none', string> = {
 }
 
 /*
- * What the roster grid's Filters panel and quick search offer (AGL-3317).
- * The card holds every member (`/api/orgs/members` answers the whole roster,
- * which the seat counts above the grid need anyway), so both are answered
- * over all of them. Role and access are matched on the values the row is
- * READ as (`roleKey`, `accessKey`): a member stored with no role is a
- * viewer, and access is the kind of user their reach makes them.
+ * What the roster grid's Filters panel and quick search offer (AGL-3317,
+ * AGL-3321): Role, Access and a search of the name, address and job title —
+ * each served by the roster's QUERY (`utils/org-member-list-query.ts`),
+ * never matched over the roster the card holds.
  */
-const MEMBER_FILTER_FIELDS = [
-  inMemoryListField('member', 'text', 'name'),
-  inMemoryListField('role', 'select', 'roleKey'),
-  inMemoryListField('access', 'select', 'accessKey'),
-]
-const MEMBER_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  member: 'Member',
-  role: 'Role',
-  access: 'Access',
-}
-const MEMBER_FILTER_OPTIONS = {
-  role: ORG_ROLES.map((value) => ({ value, label: value })),
-  // An org member is one or the other; a site member is never on this roster.
-  access: (['manager', 'collaborator'] as const).map((value) => ({
-    value,
-    label: CONSOLE_USER_TYPE_LABELS[value],
-  })),
-}
-const MEMBER_SEARCH_FIELDS = ['name', 'email', 'title'] as const
+/** How many pages of matches the card follows before it stops asking. */
+const MATCH_PAGES_MAX = 20
 
-/** A roster row, with the values the Filters panel matches. */
+/** A roster row, as the grid draws it. */
 type MemberRow = AglynOrgMember & {
   name: string
   roleKey: string
@@ -206,12 +196,27 @@ export function OrgMembersCard() {
    * memory — the seat counts and the manager-seat gate above both count
    * across ALL of them — so paging the query would mean two different
    * populations answering two questions on one card.
+   *
+   * FILTERED BY THE ROSTER'S QUERY (AGL-3321). A Filters clause or a search
+   * word is not matched over `members`: the route plans them onto its query
+   * (`utils/org-member-list-query.ts`) and the card lists every member that
+   * query answers, following its cursor, and says what it could not take.
    */
+  const gridFilter = useListGridFilter({ selectFields: ORG_MEMBER_SELECT_FIELDS })
+  const { clauses, searchWords } = gridFilter
+  const filtering =
+    clauses.length > 0 || searchWords.some((word) => word.trim() !== '')
+  /** The query's answer while filtering; `null` while it is being asked. */
+  const [matched, setMatched] = useState<{
+    members: AglynOrgMember[]
+    refused: ListQueryRefusal[]
+    notices: string[]
+  } | null>(null)
   const {
     rows: sortedMembers,
     sortedBy: pluginSortedBy,
     onSort: onPluginSort,
-  } = usePluginColumnSort(members)
+  } = usePluginColumnSort(filtering ? (matched?.members ?? []) : members)
   const memberRows = useMemo<MemberRow[]>(
     () =>
       sortedMembers.map((member) => ({
@@ -222,13 +227,6 @@ export function OrgMembersCard() {
       })),
     [sortedMembers],
   )
-  const memberFilter = useListRowsFilter({
-    rows: memberRows,
-    fields: MEMBER_FILTER_FIELDS,
-    options: MEMBER_FILTER_OPTIONS,
-    headers: MEMBER_FILTER_HEADERS,
-    search: MEMBER_SEARCH_FIELDS,
-  })
   const seatQuota = checkOrgSeatQuota(org, 'managers', managerSeatsUsed)
   // An org admin sees every org host via the memberRoles projection, so
   // this doubles as the org host directory for the access editor.
@@ -315,6 +313,50 @@ export function OrgMembersCard() {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  /*
+   * The matches, asked of the roster's query and followed to the end — the
+   * whole answer, as the unfiltered card holds the whole roster. Asked again
+   * whenever the roster is re-read, so an add or a removal shows under the
+   * filter too. A newer ask supersedes an older one still in flight.
+   */
+  const filterKey = JSON.stringify({ clauses, searchWords })
+  useEffect(() => {
+    if (!orgId || !user || !filtering) {
+      setMatched(null)
+      return
+    }
+    let current = true
+    setMatched(null)
+    void (async () => {
+      const found: AglynOrgMember[] = []
+      let refused: ListQueryRefusal[] = []
+      let notices: string[] = []
+      let cursor: string | null = null
+      for (let page = 0; page < MATCH_PAGES_MAX; page += 1) {
+        const params = new URLSearchParams({
+          orgId,
+          filters: JSON.stringify(clauses),
+          search: searchWords.join(' '),
+          ...(cursor ? { cursor } : {}),
+        })
+        const payload: any = await request(`/api/orgs/members?${params}`, 'GET')
+        if (!current) return
+        if (!payload?.members) break
+        found.push(...payload.members)
+        refused = payload.refused ?? []
+        notices = payload.notices ?? []
+        cursor = payload.nextCursor ?? null
+        if (!cursor) break
+      }
+      if (current) setMatched({ members: found, refused, notices })
+    })()
+    return () => {
+      current = false
+    }
+    // The ask is its clauses and words (`filterKey`), for this roster.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, user, filterKey, members, request])
 
   const handleAdd = useCallback(async () => {
     const target = email.trim().toLowerCase()
@@ -811,20 +853,43 @@ export function OrgMembersCard() {
             </Typography>
           </Stack>
         ) : null}
-        <ListFilterChips {...memberFilter.chipsProps} />
+        <ListFilterChips
+          fields={ORG_MEMBER_FILTER_FIELDS}
+          headers={ORG_MEMBER_FILTER_HEADERS}
+          options={ORG_MEMBER_FILTER_OPTIONS}
+          clauses={clauses}
+          onChange={gridFilter.setClauses}
+        />
+        <ListQueryNotices
+          refused={listQueryRefusals(matched?.refused ?? [], {
+            fields: ORG_MEMBER_FILTER_FIELDS,
+            headers: ORG_MEMBER_FILTER_HEADERS,
+            options: ORG_MEMBER_FILTER_OPTIONS,
+          })}
+          notices={matched?.notices ?? []}
+        />
         <ListTable
           aria-label="Organization members"
-          rows={memberFilter.rows}
-          columns={memberFilter.filterColumns(memberColumns)}
+          rows={memberRows}
+          loading={filtering && matched === null}
+          columns={listFilterGridColumns(
+            memberColumns,
+            ORG_MEMBER_FILTER_FIELDS,
+            ORG_MEMBER_FILTER_OPTIONS,
+            ORG_MEMBER_FILTER_HEADERS,
+          )}
           // A row holds a role picker over a custom-role picker, so it is as
           // tall as what it holds.
           getRowHeight={() => 'auto'}
           // The rows arrive in the roster's order, or a plugin column's; the
           // grid's own sort would be a second order fighting the first.
           disableColumnSorting
-          // The panel and the search are the grid's; the card answers them
-          // over the whole roster (AGL-3317).
-          {...memberFilter.gridProps}
+          // The panel and the search are the grid's; the roster's QUERY
+          // answers them (AGL-3321), so the grid must not filter its rows.
+          filterMode="server"
+          filterModel={gridFilter.filterModel}
+          onFilterModelChange={gridFilter.onFilterModelChange}
+          quickFilter
           noRowsLabel={
             members.length ? 'No members match these filters' : 'No members yet'
           }

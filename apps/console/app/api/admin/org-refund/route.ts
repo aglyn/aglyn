@@ -37,6 +37,8 @@ import {
   releaseRefundWindow,
   reserveRefundWindow,
 } from '../../../../utils/server/staff-refund-ledger'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import { apiIdempotencyExpiry } from '@aglyn/aglyn/app-utils/api-idempotency'
 
 /**
  * Staff subscription refunds from the org page (AGL-2486).
@@ -411,10 +413,14 @@ async function handler(request: Request): Promise<Response> {
           orgId,
           chargeId,
           kind: 'admin-subscription-refund',
+          scopeId: orgId,
           status: 'pending',
           actorUid: decoded.uid,
           createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
           createdAtMs: Date.now(),
+          // Reaped by the TTL policy like every other claim, including one a
+          // killed process stranded.
+          expiresAt: apiIdempotencyExpiry(),
         })
       } catch {
         return Response.json(
@@ -529,57 +535,55 @@ async function handler(request: Request): Promise<Response> {
     // would be a record of something that never happened. A failure to write
     // it cannot un-refund anything, so it is logged and swallowed rather than
     // reported as a failed refund.
-    await firestore
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'org.refund',
-        target: `orgs/${orgId}`,
-        before: {
-          chargeId,
-          capturedCents,
-          refundedCents: alreadyRefundedCents,
-        },
-        after: {
-          chargeId,
-          refundId: result.refundId,
-          amountCents: result.amountCents,
-          currency: result.currency,
-          refundedCents: alreadyRefundedCents + result.amountCents,
-          // The fee Stripe keeps regardless — recorded so a later margin or
-          // churn review reads the true cost off the row instead of
-          // re-deriving it from Stripe months later.
-          feeRetainedCents: result.feeRetainedCents,
-          invoiceId:
-            typeof charge?.invoice === 'string'
-              ? charge.invoice
-              : (charge?.invoice?.id ?? null),
-        },
-        reason: reason.reason,
-        note: reason.note,
-        // WHICH AUTHORITY MOVED THE MONEY (AGL-2486). Support may refund up
-        // to a cap and `super` may refund anything, so "a staff member issued
-        // a refund" is no longer one fact. Three fields rather than one,
-        // because they answer three different questions after the fact:
-        //
-        //   actorRole — who they were at the time. The claim can change;
-        //     the row must not be re-derived from today's claim.
-        //   authority — `capped` or `super`. Which rule admitted it.
-        //   overCap   — whether the AMOUNT was one only `super` could have
-        //     issued. This is the one that distinguishes an escalated refund
-        //     from a routine one: a `super` refunding $12 is routine, and
-        //     `authority` alone cannot say so. Query it to read every refund
-        //     that needed the escalation, which is the review nobody can run
-        //     against Stripe's own record.
-        actorRole,
-        authority: reservation.verdict.authority,
-        overCap: reservation.verdict.overCap,
-        // The threshold IN FORCE when the row was written, so raising the cap
-        // later does not silently reinterpret the history (AGL-2113's lesson
-        // about thresholds drifting away from the readouts that quote them).
-        capCentsAtTime: STAFF_REFUND_CAP_CENTS,
-        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firestore, {
+      actorUid: decoded.uid,
+      action: 'org.refund',
+      target: `orgs/${orgId}`,
+      before: {
+        chargeId,
+        capturedCents,
+        refundedCents: alreadyRefundedCents,
+      },
+      after: {
+        chargeId,
+        refundId: result.refundId,
+        amountCents: result.amountCents,
+        currency: result.currency,
+        refundedCents: alreadyRefundedCents + result.amountCents,
+        // The fee Stripe keeps regardless — recorded so a later margin or
+        // churn review reads the true cost off the row instead of
+        // re-deriving it from Stripe months later.
+        feeRetainedCents: result.feeRetainedCents,
+        invoiceId:
+          typeof charge?.invoice === 'string'
+            ? charge.invoice
+            : (charge?.invoice?.id ?? null),
+      },
+      reason: reason.reason,
+      note: reason.note,
+      // WHICH AUTHORITY MOVED THE MONEY (AGL-2486). Support may refund up
+      // to a cap and `super` may refund anything, so "a staff member issued
+      // a refund" is no longer one fact. Three fields rather than one,
+      // because they answer three different questions after the fact:
+      //
+      //   actorRole — who they were at the time. The claim can change;
+      //     the row must not be re-derived from today's claim.
+      //   authority — `capped` or `super`. Which rule admitted it.
+      //   overCap   — whether the AMOUNT was one only `super` could have
+      //     issued. This is the one that distinguishes an escalated refund
+      //     from a routine one: a `super` refunding $12 is routine, and
+      //     `authority` alone cannot say so. Query it to read every refund
+      //     that needed the escalation, which is the review nobody can run
+      //     against Stripe's own record.
+      actorRole,
+      authority: reservation.verdict.authority,
+      overCap: reservation.verdict.overCap,
+      // The threshold IN FORCE when the row was written, so raising the cap
+      // later does not silently reinterpret the history (AGL-2113's lesson
+      // about thresholds drifting away from the readouts that quote them).
+      capCentsAtTime: STAFF_REFUND_CAP_CENTS,
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
       .catch((error: unknown) => {
         console.error('Refund audit write failed', { orgId, chargeId }, error)
       })

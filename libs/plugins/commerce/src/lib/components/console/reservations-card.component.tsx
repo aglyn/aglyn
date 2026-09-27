@@ -37,11 +37,13 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   limit,
   orderBy,
   query,
   setDoc,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
@@ -237,12 +239,34 @@ export function ReservationsCard(props: ReservationsCardProps) {
     if (!resource) return
     const checkInDayMs = Date.parse(`${walkIn.checkIn}T00:00:00Z`)
     const checkOutDayMs = Date.parse(`${walkIn.checkOut}T00:00:00Z`)
+    /*
+     * Every stay of THIS resource that ends after the walk-in arrives — the
+     * same query `reserve.ts` checks a booking against, on the composite it
+     * already has (AGL-3321). This used to test the rows on the card's
+     * current page, so a stay on the next page did not block the dates and
+     * the desk could double-book the room.
+     */
+    const overlapping = await getDocs(
+      query(
+        collection(firestore, 'hosts', hostId, 'reservations'),
+        where('resourceId', '==', walkIn.resourceId),
+        where('checkOutDayMs', '>', checkInDayMs),
+        orderBy('checkOutDayMs'),
+        limit(500),
+      ),
+    ).catch(() => null)
+    if (!overlapping) {
+      return void enqueueSnackbar('Could not check those dates — try again', {
+        variant: 'warning',
+        persist: false,
+      })
+    }
     // `createdAtMs` carried through because the pending hold lapses on it
     // (`reservationHoldsDates`). Dropping it made every unpaid `pending` row
     // block forever, so the front desk was refused a walk-in into a room that
     // an abandoned online checkout had left empty.
-    const existing = reservations
-      .filter((item: any) => item.resourceId === walkIn.resourceId)
+    const existing = overlapping.docs
+      .map((snapshot) => snapshot.data() as any)
       .map((item: any) => ({
         checkInDayMs: item.checkInDayMs,
         checkOutDayMs: item.checkOutDayMs,
@@ -289,7 +313,7 @@ export function ReservationsCard(props: ReservationsCardProps) {
       variant: 'success',
       persist: false,
     })
-  }, [walkIn, resourceDocs, reservations, firestore, hostId, enqueueSnackbar])
+  }, [walkIn, resourceDocs, firestore, hostId, enqueueSnackbar])
 
   return (
     <CardDisplay

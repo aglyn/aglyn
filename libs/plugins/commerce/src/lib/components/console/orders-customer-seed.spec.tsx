@@ -20,24 +20,41 @@
  *
  * A contact's header links here with `?email=` to show that customer's
  * orders, and a contact's timeline with `?order=` to open the order that
- * made them a customer. The first is a filter over the loaded window; the
- * second reads the one document by id when the window does not hold it,
- * because the window is the newest two hundred and the order may be older.
+ * made them a customer. The first is a Customer clause ON THE LIST'S QUERY
+ * (AGL-3321) — a whole address is that buyer, a domain every buyer at a
+ * company; the second reads the one document by id when the loaded pages do
+ * not hold it, because the list shows a page and the order may be older.
+ *
+ * `useListQuery` is the contract's double, answering the plan over the
+ * stamped fixture orders the way Firestore would.
  */
 
 import { render, screen, waitFor } from '@testing-library/react'
 import { getDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
+import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
+import { orderListFields } from '../../model/order-list-fields'
 
 let search = ''
 let orderRows: Array<Record<string, unknown>> = []
 let stored: Record<string, unknown> | null = null
+
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => useListQueryDouble(() => orderRows, options),
+  }
+})
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...path: string[]) => ({ __path: path.join('/') }),
   query: (base: { __path: string }) => base,
   limit: () => undefined,
   orderBy: () => undefined,
+  where: () => undefined,
   documentId: () => '__name__',
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
   getDoc: jest.fn(async () => ({
@@ -56,11 +73,8 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     rows: (read ?? []).slice(0, ceiling),
     truncated: (read ?? []).length > ceiling,
   }),
-  useFirestoreCollection: (build: () => { __path: string }) => {
-    const ref = build()
-    if (ref.__path.endsWith('/orders')) return { data: orderRows }
-    return { data: [] }
-  },
+  // The product picker; the orders come through the list query's double.
+  useFirestoreCollection: () => ({ data: [] }),
 }))
 
 jest.mock('next/navigation', () => ({
@@ -82,18 +96,22 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
 
 import { HostOrdersCard } from './host-orders-card.component'
 
-const order = (id: string, extra: Record<string, unknown> = {}) => ({
-  $id: id,
-  number: 1000,
-  status: 'paid',
-  createdAtMs: Date.now() - 60_000,
-  refundedCents: 0,
-  totals: { totalCents: 100 },
-  channel: 'online',
-  lineItems: [],
-  timeline: [],
-  ...extra,
-})
+/** An order as the writers leave it, stamped with what the list queries. */
+const order = (id: string, extra: Record<string, unknown> = {}) => {
+  const row: Record<string, unknown> = {
+    $id: id,
+    number: 1000,
+    status: 'paid',
+    createdAtMs: Date.now() - 60_000,
+    refundedCents: 0,
+    totals: { totalCents: 100 },
+    channel: 'online',
+    lineItems: [],
+    timeline: [],
+    ...extra,
+  }
+  return { ...row, ...orderListFields(row, id) }
+}
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -104,17 +122,40 @@ beforeEach(() => {
 
 describe('?email= narrows the list to one buyer', () => {
   it('seeds the Customer filter from the URL and shows that buyer alone', () => {
-    search = 'email=ada%40example.test'
+    search = 'email=Ada%40Example.test'
     orderRows = [
       order('o-1', { number: 1, customerEmail: 'ada@example.test' }),
       order('o-2', { number: 2, customerEmail: 'bob@example.test' }),
+      // A buyer whose address merely BEGINS the same way is someone else.
+      order('o-3', { number: 3, customerEmail: 'ada@example.testing.io' }),
     ]
     render(<HostOrdersCard hostId="host-1" />)
     expect(screen.getByRole('list', { name: 'Filters' }).textContent).toContain(
-      'Customer contains ada@example.test',
+      'Customer is Ada@Example.test',
     )
+    // On the query, by the lower-cased key every writer stamps.
+    expect(lastListQueryPlan()?.filters).toEqual([
+      { path: 'customerEmailLower', op: '==', value: 'ada@example.test' },
+    ])
     expect(screen.getByText('ada@example.test')).toBeTruthy()
     expect(screen.queryByText('bob@example.test')).toBeNull()
+    expect(screen.queryByText('ada@example.testing.io')).toBeNull()
+  })
+
+  it('finds every buyer at a company from a domain', () => {
+    search = 'email=%40example.test'
+    orderRows = [
+      order('o-1', { number: 1, customerEmail: 'ada@example.test' }),
+      order('o-2', { number: 2, customerEmail: 'bob@example.test' }),
+      order('o-3', { number: 3, customerEmail: 'cy@elsewhere.test' }),
+    ]
+    render(<HostOrdersCard hostId="host-1" />)
+    expect(screen.getByRole('list', { name: 'Filters' }).textContent).toContain(
+      'Customer contains example.test',
+    )
+    expect(screen.getByText('ada@example.test')).toBeTruthy()
+    expect(screen.getByText('bob@example.test')).toBeTruthy()
+    expect(screen.queryByText('cy@elsewhere.test')).toBeNull()
   })
 })
 

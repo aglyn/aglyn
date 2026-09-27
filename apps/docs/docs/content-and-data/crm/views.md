@@ -67,61 +67,101 @@ force shows as a **chip** beside the views control, where its ✕ removes it,
 and all of them are part of the saved view. A view saved before the panel
 existed keeps its filters as they were. The toolbar works the way it does on
 every console list — see [Filter and search a list](../../getting-started/console-tour.md#filter-and-search) — and the sections
-below say what each CRM list's filters reach. On the companies and deals lists
-one served filter applies at a time, so a new one replaces the last.
+below say what each CRM list's filters offer.
+
+On every CRM list the filters and the search are answered by the list's own
+query, so they reach every record, a page at a time, and never only the rows
+on screen. The search matches whole words from their start — "cof" finds
+*Coffee*, a fragment from the middle of a word does not — one word at a time:
+type several and it searches the first, and says so. It reads the first 12
+letters of a long word.
+
+A few combinations cannot be answered by one query — two "contains" or "any
+of" filters at once, say, or one of them beside the search. Then the list does
+not apply that filter, and a notice above the table names it and says why.
 
 ## Filters on the Contacts list
 
 On the Contacts list the fields are the list's columns and a few that are not
-— owner, stage, source, company, tags, form, orders, lifetime value, created
-and updated dates, email verdict, next activity, and one field per
+— owner, stage, source, company, tags, form, site, orders, lifetime value,
+the updated date, email verdict, next activity, and one field per
 [custom field](./custom-fields.md) your organization has defined.
 
-One chip reaches every contact and the rest narrow what it found. The
-database answers one filter per query, so the first filter it can serve —
-a name, an email, a tag, a form, a date, an order count — is run against the
-whole collection, and every other filter narrows the first thousand contacts
-that query returned — the newest, unless the served filter sorts them its own
-way. The search box, over name, email, phone, company and tags, narrows those
-same thousand. The served chip is filled; the others are outlined; and
-the caption under the chips says which is which. Owner, stage, source, company
-and custom-field filters always narrow rather than reach, because those
-facts are kept per site and no query can reach them directly. On a site's
-Contacts list a name or tag **contains** filter narrows too, because the
-query already spends its one list match on the site. Sorting
-reorders the loaded window.
+Each field offers what the list's query can answer:
+
+| Field | Filter by |
+| --- | --- |
+| **Contact** | The name **contains** a word, **is** exactly a name, **starts with** or **ends with** some letters. |
+| **Email** | **is** an address, or **starts with** some letters. |
+| **Tags** | **contains** a tag, **any of** several, or **is not empty**. |
+| **Form ID** | **contains** a form's ID — the form's own page links here with it. |
+| **Site ID** | **is** a site's ID, or **any of** several. |
+| **Orders**, **Lifetime value** | **is not empty** — the person has bought, or is worth something. Each site keeps its own figures on its own record of the person, where no range reaches, so there are no numeric ranges. |
+| **Created** | **on**, **after** or **before** a date. |
+| **Updated** | **on**, **after** or **before** a date. |
+| **Next activity** | **is empty** — no next activity scheduled. |
+| **Owner**, **Stage** | **is** one, **any of** several, or **is not empty**. |
+| **Source** | **is** one, or **any of** several. |
+| **Company** | **is** one, or **is not empty**. |
+| **Email verdict** | **is** one verdict, **any of** several, **is empty** (nothing known) or **is not empty**. |
+| A custom field | **equals** a choice, or **any of** several, for a choice field; **equals** for text or a number; **is** or **is not** ticked for a checkbox; **is not empty** for any. |
+
+**Search** finds a person by a word of their name, their email addresses or
+their company, or by the digits of their phone number — the whole number, or
+its last seven or last four digits, typed without spaces or brackets. Tags
+have their own filter.
+
+**Created**, and a name or address that **starts with** or **ends with**
+some letters, each order the list by their own field, so each stands on its
+own: with another filter or the search beside it, it is not applied, and the
+notice says so. **Updated** combines with anything.
+
+Under a site, the owner, stage, source, company, tags, custom-field and orders
+filters read that site's own record of the person; at the organization level,
+they match on any site's record.
+
+Only one of these filters stands at a time: a name **contains** word,
+**Tags**, **Form ID**, one of the other per-site fields — Owner, Stage,
+Source, Company, a custom field, Orders or Lifetime value — or the search.
+A second one is not applied, and the notice says so. A member whose access is limited to
+particular sites cannot use the per-site fields or **Form ID** under a site;
+the notice says that too. Their search matches the start of a contact's name,
+and a notice says so.
+
+The list shows the most recently changed contacts first and keeps that order
+— the column headers do not re-sort it — a page at a time, with the usual
+footer to turn the page.
 
 ## Filters on the other lists
 
-- **Leads** — Status, Email, Owner, Lead source and Campaign; see
-  [the leads list](./leads.md). The list reads the 200 most recently seen
-  leads, and every filter and the search narrow those.
-- **Companies** — Company (starts with or is) and Owner reach every company;
-  the search box is the same **Company starts with** filter. The list is
-  paged, so one of the two applies at a time.
-- **Deals** (the table) — Status reaches every deal. The search box finds a
-  deal by any word of its title, across the 1,000 most recently changed
-  deals of that status and pipeline — for nearly every organization, all of
-  them.
+- **Leads** — Status, Email, Owner, Lead source and Campaign; the search
+  finds a lead by a word of its name, email address, company, title or tags.
+  **Campaign** and the search cannot be combined. See
+  [the leads list](./leads.md#filter-the-leads).
+- **Companies** — Company (**is** exactly, or **starts with**, which orders
+  the list by name), Owner (one teammate, or any of several) and Next
+  activity; the search finds a company by a word of its name or domain. See
+  [the companies list](./companies.md#the-companies-list).
+- **Deals** (the table) — Status (open, won or lost; one, or any of them) and
+  Next activity; the search finds a deal by any word of its title. See
+  [the board and the table](./deals.md#the-board-and-the-table).
 - **Tasks** — **Show** is the task view (My tasks, Overdue, Today, Upcoming,
-  All open, Done) and is answered by the query, up to 200 tasks a view; Kind,
-  Priority and Assignee, and the search over title and notes, narrow the rows
-  that view loaded.
+  All open, Done); Kind, Priority and Assignee filter it, and the search finds
+  a task by a word of its title.
 
 On the contacts, companies and deals lists, **Next activity** › **is empty**
 keeps only the records with no open task scheduled against them (see
-[next activity](./tasks.md#next-activity)). It narrows the rows already
-loaded rather than the whole collection, the way a contacts filter that
-cannot be served does, and it stays beside the companies and deals lists'
-one served filter.
+[next activity](./tasks.md#next-activity)). Like every other filter, it is
+answered by the query and adds up with the rest.
 
 ## Columns and sort
 
 **Manage columns** in any list's column menu chooses what shows, and **Move
 left** / **Move right** in the same menu put a column where you want it. A view
 keeps both — the choice and the order — and a view saved before a column existed
-shows the new column too, after the ones it names. Click a column header to
-sort; a view keeps that as well.
+shows the new column too, after the ones it names. On the Leads and Contacts
+lists the column headers do not sort: those lists keep their newest-first
+order.
 
 ## Segments and views
 

@@ -244,6 +244,17 @@ export interface MarketplaceListing {
   reviewedBy?: string
   reviewedAt?: unknown
   rejectionReason?: string
+  /**
+   * What the marketplace lists query by (AGL-3321), derived by the server
+   * from the fields above after every write (`listingQueryFields`,
+   * `refreshListingQueryFields`) and denied to clients.
+   */
+  nameLower?: string
+  nameTokens?: string[]
+  nameReversed?: string
+  browseAudience?: string[]
+  browseTokens?: string[]
+  takenDown?: boolean
 }
 
 /**

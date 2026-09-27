@@ -53,6 +53,8 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
+import { newFormListFields } from '@aglyn/aglyn/app-utils/forms'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
@@ -76,6 +78,8 @@ import {
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..', '..', '..')
 const NOW = new Date('2026-09-15T20:00:00.000Z')
+/** The keys every artifact create stamps for its list (AGL-3321). */
+const LIST_KEYS = Object.keys(artifactCreateListKeys('components', {}))
 /** A workspace with no plan resolves as Free: one shared layout, ten templates, no reusable components. */
 const FREE_ORG: Partial<AglynOrgBilling> = {}
 /** Starter: three shared layouts, fifty templates, reusable components. */
@@ -425,6 +429,8 @@ describe('writeAiDraft — the create route’s document', () => {
     })
     expect(mockDocs.get('hosts/host-1/layouts/job-1')).toEqual({
       displayName: 'Site layout',
+      // The keys the layouts list finds it by (AGL-3321).
+      ...artifactCreateListKeys('layouts', { displayName: 'Site layout' }),
       versionId: result.versionId,
       createdAt: NOW,
       updatedAt: NOW,
@@ -461,6 +467,12 @@ describe('writeAiDraft — the create route’s document', () => {
     expect(template).toEqual({
       kind: 'page',
       displayName: 'Blog entry template',
+      // The keys the templates library finds it by (AGL-3321): one row.
+      ...artifactCreateListKeys('templates', {
+        kind: 'page',
+        displayName: 'Blog entry template',
+        source: { type: 'authored' },
+      }),
       nodes: expect.any(Buffer),
       slug: 'blog-entry-template',
       source: { type: 'authored' },
@@ -550,9 +562,15 @@ describe('writeAiDraft — a form', () => {
       slug: 'quote-request',
       fields: [{ fieldName: 'email', label: 'Email', fieldType: 'email' }],
       consentFieldName: 'marketingConsent',
-      routing: { lead: true },
       rootId: CANVAS_ROOT_ELEMENT_ID,
       nodes: expect.any(Buffer),
+      // What the Forms list queries (AGL-3330), as Create writes it.
+      ...newFormListFields({
+        id: 'job-form',
+        displayName: 'Quote request',
+        slug: 'quote-request',
+        routing: { lead: true },
+      }),
       createdAt: NOW,
       updatedAt: NOW,
       createdBy: 'uid-1',
@@ -575,7 +593,8 @@ describe('writeAiDraft — a form', () => {
     expect(result).toMatchObject({ ok: true, name: 'Quote request 2' })
     const form = mockDocs.get('hosts/host-1/forms/job-form') ?? {}
     expect(form['slug']).toBe('quote-request-2')
-    expect(form).not.toHaveProperty('routing')
+    // No routing asked for: the lead switch is written off, and nothing else.
+    expect(form['routing']).toEqual({ lead: false })
     expect(form).not.toHaveProperty('consentFieldName')
     expect(decodeStoredNodes<Record<string, any>>(form['nodes'])?.['quote'].props.formName).toBe('Quote request 2')
   })
@@ -624,6 +643,8 @@ describe('writeAiDraft — a reusable component', () => {
     const component = mockDocs.get('hosts/host-1/components/job-3') ?? {}
     expect(component).toEqual({
       displayName: 'Testimonial card',
+      // The keys the components list finds it by (AGL-3321).
+      ...artifactCreateListKeys('components', { displayName: 'Testimonial card' }),
       rootId: CANVAS_ROOT_ELEMENT_ID,
       nodes: expect.any(Buffer),
       props: COMPONENT_PROPS,
@@ -632,7 +653,7 @@ describe('writeAiDraft — a reusable component', () => {
       createdBy: 'uid-1',
     })
     for (const key of Object.keys(component)) {
-      expect([key, [...AI_DRAFT_FIELDS.component, 'createdAt', 'updatedAt', 'createdBy'].includes(key)]).toEqual([
+      expect([key, [...AI_DRAFT_FIELDS.component, ...LIST_KEYS, 'createdAt', 'updatedAt', 'createdBy'].includes(key)]).toEqual([
         key,
         true,
       ])

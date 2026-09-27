@@ -330,6 +330,7 @@ jest.mock('@aglyn/shared-util-email', () => ({
 }))
 
 import type { PluginApiResponse } from '@aglyn/aglyn/server'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { campaignSendHandler, performCampaignSend } from './campaign-send'
 
 // ---------------------------------------------------------------------------
@@ -1058,6 +1059,78 @@ describe('when an email says it was created', () => {
     expect(created(String(result.body.campaignId))).toBeGreaterThan(
       Date.UTC(2026, 7, 1),
     )
+  })
+})
+
+/*==========================================
+ * EVERY WRITER STAMPS WHAT THE LISTS QUERY ON (AGL-3321).
+ *
+ * The Emails list, a campaign's emails and the Campaigns list's single sends
+ * are Firestore queries: search reads `subjectTokens`, "in no campaign" is
+ * `emailCampaignId == null`, and every list orders on `createdAtMs`. A query
+ * cannot find a record missing the field it asks, so each write that sets a
+ * subject stamps its tokens, and each that MINTS a record with no campaign
+ * stamps the null — including a send naming an id nothing holds yet.
+ *=========================================*/
+describe('what the lists query on', () => {
+  const stored = (id: string) => store.get(`orgs/org-1/campaigns/${id}`) ?? {}
+
+  it('a draft minted in no campaign is stored null, with its subject’s tokens', async () => {
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-9',
+      subject: 'Spring sale',
+      audience: 'leads',
+    })
+    expect(stored('draft-9')['emailCampaignId']).toBeNull()
+    expect(stored('draft-9')['subjectTokens']).toEqual(nameSearchTokens('Spring sale'))
+  })
+
+  it('a re-saved draft keeps its campaign and re-stamps its tokens', async () => {
+    store.set('orgs/org-1/campaigns/draft-8', {
+      hostId: HOST,
+      visibleTo: [`host:${HOST}`],
+      status: 'draft',
+      emailCampaignId: 'camp-1',
+      createdAtMs: 5,
+    })
+    await post({
+      hostId: HOST,
+      action: 'draft',
+      campaignId: 'draft-8',
+      subject: 'Autumn preview',
+      audience: 'leads',
+    })
+    expect(stored('draft-8')['emailCampaignId']).toBe('camp-1')
+    expect(stored('draft-8')['subjectTokens']).toEqual(nameSearchTokens('Autumn preview'))
+  })
+
+  it('an email sent at once, in no campaign, is stored null with its tokens', async () => {
+    const result = await post({
+      hostId: HOST,
+      action: 'send',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    const id = String(result.body.campaignId)
+    expect(stored(id)['emailCampaignId']).toBeNull()
+    expect(stored(id)['subjectTokens']).toEqual(nameSearchTokens('Spring sale'))
+  })
+
+  it('a send naming an id nothing holds yet mints it: dated, and in no campaign', async () => {
+    const result = await post({
+      hostId: HOST,
+      action: 'send',
+      campaignId: 'fresh-1',
+      subject: 'Spring sale',
+      body: 'Ends Sunday',
+      audience: 'leads',
+    })
+    expect(result.status).toBe(200)
+    expect(typeof stored('fresh-1')['createdAtMs']).toBe('number')
+    expect(stored('fresh-1')['emailCampaignId']).toBeNull()
   })
 })
 

@@ -54,14 +54,18 @@ that is churn, and the organization resolves as Free.
 ### [Support queue](support-queue.md) {#support-queue}
 
 Every organization's support tickets in one
-triage list: filter by open/closed, reply as Aglyn staff, close or reopen.
+triage list: filter by open/closed (across the whole queue, a page at a time),
+reply as Aglyn staff, close or reopen.
 
 ### Plugin reviews & realm trust {#plugin-reviews}
 
 The marketplace review queue, plus a
 **Listed plugins — realm trust** table for granting or revoking
 [realm trust](../developers/plugins/guides/realm-bundles.md#granting-trust-staff)
-per version.
+per version. The search box finds a plugin by a word of its name, and the status menu
+narrows every section to **Submitted**, **In review**, **Listed**, **Verified** or
+**Taken down**; both answer over every plugin listing, not a first batch, and each
+section pages at its foot.
 Rejecting a version is a **verdict, not a kill**: it stops new installs, but a
 site already pinned to those bytes keeps running them. Where that has happened
 the review panel says so and offers **Stop this version**, the per-version kill
@@ -80,15 +84,23 @@ ordered by organization id, 10 per page by default (25 or 50 from the page-size 
 
 #### Filter the directory {#filter-the-directory}
 
-The grid's toolbar filters the whole directory, not the page on screen. **Filters**
-offers the organization name, slug, id, owner, created and updated dates, and two
-pickers: **Stored plan** (the plan written on the org, which is not always the plan it
-reads as — the Plan column shows both when they differ) and **Billing status** (the
-Stripe subscription status mirrored onto the org). The query answers one filter at a
-time, so a new filter replaces the last; the chip above the grid shows the one in
-force. **Search** matches the start of any word in the name, using the first word you
-type. A filter and a search are not combined: while a filter is set, the search waits
-until it is removed. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search) for the toolbar itself.
+The grid's toolbar filters and searches the whole directory, not the page on screen.
+**Filters** offers **Organization** (*contains* a word, or *is* the whole name),
+**Org slug** (*is*), **Org ID** (*is*, or *is any of*), **Owner UID** (*is*, or *is any
+of*), **Created** (on, after, or before a day), and two pickers: **Stored plan** (the
+plan written on the org, which is not always the plan it reads as — the Plan column
+shows both when they differ) and **Billing status** (the Stripe subscription status
+mirrored onto the org). **Search** matches the start of any word in the name, using the
+first word you type, and says so when you type more than one.
+
+Every filter you set and the search apply together, each on its own field, and the
+chips above the grid show them all. The list stays in organization-id order, except
+while **Created** is filtered, when it runs newest first. Two things cannot be
+combined on one query, and the list says so above the grid rather than applying them
+to part of it: Organization *contains* together with a search (one of them is shown as
+"is not applied: cannot be combined with the search — clear the search to use it"),
+and a filter it cannot answer at all. A filter that is not applied is named, with its
+reason, and the rest still narrow the list. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search) for the toolbar itself.
 
 #### Free workspace limit {#free-workspace-limit}
 
@@ -254,18 +266,31 @@ display name, uid, SSO pool, sign-in providers, created and last sign-in dates, 
 disabled flag, the staff claim, and **Staff role** picked from *support*, *billing* and
 *super*. A role picks the claim as stored, so a staff account granted no role (which
 acts as *support*) is not matched by *support*. **Search** takes a whole email address
-as an exact lookup, and anything else as part of an email, display name or uid. A
-filter or a search scans up to 2,000 accounts and lists up to 200 matches, and says
-when it stopped at either. One filter applies at a time, and a search and a filter are
-not combined: while a search is typed, the filter waits. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
+as an exact lookup, and anything else as part of an email, display name or uid.
 
-On the detail page, **Recent audit trail** and **Data access by staff** each filter and
-search the recent entries the page read — the newest ten from each of the lookups
-behind them — by action, target, reason, actor and date, with the note in the search
-too, before they page them, so a match on a later page is never missed. The
-**Audit log** page holds the full record. **Activity by this account** filters by
-action or date through its Filters panel; the action group chips above it are shortcuts
-for the actions a plugin names.
+Every filter you set and the search apply together, over every account in every pool.
+Accounts live in Firebase Authentication rather than in a database the console can
+query, so the list reads the whole directory and matches it: an **email is** or **UID
+is** filter is a direct lookup instead, with the other filters applied to the account it
+finds. Matches are paged, 200 at a time, and never cut short. The list reads up to 2,000
+accounts to answer a filter; past that (or when an SSO pool is larger than the list can
+read), every filter and the search are shown as not applied, with the reason, and the
+list is the unfiltered directory until you look an account up by its exact email or
+uid. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
+
+On the detail page, **Recent audit trail** (what was done by or to the account) and
+**Data access by staff** (who only looked at its data) each page through the account's
+whole audit trail, newest first. Their **Filters** take **Action** (typed as it is
+recorded, such as `user.disable`), **Action group** and **When** (before or after a
+date), and **Search** finds an entry by the start of a word in its action, the actor's
+address or uid, its target, scope, reason or note. Filters and search apply to the whole
+trail rather than the page on screen, and each filter in force shows as a chip above
+the table. Anything the table cannot apply is named in a note above it and left out
+rather than applied to some entries. **Activity by this account** filters by
+action or date through its Filters panel, and its search finds entries by the start of a
+word of the address or API key that made them or of the name of what changed — all on the
+query that reads the account's activity across every site and organization, newest first.
+The action group chips above it are shortcuts for the actions a plugin names.
 
 A **Legal acceptances** card on the same page answers the two questions a terms
 dispute asks: which version of the Terms and Privacy Policy this person accepted and
@@ -345,12 +370,17 @@ devices": do not tell anyone their account is clean from that screen until it lo
 ### Email delivery {#email-delivery}
 
 An **Email delivery** card on the same detail page answers *"they say they never got
-it."* It lists the 50 newest messages we sent the account's addresses: the subject,
-which of our senders produced it, when it was sent and delivered, and whether it was
-opened or clicked. The grid's toolbar filters and searches every message the card read:
-**Status** is a picker (*Sent*, *Delivered*, *Bounced*, *Spam complaint* and the rest),
-and the subject, sender and open and click counts filter as typed values. The search
-matches the subject, the sender and the recipient address.
+it."* It lists every message we sent the account's addresses, newest first, a page at
+a time: the subject, which of our senders produced it, when it was sent and delivered,
+and whether it was opened or clicked. Its **Filters** take **Status** (a picker: *Sent*,
+*Delivered*, *Bounced*, *Spam complaint* and the rest), **Sender** (the tag exactly, such
+as `invite`), **Opens** and **Clicks** (a number, for example `0` for never opened),
+**Sent** (before or after a date), and **Message** (contains a word of the subject).
+**Search** finds a message by the start of a word in its subject, its sender, or the
+address it went to, including the domain. Filters and search apply to the whole log
+rather than the page on screen, and combine, except that **Message** and the search both
+read the same words: while a search is typed, a Message filter is set aside with a note
+saying so.
 
 Read it before you resend anything. The four states that change what you do next:
 
@@ -440,10 +470,15 @@ Every organization's Stripe **invoice history** and default
 **payment method** (with delinquency state) render on its detail page.
 
 **Staff → Margin** scans organizations on request and ranks them worst margin first. Its
-per-organization table filters and searches every organization the scan read, before
-the rendering is capped: **Plan** is a picker, and the name, rollup month, net revenue
-and margin (typed as a fraction, such as `0.4`) filter as typed values. The search
-matches the name, organization id, plan and month.
+per-organization table's **Filters** and **Search** choose which organizations the scan
+reads, across all of them: **Organization** (*contains* a word, or *is* the whole name),
+**Stored plan** (a picker), and a search that matches the start of any word in the
+name. Changing one rescans from the start, and every figure on the page then describes
+the organizations that match. Month, net revenue, margin and the band readings are
+worked out from each organization's usage after it is read, so they are not offered as
+filters, and the worst-first order is the order of the organizations read so far. A
+filter the scan cannot answer is named above the table as not applied, with its
+reason.
 
 ### [Refunds](refunds.md) {#refunds}
 
@@ -540,16 +575,17 @@ while it stood.
 The list's **Filters** narrows it by **Status** (**Active** or **Released**),
 **Reason** (one or several), **Learned from** (the tag of the send that
 failed, such as `invite`), **Site ID**, and **Last reported** (on or after, or
-before, a date). Status and Last reported combine with any other filter;
-Reason, Learned from and Site ID apply one at a time, so choosing one replaces
-another. The search box finds an address by the start of any part of it: the
-local part, a piece of it such as `doe` in `jane.doe`, or the domain, with or
-without the `@`. It matches up to the first twelve characters typed. A search
-runs on its own, alongside **Last reported** only: while a search is in the
-box, the other filters are set aside, and a note above the list says so;
-clear the search to apply them again. Filters and search apply to the whole
-list rather than the page on screen, and each filter in force shows as a chip
-above the list; remove the chip to drop it. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
+before, or on, a date). The search box finds an address by the start of any
+part of it: the local part, a piece of it such as `doe` in `jane.doe`, or the
+domain, with or without the `@`. It reads one word, and matches up to the
+first twelve characters typed; a note above the list says so when you type
+more. Every filter and the search combine, and all of them apply to the whole
+list rather than the page on screen, newest failure first. Each filter in
+force shows as a chip above the list; remove the chip to drop it.
+
+Every combination the panel offers is one query, so none is refused; a
+filter the list ever could not apply would be named in a note above the list
+and left off entirely, never applied to some rows and not others. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ### [Feature flags](feature-flags.md) {#feature-flags}
 
@@ -594,18 +630,26 @@ before/after below the list.
 The list filters through its table's toolbar, across the whole log rather than the page on
 screen:
 
-- **Action** (typed as it is recorded, such as `org.override`), **Who (uid)** and **Target**
-  are answered by the log's query, one at a time, and **When** (before or after a date) goes
-  alongside any of them.
+- **Action** (typed as it is recorded, such as `org.override`, or several at once),
+  **Who (uid)** and **Target** (the record's path, such as `orgs/acme`).
 - **Action group** groups entries by their namespace, with every AI-related entry — the
   customer overage controls, the free-spend pause, and the AI actions themselves — under one
-  **AI** group. **Scope** picks the lockdown, quarantine or report scope an entry was written
-  with. The pickers offer the groups and scopes of the entries read so far.
-- **Search** matches the actor's uid and address, the action, scope, target, reason and note.
+  **AI** group.
+- **Target type** is the kind of record acted on (`orgs`, `users`, `hosts`, `lockdowns` and
+  so on), and **Site** is the site acted on, by its id: a site itself or anything filed under
+  one.
+- **Scope** picks the lockdown, quarantine or report scope an entry was written with.
+- **When** takes one date bound, before or after a date.
+- **Search** finds an entry by the start of a word in its action, the actor's address or uid,
+  its target, scope, reason or note. It matches one word at a time, up to its first twelve
+  characters.
 
-Action group, Scope and the search are matched as the log is read: each page looks through up
-to 500 entries, so a page can come back short, and **Next** carries on from where it stopped.
-**Export CSV** exports what the filters and search match, from up to 5,000 entries. See
+Every filter and the search combine, and each filter in force shows as a chip above the
+list. The pickers offer every scope and target type the log's writers record, plus any the
+entries on screen show. A combination the log cannot answer at once, such as two
+multi-value filters with more than thirty values between them, is named in a note above the
+list and not applied, rather than applied to some entries. **Export CSV** exports what the
+filters and search match, up to 5,000 entries, and says when there were more. See
 [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 ### Coupons {#coupons}
@@ -635,12 +679,23 @@ costs more than the floor, which no organization's usage does yet.
 #### Existing coupons {#existing-coupons}
 
 **Existing coupons** lists Stripe coupons with their promotion codes, redemption
-count, and a **valid** or **expired** state — the first 100 coupons and 100 promotion
-codes Stripe returns. Its toolbar filters and searches every coupon it read, not only
-the page shown: **Duration** (*Once*, *Repeating*, *Forever*) and **Status** (*Valid*,
-*Expired*) are pickers, the name and redemption count filter as typed values, and the
-search matches a coupon's name, its Stripe id or any of its promotion codes. The fields above the list are the create form,
-not filters.
+count, and a **valid** or **expired** state, a page at a time. The list reads **every**
+coupon and promotion code Stripe holds, not a first page of them, and its toolbar filters
+and searches all of them, not only the page shown: **Duration** (*Once*, *Repeating*,
+*Forever*) and **Status** (*Valid*, *Expired*) are pickers; the coupon name filters as
+typed text (contains, does not contain, equals, starts with, ends with, empty, not
+empty); the redemption count filters as a number; and the search matches a coupon's
+name, its Stripe id or any of its promotion codes. Every filter combines with every
+other and with the search. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
+The fields above the list are the create form, not filters.
+
+Stripe cannot filter or search coupons by any of these, so this list is answered by the
+console over the whole set it read from Stripe rather than by a database query. Past
+1,000 coupons or 2,000 promotion codes it refuses to answer, with a message saying so,
+rather than filter part of them; the organization page's coupon picker reads the same
+set and stays empty in that case. A filter the list cannot apply — a field it does not
+filter by, or an operator that field does not offer — shows a notice above the table,
+"*Filter* is not applied: *why*", and is left out rather than applied to some rows.
 
 Each promotion code carries **Activate** / **Deactivate**. Checkout only resolves a code
 that is active, so a deactivated code is reported to the customer as one we do not
@@ -673,6 +728,10 @@ with SSO blocked from re-asserting it on the next sign-in.
 A suppression **outlives the contact record**, and it can be undone: a number the person
 later opts back in for is marked **Opted back in** rather than removed, so the history of
 what was asked and when survives.
+
+**Suppressed numbers** lists every record, most recently changed first, a page at a
+time, and its heading counts every number currently suppressed across the whole list,
+not only the page on screen.
 
 ### Access {#access}
 

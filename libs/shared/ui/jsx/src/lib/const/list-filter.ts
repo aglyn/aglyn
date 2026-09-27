@@ -15,13 +15,6 @@
  * limitations under the License.
  */
 
-import {
-  getGridBooleanOperators,
-  getGridDateOperators,
-  getGridNumericOperators,
-  getGridStringOperators,
-  type GridFilterOperator,
-} from '@mui/x-data-grid'
 
 /**
  * ONE declaration of what a paged list can be filtered by (AGL-2501).
@@ -38,6 +31,13 @@ import {
  * which operators the menu offers (here) and which predicates the query builds
  * (`applyListFilter`, server-side, which needs firebase-admin and so cannot
  * live in this file).
+ *
+ * ⛔ No runtime import of `@mui/x-data-grid` here. This grammar is read by
+ * `list-query-plan`, which the storefront's server-side catalog query reaches
+ * from a published page, and the grid's filter inputs are `'use client'`
+ * modules: imported from the server graph they become client references that
+ * every published page downloads. The grid's own operator objects are built
+ * in `list-grid-filter` (`listFilterColumn`, `hiddenFilterColumns`).
  *
  * ## Why the menu is shorter than MUI's
  *
@@ -226,51 +226,6 @@ export function listFilterOperators(field: ListFilterField): string[] {
   }
 }
 
-const operatorPool = (kind: ListFilterKind): GridFilterOperator[] => {
-  switch (kind) {
-    case 'boolean':
-      return getGridBooleanOperators()
-    case 'number':
-      return getGridNumericOperators()
-    case 'date':
-      return getGridDateOperators()
-    default:
-      return getGridStringOperators()
-  }
-}
-
-/**
- * The MUI operators for a field — the same list `listFilterOperators` names,
- * resolved to the grid's own operator objects so the panel keeps its native
- * inputs (a date picker for a date, a number field for a number).
- */
-export function gridFilterOperators(
-  field: ListFilterField,
-): GridFilterOperator[] {
-  const allowed = listFilterOperators(field)
-  return operatorPool(field.kind).filter((operator) =>
-    allowed.includes(operator.value),
-  )
-}
-
-/**
- * Spread onto a `GridColDef` to make a column filterable exactly as far as the
- * query can serve it. A column with NO declared field is turned off entirely —
- * deliberately, because the alternative is a funnel icon that opens a panel
- * nothing honours.
- */
-export function listFilterColumn(
-  fields: readonly ListFilterField[],
-  column: string,
-): { filterable: boolean; filterOperators?: GridFilterOperator[] } {
-  const field = fields.find((entry) => entry.column === column)
-  if (!field) return { filterable: false }
-  const operators = gridFilterOperators(field)
-  return operators.length
-    ? { filterable: true, filterOperators: operators }
-    : { filterable: false }
-}
-
 /** What a page sends the route: one field, one operator, one value. */
 export interface ListFilterRequest {
   field: string
@@ -355,92 +310,7 @@ export function gridFilterRequests(model: {
   return (model.items ?? []).filter(gridItemUsable).map(gridItemRequest)
 }
 
-/**
- * How an operator reads on a chip or in a sentence — "Owner is Dana",
- * "Created on or after 1 Jan". One map so every list that shows its
- * clauses back spells them the same way; an operator nothing here names
- * is shown as itself rather than hidden.
- */
-export function listFilterOperatorLabel(op: string): string {
-  switch (op) {
-    case 'contains':
-      return 'contains'
-    case 'doesNotContain':
-      return 'does not contain'
-    case 'equals':
-    case 'is':
-    case '=':
-      return 'is'
-    case 'doesNotEqual':
-    case '!=':
-      return 'is not'
-    case 'startsWith':
-      return 'starts with'
-    case 'endsWith':
-      return 'ends with'
-    case 'isAnyOf':
-      return 'is any of'
-    case 'isEmpty':
-      return 'is empty'
-    case 'isNotEmpty':
-      return 'is set'
-    case 'after':
-      return 'after'
-    case 'onOrAfter':
-      return 'on or after'
-    case 'before':
-      return 'before'
-    case 'onOrBefore':
-      return 'on or before'
-    case '>':
-      return 'over'
-    case '>=':
-      return 'at least'
-    case '<':
-      return 'under'
-    case '<=':
-      return 'at most'
-    default:
-      return op
-  }
-}
-
-/**
- * Fields a reader can filter by that are NOT columns on the table.
- *
- * MUI's filter panel lists COLUMNS — `gridFilterableColumnDefinitionsSelector`
- * reads every column definition, hidden ones included — so a filterable field
- * with no column is a field nobody can reach however well the route answers it.
- * Declaring it as a permanently hidden column keeps one source of truth, the
- * field list, instead of a second list of "extra filters" that drifts from it.
- *
- * `hideable: false` keeps them out of Manage columns as well: a column with no
- * `renderCell` and no width has nothing to show, and a reader who unhid one
- * would get a strip of blank cells for their trouble.
- *
- * Pair with {@link hiddenFilterVisibility}, which is what actually hides them.
- */
-export function hiddenFilterColumns(
-  fields: readonly ListFilterField[],
-  visible: readonly string[],
-  headers: Readonly<Record<string, string>> = {},
-): Array<{
-  field: string
-  headerName: string
-  hideable: boolean
-  filterable: boolean
-  filterOperators?: GridFilterOperator[]
-}> {
-  return fields
-    .filter((field) => !visible.includes(field.column))
-    .map((field) => ({
-      field: field.column,
-      headerName: headers[field.column] ?? field.column,
-      hideable: false,
-      ...listFilterColumn(fields, field.column),
-    }))
-    .filter((column) => column.filterable)
-}
+export { listFilterOperatorLabel } from './list-filter-sentence'
 
 const readPath = (row: unknown, path: string): unknown =>
   path

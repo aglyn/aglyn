@@ -125,8 +125,31 @@ const shots = [
     out: 'media/media-page.png',
     path: `/${HOST_BASE}/media`,
     waitFor: 'hero.jpg',
+    // The view is remembered on the signed-in profile (AGL-3327), so the
+    // shot names the one it draws rather than inheriting the last run's.
+    // Choosing the view already chosen changes nothing.
+    actions: [
+      { click: 'button[aria-label="Grid view"]', settleMs: 1500 },
+      // Off the toggle, so its tooltip is not in the frame.
+      { hoverXY: [720, 200], settleMs: 800 },
+    ],
     // Let the thumbnail images finish loading.
     settleMs: 4000,
+  },
+  {
+    // The List view (AGL-3327): the same files as a table, the site
+    // library's card only — the organization library below it is empty on
+    // the seeded workspace. Put back to the Grid view by the shot above on
+    // the next run.
+    out: 'media/media-list-view.png',
+    path: `/${HOST_BASE}/media`,
+    waitFor: 'hero.jpg',
+    actions: [
+      { click: 'button[aria-label="List view"]', waitFor: 'Uploaded by', settleMs: 2000 },
+      { hoverXY: [720, 200], settleMs: 800 },
+    ],
+    settleMs: 3000,
+    clipTo: { locator: '.MuiCard-root:has-text("Library"):has-text("hero.jpg")' },
   },
   {
     out: 'content/content-page.png',

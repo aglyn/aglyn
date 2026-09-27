@@ -18,28 +18,25 @@
  */
 
 /**
- * What the orders table READS, and where it admits the reading stopped.
+ * What the orders card READS, and what each read is for (AGL-3321).
  *
- * This card cannot page the way a plain list can, and that is the reason its
- * window has to be both ordered and disclosed rather than merely small. Five
- * filters and the CSV export all run over what was read, so the window is the
- * scope of every one of them:
+ * The card used to read one window — the newest two hundred orders — and run
+ * five filters, the search, the dispute banner, the money tiles and the CSV
+ * export over it, which made the window the scope of every one of them. Now
+ * each has the read its job needs, and these assertions sit on the reads
+ * themselves so a regression to a shared window cannot pass:
  *
- *  * Unordered, the window is the wrong scope. A capped query with no
- *    `orderBy` is answered in document-id order and orders carry generated
- *    ids, so it returns a pseudo-random slice — and a status filter run over a
- *    random slice reports "no refunded orders" for a store that has them.
- *  * Undisclosed, the scope is invisible. A filter that matches nothing inside
- *    the window and a filter that matches nothing in the collection render
- *    identically, so the reader cannot tell "you have none" from "this card
- *    did not look that far".
- *
- * The assertions therefore sit on the constraints themselves — field,
- * direction and ceiling as numbers — plus the disclosure and its control.
- * Rendering assertions alone would survive a regression to any window.
+ *  * THE LIST is one paged query — every clause and the search word on it,
+ *    newest first by `createdAtMs` — with no window cap of its own.
+ *  * THE BANNER is its own query, `disputeKey == 'open'`, so a deadline is
+ *    raised whatever the list is filtered to or paged at.
+ *  * THE MONEY TILES are analytics, not a filter: a bounded sixty-day read,
+ *    made only for an org entitled to see them.
+ *  * THE PRODUCT PICKER is a bounded read by document name.
  */
 
 import { cleanup, render } from '@testing-library/react'
+import type { ListQueryRequest } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 
 interface Constraint {
   __constraint: string
@@ -51,8 +48,9 @@ interface CapturedQuery {
 }
 
 const mockQueries: CapturedQuery[] = []
-let orderRows: any[] = []
-let productRows: any[] = []
+/** Every request a `useListQuery` on this card made, in call order. */
+const mockListRequests: Array<{ request: ListQueryRequest; pageSize?: number }> = []
+let mockOrgPlan = { org: { plan: 'starter' }, ready: true }
 
 jest.mock('firebase/firestore', () => {
   const marker =
@@ -68,18 +66,29 @@ jest.mock('firebase/firestore', () => {
     }),
     limit: marker('limit'),
     orderBy: marker('orderBy'),
+    where: marker('where'),
     documentId: () => '__name__',
   }
 })
 
-/** Settled and unentitled: the money tiles stay off, the table still renders. */
-const ORG_PLAN = { org: { plan: 'starter' }, ready: true }
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: { request: ListQueryRequest; pageSize?: number }) => {
+      mockListRequests.push({ request: options.request, pageSize: options.pageSize })
+      return useListQueryDouble(() => [], options)
+    },
+  }
+})
 
 jest.mock('@aglyn/tenant-feature-instance', () => {
   const firestore = require('firebase/firestore')
   return {
     useFirestore: () => ({}),
-    useOrgPlan: () => ORG_PLAN,
+    useOrgPlan: () => mockOrgPlan,
     useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
     // The real builder, through the mocked markers, so the ordering a
     // ceilinged read carries stays visible to the assertions.
@@ -93,11 +102,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => {
       rows: (read ?? []).slice(0, ceiling),
       truncated: (read ?? []).length > ceiling,
     }),
-    useFirestoreCollection: (build: () => CapturedQuery) => {
+    useFirestoreCollection: (build: () => CapturedQuery | null) => {
       const ref = build()
-      mockQueries.push(ref)
-      if (ref.__path.endsWith('/products')) return { data: productRows }
-      if (ref.__path.endsWith('/orders')) return { data: orderRows }
+      if (ref) mockQueries.push(ref)
       return { data: [] }
     },
   }
@@ -109,96 +116,59 @@ jest.mock('@aglyn/shared-ui-snackstack', () => ({
 
 import { HostOrdersCard } from './host-orders-card.component'
 
-const DAY_MS = 24 * 60 * 60 * 1000
+const queriesFor = (suffix: string) =>
+  mockQueries.filter((entry) => entry.__path.endsWith(suffix))
 
-const order = (id: number) => ({
-  $id: `order-${id}`,
-  status: 'paid',
-  createdAtMs: Date.now() - DAY_MS,
-  refundedCents: 0,
-  totals: { totalCents: 100 },
-  channel: 'online',
-  lineItems: [],
-})
-
-const orders = (count: number) =>
-  Array.from({ length: count }, (_row, index) => order(index))
-
-const queryFor = (suffix: string) => {
-  const found = mockQueries.find((entry) => entry.__path.endsWith(suffix))
-  if (!found) throw new Error(`no query was built for ${suffix}`)
-  return found
-}
-
-const onlyConstraint = (subject: CapturedQuery, kind: string) => {
-  const found = subject.constraints.filter(
-    (entry) => (entry as Constraint)?.__constraint === kind,
-  ) as Constraint[]
-  expect(found).toHaveLength(1)
-  return found[0]
-}
+const constraints = (subject: CapturedQuery, kind: string) =>
+  subject.constraints
+    .filter((entry) => entry?.__constraint === kind)
+    .map((entry) => entry.args)
 
 beforeEach(() => {
   mockQueries.length = 0
-  orderRows = orders(1)
-  productRows = []
+  mockListRequests.length = 0
+  mockOrgPlan = { org: { plan: 'starter' }, ready: true }
 })
 
 afterEach(cleanup)
 
-describe('the orders window is ordered, capped and probed', () => {
-  it('orders on the field every order writer stamps, newest first', () => {
+describe('each thing the orders card shows has the read its job needs', () => {
+  it('pages the list on its own query, and caps no window of orders', () => {
     render(<HostOrdersCard hostId="host-1" />)
-
-    // `createdAt` would satisfy "is ordered" and drop every order written
-    // without it — a silent narrowing of all five filters.
-    expect(onlyConstraint(queryFor('/orders'), 'orderBy').args).toEqual([
-      'createdAtMs',
-      'desc',
-    ])
+    const list = mockListRequests[mockListRequests.length - 1]
+    expect(list.request).toEqual({ clauses: [], search: [] })
+    // The pager's page, not a window: the double pages by the default size.
+    expect(list.pageSize).toBeUndefined()
+    // An unentitled org's card makes no plain read of `orders` at all.
+    expect(queriesFor('/orders')).toEqual([])
   })
 
-  it('caps the window at 200 and asks for one more', () => {
+  it('asks for the open disputes on a query of their own', () => {
     render(<HostOrdersCard hostId="host-1" />)
-
-    // 201: the probe is what makes "there are more" a fact rather than a
-    // comparison that is wrong at exactly 200.
-    expect(onlyConstraint(queryFor('/orders'), 'limit').args).toEqual([201])
-  })
-
-  it('walks the product name map by document name', () => {
-    productRows = [{ $id: 'p1', name: 'Kettle', status: 'active' }]
-    render(<HostOrdersCard hostId="host-1" />)
-
-    const products = queryFor('/products')
-    expect(onlyConstraint(products, 'orderBy').args).toEqual(['__name__'])
-    expect(onlyConstraint(products, 'limit').args).toEqual([101])
-  })
-
-  it('renders 200 rows and says the filters stop there', () => {
-    orderRows = orders(201)
-
-    const { getByText } = render(<HostOrdersCard hostId="host-1" />)
-
-    // The probe row is never handed to the grid: it pages 200 orders.
-    expect(getByText(/of 200$/)).toBeTruthy()
-    expect(
-      getByText(
-        /Showing the 200 most recent orders\. Filters and Export CSV cover these\./,
-      ),
-    ).toBeTruthy()
-  })
-
-  it('stays quiet at exactly 200, where nothing was cut', () => {
-    // THE CONTROL. A card that always disclosed would satisfy the case above
-    // while telling every store its list was short.
-    orderRows = orders(200)
-
-    const { getByText, queryByText } = render(
-      <HostOrdersCard hostId="host-1" />,
+    const banner = mockListRequests.find(
+      (entry) => entry.request.clauses[0]?.field === 'disputeKey',
     )
+    expect(banner?.request.clauses).toEqual([
+      { field: 'disputeKey', op: 'equals', value: 'open' },
+    ])
+    expect(banner?.pageSize).toBe(50)
+  })
 
-    expect(getByText(/of 200$/)).toBeTruthy()
-    expect(queryByText(/Showing the 200 most recent orders/)).toBeNull()
+  it('reads the money tiles on a bounded sixty-day range, only when they show', () => {
+    mockOrgPlan = { org: { plan: 'pro' }, ready: true }
+    render(<HostOrdersCard hostId="host-1" />)
+    const [stats] = queriesFor('/orders')
+    const [range] = constraints(stats, 'where')
+    expect(range.slice(0, 2)).toEqual(['createdAtMs', '>='])
+    expect(Date.now() - Number(range[2])).toBeGreaterThanOrEqual(60 * 86_400_000)
+    expect(constraints(stats, 'orderBy')).toEqual([['createdAtMs', 'desc']])
+    expect(constraints(stats, 'limit')).toEqual([[501]])
+  })
+
+  it('walks the product picker by document name', () => {
+    render(<HostOrdersCard hostId="host-1" />)
+    const [products] = queriesFor('/products')
+    expect(constraints(products, 'orderBy')).toEqual([['__name__']])
+    expect(constraints(products, 'limit')).toEqual([[101]])
   })
 })

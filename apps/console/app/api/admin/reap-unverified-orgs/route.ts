@@ -95,6 +95,7 @@ import {
   UNVERIFIED_ORG_GRACE_MS,
   type UnverifiedOrgFacts,
 } from '../../../../utils/server/reap-unverified-orgs'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 export const dynamic = 'force-dynamic'
 
@@ -418,24 +419,22 @@ async function handler(request: Request): Promise<Response> {
       }
 
       if (erased || promoted || failed.length) {
-        await firestore
-          .collection('adminAudit')
-          .add({
-            actorUid: 'system:cron',
-            action: 'orgs.unverified.reap',
-            target: 'orgs',
-            after: {
-              erased: plan.toReap
-                .filter(
-                  (candidate) =>
-                    !failed.some((entry) => entry.orgId === candidate.orgId),
-                )
-                .map((candidate) => candidate.orgId),
-              promoted: plan.toPromote.map((promotion) => promotion.orgId),
-              failed,
-            },
-            at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-          })
+        await addAdminAudit(firestore, {
+          actorUid: 'system:cron',
+          action: 'orgs.unverified.reap',
+          target: 'orgs',
+          after: {
+            erased: plan.toReap
+              .filter(
+                (candidate) =>
+                  !failed.some((entry) => entry.orgId === candidate.orgId),
+              )
+              .map((candidate) => candidate.orgId),
+            promoted: plan.toPromote.map((promotion) => promotion.orgId),
+            failed,
+          },
+          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        })
           .catch(() => undefined)
       }
     }

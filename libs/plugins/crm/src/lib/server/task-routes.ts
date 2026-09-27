@@ -21,6 +21,7 @@ import {
   CRM_COLLECTIONS,
   type CrmTask,
   crmScopeTokens,
+  crmTaskListFields,
   crmTaskReminderAfterEdit,
   crmTaskReminderPending,
   isOrgWideMember,
@@ -433,9 +434,12 @@ async function updateTask(
   }
   const previousAssignee = String(existing.get('assigneeUid') ?? '') || null
   const previousLinks = crmNextActivityLinksOf(existing.data() as Record<string, unknown>)
+  const stored = storedFields(fields, 'update')
   await tasks.doc(taskId).update({
-    ...storedFields(fields, 'update'),
+    ...stored,
     ...reminderFields(fields, existing),
+    // The title is what the Tasks list searches (AGL-3321).
+    ...crmTaskListFields({ ...existing.data(), ...stored }),
     updatedAt: FieldValue.serverTimestamp(),
   })
   // Both sides: a task moved off one deal onto another leaves neither stale.
@@ -501,6 +505,8 @@ async function createTask(
   await ref.set({
     ...storedFields(fields, 'create'),
     ...reminderFields(fields, null),
+    // What the Tasks list searches (AGL-3321).
+    ...crmTaskListFields({ ...storedFields(fields, 'create'), visibleTo }),
     status: 'open',
     completedAtMs: null,
     visibleTo,

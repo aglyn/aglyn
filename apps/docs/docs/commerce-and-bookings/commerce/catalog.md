@@ -91,7 +91,16 @@ Collections group products for landing pages and storefront blocks:
 - **Smart** collections define rules — match by tag, category, price, name,
   or product type, with *all* or *any* semantics — and membership updates
   automatically as products change. Draft and archived products never
-  appear.
+  appear. A smart collection lists every product that matches, however large
+  the catalog. Saving or deleting one updates which products it holds right
+  away. On a big catalog that can take a few seconds after **Collection
+  saved** appears.
+
+On a Product grid scoped to a smart collection whose rules use *any*, *is
+not*, a name, or a price *above*, the grid's search box and its category and
+tag chips can't be combined with the collection. Using one shows a notice
+above the grid instead of narrowing it. The type, **In stock** and price
+controls still work.
 
 ## Slugs
 

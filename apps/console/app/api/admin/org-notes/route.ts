@@ -22,6 +22,7 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Staff notes on organizations (wave v5): support/billing context that
@@ -84,7 +85,7 @@ async function handler(request: Request): Promise<Response> {
         actorEmail: decoded.email ?? null,
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: 'org.note',
         target: `orgs/${orgId}`,

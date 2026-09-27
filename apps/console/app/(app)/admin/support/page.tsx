@@ -32,14 +32,26 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { docsHelp } from '../../../../constants/docs-links'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import {
+  SUPPORT_TICKET_FILTER_FIELDS,
+  SUPPORT_TICKET_FILTER_HEADERS,
+  SUPPORT_TICKET_FILTER_OPTIONS,
+} from '../../../../utils/support-ticket-list-query'
 
 interface StaffTicket {
   $id: string
@@ -60,6 +72,14 @@ interface StaffMessage {
 
 type StatusFilter = 'open' | 'closed' | 'all'
 
+/** The status chip as the clause the route puts on its query; `all` is none. */
+const statusClauses = (filter: StatusFilter): ListFilterClause[] =>
+  filter === 'all' ? [] : [{ field: 'status', op: 'equals', value: filter, label: filter }]
+
+/** The staff queue is the tickets route's `view=queue` list. */
+const QUEUE_PARAMS: Readonly<Record<string, string>> = { view: 'queue' }
+const NO_WORDS: readonly string[] = []
+
 function formatWhen(ms: number | null): string {
   return ms ? new Date(ms).toLocaleString() : ''
 }
@@ -71,6 +91,11 @@ function formatWhen(ms: number | null): string {
  * ticket to a `staff` claim and threads a `staff: true` reply — this page is
  * the surface that was missing. Open/close and reply drive the same PATCH the
  * subscriber uses; a reply reopens a closed ticket unless it is also closed.
+ *
+ * The Open / Closed / All chips are a Status clause the route puts on its
+ * Firestore query, and the queue pages by a cursor (AGL-3321): a ticket past
+ * the first page is reached by paging, never missed because a window of the
+ * newest tickets ended before it. The open count is its own count query.
  */
 const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
@@ -105,9 +130,8 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
     [user, enqueueSnackbar],
   )
 
-  const [tickets, setTickets] = useState<StaffTicket[]>([])
-  const [loaded, setLoaded] = useState(false)
   const [filter, setFilter] = useState<StatusFilter>('open')
+  const [openCount, setOpenCount] = useState(0)
   const [thread, setThread] = useState<{
     ticket: StaffTicket
     messages: StaffMessage[]
@@ -115,15 +139,52 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
   const [reply, setReply] = useState('')
   const [busy, setBusy] = useState(false)
 
+  const clauses = useMemo(() => statusClauses(filter), [filter])
+  const onQueueError = useCallback(
+    (error: unknown) =>
+      enqueueSnackbar(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Reading the support queue failed',
+        { variant: 'warning', persist: false },
+      ),
+    [enqueueSnackbar],
+  )
+  const queue = useStaffListQuery<StaffTicket>({
+    endpoint: '/api/support/tickets',
+    clauses,
+    search: NO_WORDS,
+    params: QUEUE_PARAMS,
+    onError: onQueueError,
+  })
+  const { refresh: refreshQueue } = queue
+  const tickets = queue.rows
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(queue.refused, {
+        fields: SUPPORT_TICKET_FILTER_FIELDS,
+        headers: SUPPORT_TICKET_FILTER_HEADERS,
+        options: SUPPORT_TICKET_FILTER_OPTIONS,
+      }),
+    [queue.refused],
+  )
+
   const refresh = useCallback(async () => {
     if (!user) return
-    const payload = await request('/api/support/tickets', 'GET')
-    if (payload?.tickets) setTickets(payload.tickets)
-    setLoaded(true)
-  }, [user, request])
+    refreshQueue()
+    const payload = await request('/api/support/tickets?view=openCount', 'GET')
+    if (payload) setOpenCount(Number(payload.open ?? 0))
+  }, [user, request, refreshQueue])
+  const signedInUid = (user as any)?.uid
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    if (!signedInUid) return
+    void request('/api/support/tickets?view=openCount', 'GET').then((payload) => {
+      if (payload) setOpenCount(Number(payload.open ?? 0))
+    })
+    // Keyed on WHO is signed in: `request` changes identity with `useUser`'s
+    // object on every render, and the count is re-read after every change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedInUid])
 
   const openTicket = useCallback(
     (ticketId: string) => async () => {
@@ -166,11 +227,6 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
     },
     [request, refresh, thread, openTicket],
   )
-
-  const visible = tickets.filter((ticket) =>
-    filter === 'all' ? true : ticket.status === filter,
-  )
-  const openCount = tickets.filter((ticket) => ticket.status === 'open').length
 
   return (
     <>
@@ -215,14 +271,15 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
                     ),
                   )}
                 </Stack>
-                {loaded && visible.length === 0 ? (
+                <ListQueryNotices refused={refusals} notices={queue.notices} />
+                {!queue.loading && !queue.failed && tickets.length === 0 ? (
                   <Alert severity="success">
                     {filter === 'open'
                       ? 'No open tickets — the queue is clear.'
                       : 'No tickets to show.'}
                   </Alert>
                 ) : null}
-                {visible.map((ticket) => (
+                {tickets.map((ticket) => (
                   <Stack
                     key={ticket.$id}
                     direction="row"
@@ -253,6 +310,7 @@ const AdminSupport: NextPageWithLayout<Record<string, never>> = () => {
                     </Button>
                   </Stack>
                 ))}
+                <StaffListPaginationControls pagination={queue} />
               </Stack>
             </CardDisplay>
           </StaffOnly>

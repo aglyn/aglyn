@@ -60,6 +60,7 @@ import {
   isContactLifecycleStage,
 } from './crm-kinds'
 import {
+  CONTACT_ALTERNATE_EMAILS_FIELD,
   CONTACT_FACETS_FIELD,
   CONTACT_SOURCE_LABELS,
   type ContactInteraction,
@@ -68,7 +69,13 @@ import {
   normalizeContactEmail,
   readContactFacet,
 } from './contacts'
-import type { EmailState } from './email-state'
+import { type EmailState, isEmailStateStatus } from './email-state'
+import {
+  NAME_TOKEN_MAX_PREFIX,
+  nameSearchKey,
+  SCOPED_SEARCH_JOIN,
+  scopedSearchTokens,
+} from './name-search'
 import { MAX_SCOPE_HOSTS, ORG_SCOPE_TOKEN, type ScopeToken } from './scope-tokens'
 
 // The fixed vocabularies and their guards live in a leaf module; every name
@@ -3333,4 +3340,468 @@ export function normalizeCrmMediaIds(value: unknown): string[] {
         .filter((id) => id.length > 0 && id.length <= 200),
     ),
   ].slice(0, CRM_MEDIA_IDS_MAX)
+}
+
+/*==========================================
+ * WHAT A CRM LIST QUERIES BY (AGL-3321).
+ *
+ * Every filter and every search word on the Leads, Contacts, Companies,
+ * Deals and Tasks lists is a predicate on the list's Firestore query, and a
+ * query can only ask about a field a WRITER stored in the shape the query
+ * asks for. Three kinds of field exist for that and for nothing else:
+ *
+ *   `searchTokens`        word prefixes of what the list's search box reads
+ *                         (a lead's name, address, company, title and tags;
+ *                         a deal's title), for `array-contains` on one typed
+ *                         word — see `nameSearchTokens`.
+ *   `scopedSearchTokens`  the same tokens behind each of the record's
+ *                         `visibleTo` tokens (`host:abc~acme`). A list under
+ *                         a site already spends its one array clause on
+ *                         `visibleTo array-contains-any`, so its search asks
+ *                         `array-contains-any` over the site's tokens joined
+ *                         to the word — one clause answering both.
+ *   keys                  a normalized scalar where the stored value cannot
+ *                         be asked as it is: a lead's status (absent on a
+ *                         capture), its lead source (compared the way the
+ *                         picklist compares labels), a verdict on the
+ *                         address (`none` when there is none) and a contact's
+ *                         per-holder facet values (`facetKeys`).
+ *
+ * All of them are DERIVED: a pure function of the document, computed here
+ * and nowhere else, and written by every path that writes one of its inputs
+ * — see `CRM_LIST_FIELD_INPUTS` — so a record a list cannot find is a writer
+ * that forgot, never a second formula that disagrees. A server writer that
+ * holds the whole document spreads `crmListFields`; one that patched a field
+ * restamps the record from what was stored (`restampCrmListFields` in the
+ * admin library); the one-time backfill (`backfill-crm-list-fields.mjs`)
+ * restates them for a plain Node script and is held to the same worked
+ * examples (`tools/scripts/lib/org-record-list-fields.fixtures.json`), which this
+ * library's spec asserts too.
+ *=========================================*/
+
+/** The search box's word-prefix tokens, on every CRM record a list searches. */
+export const CRM_SEARCH_TOKENS_FIELD = 'searchTokens'
+/** The same tokens behind each `visibleTo` token — see the block header. */
+export const CRM_SCOPED_SEARCH_TOKENS_FIELD = 'scopedSearchTokens'
+/** What joins a scope token to a search token — the platform's one join (`SCOPED_SEARCH_JOIN`). */
+export const CRM_SCOPED_SEARCH_JOIN = SCOPED_SEARCH_JOIN
+/**
+ * The most search tokens one record keeps. A name, an address, a company
+ * and a title are a few dozen prefixes; the cap is what keeps a record with
+ * twenty long tags from spending hundreds of index entries on them.
+ */
+export const CRM_SEARCH_TOKENS_MAX = 200
+
+/** The collections whose lists query the fields below. */
+export type CrmListCollection = 'leads' | 'contacts' | 'companies' | 'deals' | 'crmTasks'
+
+const SEARCH_KEY = nameSearchKey
+
+/**
+ * The word-prefix tokens of several values, merged: every prefix (up to
+ * twelve characters) of every whitespace-separated word, lower-cased —
+ * exactly `nameSearchTokens` per value — plus, for an email address, the
+ * words it is made of, so `acme` finds `dana@acme.com` and `dana` does too.
+ */
+export function crmSearchTokens(values: readonly unknown[]): string[] {
+  const tokens = new Set<string>()
+  const addWord = (word: string) => {
+    const capped = word.slice(0, NAME_TOKEN_MAX_PREFIX)
+    for (let end = 1; end <= capped.length; end += 1) {
+      if (tokens.size >= CRM_SEARCH_TOKENS_MAX) return
+      tokens.add(capped.slice(0, end))
+    }
+  }
+  const addText = (text: string) => {
+    const key = SEARCH_KEY(text)
+    if (!key) return
+    for (const word of key.split(' ')) {
+      if (!word) continue
+      addWord(word)
+      // An address, a domain or a hyphenated name is also its parts.
+      if (/[@.+_-]/.test(word)) {
+        for (const part of word.split(/[@.+_-]+/)) if (part) addWord(part)
+      }
+    }
+  }
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      for (const entry of value) if (typeof entry === 'string') addText(entry)
+    } else if (typeof value === 'string') {
+      addText(value)
+    }
+  }
+  return [...tokens]
+}
+
+/**
+ * The two search fields for a record whose search reads `values`: the
+ * tokens, and the same tokens behind each of its scope tokens through the
+ * platform's one scoped writer (`scopedSearchTokens`).
+ */
+export function crmSearchFields(
+  visibleTo: unknown,
+  values: readonly unknown[],
+): { searchTokens: string[]; scopedSearchTokens: string[] } {
+  const searchTokens = crmSearchTokens(values)
+  return { searchTokens, scopedSearchTokens: scopedSearchTokens(visibleTo, searchTokens) }
+}
+
+/**
+ * The address verdict as a list asks it (AGL-3245): the state's status, or
+ * `none` when nothing is known — stored rather than left absent, because a
+ * query cannot find a field's absence and "Nothing known" is a filter.
+ */
+export const CRM_EMAIL_STATUS_FIELD = 'emailStatus'
+export const CRM_EMAIL_STATUS_NONE = 'none'
+
+export function crmEmailStatusKey(record: Record<string, unknown> | null | undefined): string {
+  const raw = record?.['emailState']
+  const status =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>)['status'] : undefined
+  // A status outside the vocabulary reads as nothing known, as `readEmailState` reads it.
+  return isEmailStateStatus(status) ? status : CRM_EMAIL_STATUS_NONE
+}
+
+/** A lead's lead source as the list compares it: the picklist's key, `null` for none. */
+export const CRM_LEAD_SOURCE_KEY_FIELD = 'leadSourceKey'
+
+export function crmLeadSourceKey(value: unknown): string | null {
+  const key = SEARCH_KEY(normalizeCrmPicklistLabel(value))
+  return key || null
+}
+
+/** What a lead's search box reads (AGL-3246). */
+export const CRM_LEAD_SEARCH_SOURCES = ['name', 'email', 'company', 'jobTitle', 'tags'] as const
+
+/**
+ * A lead's campaigns behind each of its `visibleTo` tokens
+ * (`host:abc~{campaignId}`), for the Leads list's Campaign filter under a
+ * site: there the scope clause is the query's one array clause, and a
+ * campaign asked of these keys answers both at once — the way the search
+ * folds into the scope through `scopedSearchTokens`.
+ */
+export const CRM_LEAD_SCOPED_CAMPAIGNS_FIELD = 'scopedCampaignIds'
+
+function leadCampaignIds(lead: Record<string, unknown>): string[] {
+  const raw = lead['campaignIds']
+  return Array.isArray(raw)
+    ? raw.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+    : []
+}
+
+/**
+ * Every field the Leads list queries by, from the lead as stored (or as it
+ * will be once written): the search tokens, its campaigns behind its scope,
+ * the status — `new` for a lead nobody has touched, written so `status in
+ * [new, working]` finds it — the lead source key and the address verdict.
+ */
+export function crmLeadListFields(record: object): {
+  searchTokens: string[]
+  scopedSearchTokens: string[]
+  scopedCampaignIds: string[]
+  status: CrmLeadStatus
+  leadSourceKey: string | null
+  emailStatus: string
+} {
+  const lead = record as Record<string, unknown>
+  return {
+    ...crmSearchFields(
+      lead['visibleTo'],
+      CRM_LEAD_SEARCH_SOURCES.map((field) => lead[field]),
+    ),
+    scopedCampaignIds: scopedSearchTokens(lead['visibleTo'], leadCampaignIds(lead)),
+    status: crmLeadStatus(lead as Pick<CrmLeadFields, 'status'>),
+    leadSourceKey: crmLeadSourceKey(lead['leadSource']),
+    emailStatus: crmEmailStatusKey(lead),
+  }
+}
+
+/** What a company's search box reads: its name and its domain. */
+export const CRM_COMPANY_SEARCH_SOURCES = ['name', 'domain'] as const
+
+export function crmCompanyListFields(record: object): {
+  searchTokens: string[]
+  scopedSearchTokens: string[]
+} {
+  const company = record as Record<string, unknown>
+  return crmSearchFields(
+    company['visibleTo'],
+    CRM_COMPANY_SEARCH_SOURCES.map((field) => company[field]),
+  )
+}
+
+/**
+ * What a deal's search box reads: its title (AGL-3315) — as word prefixes,
+ * and as `titleLower`, the whole title's key, which a reader whose access
+ * is some sites searches by its start.
+ */
+export function crmDealListFields(record: object): {
+  searchTokens: string[]
+  scopedSearchTokens: string[]
+  titleLower: string
+} {
+  const deal = record as Record<string, unknown>
+  return {
+    ...crmSearchFields(deal['visibleTo'], [deal['title']]),
+    titleLower: SEARCH_KEY(typeof deal['title'] === 'string' ? deal['title'] : ''),
+  }
+}
+
+/** What a task's search box reads: its title. */
+export function crmTaskListFields(record: object): {
+  searchTokens: string[]
+  scopedSearchTokens: string[]
+} {
+  const task = record as Record<string, unknown>
+  return crmSearchFields(task['visibleTo'], [task['title']])
+}
+
+/*------------------------------------------
+ * A CONTACT'S FACET KEYS.
+ *
+ * An owner, a stage, a source, a company, a tag and a custom value live on
+ * a holder's facet — `facets.{groupId}` — so a `where` on one would be a path
+ * per holder and an index per holder. `facetKeys` flattens them into one
+ * array a query can ask `array-contains` of:
+ *
+ *   `{groupId}:{field}={value}`   this holder's value
+ *   `{groupId}:{field}`           this holder has one (for "is set")
+ *   `*:{field}={value}`, `*:{field}`   any holder's, for the organization level
+ *
+ * `field` is `owner`, `stage`, `source`, `company`, `tag` or `custom.{key}`,
+ * plus two presence-only fields: `orders` for a holder the person has bought
+ * from, and `ltv` for one they are worth something to — the per-holder
+ * figures a range cannot reach, asked only whether there are any.
+ * A text value is keyed lower-cased and single-spaced; a number or a flag
+ * as its string. Under a site the viewing group's keys are asked; at the
+ * organization level, where no group is viewing, the `*` keys are.
+ *-----------------------------------------*/
+
+export const CRM_CONTACT_FACET_KEYS_FIELD = 'facetKeys'
+/** The group a key names at the organization level: any holder. */
+export const CRM_FACET_KEY_ANY_GROUP = '*'
+/** The most facet keys one contact keeps. */
+export const CRM_FACET_KEYS_MAX = 600
+
+/** The facet fields a contact list filters by, as their keys name them. */
+export type CrmFacetKeyField =
+  | 'owner'
+  | 'stage'
+  | 'source'
+  | 'company'
+  | 'tag'
+  | 'orders'
+  | 'ltv'
+  | `custom.${string}`
+
+/** A facet value as its key spells it, or `null` for a value a key cannot hold. */
+export function crmFacetKeyValue(value: unknown): string | null {
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : null
+  if (typeof value !== 'string') return null
+  const key = SEARCH_KEY(value).slice(0, 120)
+  return key || null
+}
+
+/** One facet key: `{group}:{field}` for presence, `{group}:{field}={value}` for a value. */
+export function crmFacetKey(group: string, field: CrmFacetKeyField, value?: string): string {
+  return value === undefined ? `${group}:${field}` : `${group}:${field}=${value}`
+}
+
+/** The keys one holder's facet contributes, under `group`. */
+function facetKeysOf(group: string, facet: Record<string, unknown>, into: Set<string>): void {
+  const add = (field: CrmFacetKeyField, raw: unknown) => {
+    const value = crmFacetKeyValue(raw)
+    if (value === null) return
+    into.add(crmFacetKey(group, field))
+    into.add(crmFacetKey(group, field, value))
+  }
+  add('owner', facet['ownerUid'])
+  if (isContactLifecycleStage(facet['lifecycleStage'])) add('stage', facet['lifecycleStage'])
+  add('company', facet['companyId'])
+  const sources = facet['sources']
+  if (sources && typeof sources === 'object' && !Array.isArray(sources)) {
+    for (const [source, on] of Object.entries(sources as Record<string, unknown>)) {
+      if (on) add('source', source)
+    }
+  }
+  if (Array.isArray(facet['tags'])) {
+    for (const tag of facet['tags']) add('tag', tag)
+  }
+  // Presence only: a holder's commercial figures are asked "any?", never ranged.
+  if (typeof facet['ordersCount'] === 'number' && facet['ordersCount'] > 0) {
+    into.add(crmFacetKey(group, 'orders'))
+  }
+  if (typeof facet['ltvCents'] === 'number' && facet['ltvCents'] > 0) {
+    into.add(crmFacetKey(group, 'ltv'))
+  }
+  const custom = facet['custom']
+  if (custom && typeof custom === 'object' && !Array.isArray(custom)) {
+    for (const [key, value] of Object.entries(custom as Record<string, unknown>)) {
+      if (/^[A-Za-z0-9_-]{1,64}$/.test(key)) add(`custom.${key}`, value)
+    }
+  }
+}
+
+/** Every facet key a contact carries — see the block above. */
+export function crmContactFacetKeys(record: object): string[] {
+  const facets = (record as Record<string, unknown>)[CONTACT_FACETS_FIELD]
+  if (!facets || typeof facets !== 'object' || Array.isArray(facets)) return []
+  const groups = new Set<string>()
+  const any = new Set<string>()
+  for (const [groupId, facet] of Object.entries(facets as Record<string, unknown>)) {
+    if (!groupId || !facet || typeof facet !== 'object' || Array.isArray(facet)) continue
+    facetKeysOf(groupId, facet as Record<string, unknown>, groups)
+    facetKeysOf(CRM_FACET_KEY_ANY_GROUP, facet as Record<string, unknown>, any)
+  }
+  return [...any, ...groups].slice(0, CRM_FACET_KEYS_MAX)
+}
+
+/**
+ * What a contact's search box reads: the shared identity — the canonical
+ * name and every address — and the two profile values a person is looked
+ * up by, through their top-level search echoes (`HostContact.phone`,
+ * `HostContact.companyName`): the company's words, and the phone's digits.
+ */
+export const CRM_CONTACT_SEARCH_SOURCES = [
+  'name',
+  'email',
+  CONTACT_ALTERNATE_EMAILS_FIELD,
+  'companyName',
+] as const
+
+/**
+ * A phone number as the words a search box finds it by: its digits whole,
+ * without a leading country code of one to three digits, and its last seven
+ * and last four — so `5551234`, `555123` and `4567` all find +1 555 123 4567.
+ * Typed as digits: a search reads one word, and `(555)` is not one of these.
+ */
+export function crmPhoneSearchWords(phone: unknown): string[] {
+  const digits = typeof phone === 'string' ? phone.replace(/\D/g, '') : ''
+  if (digits.length < 4) return []
+  const words = new Set<string>([digits])
+  for (let strip = 1; strip <= 3; strip += 1) {
+    if (digits.length - strip >= 7) words.add(digits.slice(strip))
+  }
+  if (digits.length > 7) words.add(digits.slice(-7))
+  words.add(digits.slice(-4))
+  return [...words]
+}
+
+export function crmContactListFields(record: object): {
+  searchTokens: string[]
+  scopedSearchTokens: string[]
+  facetKeys: string[]
+  emailStatus: string
+} {
+  const contact = record as Record<string, unknown>
+  return {
+    ...crmSearchFields(contact['visibleTo'], [
+      ...CRM_CONTACT_SEARCH_SOURCES.map((field) => contact[field]),
+      crmPhoneSearchWords(contact['phone']),
+    ]),
+    facetKeys: crmContactFacetKeys(contact),
+    emailStatus: crmEmailStatusKey(contact),
+  }
+}
+
+/**
+ * The stored fields each collection's list fields are computed from. A
+ * write that sets one of them must restamp the record — or spread
+ * {@link crmListFields} over the document it wrote.
+ */
+export const CRM_LIST_FIELD_INPUTS: Readonly<Record<CrmListCollection, readonly string[]>> = {
+  leads: ['visibleTo', ...CRM_LEAD_SEARCH_SOURCES, 'status', 'leadSource', 'emailState', 'campaignIds'],
+  contacts: ['visibleTo', ...CRM_CONTACT_SEARCH_SOURCES, 'phone', CONTACT_FACETS_FIELD, 'emailState'],
+  companies: ['visibleTo', ...CRM_COMPANY_SEARCH_SOURCES],
+  deals: ['visibleTo', 'title'],
+  crmTasks: ['visibleTo', 'title'],
+}
+
+/** Every list field of one record, from the record as stored. */
+export function crmListFields(
+  collection: CrmListCollection,
+  record: object,
+): Record<string, unknown> {
+  switch (collection) {
+    case 'leads':
+      return crmLeadListFields(record)
+    case 'contacts':
+      return crmContactListFields(record)
+    case 'companies':
+      return crmCompanyListFields(record)
+    case 'deals':
+      return crmDealListFields(record)
+    case 'crmTasks':
+      return crmTaskListFields(record)
+  }
+}
+
+const sameValue = (a: unknown, b: unknown): boolean => {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((entry, at) => entry === b[at])
+  }
+  return a === b
+}
+
+/**
+ * The list fields a stored record carries WRONGLY — the patch that brings
+ * it level, `{}` when it already is. What a restamp and a backfill write.
+ */
+export function crmListFieldsPatch(
+  collection: CrmListCollection,
+  record: object,
+): Record<string, unknown> {
+  const fields = crmListFields(collection, record)
+  const stored = record as Record<string, unknown>
+  const patch: Record<string, unknown> = {}
+  for (const [field, value] of Object.entries(fields)) {
+    if (!sameValue(stored[field], value)) patch[field] = value
+  }
+  return patch
+}
+
+/**
+ * The field each collection's list ORDERS or asks `null` of, which a record
+ * must therefore carry even when it has no value: a contact, a company and a
+ * deal carry `nextTaskAtMs` ("No next activity" asks `== null`), and a task
+ * carries `dueAtMs` (every task view orders by it, and Firestore leaves a
+ * document without the ordered field out of the answer). An absent field is
+ * neither `null` nor anything else a query can ask for.
+ */
+export const CRM_LIST_NULLABLE_FIELD: Readonly<Record<CrmListCollection, string | null>> = {
+  leads: null,
+  contacts: 'nextTaskAtMs',
+  companies: 'nextTaskAtMs',
+  deals: 'nextTaskAtMs',
+  crmTasks: 'dueAtMs',
+}
+
+/**
+ * The list fields a NEW record is written with: {@link crmListFields}, and
+ * the collection's {@link CRM_LIST_NULLABLE_FIELD} as `null` when the record
+ * does not set it — nothing is scheduled against a record that did not
+ * exist, and a task created undated is still one its views must reach.
+ */
+export function crmNewRecordListFields(
+  collection: CrmListCollection,
+  record: object,
+): Record<string, unknown> {
+  const fields = crmListFields(collection, record)
+  const nullable = CRM_LIST_NULLABLE_FIELD[collection]
+  const stored = (record as Record<string, unknown>)[nullable ?? '']
+  if (!nullable || (nullable in record && stored !== undefined)) return fields
+  return { ...fields, [nullable]: null }
+}
+
+/** Whether a patch touches a field the collection's list fields are computed from. */
+export function crmListFieldsTouched(
+  collection: CrmListCollection,
+  patch: Record<string, unknown>,
+): boolean {
+  const inputs = CRM_LIST_FIELD_INPUTS[collection]
+  return Object.keys(patch).some((key) =>
+    inputs.some((input) => key === input || key.startsWith(`${input}.`)),
+  )
 }

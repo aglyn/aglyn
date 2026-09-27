@@ -29,10 +29,11 @@
  * to the search, while still listing normally.
  *
  * Both are taken from what the record already says: `released` from
- * `releasedAt`, and the tokens from `email`, through the same derivation as
- * `emailSearchTokens` in `libs/tenant/data/admin/.../email-suppression.ts`.
- * The self-test runs the fixtures that function's spec runs, so the two
- * cannot drift apart unnoticed.
+ * `releasedAt`, and the tokens from `email`, through `lib/email-search-tokens.mjs`,
+ * the script-side twin of `emailSearchTokens` in
+ * `libs/tenant/data/admin/.../email-suppression.ts`; both are held to
+ * `lib/email-search-tokens.fixtures.json`, so the two cannot drift apart
+ * unnoticed.
  *
  * ## Idempotence and interruption
  *
@@ -55,6 +56,10 @@
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
+// The ONE script-side twin of `emailSearchTokens`, held to the library's
+// fixtures by `lib/email-search-tokens.test.mjs` (AGL-3321).
+import { emailSearchTokens } from './lib/email-search-tokens.mjs'
+import { NAME_TOKEN_MAX_PREFIX, sameSearchTokens } from './lib/name-search-tokens.mjs'
 
 const args = parseDeployArgs({
   command: 'backfill-email-suppression-filters',
@@ -72,50 +77,8 @@ const args = parseDeployArgs({
 const BATCH = 400
 /** Documents read per page of the scan. */
 const PAGE = 1000
-/** `NAME_TOKEN_MAX_PREFIX` and `NAME_TOKEN_LIMIT` in `app-utils/name-search`. */
-const TOKEN_MAX_PREFIX = 12
-const TOKEN_LIMIT = 120
-
-/** `nameSearchTokens`: every prefix, to the cap, of every space-separated word. */
-function wordPrefixTokens(text) {
-  const key = String(text ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
-  if (!key) return []
-  const tokens = new Set()
-  for (const word of key.split(' ')) {
-    if (!word) continue
-    const capped = word.slice(0, TOKEN_MAX_PREFIX)
-    for (let end = 1; end <= capped.length; end += 1) {
-      tokens.add(capped.slice(0, end))
-      if (tokens.size >= TOKEN_LIMIT) return [...tokens]
-    }
-  }
-  return [...tokens]
-}
-
-/**
- * `emailSearchTokens`: the prefixes of the whole address, the domain, the
- * domain behind an `@`, and each piece of the local part and of the domain.
- *
- * @param {unknown} email
- * @returns {string[]}
- */
-export function emailSearchTokens(email) {
-  const address = String(email ?? '').trim().toLowerCase()
-  if (!address) return []
-  const at = address.lastIndexOf('@')
-  const local = at === -1 ? address : address.slice(0, at)
-  const domain = at === -1 ? '' : address.slice(at + 1)
-  const words = [
-    address,
-    ...(domain ? [domain, `@${domain}`] : []),
-    ...local.split(/[._+-]+/),
-    ...domain.split('.'),
-  ]
-  return wordPrefixTokens(words.filter(Boolean).join(' '))
-}
-
-const sameTokens = (a, b) =>
-  Array.isArray(a) && a.length === b.length && a.every((token, at) => token === b[at])
+/** `NAME_TOKEN_MAX_PREFIX`: the longest token a writer stores. */
+const TOKEN_MAX_PREFIX = NAME_TOKEN_MAX_PREFIX
 
 /**
  * What a suppression record should be stamped with, or a skip. Pure, for the
@@ -129,7 +92,7 @@ export function planSuppression(data) {
   const released = Boolean(data.releasedAt)
   if (data.released !== released) update.released = released
   const tokens = emailSearchTokens(data.email)
-  if (tokens.length && !sameTokens(data.emailTokens, tokens)) update.emailTokens = tokens
+  if (tokens.length && !sameSearchTokens(data.emailTokens, tokens)) update.emailTokens = tokens
   return Object.keys(update).length ? { update } : { skip: 'current' }
 }
 

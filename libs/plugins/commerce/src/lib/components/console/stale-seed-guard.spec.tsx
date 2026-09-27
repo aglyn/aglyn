@@ -103,6 +103,32 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 /** The quota-enforcing create path, so a NEW product is distinguishable. */
 const mockCreateResource = jest.fn().mockResolvedValue({ id: 'prod-new' })
 
+/*
+ * The hub's table is its query (AGL-3321): answered by the contract's double
+ * over the same products, stamped the way every writer stamps them.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => ({
+      ...useListQueryDouble(
+        () =>
+          (collections['products'] ?? []).map((product) => ({
+            ...product,
+            deletedAt: product['deletedAt'] ?? null,
+            nameLower: String(product['name'] ?? '').toLowerCase(),
+          })),
+        options,
+      ),
+      status: listener.status,
+      fromCache: listener.fromCache,
+    }),
+  }
+})
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The real hook resolves through two async `getDoc` round-trips, so it
   // returns nulls on first render and these specs never await past that.
@@ -173,6 +199,15 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
 
 // Only the ref builders are stubbed; the real module rides along because
 // `@aglyn/shared-util-timestamp` extends the SDK's `Timestamp`.
+/*
+ * The host's smart collections, which every product write asks the store for
+ * to stamp `collectionIds` (AGL-3321): none on this site.
+ */
+jest.mock('./smart-collections', () => ({
+  readSmartCollections: async () => [],
+  productCollectionFields: async () => ({ collectionIds: [] }),
+}))
+
 jest.mock('firebase/firestore', () => ({
   ...jest.requireActual('firebase/firestore'),
   collection: (_db: unknown, _a: string, _b: string, name: string) => name,

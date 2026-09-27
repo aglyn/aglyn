@@ -19,10 +19,17 @@
 import * as Aglyn from '@aglyn/aglyn'
 import type { ConsolePluginPageProps } from '@aglyn/aglyn'
 import * as CommerceModel from '../../model'
-import { PRODUCT_LIST_FILTER_FIELDS } from '../../constants/product-filters'
+import {
+  PRODUCT_LIST_BASE,
+  PRODUCT_LIST_QUERY,
+} from '../../constants/product-list-query'
 import { escapeHtml } from '../../utils/escape-html'
 import { NextPageTitle } from '@aglyn/shared-ui-next/contexts/next-page-title-provider'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { ListQueryNotices } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import {
   Alert,
   Box,
@@ -42,19 +49,15 @@ import {
 import { QRCodeSVG } from 'qrcode.react'
 import {
   collection,
-  documentId,
   getDocs,
   limit,
-  orderBy,
   query,
   where,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import {
-  listFilterConstraints,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestoreCollection } from '@aglyn/tenant-feature-instance'
+import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { useOrgPlan } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 
@@ -71,6 +74,43 @@ interface RegisterLine {
 }
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+
+/** The till sells active products only; every read of the catalog asks it. */
+const SELLABLE: ListFilterRequest = { field: 'status', op: 'equals', value: 'active' }
+
+/**
+ * How many products the till's grid shows. The grid is a picker, not the
+ * catalog: typing narrows it on the query, so a name reaches every product.
+ */
+const POS_GRID_CEILING = 500
+
+/**
+ * The products hub's query (AGL-3321), narrowed to what the till may sell:
+ * live products (`deletedAt == null`, the list's scope), `status == active`,
+ * and any typed word as the search on `nameTokens` — or, for a scan, the
+ * whole scanned code as a SKU or barcode clause. Every shape is one the hub's
+ * composites already serve.
+ */
+export function posProductPlan(options: {
+  search?: string
+  code?: { field: 'barcodes' | 'skus'; value: string }
+}) {
+  const typed = options.search?.trim()
+  return planListQuery(
+    PRODUCT_LIST_QUERY,
+    {
+      base: PRODUCT_LIST_BASE,
+      clauses: [
+        SELLABLE,
+        ...(options.code
+          ? [{ field: options.code.field, op: 'contains', value: options.code.value }]
+          : []),
+      ],
+      search: typed ? [typed] : [],
+    },
+    nameSearchNormalizers,
+  )
+}
 
 /**
  * POS register (AGL-312): touch-first full-screen sale surface —
@@ -97,43 +137,27 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const { enqueueSnackbar } = useSnackbar()
 
   const [search, setSearch] = useState('')
+  const gridPlan = useMemo(() => posProductPlan({ search }), [search])
   const { data: productDocs } = useFirestoreCollection<any>(
-    () => {
-      /*
-       * The till's grid, narrowed by the QUERY rather than by the rows it
-       * happened to fetch (AGL-2501, AGL-2292).
-       *
-       * `limit(500)` with no `orderBy` is document-id order over
-       * `createResourceUid()` — an arbitrary five hundred. Both filters then
-       * ran over that sample: `status === 'active'` below, and the search.
-       * The status one is the quieter of the two, because a catalog of five
-       * hundred archived products and a hundred live ones would fill the
-       * window with the archived and leave the register showing almost
-       * nothing to sell.
-       *
-       * Status moves into the query, so the window is five hundred SELLABLE
-       * products; the typed search moves in beside it, so a name reaches the
-       * whole catalog. The scan does not come through here at all — see
-       * `handleSearchEnter`, which is a lookup rather than a filter.
-       */
-      const typed = listFilterConstraints(
-        PRODUCT_LIST_FILTER_FIELDS,
-        search.trim()
-          ? { field: 'name', op: 'contains', value: search.trim() }
-          : null,
-        // Status is already an equality on this query, so the translator must
-        // not add an ordering that would have to be the first `orderBy`.
-        { fixedOrderBy: 'nameLower' },
-      )
-      return query(
+    /*
+     * The till's grid, narrowed by the QUERY rather than by the rows it
+     * happened to fetch (AGL-2501, AGL-2292, AGL-3321).
+     *
+     * `limit(500)` with no `orderBy` was document-id order over
+     * `createResourceUid()` — an arbitrary five hundred, filtered afterwards
+     * for status, deletion and the typed search. All three are the query's
+     * now (`posProductPlan`), so the window is the first five hundred
+     * SELLABLE products by name and a typed name reaches the whole catalog.
+     * The scan does not come through here at all — see `handleSearchEnter`,
+     * which is a lookup rather than a filter.
+     */
+    () =>
+      query(
         collection(firestore, 'hosts', hostId, 'products'),
-        where('status', '==', 'active'),
-        ...(typed ?? []),
-        ...(typed ? [orderBy('nameLower')] : [orderBy(documentId())]),
-        limit(500),
-      )
-    },
-    [firestore, hostId, search],
+        ...listQueryConstraints(gridPlan),
+        limit(POS_GRID_CEILING),
+      ),
+    [firestore, hostId, gridPlan],
     { idField: '$id' },
   )
   const { data: locationDocs } = useFirestoreCollection<any>(
@@ -169,18 +193,23 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
   const usableRegisters = planReady
     ? registers.filter((r: any) => withinCap.has(r.$id))
     : []
+  /*
+   * The stays a sale can be charged to, asked for BY STATUS (AGL-3321). This
+   * read the first hundred reservations in document-id order and kept the
+   * checked-in ones, so a guest in the house was missing from the folio
+   * picker whenever a hundred other bookings sorted before theirs.
+   */
   const { data: reservationDocs } = useFirestoreCollection<any>(
     () =>
       query(
         collection(firestore, 'hosts', hostId, 'reservations'),
+        where('status', '==', 'checked_in'),
         limit(100),
       ),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const openStays = (reservationDocs ?? []).filter(
-    (reservation: any) => reservation.status === 'checked_in',
-  )
+  const openStays = reservationDocs ?? []
 
   const [lines, setLines] = useState<RegisterLine[]>([])
   const [discountPct, setDiscountPct] = useState(0)
@@ -246,10 +275,8 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
 
   const products = useMemo(
     () =>
+      // Status, deletion and the search are all the query's (`posProductPlan`).
       [...(productDocs ?? [])]
-        // `status` is now the query's; `deletedAt` stays here because
-        // Firestore cannot ask for documents that LACK a field.
-        .filter((product: any) => !product.deletedAt)
         .map((product: any) => ({
           ...CommerceModel.liftLegacyProduct(product),
           $id: product.$id,
@@ -363,8 +390,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
       const found = await getDocs(
         query(
           collection(firestore, 'hosts', hostId, 'products'),
-          where('status', '==', 'active'),
-          where(field, 'array-contains', needle),
+          ...listQueryConstraints(posProductPlan({ code: { field, value: needle } })),
           limit(1),
         ),
       )
@@ -380,7 +406,7 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
         persist: false,
       })
     }
-    if (!hit || hit.data()?.['deletedAt']) {
+    if (!hit) {
       return void enqueueSnackbar(`No product matches “${search.trim()}”`, {
         variant: 'warning',
         persist: false,
@@ -560,6 +586,9 @@ export function PosConsolePage({ hostId }: ConsolePluginPageProps) {
             autoFocus
             sx={{ mb: 2 }}
           />
+          <Box sx={{ mb: gridPlan.notices.length ? 2 : 0 }}>
+            <ListQueryNotices refused={[]} notices={gridPlan.notices} />
+          </Box>
           <Box
             sx={{
               display: 'grid',

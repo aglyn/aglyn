@@ -22,6 +22,7 @@ import {
   type PluginRecordEmailStateWriter,
 } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import {
+  CRM_EMAIL_STATUS_FIELD,
   EMAIL_STATE_FIELD,
   nextEmailState,
   normalizeContactEmail,
@@ -93,7 +94,12 @@ async function stampRecord(
   ) {
     return false
   }
-  await ref.set({ [EMAIL_STATE_FIELD]: next }, { merge: true })
+  // `emailStatus` beside it: the verdict as the CRM lists filter by it
+  // (AGL-3321) — a key a query can ask, where the state is a map.
+  await ref.set(
+    { [EMAIL_STATE_FIELD]: next, [CRM_EMAIL_STATUS_FIELD]: next.status },
+    { merge: true },
+  )
   return true
 }
 

@@ -37,8 +37,10 @@ import SubmissionsCard from './submissions-card.component'
 
 /** Every query the card built, as the collection name and its predicates. */
 let queries: Array<{ collection: string; predicates: string[] }>
-/** Rows the paged reader hands back. */
+/** The submissions Firestore holds, answered through the list-query double. */
 let rows: Array<Record<string, unknown>>
+/** The list query the card opened last: its collection and its plan. */
+let mockListQuery: { collection: string; plan: any } | null = null
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The lead silo is the org's (AGL-3275), so these cards resolve it.
@@ -52,20 +54,26 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: 'success',
     fromCache: false,
   }),
-  usePagedCollection: (factory: (pageLimit: number) => unknown) => {
-    factory(11)
-    return {
-      rows,
-      hasMore: false,
-      page: 0,
-      setPage: jest.fn(),
-      pageSize: 10,
-      setPageSize: jest.fn(),
-      status: 'success',
-      fromCache: false,
-    }
-  },
 }))
+
+// The list's query (AGL-3321), answered by the shared double: the real plan,
+// every predicate applied as Firestore would.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const actual = jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...actual,
+    useListQuery: (options: { collection: { __name: string } | null }) => {
+      const result = useListQueryDouble(() => (options.collection ? rows : []), options)
+      if (options.collection) {
+        mockListQuery = { collection: options.collection.__name, plan: result.plan }
+      }
+      return result
+    },
+  }
+})
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
@@ -121,21 +129,28 @@ jest.mock('./submission-list-assignment.component', () => ({
 beforeEach(() => {
   queries = []
   rows = []
+  mockListQuery = null
 })
 
-const submissionsQuery = () =>
-  queries.find((entry) => entry.collection === 'formSubmissions')
+/** A submission to `form-1` as the submit route writes one. */
+const submission = (id: string, email: string, read: boolean, minutes: number) => ({
+  $id: id,
+  formId: 'form-1',
+  formName: 'Contact',
+  read,
+  fields: { email },
+  createdAt: { seconds: 1_800_000_000 - minutes * 60 },
+})
 
 describe('scoped to one form', () => {
   it('narrows the SAME query rather than opening a different one', () => {
     render(<SubmissionsCard hostId="host-1" formId="form-1" />)
-    expect(submissionsQuery()?.predicates).toEqual([
-      'where:formId=form-1',
-      // The order is not optional and not a nicety: an unordered `limit()` is
-      // answered in document-id order, which is an arbitrary sample of a
-      // site's messages that a client sort then arranges to look like a feed.
-      'orderBy:createdAt',
-    ])
+    expect(mockListQuery?.collection).toBe('formSubmissions')
+    expect(mockListQuery?.plan.filters).toEqual([{ path: 'formId', op: '==', value: 'form-1' }])
+    // The order is not optional and not a nicety: an unordered `limit()` is
+    // answered in document-id order, which is an arbitrary sample of a
+    // site's messages that a client sort then arranges to look like a feed.
+    expect(mockListQuery?.plan.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
   })
 
   it('does not read the site’s form catalog at all', () => {
@@ -169,14 +184,7 @@ describe('scoped to one form', () => {
   })
 
   it('still renders the rows it is given', () => {
-    rows = [
-      {
-        $id: 's1',
-        formName: 'Contact',
-        read: true,
-        fields: { email: 'visitor@example.com' },
-      },
-    ]
+    rows = [submission('s1', 'visitor@example.com', true, 1)]
     render(<SubmissionsCard hostId="host-1" formId="form-1" />)
     // The sender column and the message summary both carry the address, which
     // is the same row rendered whole rather than a duplicate row.
@@ -188,8 +196,8 @@ describe('scoped to one form', () => {
 describe('the submissions are a record list in the shared grid (AGL-3045)', () => {
   it('draws the rows in the grid, marks the unread one, and opens a row into the reader', () => {
     rows = [
-      { $id: 's1', formName: 'Contact', read: false, fields: { email: 'new@example.com' } },
-      { $id: 's2', formName: 'Contact', read: true, fields: { email: 'old@example.com' } },
+      submission('s1', 'new@example.com', false, 1),
+      submission('s2', 'old@example.com', true, 2),
     ]
     const { container } = render(<SubmissionsCard hostId="host-1" formId="form-1" />)
 
@@ -211,7 +219,7 @@ describe('THE CONTROL: unscoped, it is still the site-wide inbox', () => {
     // Otherwise every assertion above is satisfied by a card that never
     // reads the catalog and never offers a picker under any circumstances.
     render(<SubmissionsCard hostId="host-1" />)
-    expect(submissionsQuery()?.predicates).toEqual(['orderBy:createdAt'])
+    expect(mockListQuery?.plan.filters).toEqual([])
     expect(queries.some((entry) => entry.collection === 'forms')).toBe(true)
   })
 })

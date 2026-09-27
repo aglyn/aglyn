@@ -66,6 +66,7 @@ import {
   type SendingDomainClaim,
 } from '../../../../utils/server/reap-sending-domains'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 export const dynamic = 'force-dynamic'
 
@@ -260,15 +261,13 @@ async function handler(request: Request): Promise<Response> {
       }
 
       if (released || stillOwed) {
-        await firestore
-          .collection('adminAudit')
-          .add({
-            actorUid: 'system:cron',
-            action: 'email.sending-domains.reap',
-            target: 'sendingLabels',
-            after: { released: settled, stillOwed: owed },
-            at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-          })
+        await addAdminAudit(firestore, {
+          actorUid: 'system:cron',
+          action: 'email.sending-domains.reap',
+          target: 'sendingLabels',
+          after: { released: settled, stillOwed: owed },
+          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        })
           .catch(() => undefined)
       }
     }

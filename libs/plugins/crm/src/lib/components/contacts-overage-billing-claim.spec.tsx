@@ -55,7 +55,7 @@
  * localhost carries the LIVE key.
  */
 
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import CrmConsolePage from './crm-console-page'
 import { CRM_CONSOLE_SECTIONS } from './crm-console-sections'
@@ -99,6 +99,20 @@ jest.mock('./recent-activity-feed', () => ({
   default: () => null,
   RecentActivityFeed: () => null,
 }))
+// The list's query (AGL-3321), planned for real and answered from the
+// fixture rows by the list-query double — every row visible and dated.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() =>
+      (collections.contacts ?? []).map((row: Record<string, unknown>) => ({
+        visibleTo: ['org'],
+        updatedAt: new Date(0),
+        ...row,
+      })),
+      jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    ),
+)
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   /*
    * The real translator, not a stub. It is a pure function of the shared
@@ -149,10 +163,11 @@ jest.mock('firebase/firestore', () => ({
   doc: () => ({}),
   // The audience head-count is a server aggregate now (AGL-1706). Answering
   // it with the fixture's own length keeps this spec's arithmetic (60 − 10 =
-  // 50 over, at $1/1,000 = $0.05) true on both the pending fallback and the
-  // resolved read, so nothing here depends on which one paints.
-  getCountFromServer: jest.fn(async () => ({
-    data: () => ({ count: contactDocs.length }),
+  // 50 over, at $1/1,000 = $0.05) true once the read resolves; the list
+  // itself reads one page (AGL-3321), so the pending fallback understates.
+  // Companies and deals count nothing, so the records band is the people.
+  getCountFromServer: jest.fn(async (name: string) => ({
+    data: () => ({ count: name === 'contacts' ? contactDocs.length : 0 }),
   })),
   addDoc: jest.fn().mockResolvedValue(undefined),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
@@ -215,9 +230,10 @@ const alertText = (): string =>
   screen.queryByText(new RegExp(OVERAGE_LEAD))?.textContent ?? ''
 
 describe('the Contacts overage alert follows what is billed (AGL-1662)', () => {
-  it('withholds the dollar figure while `release_crm` is off', () => {
+  it('withholds the dollar figure while `release_crm` is off', async () => {
     mount({ released: false, ready: true })
 
+    await waitFor(() => expect(alertText()).toContain(OVERAGE_LEAD))
     const text = alertText()
     // The head-count is real, so it stays.
     expect(text).toContain(OVERAGE_LEAD)
@@ -232,11 +248,12 @@ describe('the Contacts overage alert follows what is billed (AGL-1662)', () => {
     expect(text).toContain('$1/1,000 rate applies once Contacts opens')
   })
 
-  it('quotes the figure for an org whose flag resolves ON', () => {
+  it('quotes the figure for an org whose flag resolves ON', async () => {
     // Billed by the cron, so this page says so — a blanket suppression of the
     // alert fails here.
     mount({ released: true, ready: true })
 
+    await waitFor(() => expect(alertText()).toContain(OVERAGE_LEAD))
     const text = alertText()
     // The basis rides along with the figure (AGL-2399). The count above is a
     // LIVE head count and the invoice charges the last reading before the month

@@ -967,6 +967,8 @@ describe('the pre-existing gates', () => {
  * never looks at, which is the failure this whole block exists to rule out.
  */
 import { suppressionId } from './campaign-send'
+// The REAL address tokens, from the same leaf the writer imports (AGL-3321).
+import { emailSearchTokens } from '@aglyn/tenant-data-admin/server/email-suppression'
 
 const SUPPRESSION_PATH = `hosts/${HOST}/suppressions/${suppressionId(RECIPIENT)}`
 
@@ -996,6 +998,8 @@ describe('a complaint', () => {
     expect(result.status).toBe(200)
     expect(docs.get(SUPPRESSION_PATH)).toEqual({
       email: RECIPIENT,
+      // What the site's Suppressions list searches (AGL-3321).
+      emailTokens: emailSearchTokens(RECIPIENT),
       reason: 'complaint',
       suppressedAt: SERVER_TIME,
       createdAt: SERVER_TIME,
@@ -1063,6 +1067,8 @@ describe('a bounce', () => {
 
     expect(docs.get(SUPPRESSION_PATH)).toEqual({
       email: RECIPIENT,
+      // What the site's Suppressions list searches (AGL-3321).
+      emailTokens: emailSearchTokens(RECIPIENT),
       reason: 'bounce',
       suppressedAt: SERVER_TIME,
       createdAt: SERVER_TIME,

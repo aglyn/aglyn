@@ -20,62 +20,71 @@ import { ICON_VARIANT_COMPONENT } from '@aglyn/shared-data-enums'
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import {
   useFirestore,
-  useFirestoreCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import {
+  useListQuery,
+  type UseListQueryResult,
+} from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { Alert, Chip, Stack } from '@mui/material'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
-import type { GridColDef } from '@mui/x-data-grid'
 import {
-  collection,
-  documentId,
-  limit,
-  orderBy,
-  query,
-  where,
-} from 'firebase/firestore'
-import { useMemo } from 'react'
+  type ListFilterOption,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  type ListGridFilter,
+  useListGridFilter,
+} from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import type { GridColDef } from '@mui/x-data-grid'
+import { collection } from 'firebase/firestore'
+import { type ReactNode, useMemo } from 'react'
 import { pluginDocsHelp } from '@aglyn/aglyn'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { listingPath } from '../model/marketplace-paths'
+import {
+  EVERY_WORKSPACE,
+  HELD_LICENCE_QUERY,
+  licenceBase,
+  MINE_LICENCE_QUERY,
+  mineLicenceClauses,
+} from '../model/listing-query'
+import {
+  useListingNameLookup,
+  useListingNames,
+} from '../hooks/use-listing-name-lookup'
 import EmptyState from '@aglyn/shared-ui-jsx/components/read-gated-empty-state.component'
 import type { ReadOutcome } from '@aglyn/shared-ui-jsx/utils/read-outcome'
 
 /*
- * What each license grid's Filters panel offers. Both lists hold every row
- * they describe, so the panel and the search answer over all of them. The
- * Listing column filters by the listing's name; who bought a license and
- * which workspace one landed in are picked.
+ * What each license grid's Filters panel offers, and how its search reads —
+ * every clause and the search on the QUERY (AGL-3321). They were matched over
+ * the rows each list had loaded (the retired window filter), which answered "no
+ * match" for a license past what was read.
+ *
+ *   - "This workspace" filters by who bought it — You, by uid equality. "A
+ *     colleague" was an in-memory negation; Firestore's `!=` would lead the
+ *     order by buyer and needs a composite per clause beside it, so it is not
+ *     offered.
+ *   - "Bought by you" filters by the workspace a license landed in, or the
+ *     every-workspace grant a purchase naming none carries (`buyerOrgId`
+ *     null).
+ *   - The search is the listing's NAME: the listings holding the word are
+ *     asked first, and the license query asks for their ids
+ *     (`useListingNameLookup`).
  */
-const HELD_FILTER_FIELDS = [
-  inMemoryListField('listingId', 'text', 'listingName'),
-  inMemoryListField('buyerUid', 'select', 'boughtBy'),
-]
 const HELD_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  listingId: 'Listing',
   buyerUid: 'Bought by',
 }
-const HELD_FILTER_OPTIONS = {
-  buyerUid: [
-    { value: 'you', label: 'You' },
-    { value: 'colleague', label: 'A colleague' },
-  ],
-}
-const MINE_FILTER_FIELDS = [
-  inMemoryListField('listingId', 'text', 'listingName'),
-  inMemoryListField('buyerOrgId', 'select', 'licensedTo'),
-]
 const MINE_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  listingId: 'Listing',
   buyerOrgId: 'Licensed to',
 }
-/** A purchase that names no organization, which entitles its buyer everywhere. */
-const EVERY_WORKSPACE = 'every'
-/** What the quick search reads on a license row. */
-const LICENSE_SEARCH_FIELDS = ['listingName'] as const
 
 /**
  * WHICH WORKSPACE HOLDS A LICENCE (AGL-2331).
@@ -154,72 +163,6 @@ export function OrgLicencesPanel({
   const { data: user } = useUser()
   const uid = (user as { uid?: string } | null | undefined)?.uid
 
-  /** The licences this workspace holds — whoever in it did the buying. */
-  const orgLicencesRead = useFirestoreCollection<any>(
-    () =>
-      orgId
-        ? query(
-            collection(firestore, 'marketplacePurchases'),
-            where('buyerOrgId', '==', orgId),
-          )
-        : null,
-    [firestore, orgId],
-    { idField: '$id' },
-  )
-  /** Everything this person has ever bought, in any workspace. */
-  const myPurchasesRead = useFirestoreCollection<any>(
-    () =>
-      uid
-        ? query(
-            collection(firestore, 'marketplacePurchases'),
-            where('buyerUid', '==', uid),
-          )
-        : null,
-    [firestore, uid],
-    { idField: '$id' },
-  )
-
-  /**
-   * Listing id → display name.
-   *
-   * One subscription rather than a read per row: `marketplaceListings` is
-   * world-readable (it is the catalogue), the browse grid on the sibling tab
-   * already listens to it, and a per-row hook would change the hook count
-   * between renders as licences arrive.
-   */
-  const { data: listings } = useFirestoreCollection<any>(
-    /*
-     * ORDERED, so the window is a reachable 200 rather than a sample.
-     *
-     * A capped read with no `orderBy` is answered in document-id order
-     * anyway, so naming it changes no row — what it changes is that the
-     * ordering is a decision rather than an accident, and that the obvious
-     * next edit is caught: `orderBy('displayName')` would drop every listing
-     * saved without one out of the map, and a licence whose listing is
-     * missing from the map is a row that names itself by raw id.
-     *
-     * Ordering on the document NAME, which is what a listing id already is
-     * here, keeps the map's keys and the walk in the same space. Past 200
-     * listings a licence still renders — the fallback below prints the
-     * listing id — so the cap degrades the label and never the row.
-     */
-    () =>
-      query(
-        collection(firestore, 'marketplaceListings'),
-        orderBy(documentId()),
-        limit(200),
-      ),
-    [firestore],
-    { idField: '$id' },
-  )
-  const listingNames = useMemo(() => {
-    const names: Record<string, string> = {}
-    for (const listing of listings ?? []) {
-      names[listing.$id] = String(listing.displayName ?? listing.$id)
-    }
-    return names
-  }, [listings])
-
   /** Workspace id → the name the member already sees in the org switcher. */
   const orgNames = useMemo(() => {
     const names: Record<string, string> = {}
@@ -227,36 +170,10 @@ export function OrgLicencesPanel({
     return names
   }, [viewerOrgs])
 
-  /**
-   * A refunded purchase is not a licence (AGL-1546) and must not be listed as
-   * one — the whole point of this panel is deciding whether to buy, and a row
-   * that says "you own this" when the install route answers 402 is worse than
-   * no row.
-   */
-  const live = (rows: any[] | undefined): any[] =>
-    (rows ?? []).filter((row) => !row?.refundedAt)
-
-  const held = useMemo(
-    () =>
-      live(orgLicencesRead.data).map((row) => ({
-        ...row,
-        listingName:
-          listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
-        boughtBy: row.buyerUid === uid ? 'you' : 'colleague',
-      })),
-    [orgLicencesRead.data, listingNames, uid],
+  const heldOptions = useMemo(
+    () => ({ buyerUid: uid ? [{ value: uid, label: 'You' }] : [] }),
+    [uid],
   )
-  const mine = useMemo(
-    () =>
-      live(myPurchasesRead.data).map((row) => ({
-        ...row,
-        listingName:
-          listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
-        licensedTo: String(row.buyerOrgId ?? '') || EVERY_WORKSPACE,
-      })),
-    [myPurchasesRead.data, listingNames],
-  )
-
   const mineOptions = useMemo(
     () => ({
       buyerOrgId: [
@@ -269,112 +186,173 @@ export function OrgLicencesPanel({
     }),
     [orgId, viewerOrgs],
   )
-  const heldFilter = useListRowsFilter({
-    rows: held,
-    fields: HELD_FILTER_FIELDS,
-    options: HELD_FILTER_OPTIONS,
-    headers: HELD_FILTER_HEADERS,
-    search: LICENSE_SEARCH_FIELDS,
-  })
-  const mineFilter = useListRowsFilter({
-    rows: mine,
-    fields: MINE_FILTER_FIELDS,
-    options: mineOptions,
-    headers: MINE_FILTER_HEADERS,
-    search: LICENSE_SEARCH_FIELDS,
-  })
+  const heldFilter = useListGridFilter({ selectFields: ['buyerUid'] })
+  const mineFilter = useListGridFilter({ selectFields: ['buyerOrgId'] })
+  const heldLookup = useListingNameLookup(heldFilter.searchWords)
+  const mineLookup = useListingNameLookup(mineFilter.searchWords)
 
-  /*==========================================
-   * BOTH LISTS ARE WHOLE, so the grid pages them and its counts are TOTALS.
+  /*
+   * Both lists read `marketplacePurchases`, which is buyer/org/seller-gated —
+   * the org clause landed with AGL-2331 for exactly this list. Held at null
+   * until the org and uid resolve: a rules-shaped LIST is evaluated against
+   * the QUERY, so a sentinel value is a guaranteed denial retried on the
+   * refusal cadence (AGL-1440), not an empty list. A search whose listing
+   * lookup is still out holds too, and one that named no listing is answered
+   * with no rows rather than an `in []` Firestore refuses.
    *
-   * Neither query is capped: each reads one workspace's purchases or one
-   * person's, whole. So the card holds the entire list it is describing, the
-   * refund filter above has already run over all of it, and the grid's
-   * footer counts the collection's real size rather than a window's length —
-   * the one case where a client page can state a total without qualifying it.
-   *
-   * Server-paging either one would break that. `refundedAt` is filtered after
-   * reading, so a ten-document page arrives holding anywhere from zero to ten
-   * licences, and an agency deciding whether to buy a component again is
-   * exactly the reader who must not be shown a short page as a complete
-   * answer.
-   *=========================================*/
+   * A refunded purchase is not a licence (AGL-1546) and must not be listed as
+   * one — the whole point of this panel is deciding whether to buy, and a row
+   * that says "you own this" when the install route answers 402 is worse than
+   * no row. `refundedAt == null` is on both queries (`licenceBase`).
+   */
+  const purchases = useMemo(
+    () => collection(firestore, 'marketplacePurchases'),
+    [firestore],
+  )
+  const heldRead = useListQuery<any>({
+    collection:
+      orgId && !heldLookup.pending && heldLookup.ids?.length !== 0
+        ? purchases
+        : null,
+    declaration: HELD_LICENCE_QUERY,
+    request: {
+      clauses: heldFilter.clauses,
+      base: orgId
+        ? licenceBase({ path: 'buyerOrgId', value: orgId }, heldLookup.ids)
+        : [],
+    },
+    deps: [firestore, orgId, heldLookup.pending, (heldLookup.ids ?? []).join(',')],
+    idField: '$id',
+  })
+  const mineRead = useListQuery<any>({
+    collection:
+      uid && !mineLookup.pending && mineLookup.ids?.length !== 0 ? purchases : null,
+    declaration: MINE_LICENCE_QUERY,
+    request: {
+      clauses: mineLicenceClauses(mineFilter.clauses),
+      base: uid ? licenceBase({ path: 'buyerUid', value: uid }, mineLookup.ids) : [],
+    },
+    deps: [firestore, uid, mineLookup.pending, (mineLookup.ids ?? []).join(',')],
+    idField: '$id',
+  })
+  const heldNamedNone = heldLookup.ids?.length === 0
+  const mineNamedNone = mineLookup.ids?.length === 0
+  const heldRows = useMemo(
+    () => (heldNamedNone ? [] : heldRead.rows),
+    [heldNamedNone, heldRead.rows],
+  )
+  const mineRows = useMemo(
+    () => (mineNamedNone ? [] : mineRead.rows),
+    [mineNamedNone, mineRead.rows],
+  )
+
+  /**
+   * Listing id → display name, read by id for the rows on screen. It was a
+   * window of the first two hundred listings, past which a license printed
+   * its listing's raw id.
+   */
+  const listingNames = useListingNames(
+    [...heldRows, ...mineRows].map((row) => String(row.listingId ?? '')),
+  )
+
+  const held = useMemo(
+    () =>
+      heldRows.map((row: any) => ({
+        ...row,
+        boughtBy: row.buyerUid === uid ? 'You' : 'A colleague',
+      })),
+    [heldRows, uid],
+  )
+  const mine = mineRows
+
   const heldColumns = useMemo<GridColDef[]>(
-    () => [
-      {
-        field: 'listingId',
-        headerName: 'Listing',
-        flex: 1,
-        minWidth: 220,
-        valueGetter: (_value, row) =>
-          listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
-        renderCell: ({ row, value }) => (
-          <AppLink href={listingPath(basePath, String(row.listingId ?? ''))}>
-            {value}
-          </AppLink>
-        ),
-      },
-      {
-        field: 'buyerUid',
-        headerName: 'Bought by',
-        width: 150,
-        // The select's value; the grid shows its label, You or A colleague.
-        valueGetter: (_value, row) => row.boughtBy,
-      },
-      {
-        field: 'amountCents',
-        headerName: 'Paid',
-        type: 'number',
-        align: 'right',
-        headerAlign: 'right',
-        width: 120,
-        // What the licence cost before tax, which is what a reader compares.
-        valueGetter: (_value, row) =>
-          (Number(row.amountCents ?? 0) - Number(row.taxCents ?? 0)) / 100,
-        valueFormatter: (value: number) => `$${value.toFixed(2)}`,
-      },
-    ],
-    [listingNames, basePath],
+    () =>
+      listFilterGridColumns(
+        [
+          {
+            field: 'listingId',
+            headerName: 'Listing',
+            flex: 1,
+            minWidth: 220,
+            valueGetter: (_value, row) =>
+              listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
+            renderCell: ({ row, value }) => (
+              <AppLink href={listingPath(basePath, String(row.listingId ?? ''))}>
+                {value}
+              </AppLink>
+            ),
+          },
+          {
+            field: 'buyerUid',
+            headerName: 'Bought by',
+            width: 150,
+            // Drawn as who it was, whatever the select's one choice is.
+            renderCell: ({ row }) => row.boughtBy,
+          },
+          {
+            field: 'amountCents',
+            headerName: 'Paid',
+            type: 'number',
+            align: 'right',
+            headerAlign: 'right',
+            width: 120,
+            // What the licence cost before tax, which is what a reader compares.
+            valueGetter: (_value, row) =>
+              (Number(row.amountCents ?? 0) - Number(row.taxCents ?? 0)) / 100,
+            valueFormatter: (value: number) => `$${value.toFixed(2)}`,
+          },
+        ],
+        HELD_LICENCE_QUERY.fields,
+        heldOptions,
+        HELD_FILTER_HEADERS,
+      ),
+    [listingNames, basePath, heldOptions],
   )
   const mineColumns = useMemo<GridColDef[]>(
-    () => [
-      {
-        field: 'listingId',
-        headerName: 'Listing',
-        flex: 1,
-        minWidth: 220,
-        valueGetter: (_value, row) =>
-          listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
-      },
-      {
-        field: 'buyerOrgId',
-        headerName: 'Licensed to',
-        flex: 1,
-        minWidth: 220,
-        valueGetter: (_value, row) => {
-          const licensedOrg = String(row.buyerOrgId ?? '')
-          if (!licensedOrg) return 'Every workspace you belong to'
-          return licensedOrg === orgId
-            ? 'This workspace'
-            : (orgNames[licensedOrg] ?? licensedOrg)
-        },
-        renderCell: ({ row, value }) => {
-          const licensedOrg = String(row.buyerOrgId ?? '')
-          // A purchase made before AGL-2331 named no organization, so it is
-          // not reinterpreted as belonging to one — it keeps entitling this
-          // buyer everywhere, exactly as it did when they paid for it. Saying
-          // "every workspace" rather than guessing an org is the whole reason
-          // nobody loses access here.
-          if (!licensedOrg) return <Chip size="small" label={value} />
-          return licensedOrg === orgId ? (
-            <Chip size="small" color="primary" label={value} />
-          ) : (
-            <Chip size="small" variant="outlined" label={value} />
-          )
-        },
-      },
-    ],
-    [listingNames, orgId, orgNames],
+    () =>
+      listFilterGridColumns(
+        [
+          {
+            field: 'listingId',
+            headerName: 'Listing',
+            flex: 1,
+            minWidth: 220,
+            valueGetter: (_value, row) =>
+              listingNames[String(row.listingId ?? '')] ?? String(row.listingId ?? ''),
+          },
+          {
+            field: 'buyerOrgId',
+            headerName: 'Licensed to',
+            flex: 1,
+            minWidth: 220,
+            valueGetter: (_value, row) => {
+              const licensedOrg = String(row.buyerOrgId ?? '')
+              if (!licensedOrg) return 'Every workspace you belong to'
+              return licensedOrg === orgId
+                ? 'This workspace'
+                : (orgNames[licensedOrg] ?? licensedOrg)
+            },
+            renderCell: ({ row, value }) => {
+              const licensedOrg = String(row.buyerOrgId ?? '')
+              // A purchase made before AGL-2331 named no organization, so it is
+              // not reinterpreted as belonging to one — it keeps entitling this
+              // buyer everywhere, exactly as it did when they paid for it. Saying
+              // "every workspace" rather than guessing an org is the whole reason
+              // nobody loses access here.
+              if (!licensedOrg) return <Chip size="small" label={value} />
+              return licensedOrg === orgId ? (
+                <Chip size="small" color="primary" label={value} />
+              ) : (
+                <Chip size="small" variant="outlined" label={value} />
+              )
+            },
+          },
+        ],
+        MINE_LICENCE_QUERY.fields,
+        mineOptions,
+        MINE_FILTER_HEADERS,
+      ),
+    [listingNames, orgId, orgNames, mineOptions],
   )
 
   /**
@@ -396,6 +374,9 @@ export function OrgLicencesPanel({
         ? 'loaded'
         : 'loading'
 
+  const filtering = (filter: ListGridFilter) =>
+    filter.clauses.length > 0 || filter.searchWords.length > 0
+
   return (
     <Stack spacing={3}>
       <Alert severity="info">
@@ -404,9 +385,9 @@ export function OrgLicencesPanel({
           'second workspace needs its own license.'}
       </Alert>
 
-      {held.length === 0 ? (
+      {held.length === 0 && heldRead.page === 0 && !filtering(heldFilter) ? (
         <EmptyState
-          read={outcome(orgLicencesRead)}
+          read={outcome(heldRead)}
           subject="this workspace’s licenses"
           iconPath={ICON_VARIANT_COMPONENT.path}
           title={'This workspace holds no licenses'}
@@ -431,23 +412,23 @@ export function OrgLicencesPanel({
           contentGutterX
           contentGutterY
         >
-          <Stack spacing={1}>
-            <ListFilterChips {...heldFilter.chipsProps} />
-            <ListTable
-              aria-label="Licenses this workspace holds"
-              rows={heldFilter.rows}
-              columns={heldFilter.filterColumns(heldColumns)}
-              {...heldFilter.gridProps}
-              rowHeight={TABLE_ROW_HEIGHT}
-              noRowsLabel="No licenses match these filters"
-            />
-          </Stack>
+          <LicenceTable
+            label="Licenses this workspace holds"
+            declaration={HELD_LICENCE_QUERY}
+            headers={HELD_FILTER_HEADERS}
+            options={heldOptions}
+            gridFilter={heldFilter}
+            lookup={heldLookup}
+            read={heldRead}
+            rows={held}
+            columns={heldColumns}
+          />
         </CardDisplay>
       )}
 
-      {mine.length === 0 ? (
+      {mine.length === 0 && mineRead.page === 0 && !filtering(mineFilter) ? (
         <EmptyState
-          read={outcome(myPurchasesRead)}
+          read={outcome(mineRead)}
           subject="your purchases"
           iconPath={ICON_VARIANT_COMPONENT.path}
           title={'You have not bought anything yet'}
@@ -471,19 +452,88 @@ export function OrgLicencesPanel({
           contentGutterX
           contentGutterY
         >
-          <Stack spacing={1}>
-            <ListFilterChips {...mineFilter.chipsProps} />
-            <ListTable
-              aria-label="Licenses you bought"
-              rows={mineFilter.rows}
-              columns={mineFilter.filterColumns(mineColumns)}
-              {...mineFilter.gridProps}
-              rowHeight={TABLE_ROW_HEIGHT}
-              noRowsLabel="No licenses match these filters"
-            />
-          </Stack>
+          <LicenceTable
+            label="Licenses you bought"
+            declaration={MINE_LICENCE_QUERY}
+            headers={MINE_FILTER_HEADERS}
+            options={mineOptions}
+            gridFilter={mineFilter}
+            lookup={mineLookup}
+            read={mineRead}
+            rows={mine}
+            columns={mineColumns}
+          />
         </CardDisplay>
       )}
+    </Stack>
+  )
+}
+
+/**
+ * One license grid: its clause chips, what the query refused or said, the
+ * grid (filtered and searched by the query, not by itself) and its pager.
+ */
+function LicenceTable(props: {
+  label: string
+  declaration: ListQueryDeclaration
+  headers: Readonly<Record<string, string>>
+  options: Readonly<Record<string, readonly ListFilterOption[]>>
+  gridFilter: ListGridFilter
+  lookup: ReturnType<typeof useListingNameLookup>
+  read: UseListQueryResult<any>
+  rows: any[]
+  columns: GridColDef[]
+}): ReactNode {
+  const {
+    label,
+    declaration,
+    headers,
+    options,
+    gridFilter,
+    lookup,
+    read,
+    rows,
+    columns,
+  } = props
+  const refused = listQueryRefusals([...lookup.refused, ...read.plan.refused], {
+    fields: declaration.fields,
+    headers,
+    options,
+  })
+  return (
+    <Stack spacing={1}>
+      <ListFilterChips
+        fields={declaration.fields}
+        headers={headers}
+        clauses={gridFilter.clauses}
+        onChange={gridFilter.setClauses}
+        options={options}
+      />
+      <ListQueryNotices refused={refused} notices={lookup.notices} />
+      <ListTable
+        aria-label={label}
+        rows={rows}
+        columns={columns}
+        filterMode="server"
+        filterModel={gridFilter.filterModel}
+        onFilterModelChange={gridFilter.onFilterModelChange}
+        quickFilter
+        // The query's order is the purchases' own; the grid does not re-sort a page.
+        sortingMode="server"
+        disableColumnSorting
+        // `ListPagination` below pages the query.
+        hideFooter
+        rowHeight={TABLE_ROW_HEIGHT}
+        noRowsLabel="No licenses match these filters"
+      />
+      <ListPagination
+        page={read.page}
+        pageSize={read.pageSize}
+        rowCount={rows.length}
+        hasMore={read.hasMore}
+        onPageChange={read.setPage}
+        onPageSizeChange={read.setPageSize}
+      />
     </Stack>
   )
 }

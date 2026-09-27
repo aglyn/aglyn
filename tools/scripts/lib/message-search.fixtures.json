@@ -1,0 +1,618 @@
+{
+  "note": "Worked examples for the message search keys (AGL-3321). Asserted by libs/aglyn/src/lib/app-utils/message-search.spec.ts against messageSearchFields and messageSender in message-search.ts, and by tools/scripts/backfill-form-submission-filters.mjs --self-test against its own copy. Regenerate only from the library, never by hand.",
+  "fields": [
+    {
+      "fields": {
+        "name": "Hannah Ortiz",
+        "email": "hannah.ortiz@example.com",
+        "message": "Do you take orders for a three-tier wedding cake in early June? Around 120 guests."
+      },
+      "expected": {
+        "senderTokens": [
+          "h",
+          "ha",
+          "han",
+          "hann",
+          "hanna",
+          "hannah",
+          "o",
+          "or",
+          "ort",
+          "orti",
+          "ortiz",
+          "hannah.",
+          "hannah.o",
+          "hannah.or",
+          "hannah.ort",
+          "hannah.orti",
+          "hannah.ortiz",
+          "e",
+          "ex",
+          "exa",
+          "exam",
+          "examp",
+          "exampl",
+          "example",
+          "c",
+          "co",
+          "com"
+        ],
+        "searchTokens": [
+          "h",
+          "ha",
+          "han",
+          "hann",
+          "hanna",
+          "hannah",
+          "o",
+          "or",
+          "ort",
+          "orti",
+          "ortiz",
+          "hannah.",
+          "hannah.o",
+          "hannah.or",
+          "hannah.ort",
+          "hannah.orti",
+          "hannah.ortiz",
+          "e",
+          "ex",
+          "exa",
+          "exam",
+          "examp",
+          "exampl",
+          "example",
+          "c",
+          "co",
+          "com",
+          "d",
+          "do",
+          "y",
+          "yo",
+          "you",
+          "t",
+          "ta",
+          "tak",
+          "take",
+          "ord",
+          "orde",
+          "order",
+          "orders",
+          "f",
+          "fo",
+          "for",
+          "a",
+          "th",
+          "thr",
+          "thre",
+          "three",
+          "three-",
+          "three-t",
+          "three-ti",
+          "three-tie",
+          "three-tier",
+          "ti",
+          "tie",
+          "tier",
+          "w",
+          "we",
+          "wed",
+          "wedd",
+          "weddi",
+          "weddin",
+          "wedding",
+          "ca",
+          "cak",
+          "cake",
+          "i",
+          "in",
+          "ea",
+          "ear",
+          "earl",
+          "early",
+          "j",
+          "ju",
+          "jun",
+          "june",
+          "ar",
+          "aro",
+          "arou",
+          "aroun",
+          "around",
+          "1",
+          "12",
+          "120",
+          "g",
+          "gu",
+          "gue",
+          "gues",
+          "guest",
+          "guests"
+        ]
+      }
+    },
+    {
+      "fields": {
+        "Full Name": "Priya Nair",
+        "Email Address": "PRIYA@Lumen.co",
+        "Company size": "11-50"
+      },
+      "expected": {
+        "senderTokens": [
+          "p",
+          "pr",
+          "pri",
+          "priy",
+          "priya",
+          "n",
+          "na",
+          "nai",
+          "nair",
+          "priya@",
+          "priya@l",
+          "priya@lu",
+          "priya@lum",
+          "priya@lume",
+          "priya@lumen",
+          "priya@lumen.",
+          "l",
+          "lu",
+          "lum",
+          "lume",
+          "lumen",
+          "c",
+          "co"
+        ],
+        "searchTokens": [
+          "p",
+          "pr",
+          "pri",
+          "priy",
+          "priya",
+          "n",
+          "na",
+          "nai",
+          "nair",
+          "priya@",
+          "priya@l",
+          "priya@lu",
+          "priya@lum",
+          "priya@lume",
+          "priya@lumen",
+          "priya@lumen.",
+          "l",
+          "lu",
+          "lum",
+          "lume",
+          "lumen",
+          "c",
+          "co",
+          "1",
+          "11",
+          "11-",
+          "11-5",
+          "11-50",
+          "5",
+          "50"
+        ]
+      }
+    },
+    {
+      "fields": {
+        "question": "Is the sourdough (really) nut-free?"
+      },
+      "expected": {
+        "senderTokens": [],
+        "searchTokens": [
+          "i",
+          "is",
+          "t",
+          "th",
+          "the",
+          "s",
+          "so",
+          "sou",
+          "sour",
+          "sourd",
+          "sourdo",
+          "sourdou",
+          "sourdoug",
+          "sourdough",
+          "r",
+          "re",
+          "rea",
+          "real",
+          "reall",
+          "really",
+          "n",
+          "nu",
+          "nut",
+          "nut-",
+          "nut-f",
+          "nut-fr",
+          "nut-fre",
+          "nut-free",
+          "f",
+          "fr",
+          "fre",
+          "free"
+        ]
+      }
+    },
+    {
+      "fields": {
+        "topics": [
+          "Wholesale",
+          "Catering"
+        ],
+        "guests": 120,
+        "subscribe": true,
+        "name": "   "
+      },
+      "expected": {
+        "senderTokens": [],
+        "searchTokens": [
+          "1",
+          "12",
+          "120",
+          "t",
+          "tr",
+          "tru",
+          "true",
+          "w",
+          "wh",
+          "who",
+          "whol",
+          "whole",
+          "wholes",
+          "wholesa",
+          "wholesal",
+          "wholesale",
+          "c",
+          "ca",
+          "cat",
+          "cate",
+          "cater",
+          "cateri",
+          "caterin",
+          "catering"
+        ]
+      }
+    },
+    {
+      "fields": {
+        "message": "worda0 wordb1 wordc2 wordd3 worde4 wordf5 wordg6 wordh7 wordi8 wordj9 wordk10 wordl11 wordm12 wordn13 wordo14 wordp15 wordq16 wordr17 words18 wordt19 wordu20 wordv21 wordw22 wordx23 wordy24 wordz25 worda26 wordb27 wordc28 wordd29 worde30 wordf31 wordg32 wordh33 wordi34 wordj35 wordk36 wordl37 wordm38 wordn39 wordo40 wordp41 wordq42 wordr43 words44 wordt45 wordu46 wordv47 wordw48 wordx49 wordy50 wordz51 worda52 wordb53 wordc54 wordd55 worde56 wordf57 wordg58 wordh59",
+        "email": "long@example.test"
+      },
+      "expected": {
+        "senderTokens": [
+          "l",
+          "lo",
+          "lon",
+          "long",
+          "long@",
+          "long@e",
+          "long@ex",
+          "long@exa",
+          "long@exam",
+          "long@examp",
+          "long@exampl",
+          "long@example",
+          "e",
+          "ex",
+          "exa",
+          "exam",
+          "examp",
+          "exampl",
+          "example",
+          "t",
+          "te",
+          "tes",
+          "test"
+        ],
+        "searchTokens": [
+          "l",
+          "lo",
+          "lon",
+          "long",
+          "long@",
+          "long@e",
+          "long@ex",
+          "long@exa",
+          "long@exam",
+          "long@examp",
+          "long@exampl",
+          "long@example",
+          "e",
+          "ex",
+          "exa",
+          "exam",
+          "examp",
+          "exampl",
+          "example",
+          "t",
+          "te",
+          "tes",
+          "test",
+          "w",
+          "wo",
+          "wor",
+          "word",
+          "worda",
+          "worda0",
+          "wordb",
+          "wordb1",
+          "wordc",
+          "wordc2",
+          "wordd",
+          "wordd3",
+          "worde",
+          "worde4",
+          "wordf",
+          "wordf5",
+          "wordg",
+          "wordg6",
+          "wordh",
+          "wordh7",
+          "wordi",
+          "wordi8",
+          "wordj",
+          "wordj9",
+          "wordk",
+          "wordk1",
+          "wordk10",
+          "wordl",
+          "wordl1",
+          "wordl11",
+          "wordm",
+          "wordm1",
+          "wordm12",
+          "wordn",
+          "wordn1",
+          "wordn13",
+          "wordo",
+          "wordo1",
+          "wordo14",
+          "wordp",
+          "wordp1",
+          "wordp15",
+          "wordq",
+          "wordq1",
+          "wordq16",
+          "wordr",
+          "wordr1",
+          "wordr17",
+          "words",
+          "words1",
+          "words18",
+          "wordt",
+          "wordt1",
+          "wordt19",
+          "wordu",
+          "wordu2",
+          "wordu20",
+          "wordv",
+          "wordv2",
+          "wordv21",
+          "wordw",
+          "wordw2",
+          "wordw22",
+          "wordx",
+          "wordx2",
+          "wordx23",
+          "wordy",
+          "wordy2",
+          "wordy24",
+          "wordz",
+          "wordz2",
+          "wordz25",
+          "worda2",
+          "worda26",
+          "wordb2",
+          "wordb27",
+          "wordc28",
+          "wordd2",
+          "wordd29",
+          "worde3",
+          "worde30",
+          "wordf3",
+          "wordf31",
+          "wordg3",
+          "wordg32",
+          "wordh3",
+          "wordh33",
+          "wordi3",
+          "wordi34",
+          "wordj3",
+          "wordj35"
+        ]
+      }
+    },
+    {
+      "fields": {
+        "2": "second",
+        "10": "tenth",
+        "name": "Zed"
+      },
+      "expected": {
+        "senderTokens": [
+          "z",
+          "ze",
+          "zed"
+        ],
+        "searchTokens": [
+          "z",
+          "ze",
+          "zed",
+          "t",
+          "te",
+          "ten",
+          "tent",
+          "tenth",
+          "s",
+          "se",
+          "sec",
+          "seco",
+          "secon",
+          "second"
+        ]
+      }
+    },
+    {
+      "fields": {
+        "name": "José Ñúñez",
+        "message": "¿Café? con leche — gracias"
+      },
+      "expected": {
+        "senderTokens": [
+          "j",
+          "jo",
+          "jos",
+          "josé",
+          "ñ",
+          "ñú",
+          "ñúñ",
+          "ñúñe",
+          "ñúñez"
+        ],
+        "searchTokens": [
+          "j",
+          "jo",
+          "jos",
+          "josé",
+          "ñ",
+          "ñú",
+          "ñúñ",
+          "ñúñe",
+          "ñúñez",
+          "c",
+          "ca",
+          "caf",
+          "café",
+          "co",
+          "con",
+          "l",
+          "le",
+          "lec",
+          "lech",
+          "leche",
+          "g",
+          "gr",
+          "gra",
+          "grac",
+          "graci",
+          "gracia",
+          "gracias"
+        ]
+      }
+    },
+    {
+      "fields": {
+        "Name": "First Spelling",
+        "name": "second spelling"
+      },
+      "expected": {
+        "senderTokens": [
+          "f",
+          "fi",
+          "fir",
+          "firs",
+          "first",
+          "s",
+          "sp",
+          "spe",
+          "spel",
+          "spell",
+          "spelli",
+          "spellin",
+          "spelling"
+        ],
+        "searchTokens": [
+          "f",
+          "fi",
+          "fir",
+          "firs",
+          "first",
+          "s",
+          "sp",
+          "spe",
+          "spel",
+          "spell",
+          "spelli",
+          "spellin",
+          "spelling",
+          "se",
+          "sec",
+          "seco",
+          "secon",
+          "second"
+        ]
+      }
+    },
+    {
+      "fields": {},
+      "expected": {
+        "senderTokens": [],
+        "searchTokens": []
+      }
+    },
+    {
+      "fields": null,
+      "expected": {
+        "senderTokens": [],
+        "searchTokens": []
+      }
+    }
+  ],
+  "sender": [
+    {
+      "fields": {
+        "name": "Priya Nair",
+        "email": "priya@lumen.co"
+      },
+      "expected": {
+        "name": "Priya Nair",
+        "email": "priya@lumen.co"
+      }
+    },
+    {
+      "fields": {
+        "Your Name": "Ada",
+        "E-mail": "no@match.test",
+        "Email_Address": "ada@example.com"
+      },
+      "expected": {
+        "name": "Ada",
+        "email": "no@match.test"
+      }
+    },
+    {
+      "fields": {
+        "firstName": "Lin",
+        "contact_name": "Other"
+      },
+      "expected": {
+        "name": "Lin"
+      }
+    },
+    {
+      "fields": {
+        "Name": "First Spelling",
+        "name": "second spelling"
+      },
+      "expected": {
+        "name": "First Spelling"
+      }
+    },
+    {
+      "fields": {
+        "message": "nobody named"
+      },
+      "expected": {}
+    },
+    {
+      "fields": null,
+      "expected": {}
+    }
+  ]
+}

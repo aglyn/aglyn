@@ -25,6 +25,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Staff impersonation (AGL-246): mints a short-lived custom token for the
@@ -117,21 +118,17 @@ async function handler(request: Request): Promise<Response> {
       impersonatedBy: decoded.uid,
       impersonatedByEmail: decoded.email ?? null,
     })
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'user.impersonate',
-        target: `users/${uid}`,
-        // Top-level, matching `org-override` and `lockdown`, so the audit
-        // page renders it without knowing this action's payload shape.
-        reason,
-        before: null,
-        after: { email: target.email ?? null, tenantId: tenantId ?? null },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'user.impersonate',
+      target: `users/${uid}`,
+      // Top-level, matching `org-override` and `lockdown`, so the audit
+      // page renders it without knowing this action's payload shape.
+      reason,
+      before: null,
+      after: { email: target.email ?? null, tenantId: tenantId ?? null },
+      at: FieldValue.serverTimestamp(),
+    })
     // The pool rides along with the token (AGL-1993). Scoping the MINT is only
     // half of it: `signInWithCustomToken` reads the pool off the client's auth
     // instance, so without this the caller cannot place the instance in the

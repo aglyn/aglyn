@@ -207,7 +207,9 @@ function summarize(label: string, listens: Array<{ path: string; limit: number }
 /** Collections only ONE section's cards read, keyed by that section. */
 const SECTION_COLLECTIONS = {
   catalog: ['productCategories', 'inventoryAdjustments', 'memberPosts'],
-  orders: ['orders', 'checkouts', 'restockAlerts'],
+  // `restockAlerts` is not here: the Recovery & alerts card COUNTS it by
+  // aggregation and never listens to it (AGL-3321).
+  orders: ['orders', 'checkouts'],
   promotions: ['discounts', 'coupons', 'giftCards', 'reviews'],
   reservations: ['reservations'],
 } as const

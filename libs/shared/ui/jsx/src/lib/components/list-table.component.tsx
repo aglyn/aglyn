@@ -304,7 +304,60 @@ export interface ListTableProps extends DataTableProps {
    * only thing that selects, so the two gestures cannot collide.
    */
   selectable?: ListTableSelection
+  /**
+   * The toolbar, its Filters panel and its search, and none of the rows
+   * (AGL-3327).
+   *
+   * For a list the reader can also see some other way — the media library's
+   * thumbnail grid — that must filter exactly as its table view does. The
+   * panel, the quick search and Export all live inside the grid, bound to
+   * its API, so a second, hand-built toolbar for the other view would be a
+   * second filter UI to keep in step with this one. Instead the grid is
+   * drawn with its body collapsed and no rows: the toolbar stays, and the
+   * panel still opens under it (its anchor is kept, at the top of the
+   * collapsed body). The columns chooser and Export go — there are no
+   * columns on screen to choose, and the rows are the other view's to draw
+   * and to export.
+   */
+  toolbarOnly?: boolean
 }
+
+const NO_ROWS = [] as const
+
+/** No column chooser and no Export: the columns and rows are drawn elsewhere. */
+const TOOLBAR_ONLY_PROPS = { disableColumnSelector: true }
+
+/** Nothing, for an overlay a toolbar-only grid has no body to draw in. */
+const NoOverlay = () => null
+
+/** A toolbar-only grid's overlays: its body is collapsed, so they are too. */
+const TOOLBAR_ONLY_SLOTS = {
+  noRowsOverlay: NoOverlay,
+  noResultsOverlay: NoOverlay,
+  loadingOverlay: NoOverlay,
+}
+
+/**
+ * The body of a toolbar-only grid, collapsed to nothing.
+ *
+ * Everything in the main container goes except the panel anchor, which the
+ * Filters panel positions itself against: the anchor sits at the top of the
+ * collapsed body, which is directly under the toolbar, where the panel opens
+ * on every other list. The body keeps no height, so the virtualized rows it
+ * would draw into have none to fill.
+ */
+const TOOLBAR_ONLY_SX = {
+  '& .MuiDataGrid-main': {
+    flex: '0 0 0px',
+    height: 0,
+    minHeight: 0,
+    overflow: 'visible',
+  },
+  '& .MuiDataGrid-main > :not([data-id="gridPanelAnchor"])': {
+    display: 'none',
+  },
+  '& [data-id="gridPanelAnchor"]': { top: 0 },
+} as const
 
 /**
  * The grid every FLAT artifact list uses — layouts, components, templates.
@@ -323,6 +376,8 @@ export function ListTable(props: ListTableProps) {
     selectable,
     quickFilter,
     slotProps,
+    toolbarOnly = false,
+    slots,
     ...rest
   } = props
   const showQuickFilter = quickFilter ?? rest.filterMode !== 'server'
@@ -385,8 +440,9 @@ export function ListTable(props: ListTableProps) {
    * initial state is read once. A floor of one because MUI rejects a page
    * size of zero, and an empty grid has nothing to slice anyway.
    *=========================================*/
-  const rowCount = rows?.length ?? 0
-  const unpaged = hideFooter
+  const rowCount = toolbarOnly ? 0 : (rows?.length ?? 0)
+  const footerHidden = hideFooter || toolbarOnly
+  const unpaged = footerHidden
     ? {
         paginationModel: { page: 0, pageSize: Math.max(rowCount, 1) },
         // A controlled model with no handler logs a MUI warning, and the
@@ -458,6 +514,7 @@ export function ListTable(props: ListTableProps) {
             alignItems: 'center',
           },
         },
+        ...(toolbarOnly ? [TOOLBAR_ONLY_SX] : []),
         ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
       ]}
       /*
@@ -501,14 +558,28 @@ export function ListTable(props: ListTableProps) {
        */
       slotProps={{
         ...slotProps,
-        toolbar: { showQuickFilter, ...slotProps?.toolbar },
+        toolbar: {
+          showQuickFilter,
+          ...slotProps?.toolbar,
+          ...(toolbarOnly
+            ? {
+                csvOptions: { disableToolbarButton: true },
+                printOptions: { disableToolbarButton: true },
+              }
+            : {}),
+        },
         pagination: {
           labelRowsPerPage: TABLE_ROWS_PER_PAGE_LABEL,
           ...slotProps?.pagination,
         },
       }}
-      rows={rows}
-      hideFooter={hideFooter}
+      // A toolbar-only grid holds no rows: the reader sees them some other
+      // way, and rows laid out under a collapsed body would be drawn for no
+      // one.
+      rows={toolbarOnly ? NO_ROWS : rows}
+      hideFooter={footerHidden}
+      slots={toolbarOnly ? { ...slots, ...TOOLBAR_ONLY_SLOTS } : slots}
+      {...(toolbarOnly ? TOOLBAR_ONLY_PROPS : {})}
       {...rest}
       /*
        * AFTER `rest`, deliberately. "The footer is hidden, so every row I was

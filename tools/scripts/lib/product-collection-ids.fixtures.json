@@ -1,0 +1,188 @@
+{
+  "$comment": "Worked examples for productCollectionIds (libs/plugins/commerce/src/lib/model/commerce.ts, over liftLegacyProduct) and its script-side twin tools/scripts/lib/product-collection-ids.mjs. Both assert these; change one only with the other (AGL-3321).",
+  "collections": [
+    {
+      "id": "c-no-wood",
+      "rules": [
+        {
+          "field": "tag",
+          "op": "neq",
+          "value": "wood"
+        }
+      ]
+    },
+    {
+      "id": "b-walnut-or-cheap",
+      "matchAll": false,
+      "rules": [
+        {
+          "field": "name",
+          "op": "contains",
+          "value": "walnut"
+        },
+        {
+          "field": "priceUsd",
+          "op": "lt",
+          "value": 15
+        }
+      ]
+    },
+    {
+      "id": "a-over-100",
+      "rules": [
+        {
+          "field": "priceUsd",
+          "op": "gt",
+          "value": 100
+        }
+      ]
+    },
+    {
+      "id": "d-digital-in-cat",
+      "rules": [
+        {
+          "field": "type",
+          "op": "eq",
+          "value": "digital"
+        },
+        {
+          "field": "categoryId",
+          "op": "eq",
+          "value": "cat-1"
+        }
+      ]
+    },
+    {
+      "id": "e-exact-name",
+      "rules": [
+        {
+          "field": "name",
+          "op": "eq",
+          "value": "product"
+        }
+      ]
+    },
+    {
+      "id": "f-no-rules",
+      "rules": []
+    },
+    {
+      "id": "g-price-eq-20",
+      "rules": [
+        {
+          "field": "priceUsd",
+          "op": "eq",
+          "value": 20
+        }
+      ]
+    },
+    {
+      "id": "h-not-physical",
+      "rules": [
+        {
+          "field": "type",
+          "op": "neq",
+          "value": "physical"
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "name": "a walnut chair with a wood tag",
+      "product": {
+        "name": "Walnut Chair",
+        "type": "physical",
+        "tags": [
+          "wood"
+        ],
+        "variants": [
+          {
+            "id": "v1",
+            "priceUsd": 120
+          },
+          {
+            "id": "v2",
+            "priceUsd": 90
+          }
+        ]
+      },
+      "expected": [
+        "a-over-100",
+        "b-walnut-or-cheap"
+      ]
+    },
+    {
+      "name": "a cheap digital download in a category",
+      "product": {
+        "name": "Pattern PDF",
+        "type": "digital",
+        "categoryIds": [
+          "cat-1"
+        ],
+        "variants": [
+          {
+            "id": "v1",
+            "priceUsd": 9
+          }
+        ]
+      },
+      "expected": [
+        "b-walnut-or-cheap",
+        "c-no-wood",
+        "d-digital-in-cat",
+        "h-not-physical"
+      ]
+    },
+    {
+      "name": "a legacy Commerce Starter doc with a flat price and no name",
+      "product": {
+        "priceUsd": 20
+      },
+      "expected": [
+        "c-no-wood",
+        "e-exact-name",
+        "g-price-eq-20"
+      ]
+    },
+    {
+      "name": "a product spanning a price",
+      "product": {
+        "name": "Mug",
+        "type": "physical",
+        "variants": [
+          {
+            "id": "s",
+            "priceUsd": 15
+          },
+          {
+            "id": "l",
+            "priceUsd": 25
+          }
+        ]
+      },
+      "expected": [
+        "c-no-wood",
+        "g-price-eq-20"
+      ]
+    },
+    {
+      "name": "a product with no priced variant",
+      "product": {
+        "name": "Draft Thing",
+        "type": "service",
+        "variants": [
+          {
+            "id": "v",
+            "priceUsd": null
+          }
+        ]
+      },
+      "expected": [
+        "b-walnut-or-cheap",
+        "c-no-wood",
+        "h-not-physical"
+      ]
+    }
+  ]
+}

@@ -57,7 +57,6 @@
 
 import { act, render } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import {
   DEFAULT_MARKETING_CONSENT_POLICY,
   readMarketingBasis,
@@ -182,17 +181,13 @@ const FIRESTORE = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useUser: () => ({ data: { uid: 'uid-test' } }),
-  usePagedCollection: () => ({
-    rows: memberDocs,
-    hasMore: false,
-    page: 0,
-    setPage: () => undefined,
-    pageSize: TABLE_PAGE_SIZE_DEFAULT,
-    setPageSize: () => undefined,
-    status: 'success',
-    fromCache: false,
-  }),
 }))
+
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() => memberDocs, jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')),
+)
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({

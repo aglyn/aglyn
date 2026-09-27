@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { addressSearchWords } from '@aglyn/aglyn/app-utils/activity-search'
 import {
   nameSearchKey,
   nameSearchTokens,
@@ -48,4 +49,29 @@ export function memberNameSearchFields(displayName: string): {
     // "lovelace" and not only by typing "ada".
     displayNameTokens: nameSearchTokens(displayName),
   }
+}
+
+/**
+ * What the Site users list's search box finds a member by (AGL-3321): the
+ * start of any word of their display name, or of their address — the whole
+ * address, its local part, its domain, or any run of letters and digits in
+ * it, read the way the activity logs read an actor's (`addressSearchWords`).
+ * So `ada`, `lovelace` and `example.com` all find Ada Lovelace
+ * <ada@example.com>, and a member who never gave a name is still found.
+ *
+ * Stamped as `searchTokens` at sign-up (the only writer of `email`, which
+ * never changes afterwards) and wherever the display name is written, with
+ * the address the document already holds. `Name contains` keeps reading
+ * `displayNameTokens`, so it filters the name alone.
+ *
+ * ⚠️ EVERY writer of `displayName` or `email` must stamp it, or the member
+ * lists normally and the search cannot find them.
+ */
+export function memberSearchTokens(
+  displayName: string | null | undefined,
+  email: string | null | undefined,
+): string[] {
+  return nameSearchTokens(
+    [...addressSearchWords(email), displayName ?? ''].join(' '),
+  )
 }

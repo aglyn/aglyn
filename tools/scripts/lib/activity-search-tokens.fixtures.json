@@ -1,0 +1,409 @@
+{
+  "tokens": [
+    {
+      "name": "a person: the whole address, its halves, its runs, and the target name",
+      "entry": {
+        "actorEmail": "Ada.Lovelace@Example.com",
+        "target": {
+          "type": "screen",
+          "id": "s1",
+          "name": "Home page"
+        }
+      },
+      "expected": [
+        "a",
+        "ad",
+        "ada",
+        "ada.",
+        "ada.l",
+        "ada.lo",
+        "ada.lov",
+        "ada.love",
+        "ada.lovel",
+        "ada.lovela",
+        "ada.lovelac",
+        "ada.lovelace",
+        "e",
+        "ex",
+        "exa",
+        "exam",
+        "examp",
+        "exampl",
+        "example",
+        "example.",
+        "example.c",
+        "example.co",
+        "example.com",
+        "l",
+        "lo",
+        "lov",
+        "love",
+        "lovel",
+        "lovela",
+        "lovelac",
+        "lovelace",
+        "c",
+        "co",
+        "com",
+        "h",
+        "ho",
+        "hom",
+        "home",
+        "p",
+        "pa",
+        "pag",
+        "page"
+      ]
+    },
+    {
+      "name": "an API key: its name stands in for the address",
+      "entry": {
+        "actorId": "api",
+        "actorEmail": null,
+        "apiKeyName": "Zapier sync",
+        "target": {
+          "type": "contact",
+          "name": "Leads"
+        }
+      },
+      "expected": [
+        "z",
+        "za",
+        "zap",
+        "zapi",
+        "zapie",
+        "zapier",
+        "s",
+        "sy",
+        "syn",
+        "sync",
+        "l",
+        "le",
+        "lea",
+        "lead",
+        "leads"
+      ]
+    },
+    {
+      "name": "a workflow run: no actor, the workflow name",
+      "entry": {
+        "actorId": null,
+        "actorEmail": null,
+        "target": {
+          "type": "workflow",
+          "id": "w1",
+          "name": "Welcome series"
+        }
+      },
+      "expected": [
+        "w",
+        "we",
+        "wel",
+        "welc",
+        "welco",
+        "welcom",
+        "welcome",
+        "s",
+        "se",
+        "ser",
+        "seri",
+        "serie",
+        "series"
+      ]
+    },
+    {
+      "name": "nothing to search",
+      "entry": {},
+      "expected": []
+    },
+    {
+      "name": "a target with no name",
+      "entry": {
+        "actorEmail": "bo@acme.io",
+        "target": {
+          "type": "theme"
+        }
+      },
+      "expected": [
+        "b",
+        "bo",
+        "bo@",
+        "bo@a",
+        "bo@ac",
+        "bo@acm",
+        "bo@acme",
+        "bo@acme.",
+        "bo@acme.i",
+        "bo@acme.io",
+        "a",
+        "ac",
+        "acm",
+        "acme",
+        "acme.",
+        "acme.i",
+        "acme.io",
+        "i",
+        "io"
+      ]
+    },
+    {
+      "name": "a plus-address on a subdomain",
+      "entry": {
+        "actorEmail": "ops+alerts@mail.acme.co.uk",
+        "target": {
+          "name": "Summer sale"
+        }
+      },
+      "expected": [
+        "o",
+        "op",
+        "ops",
+        "ops+",
+        "ops+a",
+        "ops+al",
+        "ops+ale",
+        "ops+aler",
+        "ops+alert",
+        "ops+alerts",
+        "ops+alerts@",
+        "ops+alerts@m",
+        "m",
+        "ma",
+        "mai",
+        "mail",
+        "mail.",
+        "mail.a",
+        "mail.ac",
+        "mail.acm",
+        "mail.acme",
+        "mail.acme.",
+        "mail.acme.c",
+        "mail.acme.co",
+        "a",
+        "al",
+        "ale",
+        "aler",
+        "alert",
+        "alerts",
+        "ac",
+        "acm",
+        "acme",
+        "c",
+        "co",
+        "u",
+        "uk",
+        "s",
+        "su",
+        "sum",
+        "summ",
+        "summe",
+        "summer",
+        "sa",
+        "sal",
+        "sale"
+      ]
+    },
+    {
+      "name": "values that are not text are ignored",
+      "entry": {
+        "actorEmail": 42,
+        "apiKeyName": {
+          "name": "x"
+        },
+        "target": {
+          "name": [
+            "x"
+          ]
+        }
+      },
+      "expected": []
+    },
+    {
+      "name": "whitespace is collapsed and case folded",
+      "entry": {
+        "actorEmail": "  ",
+        "target": {
+          "name": "  Pricing\t  PAGE "
+        }
+      },
+      "expected": [
+        "p",
+        "pr",
+        "pri",
+        "pric",
+        "prici",
+        "pricin",
+        "pricing",
+        "pa",
+        "pag",
+        "page"
+      ]
+    },
+    {
+      "name": "letters beyond ASCII are kept",
+      "entry": {
+        "actorEmail": "josé@café.fr",
+        "target": {
+          "name": "Café Menu"
+        }
+      },
+      "expected": [
+        "j",
+        "jo",
+        "jos",
+        "josé",
+        "josé@",
+        "josé@c",
+        "josé@ca",
+        "josé@caf",
+        "josé@café",
+        "josé@café.",
+        "josé@café.f",
+        "josé@café.fr",
+        "c",
+        "ca",
+        "caf",
+        "café",
+        "café.",
+        "café.f",
+        "café.fr",
+        "f",
+        "fr",
+        "m",
+        "me",
+        "men",
+        "menu"
+      ]
+    },
+    {
+      "name": "the token ceiling holds on a very long name",
+      "entry": {
+        "target": {
+          "name": "axyzuvwqrstop bxyzuvwqrstop cxyzuvwqrstop dxyzuvwqrstop exyzuvwqrstop fxyzuvwqrstop gxyzuvwqrstop hxyzuvwqrstop ixyzuvwqrstop jxyzuvwqrstop kxyzuvwqrstop lxyzuvwqrstop mxyzuvwqrstop nxyzuvwqrstop"
+        }
+      },
+      "expected": [
+        "a",
+        "ax",
+        "axy",
+        "axyz",
+        "axyzu",
+        "axyzuv",
+        "axyzuvw",
+        "axyzuvwq",
+        "axyzuvwqr",
+        "axyzuvwqrs",
+        "axyzuvwqrst",
+        "axyzuvwqrsto",
+        "b",
+        "bx",
+        "bxy",
+        "bxyz",
+        "bxyzu",
+        "bxyzuv",
+        "bxyzuvw",
+        "bxyzuvwq",
+        "bxyzuvwqr",
+        "bxyzuvwqrs",
+        "bxyzuvwqrst",
+        "bxyzuvwqrsto",
+        "c",
+        "cx",
+        "cxy",
+        "cxyz",
+        "cxyzu",
+        "cxyzuv",
+        "cxyzuvw",
+        "cxyzuvwq",
+        "cxyzuvwqr",
+        "cxyzuvwqrs",
+        "cxyzuvwqrst",
+        "cxyzuvwqrsto",
+        "d",
+        "dx",
+        "dxy",
+        "dxyz",
+        "dxyzu",
+        "dxyzuv",
+        "dxyzuvw",
+        "dxyzuvwq",
+        "dxyzuvwqr",
+        "dxyzuvwqrs",
+        "dxyzuvwqrst",
+        "dxyzuvwqrsto",
+        "e",
+        "ex",
+        "exy",
+        "exyz",
+        "exyzu",
+        "exyzuv",
+        "exyzuvw",
+        "exyzuvwq",
+        "exyzuvwqr",
+        "exyzuvwqrs",
+        "exyzuvwqrst",
+        "exyzuvwqrsto",
+        "f",
+        "fx",
+        "fxy",
+        "fxyz",
+        "fxyzu",
+        "fxyzuv",
+        "fxyzuvw",
+        "fxyzuvwq",
+        "fxyzuvwqr",
+        "fxyzuvwqrs",
+        "fxyzuvwqrst",
+        "fxyzuvwqrsto",
+        "g",
+        "gx",
+        "gxy",
+        "gxyz",
+        "gxyzu",
+        "gxyzuv",
+        "gxyzuvw",
+        "gxyzuvwq",
+        "gxyzuvwqr",
+        "gxyzuvwqrs",
+        "gxyzuvwqrst",
+        "gxyzuvwqrsto",
+        "h",
+        "hx",
+        "hxy",
+        "hxyz",
+        "hxyzu",
+        "hxyzuv",
+        "hxyzuvw",
+        "hxyzuvwq",
+        "hxyzuvwqr",
+        "hxyzuvwqrs",
+        "hxyzuvwqrst",
+        "hxyzuvwqrsto",
+        "i",
+        "ix",
+        "ixy",
+        "ixyz",
+        "ixyzu",
+        "ixyzuv",
+        "ixyzuvw",
+        "ixyzuvwq",
+        "ixyzuvwqr",
+        "ixyzuvwqrs",
+        "ixyzuvwqrst",
+        "ixyzuvwqrsto",
+        "j",
+        "jx",
+        "jxy",
+        "jxyz",
+        "jxyzu",
+        "jxyzuv",
+        "jxyzuvw",
+        "jxyzuvwq",
+        "jxyzuvwqr",
+        "jxyzuvwqrs",
+        "jxyzuvwqrst",
+        "jxyzuvwqrsto"
+      ]
+    }
+  ]
+}

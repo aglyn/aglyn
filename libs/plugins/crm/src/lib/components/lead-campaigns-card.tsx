@@ -36,6 +36,10 @@ import { Button, Stack } from '@mui/material'
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { crmClientListFields } from '../model/crm-list-query'
+
+/** The list field a campaign filing moves (AGL-3321). */
+const LEAD_CAMPAIGN_LIST_FIELDS = ['scopedCampaignIds'] as const
 
 /** The helper line under the picker — the contact card's, word for word. */
 export const LEAD_CAMPAIGNS_HELPER_TEXT =
@@ -143,6 +147,9 @@ export function LeadCampaignsCard(props: LeadCampaignsCardProps) {
       async () => {
         await updateDoc(doc(firestore, 'orgs', orgId, 'leads', leadId), {
           campaignIds: next,
+          // The Leads list's Campaign filter under a site reads these
+          // (AGL-3321), from the lead with its new campaigns.
+          ...crmClientListFields('leads', lead, { campaignIds: next }, LEAD_CAMPAIGN_LIST_FIELDS),
           updatedAt: serverTimestamp(),
         })
       },

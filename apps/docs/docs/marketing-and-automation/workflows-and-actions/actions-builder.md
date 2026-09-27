@@ -259,11 +259,14 @@ Every automation row has a **Runs** button. It opens **Runs — *your automation
 | **What happened** | For a run, what each step did, joined with `·`. For a failure, the errors. For a skip, which condition stopped it. |
 
 The table's toolbar narrows it. **Filters** offers **Trigger** and **Result** as picked
-values, **Time** by day, and **What happened** as typed text; **Search** finds words in
-the trigger or in what happened. Both reach every run the table read — the runs among
-the 200 most recent activity entries this automation wrote — not only the page on screen,
-and each filter in force shows as a chip above the table. When the automation has
-written more than that, a note under the table says so. See
+values (**is** or **is any of**) and **Time** by day (**is**, **after**, **on or after**,
+**before**, **on or before**); **Search** finds a word at the start of any word in
+**What happened**. Every filter and the search are asked of the whole history, however
+far back it goes, and the table pages through the matches newest first, so a run from
+months ago is found as readily as one from this morning. Each filter in force shows as a
+chip above the table. Search and filters combine; a combination the history can't answer
+at once is named above the table and not applied, rather than applied to some runs and
+not others. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 **Skipped** is a result, not an absence — see

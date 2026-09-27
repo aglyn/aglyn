@@ -693,7 +693,16 @@ describe('a form', () => {
       routing: { datasetId: 'ds' },
       versionId: result.versionId,
     })
-    expect(copy).not.toHaveProperty('stats')
+    // The source's 12 stay behind. The copy has counted nothing, which it
+    // says with a null per counter (AGL-3330), never a zero.
+    expect(copy['stats']).toEqual({ submissions: null, leads: null, lastSubmissionAtMs: null })
+    // What its list queries: its own search keys, in use, the lead switch set.
+    expect(copy).toMatchObject({
+      nameLower: 'copy of contact',
+      retired: false,
+      routing: { datasetId: 'ds', lead: false },
+    })
+    expect(copy['searchTokens']).toEqual(expect.arrayContaining(['copy', 'contact']))
     expect(store.get(`hosts/${HOST}/forms/${result.id}/versions/${result.versionId}`)).toMatchObject({
       formId: result.id,
     })

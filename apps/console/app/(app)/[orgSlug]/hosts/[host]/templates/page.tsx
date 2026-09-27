@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { mdiBookmarkOutline } from '@aglyn/shared-data-mdi'
 import { Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -102,6 +103,12 @@ const HostTemplates: NextPageWithLayout<Record<string, never>> = () => {
         // Explicit rather than absent: an absent source reads as "unknown"
         // to the badge and the marketplace update path, not as "mine".
         source: { type: 'authored' },
+        // The keys the library's list queries by (AGL-3321).
+        ...artifactCreateListKeys('templates', {
+          kind: values.kind ?? 'page',
+          displayName: values.displayName,
+          source: { type: 'authored' },
+        }),
         createdAt: timestamp,
         updatedAt: timestamp,
       })

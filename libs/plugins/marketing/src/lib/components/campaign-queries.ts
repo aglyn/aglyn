@@ -93,6 +93,29 @@ export function campaignSendsQuery(
     : sends
 }
 
+/**
+ * The two collections UNSCOPED, for a paged list that puts its scope on its
+ * query plan (AGL-3321): `campaignSendsScope` / `campaignContainersScope` in
+ * `model/campaign-list-query.ts` carry the site's clause there, beside the
+ * list's own. A site hub's sends are asked `hostId == {site}` rather than by
+ * `visibleTo`, so search keeps the query's one array clause; the rules
+ * admit that read for the site's collaborators too.
+ */
+export function campaignSendsCollection(
+  firestore: Firestore,
+  orgId: string | null,
+): Query | null {
+  return orgId ? collection(firestore, ...orgCampaignSendsPath(orgId)) : null
+}
+
+/** `orgs/{orgId}/emailCampaigns`, unscoped — see {@link campaignSendsCollection}. */
+export function campaignContainersCollection(
+  firestore: Firestore,
+  orgId: string | null,
+): Query | null {
+  return orgId ? collection(firestore, ...orgEmailCampaignsPath(orgId)) : null
+}
+
 /** One container, `orgs/{orgId}/emailCampaigns/{id}`. */
 export function campaignContainerDoc(
   firestore: Firestore,

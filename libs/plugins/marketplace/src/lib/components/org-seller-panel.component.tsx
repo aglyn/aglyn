@@ -20,7 +20,6 @@ import { trackEvent } from '@aglyn/aglyn/app-utils/analytics-events'
 import { mdiDotsVertical } from '@aglyn/shared-data-mdi'
 import { AppLink, CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Alert,
   Avatar,
@@ -56,7 +55,7 @@ import {
 import { PLATFORM_BRAND_LEGAL_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { LISTING_LOGO_HINT } from '../constants/listing-media'
 import { useRouter } from 'next/navigation'
-import { collection, doc, query, updateDoc, where } from 'firebase/firestore'
+import { collection, doc, query, where } from 'firebase/firestore'
 import { type ReactElement, useCallback, useEffect, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -510,12 +509,32 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
     },
     [user, enqueueSnackbar],
   )
+  // Unpublish ⇄ republish goes through the API too (AGL-3321). It was a
+  // client write of `deletedAt`, but browse queries each listing's audience,
+  // which only the server re-derives — so the rules now deny the field here.
   const handleUnpublish = useCallback(
     (listing: any) => async () => {
       try {
-        await updateDoc(doc(firestore, 'marketplaceListings', listing.$id), {
-          deletedAt: listing.deletedAt ? null : Timestamp.now(),
-        })
+        const response = await authorizedFetch(
+          user,
+          '/api/marketplace/publish-plugin',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'set-published',
+              listingId: listing.$id,
+              published: Boolean(listing.deletedAt),
+            }),
+          },
+        )
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          return void enqueueSnackbar(
+            payload?.error ?? 'Publishing change failed',
+            { variant: 'error', allowDuplicate: true },
+          )
+        }
         enqueueSnackbar(listing.deletedAt ? 'Republished' : 'Unpublished', {
           variant: 'success',
           persist: false,
@@ -528,7 +547,7 @@ export function OrgSellerPanel(props: OrgSellerPanelProps) {
         })
       }
     },
-    [firestore, enqueueSnackbar],
+    [user, enqueueSnackbar],
   )
 
   const cards: Record<OrgSellerSection, ReactElement> = {

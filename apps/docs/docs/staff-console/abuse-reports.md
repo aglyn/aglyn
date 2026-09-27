@@ -197,6 +197,29 @@ the re-read, not the click.
 person to receive a report about the same site has no idea whether we already
 considered it.
 
+**Filtering and paging the queue.** The queue has two filters, **Status** and
+**Category**, set from the two menus above it; each one in force shows as a chip
+you can remove. Both are applied to
+the **whole queue** by the query that reads it, not to the page on screen, so
+"no reports match" means none anywhere. They combine freely — `open` reports in
+`phishing`, say. There is no search box: a report is triaged by status and category, and its text
+is whatever a stranger typed into a public form.
+
+Reports come newest update first, a page at a time, with the page controls under
+the last card. Counter-notices page on their own below them, **oldest first** —
+the first page holds the deadlines closest to passing.
+
+The menus offer only what the query can hold. A filter that reaches the queue
+some other way and cannot be applied is not applied at all: a notice above the
+list names it and says why, in the form *"Status starts with act is not applied:
+…"*, rather than narrowing some rows and not others.
+
+The banners at the top count the **whole queue**, whatever page you are on: open
+reports in an urgent category, counter-notices not yet forwarded, and
+restorations already past their deadline (read "at least N" in the rare case
+there are more candidates than one read covers). The failed-receipt banner is
+the exception and says so: it counts the submitters **on this page**.
+
 ## What we do not tell people {#disclosure}
 
 Two rules, both narrow and both firm.
@@ -431,8 +454,9 @@ incident.
   refused message is turned away at SMTP rather than landing in a junk folder.
   There is no copy of it anywhere, on either side — so this page is the only
   place the failure is knowable, and the reporter has no way to tell you.
-  The count at the top of the queue describes the rows on **this page**, like
-  the urgent count beside it, not the whole queue.
+  The failed-receipt count at the top of the queue describes the rows on
+  **this page**, not the whole queue — unlike the urgent count beside it, which
+  is the whole queue's.
 - **`abuse@aglyn.com` and `dmca@aglyn.com` deliver** — confirmed 2026-08-19
   (AGL-1911) by reading Google Workspace group configuration, *not* by a test
   send. Both are Google Groups ("Legal - Abuse", "Legal - DMCA") with

@@ -48,6 +48,7 @@ import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
 
 import { putMediaDocument } from './lib/media-counter.mjs'
+import { displayNameSearchFields } from './lib/name-search-tokens.mjs'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -101,6 +102,9 @@ async function main() {
   await orgRef.set(
     {
       name: 'Scope Agency',
+      // The search keys every org writer stamps (`createOrganization`), so the
+      // staff Organizations list's search and name filter find it (AGL-3321).
+      ...displayNameSearchFields('Scope Agency'),
       slug: ORG_ID,
       ownerUid: 'scope-owner',
       plan: 'business',

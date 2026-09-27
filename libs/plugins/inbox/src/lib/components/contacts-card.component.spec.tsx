@@ -16,13 +16,13 @@
  */
 
 /**
- * A site's members and leads are one record list in the shared grid
- * (AGL-3045).
+ * A site's members and leads, each its own list on its own query
+ * (AGL-3045 → AGL-3321).
  *
- * The grid scrolls its own columns inside the card. What it has to keep from
- * the table it replaced: members first and then the leads that are not
- * already members, one person once whatever the case of their address, a
- * member and a lead that share a document id kept apart, and each kind's own
+ * The toggle over the grid picks the collection; each list's filters and
+ * search are predicates on that collection's query, paged by the server, so a
+ * match past the first page is found. What the table keeps from the one it
+ * replaced: the shared grid, the name beside the address, and each kind's own
  * actions — removing a member, and opening a lead or asking where it came
  * from.
  */
@@ -30,43 +30,64 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
-/** The documents each collection holds, newest first. */
+/** The documents each collection holds. */
 let mockMembers: Array<Record<string, unknown>> = []
 let mockLeads: Array<Record<string, unknown>> = []
+/** The reader's reach in the org: org-wide unless a spec says otherwise. */
+let mockReach = { tokens: ['org'], orgWide: true, loaded: true }
+/** Every collection a list query was opened on, in order. */
+let mockOpened: string[] = []
+/** The plan each collection's list asked last. */
+let mockPlans: Record<string, any> = {}
 
 /** Held: a Firestore handle minted per render would re-run every read. */
 const mockFirestore = {}
 /** The signed-in account a member removal is authorized as (AGL-3308). */
 const mockUser = { getIdToken: async () => 'console-id-token' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  __esModule: true,
   // The lead silo is the org's (AGL-3275), so these cards resolve it.
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
-  __esModule: true,
   useFirestore: () => mockFirestore,
   useUser: () => ({ data: mockUser }),
-  useFirestoreCollection: (factory: () => { __name: string }) => {
-    const name = factory().__name
-    return {
-      data: name === 'siteMembers' ? mockMembers : name === 'leads' ? mockLeads : [],
-      status: 'success',
-      fromCache: false,
-    }
-  },
+  useScopeTokens: () => mockReach,
 }))
 
 jest.mock('firebase/firestore', () => ({
-  // The scope clause every lead read carries now (AGL-3275).
-  where: (...args: unknown[]) => ({ __where: args }),
   __esModule: true,
-  collection: (_db: unknown, ...segments: string[]) => ({
-    __name: segments[segments.length - 1],
-  }),
-  query: (source: { __name: string }) => source,
-  orderBy: () => undefined,
-  limit: () => undefined,
+  collection: (_db: unknown, ...segments: string[]) => ({ __source: segments.join('/') }),
   doc: (_db: unknown, ...segments: string[]) => segments.join('/'),
   deleteDoc: jest.fn().mockResolvedValue(undefined),
 }))
+
+/*
+ * The list query, answered by the shared double over the collection the card
+ * opened: the real plan, every predicate applied as Firestore would, paged.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const actual = jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...actual,
+    useListQuery: (options: { collection: { __source: string } | null }) => {
+      const source = options.collection?.__source ?? ''
+      if (source) mockOpened.push(source)
+      const result = useListQueryDouble(
+        () =>
+          source.endsWith('/siteMembers')
+            ? mockMembers
+            : source.endsWith('/leads')
+              ? mockLeads
+              : [],
+        options,
+      )
+      if (source) mockPlans[source] = result.plan
+      return result
+    },
+  }
+})
 
 /*
  * The route that owns member accounts (AGL-3308). A member's password hash is
@@ -111,9 +132,15 @@ jest.mock('next/navigation', () => ({
 }))
 
 import { deleteDoc } from 'firebase/firestore'
-import { ContactsCard } from './contacts-card.component'
+import { nameSearchTokens, scopedSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
+import { ContactsCard } from './contacts-card.component'
+
+/** The plan the list over one collection asked last. */
+const planOf = (source: string) => mockPlans[source]
+const MEMBERS = 'hosts/host-1/siteMembers'
+const LEADS = 'orgs/org-1/leads'
 
 /**
  * A plugin that keeps people and says where a lead is read. The Inbox imports
@@ -129,42 +156,95 @@ const publishLeadRoutes = () =>
     { pluginId: 'people' },
   )
 
-const at = (iso: string) => ({ toDate: () => new Date(iso) })
+const at = (iso: string) => {
+  const date = new Date(iso)
+  return { seconds: date.getTime() / 1000, toDate: () => date }
+}
+
+/** A member as the register route writes one. */
+const member = (id: string, email: string, displayName: string, iso: string) => ({
+  $id: id,
+  email,
+  displayName,
+  // The name's words; the writer adds the address's (`memberSearchTokens`).
+  searchTokens: nameSearchTokens(displayName),
+  createdAt: at(iso),
+})
+
+/** A lead as `addHostLead` and the CRM's list fields write one. */
+const lead = (id: string, email: string, name: string, sources: string[], iso: string) => {
+  const searchTokens = [...nameSearchTokens(name), ...nameSearchTokens(email)]
+  return {
+    $id: id,
+    email,
+    name,
+    sources,
+    visibleTo: ['host:host-1'],
+    searchTokens,
+    scopedSearchTokens: scopedSearchTokens(['host:host-1'], searchTokens),
+    createdAt: at(iso),
+  }
+}
 
 beforeEach(() => {
   jest.clearAllMocks()
   mockRouteAnswer.ok = true
   mockRouteAnswer.body = { ok: true }
+  mockReach = { tokens: ['org'], orgWide: true, loaded: true }
+  mockOpened = []
+  mockPlans = {}
   resetPluginServicesForTests()
   publishLeadRoutes()
-  mockMembers = [
-    { $id: 'same-id', email: 'ada@example.com', displayName: 'Ada', createdAt: at('2026-09-10T12:00:00Z') },
-  ]
+  mockMembers = [member('same-id', 'ada@example.com', 'Ada', '2026-09-10T12:00:00Z')]
   mockLeads = [
-    // The same person as the member, in a different case: listed once.
-    { $id: 'lead-dup', email: 'ADA@example.com', source: 'signup', createdAt: at('2026-09-09T12:00:00Z') },
+    // The same person as the member: a lead in its own list, as it is in its
+    // own collection.
+    lead('lead-ada', 'ada@example.com', 'Ada', ['signup'], '2026-09-09T12:00:00Z'),
     // A lead whose document id happens to equal the member's.
-    { $id: 'same-id', email: 'lin@example.com', name: 'Lin', source: 'booking', createdAt: at('2026-09-08T12:00:00Z') },
+    lead('same-id', 'lin@example.com', 'Lin', ['booking', 'form:contact'], '2026-09-08T12:00:00Z'),
   ]
 })
 
+const addresses = () =>
+  Array.from(document.querySelectorAll('[role="row"][data-id]')).map(
+    (row) => row.querySelector('[data-field="email"] p')?.textContent,
+  )
 const rowOf = (address: string) =>
-  within(screen.getByRole('grid', { name: 'Site members and leads' }))
-    .getByText(address)
-    .closest('[role="row"]') as HTMLElement
+  within(screen.getByRole('grid')).getByText(address).closest('[role="row"]') as HTMLElement
+const showLeads = async () => {
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Leads' }))
+  })
+}
 
-describe('ContactsCard (AGL-3045)', () => {
-  it('lists members, then leads that are not members, in the shared grid', () => {
+describe('ContactsCard (AGL-3045 → AGL-3321)', () => {
+  it('lists a site’s members, newest first, and opens no lead read until asked', () => {
     const { container } = render(<ContactsCard hostId="host-1" />)
 
     expect(container.querySelectorAll('table')).toHaveLength(0)
-    const addresses = Array.from(document.querySelectorAll('[role="row"][data-id]')).map(
-      (row) => row.querySelector('[data-field="email"] p')?.textContent,
-    )
-    expect(addresses).toEqual(['ada@example.com', 'lin@example.com'])
-    expect(within(rowOf('ada@example.com')).getByText('Member')).toBeTruthy()
-    expect(within(rowOf('lin@example.com')).getByText('Lead · booking')).toBeTruthy()
+    expect(screen.getByRole('grid', { name: 'Site members' })).toBeTruthy()
+    expect(addresses()).toEqual(['ada@example.com'])
+    expect(within(rowOf('ada@example.com')).getByText('Ada')).toBeTruthy()
+    expect(mockOpened.every((source) => source === 'hosts/host-1/siteMembers')).toBe(true)
+    expect(planOf(MEMBERS).orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+  })
+
+  it('lists the site’s leads on the Leads toggle, each with where it came from', async () => {
+    render(<ContactsCard hostId="host-1" />)
+    await showLeads()
+
+    expect(screen.getByRole('grid', { name: 'Leads' })).toBeTruthy()
+    // Every lead, the one who is also a member included: no dedupe across
+    // two paged collections.
+    expect(addresses()).toEqual(['ada@example.com', 'lin@example.com'])
+    expect(within(rowOf('ada@example.com')).getByText('Sign-up')).toBeTruthy()
+    expect(within(rowOf('lin@example.com')).getByText('Booking')).toBeTruthy()
+    expect(within(rowOf('lin@example.com')).getByText('Form')).toBeTruthy()
     expect(within(rowOf('lin@example.com')).getByText('Lin')).toBeTruthy()
+    // Narrowed to what this site may see, on the query.
+    expect(planOf(LEADS).filters).toEqual([
+      { path: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:host-1'] },
+    ])
   })
 
   it('removes a member from the member’s menu', async () => {
@@ -220,14 +300,12 @@ describe('ContactsCard (AGL-3045)', () => {
       variant: 'warning',
       allowDuplicate: true,
     })
-    expect(mockEnqueueSnackbar).not.toHaveBeenCalledWith(
-      'Member removed',
-      expect.anything(),
-    )
+    expect(mockEnqueueSnackbar).not.toHaveBeenCalledWith('Member removed', expect.anything())
   })
 
-  it('opens a lead in the CRM, or asks where it came from, from the lead’s menu', () => {
+  it('opens a lead in the CRM, or asks where it came from, from the lead’s menu', async () => {
     render(<ContactsCard hostId="host-1" />)
+    await showLeads()
 
     fireEvent.click(
       within(rowOf('lin@example.com')).getByRole('button', {
@@ -240,9 +318,10 @@ describe('ContactsCard (AGL-3045)', () => {
     expect(screen.getByText('Attribution')).toBeTruthy()
   })
 
-  it('offers no link to a lead’s record when no plugin publishes its address', () => {
+  it('offers no link to a lead’s record when no plugin publishes its address', async () => {
     resetPluginServicesForTests()
     render(<ContactsCard hostId="host-1" />)
+    await showLeads()
 
     fireEvent.click(
       within(rowOf('lin@example.com')).getByRole('button', {
@@ -254,29 +333,65 @@ describe('ContactsCard (AGL-3045)', () => {
   })
 })
 
-describe('the contacts list filters through the grid toolbar (AGL-3317)', () => {
-  const addresses = () =>
-    Array.from(document.querySelectorAll('[role="row"][data-id]')).map(
-      (row) => row.querySelector('[data-field="email"] p')?.textContent,
-    )
-
-  it('searches names and addresses over every contact read', async () => {
+describe('each list searches on its query (AGL-3321)', () => {
+  it('finds a member by name past the first page, through `searchTokens`', async () => {
+    mockMembers = [
+      ...Array.from({ length: 14 }, (_, at) =>
+        member(`m-${at}`, `person${at}@example.com`, `Person ${at}`, `2026-09-${String(20 - at).padStart(2, '0')}T00:00:00Z`),
+      ),
+      member('m-late', 'grace@example.com', 'Grace Hopper', '2026-08-01T00:00:00Z'),
+    ]
     render(<ContactsCard hostId="host-1" />)
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'lin' } })
-    await waitFor(() => expect(addresses()).toEqual(['lin@example.com']))
+    expect(addresses()).not.toContain('grace@example.com')
+
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'hopp' } })
+    await waitFor(() => expect(addresses()).toEqual(['grace@example.com']))
+    expect(planOf(MEMBERS).filters).toEqual([
+      { path: 'searchTokens', op: 'array-contains', value: 'hopp' },
+    ])
   })
 
-  it('narrows by Type, member or lead by its source', async () => {
+  it('folds a lead search into the site’s scope for an org-wide reader', async () => {
     render(<ContactsCard hostId="host-1" />)
-    fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
-    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Column' }))
-    await act(async () => {
-      fireEvent.click(await screen.findByRole('option', { name: 'Type' }))
-    })
-    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Value' }))
-    await act(async () => {
-      fireEvent.click(await screen.findByRole('option', { name: 'Member' }))
-    })
+    await showLeads()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'lin' } })
+
+    await waitFor(() => expect(addresses()).toEqual(['lin@example.com']))
+    expect(planOf(LEADS).filters).toEqual([
+      {
+        path: 'scopedSearchTokens',
+        op: 'array-contains-any',
+        value: ['org~lin', 'host:host-1~lin'],
+      },
+    ])
+  })
+
+  it('asks a site collaborator’s lead search as the start of the address, beside the scope', async () => {
+    // The rules prove a query without the scope clause only for an org-wide
+    // member, so this reader keeps the clause, and the search becomes a
+    // prefix range on the stored address — which the rules also prove.
+    mockReach = { tokens: ['org', 'host:host-1'], orgWide: false, loaded: true }
+    render(<ContactsCard hostId="host-1" />)
+    await showLeads()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'lin' } })
+
+    await waitFor(() => expect(addresses()).toEqual(['lin@example.com']))
+    expect(planOf(LEADS).filters).toEqual([
+      { path: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:host-1'] },
+      { path: 'email', op: '>=', value: 'lin' },
+      { path: 'email', op: '<=', value: 'lin\uf8ff' },
+    ])
+    expect(screen.getByText(/matches the start of the address/)).toBeTruthy()
+    expect(screen.queryByText(/Search is not applied/)).toBeNull()
+  })
+
+  it('starts the other list clean', async () => {
+    render(<ContactsCard hostId="host-1" />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'ada' } })
     await waitFor(() => expect(addresses()).toEqual(['ada@example.com']))
+    await showLeads()
+
+    expect((screen.getByRole('searchbox') as HTMLInputElement).value).toBe('')
+    expect(addresses()).toEqual(['ada@example.com', 'lin@example.com'])
   })
 })

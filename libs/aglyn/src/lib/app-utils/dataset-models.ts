@@ -517,22 +517,28 @@ export function datasetReferencedIds(
 export function datasetIntegrityFields(
   model: DatasetModel,
   values: Record<string, unknown> | undefined,
-): { referencedIds?: string[]; filterKeys?: string[] } {
+): {
+  referencedIds?: string[]
+  filterKeys?: string[]
+  filterValues?: DatasetFilterValues
+} {
   const referencedIds = datasetReferencedIds(model, values)
-  // The records table's filter tokens (`datasetFilterKeys`) travel on the
-  // same writes for the same reason: a record written without them is
-  // invisible to every filter the query serves. Omitted when empty, like
-  // `referencedIds`.
+  // The records table's filter fields (`datasetFilterKeys`,
+  // `datasetFilterValues`) travel on the same writes for the same reason: a
+  // record written without them is invisible to every filter the query
+  // serves. Omitted when empty, like `referencedIds`.
   const filterKeys = datasetFilterKeys(model, values)
+  const filterValues = datasetFilterValues(model, values)
   return {
     ...(referencedIds.length ? { referencedIds } : {}),
     ...(filterKeys.length ? { filterKeys } : {}),
+    ...(Object.keys(filterValues).length ? { filterValues } : {}),
   }
 }
 
 /**
- * `datasetIntegrityFields` for a MERGING write (`update`, `set` with `merge`
- * or `mergeFields`), where leaving the field out preserves what is stored
+ * `datasetIntegrityFields` for a MERGING write (`update`, `set` with
+ * `mergeFields`), where leaving the field out preserves what is stored
  * rather than clearing it.
  *
  * A record whose last reference is cleared has to have the field REMOVED, or
@@ -541,28 +547,42 @@ export function datasetIntegrityFields(
  * caller's delete sentinel: `deleteField()` in the web SDK,
  * `FieldValue.delete()` in the Admin SDK. It is passed in rather than imported
  * because this module is shared by both and must stay SDK-free. The filter
- * tokens are cleared the same way, so a record emptied of every filterable
+ * fields are cleared the same way, so a record emptied of every filterable
  * value stops answering the filters its old values did.
+ *
+ * ⚠️ `filterValues` is a MAP, and it is written WHOLE: `update` and
+ * `mergeFields` replace a field outright, so a value cleared since the last
+ * write leaves the map with it. `set(…, { merge: true })` does NOT — it merges
+ * maps key by key and would keep the cleared value answering its old
+ * equality — so a record write never uses it; list the fields in
+ * `mergeFields` instead.
  */
 export function datasetIntegrityUpdate<TClear>(
   model: DatasetModel,
   values: Record<string, unknown> | undefined,
   clear: TClear,
-): { referencedIds: string[] | TClear; filterKeys: string[] | TClear } {
+): {
+  referencedIds: string[] | TClear
+  filterKeys: string[] | TClear
+  filterValues: DatasetFilterValues | TClear
+} {
   const referencedIds = datasetReferencedIds(model, values)
   const filterKeys = datasetFilterKeys(model, values)
+  const filterValues = datasetFilterValues(model, values)
   return {
     referencedIds: referencedIds.length ? referencedIds : clear,
     filterKeys: filterKeys.length ? filterKeys : clear,
+    filterValues: Object.keys(filterValues).length ? filterValues : clear,
   }
 }
 
 /**
- * A dataset record's FILTER TOKENS: every question the records table can ask
- * of a record, flattened into one array of strings Firestore indexes on its
- * own.
+ * A dataset record's FILTER TOKENS: every word-level question the records
+ * table can ask of a record, flattened into one array of strings Firestore
+ * indexes on its own. Its twin, {@link datasetFilterValues}, holds the
+ * equalities.
  *
- * ## Why a token array, and not the values
+ * ## Why these fields, and not the values
  *
  * A record's fields live under `values`, a user-defined, unbounded map that
  * the index configuration exempts from indexing — auto-indexing it can exceed
@@ -571,10 +591,13 @@ export function datasetIntegrityUpdate<TClear>(
  * dataset, runs into the project's composite-index cap, and is deleted by the
  * next `firestore:indexes` deploy of a file that does not list it.
  *
- * `filterKeys` needs none of that. Firestore's AUTOMATIC single-field index
- * serves `where('filterKeys', 'array-contains', token)` with
- * `orderBy(documentId())`, so one clause, or one search word, reaches every
- * record of any dataset on any project, with no index deploy.
+ * `filterKeys` and `filterValues` need none of that. Firestore's AUTOMATIC
+ * single-field indexes serve `where('filterKeys', 'array-contains', token)`
+ * and `where('filterValues.<field>', '==', value)`, and every automatic index
+ * ends in the document name — so any number of those equalities and ONE
+ * `array-contains`, under `orderBy(documentId())`, compose by index merging,
+ * with no composite index and no index deploy, on any dataset of any project
+ * (AGL-3321).
  *
  * ## The token grammar
  *
@@ -653,12 +676,18 @@ function asText(value: unknown): string | null {
   return null
 }
 
-/** Plain text as its `=` token's value: lower-cased, trimmed, clipped. */
-function textKey(value: string): string {
+/**
+ * Plain text as its stored key — its `=` token's value and its
+ * `filterValues` entry: lower-cased, trimmed, clipped to
+ * {@link DATASET_FILTER_VALUE_MAX} characters. What the records table asks a
+ * typed value to equal.
+ */
+export function datasetFilterTextKey(value: string): string {
   return Array.from(value.trim().toLowerCase())
     .slice(0, DATASET_FILTER_VALUE_MAX)
     .join('')
 }
+const textKey = datasetFilterTextKey
 
 /** A stored number (or its text form) as its `=` token's value. */
 function numberKey(value: unknown): string | null {
@@ -736,14 +765,90 @@ export function datasetFilterKeys(
   return kept.sort()
 }
 
+/** A record's `filterValues`: field id → the value an equality asks for. */
+export type DatasetFilterValues = Record<string, string | number | boolean>
+
 /**
- * The one token that serves a filter clause over every record, or null when
- * no token can: the clause is then matched over a window of records instead.
+ * Field ids a query can name as `filterValues.<id>`. A path string splits on
+ * `.`, and the SDKs refuse `~ * / [ ]` in one; the model editor allows only
+ * letters, digits and underscores, but a v1 dataset's column names were
+ * never checked. Backticks are refused too, as the escape a path would need.
+ */
+const FILTER_VALUE_ID = /^[^.~*/[\]`]+$/
+
+/**
+ * The query path of a field's `filterValues` entry, or null for a field id
+ * no path can name — such a field is stamped no entry, and the records table
+ * offers it no equality (its `contains`, served by `filterKeys`, stands).
+ */
+export function datasetFilterValuePath(fieldId: string): string | null {
+  return FILTER_VALUE_ID.test(fieldId) && !/^__.*__$/.test(fieldId)
+    ? `filterValues.${fieldId}`
+    : null
+}
+
+/**
+ * A dataset record's FILTER VALUES: `{ [fieldId]: value }`, one scalar per
+ * field an equality can be asked of, so the records table puts every
+ * equality on its query (AGL-3321).
  *
- *  - enum, boolean, number and list `equals` → the `=` token of the value;
- *  - plain text `equals` → the lower-cased `=` token;
+ *   enum text (`validation.options`)  the value exactly, as its `=` token;
+ *   plain text                        {@link datasetFilterTextKey};
+ *   bool                              a boolean;
+ *   int32 / int64 / float             a number.
+ *
+ * A form or an automation stores every value as text, so `'19.50'` is the
+ * number 19.5 and `'true'` the boolean, as in {@link datasetFilterKeys}.
+ * Fields with no value, and timestamps, lists, references, maps, bytes,
+ * coordinates and nil fields, carry no entry: a list is asked by member
+ * (`f:<id>=<member>` in `filterKeys`), and the rest are not asked about by
+ * value.
+ *
+ * ## What it costs
+ *
+ * Unlike `values`, this map is NOT exempt from indexing — that is its whole
+ * point. Each entry is a scalar and costs two automatic index entries
+ * (ascending, descending), so a record costs at most two per model field —
+ * bounded by the model's field count (the `/v1` API caps a model at 100
+ * fields), far inside Firestore's 40,000 entries per document, where
+ * `values` was unbounded because a `map` or `sorted` value may hold anything.
+ */
+export function datasetFilterValues(
+  model: DatasetModel,
+  values: Record<string, unknown> | undefined,
+): DatasetFilterValues {
+  const out: DatasetFilterValues = {}
+  for (const fieldId of modelFieldIds(model)) {
+    const field = model.fields?.[fieldId]
+    const stored = values?.[fieldId]
+    if (!field || stored == null || !datasetFilterValuePath(fieldId)) continue
+    if (field.type === 'text') {
+      const text = asText(stored)
+      if (text == null || !text.trim()) continue
+      out[fieldId] = isEnum(field) ? text : textKey(text)
+    } else if (field.type === 'bool') {
+      const key = boolKey(stored)
+      if (key) out[fieldId] = key === 'true'
+    } else if (isNumeric(field)) {
+      const key = numberKey(stored)
+      if (key) out[fieldId] = Number(key)
+    }
+  }
+  return out
+}
+
+/**
+ * The `filterKeys` token a word-level clause asks for, or null when it is
+ * not one:
+ *
  *  - plain text `contains` → the `^` token of the value's FIRST word, so a
- *    served `contains` is a word-prefix match, not a mid-string one;
+ *    `contains` is a word-prefix match, not a mid-string one, and one word
+ *    of several is asked (the records table says so);
+ *  - list `contains` (and `equals`) → the member's `=` token;
+ *  - enum, boolean, number and plain text `equals` → the `=` token of the
+ *    value. The records table asks these of `filterValues` instead, which
+ *    composes with a `contains`; the token remains what the quick search and
+ *    older readers match.
  *  - everything else — ranges, dates, `isEmpty`, `isAnyOf`, negations — null.
  *
  * `clause.field` is the field id. The operator names are the grid's: a
@@ -780,28 +885,6 @@ export function datasetFilterToken(
     return equals || op === 'contains' ? `f:${clause.field}=${value.trim()}` : null
   }
   return null
-}
-
-/**
- * Every token a record must hold to answer a clause, or null when the clause
- * is not token-served. The same as {@link datasetFilterToken} except for a
- * plain text `contains` of several words, which needs each word's prefix —
- * the query can serve only one of them, and the rest are matched over the
- * rows it returns, by these same tokens, so both answers agree.
- */
-export function datasetFilterTokens(
-  model: DatasetModel,
-  clause: DatasetFilterClause,
-): string[] | null {
-  const first = datasetFilterToken(model, clause)
-  if (!first) return null
-  const field = model.fields?.[clause.field]
-  if (field?.type === 'text' && !isEnum(field) && clause.op === 'contains') {
-    return datasetFilterWords(clause.value).map(
-      (word) => `f:${clause.field}^${clipWord(word)}`,
-    )
-  }
-  return [first]
 }
 
 /**

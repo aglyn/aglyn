@@ -92,6 +92,7 @@
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { logResourceDuplicated } from '@aglyn/tenant-data-admin/server/duplicate-activity'
+import { restampCrmListFieldsOf } from '@aglyn/tenant-data-admin/server/crm-records'
 import {
   DUPLICATE_BUSY_MESSAGE,
   duplicateDisplayName,
@@ -134,6 +135,10 @@ import {
   sendIsOnHost,
 } from './campaign-org-refs'
 import { SCREEN_KIND_EMAIL } from '@aglyn/aglyn/app-utils/screen-route'
+import {
+  campaignContainerSearchFields,
+  campaignSendSearchFields,
+} from '../model/campaign-list-query'
 import {
   registerPluginResourceDraftWriter,
   type PluginDraftRecord,
@@ -185,7 +190,8 @@ interface ManageResult {
 }
 
 /**
- * Clears {@link CAMPAIGN_SEND_CONTAINER_FIELD} from every send in a campaign.
+ * Files every send in a campaign under NO campaign: {@link
+ * CAMPAIGN_SEND_CONTAINER_FIELD} set to `null`.
  *
  * Equality on one field with a `limit` — no `orderBy` — which Firestore's
  * automatic single-field index serves. Ordering would need a composite index
@@ -209,17 +215,15 @@ async function detachSends(
     const batch = firestore.batch()
     for (const send of page.docs) {
       /*
-       * The FIELD is removed, not set to an empty string. `campaignListRows`
-       * adopts a send whose container id is falsy, so an empty string would
-       * work by accident today — but the field is also what the campaign
-       * detail page's `where` clause matches, and an equality query on `''`
-       * is a different query from the absence the pre-container sends have.
-       * One shape for "belongs to no campaign" is what keeps those two
-       * readers agreeing.
+       * `null`, not an empty string and not a removed field. "Belongs to no
+       * campaign" has ONE stored shape, because it is a query: the lists ask
+       * `emailCampaignId == null` for single sends (AGL-3321), which an
+       * empty string would not answer and a missing field cannot — a query
+       * never finds a field that is not there. `campaignListRows` adopts any
+       * falsy container id, so every reader agrees.
        */
       batch.update(send.ref, {
-        [CAMPAIGN_SEND_CONTAINER_FIELD]:
-          firebaseAdmin.firestore.FieldValue.delete(),
+        [CAMPAIGN_SEND_CONTAINER_FIELD]: null,
       })
     }
     await batch.commit()
@@ -265,6 +269,11 @@ async function detachMembership(
       })
     }
     await batch.commit()
+    // A lead's campaigns are what the Leads list's Campaign filter reads
+    // under a site (AGL-3321): restamped from each lead as it now stands.
+    if (collectionRef.id === 'leads') {
+      await restampCrmListFieldsOf(page.docs.map((member) => member.ref), 'leads')
+    }
     detached += page.size
     if (page.size < DETACH_BATCH) return { detached, remaining: false }
   }
@@ -691,6 +700,10 @@ async function duplicateMessage(
       const nowMs = Date.now()
       transaction.create(messages.doc(id), {
         ...copy,
+        // The list fields a new record carries (AGL-3321): its subject's
+        // search tokens, and `null` for a source filed under no campaign.
+        ...campaignSendSearchFields(copy['subject']),
+        [CAMPAIGN_SEND_CONTAINER_FIELD]: copy[CAMPAIGN_SEND_CONTAINER_FIELD] ?? null,
         ...campaignSendSiteStamp(siteId),
         displayName: name,
         status: 'draft',
@@ -780,6 +793,7 @@ export function campaignDraftEmailId(campaignId: string): string {
 /** Every field a drafted email is written with, and so every field it can hold. */
 export const CAMPAIGN_DRAFT_EMAIL_FIELDS = [
   'subject',
+  'subjectTokens',
   'preheader',
   'templateScreenId',
   'subjectVariants',
@@ -965,16 +979,19 @@ export function createCampaignDraftWriter(
         const nowMs = request.now.getTime()
         // A site hub's create drawer's own document: a name, no dates, no
         // lists, placed on the site it was drafted for.
+        const visibleTo = campaignVisibleTo([request.hostId])
         transaction.create(campaignRef, {
           name,
+          ...campaignContainerSearchFields(name),
           listIds: [],
-          visibleTo: campaignVisibleTo([request.hostId]),
+          visibleTo,
           createdAtMs: nowMs,
           createdBy: request.uid,
         })
         const { value } = read
         transaction.create(emailRef, {
           subject: value.subject,
+          ...campaignSendSearchFields(value.subject),
           ...(value.preheader ? { preheader: value.preheader } : {}),
           templateScreenId: value.templateScreenId,
           ...(value.subjectVariants.length ? { subjectVariants: value.subjectVariants } : {}),
