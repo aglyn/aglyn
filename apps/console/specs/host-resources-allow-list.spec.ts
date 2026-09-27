@@ -158,8 +158,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   // the behaviour under test had regressed. Stubbed `() => true` it would be
   // worse: the suite would pass against a route that admits anybody.
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/organizations'),
+  // The REAL list keys (AGL-3321): every artifact create stamps the keys its
+  // list queries by, and a stub would let the route store keys no list reads.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/artifact-list-keys'),
   createResourceUid: () => 'generated-id',
-  nameSearchKey: (value: string) => value.toLowerCase(),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
     query: {},
@@ -555,7 +557,10 @@ describe('/api/hosts/resources stores an allow-list (AGL-1377)', () => {
       expect(mockWrite).not.toHaveBeenCalled()
     })
 
-    it('keeps a page component exactly as it was: no kind sent, none stored', async () => {
+    it('stores the kind a page component is read as when none is sent (AGL-3321)', async () => {
+      // A component with no kind has always been a page component
+      // (`reusableComponentKindOf`); the components list's "Used in" filter
+      // asks the stored word, so a create stores it.
       const response = await postResource('reusableComponent', {
         displayName: 'Site nav',
         rootId: 'root',
@@ -563,7 +568,7 @@ describe('/api/hosts/resources stores an allow-list (AGL-1377)', () => {
       })
       expect(response.status).toBe(200)
       const stored = mockWrite.mock.calls[0][0] as Record<string, unknown>
-      expect(stored).not.toHaveProperty('kind')
+      expect(stored['kind']).toBe('site')
     })
 
     it('stores a component kind only on a template that makes a component', async () => {

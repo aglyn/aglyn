@@ -111,8 +111,8 @@ import {
   ENTRY_LIST_SORT_FIELDS,
   ENTRY_STATUS_OPTIONS,
   entryListBase,
-  entryListEqualityFields,
-  entryListStoredSort,
+  planEntryList,
+  type EntryListView,
 } from '../components/content/entry-list-query'
 import { ENTRY_LIST_FILTER_FIELDS } from '../utils/list-filters'
 
@@ -376,6 +376,17 @@ const rowsOf = async (built: Query): Promise<Row[]> =>
     $id: snapshot.id,
   }))
 
+/**
+ * The query the content scope reads for one sort and filter (AGL-3321): the
+ * plan's predicates as the walk's base, and the STORED order it walks —
+ * which a narrowed list may have moved onto one of its declared orders.
+ */
+const viewOf = (
+  columnSort: CollectionSort,
+  filter: ListFilterRequest | null,
+): EntryListView =>
+  planEntryList({ clauses: filter ? [filter] : [], search: [], sort: columnSort })
+
 /** One page, planned exactly as `useSortedPagedCollection` plans it. */
 async function readPage(
   columnSort: CollectionSort,
@@ -383,11 +394,12 @@ async function readPage(
   page: number,
   pageSize: number,
 ) {
-  const base = entryListBase(db, HOST_ID, COLLECTION_ID, filter, columnSort)
+  const view = viewOf(columnSort, filter)
+  const base = entryListBase(db, HOST_ID, COLLECTION_ID, view)
   // The walk orders on the stored field, as the content scope hands it to
   // `useSortedPagedCollection` (AGL-3323).
-  const sort = entryListStoredSort(columnSort)
-  const equalityFields = entryListEqualityFields(filter)
+  const sort = view.order
+  const equalityFields = view.equalityFields
   const keyedIsTotal = sortFieldIsTotal(sort, equalityFields)
   const { keyedLimit } = planKeyedSegment({
     page,
@@ -564,11 +576,12 @@ describeEmulated('the entries table under every sort and filter (emulator)', () 
     for (const filter of filters()) {
       for (const columnSort of SORTS) {
         const rows = (await walk(columnSort, filter, 3)).flat()
-        const sort = entryListStoredSort(columnSort)
+        const view = viewOf(columnSort, filter)
+        const sort = view.order
         const split = rows.findIndex((row) => lacksSortField(row, sort.field))
         const keyed = split === -1 ? rows : rows.slice(0, split)
         const rest = split === -1 ? [] : rows.slice(split)
-        const pinned = sortFieldIsTotal(sort, entryListEqualityFields(filter))
+        const pinned = sortFieldIsTotal(sort, view.equalityFields)
 
         // Nothing that lacks the value comes before something that has it.
         expect(rest.every((row) => lacksSortField(row, sort.field))).toBe(true)

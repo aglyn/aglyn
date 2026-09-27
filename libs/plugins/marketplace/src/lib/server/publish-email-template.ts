@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   checkEntitlement,
   createResourceUid,
@@ -203,6 +204,9 @@ export const publishEmailTemplateHandler: PluginApiHandler = async (
         sourceHostId: hostId,
         emailTemplateKey: templateKey,
         displayName: displayName.trim(),
+        // The keys a listing is searched by (AGL-3321): the template gallery's
+        // marketplace shelf asks `nameTokens` on its query.
+        ...displayNameSearchFields(displayName.trim()),
         ...(description.trim() && { description: description.trim() }),
         ...(category.trim() && { category: category.trim() }),
         priceUsd,

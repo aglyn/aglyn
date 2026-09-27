@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import {
   checkEntitlement,
   checkPluginBundle,
@@ -112,7 +113,9 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
         ...(typeof description === 'string'
           ? { description: description.slice(0, 500) }
           : {}),
-        ...(nextName ? { displayName: nextName } : {}),
+        ...(nextName
+          ? { displayName: nextName, ...displayNameSearchFields(nextName) }
+          : {}),
         updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -435,6 +438,9 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
         profileId: publisher.orgId,
         pluginId: manifest.id,
         displayName: displayName.trim(),
+        // The keys a listing is searched by (AGL-3321): the template gallery's
+        // marketplace shelf asks `nameTokens` on its query.
+        ...displayNameSearchFields(displayName.trim()),
         ...(description.trim() && { description: description.trim() }),
         ...(category.trim() && { category: category.trim() }),
         priceUsd,

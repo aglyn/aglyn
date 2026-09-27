@@ -37,6 +37,13 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { LIST_QUERY_ID_PATH } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  ARTIFACT_LIST_ORDER,
+  COMPONENT_LIST_QUERY,
+  LAYOUT_LIST_QUERY,
+  TEMPLATE_LIST_QUERY,
+} from '../utils/artifact-list-queries'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -700,7 +707,7 @@ describe('the shared plugin query builder orders on the document NAME', () => {
 })
 
 /**
- * The four site artifact lists ask ONE query builder (AGL-2501).
+ * The four site artifact lists share ONE ordering decision (AGL-2501).
  *
  * They read four different collections under `hosts/{id}` and every one of
  * them faces the same question: `orderBy` matches only documents that HAVE
@@ -709,11 +716,14 @@ describe('the shared plugin query builder orders on the document NAME', () => {
  * sites answering that separately is how three of them answered it by not
  * ordering at all.
  *
- * `hostArtifactQuery` is where the answer lives, so this asserts the surfaces
- * ASK through it rather than merely that they contain an `orderBy` somewhere.
+ * The screens tree asks `hostArtifactQuery`, where the answer lives. The
+ * layouts, components and templates lists page their LIST QUERY (AGL-3321),
+ * whose declarations in `artifact-list-queries.ts` all walk
+ * `ARTIFACT_LIST_ORDER` — the document name — so this asserts both halves:
+ * that each surface asks through its own route, and that the route orders on
+ * the name.
  */
 const ARTIFACT_LISTS: Array<[string, string]> = [
-  ['screens', 'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'],
   ['layouts', 'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx'],
   ['components', 'apps/console/components/host-components-card.component.tsx'],
   [
@@ -723,56 +733,58 @@ const ARTIFACT_LISTS: Array<[string, string]> = [
 ]
 
 describe('the site artifact lists share one ordering decision (AGL-2501)', () => {
-  it.each(ARTIFACT_LISTS)('the %s list asks through the shared builder', (
-    _label,
-    path,
-  ) => {
-    const code = withoutComments(read(path))
+  it('the screens tree asks through the shared builder', () => {
+    const code = withoutComments(
+      read('apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'),
+    )
     expect(code).toContain('hostArtifactQuery(')
+  })
+
+  it.each(ARTIFACT_LISTS)('the %s list pages its list query', (_label, path) => {
+    const code = withoutComments(read(path))
+    expect(code).toContain('useListQuery<')
+    expect(code).toMatch(/_LIST_QUERY\b/)
     // And does not go around it. A second capped query written beside the
-    // shared one is how a list ends up with two orderings, only one of which
+    // list's own is how a list ends up with two orderings, only one of which
     // anybody reviews — so these files build no `limit()` of their own at
-    // all. (Uncapped reads are untouched: the templates card counts screens
-    // with a server aggregate, which is a different question from a list.)
+    // all. (Uncapped reads are untouched: the templates card counts its
+    // library with a server aggregate, which is a different question.)
     expect(code).not.toMatch(/\blimit\(/)
   })
 
-  it('the builder orders on the document NAME, which cannot be absent', () => {
+  it('every list query walks the document NAME, which cannot be absent', () => {
     // The decision itself, asserted where it lives. `orderBy('displayName')`
-    // here would not mis-sort these lists, it would silently drop every
-    // artifact created without a name — a worse failure, and an invisible one.
+    // would not mis-sort these lists, it would silently drop every artifact
+    // created without a name — a worse failure, and an invisible one.
     const builder = withoutComments(
       read('apps/console/utils/host-artifact-queries.ts'),
     )
     expect(builder).toContain('orderBy(documentId())')
     expect(builder).not.toMatch(/orderBy\('displayName'/)
+    for (const declaration of [LAYOUT_LIST_QUERY, COMPONENT_LIST_QUERY, TEMPLATE_LIST_QUERY]) {
+      expect(declaration.sorts).toEqual([ARTIFACT_LIST_ORDER])
+    }
+    expect(ARTIFACT_LIST_ORDER).toEqual({ path: LIST_QUERY_ID_PATH, direction: 'asc' })
   })
 
-  it('none of them re-sorts the window it was handed', () => {
+  it('none of them re-sorts the page it was handed', () => {
     // Sorting a server-ordered page in the browser is what made the original
     // bug invisible: the rows run in a believable order and are the wrong
-    // rows. The two lists that read a CEILING rather than a page may sort —
-    // they hold the whole collection — so this covers the paged two.
-    for (const path of [
-      'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
-      'apps/console/components/host-components-card.component.tsx',
-    ]) {
-      expect(withoutComments(read(path))).not.toMatch(/\.sort\(/)
+    // rows.
+    for (const [, path] of ARTIFACT_LISTS) {
+      expect(withoutComments(read(path))).not.toMatch(/\.sort\(\s*\(/)
     }
   })
 
-  it('the two ceilinged reads probe for what they could not read', () => {
-    // A tree and a template bundle cannot be sliced by document, so both read
-    // a ceiling. A ceiling with no probe is a partial site rendered as a whole
-    // one, which is the failure the pager solves for every other list.
-    for (const path of [
-      'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx',
-      'apps/console/components/templates/host-templates-card.component.tsx',
-    ]) {
-      const code = withoutComments(read(path))
-      expect(code).toContain('ceilingedWindow')
-      expect(code).toMatch(/WINDOW \+ 1/)
-    }
+  it('the screens tree probes for what its ceiling could not read', () => {
+    // A tree cannot be sliced by document, so it reads a ceiling. A ceiling
+    // with no probe is a partial site rendered as a whole one, which is the
+    // failure the pager solves for every other list.
+    const code = withoutComments(
+      read('apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'),
+    )
+    expect(code).toContain('ceilingedWindow')
+    expect(code).toMatch(/WINDOW \+ 1/)
   })
 })
 

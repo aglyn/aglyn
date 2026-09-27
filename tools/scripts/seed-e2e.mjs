@@ -843,6 +843,9 @@ const componentRef = hostRef.collection('components').doc(COMPONENT_ID)
 await put(componentRef, {
   hostId,
   displayName: 'Marketing CTA',
+  // The keys the components list finds it by (AGL-3321).
+  ...displayNameSearchFields('Marketing CTA'),
+  kind: 'site',
   description:
     'Closing call-to-action band — one component, different words per page.',
   rootId: COMPONENT_ROOT_ID,
@@ -869,6 +872,8 @@ await put(componentRef.collection('versions').doc(COMPONENT_VERSION_ID), {
 const homeScreen = hostRef.collection('screens').doc('seed-home')
 await put(homeScreen, {
   displayName: 'Home',
+  // The keys the screen lists find a screen by (AGL-835, AGL-3321).
+  ...displayNameSearchFields('Home'),
   slug: 'home',
   versionId: 'seed-home-v1',
   createdAt: now,
@@ -948,6 +953,7 @@ await put(homeScreen.collection('versions').doc('seed-home-v1'), {
 const scopedScreen = hostRef.collection('screens').doc('seed-scoped')
 await put(scopedScreen, {
   displayName: 'Scoped',
+  ...displayNameSearchFields('Scoped'),
   slug: 'scoped',
   versionId: 'seed-scoped-v1',
   createdAt: now,
@@ -1004,6 +1010,7 @@ await put(scopedScreen.collection('versions').doc('seed-scoped-v1'), {
 const surveyScreen = hostRef.collection('screens').doc('seed-guide-survey-screen')
 await put(surveyScreen, {
   displayName: 'Survey',
+  ...displayNameSearchFields('Survey'),
   slug: 'survey',
   versionId: 'seed-guide-survey-screen-v1',
   createdAt: now,
@@ -1081,6 +1088,7 @@ await put(
 const emailScreen = hostRef.collection('screens').doc('seed-email-welcome')
 await put(emailScreen, {
   displayName: 'Welcome email',
+  ...displayNameSearchFields('Welcome email'),
   kind: 'email',
   versionId: 'seed-email-v1',
   emailSubject: 'Welcome to the bakery, {{contact.firstName}}',
@@ -1125,6 +1133,8 @@ await put(blog, { displayName: 'Blog', slug: 'blog', createdAt: now })
 const sourdoughPublishedAt = Timestamp.now()
 await put(blog.collection('entries').doc('seed-sourdough'), {
   title: 'Why our sourdough takes three days',
+  // The words the console's entries table searches by (AGL-3321).
+  titleTokens: nameSearchTokens('Why our sourdough takes three days'),
   slug: 'three-day-sourdough',
   excerpt: 'Slow fermentation is the whole secret.',
   status: 'published',

@@ -355,32 +355,82 @@ export const SITE_MEMBER_LIST_FILTER_OPTIONS = {
 /*
  * Content entries (`hosts/{hostId}/collections/{collectionId}/entries`).
  *
- * Both are EQUALITY on the stored value, and that is what keeps the sorted
- * list total under a filter: an equality narrows the scan that finds the
- * entries lacking the sort field to the same entries the filter matches, so
- * the walk behind `useSortedPagedCollection` still reaches all of them. A
- * range or a word search would need its own ordering and could not share it.
+ * EVERY clause below is on the Firestore query together (AGL-3321), composed
+ * by `planListQuery` through `ENTRY_LIST_QUERY` in
+ * `components/content/entry-list-query.ts`, which also holds the orders a
+ * filtered list may take. Nothing is matched over the rows a page loaded.
+ *
+ * The equalities — status, category, author — and the title search each need
+ * one composite per filtered order (index merging serves every combination of
+ * them), which is what keeps this list's filtered orders to three. The two
+ * dates are ranges over fields those orders already walk, so they cost no
+ * index of their own; a range leads the order, and so reads with ONE ordered
+ * query rather than the two-segment walk: every entry it matches carries the
+ * field it ranges over.
  *
  * `status` matches the stored word. An entry with no `status` at all — only a
  * hand-written import bundle produces one — matches none of the three, and is
  * still on the unfiltered list.
  *
- * `categoryId` matches the stable id the entry editor writes. An entry that
- * still carries only the legacy free-typed `category` matches no id until a
- * category is picked for it in the editor.
+ * `categoryId` and `authorId` match the stable ids the entry editor writes.
+ * An entry that still carries only the legacy free-typed `category` or
+ * `authorName` matches no id until one is picked for it in the editor.
+ *
+ * `title` is WORD-level, over `titleTokens` (`entryTitleSearchFields`): the
+ * quick search reads the same array, and a query holds one array clause, so
+ * the two do not combine.
+ *
+ * `publishedAt` is the Published column, and ranges over the date that column
+ * shows — `publishSortAt`, the scheduled date while an entry waits and the
+ * published date after (AGL-3323). A draft has neither and matches no range.
  */
 export const ENTRY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
-  { column: 'status', kind: 'exact', path: 'status', operators: ['equals'] },
+  {
+    column: 'title',
+    kind: 'text',
+    path: 'title',
+    tokensPath: 'titleTokens',
+    operators: ['contains'],
+  },
+  {
+    column: 'status',
+    kind: 'exact',
+    path: 'status',
+    operators: ['equals', 'isAnyOf'],
+  },
   {
     column: 'categoryId',
     kind: 'exact',
     path: 'categoryId',
-    operators: ['equals'],
+    operators: ['equals', 'isAnyOf'],
+  },
+  {
+    column: 'authorId',
+    kind: 'exact',
+    path: 'authorId',
+    operators: ['equals', 'isAnyOf'],
+  },
+  {
+    column: 'publishedAt',
+    kind: 'date',
+    path: 'publishSortAt',
+    operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
+  },
+  {
+    column: 'updatedAt',
+    kind: 'date',
+    path: 'updatedAt',
+    operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
   },
 ]
 
-/** Headers for entry fields that are filterable without being columns. */
+/** How each entry field reads — as a hidden column's header, and on a chip. */
 export const ENTRY_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  title: 'Title',
+  status: 'Status',
   categoryId: 'Category',
+  authorId: 'Author',
+  publishedAt: 'Published',
+  updatedAt: 'Updated',
 }
 

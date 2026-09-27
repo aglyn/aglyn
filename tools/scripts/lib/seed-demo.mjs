@@ -40,8 +40,8 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { datasetFilterFields, effectiveModel } from './record-filter-keys.mjs'
 import { buildHomeNodes } from './demo-brands.mjs'
 import { putMediaDocument } from './media-counter.mjs'
-import { seedSendId } from './org-campaign-backfill.mjs'
 import { displayNameSearchFields, nameSearchTokens } from './name-search-tokens.mjs'
+import { seedSendId } from './org-campaign-backfill.mjs'
 
 /** Every host subcollection the seeder writes into. Order is cosmetic. */
 export const HOST_SEEDED_COLLECTIONS = [
@@ -262,6 +262,8 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
       const { id, ...fields } = entry
       await put(ref.collection('entries').doc(id), {
         ...fields,
+        // The words the console's entries table searches by (AGL-3321).
+        titleTokens: nameSearchTokens(fields.title),
         status: 'published',
         publishedAt: now,
         // The console's Published sort key (AGL-3323).
@@ -453,6 +455,8 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
     const emailScreen = hostRef.collection('screens').doc(EMAIL_SCREEN_ID)
     await put(emailScreen, {
       displayName: 'Welcome email',
+      // The keys the email templates list finds it by (AGL-3321).
+      ...displayNameSearchFields('Welcome email'),
       kind: 'email',
       versionId: EMAIL_VERSION_ID,
       emailSubject: marketing.email.subject,
@@ -522,7 +526,8 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
     const homeScreen = hostRef.collection('screens').doc(HOME_SCREEN_ID)
     await put(homeScreen, {
       displayName: 'Home',
-      nameLower: 'home',
+      // The keys the screen switcher and lists find it by (AGL-835, AGL-3321).
+      ...displayNameSearchFields('Home'),
       slug: SCREEN_ROOT_PATH,
       versionId: HOME_VERSION_ID,
       publishedAt: now,
@@ -642,6 +647,8 @@ export async function seedMarketplaceListing({ firestore, log }) {
     .set(
       {
         displayName: 'Hero banner',
+        // The keys the template gallery's marketplace shelf searches (AGL-3321).
+        ...displayNameSearchFields('Hero banner'),
         description: 'A reusable hero section with a headline and CTA.',
         category: 'Sections',
         latestVersion: 1,

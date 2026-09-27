@@ -16,11 +16,7 @@
  */
 'use client'
 
-import {
-  lockdownRefusalText,
-  parseLockdownRefusal,
-  type TemplateKind,
-} from '@aglyn/aglyn'
+import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 import {
   AppLink,
   CardDisplay,
@@ -29,8 +25,15 @@ import {
   useLoading,
 } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { artifactDeleteListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { type GridColDef } from '@mui/x-data-grid'
 import {
@@ -52,13 +55,7 @@ import {
   useHostVersionApi,
   useUser,
 } from '@aglyn/tenant-feature-instance'
-import {
-  Alert,
-  Button,
-  Chip,
-  Stack,
-  Tooltip,
-} from '@mui/material'
+import { Button, Chip, Stack, Tooltip } from '@mui/material'
 import DocumentPresenceChips from '../document-presence-chips.component'
 import usePresenceSummary from '../../hooks/use-presence-summary'
 import {
@@ -66,7 +63,9 @@ import {
   doc,
   getCountFromServer,
   getDoc,
+  query,
   updateDoc,
+  where,
 } from 'firebase/firestore'
 import { ICON_VARIANT_SHOW_DETAIL } from '@aglyn/shared-data-enums'
 import { useRouter } from 'next/navigation'
@@ -82,33 +81,18 @@ import { buildRoute, Route } from '../../constants/route-links'
 import { useHostSubdomain } from '../host-id-provider'
 import useCurrentOrg from '../../hooks/use-current-org'
 import { useOrgSlug } from '../../hooks/use-org-scope'
-import useFirestoreCollection from '../../hooks/use-firestore-collection'
 import {
-  ceilingedWindow,
-  hostArtifactQuery,
-} from '../../utils/host-artifact-queries'
+  TEMPLATE_KIND_OPTIONS,
+  TEMPLATE_LIST_BASE,
+  TEMPLATE_LIST_HEADERS,
+  TEMPLATE_LIST_QUERY,
+} from '../../utils/artifact-list-queries'
 import createPageFromTemplate, {
   templateScreenAddressRefusal,
   withBundleRootScreen,
 } from './create-page-from-template'
 import UseTemplateDialog from './use-template-dialog.component'
-
-/**
- * How many template documents one open of this card reads.
- *
- * A ceiling rather than a page — see the read below for why this list cannot
- * be windowed. Comfortably above the largest FINITE `templatesPerHost` (50),
- * so only a site on an unlimited plan can reach it.
- */
-const TEMPLATE_WINDOW = 200
-
-/**
- * Row order for the table's default sort. The three kinds are used in
- * completely different places — a page template makes a screen, a component
- * template goes onto one — and grouping them that way was the useful part of
- * the sectioned layout this table replaced.
- */
-const KIND_ORDER: TemplateKind[] = ['page', 'component', 'layout']
+import useStarterPages from './use-starter-pages'
 
 /**
  * Provenance badge (AGL-666), qualified once the copy has been edited
@@ -140,47 +124,26 @@ function sourceChip(
   return { label: 'Saved here', color: 'default' as const }
 }
 
-/** Where a template came from, as the Source filter matches it. */
-type TemplateSourceKey = 'marketplace' | 'starter' | 'saved'
+/** Where a template came from, by its stored `source.type`. */
+type TemplateSourceKey = 'marketplace' | 'starter' | 'authored'
 const templateSourceKey = (source: { type?: string } | undefined): TemplateSourceKey =>
-  source?.type === 'marketplace' || source?.type === 'starter' ? source.type : 'saved'
+  source?.type === 'marketplace' || source?.type === 'starter' ? source.type : 'authored'
 
 /*
- * What the library grid's Filters panel and quick search offer (AGL-3317).
- * The card holds its rows — the capped window of `TEMPLATE_WINDOW` documents,
- * grouped — so both are answered over every row it read, and the ceiling
- * notice above the grid says when that window is short of the library.
- * Kind and source are matched on the values the row is READ as (`kindKey`,
- * `sourceKey`): a template stored with no kind is a page template, and one
- * with no source was saved here.
+ * What the library grid's Filters panel and quick search offer: every clause
+ * on the query (AGL-3321) — see `TEMPLATE_LIST_QUERY`, whose note says what
+ * each asks and which composite serves it. Kind and Source are the STORED
+ * values, which every create writes and the list-keys backfill stamped on
+ * the templates that predate them.
  */
-const TEMPLATE_FILTER_FIELDS = [
-  inMemoryListField('displayName', 'text'),
-  inMemoryListField('kind', 'select', 'kindKey'),
-  inMemoryListField('source', 'select', 'sourceKey'),
-  inMemoryListField('description', 'text'),
-  inMemoryListField('updatedAt', 'date', 'template.updatedAt'),
-  inMemoryListField('createdAt', 'date', 'template.createdAt'),
-]
-const TEMPLATE_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  displayName: 'Display name',
-  kind: 'Kind',
-  source: 'Source',
-  description: 'Description',
-  updatedAt: 'Updated',
-  createdAt: 'Created',
-}
 const TEMPLATE_FILTER_OPTIONS = {
-  kind: KIND_ORDER.map((kind) => ({
-    value: kind,
-    label: kind.charAt(0).toUpperCase() + kind.slice(1),
-  })),
-  source: (['marketplace', 'starter', 'saved'] as const).map((key) => ({
+  kind: TEMPLATE_KIND_OPTIONS,
+  source: (['marketplace', 'starter', 'authored'] as const).map((key) => ({
     value: key,
-    label: sourceChip(key === 'saved' ? undefined : { type: key }).label,
+    label: sourceChip(key === 'authored' ? undefined : { type: key }).label,
   })),
 }
-const TEMPLATE_SEARCH_FIELDS = ['displayName', 'description', 'template.$id'] as const
+const TEMPLATE_SELECT_FIELDS = Object.keys(TEMPLATE_FILTER_OPTIONS)
 
 /**
  * Templates library (AGL-667).
@@ -258,119 +221,126 @@ export function HostTemplatesCard({
     Map<string, number | string>
   >(new Map())
   /**
-   * THE WHOLE LIBRARY, ordered, with the ceiling made visible (AGL-2501).
+   * THE LIBRARY, paged by its query (AGL-3321).
    *
-   * The read was `limit(200)` with no `orderBy`, so a site over the ceiling
-   * got a pseudo-random two hundred in document-id order, which the row memo
-   * below then sorted by kind and name — the arrangement that makes a sample
-   * read as a complete, alphabetized library.
+   * It was a whole read — every template document up to a ceiling of two
+   * hundred — grouped, sorted and filtered in the browser, because a row is
+   * a page GROUP: a multi-page starter materializes one document per screen
+   * and collapses into one row (AGL-696), and document-ordered ids scatter a
+   * starter's pages across any page-sized window.
    *
-   * It is deliberately NOT server-paged, unlike the layouts and components
-   * lists. A row here is a page GROUP: a multi-page starter materializes one
-   * document per screen and collapses into one row keyed by
-   * `source.starterId`. Document-ordered ids scatter a bundle's pages across
-   * the walk, so a page-sized window would render the same starter as a
-   * separate, partial row on two different pages — and "use this bundle"
-   * would apply whichever pages that page happened to hold.
-   *
-   * So the read stays whole and gains the two things it owed: an order that
-   * drops nothing (`hostArtifactQuery` explains why it is the document id and
-   * not `displayName`), and one PROBE document past the ceiling, so a site
-   * over it can be told rather than quietly shown a fraction of its library.
+   * The grouping is now WRITTEN: the page that leads a starter's row carries
+   * `libraryRow: true` and the others `false`, and so does a deleted template
+   * (`artifactCreateListKeys`/`artifactDeleteListKeys`). So the query asks for
+   * library ROWS — `TEMPLATE_LIST_BASE` — and pages them, with every clause
+   * and the search on it, and a starter is one row wherever its pages fall.
+   * The rows run in the walk's order (the document id; `hostArtifactQuery`
+   * says why) and are never re-sorted.
    */
-  const { data: templateWindow, status } = useFirestoreCollection<any>(
-    () => hostArtifactQuery(firestore, hostId, 'templates', TEMPLATE_WINDOW + 1),
-    [firestore, hostId],
-    { idField: '$id' },
+  const gridFilter = useListGridFilter({ selectFields: TEMPLATE_SELECT_FIELDS })
+  const templateList = useListQuery<any>({
+    collection: hostId ? collection(firestore, 'hosts', hostId, 'templates') : null,
+    declaration: TEMPLATE_LIST_QUERY,
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      base: TEMPLATE_LIST_BASE,
+    },
+    deps: [firestore, hostId],
+    idField: '$id',
+    /*
+     * The scope and every predicate are on MUTABLE fields — a delete clears
+     * `libraryRow` — so a document can drop out of the live target
+     * mid-session, and the SDK caches that as a tombstone every other reader
+     * of the path is then served (AGL-827/929). Confirmed against the server
+     * before it is believed.
+     */
+    confirmDisappearances: true,
+  })
+  const templatesNarrowed =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.length > 0
+  const templateRefusals = useMemo(
+    () =>
+      listQueryRefusals(templateList.plan.refused, {
+        fields: TEMPLATE_LIST_QUERY.fields,
+        headers: TEMPLATE_LIST_HEADERS,
+        options: TEMPLATE_FILTER_OPTIONS,
+      }),
+    [templateList.plan],
   )
-  const { rows: templateDocs, truncated: templatesTruncated } = useMemo(
-    () => ceilingedWindow<any>(templateWindow, TEMPLATE_WINDOW),
-    [templateWindow],
+  const { status } = templateList
+  /*
+   * A tombstone is never a library row — its delete wrote `libraryRow: false`
+   * — so this is a guard for a delete path that did not, not a filter: no
+   * clause or search word is matched here.
+   */
+  const heads = useMemo(
+    () => templateList.rows.filter((entry: any) => !entry.deletedAt),
+    [templateList.rows],
+  )
+
+  /*
+   * The pages of each STARTER on this page, read by starter id (AGL-3321) —
+   * see `useStarterPages`. `starterPagesEpoch` re-reads them after a delete.
+   */
+  const [starterPagesEpoch, setStarterPagesEpoch] = useState(0)
+  const starterIds = useMemo(
+    () =>
+      heads
+        .map((entry: any) => entry.source?.starterId)
+        .filter((id: unknown): id is string => typeof id === 'string' && id !== ''),
+    [heads],
+  )
+  const { pages: starterPages, pagesOf: starterPagesOf } = useStarterPages(
+    firestore,
+    hostId,
+    starterIds,
+    starterPagesEpoch,
   )
 
   /**
-   * One row per template, EXCEPT that a starter's pages collapse into a
-   * single row keyed by `source.starterId`.
-   *
-   * A multi-page starter materializes one document per screen (AGL-687), so
-   * flat it would put five rows in the library for something the gallery
-   * presents as one card. Grouping keeps the two surfaces agreeing, and
-   * AGL-696 confirmed it after looking at a real five-page starter — but
-   * only once the row's ACTIONS were made to mean the bundle rather than
-   * silently mean its first page. A grouped row now uses and deletes all of
-   * its pages; per-page Edit and Use live on the detail page, which lists the
-   * siblings. `pages` is what makes that possible, so it is carried on the
-   * row rather than recomputed per action.
+   * One row per library row: a template, or a starter led by one of its
+   * pages and standing for all of them. `pages` is what makes the bundle
+   * actions mean the bundle, so it is carried on the row.
    */
-  const rows = useMemo(() => {
-    const seenStarters = new Set<string>()
-    const out: Array<{
-      key: string
-      /** Row's representative document — the first page of a bundle. */
-      template: any
-      /** Every document the row stands for; length 1 when not a bundle. */
-      pages: any[]
-      displayName: string
-      description?: string
-      kindKey: string
-      sourceKey: TemplateSourceKey
-    }> = []
-    const live = (templateDocs ?? []).filter((entry: any) => !entry.deletedAt)
-    // Kind order first, then name.
-    const kindRank = (kind: string) => KIND_ORDER.indexOf(kind as TemplateKind)
-    const sorted = [...live].sort((a: any, b: any) => {
-      const byRank = kindRank(a.kind ?? 'page') - kindRank(b.kind ?? 'page')
-      if (byRank !== 0) return byRank
-      return String(a.displayName ?? '').localeCompare(
-        String(b.displayName ?? ''),
-      )
-    })
-    for (const template of sorted) {
-      const starterId = template.source?.starterId as string | undefined
-      if (starterId) {
-        if (seenStarters.has(starterId)) continue
-        seenStarters.add(starterId)
-        const pages = live
-          .filter((entry: any) => entry.source?.starterId === starterId)
-          .sort(
-            (a: any, b: any) =>
-              Number(a.source?.starterOrder ?? 0) -
-              Number(b.source?.starterOrder ?? 0),
-          )
-        out.push({
-          key: `starter:${starterId}`,
-          template: pages[0] ?? template,
-          pages: pages.length ? pages : [template],
-          displayName:
-            template.source?.starterName ?? template.displayName ?? starterId,
-          description: template.source?.starterDescription,
-          kindKey: (pages[0] ?? template).kind ?? 'page',
-          sourceKey: templateSourceKey((pages[0] ?? template).source),
-        })
-        continue
-      }
-      out.push({
-        key: template.$id,
-        template,
-        pages: [template],
-        displayName: template.displayName ?? template.$id,
-        description: template.description,
-        kindKey: template.kind ?? 'page',
-        sourceKey: templateSourceKey(template.source),
-      })
-    }
-    return out
-  }, [templateDocs])
+  const rows = useMemo(
+    () =>
+      heads.map((template: any) => {
+        const starterId = template.source?.starterId as string | undefined
+        if (starterId) {
+          const pages = starterPages.get(starterId) ?? [template]
+          return {
+            key: `starter:${starterId}`,
+            template,
+            pages,
+            displayName:
+              template.source?.starterName ?? template.displayName ?? starterId,
+            description: template.source?.starterDescription,
+            kindKey: template.kind ?? 'page',
+            sourceKey: templateSourceKey(template.source),
+          }
+        }
+        return {
+          key: template.$id,
+          template,
+          pages: [template],
+          displayName: template.displayName ?? template.$id,
+          description: template.description,
+          kindKey: template.kind ?? 'page',
+          sourceKey: templateSourceKey(template.source),
+        }
+      }),
+    [heads, starterPages],
+  )
 
   const listingIds = useMemo(() => {
     const ids = new Set<string>()
-    for (const entry of templateDocs ?? []) {
-      if (entry.deletedAt) continue
+    for (const entry of heads) {
       const id = entry.source?.listingId
       if (entry.source?.type === 'marketplace' && id) ids.add(id)
     }
     return Array.from(ids).sort().join(',')
-  }, [templateDocs])
+  }, [heads])
 
   useEffect(() => {
     if (!listingIds) return
@@ -481,6 +451,20 @@ export function HostTemplatesCard({
   )
 
   /**
+   * The pages a row stands for, read FRESH when it is acted on (AGL-3321):
+   * a starter's pages by its id — the row may have been drawn before they
+   * arrived, and a bundle action must never act on a partial set — and any
+   * other row's one template.
+   */
+  const pagesOf = useCallback(
+    async (row: { template: any; pages: any[] }): Promise<any[]> => {
+      const starterId = row.template?.source?.starterId
+      return starterId ? starterPagesOf(starterId) : row.pages
+    },
+    [starterPagesOf],
+  )
+
+  /**
    * Deletes everything the ROW stands for, which for a grouped starter is
    * all of its pages (AGL-696).
    *
@@ -490,15 +474,16 @@ export function HostTemplatesCard({
    * it does not; it means the bundle, so this does too.
    */
   const handleDelete = useCallback(
-    (row: { displayName: string; pages: any[] }) => async () => {
-      const count = row.pages.length
+    (row: { displayName: string; template: any; pages: any[] }) => async () => {
+      const pages = await pagesOf(row)
+      const count = pages.length
       const confirmed = await confirm({
         title: count > 1 ? `Delete all ${count} pages?` : 'Delete this template?',
         description:
           count > 1
             ? `"${row.displayName}" is a starter of ${count} page templates, ` +
               'and all of them are removed from your library: ' +
-              `${row.pages
+              `${pages
                 .map((page: any) => page.displayName ?? page.$id)
                 .join(', ')}. Pages you already created from it are ` +
               'unaffected. To remove just one, open the starter and delete ' +
@@ -513,20 +498,24 @@ export function HostTemplatesCard({
       if (!confirmed) return
       // Soft delete, matching reusable components — a template may be the
       // only remaining copy of a page someone deleted.
+      // No longer a library row either (AGL-3321), or the library's query
+      // would still list it.
       const deletedAt = Timestamp.now()
       await Promise.all(
-        row.pages.map((page: any) =>
+        pages.map((page: any) =>
           updateDoc(doc(firestore, 'hosts', hostId, 'templates', page.$id), {
             deletedAt,
+            ...artifactDeleteListKeys('templates'),
           }),
         ),
       )
+      setStarterPagesEpoch((epoch) => epoch + 1)
       enqueueSnackbar(
         count > 1 ? `Deleted ${count} page templates` : 'Template deleted',
         { variant: 'success', persist: false },
       )
     },
-    [confirm, firestore, hostId, enqueueSnackbar],
+    [confirm, firestore, hostId, enqueueSnackbar, pagesOf],
   )
 
   /**
@@ -539,8 +528,8 @@ export function HostTemplatesCard({
    * its own scope. Per-page Use stays reachable from the detail page.
    */
   const handleUseBundle = useCallback(
-    (row: { displayName: string; pages: any[] }) => async () => {
-      const pages = row.pages
+    (row: { displayName: string; template: any; pages: any[] }) => async () => {
+      const pages = await pagesOf(row)
       // AGL-1422, before the confirmation rather than after it: the quota
       // below reads an undefined `org` as the FREE tier, so inside the
       // loading window this asked the user to confirm adding five pages and
@@ -685,6 +674,7 @@ export function HostTemplatesCard({
       createHostResource,
       createHostVersion,
       enqueueSnackbar,
+      pagesOf,
     ],
   )
 
@@ -701,14 +691,6 @@ export function HostTemplatesCard({
    * version. The chip's own copy carries that caveat so the count cannot be
    * read as "already in the one you are about to open".
    */
-  const templateFilter = useListRowsFilter({
-    rows,
-    fields: TEMPLATE_FILTER_FIELDS,
-    options: TEMPLATE_FILTER_OPTIONS,
-    headers: TEMPLATE_FILTER_HEADERS,
-    search: TEMPLATE_SEARCH_FIELDS,
-  })
-
   const { peopleIn } = usePresenceSummary(hostId)
 
   const columns: GridColDef[] = [
@@ -905,19 +887,35 @@ export function HostTemplatesCard({
    * was the one quota key of 31 with no customer-facing surface at all, so a
    * merchant on Starter learned their 50-template cap by being refused a save.
    *
-   * The count is the listener's, not a `getCountFromServer`, and that is safe
-   * here in a way it would not be generally: the listener is capped at 200 and
-   * the largest FINITE plan cap is 50, so a host that could be truncated is
-   * necessarily on an UNLIMITED plan, where the readout says `N/∞` and an
-   * under-count changes no decision. On every plan whose cap can actually
-   * refuse a save, 200 cannot truncate. (Contrast AGL-1716, where a
-   * `limit()`-ed head-count fed a real gate.)
+   * The count is a server aggregate over exactly what the route counts —
+   * every template that is not a starter's page — because the list is a page
+   * now (AGL-3321) and its length is not the library's size (AGL-1716). It is
+   * re-asked whenever the page's rows change, which is when a create or a
+   * delete could have moved it.
    */
-  const templateQuota = checkOrgQuota(
-    org,
-    'templatesPerHost',
-    (templateDocs ?? []).length,
-  )
+  const rowsSignature = templateList.rows.map((entry: any) => entry.$id).join(',')
+  const [templateCount, setTemplateCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (!hostId) return
+    let active = true
+    void getCountFromServer(
+      query(
+        collection(firestore, 'hosts', hostId, 'templates'),
+        where('source.type', '!=', 'starter'),
+      ),
+    )
+      .then((snapshot) => {
+        if (active) setTemplateCount(snapshot.data().count)
+      })
+      .catch(() => {
+        // Pending or refused, the page stands in: a LOWER bound.
+      })
+    return () => {
+      active = false
+    }
+  }, [firestore, hostId, rowsSignature, starterPagesEpoch])
+  const quotaUsed = templateCount ?? heads.length
+  const templateQuota = checkOrgQuota(org, 'templatesPerHost', quotaUsed)
   /**
    * Hand the page the numbers it needs for the header readout.
    *
@@ -927,10 +925,7 @@ export function HostTemplatesCard({
    * re-publishes when the count or the plan actually changes and not on every
    * keystroke elsewhere on the page.
    */
-  // `quotaLimit`, not `limit` — the bare name is Firestore's `limit()` in this
-  // file, and shadowing it turns the entries listener into a type error a few
-  // hundred lines up.
-  const quotaUsed = (templateDocs ?? []).length
+  // `quotaLimit`, not `limit` — the bare name is Firestore's `limit()`.
   const quotaLimit = templateQuota.limit
   useEffect(() => {
     onQuota?.({ ready: orgReady, used: quotaUsed, limit: quotaLimit })
@@ -939,21 +934,6 @@ export function HostTemplatesCard({
   return (
     <CardDisplay>
       {duplicate.dialog}
-      {/*
-        The ceiling, said out loud. A starter's pages are grouped across the
-        WHOLE window, so a library cut short does not merely hide rows — it can
-        present a bundle by the pages that made the cut. Naming the number lets
-        a reader tell "I have no such template" from "this card did not read
-        it".
-      */}
-      {templatesTruncated ? (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          {`This site holds more than ${TEMPLATE_WINDOW} templates. The ` +
-            `library below shows the first ${TEMPLATE_WINDOW} in document ` +
-            'order, and a multi-page starter is only complete if all of its ' +
-            'pages are among them.'}
-        </Alert>
-      ) : null}
       {/* The readout moved OUT of this card and into the page header, beside
           the create button, matching the Sites page (AGL-2113). It read as a
           caption on a list here; opposite the heading it is a fact about the
@@ -961,18 +941,34 @@ export function HostTemplatesCard({
           through `onQuota` so the page can render it without counting the
           documents a second time — two counts of the same thing is how a
           readout and the gate it belongs to come to disagree. */}
-      <ListFilterChips {...templateFilter.chipsProps} />
+      <ListFilterChips
+        fields={TEMPLATE_LIST_QUERY.fields}
+        headers={TEMPLATE_LIST_HEADERS}
+        clauses={gridFilter.clauses}
+        onChange={gridFilter.setClauses}
+        options={TEMPLATE_FILTER_OPTIONS}
+      />
+      <ListQueryNotices refused={templateRefusals} notices={templateList.plan.notices} />
       <ListTable
         aria-label="Templates"
         rowHeight={TABLE_ROW_HEIGHT}
         // A template ROW is a page GROUP, not a document — a five-page bundle
         // is one row keyed by its group, so this list keeps its own row id.
         getRowId={(row) => row.key}
-        columns={templateFilter.filterColumns(columns)}
+        columns={listFilterGridColumns(
+          columns,
+          TEMPLATE_LIST_QUERY.fields,
+          TEMPLATE_FILTER_OPTIONS,
+          TEMPLATE_LIST_HEADERS,
+        )}
         // A filtered-to-nothing library says so; the empty state and its way
         // out are for a site that has no templates at all.
-        {...(templateFilter.filtering
-          ? { noRowsLabel: 'No templates match these filters' }
+        {...(templatesNarrowed
+          ? {
+              noRowsLabel: templateList.hasMore
+                ? 'No templates match on this page — the next one has more'
+                : 'No templates match these filters',
+            }
           : {
               noRowsLabel: 'No templates yet',
               noRowsDescription:
@@ -983,10 +979,14 @@ export function HostTemplatesCard({
                 </Button>
               ) : null,
             })}
-        rows={templateFilter.rows}
-        // The panel and the search are the grid's; the card answers them
-        // over every row it read (AGL-3317).
-        {...templateFilter.gridProps}
+        rows={rows}
+        // The panel and the search are the grid's; the QUERY answers them
+        // (AGL-3321), so the grid filters and sorts nothing.
+        filterMode="server"
+        filterModel={gridFilter.filterModel}
+        onFilterModelChange={gridFilter.onFilterModelChange}
+        quickFilter
+        disableColumnSorting
         onOpen={(_id, row) =>
           router.push(
             buildRoute(Route.TEMPLATE_DETAILS, {
@@ -997,6 +997,16 @@ export function HostTemplatesCard({
           )
         }
         loading={status === 'loading'}
+        // Paged by the footer below, so the grid must not also slice.
+        hideFooter
+      />
+      <ListPagination
+        page={templateList.page}
+        pageSize={templateList.pageSize}
+        rowCount={rows.length}
+        hasMore={templateList.hasMore}
+        onPageChange={templateList.setPage}
+        onPageSizeChange={templateList.setPageSize}
       />
       <UseTemplateDialog
         hostId={hostId}

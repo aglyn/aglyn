@@ -18,6 +18,7 @@
 import { HostEntityType } from '../foundation/definitions/platform.types'
 import { MEDIA_ALT_MAX_LENGTH } from './media-metadata'
 import { absoluteMediaSrc } from './media-ref'
+import { nameSearchKey, nameSearchTokens } from './name-search'
 import { urlSlugSegment } from './url-slug'
 
 /**
@@ -389,6 +390,48 @@ export function contentAuthorSchemaType(
   type: HostEntityType | string | number | undefined | null,
 ): 'Person' | 'Organization' {
   return Number(type) === HostEntityType.PERSON ? 'Person' : 'Organization'
+}
+
+/**
+ * Where an author's schema type is stored as the WORD the console's Authors
+ * table filters by (AGL-3321).
+ *
+ * `type` holds `HostEntityType` in whichever spelling wrote it: the number
+ * from the authors tab, a string `"1"`/`"2"` from an older bundle, nothing at
+ * all on a record `contentAuthorSchemaType` reads as `Organization`. A query
+ * matches one stored value, so an equality on `type` would miss every record
+ * spelled another way. This field is that one value.
+ */
+export const AUTHOR_SCHEMA_TYPE_FIELD = 'schemaType'
+
+/**
+ * The fields the Authors table's query reads (AGL-3321), derived from what the
+ * record already says: the name's lower-cased key and word-prefix tokens,
+ * normalized exactly as `nameSearchKey` / `nameSearchTokens` normalize a typed
+ * value, and the schema type as the row reads it.
+ *
+ * Spread at EVERY write of an author's `name` or `type` — the resources
+ * route's create, the authors tab's edit, the bundle import — and stamped on
+ * older records by `tools/scripts/backfill-authors-search-fields.mjs`. A
+ * record without them still reaches the picker, which reads every author; it
+ * is only the table's filters and search that cannot see it.
+ */
+export function contentAuthorQueryFields(author: {
+  name?: unknown
+  type?: unknown
+}): {
+  nameLower: string
+  nameTokens: string[]
+  [AUTHOR_SCHEMA_TYPE_FIELD]: 'Person' | 'Organization'
+} {
+  const name = typeof author.name === 'string' ? author.name : ''
+  return {
+    nameLower: nameSearchKey(name),
+    nameTokens: nameSearchTokens(name),
+    [AUTHOR_SCHEMA_TYPE_FIELD]: contentAuthorSchemaType(
+      author.type as HostEntityType | string | number | undefined | null,
+    ),
+  }
 }
 
 const text = (value: unknown, max = AUTHOR_NAME_MAX_LENGTH): string =>

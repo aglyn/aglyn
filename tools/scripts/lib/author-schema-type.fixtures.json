@@ -1,0 +1,12 @@
+{
+  "//": "How every stored spelling of an author's `type` reads as the schema type word the Authors table filters by: `contentAuthorSchemaType` (libs/aglyn/src/lib/app-utils/content-authors.ts), read the same way by tools/scripts/backfill-authors-search-fields.mjs. Asserted by content-query-fields.spec.ts and by that backfill's --self-test (AGL-3321). A case with no `type` key is an author stored without one.",
+  "cases": [
+    { "type": 2, "schemaType": "Person" },
+    { "type": "2", "schemaType": "Person" },
+    { "type": 1, "schemaType": "Organization" },
+    { "type": "1", "schemaType": "Organization" },
+    { "type": null, "schemaType": "Organization" },
+    { "type": "", "schemaType": "Organization" },
+    { "schemaType": "Organization" }
+  ]
+}

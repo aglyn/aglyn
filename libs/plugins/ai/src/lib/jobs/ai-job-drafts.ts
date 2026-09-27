@@ -23,7 +23,7 @@ import {
   type FormFieldDecl,
   type FormRouting,
 } from '@aglyn/aglyn/app-utils/forms'
-import { nameSearchKey } from '@aglyn/aglyn/app-utils/name-search'
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
   checkDatasetQuota,
   checkEntitlement,
@@ -62,7 +62,9 @@ import type { AiJobAdmissionRefusal } from './ai-job-admission'
  * `AI_DRAFT_FIELDS` is that route's allow-list for each kind, and a spec
  * reads the route's source to hold the two together. Nothing outside the
  * list is written except the route's own stamps: `createdAt`, `updatedAt`,
- * `createdBy`, a screen's `nameLower`, and a template's `source`, which is
+ * `createdBy`, the list keys every artifact create carries
+ * (`artifactCreateListKeys`: the name keys, a component's or template's stored
+ * kind, a template's library row), and a template's `source`, which is
  * `authored` — a template a member's job generated is theirs, never a starter
  * or a listing. A layout's or a screen's first version carries the keys the
  * versions route seeds one with. A form is the document the Forms page's
@@ -620,7 +622,11 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
     let versionId: string | null = null
     if (input.kind === 'layout') {
       versionId = createResourceUid()
-      tx.create(draftRef, { ...allowListed('layout', { displayName: name, versionId }), ...stamps })
+      tx.create(draftRef, {
+        ...allowListed('layout', { displayName: name, versionId }),
+        ...artifactCreateListKeys('layouts', { displayName: name }),
+        ...stamps,
+      })
       tx.create(draftRef.collection('versions').doc(versionId), {
         layoutId: input.id,
         hostId: input.hostId,
@@ -633,7 +639,7 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
       const slug = aiDraftScreenSlug(input.slug, name, rows, routingMap)
       tx.create(draftRef, {
         ...allowListed('screen', { displayName: name, slug, versionId }),
-        nameLower: nameSearchKey(name),
+        ...artifactCreateListKeys('screens', { displayName: name }),
         ...stamps,
       })
       tx.create(draftRef.collection('versions').doc(versionId), {
@@ -653,6 +659,11 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
           slug: input.slug || undefined,
         }),
         source: { type: 'authored' },
+        ...artifactCreateListKeys('templates', {
+          kind: 'page',
+          displayName: name,
+          source: { type: 'authored' },
+        }),
         ...stamps,
       })
     } else if (input.kind === 'component') {
@@ -663,6 +674,7 @@ export async function writeAiDraft(firestore: Firestore, input: AiDraftInput): P
           nodes,
           props: input.props?.length ? [...input.props] : undefined,
         }),
+        ...artifactCreateListKeys('components', { displayName: name }),
         ...stamps,
       })
     } else {
