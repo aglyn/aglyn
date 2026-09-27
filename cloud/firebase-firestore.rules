@@ -1523,9 +1523,8 @@ service cloud.firestore {
        * `emailState` (AGL-3245) stays closed, exactly as the host block had
        * it: the senders write the platform's verdict on an address — a
        * bounce, a gateway block, a do-not-contact mark — and a member who
-       * could clear it could email a person who asked not to be. Its list
-       * key `emailStatus` (AGL-3321) is closed with it, or a member could
-       * file a bounced lead under "Email OK" in the list's filter.
+       * could clear it could email a person who asked not to be. So is its
+       * list key `emailStatus` (AGL-3321).
        *
        * DELETE IS SOLE-HOLDER ONLY, for the reason it is on a contact: in a
        * multi-brand org the row is shared, and one brand removing a lead must
@@ -1841,13 +1840,8 @@ service cloud.firestore {
        * `reports/*` (reach, links, revenue, conversions) is read through the
        * parent's scope, because the parent's match does not reach a
        * subcollection and a report has no `visibleTo` of its own.
-       *
-       * A send is ALSO readable through its `hostId` (AGL-3321): every
-       * writer stamps `hostId` and `visibleTo: ['host:{hostId}']` together
-       * (`campaignSendSiteStamp`), so the two say the same thing. A site
-       * hub's lists ask `hostId == {site}` — an equality, which leaves the
-       * query's one array clause free for search — and this is what proves
-       * that query for the site's collaborators.
+       * Also readable by `hostId` (AGL-3321), which writers stamp with the
+       * matching `visibleTo`: it proves a site hub's `hostId ==` list.
        */
       match /campaigns/{sendId} {
         allow read: if isStaff() || canReadScoped() ||
@@ -3139,12 +3133,8 @@ service cloud.firestore {
       match /forms/{formId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
-        // `retired` is the queryable mirror of `archivedAt` the Forms list
-        // asks (AGL-3330): Firestore cannot find a document by a missing
-        // field, so "in use" is `retired == false`. A write that touches
-        // either must leave the two agreeing, or a retired form lists as in
-        // use (or vanishes from the list) while every other reader, which
-        // asks `archivedAt`, says the opposite.
+        // `retired` mirrors `archivedAt` for the Forms list (AGL-3330); a
+        // write touching either keeps them agreeing.
         allow update: if isStaff() ||
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             !request.resource.data.diff(resource.data)
@@ -4250,22 +4240,10 @@ service cloud.firestore {
                      // and the only client write to a listing in the repo is
                      // the unpublish toggle, which writes `deletedAt` alone.
                      'logoUrl', 'screenshots',
-                     // What the marketplace lists QUERY by (AGL-3321): the
-                     // name's search keys, who browse shows the listing to
-                     // and its search tokens under each audience, and the
-                     // staff queue's takedown flag. Derived by the server
-                     // from the listing as stored, after every write — a
-                     // publisher who could write `browseAudience` could put
-                     // an unreviewed plugin on the public shelf.
+                     // Server-derived list keys (AGL-3321).
                      'nameLower', 'nameTokens', 'nameReversed',
                      'browseAudience', 'browseTokens', 'takenDown',
-                     // …and three fields they are derived FROM, which this
-                     // block used to leave to the owner. The name, the
-                     // unpublish toggle and private/public now go through
-                     // `/api/marketplace/publish-plugin` (`update-listing`,
-                     // `set-published`, `set-visibility`), which re-derive
-                     // the fields above; a client write of any of them
-                     // would leave a stale audience or a stale search key.
+                     // …and their inputs, written via publish-plugin.
                      'displayName', 'deletedAt', 'visibility']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
