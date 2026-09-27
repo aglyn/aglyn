@@ -9,6 +9,54 @@ content on the marketing site and is written separately.
 
 <!-- releases below -->
 
+## v1.0.0-beta.200 — 2026-09-27
+
+[Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.199...v1.0.0-beta.200)
+
+### Added
+
+- **commerce:** smart collections are read by membership stored on each product ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **forms:** the Forms list filters and searches every column on its query ([AGL-3330](https://linear.app/aglyn/issue/AGL-3330))
+- **console:** every staff list filters and searches on its Firestore query ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321), [AGL-3346](https://linear.app/aglyn/issue/AGL-3346), [AGL-3347](https://linear.app/aglyn/issue/AGL-3347), [AGL-3348](https://linear.app/aglyn/issue/AGL-3348), [AGL-3349](https://linear.app/aglyn/issue/AGL-3349), [AGL-3350](https://linear.app/aglyn/issue/AGL-3350))
+- **commerce:** commerce, marketplace, runs and billing lists filter on their queries ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **crm:** every CRM list filters and searches on its Firestore query ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** site artifact, gallery and content lists serve every filter from the query ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321), [AGL-3323](https://linear.app/aglyn/issue/AGL-3323))
+- **marketing:** outreach and marketing lists filter and search on their queries ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **email:** email, inbox and dataset lists serve every filter and search from the query ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** site people, Sites cards, activity and team roster filter on their queries ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **media:** the library filters and searches on the query, in a Grid or List view ([AGL-3327](https://linear.app/aglyn/issue/AGL-3327), [AGL-2854](https://linear.app/aglyn/issue/AGL-2854))
+- **tools:** one script-side twin of the list search keys, held to the library's fixtures ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **aglyn:** one writer stamps the scoped search tokens a scoped list query reads ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **shared-ui-jsx:** one Admin twin, one clause wording and a list query double ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **aglyn:** displayNameSearchFields stamps the list search keys a displayName carries ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+### Fixed
+
+- **rules:** the Firestore rules fit their 256 KiB deploy limit again ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **tenant-feature-instance:** the list query double's mock module takes the real one ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+### Reverted
+
+- **console:** the Sites page keeps its site cards ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+### Changed
+
+- **shared-ui-jsx:** delete the hooks that matched a list's loaded rows ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+### Documentation
+
+- **aglyn:** a folded scoped search is for readers whose rule needs no visibleTo term ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+<details>
+<summary>Also in this release: 3 test, 1 ci</summary>
+
+- **tools:** run the smart-collection membership fixture test with the other list-key twins ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** the revenue guard tells a list query plan from the billing plan ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **ai:** the AI activity spec expects the search keys every activity row now carries ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+- **console:** the grid-filter sweep no longer expects a table on the Sites card view ([AGL-3321](https://linear.app/aglyn/issue/AGL-3321))
+
+</details>
+
 ## v1.0.0-beta.199 — 2026-09-25
 
 [Compare with the previous release](https://github.com/aglyn/aglyn/compare/v1.0.0-beta.198...v1.0.0-beta.199)
