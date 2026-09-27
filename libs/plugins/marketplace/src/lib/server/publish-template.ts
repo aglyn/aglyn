@@ -31,6 +31,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { refreshListingQueryFields } from './listing-query-fields'
 
 const MAX_TEMPLATE_SCREENS = 25
 
@@ -212,6 +213,8 @@ export const publishTemplateHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    // The lists this listing appears in query by fields derived from it (AGL-3321).
+    await refreshListingQueryFields(listingRef)
     await listingRef.collection('versions').doc(String(version)).set({
       template: {
         screens,

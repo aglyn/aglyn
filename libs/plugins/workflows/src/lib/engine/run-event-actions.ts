@@ -82,6 +82,7 @@ import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
+import { runSummaryFields } from '../model/run-history'
 import {
   advanceFlowEnrollment,
   claimFlowEnrollment,
@@ -1275,7 +1276,10 @@ export async function executeAction(
       // run-history table could not otherwise fill.
       result: stepErrors.length ? 'failed' : 'succeeded',
       trigger: event,
-      summary: (outcomes.length ? outcomes.join(' · ') : 'Ran').slice(0, 300),
+      // The summary and its search tokens, written together (AGL-3321).
+      ...runSummaryFields(
+        (outcomes.length ? outcomes.join(' · ') : 'Ran').slice(0, 300),
+      ),
       target: {
         // An org automation's run is filed under its own type, so the site's
         // run history can tell it from a site action sharing the feed.
@@ -1570,7 +1574,7 @@ async function recordSkippedRun(
       action: `${kind === 'orgAutomation' ? 'Org automation' : 'Action'} skipped on ${event}`,
       result: 'skipped',
       trigger: event,
-      summary: reason.slice(0, 300),
+      ...runSummaryFields(reason.slice(0, 300)),
       target: {
         type: kind === 'orgAutomation' ? ORG_AUTOMATION_RUN_TARGET : 'workflow',
         id: actionId,
@@ -1924,7 +1928,7 @@ export async function stopFlowEnrollment(
       action: `Flow stopped mid-wait: ${reason}`.slice(0, 300),
       result: 'skipped',
       trigger: enrollment.event,
-      summary: reason.slice(0, 300),
+      ...runSummaryFields(reason.slice(0, 300)),
       target: {
         type:
           enrollment.automation === 'org'

@@ -347,6 +347,10 @@ const RESOURCES: Record<string, {
       'nameReversed',
       'skus',
       'barcodes',
+      // The storefront catalog's price and In stock keys (AGL-3321), from
+      // `productSearchFields` / `productStockFields` on the same payload.
+      'priceFromCents',
+      'soldOut',
       // Legacy Commerce Starter fields, still written by every caller.
       'priceUsd',
       'inventory',
@@ -1046,6 +1050,11 @@ async function handler(request: Request): Promise<Response> {
         // What the Authors table queries (AGL-3321) — the name's key and
         // tokens, and the schema type as one word — derived the same way.
         ...(resourceKey === 'author' ? contentAuthorQueryFields(doc) : {}),
+        // A product is born LIVE, said with an explicit null (AGL-3321): the
+        // products table's query is scoped `deletedAt == null`, and Firestore
+        // cannot match a field that is absent. Off the allow-list above, so a
+        // duplicate never carries its source's soft delete.
+        ...(resourceKey === 'product' ? { deletedAt: null } : {}),
         // Unconditional now that no allow-list carries them: the client cannot
         // supply either, so there is no client value left to preserve. The
         // callers already relied on this — a Timestamp does not survive the

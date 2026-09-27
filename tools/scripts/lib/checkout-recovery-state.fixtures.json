@@ -1,0 +1,12 @@
+{
+  "$comment": "Worked examples for checkoutRecoveryState (libs/plugins/commerce/src/lib/model/checkout-recovery.ts) and its restatement in tools/scripts/backfill-checkout-recovery-state.mjs. Both assert these; change one only with the other (AGL-3321).",
+  "cases": [
+    { "name": "an email, never reminded", "checkout": { "email": "jane@example.com", "status": "open" }, "expected": "pending" },
+    { "name": "an email, reminded", "checkout": { "email": "jane@example.com", "status": "open", "remindedAtMs": 1800000000000 }, "expected": "reminded" },
+    { "name": "an email and an explicit null reminder", "checkout": { "email": "jane@example.com", "remindedAtMs": null }, "expected": "pending" },
+    { "name": "no email", "checkout": { "status": "open" }, "expected": "none" },
+    { "name": "an empty email", "checkout": { "email": "", "status": "open" }, "expected": "none" },
+    { "name": "no email, yet stamped reminded", "checkout": { "remindedAtMs": 1800000000000 }, "expected": "none" },
+    { "name": "a completed checkout keeps its recovery state", "checkout": { "email": "jane@example.com", "status": "completed" }, "expected": "pending" }
+  ]
+}

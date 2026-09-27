@@ -37,6 +37,7 @@ import {
   resolvePublisherProfile,
 } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { refreshListingQueryFields } from './listing-query-fields'
 import {
   attestationLabels,
   missingAttestations,
@@ -120,6 +121,8 @@ const updateListingContent: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    // A renamed listing is searched by its new name (AGL-3321).
+    await refreshListingQueryFields(listingRef)
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error(error)
@@ -184,10 +187,64 @@ const setListingVisibility: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    // Private leaves browse and public joins it, through the audience the
+    // browse query reads (AGL-3321).
+    await refreshListingQueryFields(listingRef)
     return res.status(200).json({ ok: true, visibility })
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Visibility change failed' })
+  }
+}
+
+/**
+ * Unpublish or republish a listing (AGL-3321).
+ *
+ * This was the one client write to a listing: the seller panel set
+ * `deletedAt` directly. Browse now queries a listing's AUDIENCE, which
+ * follows from `deletedAt` among other fields, and a client write cannot
+ * re-derive it — so the toggle moved here, beside `set-visibility`, and the
+ * rules deny `deletedAt` to clients. Publisher-or-staff, like the other two
+ * listing actions; unlike them it reaches a listing that is already
+ * unpublished, since republishing is half of what it does.
+ */
+const setListingPublished: PluginApiHandler = async (req, res) => {
+  const listingId = String(req.body?.listingId ?? '')
+  const published = req.body?.published === true
+  if (!listingId) return res.status(400).json({ error: 'Missing listingId' })
+  const authorization = String(req.headers.authorization ?? '')
+  const idToken = authorization.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined
+  if (!idToken) return res.status(401).json({ error: 'Unauthenticated' })
+  try {
+    const decoded = await firebaseAdmin.app().auth().verifyIdToken(idToken)
+    const firestore = firebaseAdmin.app().firestore()
+    const listingRef = firestore.collection('marketplaceListings').doc(listingId)
+    const listing = (await listingRef.get()).data()
+    if (!listing) return res.status(404).json({ error: 'Unknown listing' })
+    const isPublisher = await canActAsPublisher(
+      firestore,
+      decoded.uid,
+      listing.profileId,
+    )
+    if (!isPublisher && decoded['staff'] !== true) {
+      return res.status(403).json({ error: 'Not your listing' })
+    }
+    await listingRef.set(
+      {
+        deletedAt: published
+          ? null
+          : firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+    await refreshListingQueryFields(listingRef)
+    return res.status(200).json({ ok: true, published })
+  } catch (error) {
+    console.error(error)
+    return res.status(500).json({ error: 'Publishing change failed' })
   }
 }
 
@@ -204,6 +261,10 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
   // Private ⇄ public (AGL-968/994), without shipping a new bundle.
   if (req.body?.action === 'set-visibility') {
     return setListingVisibility(req, res)
+  }
+  // Unpublish ⇄ republish (AGL-3321), which was a client write.
+  if (req.body?.action === 'set-published') {
+    return setListingPublished(req, res)
   }
   const body = req.body ?? {}
   const headers = req.headers as Partial<Record<string, string>>
@@ -473,6 +534,8 @@ export const publishPluginHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    // The lists this listing appears in query by fields derived from it (AGL-3321).
+    await refreshListingQueryFields(listingRef)
     // Version snapshots are server-only; the loader reads sha256 + manifest
     // to verify integrity and stamp CSP before executing.
     await listingRef

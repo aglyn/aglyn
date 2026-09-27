@@ -18,15 +18,25 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import { Chip, Divider, Stack, Typography } from '@mui/material'
-import { collection } from 'firebase/firestore'
-import { useMemo } from 'react'
 import {
-  ceilingedWindow,
-  collectionCeiling,
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
+  collection,
+  type Firestore,
+  getCountFromServer,
+  limit,
+  orderBy,
+  query,
+  type Query,
+  where,
+} from 'firebase/firestore'
+import { useEffect, useMemo, useState } from 'react'
+import { useFirestore, useFirestoreCollection } from '@aglyn/tenant-feature-instance'
 import { pluginDocsHelp } from '@aglyn/aglyn'
+import {
+  CHECKOUT_GIVE_UP_AFTER_MS,
+  CHECKOUT_RECOVERY_STATE_FIELD,
+  CHECKOUT_REMIND_AFTER_MS,
+  type CheckoutRecoveryState,
+} from '../../model/checkout-recovery'
 import {
   EntitlementUpsell,
   useCommerceEntitlement,
@@ -35,11 +45,6 @@ import {
 export interface RecoveryQueueCardProps {
   hostId: string
 }
-
-/** `process-abandoned.ts` waits this long before it will remind a checkout. */
-const REMIND_AFTER_MS = 60 * 60 * 1000
-/** …and gives up after this, marking the checkout `expired`. */
-const GIVE_UP_AFTER_MS = 7 * 24 * 60 * 60 * 1000
 
 const recoveryHelp = pluginDocsHelp('commerce', {
   anchor: '#recovery-and-alerts',
@@ -58,22 +63,87 @@ const relative = (atMs: number | undefined): string => {
   return `${Math.round(hours / 24)}d ago`
 }
 
+/** How many open checkouts the card names under its chips. */
+const RECENT_CHECKOUTS = 5
+
+const PENDING: CheckoutRecoveryState = 'pending'
+const REMINDED: CheckoutRecoveryState = 'reminded'
+
 /**
- * How many documents each set of counters may be computed from.
+ * The queries behind every figure on the card (AGL-3321), each the set
+ * `scanAbandonedCheckouts` or `scanRestockAlerts` acts on, asked of Firestore
+ * rather than matched over rows the card has read.
  *
- * Every figure this card renders is a COUNT, so neither read can be paged — a
- * tally over page one is not a tally. What makes a count trustworthy instead
- * is that the walk reaching it is total, which is why both ask through
- * `collectionCeiling` and order on the document name: an unordered cap returns
- * a pseudo-random slice, and a count over a random slice is an undercount with
- * nothing on screen to suggest it.
+ * Checkouts ask `status == 'open'` and the `recoveryState` every writer
+ * stamps, so "carries an email" and "not reminded yet" are equalities rather
+ * than absences. The two time windows are ranges on `createdAtMs`, ordered
+ * newest first so they share one composite with the recent list:
+ * `(status, recoveryState, createdAtMs DESC)`. Reminded is two equalities and
+ * needs none.
  *
- * These chips claim to mirror what `scanAbandonedCheckouts` will act on, so a
- * ceiling that bites has to say so rather than quietly report a smaller queue
- * than the job will find.
+ * Alerts ask `notifiedAtMs == null` for the waiting, which `notify-restock.ts`
+ * writes as an explicit null. Notified is every retired alert less the
+ * skipped ones — `process-restock.ts` writes `skipped: true` only together
+ * with `notifiedAtMs`, so the difference is exact — both on single-field
+ * indexes.
  */
-const CHECKOUT_CEILING = 200
-const ALERT_CEILING = 200
+export function recoveryQueueQueries(
+  firestore: Firestore,
+  hostId: string,
+  nowMs: number,
+) {
+  const checkouts = collection(firestore, 'hosts', hostId, 'checkouts')
+  const alerts = collection(firestore, 'hosts', hostId, 'restockAlerts')
+  const open = where('status', '==', 'open')
+  const pending = where(CHECKOUT_RECOVERY_STATE_FIELD, '==', PENDING)
+  const newestFirst = orderBy('createdAtMs', 'desc')
+  return {
+    due: query(
+      checkouts,
+      open,
+      pending,
+      where('createdAtMs', '>=', nowMs - CHECKOUT_GIVE_UP_AFTER_MS),
+      where('createdAtMs', '<=', nowMs - CHECKOUT_REMIND_AFTER_MS),
+      newestFirst,
+    ),
+    waiting: query(
+      checkouts,
+      open,
+      pending,
+      where('createdAtMs', '>', nowMs - CHECKOUT_REMIND_AFTER_MS),
+      newestFirst,
+    ),
+    reminded: query(checkouts, open, where(CHECKOUT_RECOVERY_STATE_FIELD, '==', REMINDED)),
+    alertsWaiting: query(alerts, where('notifiedAtMs', '==', null)),
+    alertsRetired: query(alerts, where('notifiedAtMs', '!=', null)),
+    alertsSkipped: query(alerts, where('skipped', '==', true)),
+  }
+}
+
+/** The open checkouts with an email, newest first — the card's short list. */
+export function recentRecoverableCheckouts(
+  firestore: Firestore,
+  hostId: string,
+) {
+  return query(
+    collection(firestore, 'hosts', hostId, 'checkouts'),
+    where('status', '==', 'open'),
+    where(CHECKOUT_RECOVERY_STATE_FIELD, 'in', [PENDING, REMINDED]),
+    orderBy('createdAtMs', 'desc'),
+    limit(RECENT_CHECKOUTS),
+  )
+}
+
+interface QueueFigures {
+  due: number
+  waiting: number
+  reminded: number
+  alertsWaiting: number
+  alertsNotified: number
+}
+
+const countOf = (target: Query) =>
+  getCountFromServer(target).then((snapshot) => snapshot.data().count)
 
 /**
  * Recovery & alerts (AGL-2227).
@@ -93,11 +163,14 @@ const ALERT_CEILING = 200
  * needs somewhere the queue depth is visible. A queue that is always empty and
  * a queue that is never drained look identical from outside.
  *
- * Read-only, and deliberately so. The counts come from the same documents the
- * scans read; nothing here writes, so this card cannot disagree with the job
- * about what is owed. Sending is the job's to do — a "send now" button would
- * be a second sender racing a beat that runs every 15 minutes, for a reminder
- * the merchant cannot un-send.
+ * Every figure is a Firestore COUNT (AGL-3321) over the whole collection —
+ * see `recoveryQueueQueries` — so a queue of any depth reads exactly, where
+ * the card used to count the first two hundred documents it read.
+ *
+ * Read-only, and deliberately so. Nothing here writes, so this card cannot
+ * disagree with the job about what is owed. Sending is the job's to do — a
+ * "send now" button would be a second sender racing a beat that runs every 15
+ * minutes, for a reminder the merchant cannot un-send.
  *
  * The abandoned half is entitlement-gated in place rather than gating the
  * whole card: `abandonedCart` is Pro, back-in-stock alerts are on every plan
@@ -114,69 +187,53 @@ export function RecoveryQueueCard(props: RecoveryQueueCardProps) {
     'abandonedCart',
   )
 
-  const { data: checkoutDocs } = useFirestoreCollection<any>(
-    () =>
-      collectionCeiling(
-        collection(firestore, 'hosts', hostId, 'checkouts'),
-        CHECKOUT_CEILING,
-      ),
+  const { data: recentDocs } = useFirestoreCollection<any>(
+    () => recentRecoverableCheckouts(firestore, hostId),
     [firestore, hostId],
     { idField: '$id' },
   )
-  const { data: alertDocs } = useFirestoreCollection<any>(
-    () =>
-      collectionCeiling(
-        collection(firestore, 'hosts', hostId, 'restockAlerts'),
-        ALERT_CEILING,
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const checkoutWindow = useMemo(
-    () => ceilingedWindow<any>(checkoutDocs ?? undefined, CHECKOUT_CEILING),
-    [checkoutDocs],
-  )
-  const alertWindow = useMemo(
-    () => ceilingedWindow<any>(alertDocs ?? undefined, ALERT_CEILING),
-    [alertDocs],
-  )
+  const recent = useMemo(() => recentDocs ?? [], [recentDocs])
 
-  const checkouts = useMemo(() => {
-    const now = Date.now()
-    // The same three tests `scanAbandonedCheckouts` applies, in the same
-    // order, so the number here is the number the job will act on rather
-    // than a looser "open checkouts" count that would always read higher.
-    const open = checkoutWindow.rows.filter(
-      (row: any) => row.status === 'open' && row.email,
-    )
-    return {
-      reminded: open.filter((row: any) => row.remindedAtMs).length,
-      due: open.filter(
-        (row: any) =>
-          !row.remindedAtMs &&
-          now - Number(row.createdAtMs ?? 0) >= REMIND_AFTER_MS &&
-          now - Number(row.createdAtMs ?? 0) <= GIVE_UP_AFTER_MS,
-      ).length,
-      waiting: open.filter(
-        (row: any) =>
-          !row.remindedAtMs &&
-          now - Number(row.createdAtMs ?? 0) < REMIND_AFTER_MS,
-      ).length,
-      recent: [...open]
-        .sort((a: any, b: any) => (b.createdAtMs ?? 0) - (a.createdAtMs ?? 0))
-        .slice(0, 5),
+  // Counted again whenever the newest checkouts move, which is when the
+  // figures under them have.
+  const [figures, setFigures] = useState<QueueFigures | null>(null)
+  const [countFailed, setCountFailed] = useState(false)
+  const recentKey = recent
+    .map((row: any) => `${row.$id}:${row.remindedAtMs ?? ''}`)
+    .join(',')
+  useEffect(() => {
+    let active = true
+    const asked = recoveryQueueQueries(firestore, hostId, Date.now())
+    Promise.all([
+      countOf(asked.due),
+      countOf(asked.waiting),
+      countOf(asked.reminded),
+      countOf(asked.alertsWaiting),
+      countOf(asked.alertsRetired),
+      countOf(asked.alertsSkipped),
+    ])
+      .then(([due, waiting, reminded, alertsWaiting, retired, skipped]) => {
+        if (!active) return
+        setFigures({
+          due,
+          waiting,
+          reminded,
+          alertsWaiting,
+          alertsNotified: Math.max(0, retired - skipped),
+        })
+        setCountFailed(false)
+      })
+      .catch((error) => {
+        console.error('Recovery queue counts failed', error)
+        if (active) setCountFailed(true)
+      })
+    return () => {
+      active = false
     }
-  }, [checkoutWindow])
+  }, [firestore, hostId, recentKey])
 
-  const alerts = useMemo(() => {
-    const rows = alertWindow.rows
-    return {
-      pending: rows.filter((row: any) => row.notifiedAtMs == null).length,
-      notified: rows.filter(
-        (row: any) => row.notifiedAtMs != null && !row.skipped,
-      ).length,
-    }
-  }, [alertWindow])
+  /** A figure, or a dash until it is counted. Never a 0 it has not counted. */
+  const figure = (value: number | undefined) => (value == null ? '—' : String(value))
 
   return (
     <CardDisplay
@@ -186,6 +243,12 @@ export function RecoveryQueueCard(props: RecoveryQueueCardProps) {
       contentGutterY
     >
       <Stack spacing={2}>
+        {countFailed ? (
+          <Typography variant="caption" color="error">
+            {'The queue figures could not be counted just now. They are ' +
+              'counted again when a checkout changes, or on reload.'}
+          </Typography>
+        ) : null}
         <Stack spacing={1}>
           <Typography variant="subtitle2">{'Abandoned checkouts'}</Typography>
           {!ready ? (
@@ -197,32 +260,27 @@ export function RecoveryQueueCard(props: RecoveryQueueCardProps) {
               <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
                 <Chip
                   size="small"
-                  color={checkouts.due ? 'warning' : 'default'}
-                  label={`${checkouts.due} due a reminder`}
+                  color={figures?.due ? 'warning' : 'default'}
+                  label={`${figure(figures?.due)} due a reminder`}
                 />
                 <Chip
                   size="small"
-                  label={`${checkouts.waiting} still within the first hour`}
+                  label={`${figure(figures?.waiting)} still within the first hour`}
                 />
                 <Chip
                   size="small"
-                  color={checkouts.reminded ? 'success' : 'default'}
-                  label={`${checkouts.reminded} reminded`}
+                  color={figures?.reminded ? 'success' : 'default'}
+                  label={`${figure(figures?.reminded)} reminded`}
                 />
               </Stack>
-              {checkoutWindow.truncated ? (
-                <Typography variant="caption" color="text.secondary">
-                  {`Counted across ${CHECKOUT_CEILING} checkouts. The reminder job reads the rest; these figures do not.`}
-                </Typography>
-              ) : null}
               <Typography variant="caption" color="text.secondary">
                 {'Reminders send automatically about 15 minutes after a ' +
                   'checkout has been idle for an hour. A checkout that is ' +
                   'completed stops reminding itself.'}
               </Typography>
-              {checkouts.recent.length ? (
+              {recent.length ? (
                 <Stack spacing={0.5}>
-                  {checkouts.recent.map((row: any) => (
+                  {recent.map((row: any) => (
                     <Typography key={row.$id} variant="body2">
                       {`${row.email} · started ${relative(row.createdAtMs)}${
                         row.remindedAtMs
@@ -252,16 +310,11 @@ export function RecoveryQueueCard(props: RecoveryQueueCardProps) {
           <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
             <Chip
               size="small"
-              color={alerts.pending ? 'info' : 'default'}
-              label={`${alerts.pending} shoppers waiting`}
+              color={figures?.alertsWaiting ? 'info' : 'default'}
+              label={`${figure(figures?.alertsWaiting)} shoppers waiting`}
             />
-            <Chip size="small" label={`${alerts.notified} notified`} />
+            <Chip size="small" label={`${figure(figures?.alertsNotified)} notified`} />
           </Stack>
-          {alertWindow.truncated ? (
-            <Typography variant="caption" color="text.secondary">
-              {`Counted across ${ALERT_CEILING} alerts. The notify job reads the rest; these figures do not.`}
-            </Typography>
-          ) : null}
           <Typography variant="caption" color="text.secondary">
             {'Anyone who used “Notify me when it’s back” on a sold-out ' +
               'product is emailed once its stock goes above zero. Waiting ' +

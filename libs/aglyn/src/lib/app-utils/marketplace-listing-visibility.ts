@@ -128,20 +128,24 @@ export function isListingBrowsable(listing: {
  * `aglyn:addons`. `marketplace.ts` re-exports them so publishing code keeps
  * one import site.
  *
- * The list is short on purpose. The only client-side write to a listing
- * document anywhere in the repo is the unpublish/republish toggle in the org
- * seller panel, which writes `deletedAt` alone — publish, content edits,
- * review and install all go through Admin-SDK routes. So the fields below are
- * classified writable because a publisher OWNS them, not because anything
- * would break: denying the rest cost nothing, which is how AGL-1364 closed.
+ * The list is short on purpose. Nothing in the repo writes a listing
+ * document client-side any more: the unpublish/republish toggle in the org
+ * seller panel was the last, and it goes through the publish API since
+ * AGL-3321 — as publish, content edits, review and install always did. So
+ * the fields below are classified writable because a publisher OWNS them,
+ * not because anything would break: denying the rest cost nothing, which is
+ * how AGL-1364 closed.
  */
 export const LISTING_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> =
   {
-    displayName:
-      'The listing title. Publisher-authored storefront copy, validated by ' +
+    // `displayName` was here until AGL-3321: the marketplace lists search it
+    // through keys the server derives, so it is written through the API
+    // (`update-listing`) alone and denied here with `deletedAt` and
+    // `visibility`, the two other fields a listing's browse audience follows.
+    description:
+      'Publisher-authored storefront copy, validated by ' +
       '`validateListingContent` on the API path and sanitized at render — ' +
       'renderers never trust this document.',
-    description: 'Publisher-authored storefront copy. Same handling as `displayName`.',
     category:
       'The single legacy category. Publisher-chosen shelf placement; it ' +
       'orders a browse page and gates nothing.',
@@ -167,16 +171,6 @@ export const LISTING_CLIENT_WRITABLE_FIELDS: Readonly<Record<string, string>> =
     license:
       'An SPDX-ish label the publisher asserts about their own code. A claim ' +
       'shown to buyers, not a permission the platform grants.',
-    deletedAt:
-      'The unpublish/republish toggle — the ONE field the console writes ' +
-      'client-side, and the publisher\'s own decision to withdraw their ' +
-      'listing. Staff takedown is `hiddenAt`, which is denied precisely so ' +
-      'an owner cannot un-hide themselves.',
-    visibility:
-      'Private vs public (AGL-968). Genuinely the publisher\'s choice, and ' +
-      'it only ever NARROWS reach: a private plugin faces the identical ' +
-      'review bar, and the review gate a publisher might try to escape by ' +
-      'relabelling is closed by denying `artifactType`/`type`/`kind`.',
     pluginId:
       'The manifest id a plugin listing declares (AGL-45). Rewriting it ' +
       'breaks the publisher\'s own install resolution; the artifact that ' +

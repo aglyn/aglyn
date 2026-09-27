@@ -532,6 +532,8 @@ describe('a workflow of function calls', () => {
       result: 'succeeded',
       trigger: 'formSubmission',
       summary: 'Ran',
+      // The Runs table's search reads the summary's words (AGL-3321).
+      summaryTokens: ['r', 'ra', 'ran'],
       status: 'ok',
       durationMs: expect.any(Number),
       target: { type: 'workflow', id: 'wf-intake', name: 'Lead intake' },

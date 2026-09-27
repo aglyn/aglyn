@@ -61,7 +61,10 @@ triage list: filter by open/closed, reply as Aglyn staff, close or reopen.
 The marketplace review queue, plus a
 **Listed plugins — realm trust** table for granting or revoking
 [realm trust](../developers/plugins/guides/realm-bundles.md#granting-trust-staff)
-per version.
+per version. The search box finds a plugin by a word of its name, and the status menu
+narrows every section to **Submitted**, **In review**, **Listed**, **Verified** or
+**Taken down**; both answer over every plugin listing, not a first batch, and each
+section pages at its foot.
 Rejecting a version is a **verdict, not a kill**: it stops new installs, but a
 site already pinned to those bytes keeps running them. Where that has happened
 the review panel says so and offers **Stop this version**, the per-version kill

@@ -1,0 +1,369 @@
+{
+  "$comment": "Worked examples for listingQueryFields (libs/plugins/marketplace/src/lib/model/listing-query.ts) and its restatement in tools/scripts/lib/listing-query-fields.mjs. Asserted by listing-query.spec.ts and by backfill-marketplace-listing-search.mjs --self-test; change one only with the other (AGL-3321).",
+  "listings": [
+    {
+      "name": "a public component",
+      "listing": {
+        "displayName": "Promo Countdown",
+        "profileId": "org1",
+        "artifactType": "component",
+        "deletedAt": null
+      },
+      "expected": {
+        "nameLower": "promo countdown",
+        "nameTokens": [
+          "p",
+          "pr",
+          "pro",
+          "prom",
+          "promo",
+          "c",
+          "co",
+          "cou",
+          "coun",
+          "count",
+          "countd",
+          "countdo",
+          "countdow",
+          "countdown"
+        ],
+        "nameReversed": "nwodtnuoc omorp",
+        "browseAudience": [
+          "*",
+          "*|org1"
+        ],
+        "browseTokens": [
+          "*~p",
+          "*~pr",
+          "*~pro",
+          "*~prom",
+          "*~promo",
+          "*~c",
+          "*~co",
+          "*~cou",
+          "*~coun",
+          "*~count",
+          "*~countd",
+          "*~countdo",
+          "*~countdow",
+          "*~countdown",
+          "*|org1~p",
+          "*|org1~pr",
+          "*|org1~pro",
+          "*|org1~prom",
+          "*|org1~promo",
+          "*|org1~c",
+          "*|org1~co",
+          "*|org1~cou",
+          "*|org1~coun",
+          "*|org1~count",
+          "*|org1~countd",
+          "*|org1~countdo",
+          "*|org1~countdow",
+          "*|org1~countdown"
+        ],
+        "takenDown": false
+      }
+    },
+    {
+      "name": "a plugin waiting on review",
+      "listing": {
+        "displayName": "Office Hours",
+        "profileId": "org1",
+        "type": "plugin",
+        "artifactType": "plugin",
+        "reviewStatus": "submitted",
+        "deletedAt": null
+      },
+      "expected": {
+        "nameLower": "office hours",
+        "nameTokens": [
+          "o",
+          "of",
+          "off",
+          "offi",
+          "offic",
+          "office",
+          "h",
+          "ho",
+          "hou",
+          "hour",
+          "hours"
+        ],
+        "nameReversed": "sruoh eciffo",
+        "browseAudience": [
+          "org1",
+          "org1|org1"
+        ],
+        "browseTokens": [
+          "org1~o",
+          "org1~of",
+          "org1~off",
+          "org1~offi",
+          "org1~offic",
+          "org1~office",
+          "org1~h",
+          "org1~ho",
+          "org1~hou",
+          "org1~hour",
+          "org1~hours",
+          "org1|org1~o",
+          "org1|org1~of",
+          "org1|org1~off",
+          "org1|org1~offi",
+          "org1|org1~offic",
+          "org1|org1~office",
+          "org1|org1~h",
+          "org1|org1~ho",
+          "org1|org1~hou",
+          "org1|org1~hour",
+          "org1|org1~hours"
+        ],
+        "takenDown": false
+      }
+    },
+    {
+      "name": "a listed plugin",
+      "listing": {
+        "displayName": "Office Hours",
+        "profileId": "org1",
+        "type": "plugin",
+        "artifactType": "plugin",
+        "reviewStatus": "listed"
+      },
+      "expected": {
+        "nameLower": "office hours",
+        "nameTokens": [
+          "o",
+          "of",
+          "off",
+          "offi",
+          "offic",
+          "office",
+          "h",
+          "ho",
+          "hou",
+          "hour",
+          "hours"
+        ],
+        "nameReversed": "sruoh eciffo",
+        "browseAudience": [
+          "*",
+          "*|org1"
+        ],
+        "browseTokens": [
+          "*~o",
+          "*~of",
+          "*~off",
+          "*~offi",
+          "*~offic",
+          "*~office",
+          "*~h",
+          "*~ho",
+          "*~hou",
+          "*~hour",
+          "*~hours",
+          "*|org1~o",
+          "*|org1~of",
+          "*|org1~off",
+          "*|org1~offi",
+          "*|org1~offic",
+          "*|org1~office",
+          "*|org1~h",
+          "*|org1~ho",
+          "*|org1~hou",
+          "*|org1~hour",
+          "*|org1~hours"
+        ],
+        "takenDown": false
+      }
+    },
+    {
+      "name": "a legacy plugin with no verdict",
+      "listing": {
+        "displayName": "Old",
+        "profileId": "org2",
+        "type": "plugin"
+      },
+      "expected": {
+        "nameLower": "old",
+        "nameTokens": [
+          "o",
+          "ol",
+          "old"
+        ],
+        "nameReversed": "dlo",
+        "browseAudience": [
+          "*",
+          "*|org2"
+        ],
+        "browseTokens": [
+          "*~o",
+          "*~ol",
+          "*~old",
+          "*|org2~o",
+          "*|org2~ol",
+          "*|org2~old"
+        ],
+        "takenDown": false
+      }
+    },
+    {
+      "name": "a verified plugin taken down",
+      "listing": {
+        "displayName": "Bad Actor",
+        "profileId": "org3",
+        "artifactType": "plugin",
+        "reviewStatus": "listed",
+        "hiddenAt": {
+          "seconds": 1
+        }
+      },
+      "expected": {
+        "nameLower": "bad actor",
+        "nameTokens": [
+          "b",
+          "ba",
+          "bad",
+          "a",
+          "ac",
+          "act",
+          "acto",
+          "actor"
+        ],
+        "nameReversed": "rotca dab",
+        "browseAudience": [
+          "org3",
+          "org3|org3"
+        ],
+        "browseTokens": [
+          "org3~b",
+          "org3~ba",
+          "org3~bad",
+          "org3~a",
+          "org3~ac",
+          "org3~act",
+          "org3~acto",
+          "org3~actor",
+          "org3|org3~b",
+          "org3|org3~ba",
+          "org3|org3~bad",
+          "org3|org3~a",
+          "org3|org3~ac",
+          "org3|org3~act",
+          "org3|org3~acto",
+          "org3|org3~actor"
+        ],
+        "takenDown": true
+      }
+    },
+    {
+      "name": "a private plugin",
+      "listing": {
+        "displayName": "Internal",
+        "profileId": "org1",
+        "artifactType": "plugin",
+        "reviewStatus": "listed",
+        "visibility": "private"
+      },
+      "expected": {
+        "nameLower": "internal",
+        "nameTokens": [
+          "i",
+          "in",
+          "int",
+          "inte",
+          "inter",
+          "intern",
+          "interna",
+          "internal"
+        ],
+        "nameReversed": "lanretni",
+        "browseAudience": [],
+        "browseTokens": [],
+        "takenDown": false
+      }
+    },
+    {
+      "name": "an unpublished listing",
+      "listing": {
+        "displayName": "Gone",
+        "profileId": "org1",
+        "artifactType": "theme",
+        "deletedAt": {
+          "seconds": 5
+        }
+      },
+      "expected": {
+        "nameLower": "gone",
+        "nameTokens": [
+          "g",
+          "go",
+          "gon",
+          "gone"
+        ],
+        "nameReversed": "enog",
+        "browseAudience": [],
+        "browseTokens": [],
+        "takenDown": false
+      }
+    },
+    {
+      "name": "a template with no publisher",
+      "listing": {
+        "displayName": "  Starter   Site ",
+        "kind": "template"
+      },
+      "expected": {
+        "nameLower": "starter site",
+        "nameTokens": [
+          "s",
+          "st",
+          "sta",
+          "star",
+          "start",
+          "starte",
+          "starter",
+          "si",
+          "sit",
+          "site"
+        ],
+        "nameReversed": "etis retrats",
+        "browseAudience": [
+          "*"
+        ],
+        "browseTokens": [
+          "*~s",
+          "*~st",
+          "*~sta",
+          "*~star",
+          "*~start",
+          "*~starte",
+          "*~starter",
+          "*~si",
+          "*~sit",
+          "*~site"
+        ],
+        "takenDown": false
+      }
+    },
+    {
+      "name": "a listing with no name",
+      "listing": {
+        "profileId": "org4",
+        "artifactType": "layout"
+      },
+      "expected": {
+        "nameLower": "",
+        "nameTokens": [],
+        "nameReversed": "",
+        "browseAudience": [
+          "*",
+          "*|org4"
+        ],
+        "browseTokens": [],
+        "takenDown": false
+      }
+    }
+  ]
+}

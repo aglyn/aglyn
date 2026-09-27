@@ -444,8 +444,23 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
      * `product.$id` is still the doc path below — reading the synthetic key
      * is what it is for. Writing it is the bug.
      */
-    const seeded = current as typeof current & { $id?: string }
-    const { $id: _syntheticId, ...currentFields } = seeded
+    const seeded = current as typeof current & {
+      $id?: string
+      skus?: string[]
+      barcodes?: string[]
+    }
+    /*
+     * The seed's `skus` / `barcodes` are dropped too (AGL-3321):
+     * `productSearchFields` below OMITS each when no variant has one, so a
+     * seeded copy would survive a save that removed the last SKU, and the
+     * product would go on answering a SKU filter for a code it no longer has.
+     */
+    const {
+      $id: _syntheticId,
+      skus: _seededSkus,
+      barcodes: _seededBarcodes,
+      ...currentFields
+    } = seeded
     const base = {
       ...currentFields,
       /*
@@ -461,7 +476,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
       }),
       slug: current.slug || CommerceModel.commerceSlug(current.name),
       priceUsd: primaryVariant?.priceUsd ?? 0,
-      inventory: CommerceModel.productInventory(current),
+      ...CommerceModel.productStockFields({
+        variants: current.variants,
+        oversellPolicy: current.oversellPolicy,
+      }),
       imageUrl: current.mediaUrls?.[0] ?? current.imageUrl ?? null,
       updatedAtMs: Date.now(),
     }
@@ -530,6 +548,10 @@ export function ProductEditorDialog(props: ProductEditorDialogProps) {
               {
                 ...withoutHolds,
                 ...(liveHolds ? { stockHolds: liveHolds } : {}),
+                // The editor edits a LIVE product, and the products table
+                // lists only `deletedAt == null` (AGL-3321): a replace whose
+                // seed lacked the field would take the product off the list.
+                deletedAt: null,
                 updatedAt: Timestamp.now(),
               },
               { merge: false },

@@ -4116,8 +4116,9 @@ service cloud.firestore {
 
     // Listings are public reads. Creates and version snapshots happen ONLY
     // through the publish API (Admin SDK, server-side sanitization) — no
-    // client create. Owners may update/delete their own listing metadata
-    // (unpublish via deletedAt); staff may moderate anything.
+    // client create. Owners may update the publisher-authored copy the
+    // deny-list below leaves them, and delete; staff may moderate anything.
+    // Unpublishing moved to the API with AGL-3321 (`set-published`).
     match /marketplaceListings/{listingId} {
       allow read: if true;
       allow create: if false;
@@ -4133,7 +4134,7 @@ service cloud.firestore {
           get(/databases/$(database)/documents/orgs/$(resource.data.profileId)/members/$(request.auth.uid))
             .data.role in ['owner', 'admin'];
       }
-      // Owners toggle metadata (deletedAt un/republish) client-side, but
+      // Owners may write their listing's copy client-side, but
       // must NOT touch server-managed fields (AGL-503): installCount is
       // incremented by the install API (ranking integrity), priceUsd gates
       // purchases, and profileId is the ownership key. The review verdict is
@@ -4238,7 +4239,24 @@ service cloud.firestore {
                      // `/api/marketplace/publish-plugin` (`update-listing`),
                      // and the only client write to a listing in the repo is
                      // the unpublish toggle, which writes `deletedAt` alone.
-                     'logoUrl', 'screenshots']));
+                     'logoUrl', 'screenshots',
+                     // What the marketplace lists QUERY by (AGL-3321): the
+                     // name's search keys, who browse shows the listing to
+                     // and its search tokens under each audience, and the
+                     // staff queue's takedown flag. Derived by the server
+                     // from the listing as stored, after every write — a
+                     // publisher who could write `browseAudience` could put
+                     // an unreviewed plugin on the public shelf.
+                     'nameLower', 'nameTokens', 'nameReversed',
+                     'browseAudience', 'browseTokens', 'takenDown',
+                     // …and three fields they are derived FROM, which this
+                     // block used to leave to the owner. The name, the
+                     // unpublish toggle and private/public now go through
+                     // `/api/marketplace/publish-plugin` (`update-listing`,
+                     // `set-published`, `set-visibility`), which re-derive
+                     // the fields above; a client write of any of them
+                     // would leave a stale audience or a stale search key.
+                     'displayName', 'deletedAt', 'visibility']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/marketplace/install, which

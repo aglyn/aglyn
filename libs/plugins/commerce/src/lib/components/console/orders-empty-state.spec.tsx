@@ -53,11 +53,26 @@ const PRODUCT = {
  */
 let products: any[] = []
 
+/*
+ * The list's query (AGL-3321), answered by the contract's double over a store
+ * that has never taken an order — that emptiness IS the fixture.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => useListQueryDouble(() => [], options),
+  }
+})
+
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...path: string[]) => path.join('/'),
   query: (ref: string) => ref,
   limit: () => undefined,
   orderBy: () => undefined,
+  where: () => undefined,
   documentId: () => '__name__',
 }))
 
@@ -85,11 +100,9 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
    */
   useOrgPlan: () => ORG_PLAN,
   useUser: () => ({ data: { uid: 'uid-1', getIdToken: async () => 'token' } }),
-  useFirestoreCollection: (build: () => string) => {
+  useFirestoreCollection: (build: () => string | null) => {
     const path = build()
-    if (path.endsWith('/products')) return { data: products }
-    // The point of the fixture: this host has never taken an order.
-    if (path.endsWith('/orders')) return { data: [] }
+    if (path?.endsWith('/products')) return { data: products }
     return { data: [] }
   },
 }))

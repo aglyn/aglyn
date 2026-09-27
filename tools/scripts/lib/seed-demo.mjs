@@ -40,9 +40,13 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { datasetFilterFields, effectiveModel } from './record-filter-keys.mjs'
 import { buildHomeNodes } from './demo-brands.mjs'
 import { putMediaDocument } from './media-counter.mjs'
+import { listingQueryFields } from './listing-query-fields.mjs'
+import { seedSendId } from './org-campaign-backfill.mjs'
+import { orderListFieldsOf } from '../backfill-orders-list-fields.mjs'
+import { productListFieldsOf } from '../backfill-products-list-fields.mjs'
+import { giftCardSearchTokens } from '../backfill-gift-card-search-tokens.mjs'
 import { displayNameSearchFields, nameSearchTokens } from './name-search-tokens.mjs'
 import { withCrmListFields } from './org-record-list-fields.mjs'
-import { seedSendId } from './org-campaign-backfill.mjs'
 
 /** Every host subcollection the seeder writes into. Order is cosmetic. */
 export const HOST_SEEDED_COLLECTIONS = [
@@ -101,6 +105,18 @@ const SCREEN_ROOT_PATH = '/'
 /** `nameLower` normalization, mirroring `membershipRow`. */
 export const nameLower = (value) =>
   String(value).trim().replace(/\s+/g, ' ').toLowerCase()
+
+/**
+ * Every field the products lists scope, order, search and filter a product by
+ * (AGL-3321) — `deletedAt: null`, the name, SKU and price keys, the In stock
+ * verdict — as the products backfill derives them, so a seeded product is in
+ * the console table and the storefront grid exactly as a written one is.
+ *
+ * @param {Record<string, unknown>} product the product as it will be stored
+ */
+export function productListFields(product) {
+  return productListFieldsOf(product)
+}
 
 /**
  * Deletes the `seed-…` documents (and their subcollections) under a host and,
@@ -369,6 +385,7 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
       const url = `https://picsum.photos/seed/${imageSeed}`
       await put(hostRef.collection('products').doc(id), {
         ...fields,
+        ...productListFields({ ...fields, status: 'active' }),
         status: 'active',
         // Flat legacy fields alongside the structured `variants`, so every
         // surface renders without a lift step.
@@ -382,6 +399,8 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
       const { id, ...fields } = order
       await put(hostRef.collection('orders').doc(id), {
         ...fields,
+        // The fields the orders list queries by (AGL-3321).
+        ...orderListFieldsOf(fields, id),
         createdAtMs: nowMs,
         createdAt: now,
       })
@@ -399,7 +418,14 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
     }
     for (const card of c.giftCards ?? []) {
       const { id, ...fields } = card
-      await put(hostRef.collection('giftCards').doc(id), { ...fields, createdAt: now })
+      // `createdAtMs` is the Gift cards card's order and `searchTokens` its
+      // search (AGL-3321); a card without either never lists or never matches.
+      await put(hostRef.collection('giftCards').doc(id), {
+        ...fields,
+        searchTokens: giftCardSearchTokens(id, fields.recipientEmail),
+        createdAt: now,
+        createdAtMs: Date.now(),
+      })
     }
     for (const review of c.reviews ?? []) {
       const { id, ...fields } = review
@@ -643,20 +669,24 @@ export async function seedMarketplaceListing({ firestore, log }) {
     log?.('Not the emulator — skipped the platform-global marketplace listing.')
     return
   }
+  const listing = {
+    displayName: 'Hero banner',
+    description: 'A reusable hero section with a headline and CTA.',
+    category: 'Sections',
+    latestVersion: 1,
+    installCount: 4,
+    ratingAverage: null,
+    priceUsd: 0,
+    deletedAt: null,
+  }
   await firestore
     .collection('marketplaceListings')
     .doc('seed-listing-hero')
     .set(
       {
-        displayName: 'Hero banner',
-        // The keys the template gallery's marketplace shelf searches (AGL-3321).
-        ...displayNameSearchFields('Hero banner'),
-        description: 'A reusable hero section with a headline and CTA.',
-        category: 'Sections',
-        latestVersion: 1,
-        installCount: 4,
-        priceUsd: 0,
-        deletedAt: null,
+        ...listing,
+        // What browse and the staff queue query by (AGL-3321).
+        ...listingQueryFields(listing),
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       },

@@ -103,6 +103,32 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
 /** The quota-enforcing create path, so a NEW product is distinguishable. */
 const mockCreateResource = jest.fn().mockResolvedValue({ id: 'prod-new' })
 
+/*
+ * The hub's table is its query (AGL-3321): answered by the contract's double
+ * over the same products, stamped the way every writer stamps them.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => ({
+      ...useListQueryDouble(
+        () =>
+          (collections['products'] ?? []).map((product) => ({
+            ...product,
+            deletedAt: product['deletedAt'] ?? null,
+            nameLower: String(product['name'] ?? '').toLowerCase(),
+          })),
+        options,
+      ),
+      status: listener.status,
+      fromCache: listener.fromCache,
+    }),
+  }
+})
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // The real hook resolves through two async `getDoc` round-trips, so it
   // returns nulls on first render and these specs never await past that.

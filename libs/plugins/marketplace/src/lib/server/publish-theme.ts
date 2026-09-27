@@ -27,6 +27,7 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { marketplacePriceRefusal } from '../model/marketplace'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { refreshListingQueryFields } from './listing-query-fields'
 
 /**
  * Publishes a site's theme to the marketplace (AGL-1020).
@@ -168,6 +169,8 @@ export const publishThemeHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    // The lists this listing appears in query by fields derived from it (AGL-3321).
+    await refreshListingQueryFields(listingRef)
     await listingRef.collection('versions').doc(String(version)).set({
       theme,
       publishedAt: now,

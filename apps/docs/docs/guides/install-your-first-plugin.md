@@ -61,6 +61,17 @@ one, you're in the wrong section. [More on the split](../developers/plugins/over
 catalog only — clicking one takes you to its **detail page**, which is the only
 place an install can happen. You cannot install by accident from the grid.
 
+The controls answer over the whole marketplace, not the cards already on screen:
+
+- **Search components** finds a listing by a word of its name. It matches one word at
+  a time, from the start of the word (`count` finds *Promo Countdown*).
+- **The category chips** show one category's listings; click the chip again to clear it.
+- **The sort menu** orders by **Newest**, **Most installed** or **Highest rated**
+  (listings nobody has rated come last).
+
+The grid pages at the bottom. Your own organization's listings still waiting on
+review appear here too, so you can watch a submission move through review.
+
 Two things on a card are worth reading before you click into one:
 
 - **The price chip.** Every card has one. A paid listing shows `$29`; a free one shows

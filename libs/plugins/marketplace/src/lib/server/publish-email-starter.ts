@@ -35,6 +35,7 @@ import {
 } from '../model'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { refreshListingQueryFields } from './listing-query-fields'
 
 /**
  * Publishes a site's campaign email design as a marketplace starter.
@@ -233,6 +234,8 @@ export const publishEmailStarterHandler: PluginApiHandler = async (req, res) => 
       },
       { merge: true },
     )
+    // The lists this listing appears in query by fields derived from it (AGL-3321).
+    await refreshListingQueryFields(listingRef)
     await listingRef
       .collection('versions')
       .doc(String(version))

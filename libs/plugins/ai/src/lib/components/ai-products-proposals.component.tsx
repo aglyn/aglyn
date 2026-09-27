@@ -37,6 +37,12 @@ import { isAiJobMoving } from './use-ai-products-jobs'
  * write is one the hub makes when a person asks for it — Apply, Apply to all,
  * Create drafts, Create selected — and the hub passes over what the site
  * already has, so a proposal applied twice creates nothing twice.
+ *
+ * Each table is one job's whole answer, held in hand and capped by the job
+ * (`AI_PRODUCTS_BULK_MAX`, `AI_CATEGORIES_MAX`, `AI_DISCOUNTS_MAX`, a dozen
+ * proposed products), so none offers a Filters panel or a search box: a
+ * bounded readout is read whole, and a grid that filtered the rows it holds
+ * is the pattern every list is leaving (AGL-3321).
  */
 
 /** A column of a review table, in the shared list table's own terms. */
@@ -158,7 +164,7 @@ export function AiBulkCopyReview(props: {
     <Stack spacing={1} aria-label="Proposed product copy">
       <Typography variant="subtitle2">{`Product copy · ${proposals.length} of ${asked}`}</Typography>
       <JobState job={job} doing={`Writing copy: ${proposals.length} of ${asked}`} />
-      {tableRows.length ? <ListTable rows={tableRows} columns={columns} hideFooter quickFilter={false} /> : null}
+      {tableRows.length ? <ListTable rows={tableRows} columns={columns} hideFooter disableColumnFilter quickFilter={false} /> : null}
       {gaps ? (
         <Alert severity="warning">
           {`${gaps} ${gaps === 1 ? 'description marks' : 'descriptions mark'} facts in [brackets] to fill in before you publish.`}
@@ -292,6 +298,7 @@ export function AiCatalogReview(props: {
             rows={rows}
             columns={columns}
             hideFooter
+            disableColumnFilter
             quickFilter={false}
             getRowHeight={() => 'auto'}
             selectable={{ selected: chosen, onChange: setSelected }}
@@ -408,6 +415,7 @@ export function AiCategoriesReview(props: {
           rows={categoryRows}
           columns={categoryColumns}
           hideFooter
+          disableColumnFilter
           quickFilter={false}
           selectable={{ selected: chosenCategories, onChange: setCategories }}
         />
@@ -417,6 +425,7 @@ export function AiCategoriesReview(props: {
           rows={discountRows}
           columns={discountColumns}
           hideFooter
+          disableColumnFilter
           quickFilter={false}
           selectable={{ selected: chosenDiscounts, onChange: setDiscounts }}
         />

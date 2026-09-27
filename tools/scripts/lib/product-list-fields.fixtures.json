@@ -1,0 +1,95 @@
+{
+  "keys": [
+    {
+      "product": { "name": "Acme Coffee" },
+      "expected": {
+        "nameLower": "acme coffee",
+        "nameTokens": ["a", "ac", "acm", "acme", "c", "co", "cof", "coff", "coffe", "coffee"],
+        "nameReversed": "eeffoc emca"
+      }
+    },
+    {
+      "product": {
+        "name": "  Walnut   Desk ",
+        "variants": [
+          { "id": "a", "priceUsd": 10, "sku": " ABC-123 ", "barcode": "0012345" },
+          { "id": "b", "priceUsd": 8.5, "sku": "abc-123" },
+          { "id": "c", "priceUsd": 12, "sku": "DEF-456", "barcode": "" }
+        ]
+      },
+      "expected": {
+        "nameLower": "walnut desk",
+        "nameTokens": ["w", "wa", "wal", "waln", "walnu", "walnut", "d", "de", "des", "desk"],
+        "nameReversed": "ksed tunlaw",
+        "skus": ["abc-123", "def-456"],
+        "barcodes": ["0012345"],
+        "priceFromCents": 850
+      }
+    },
+    {
+      "product": { "name": "Supercalifragilistic mug", "variants": [{ "id": "a", "priceUsd": 4 }] },
+      "expected": {
+        "nameLower": "supercalifragilistic mug",
+        "nameTokens": [
+          "s", "su", "sup", "supe", "super", "superc", "superca", "supercal", "supercali", "supercalif",
+          "supercalifr", "supercalifra", "m", "mu", "mug"
+        ],
+        "nameReversed": "gum citsiligarfilacrepus",
+        "priceFromCents": 400
+      }
+    },
+    {
+      "product": { "name": "Unpriced draft", "variants": [{ "id": "a" }, { "id": "b", "priceUsd": -1 }] },
+      "expected": {
+        "nameLower": "unpriced draft",
+        "nameTokens": ["u", "un", "unp", "unpr", "unpri", "unpric", "unprice", "unpriced", "d", "dr", "dra", "draf", "draft"],
+        "nameReversed": "tfard decirpnu",
+        "priceFromCents": 0
+      }
+    },
+    {
+      "product": { "name": "" },
+      "expected": { "nameLower": "", "nameTokens": [], "nameReversed": "" }
+    }
+  ],
+  "stock": [
+    {
+      "product": { "variants": [{ "id": "a", "priceUsd": 1 }, { "id": "b", "priceUsd": 1, "inventory": null }] },
+      "expected": { "inventory": null, "soldOut": false }
+    },
+    {
+      "product": { "variants": [{ "id": "a", "priceUsd": 1, "inventory": 2 }, { "id": "b", "priceUsd": 1, "inventory": 0 }] },
+      "expected": { "inventory": 2, "soldOut": false }
+    },
+    {
+      "product": { "variants": [{ "id": "a", "priceUsd": 1, "inventory": 0 }, { "id": "b", "priceUsd": 1 }] },
+      "expected": { "inventory": 0, "soldOut": true }
+    },
+    {
+      "product": { "oversellPolicy": "backorder", "variants": [{ "id": "a", "priceUsd": 1, "inventory": 0 }] },
+      "expected": { "inventory": 0, "soldOut": false }
+    },
+    {
+      "product": { "oversellPolicy": "deny", "variants": [{ "id": "a", "priceUsd": 1, "inventory": -2 }] },
+      "expected": { "inventory": -2, "soldOut": true }
+    }
+  ],
+  "lift": [
+    {
+      "product": { "name": "Old tee", "priceUsd": 5 },
+      "expected": { "status": "active", "type": "physical", "nameLower": "old tee", "priceFromCents": 500, "soldOut": false }
+    },
+    {
+      "product": { "name": "Old mug", "status": "draft", "type": "digital", "variants": [], "priceUsd": 7.25, "inventory": 0 },
+      "expected": { "status": "draft", "type": "digital", "nameLower": "old mug", "priceFromCents": 725, "soldOut": true }
+    },
+    {
+      "product": { "priceUsd": "oops" },
+      "expected": { "status": "active", "type": "physical", "nameLower": "product", "priceFromCents": 0, "soldOut": false }
+    },
+    {
+      "product": { "name": "New cap", "variants": [{ "id": "a", "priceUsd": 9 }] },
+      "expected": { "status": null, "type": null, "nameLower": "new cap", "priceFromCents": 900, "soldOut": false }
+    }
+  ]
+}

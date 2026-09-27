@@ -23,6 +23,10 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
+import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { MARKETPLACE_REPORTS_QUERY } from '../model/listing-query'
 
 /**
  * The staff end of the marketplace report button (AGL-2310), served at
@@ -66,6 +70,9 @@ import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token
 const REPORTS_COLLECTION = 'marketplaceReports'
 
 const REPORT_ID = /^[a-f0-9]{40}$/
+
+/** How many reports one read of the queue returns. */
+const REPORTS_WINDOW = 200
 
 const asString = (value: unknown): string | null =>
   typeof value === 'string' && value ? value : null
@@ -113,24 +120,34 @@ async function handler(request: Request): Promise<Response> {
 
     if (method === 'GET') {
       /**
-       * Ordered by `updatedAt`, filtered by status in JS.
+       * Status on the QUERY, newest activity first (AGL-3321).
        *
-       * A `where('status','==',…)` beside this ordering is a composite index,
-       * and a composite deploys by hand outside the git pipeline — the queue
-       * would have shipped ahead of its index and thrown FAILED_PRECONDITION
-       * on the one surface that exists to be read. The window is small enough
-       * that filtering it here costs nothing.
+       * It was matched in JS over the newest two hundred reports, so an open
+       * report older than two hundred newer ones of any status was not in the
+       * Open queue at all — the one list whose job is not to lose a report.
+       * `MARKETPLACE_REPORTS_QUERY` puts it on the query, served by the
+       * `(status, updatedAt DESC)` composite its spec pins. `report.ts` has
+       * written `status` and `updatedAt` on every report since the button
+       * shipped, so the order drops none. A queue longer than its window says
+       * so (`more`) instead of reading as complete.
        */
       const requested = String(query?.['status'] ?? '')
-      const snapshot = await collection
-        .orderBy('updatedAt', 'desc')
-        .limit(200)
+      const plan = planListQuery(
+        MARKETPLACE_REPORTS_QUERY,
+        {
+          clauses: requested
+            ? [{ field: 'status', op: 'equals', value: requested }]
+            : [],
+        },
+        nameSearchNormalizers,
+      )
+      const snapshot = await applyListQuery(collection, plan)
+        .limit(REPORTS_WINDOW + 1)
         .get()
-        // Reports written before `updatedAt` existed still have to appear —
-        // an ordering that silently drops rows is how a queue reads as empty.
-        .catch(() => collection.limit(200).get())
+      const more = snapshot.docs.length > REPORTS_WINDOW
 
       const reports = snapshot.docs
+        .slice(0, REPORTS_WINDOW)
         .map((doc) => {
           const data = doc.data() as Record<string, unknown>
           return {
@@ -154,11 +171,11 @@ async function handler(request: Request): Promise<Response> {
             updatedAtMs: asMillis(data['updatedAt']),
           }
         })
-        .filter((report) => !requested || report.status === requested)
 
       return Response.json(
         {
           reports,
+          more,
           actorRole: showIdentity ? 'super' : 'support',
           identityVisible: showIdentity,
           statuses: Aglyn.ABUSE_REPORT_STATUSES,

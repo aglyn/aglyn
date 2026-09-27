@@ -32,6 +32,7 @@ import {
 import { sanitizeMarketplaceProps } from '../model/marketplace-props'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { refreshListingQueryFields } from './listing-query-fields'
 
 /** The node marking where a bound screen's content grafts in. */
 const LAYOUT_SLOT_COMPONENT_ID = 'layoutSlot'
@@ -236,6 +237,8 @@ export const publishLayoutHandler: PluginApiHandler = async (req, res) => {
       },
       { merge: true },
     )
+    // The lists this listing appears in query by fields derived from it (AGL-3321).
+    await refreshListingQueryFields(listingRef)
     await listingRef.collection('versions').doc(String(version)).set({
       // `props` is always a list, even an empty one: install and update read a
       // version with none as one published before properties were carried.

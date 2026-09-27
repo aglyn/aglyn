@@ -39,10 +39,11 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useMemo } from 'react'
 import * as CommerceModel from '../../model'
+import { productSlugLedger } from './product-slugs'
 
 /**
- * The products hub's zone (AGL-2916): the hub's catalog rows, and the writes a
- * widget there may ask the hub to make. A widget proposes; these are the
+ * The products hub's zone (AGL-2916): the page of catalog rows the hub's table
+ * shows, and the writes a widget there may ask the hub to make. A widget proposes; these are the
  * hub's writes, each through the door the hub's own controls use.
  *
  * - **Copy onto a saved product** is a transaction over the product as the
@@ -61,8 +62,9 @@ import * as CommerceModel from '../../model'
  * name, a category of the same name, a discount with the same code or, with no
  * code, the same name — so a proposal applied twice, by anyone, creates
  * nothing twice. Each check is a read made when a person applies, never while
- * the hub is open, and reaches past the hub's filtered, ceilinged rows: a
- * product is looked up by its search key.
+ * the hub is open, and reaches past the page the hub shows: a product is
+ * looked up by its search key, and its slug by the slugs it could take
+ * (`productSlugLedger`, AGL-3321).
  */
 
 type ProductRow = CommerceModel.HostProduct & { $id: string }
@@ -72,7 +74,11 @@ export type ProductsRoomCheck = (count: number) => { allowed: boolean; limit: nu
 
 export interface ProductsHubZoneProps {
   hostId: string
-  /** The catalog rows the hub holds. */
+  /**
+   * The page of catalog rows the hub's table shows, in its order — the
+   * products its filters and search matched, one page at a time (AGL-3321).
+   * Never the catalog: nothing here decides what exists from these rows.
+   */
   products: readonly ProductRow[]
   roomFor: ProductsRoomCheck
   lastImport: ConsoleProductsHubZoneProps['lastImport']
@@ -91,6 +97,9 @@ const nameKey = (name: string) => name.replace(/\s+/g, ' ').trim().toLowerCase()
 
 /** The most values one Firestore `in` clause takes. */
 const IN_CLAUSE_MAX = 10
+
+/** No slug taken: a draft's own base slug, before the store is asked. */
+const NO_SLUGS: ReadonlySet<string> = new Set()
 
 export function ProductsHubZone(props: ProductsHubZoneProps) {
   const { hostId, products, roomFor, lastImport, onCreated } = props
@@ -127,7 +136,8 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
 
   const createProductDrafts = useCallback(
     async (proposals: readonly ConsoleProposedProduct[]) => {
-      const held = new Set(products.map((product) => nameKey(product.name)))
+      // What exists is asked of the store, never read off the page on screen.
+      const held = new Set<string>()
       const searchKeys = [
         ...new Set(proposals.map((proposal) => CommerceModel.productSearchFields({ name: proposal.name.trim() }).nameLower)),
       ].filter(Boolean)
@@ -157,13 +167,18 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
             `${room.limit}. See Billing to upgrade.`,
         )
       }
-      const taken = new Set(products.map((product) => product.slug))
+      // Each draft's slug is asked of the store: the base slug its name makes,
+      // then `-2`, `-3`, … until one no product holds, live or deleted.
+      const slugs = productSlugLedger(firestore, hostId)
       const created: string[] = []
       try {
-        for (const proposal of fresh) {
-          const draft = CommerceModel.unpricedProductDraft(proposal, taken, Date.now())
-          taken.add(draft.slug)
-          const { id } = await createHostResource({ hostId, resource: 'product', data: draft })
+        const drafts = fresh.map((proposal) =>
+          CommerceModel.unpricedProductDraft(proposal, NO_SLUGS, Date.now()),
+        )
+        await slugs.ask(drafts.map((draft) => draft.slug))
+        for (const draft of drafts) {
+          const slug = await slugs.claim(draft.slug)
+          const { id } = await createHostResource({ hostId, resource: 'product', data: { ...draft, slug } })
           created.push(id)
         }
       } finally {
@@ -171,7 +186,7 @@ export function ProductsHubZone(props: ProductsHubZoneProps) {
       }
       return created
     },
-    [products, roomFor, createHostResource, firestore, hostId, onCreated],
+    [roomFor, createHostResource, firestore, hostId, onCreated],
   )
 
   const createCategories = useCallback(

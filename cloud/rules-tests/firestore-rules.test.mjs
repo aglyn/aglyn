@@ -3605,22 +3605,23 @@ describe('hosts', () => {
         { uid: VIEWER, rating: 5 },
       )
     })
-    // An org manager may edit their own listing's metadata.
+    // An org manager may edit their own listing's metadata. (Its copy — the
+    // name is written through the publish API since AGL-3321.)
     await assertSucceeds(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-rated'), {
-        displayName: 'Renamed',
+        description: 'Reworded',
       }),
     )
     // A non-manager member of the same org may not.
     await assertFails(
       updateDoc(doc(authed(VIEWER), 'marketplaceListings', 'listing-rated'), {
-        displayName: 'Nope',
+        description: 'Nope',
       }),
     )
     // Nor may an outsider.
     await assertFails(
       updateDoc(doc(authed(OUTSIDER), 'marketplaceListings', 'listing-rated'), {
-        displayName: 'Nope',
+        description: 'Nope',
       }),
     )
     // Even the owner cannot invent a rating. Values must DIFFER from the
@@ -5628,9 +5629,32 @@ describe('pre-release hardening guards', () => {
   })
 
   it('listing owner cannot tamper server-managed fields (AGL-503)', async () => {
-    await assertSucceeds(
-      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), { deletedAt: new Date() }),
-    )
+    // Unpublishing, renaming and going private go through the publish API
+    // since AGL-3321, which re-derives what the marketplace lists query by.
+    for (const field of [
+      { deletedAt: new Date() },
+      { displayName: 'Plugin v2' },
+      { visibility: 'public' },
+    ]) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),
+      )
+    }
+    // The derived fields themselves (AGL-3321): `browseAudience` decides who
+    // browse shows a listing to, so a publisher who could write it could put
+    // an unreviewed plugin on the public shelf.
+    for (const field of [
+      { browseAudience: ['*'] },
+      { browseTokens: ['*~plug'] },
+      { nameTokens: ['p'] },
+      { nameLower: 'plugin' },
+      { nameReversed: 'nigulp' },
+      { takenDown: false },
+    ]) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),
+      )
+    }
     await assertFails(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), { installCount: 9999 }),
     )
@@ -5708,12 +5732,12 @@ describe('pre-release hardening guards', () => {
     // the deny-list is that it names what is server-owned, not everything.
     await assertSucceeds(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
-        displayName: 'Plugin v2', readme: '# Docs', license: 'MIT',
+        description: 'Plugin v2', readme: '# Docs', license: 'MIT',
       }),
     )
     // Non-owners still can't touch someone else's listing.
     await assertFails(
-      updateDoc(doc(authed(EDITOR), 'marketplaceListings', LISTING), { deletedAt: new Date() }),
+      updateDoc(doc(authed(EDITOR), 'marketplaceListings', LISTING), { readme: '# Mine' }),
     )
   })
 

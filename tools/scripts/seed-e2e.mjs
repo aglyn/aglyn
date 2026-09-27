@@ -50,6 +50,7 @@ import { datasetFilterFields, effectiveModel } from './lib/record-filter-keys.mj
 import { readLegalDocumentVersion } from './lib/legal-document-version.mjs'
 import { withCrmListFields } from './lib/org-record-list-fields.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
+import { listingQueryFieldsPatch } from './lib/listing-query-fields.mjs'
 import { listMemberSearchTokens } from './lib/email-search-tokens.mjs'
 import { displayNameSearchFields, nameSearchTokens } from './lib/name-search-tokens.mjs'
 
@@ -1318,7 +1319,14 @@ await put(
 // exercise. The sha matches tools/plugin-loader/realm/demo's bundle when
 // that has been built; install tests re-seed the sha as needed.
 const demoListing = firestore.collection('marketplaceListings').doc('realm-demo')
-await put(demoListing, {
+// What browse and the staff queue query by (AGL-3321), as every listing
+// writer stamps it; `latestVersionReviewState` is the summary the queue's
+// Awaiting review asks for, and this version has no verdict yet.
+const withListingQueryFields = (listing) => ({
+  ...listing,
+  ...listingQueryFieldsPatch(listing),
+})
+await put(demoListing, withListingQueryFields({
   type: 'plugin',
   profileId: 'seed-publisher',
   pluginId: 'realm-demo',
@@ -1335,10 +1343,11 @@ await put(demoListing, {
   license: 'MIT',
   priceUsd: 0,
   latestVersion: '1.0.0',
+  latestVersionReviewState: 'pending',
   deletedAt: null,
   reviewStatus: 'listed',
   createdAt: now,
-})
+}))
 await put(demoListing.collection('pluginVersions').doc('1.0.0'), {
   version: '1.0.0',
   sha256: 'seed-sha-placeholder',
@@ -1355,7 +1364,7 @@ await put(demoListing.collection('pluginVersions').doc('1.0.0'), {
 })
 
 // A submitted listing so the staff review queue (AGL-432) has content.
-await put(firestore.collection('marketplaceListings').doc('pending-review'), {
+await put(firestore.collection('marketplaceListings').doc('pending-review'), withListingQueryFields({
   type: 'plugin',
   profileId: 'seed-publisher',
   pluginId: 'pending-review',
@@ -1364,10 +1373,11 @@ await put(firestore.collection('marketplaceListings').doc('pending-review'), {
   license: 'MIT',
   priceUsd: 0,
   latestVersion: '0.1.0',
+  latestVersionReviewState: 'pending',
   deletedAt: null,
   reviewStatus: 'submitted',
   createdAt: now,
-})
+}))
 await put(
   firestore
     .collection('marketplaceListings')

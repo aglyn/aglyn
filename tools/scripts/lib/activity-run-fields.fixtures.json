@@ -1,0 +1,196 @@
+{
+  "note": "Worked examples for completing a run entry in hosts/{hostId}/activity (AGL-3321). Asserted by libs/plugins/workflows/src/lib/model/run-history.spec.ts against runEntryCompletion, and by tools/scripts/backfill-activity-run-fields.mjs --self-test against its own copy. Regenerate only from the library, never by hand.",
+  "cases": [
+    {
+      "name": "a legacy success is completed from its prose",
+      "entry": {
+        "action": "Action ran on formSubmission"
+      },
+      "expected": {
+        "result": "succeeded",
+        "trigger": "formSubmission",
+        "summary": "Ran",
+        "summaryTokens": [
+          "r",
+          "ra",
+          "ran"
+        ]
+      }
+    },
+    {
+      "name": "a legacy failure keeps what failed as its summary",
+      "entry": {
+        "action": "Action ran on orderPaid with errors: Step 2: webhook 500"
+      },
+      "expected": {
+        "result": "failed",
+        "trigger": "orderPaid",
+        "summary": "Step 2: webhook 500",
+        "summaryTokens": [
+          "s",
+          "st",
+          "ste",
+          "step",
+          "2",
+          "2:",
+          "w",
+          "we",
+          "web",
+          "webh",
+          "webho",
+          "webhoo",
+          "webhook",
+          "5",
+          "50",
+          "500"
+        ]
+      }
+    },
+    {
+      "name": "a structured run gains only its tokens",
+      "entry": {
+        "action": "Action skipped on formSubmission",
+        "result": "skipped",
+        "trigger": "formSubmission",
+        "summary": "Condition on email not met"
+      },
+      "expected": {
+        "summaryTokens": [
+          "c",
+          "co",
+          "con",
+          "cond",
+          "condi",
+          "condit",
+          "conditi",
+          "conditio",
+          "condition",
+          "o",
+          "on",
+          "e",
+          "em",
+          "ema",
+          "emai",
+          "email",
+          "n",
+          "no",
+          "not",
+          "m",
+          "me",
+          "met"
+        ]
+      }
+    },
+    {
+      "name": "stale tokens are rewritten from the summary",
+      "entry": {
+        "action": "Workflow ran on formSubmission",
+        "result": "failed",
+        "trigger": "formSubmission",
+        "summary": "Boom",
+        "summaryTokens": [
+          "old"
+        ]
+      },
+      "expected": {
+        "summaryTokens": [
+          "b",
+          "bo",
+          "boo",
+          "boom"
+        ]
+      }
+    },
+    {
+      "name": "a long summary is capped the way the writers cap it",
+      "entry": {
+        "result": "succeeded",
+        "trigger": "formSubmission",
+        "summary": "Sent email · saved to Leads · webhook 200 · extraordinarily"
+      },
+      "expected": {
+        "summaryTokens": [
+          "s",
+          "se",
+          "sen",
+          "sent",
+          "e",
+          "em",
+          "ema",
+          "emai",
+          "email",
+          "·",
+          "sa",
+          "sav",
+          "save",
+          "saved",
+          "t",
+          "to",
+          "l",
+          "le",
+          "lea",
+          "lead",
+          "leads",
+          "w",
+          "we",
+          "web",
+          "webh",
+          "webho",
+          "webhoo",
+          "webhook",
+          "2",
+          "20",
+          "200",
+          "ex",
+          "ext",
+          "extr",
+          "extra",
+          "extrao",
+          "extraor",
+          "extraord",
+          "extraordi",
+          "extraordin",
+          "extraordina",
+          "extraordinar"
+        ]
+      }
+    },
+    {
+      "name": "a complete run is left alone",
+      "entry": {
+        "action": "Action ran on formSubmission",
+        "result": "succeeded",
+        "trigger": "formSubmission",
+        "summary": "Ran",
+        "summaryTokens": [
+          "r",
+          "ra",
+          "ran"
+        ]
+      },
+      "expected": null
+    },
+    {
+      "name": "a publish is not a run",
+      "entry": {
+        "action": "Published screen"
+      },
+      "expected": null
+    },
+    {
+      "name": "a pre-verdict workflow line is not a run, as the history has always read it",
+      "entry": {
+        "action": "Workflow ran on formSubmission"
+      },
+      "expected": null
+    },
+    {
+      "name": "an unknown verdict is not a run",
+      "entry": {
+        "action": "Media saved",
+        "result": "pending"
+      },
+      "expected": null
+    }
+  ]
+}

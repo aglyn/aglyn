@@ -52,6 +52,9 @@ const mockFirestore = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => mockFirestore,
+}))
+// The history pages through `useListQuery`, which reads through this hook.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-firestore-collection', () => ({
   useFirestoreCollection: () => ({ data: entries, status: 'success', fromCache: false }),
 }))
 jest.mock('firebase/firestore', () => ({
@@ -60,6 +63,8 @@ jest.mock('firebase/firestore', () => ({
   where: () => ({}),
   limit: () => ({}),
   orderBy: () => ({}),
+  documentId: () => '__name__',
+  Timestamp: { fromDate: (date: Date) => date },
 }))
 jest.mock('@aglyn/aglyn', () => ({ pluginDocsHelp: () => undefined }))
 jest.mock('@aglyn/shared-ui-jsx', () => ({
