@@ -107,7 +107,7 @@ import {
   ENTRY_PUBLISH_SORT_FIELD,
   entryPublishSortStamp,
 } from '@aglyn/aglyn/app-utils/collection-entry-date'
-import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/collection-entries'
+import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/content-query-fields'
 import { IMPORTABLE_FIELDS } from '../app/api/_lib/site-export'
 import { entryPublishSortPatch } from '../components/content/content-scope.context'
 import {
