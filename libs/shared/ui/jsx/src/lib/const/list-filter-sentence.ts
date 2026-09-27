@@ -84,8 +84,27 @@ const VALUELESS_OPERATORS = new Set(['isEmpty', 'isNotEmpty'])
 /** Operators that take several values, comma-joined the way the grammar splits them. */
 const MULTI_OPERATORS = new Set(['isAnyOf'])
 
+/**
+ * The calendar day a date clause names, as a LOCAL date.
+ *
+ * The panel's date input holds a day, not an instant, and hands it over as
+ * `YYYY-MM-DD` — which `new Date` reads as UTC midnight, the previous
+ * evening anywhere west of UTC. Travelled through `toISOString`, the same
+ * day arrives as `YYYY-MM-DDT00:00:00.000Z`. Either spelling is read by its
+ * date parts, so "on or after Sep 17" starts on Sep 17 wherever the reader
+ * is. Any other value is an instant and is read as one. The query
+ * translators read a date clause through it too, so the day a query asks for
+ * is the day the rows are matched by.
+ */
+const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.000)?Z)?$/
+export const listFilterDay = (raw: string): Date => {
+  const day = DAY_ONLY.exec(raw)
+  return day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(raw)
+}
+
+/** A date clause's value as the day it names, read the way the query reads it. */
 const dayLabel = (raw: string): string => {
-  const at = new Date(raw)
+  const at = listFilterDay(raw)
   return Number.isNaN(at.getTime()) ? raw : at.toLocaleDateString()
 }
 
