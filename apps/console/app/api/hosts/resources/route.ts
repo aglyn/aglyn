@@ -51,8 +51,10 @@ import {
 import { isDuplicableHostResourceKind } from '@aglyn/aglyn/app-utils/duplicate-resource'
 import { isReusableComponentKind } from '@aglyn/aglyn/app-utils/reusable-component-kind'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
-import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/collection-entries'
-import { contentAuthorQueryFields } from '@aglyn/aglyn/app-utils/content-authors'
+import {
+  contentAuthorQueryFields,
+  entryTitleSearchFields,
+} from '@aglyn/aglyn/app-utils/content-query-fields'
 import { Timestamp } from 'firebase-admin/firestore'
 import {
   billableScreenIds,

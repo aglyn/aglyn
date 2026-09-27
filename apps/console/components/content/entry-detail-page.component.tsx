@@ -20,7 +20,7 @@ import * as Aglyn from '@aglyn/aglyn'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
 // The leaf module, not the barrel: the entry specs mock the barrel as a closed
 // world, and a search key derivation is nothing they have reason to stage.
-import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/collection-entries'
+import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/content-query-fields'
 import {
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_PRIMARY_KEY,

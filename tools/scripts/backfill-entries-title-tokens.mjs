@@ -22,7 +22,7 @@
  *
  * The console's entries table searches by `array-contains` on `titleTokens`
  * — every word prefix of the title, as `entryTitleSearchFields` in
- * `libs/aglyn/src/lib/app-utils/collection-entries.ts` writes it — on the
+ * `libs/aglyn/src/lib/app-utils/content-query-fields.ts` writes it — on the
  * Firestore query itself, beneath whichever order the table is in. Every
  * writer of `title` stamps it now: the entry editor, the resources route's
  * create, the bundle import, and the seed and changelog scripts. An entry

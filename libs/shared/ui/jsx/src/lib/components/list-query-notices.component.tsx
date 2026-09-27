@@ -19,11 +19,8 @@
 
 import { Alert, Stack } from '@mui/material'
 import type { ListFilterField } from '../const/list-filter'
-import {
-  type ListFilterClause,
-  type ListFilterOption,
-  listFilterClauseSentence,
-} from '../const/list-grid-filter'
+import { listFilterClauseSentence } from '../const/list-filter-sentence'
+import type { ListFilterClause, ListFilterOption } from '../const/list-grid-filter'
 
 /**
  * A plan's refusals as the notices read them: each refused clause by the

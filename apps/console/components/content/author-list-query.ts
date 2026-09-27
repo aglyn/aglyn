@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { AUTHOR_SCHEMA_TYPE_FIELD } from '@aglyn/aglyn/app-utils/content-authors'
+import { AUTHOR_SCHEMA_TYPE_FIELD } from '@aglyn/aglyn/app-utils/content-query-fields'
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import type { ListFilterOption } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'

@@ -26,7 +26,7 @@ import {
 import {
   hiddenFilterColumns,
   listFilterColumn,
-} from '@aglyn/shared-ui-jsx/const/list-filter'
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { Chip, Stack, Tooltip, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import {

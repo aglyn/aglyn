@@ -33,8 +33,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { entryTitleSearchFields } from './collection-entries'
-import { contentAuthorQueryFields } from './content-authors'
+import { contentAuthorQueryFields, entryTitleSearchFields } from './content-query-fields'
 
 const fixture = <T,>(name: string): T =>
   JSON.parse(

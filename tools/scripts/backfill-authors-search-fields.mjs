@@ -25,7 +25,7 @@
  * Name "is" by equality on `nameLower`, and Type by equality on
  * `schemaType`. Every author write stamps all three now, through
  * `contentAuthorQueryFields` in
- * `libs/aglyn/src/lib/app-utils/content-authors.ts`: the resources route's
+ * `libs/aglyn/src/lib/app-utils/content-query-fields.ts`: the resources route's
  * create, the authors tab's edit, the bundle import. An author written before
  * that has none of them, and a query cannot find a document by a field it
  * lacks — so without this, the backlog still LISTS, ordered by name, but no

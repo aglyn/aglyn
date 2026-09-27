@@ -16,19 +16,21 @@
  */
 
 import {
+  getGridBooleanOperators,
+  getGridDateOperators,
+  getGridNumericOperators,
   getGridSingleSelectOperators,
+  getGridStringOperators,
   type GridColDef,
   type GridFilterItem,
+  type GridFilterOperator,
 } from '@mui/x-data-grid'
 import {
   gridFilterRequests,
-  hiddenFilterColumns,
   type ListFilterField,
+  type ListFilterKind,
   type ListFilterRequest,
-  listFilterColumn,
-  listFilterOperatorLabel,
   listFilterOperators,
-  matchListFilter,
 } from './list-filter'
 
 /*
@@ -58,6 +60,88 @@ export interface ListFilterClause extends ListFilterRequest {
 export interface ListFilterOption {
   value: string
   label: string
+}
+
+const operatorPool = (kind: ListFilterKind): GridFilterOperator[] => {
+  switch (kind) {
+    case 'boolean':
+      return getGridBooleanOperators()
+    case 'number':
+      return getGridNumericOperators()
+    case 'date':
+      return getGridDateOperators()
+    default:
+      return getGridStringOperators()
+  }
+}
+
+/**
+ * The MUI operators for a field — the same list `listFilterOperators` names,
+ * resolved to the grid's own operator objects so the panel keeps its native
+ * inputs (a date picker for a date, a number field for a number).
+ */
+export function gridFilterOperators(
+  field: ListFilterField,
+): GridFilterOperator[] {
+  const allowed = listFilterOperators(field)
+  return operatorPool(field.kind).filter((operator) =>
+    allowed.includes(operator.value),
+  )
+}
+
+/**
+ * Spread onto a `GridColDef` to make a column filterable exactly as far as the
+ * query can serve it. A column with NO declared field is turned off entirely —
+ * deliberately, because the alternative is a funnel icon that opens a panel
+ * nothing honours.
+ */
+export function listFilterColumn(
+  fields: readonly ListFilterField[],
+  column: string,
+): { filterable: boolean; filterOperators?: GridFilterOperator[] } {
+  const field = fields.find((entry) => entry.column === column)
+  if (!field) return { filterable: false }
+  const operators = gridFilterOperators(field)
+  return operators.length
+    ? { filterable: true, filterOperators: operators }
+    : { filterable: false }
+}
+
+/**
+ * Fields a reader can filter by that are NOT columns on the table.
+ *
+ * MUI's filter panel lists COLUMNS — `gridFilterableColumnDefinitionsSelector`
+ * reads every column definition, hidden ones included — so a filterable field
+ * with no column is a field nobody can reach however well the route answers it.
+ * Declaring it as a permanently hidden column keeps one source of truth, the
+ * field list, instead of a second list of "extra filters" that drifts from it.
+ *
+ * `hideable: false` keeps them out of Manage columns as well: a column with no
+ * `renderCell` and no width has nothing to show, and a reader who unhid one
+ * would get a strip of blank cells for their trouble.
+ *
+ * Pair with {@link hiddenFilterVisibility}, which is what actually hides them.
+ */
+export function hiddenFilterColumns(
+  fields: readonly ListFilterField[],
+  visible: readonly string[],
+  headers: Readonly<Record<string, string>> = {},
+): Array<{
+  field: string
+  headerName: string
+  hideable: boolean
+  filterable: boolean
+  filterOperators?: GridFilterOperator[]
+}> {
+  return fields
+    .filter((field) => !visible.includes(field.column))
+    .map((field) => ({
+      field: field.column,
+      headerName: headers[field.column] ?? field.column,
+      hideable: false,
+      ...listFilterColumn(fields, field.column),
+    }))
+    .filter((column) => column.filterable)
 }
 
 /** The grid operator each stored select operator shows as. */
@@ -240,48 +324,4 @@ export function upsertListFilterClause<Clause extends ListFilterClause>(
   return [...rest.slice(0, at), next, ...rest.slice(at)]
 }
 
-/** Operators that carry no value. */
-const VALUELESS_OPERATORS = new Set(['isEmpty', 'isNotEmpty'])
-/** Operators that take several values, comma-joined the way the grammar splits them. */
-const MULTI_OPERATORS = new Set(['isAnyOf'])
-
-const dayLabel = (raw: string): string => {
-  const at = new Date(raw)
-  return Number.isNaN(at.getTime()) ? raw : at.toLocaleDateString()
-}
-
-/**
- * How a clause reads as a sentence — "Owner is Dana", "Created on or after
- * 1 Jan", "Reason is any of Bounced, Complained": its header, its operator,
- * and its value by the label of the option it names.
- *
- * ONE wording, used by the chips over a list and by the notices that say a
- * clause was not applied (`listQueryRefusals`), so the two cannot describe
- * the same clause differently.
- */
-export function listFilterClauseSentence(
-  clause: ListFilterClause,
-  context: {
-    fields: readonly ListFilterField[]
-    headers?: Readonly<Record<string, string>>
-    options?: Readonly<Record<string, readonly ListFilterOption[]>>
-  },
-): string {
-  const field = context.fields.find((entry) => entry.column === clause.field)
-  const header = context.headers?.[clause.field] ?? clause.field
-  const choices = context.options?.[clause.field]
-  const named = (value: string) =>
-    choices?.find((option) => option.value === value)?.label ?? value
-  const value = VALUELESS_OPERATORS.has(clause.op)
-    ? ''
-    : MULTI_OPERATORS.has(clause.op)
-      ? clause.value
-          .split(',')
-          .map((entry) => entry.trim())
-          .filter(Boolean)
-          .map(named)
-          .join(', ')
-      : clause.label ?? (field?.kind === 'date' ? dayLabel(clause.value) : named(clause.value))
-  return `${header} ${listFilterOperatorLabel(clause.op)}${value ? ` ${value}` : ''}`
-}
-
+export { listFilterClauseSentence } from './list-filter-sentence'

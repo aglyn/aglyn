@@ -58,8 +58,10 @@ import {
   ENTRY_PUBLISH_SORT_FIELD,
   entryPublishSortStamp,
 } from '@aglyn/aglyn/app-utils/collection-entry-date'
-import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/collection-entries'
-import { contentAuthorQueryFields } from '@aglyn/aglyn/app-utils/content-authors'
+import {
+  contentAuthorQueryFields,
+  entryTitleSearchFields,
+} from '@aglyn/aglyn/app-utils/content-query-fields'
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { decodeBundleTimestamps } from '../../_lib/bundle-timestamps'

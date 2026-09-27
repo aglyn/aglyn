@@ -29,7 +29,6 @@ import {
   contentAuthorPageUrl,
   normalizeContentAuthorLinks,
 } from './content-authors'
-import { nameSearchTokens } from './name-search'
 import { resolveNamedTokens } from './resolve-named-tokens'
 
 export * from './collection-entry-date'
@@ -335,36 +334,6 @@ export const ENTRIES_MAX_PER_COLLECTION = 10000
  * multiplies out to a bounded store rather than an unbounded one.
  */
 export const COLLECTIONS_MAX_PER_HOST = 100
-
-/**
- * The field the console's entries table searches (AGL-3321): every word
- * prefix of the entry's title, as `nameSearchTokens` writes them, which the
- * table's quick search and its Title "contains" filter ask with
- * `array-contains` on the Firestore query.
- *
- * DERIVED, and never carried in a bundle. Every writer of `title` stamps it
- * through {@link entryTitleSearchFields}: the entry editor's save, the
- * resources route's create, the bundle import, and the seed and changelog
- * scripts. `tools/scripts/backfill-entries-title-tokens.mjs` stamps the
- * entries written before it. An entry without it still lists; it just cannot
- * be found by a word of its title.
- */
-export const ENTRY_TITLE_TOKENS_FIELD = 'titleTokens'
-
-/**
- * The search half of a write that sets an entry's `title`. An entry with no
- * title gets an empty array, so the field is present on every entry and the
- * backfill has nothing left to find.
- */
-export function entryTitleSearchFields(title: unknown): {
-  [ENTRY_TITLE_TOKENS_FIELD]: string[]
-} {
-  return {
-    [ENTRY_TITLE_TOKENS_FIELD]: nameSearchTokens(
-      typeof title === 'string' ? title : '',
-    ),
-  }
-}
 
 /**
  * One published content-collection entry as the compose pipeline sees it

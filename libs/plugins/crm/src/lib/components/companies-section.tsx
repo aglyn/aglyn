@@ -27,7 +27,7 @@ import { mdiPlus } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { listFilterColumn } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterColumn } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import ListQueryNotices, {
   listQueryRefusals,
 } from '@aglyn/shared-ui-jsx/components/list-query-notices.component'

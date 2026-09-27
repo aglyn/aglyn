@@ -16,7 +16,7 @@
  */
 
 import { ENTRY_PUBLISH_SORT_FIELD } from '@aglyn/aglyn/app-utils/collection-entry-date'
-import { ENTRY_TITLE_TOKENS_FIELD } from '@aglyn/aglyn/app-utils/collection-entries'
+import { ENTRY_TITLE_TOKENS_FIELD } from '@aglyn/aglyn/app-utils/content-query-fields'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
