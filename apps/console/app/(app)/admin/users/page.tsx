@@ -65,6 +65,11 @@ import {
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { displayWindow } from '../../../../utils/display-window'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
@@ -172,7 +177,9 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * page — so both answered "no such account" for everyone past it. Firebase
    * Auth has no predicate to push them into, so `/api/admin/users` reads the
    * pools and matches there, routing a complete email to the O(1) lookup
-   * first.
+   * first. Every clause and the search go together and apply together, over
+   * the whole directory (AGL-3321); what the route cannot answer comes back
+   * refused, by name, and is not applied.
    *
    * The query lives in a REF, and `applyQuery` writes it before it asks for a
    * page. The fetcher is a dependency of the pagination hook, so holding the
@@ -182,31 +189,29 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * would read the query the panel had BEFORE the reader changed it, which
    * shows as a filter that highlights its column and narrows nothing.
    */
-  type ListQuery = { field: string; op: string; value: string } | null
-  const queryRef = useRef<{ search: string; filter: ListQuery }>({
+  type ListQuery = ReadonlyArray<{ field: string; op: string; value: string }>
+  const queryRef = useRef<{ search: string; clauses: ListQuery }>({
     search: '',
-    filter: null,
+    clauses: [],
   })
-  /** Set when the last response could not read the whole directory. */
-  const [scanTruncated, setScanTruncated] = useState<{
-    scan: boolean
-    match: boolean
-    count: number
-  } | null>(null)
+  /** What the route could not answer, and why; none of it is applied. */
+  const [refused, setRefused] = useState<ListQueryRefusal[]>([])
 
   const fetchUsersPage = useCallback(
     async (cursor: string | null, index: number) => {
       const params = new URLSearchParams()
-      const { search: term, filter: item } = queryRef.current
+      const { search: term, clauses: asked } = queryRef.current
       if (term) params.set('search', term)
-      if (item) {
-        params.set('filterField', item.field)
-        params.set('filterOp', item.op)
-        params.set('filterValue', item.value)
+      if (asked.length) {
+        params.set(
+          'filters',
+          JSON.stringify(asked.map(({ field, op, value }) => ({ field, op, value }))),
+        )
       }
-      // A narrowed list is not a page of the walk, so it carries no cursor —
-      // resuming one would page through the unfiltered directory instead.
-      if (cursor && !term && !item) params.set('nextPageToken', cursor)
+      // The route's own cursor, opaque here: an Auth page token on the plain
+      // walk, a place in the complete match on a narrowed one. The query
+      // travels with it, so a cursor is never read against another question.
+      if (cursor) params.set('nextPageToken', cursor)
       const query = params.toString()
       const response = await authorizedFetch(
         user,
@@ -219,15 +224,7 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
       // A tenant pool bigger than one page is reported, never dropped
       // silently (AGL-1122) — invisible users are the bug this fixed.
       setTruncatedTenants(payload.tenantTruncated ?? [])
-      setScanTruncated(
-        payload.scanTruncated || payload.matchTruncated
-          ? {
-              scan: Boolean(payload.scanTruncated),
-              match: Boolean(payload.matchTruncated),
-              count: Number(payload.matchCount ?? rows.length),
-            }
-          : null,
-      )
+      setRefused(Array.isArray(payload.refused) ? payload.refused : [])
       return {
         rows,
         nextCursor: payload.nextPageToken ?? null,
@@ -278,8 +275,8 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
    * directory instead.
    */
   const applyQuery = useCallback(
-    (search: string, filter: ListQuery) => {
-      queryRef.current = { search, filter }
+    (search: string, clauses: ListQuery) => {
+      queryRef.current = { search, clauses }
       // The rows of the OLD walk go with it. They are kept to merge twins
       // across pages, and a row that matched the previous search is not a
       // row that matched this one — carrying them over would show accounts
@@ -294,24 +291,25 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   /*
    * The grid's Filters panel and quick search, bound to the query.
    *
-   * `single`, because the route answers ONE clause: a clause set in the
-   * panel replaces the last. Each change goes straight through `applyQuery`
-   * — which reads the other half from `queryRef`, written synchronously —
-   * so the first page is asked for with the query the reader just set.
+   * Every clause the panel holds, one per field, and the search words: the
+   * route applies them all together. Each change goes straight through
+   * `applyQuery` — which reads the other half from `queryRef`, written
+   * synchronously — so the first page is asked for with the query the
+   * reader just set.
    */
   const [clauses, setClauses] = useState<ListFilterClause[]>([])
   const [searchWords, setSearchWords] = useState<string[]>([])
   const onClausesChange = useCallback(
     (next: ListFilterClause[]) => {
       setClauses(next)
-      applyQuery(queryRef.current.search, next[0] ?? null)
+      applyQuery(queryRef.current.search, next)
     },
     [applyQuery],
   )
   const onSearchChange = useCallback(
     (words: string[]) => {
       setSearchWords(words)
-      applyQuery(words.join(' ').trim(), queryRef.current.filter)
+      applyQuery(words.join(' ').trim(), queryRef.current.clauses)
     },
     [applyQuery],
   )
@@ -321,7 +319,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
   )
   const gridFilter = useListGridFilter({
     selectFields: USER_SELECT_FIELDS,
-    single: true,
     clauses,
     onChange: onClausesChange,
     search: searchBinding,
@@ -735,19 +732,16 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                 options={USER_LIST_FILTER_OPTIONS}
                 clauses={gridFilter.clauses}
                 onChange={gridFilter.setClauses}
-                servedField={clauses[0]?.field ?? null}
-                marksServed={!searching}
               />
-              {/* The route answers a search OR a filter, never both: with
-                  words in the search box it runs the search and the filter
-                  waits. Said, so the chip does not read as applied. */}
-              {searching && clauses.length ? (
-                <Alert severity="info">
-                  {'The filter is set aside while a search is in force — ' +
-                    'this list answers one of the two. Clear the search to ' +
-                    'apply the filter.'}
-                </Alert>
-              ) : null}
+              {/* What the route could not answer over the whole directory,
+                  by name — not applied, rather than applied to part of it. */}
+              <ListQueryNotices
+                refused={listQueryRefusals(refused, {
+                  fields: USER_LIST_FILTER_FIELDS,
+                  headers: USER_LIST_FILTER_HEADERS,
+                  options: USER_LIST_FILTER_OPTIONS,
+                })}
+              />
               <ListTable
                 rows={window.shown}
                 columns={userColumns}
@@ -813,19 +807,6 @@ const AdminUsers: NextPageWithLayout<Record<string, never>> = () => {
                   setDisplayPage(0)
                 }}
               />
-              {/* A partial answer never reads as a complete one. A staff
-                  list that stopped early and said "no matches" is the whole
-                  failure this change is about. */}
-              {scanTruncated ? (
-                <Alert severity="warning">
-                  {scanTruncated.scan
-                    ? 'More accounts exist than this search could read. ' +
-                      'Narrow it, or search an exact email to reach an ' +
-                      'account directly.'
-                    : `${scanTruncated.count} accounts matched; the first ` +
-                      'are shown. Narrow the search to see the rest.'}
-                </Alert>
-              ) : null}
               {/* Never let a pool go quietly missing again (AGL-1122). */}
               {truncatedTenants.length ? (
                 <Alert severity="warning">

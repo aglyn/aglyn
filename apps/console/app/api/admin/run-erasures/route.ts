@@ -36,6 +36,16 @@ import {
   countPendingPersonErasures,
   runPersonErasures,
 } from '../../../../utils/server/run-person-erasures'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  ERASURE_LIST_QUERY,
+  ERASURE_LIST_SORT,
+  splitErasureStateClauses,
+} from '../../../../utils/pending-erasures-list-query'
+import {
+  readStaffListQuery,
+  runStaffListQuery,
+} from '../../../../utils/server/staff-list-query'
 
 /**
  * Executes due GDPR erasures (AGL-487) — completes the self-serve deletion
@@ -49,13 +59,6 @@ import {
  * bounded number per run and eraseOrg is safe to re-run on the rest.
  */
 const MAX_PER_RUN = 5
-
-/**
- * How many pending erasures the GET preview lists. Higher than
- * `MAX_PER_RUN` on purpose: the point of the preview is to show what is
- * WAITING, including the ones this run will not reach.
- */
-const MAX_PENDING_LISTED = 50
 
 /**
  * Staff, or the scheduler (AGL-2165).
@@ -97,7 +100,7 @@ async function authorizeActor(
 }
 
 async function handler(request: Request): Promise<Response> {
-  const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, body, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'POST' && method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -138,32 +141,59 @@ async function handler(request: Request): Promise<Response> {
     // holding, and when each hold expires.
     if (method === 'GET') {
       const now = Date.now()
-      // `orderBy` rather than `where('erasureRequestedAt', '!=', null)`:
-      // both filter to documents that HAVE the field, but orderBy rides the
-      // automatic single-field index every Firestore collection already has,
-      // while the inequality wants a composite one that is not deployed —
-      // and a missing index fails this query at runtime, in production only,
-      // which is the one place this surface has to work.
-      // Oldest first, which is also the order the runner takes them in.
+      const cutoff = new Date(now - ERASURE_HOLD_MS)
+      const orgs = firestore.collection('orgs')
+      const asked = (query ?? {}) as Record<string, unknown>
+
+      // `?view=summary`: the figures over the WHOLE queue, as COUNT
+      // aggregations — each a range over `erasureRequestedAt` alone, which
+      // its automatic single-field index serves — rather than counts of a
+      // page of it.
+      if (asked['view'] === 'summary') {
+        const [queued, due, people] = await Promise.all([
+          orgs.where(ERASURE_LIST_SORT.path, '>=', new Date(0)).count().get(),
+          orgs.where(ERASURE_LIST_SORT.path, '<=', cutoff).count().get(),
+          // The PEOPLE waiting, beside the workspaces (AGL-2623): a workspace
+          // admin's erasure request for one person runs through this same
+          // job, and the card that watches the queue has to see both halves.
+          countPendingPersonErasures().catch((error) => {
+            console.error('run-erasures: person queue could not be counted', error)
+            return null
+          }),
+        ])
+        return Response.json(
+          {
+            queued: Number(queued.data().count ?? 0),
+            dueCount: Number(due.data().count ?? 0),
+            maxPerRun: MAX_PER_RUN,
+            people,
+          },
+          { status: 200 },
+        )
+      }
+
       /*
-       * ONE document more than the ceiling, which is what makes "there is
-       * more than this" a fact rather than a comparison.
-       *
-       * `size >= MAX_PENDING_LISTED` is wrong in exactly the case the flag
-       * exists for: a queue holding precisely the ceiling is COMPLETE, and
-       * reporting it as truncated puts "at least" on a number that is exact.
-       * The probe row is never handed on — a response listing `ceiling + 1`
-       * rows would be describing a window it did not draw.
+       * The queue itself, every Filters-panel clause and the search word on
+       * ONE query ordered by `erasureRequestedAt` — oldest first, the order
+       * the runner takes them in — and paged by a cursor in that order
+       * (AGL-3321). `orderBy` on the field is what limits the read to
+       * organizations that HAVE a request. State is a range over that same
+       * field, read now (`utils/pending-erasures-list-query.ts`). Nothing is
+       * matched over rows already read, and what the plan could not apply
+       * comes back in `refused`.
        */
-      const pending = await firestore
-        .collection('orgs')
-        .orderBy('erasureRequestedAt', 'asc')
-        .limit(MAX_PENDING_LISTED + 1)
-        .get()
-      const truncated = pending.size > MAX_PENDING_LISTED
-      const rows = pending.docs
-        .slice(0, MAX_PENDING_LISTED)
-        .map((org) => {
+      const listed = readStaffListQuery(asked)
+      if (!listed) {
+        return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+      }
+      const split = splitErasureStateClauses(listed.clauses, now, ERASURE_HOLD_MS)
+      const page = await runStaffListQuery({
+        firestore,
+        collection: orgs,
+        declaration: ERASURE_LIST_QUERY,
+        request: { ...listed, clauses: split.rest },
+        base: split.base,
+        row: (org) => {
           const requestedAt = org.get('erasureRequestedAt')
           const requestedMs =
             typeof requestedAt?.toMillis === 'function'
@@ -179,24 +209,10 @@ async function handler(request: Request): Promise<Response> {
             holdExpiresAtMs: requestedMs ? requestedMs + ERASURE_HOLD_MS : null,
             due: Boolean(requestedMs) && requestedMs + ERASURE_HOLD_MS <= now,
           }
-        })
-      // The PEOPLE waiting, beside the workspaces (AGL-2623): a workspace
-      // admin's erasure request for one person runs through this same job,
-      // and the card that watches the queue has to see both halves of it.
-      const people = await countPendingPersonErasures().catch((error) => {
-        console.error('run-erasures: person queue could not be counted', error)
-        return null
+        },
       })
       return Response.json(
-        {
-          pending: rows,
-          dueCount: rows.filter((row) => row.due).length,
-          maxPerRun: MAX_PER_RUN,
-          // A lower bound, and said so: the query is capped, so a longer
-          // queue reads identically to a complete one from the length alone.
-          truncated,
-          people,
-        },
+        { ...page, refused: [...split.refused, ...page.refused] },
         { status: 200 },
       )
     }
@@ -216,17 +232,15 @@ async function handler(request: Request): Promise<Response> {
           { status: 400 },
         )
       }
-      await firestore
-        .collection('adminAudit')
-        .add({
-          actorUid: actor.uid,
-          action: 'erasure.runBatch',
-          target: 'orgs/*',
-          reason,
-          before: null,
-          after: { maxPerRun: MAX_PER_RUN },
-          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firestore, {
+        actorUid: actor.uid,
+        action: 'erasure.runBatch',
+        target: 'orgs/*',
+        reason,
+        before: null,
+        after: { maxPerRun: MAX_PER_RUN },
+        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
         .catch(() => undefined)
     }
     const holdCutoff = new Date(Date.now() - ERASURE_HOLD_MS)

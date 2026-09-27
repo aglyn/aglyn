@@ -19,7 +19,6 @@
 import {
   CONSOLE_USER_TYPE_LABELS,
   consoleUserType,
-  orgOverrideReasonSummary,
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import {
@@ -46,8 +45,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useParams } from 'next/navigation'
-import type { GridColDef } from '@mui/x-data-grid'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth, useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import StaffAcquisitionCard from '../../../../../components/staff-acquisition-card.component'
@@ -66,16 +64,10 @@ import StaffUserEmailHistoryCard, {
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import { docsHelp } from '../../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../../constants/route-links'
-import {
-  CONTENT_MAX_WIDTH,
-  TABLE_PAGE_SIZE_DEFAULT,
-} from '../../../../../constants/shared'
-import ActivityTable from '../../../../../components/activity-table.component'
-import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import { useDeclareDocumentSubject } from '../../../../../components/document-subject'
 import ActorActivityTable from '../../../../../components/actor-activity-table.component'
+import StaffUserAuditTable from '../../../../../components/staff-user-audit-table.component'
 import PluginWidgetSlot, {
   useSlotWidgets,
 } from '../../../../../components/plugin-widget-slot.component'
@@ -128,27 +120,6 @@ interface UserDetail {
     allHosts: boolean
     hostAccess: Record<string, string>
     joinedAt: string | null
-  }>
-  audit: Array<{
-    id: string
-    actorUid: string | null
-    action: string | null
-    target: string | null
-    /** The person the entry is ABOUT, when the writer could resolve one. */
-    subjectUid: string | null
-    /** WHY, when the row carries one (AGL-1652) — see `org.override`. */
-    reason: string | null
-    note: string | null
-    at: string | null
-    /**
-     * One act recorded more than once, collapsed onto one row. `1` and a null
-     * `lastAt` are the ordinary case; anything higher must be rendered, or
-     * the card under-reports an access the writer merged.
-     */
-    repeatCount: number
-    lastAt: string | null
-    /** `access` looked; `change` altered something or acted on someone. */
-    kind: 'access' | 'change'
   }>
   /**
    * Clickwrap acceptance history and the ToS §18.5 verdicts (AGL-2316).
@@ -241,27 +212,6 @@ interface UserDetail {
  * state, staff role, org memberships with per-site access, and its
  * recent audit trail — plus impersonation (AGL-246).
  */
-/*
- * What the two audit tables filter and search by. Both hold the whole window
- * the detail route returned and page it themselves, so the panel and the
- * search answer over every entry in that window before a page is sliced.
- */
-const AUDIT_FILTER_FIELDS = [
-  inMemoryListField('action', 'text'),
-  inMemoryListField('target', 'text'),
-  inMemoryListField('reason', 'text'),
-  inMemoryListField('actorUid', 'text'),
-  inMemoryListField('at', 'date'),
-]
-const AUDIT_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  action: 'Action',
-  target: 'Target',
-  reason: 'Why',
-  actorUid: 'Actor',
-  at: 'When',
-}
-const AUDIT_SEARCH_PATHS = ['action', 'target', 'reason', 'note', 'actorUid']
-
 const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   const params = useParams<{ uid: string }>()
   const uid = params?.uid
@@ -269,60 +219,7 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   const auth = useAuth()
   const { enqueueSnackbar } = useSnackbar()
   const [detail, setDetail] = useState<UserDetail | null>(null)
-  /*
-   * The audit trail PAGES (AGL-2501). It is the one table on this page whose
-   * length is a function of how much the account has DONE rather than of what
-   * it is: memberships and legal acceptances are a handful either way, and an
-   * audited action is written every time staff act on this user or this user
-   * acts anywhere. A long-lived account rendered the whole trail in one wall
-   * at the bottom of an already long page.
-   *
-   * `/api/admin/users/detail` returns the window it already bounds, so the
-   * footer takes a real total. Paging deeper than that window is what the
-   * Audit log page is for, and the card says so.
-   */
-  const [auditPage, setAuditPage] = useState(0)
-  const [auditPageSize, setAuditPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const [accessPage, setAccessPage] = useState(0)
-  const [accessPageSize, setAccessPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const [error, setError] = useState<string | null>(null)
-  // Memoized rather than `detail?.audit ?? []` inline: a fresh empty array on
-  // every render re-runs the slice below forever.
-  const allAuditEntries = useMemo(() => detail?.audit ?? [], [detail])
-  /*
-   * TWO TABLES, BECAUSE A READ MUST NOT BE ABLE TO BURY AN IMPERSONATION.
-   *
-   * One list held both, newest first, and a handful of `email.message-viewed`
-   * rows pushed `user.impersonate` and `org.override` off the visible page —
-   * the entries somebody opens this card to find. Separating them is what
-   * makes that structurally impossible rather than a matter of how the
-   * ranking happens to fall today: the two categories no longer compete for
-   * the same rows, and each pages on its own.
-   *
-   * Filtering one table would have been less page, but it puts the answer
-   * behind a control whose default hides half the record. These are also two
-   * different questions — "what was done to this account" and "who looked at
-   * this account's data" — and the page already reads as a stack of separately
-   * titled logs.
-   */
-  const auditEntries = useMemo(
-    () => allAuditEntries.filter((entry) => entry.kind !== 'access'),
-    [allAuditEntries],
-  )
-  const accessEntries = useMemo(
-    () => allAuditEntries.filter((entry) => entry.kind === 'access'),
-    [allAuditEntries],
-  )
-  /**
-   * The audit trail's columns, in the console's row grammar (AGL-2501).
-   *
-   * This card and "Activity by this account" directly above it now render the
-   * same table — `ActivityTable` owns the card, the grid, the toolbar, the
-   * empty state and the footer — so a staff member reading two audit tables
-   * stacked on one page reads them the same way. What stays different is what
-   * they are OF: the one above is what this account DID, this one is what was
-   * done BY or TO it, and both descriptions say so.
-   */
   /**
    * NAME first, then email, then uid.
    *
@@ -350,125 +247,6 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
   // server's id title until a name arrives, so the tab cannot flicker through
   // the wrong one either.
   useDeclareDocumentSubject(uid, accountLabel ?? undefined)
-
-  const auditColumns: GridColDef[] = useMemo(
-    () => [
-      { field: 'action', headerName: 'Action', flex: 1.2, minWidth: 180 },
-      { field: 'target', headerName: 'Target', flex: 1.2, minWidth: 180 },
-      {
-        // An `org.override` this account performed shows up here too, so the
-        // reason has to reach this table as well (AGL-1652) — the audit page
-        // is not the only place the act is read from.
-        field: 'reason',
-        headerName: 'Why',
-        flex: 1,
-        minWidth: 160,
-        valueGetter: (_value: unknown, row: any) =>
-          orgOverrideReasonSummary(row.reason, row.note) ?? '—',
-      },
-      {
-        field: 'actorUid',
-        headerName: 'Actor',
-        flex: 0.9,
-        minWidth: 150,
-        /*
-         * "this account" is a real answer, not a placeholder: the route reads
-         * two halves — entries this account performed, and entries performed
-         * against it — so a row is either one or the other. The other half
-         * still shows a bare staff uid, which is a name this page does not
-         * resolve; that is a separate gap from the one this column had.
-         */
-        valueGetter: (_value: unknown, row: any) =>
-          row.actorUid === detail?.user.uid
-            ? 'this account'
-            : (row.actorUid ?? '—'),
-        renderCell: ({ row }: any) =>
-          row.actorUid === detail?.user.uid ? (
-            <Chip size="small" variant="outlined" label="this account" />
-          ) : (
-            (row.actorUid ?? '—')
-          ),
-      },
-      {
-        field: 'at',
-        headerName: 'When',
-        flex: 1,
-        minWidth: 180,
-        // `type: 'date'` gives the panel a date picker, and sorting happens on
-        // the instant rather than on the rendered string — a grid sorting the
-        // rendered text orders it alphabetically.
-        type: 'date',
-        valueGetter: (_value: unknown, row: any) =>
-          row.at ? new Date(row.at) : null,
-        /*
-         * A COLLAPSED ROW SAYS SO.
-         *
-         * The writer merges an immediate repeat of one act onto the row
-         * already there rather than adding a second. Printing only the first
-         * instant would hide that, and a row that quietly stands for several
-         * accesses is the same lie as a missing row — so the count and the
-         * last occurrence are rendered whenever there was more than one.
-         */
-        renderCell: ({ row }: any) => {
-          if (!row.at) return '—'
-          const first = new Date(row.at).toLocaleString()
-          if (!(row.repeatCount > 1)) return first
-          const last = row.lastAt
-            ? new Date(row.lastAt).toLocaleTimeString()
-            : null
-          return `${first} · ${row.repeatCount}x${last ? `, last ${last}` : ''}`
-        },
-      },
-    ],
-    [detail?.user.uid],
-  )
-  const auditFilter = useListRowsFilter({
-    rows: auditEntries,
-    fields: AUDIT_FILTER_FIELDS,
-    headers: AUDIT_FILTER_HEADERS,
-    search: AUDIT_SEARCH_PATHS,
-  })
-  const accessFilter = useListRowsFilter({
-    rows: accessEntries,
-    fields: AUDIT_FILTER_FIELDS,
-    headers: AUDIT_FILTER_HEADERS,
-    search: AUDIT_SEARCH_PATHS,
-  })
-  const filteredAudit = auditFilter.rows
-  const filteredAccess = accessFilter.rows
-  const pagedAudit = useMemo(
-    () =>
-      filteredAudit.slice(
-        auditPage * auditPageSize,
-        auditPage * auditPageSize + auditPageSize,
-      ),
-    [filteredAudit, auditPage, auditPageSize],
-  )
-  const pagedAccess = useMemo(
-    () =>
-      filteredAccess.slice(
-        accessPage * accessPageSize,
-        accessPage * accessPageSize + accessPageSize,
-      ),
-    [filteredAccess, accessPage, accessPageSize],
-  )
-  // A reload that returns a shorter trail, or a filter that narrows it, can
-  // strand a reader past the last page, which renders as an empty table with
-  // no way back.
-  useEffect(() => {
-    const lastPage = Math.max(
-      0,
-      Math.ceil(filteredAudit.length / auditPageSize) - 1,
-    )
-    if (auditPage > lastPage) setAuditPage(lastPage)
-  }, [filteredAudit.length, auditPage, auditPageSize])
-  useEffect(() => {
-    const lastPage = Math.max(
-      0,
-      Math.ceil(filteredAccess.length / accessPageSize) - 1,
-    )
-    if (accessPage > lastPage) setAccessPage(lastPage)
-  }, [filteredAccess.length, accessPage, accessPageSize])
 
   useEffect(() => {
     if (!uid || !user) return
@@ -1055,12 +833,8 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                    * at the edge. Same reason those two are out here.
                    */
                   <StaffUserEmailHistoryCard
+                    uid={detail.user.uid}
                     address={detail.user.email ?? null}
-                    rows={detail.emails?.rows ?? []}
-                    // A missing `emails` key is a read that did not happen,
-                    // which reads to a human exactly like a read that failed
-                    // — and NOT like "we never emailed them".
-                    lookupFailed={detail.emails?.lookupFailed ?? true}
                     // Every address the rows were gathered from, so a staffer
                     // can see they are looking at mail sent to an address
                     // that is no longer this account's primary.
@@ -1283,35 +1057,24 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
               {
                 size: { xs: 12 },
                 children: (
-                  <ActivityTable
+                  <StaffUserAuditTable
+                    uid={uid}
+                    kind="change"
                     header="Recent audit trail"
                     help={docsHelp('staffConsole', {
                       anchor: '#whats-there',
                       excerpt:
-                        'Audited staff actions performed by or on this account — the full record lives on the Audit log page.',
+                        'Audited staff actions performed by or on this account, newest first, filtered and searched across the whole trail.',
                     })}
                     description={
                       'Audited staff actions performed BY or ON this ' +
                       'account. Not the same as the activity above, which ' +
                       'is what the account itself did. Data staff merely ' +
-                      'LOOKED at is the card below. The full record lives ' +
-                      'on the Audit log page.'
+                      'LOOKED at is the card below. The whole log is on ' +
+                      'the Audit log page.'
                     }
-                    columns={auditFilter.filterColumns(auditColumns)}
-                    rows={pagedAudit}
-                    getRowId={(row: any) => row.id}
                     emptyLabel="No audited actions involve this account."
                     filteredLabel="No audited actions match these filters"
-                    filtering={auditFilter.filtering}
-                    filterModel={auditFilter.gridProps.filterModel}
-                    onFilterModelChange={auditFilter.gridProps.onFilterModelChange}
-                    quickFilter
-                    filterChips={<ListFilterChips {...auditFilter.chipsProps} />}
-                    page={auditPage}
-                    pageSize={auditPageSize}
-                    count={filteredAudit.length}
-                    onPageChange={setAuditPage}
-                    onPageSizeChange={setAuditPageSize}
                   />
                 ),
               },
@@ -1332,7 +1095,9 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                    * read their mail — and that answer must be on the page of
                    * the person whose mail it was.
                    */
-                  <ActivityTable
+                  <StaffUserAuditTable
+                    uid={uid}
+                    kind="access"
                     header="Data access by staff"
                     help={docsHelp('staffConsole', {
                       anchor: '#whats-there',
@@ -1346,21 +1111,8 @@ const AdminUserDetail: NextPageWithLayout<Record<string, never>> = () => {
                       'collapse onto one row and say how many; two separate ' +
                       'openings are two rows.'
                     }
-                    columns={accessFilter.filterColumns(auditColumns)}
-                    rows={pagedAccess}
-                    getRowId={(row: any) => row.id}
                     emptyLabel="No audited staff reads of this account's data."
                     filteredLabel="No audited staff reads match these filters"
-                    filtering={accessFilter.filtering}
-                    filterModel={accessFilter.gridProps.filterModel}
-                    onFilterModelChange={accessFilter.gridProps.onFilterModelChange}
-                    quickFilter
-                    filterChips={<ListFilterChips {...accessFilter.chipsProps} />}
-                    page={accessPage}
-                    pageSize={accessPageSize}
-                    count={filteredAccess.length}
-                    onPageChange={setAccessPage}
-                    onPageSizeChange={setAccessPageSize}
                   />
                 ),
               },

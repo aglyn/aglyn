@@ -34,6 +34,7 @@ import {
   STORAGE_CAP_FALLBACK_USD,
 } from '../../../../utils/storage-overage'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — self-serve billing surface, same posture as
 // billing/addons and billing/checkout. AGL-1501 keeps billing-locked sessions
@@ -204,22 +205,18 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        actorEmail: decoded.email ?? null,
-        action: 'billing.storageOverage.setCap',
-        target: `orgs/${orgId}`,
-        before: {
-          capSet: current.capSet,
-          monthlyCapUsd: current.monthlyCapUsd,
-        },
-        after: { capSet: true, monthlyCapUsd: cap },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      actorEmail: decoded.email ?? null,
+      action: 'billing.storageOverage.setCap',
+      target: `orgs/${orgId}`,
+      before: {
+        capSet: current.capSet,
+        monthlyCapUsd: current.monthlyCapUsd,
+      },
+      after: { capSet: true, monthlyCapUsd: cap },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     return Response.json(

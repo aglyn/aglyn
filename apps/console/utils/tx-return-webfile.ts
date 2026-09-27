@@ -320,8 +320,9 @@ export interface TaxReturnPayload {
    * The rows behind `undatedRows` — in no period query, so in no other list
    * on this payload. Optional: a response predating them carries the count
    * alone, which is the state this whole section exists to leave behind.
+   * `truncated` when the list is capped below the count beside it.
    */
-  undated?: { rows: TaxReturnRow[] } | null
+  undated?: { rows: TaxReturnRow[]; truncated?: boolean } | null
   /**
    * Item 3, as somebody entered it for THIS period, or absent.
    *

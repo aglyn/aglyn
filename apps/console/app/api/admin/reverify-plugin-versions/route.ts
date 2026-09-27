@@ -44,6 +44,7 @@ import {
   summariseReverify,
   type ReverifyEntry,
 } from '../../../../utils/server/reverify-plugin-versions'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * This job's console descriptor (AGL-1949) — the audit action, shared with the
@@ -293,22 +294,20 @@ async function handler(request: Request): Promise<Response> {
         // `ReverifyEntry.reviewLink`.
         link: first.reviewLink,
       })
-      await firestore
-        .collection('adminAudit')
-        .add({
-          actorUid: 'system:cron',
-          action: 'plugins.verifier.regression',
-          target: `verifier:${PLUGIN_VERIFIER_VERSION}`,
-          after: {
-            regressed: summary.needsStaff.map((entry) => ({
-              listingId: entry.listingId,
-              version: entry.version,
-              activeInstalls: entry.activeInstalls,
-              problems: entry.problems,
-            })),
-          },
-          at: FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firestore, {
+        actorUid: 'system:cron',
+        action: 'plugins.verifier.regression',
+        target: `verifier:${PLUGIN_VERIFIER_VERSION}`,
+        after: {
+          regressed: summary.needsStaff.map((entry) => ({
+            listingId: entry.listingId,
+            version: entry.version,
+            activeInstalls: entry.activeInstalls,
+            problems: entry.problems,
+          })),
+        },
+        at: FieldValue.serverTimestamp(),
+      })
         .catch(() => undefined)
     }
 

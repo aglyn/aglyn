@@ -18,9 +18,13 @@
 
 import { CardDisplay } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
@@ -34,6 +38,14 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
+import useStaffListQuery from '../hooks/use-staff-list-query'
+import {
+  CLAIM_FILTER_FIELDS,
+  CLAIM_FILTER_HEADERS,
+  CLAIM_FILTER_OPTIONS,
+  CLAIM_SELECT_FIELDS,
+} from '../utils/idempotency-claims-list-query'
+import StaffListPaginationControls from './staff-list-pagination.component'
 
 export interface IdempotencyClaim {
   id: string
@@ -45,43 +57,18 @@ export interface IdempotencyClaim {
   stranded: boolean
 }
 
-interface ClaimReport {
-  claims: IdempotencyClaim[]
+/** The two figures over the whole pending set, from `?view=summary`. */
+interface ClaimSummary {
   pending: number
   stranded: number
+  /** Pending claims with no claim time, which the age-ordered list cannot show. */
+  untimed: number
   strandedAfterMs: number
-  truncated: boolean
 }
+
+const NO_SEARCH: readonly string[] = []
 
 /** Minutes and hours, because "8100000 ms" is not an operator's unit. */
-/*
- * What the claims grid filters and searches by. The card holds the whole
- * window the route read (a ceiling it says it hit), so both answer over all
- * of it. The operation is whatever its writer named, so it is typed rather
- * than picked; the state is the one enumeration a claim has.
- */
-const CLAIM_FILTER_FIELDS = [
-  inMemoryListField('kind', 'text'),
-  inMemoryListField('scopeId', 'text'),
-  inMemoryListField('orgId', 'text'),
-  inMemoryListField('ageMs', 'number'),
-  inMemoryListField('stranded', 'select', 'state'),
-]
-const CLAIM_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  kind: 'Operation',
-  scopeId: 'Scope',
-  orgId: 'Org',
-  ageMs: 'Age (ms)',
-  stranded: 'State',
-}
-const CLAIM_FILTER_OPTIONS = {
-  stranded: [
-    { value: 'stranded', label: 'stranded' },
-    { value: 'inFlight', label: 'in flight' },
-  ],
-}
-const CLAIM_SEARCH_PATHS = ['kind', 'scopeId', 'orgId', 'id']
-
 export function formatAge(ageMs: number | null): string {
   if (ageMs == null || !Number.isFinite(ageMs)) return 'unknown'
   const minutes = Math.floor(ageMs / 60000)
@@ -115,11 +102,9 @@ export function formatAge(ageMs: number | null): string {
  */
 export default function IdempotencyClaimsCard() {
   const { data: user } = useUser()
-  const [report, setReport] = useState<ClaimReport | null>(null)
+  const [summary, setSummary] = useState<ClaimSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-
-  const reload = useCallback(() => setReloadKey((key) => key + 1), [])
 
   useEffect(() => {
     if (!user) return
@@ -128,7 +113,7 @@ export default function IdempotencyClaimsCard() {
       try {
         const response = await authorizedFetch(
           user,
-          '/api/admin/idempotency-claims',
+          '/api/admin/idempotency-claims?view=summary',
         )
         const body = await response.json().catch(() => null)
         if (!active) return
@@ -136,8 +121,7 @@ export default function IdempotencyClaimsCard() {
           setError(body?.error ?? 'Idempotency claim lookup failed')
           return
         }
-        setError(null)
-        setReport(body as ClaimReport)
+        setSummary(body as ClaimSummary)
       } catch {
         if (active) setError('Idempotency claim lookup failed')
       }
@@ -147,26 +131,40 @@ export default function IdempotencyClaimsCard() {
     }
   }, [user, reloadKey])
 
-  const claimRows = useMemo(
-    () =>
-      (report?.claims ?? []).map((claim) => ({
-        ...claim,
-        state: claim.stranded ? 'stranded' : 'inFlight',
-      })),
-    [report],
+  /*
+   * The Filters panel, SERVED by the route (AGL-3321): every clause is on
+   * one query over the pending claims, oldest first, and each page the
+   * footer turns is a page of the narrowed list. See
+   * `utils/idempotency-claims-list-query.ts`.
+   */
+  const gridFilter = useListGridFilter({ selectFields: CLAIM_SELECT_FIELDS })
+  const onError = useCallback(
+    (reason: unknown) =>
+      setError(
+        reason instanceof Error && reason.message
+          ? reason.message
+          : 'Idempotency claim lookup failed',
+      ),
+    [],
   )
-  const claimFilter = useListRowsFilter({
-    rows: claimRows,
-    fields: CLAIM_FILTER_FIELDS,
-    options: CLAIM_FILTER_OPTIONS,
-    headers: CLAIM_FILTER_HEADERS,
-    search: CLAIM_SEARCH_PATHS,
+  const claims = useStaffListQuery<IdempotencyClaim>({
+    endpoint: '/api/admin/idempotency-claims',
+    clauses: gridFilter.clauses,
+    // No search box: every value on a claim is an identifier, which the
+    // panel's exact filters match (`utils/idempotency-claims-list-query.ts`).
+    search: NO_SEARCH,
+    onError,
   })
-  const { filterColumns } = claimFilter
+  const { refresh } = claims
+  const reload = useCallback(() => {
+    setError(null)
+    setReloadKey((key) => key + 1)
+    refresh()
+  }, [refresh])
 
   /* One row grammar, the console's (AGL-2501). */
   const claimColumns: GridColDef[] = useMemo(
-    () => filterColumns([
+    () => listFilterGridColumns([
       {
         field: 'kind',
         headerName: 'Operation',
@@ -232,11 +230,9 @@ export default function IdempotencyClaimsCard() {
           />
         ),
       },
-    ]),
-    [filterColumns],
+    ], CLAIM_FILTER_FIELDS, CLAIM_FILTER_OPTIONS, CLAIM_FILTER_HEADERS),
+    [],
   )
-
-  const countPrefix = report?.truncated ? 'at least ' : ''
 
   return (
     <CardDisplay
@@ -267,79 +263,94 @@ export default function IdempotencyClaimsCard() {
         </Stack>
 
         {error ? <Alert severity="error">{error}</Alert> : null}
-
-        {report ? (
-          <>
-            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-              {/*
-                "at least", or nothing at all. Both figures are counted over
-                the scan window, so once the probe finds a claim past it they
-                are lower bounds — and a lower bound printed as a total is
-                what makes a fleet-wide outage read as a quiet minute. Keyed
-                on the probe rather than on the window's length, because a
-                scan that returned exactly the ceiling is complete and its
-                numbers are exact.
-              */}
-              <Chip
-                size="small"
-                label={`${countPrefix}${report.pending} in flight or stuck`}
-              />
-              {/*
-                Two numbers, not one. A pending claim is ordinary traffic and
-                a stranded one is a stuck key; a single "pending" figure makes
-                a busy minute and a dead process look identical.
-              */}
-              <Chip
-                size="small"
-                color={report.stranded > 0 ? 'warning' : 'success'}
-                label={`${countPrefix}${report.stranded} stranded over ${formatAge(
-                  report.strandedAfterMs,
-                )}`}
-              />
-            </Stack>
-
-            {report.truncated ? (
-              <Alert severity="warning">
-                {'More pending claims than this read returns — the figures ' +
-                  'above are floors, and the rows are a sample of the ' +
-                  'fleet rather than all of it.'}
-              </Alert>
-            ) : null}
-
-            {report.claims.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                {'Nothing pending. Every claim taken has settled or been released.'}
-              </Typography>
-            ) : (
-              <>
-              <ListFilterChips {...claimFilter.chipsProps} />
-              <ListTable
-                aria-label="Idempotency claims"
-                rows={claimFilter.rows}
-                columns={claimColumns}
-                {...claimFilter.gridProps}
-                noRowsLabel="No claims match these filters"
-                getRowId={(row: any) => row.id}
-                /*
-                 * The grid's own footer, which is the console's one footer
-                 * (AGL-2501). The route reads a ceiling with a probe and
-                 * hands the whole window over, so the page is a client slice
-                 * — and this list is at its longest during the incident it
-                 * exists to describe, which is precisely when the claims
-                 * past the tenth were reachable by nothing.
-                 *
-                 * A claim has no page of its own, which is a fact about the
-                 * ROW and was never a reason to withhold the pager.
-                 */
-                rowHeight={TABLE_ROW_HEIGHT}
-              />
-              </>
-            )}
-          </>
-        ) : error ? null : (
+        {!summary && !error ? (
           <Typography variant="body2" color="text.secondary">
             {'Loading…'}
           </Typography>
+        ) : null}
+
+        {summary ? (
+          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+            {/*
+              Two numbers, not one. A pending claim is ordinary traffic and
+              a stranded one is a stuck key; a single "pending" figure makes
+              a busy minute and a dead process look identical. Both are
+              counted over every pending claim, not over a page of them.
+            */}
+            <Chip size="small" label={`${summary.pending} in flight or stuck`} />
+            <Chip
+              size="small"
+              color={summary.stranded > 0 ? 'warning' : 'success'}
+              label={`${summary.stranded} stranded over ${formatAge(
+                summary.strandedAfterMs,
+              )}`}
+            />
+          </Stack>
+        ) : null}
+
+        {summary && summary.untimed > 0 ? (
+          <Alert severity="warning">
+            {`${summary.untimed} pending ${
+              summary.untimed === 1 ? 'claim carries' : 'claims carry'
+            } no claim time, so ${
+              summary.untimed === 1 ? 'it has' : 'they have'
+            } no age and ${
+              summary.untimed === 1 ? 'is' : 'are'
+            } not listed below. Each is a key that was taken without the ` +
+              'time it was taken, by a writer that predates this card.'}
+          </Alert>
+        ) : null}
+
+        {summary && summary.pending === 0 && !claims.filtering ? (
+          <Typography variant="body2" color="text.secondary">
+            {'Nothing pending. Every claim taken has settled or been released.'}
+          </Typography>
+        ) : (
+          <>
+            <ListFilterChips
+              fields={CLAIM_FILTER_FIELDS}
+              headers={CLAIM_FILTER_HEADERS}
+              options={CLAIM_FILTER_OPTIONS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+            />
+            <ListQueryNotices
+              refused={listQueryRefusals(claims.refused, {
+                fields: CLAIM_FILTER_FIELDS,
+                headers: CLAIM_FILTER_HEADERS,
+                options: CLAIM_FILTER_OPTIONS,
+              })}
+              notices={claims.notices}
+            />
+            <ListTable
+              aria-label="Idempotency claims"
+              rows={claims.rows}
+              columns={claimColumns}
+              loading={claims.loading}
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              noRowsLabel="No claims match these filters"
+              getRowId={(row: IdempotencyClaim) => row.id}
+              rowHeight={TABLE_ROW_HEIGHT}
+              /*
+               * One page of a cursor walk, turned by the console's shared
+               * footer below: the grid neither slices it nor filters it. This
+               * list is at its longest during the incident it exists to
+               * describe, which is precisely when a window would hide the
+               * claims past it.
+               *
+               * A claim has no page of its own, which is a fact about the
+               * ROW and was never a reason to withhold the pager.
+               */
+              hideFooter
+            />
+            <StaffListPaginationControls
+              pagination={claims}
+              shown={claims.rows.length}
+              sizeMenu={false}
+            />
+          </>
         )}
       </Stack>
     </CardDisplay>

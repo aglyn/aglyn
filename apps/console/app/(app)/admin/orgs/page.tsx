@@ -29,7 +29,6 @@ import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
-  Alert,
   Button,
   Chip,
   Dialog,
@@ -39,7 +38,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { type GridColDef, type GridSortModel } from '@mui/x-data-grid'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
@@ -50,9 +49,13 @@ import {
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import {
   ORG_LIST_FILTER_FIELDS,
   ORG_LIST_FILTER_HEADERS,
-} from '../../../../utils/list-filters'
+} from '../../../../utils/org-list-query'
 import { mdiChartLine } from '@aglyn/shared-data-mdi'
 import {
   ListTable,
@@ -83,7 +86,7 @@ import MainLayout from '../../../../components/layouts/main.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
-import { useStaffListPagination } from '../../../../hooks/use-staff-list-pagination'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
 
 /**
  * Staff organization management (AGL-238, grown from the AGL-42 tenant
@@ -147,91 +150,38 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
   // from the client returned a non-deterministic subset — that list is gated by
   // the `isStaff() || isOrgMember()` rule and rides App Check. `/api/admin/orgs`
   // reads it with the service account (bypasses both), so staff reliably see
-  // EVERY org, with cursor pagination (`after` = the last doc id).
-  //
-  // The Previous/Next machinery itself moved to `useStaffListPagination`
-  // (AGL-2486) — it was written here and the Users list had none, and the
-  // cheap fix for that was a second copy of this block. The page size is the
-  // route's (`PAGE_SIZE`, 25), not the screen's; nothing here decides it.
+  // EVERY org, with cursor pagination.
   /**
-   * The grid's Filters panel and quick search, bound to the ONE clause the
-   * query is currently answering (`single`).
-   *
-   * One, not a list: Firestore composes a second predicate only with an
-   * index built for that exact pair, so offering two filters would mean
-   * either a combinatorial index set or a panel where some combinations
-   * quietly return nothing. A clause set in the panel replaces the last.
+   * The grid's Filters panel and quick search: every clause the reader sets,
+   * each on its own field, and the search box's words.
    */
-  const gridFilter = useListGridFilter({
-    selectFields: ORG_SELECT_FIELDS,
-    single: true,
-  })
-  const filter = gridFilter.clauses[0] ?? null
-  const searchKey = gridFilter.searchWords.join(' ').trim()
-  /** The debounced term the toolbar's quick filter last settled on. */
-  const [search, setSearch] = useState('')
-  /*
-   * Debounced, because each settled term is a Firestore query and a fast
-   * typist would otherwise spend one per keystroke. The cleanup clears a
-   * pending term on unmount, so it cannot set state on a page that has gone.
-   */
-  useEffect(() => {
-    const timer = setTimeout(() => setSearch(searchKey), 300)
-    return () => clearTimeout(timer)
-  }, [searchKey])
-  const filtering = Boolean(filter) || Boolean(searchKey)
-
-  const fetchOrgsPage = useCallback(
-    async (cursor: string | null, _pageIndex: number, pageSize: number) => {
-      const url = new URL('/api/admin/orgs', window.location.origin)
-      url.searchParams.set('pageSize', String(pageSize))
-      if (search) url.searchParams.set('search', search)
-      if (filter) {
-        url.searchParams.set('filterField', filter.field)
-        url.searchParams.set('filterOp', filter.op)
-        url.searchParams.set('filterValue', filter.value)
-      }
-      if (cursor) url.searchParams.set('after', cursor)
-      const response = await authorizedFetch(user, url.toString())
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload?.error ?? 'Failed')
-      return {
-        rows: (payload.orgs ?? []) as any[],
-        hasMore: Boolean(payload.hasMore),
-        nextCursor: payload.nextCursor ?? null,
-      }
-    },
-    [user, search, filter],
-  )
+  const gridFilter = useListGridFilter({ selectFields: ORG_SELECT_FIELDS })
   const reportOrgsError = useCallback(() => {
     enqueueSnackbar('Could not load organizations', { variant: 'error' })
   }, [enqueueSnackbar])
-  const pagination = useStaffListPagination<any>({
-    fetchPage: fetchOrgsPage,
+  /*
+   * EVERY CLAUSE AND THE SEARCH ARE THE ROUTE'S QUERY (AGL-3321).
+   *
+   * The clauses and the words go to `/api/admin/orgs`, which plans them all
+   * onto one Firestore query (`ORG_LIST_QUERY`) and pages the answer; a new
+   * clause or word starts the walk over at page one. The page narrows
+   * nothing it is handed. A clause one query cannot hold alongside the rest
+   * comes back refused, is not applied, and is named above the grid.
+   *
+   * The search matches the start of any word of the name ("coffee" finds
+   * "Acme Coffee"), never mid-word; a Firestore query without a search
+   * service can do no more, and a word search that reaches every
+   * organization beats a substring match over the rows on screen.
+   */
+  const pagination = useStaffListQuery<any>({
+    endpoint: '/api/admin/orgs',
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+    rowsKey: 'orgs',
     onError: reportOrgsError,
   })
   // `refresh` re-reads the page currently shown — the post-mutation target.
-  const { rows: orgDocs, loading, refresh } = pagination
-
-  /*
-   * Search runs on the SERVER; sorting is the grid's (AGL-2501).
-   *
-   * Both used to be bespoke and both were wrong at scale: a `Sort` select
-   * offering three of the table's own columns, and a text box that filtered
-   * the rows already fetched. This list is paged, so filtering in the browser
-   * answered "no such organization" for every organization past the first
-   * page — an answer a search must never give wrongly.
-   *
-   * The toolbar's quick filter now drives `/api/admin/orgs?search=`, a
-   * Firestore prefix range over the normalized `nameLower`. Debounced,
-   * because each keystroke is a query.
-   *
-   * ⚠️ Prefix, not contains: "acme" finds "Acme Coffee" and "coffee" does
-   * not. Firestore cannot answer contains without a search service, and a
-   * prefix that reaches the whole collection beats a contains that cannot
-   * see past ten rows.
-   */
-  const orgs = orgDocs
+  const { rows: orgs, loading, refresh, filtering } = pagination
 
   /*
    * Columns a plugin contributes to this list (AGL-2984), drawn after the
@@ -607,18 +557,17 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                 options={ORG_LIST_FILTER_OPTIONS}
                 clauses={gridFilter.clauses}
                 onChange={gridFilter.setClauses}
-                servedField={filter?.field ?? null}
               />
-              {/* The route answers a filter OR a search, never both at once:
-                  with a filter set it runs the filter's query and the words
-                  wait. Said, so the search box does not read as applied. */}
-              {filter && search ? (
-                <Alert severity="info">
-                  {'The search is set aside while a filter is in force — ' +
-                    'this list answers one of the two. Remove the filter to ' +
-                    'search by name.'}
-                </Alert>
-              ) : null}
+              {/* What the query could not hold alongside the rest, by name —
+                  not applied, rather than applied to some rows. */}
+              <ListQueryNotices
+                refused={listQueryRefusals(pagination.refused, {
+                  fields: ORG_LIST_FILTER_FIELDS,
+                  headers: ORG_LIST_FILTER_HEADERS,
+                  options: ORG_LIST_FILTER_OPTIONS,
+                })}
+                notices={pagination.notices}
+              />
               {orgs.length === 0 && !filtering ? (
                 <Typography variant="body2" color="text.secondary">
                   {loading
@@ -637,10 +586,10 @@ const AdminOrgs: NextPageWithLayout<Record<string, never>> = () => {
                   onSortModelChange={onGridSortModelChange}
                   /*
                    * The grid must NOT also filter. With the server answering
-                   * the search, a second client-side pass over the returned
-                   * page would drop rows the query already matched — the
-                   * prefix range matches `nameLower`, and the grid compares
-                   * against whatever a column happens to render.
+                   * the clauses and the search, a second client-side pass over
+                   * the returned page would drop rows the query already
+                   * matched — the query matches the stored keys, and the grid
+                   * compares against whatever a column happens to render.
                    */
                   filterMode="server"
                   // The route answers the search box as well as the column

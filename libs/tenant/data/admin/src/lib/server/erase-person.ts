@@ -30,6 +30,7 @@ import { eraseEmailDeliveriesForAddresses } from './email-delivery-log'
 import { suppressEmailForHostErasure } from './email-suppression'
 import firebaseAdmin from './firebase-admin'
 import { listMemberDocIds } from './list-members'
+import { addAdminAudit } from './admin-audit-write'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 
@@ -336,16 +337,14 @@ export async function erasePerson(
     console.error('erasePerson: delivery log sweep failed', error)
   }
 
-  await db
-    .collection('adminAudit')
-    .add({
-      actorUid: 'system:erase-person',
-      action: 'person.erased',
-      target: `orgs/${options.orgId}/people/${key}`,
-      before: null,
-      after: counts,
-      at: FieldValue.serverTimestamp(),
-    })
+  await addAdminAudit(db, {
+    actorUid: 'system:erase-person',
+    action: 'person.erased',
+    target: `orgs/${options.orgId}/people/${key}`,
+    before: null,
+    after: counts,
+    at: FieldValue.serverTimestamp(),
+  })
     .catch(() => undefined)
 
   return { ok: true, ...counts }

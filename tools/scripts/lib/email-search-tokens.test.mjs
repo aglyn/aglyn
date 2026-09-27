@@ -18,11 +18,16 @@
 // npm run test:email-search-tokens
 //
 // The script-side address search keys answer the same fixtures the library's
-// email-suppression.spec.ts and list-members.spec.ts answer (AGL-3321).
+// email-suppression.spec.ts, list-members.spec.ts and
+// email-delivery-search.spec.ts answer (AGL-3321).
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { emailSearchTokens, listMemberSearchTokens } from './email-search-tokens.mjs'
+import {
+  emailDeliverySearchTokens,
+  emailSearchTokens,
+  listMemberSearchTokens,
+} from './email-search-tokens.mjs'
 
 const fixtures = JSON.parse(
   readFileSync(new URL('./email-search-tokens.fixtures.json', import.meta.url), 'utf8'),
@@ -48,4 +53,11 @@ test('list member tokens match the fixtures', () => {
 test('no address, no tokens', () => {
   assert.deepEqual(emailSearchTokens(null), [])
   assert.deepEqual(emailSearchTokens('   '), [])
+})
+
+test('delivery-message tokens match the fixtures', () => {
+  assert.ok(fixtures.deliveries.length >= 3)
+  for (const { name, message, tokens } of fixtures.deliveries) {
+    assert.deepEqual(emailDeliverySearchTokens(message), tokens, name)
+  }
 })

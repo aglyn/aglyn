@@ -31,6 +31,7 @@ import {
   readOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Apply or remove a per-org subscription discount (AGL-1105). Staff attaches
@@ -144,7 +145,7 @@ async function handler(request: Request): Promise<Response> {
         { discount: firebaseAdmin.firestore.FieldValue.delete() },
         { merge: true },
       )
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: 'org.discount.remove',
         target: `orgs/${orgId}`,
@@ -248,7 +249,7 @@ async function handler(request: Request): Promise<Response> {
     if (reason) discount.reason = reason.slice(0, 500)
 
     await orgRef.set({ discount }, { merge: true })
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: decoded.uid,
       action: 'org.discount.apply',
       target: `orgs/${orgId}`,

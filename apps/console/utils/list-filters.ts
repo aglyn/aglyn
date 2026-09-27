@@ -30,82 +30,10 @@ import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
  * Firestore filters the collection it queries and nothing else.
  */
 
-/**
- * Organizations (`orgs/{orgId}`).
- *
- * ⛔ Three things a reader might reasonably expect are absent, and each for the
- * same reason — the query has nothing to filter on:
- *
- *   Stripe customer   lives at `orgs/{orgId}/billing/stripe`, a subcollection
- *                     document. A parent cannot be filtered by a child's
- *                     field; a collection-group query over `billing` returns
- *                     billing documents, not organizations, so it can neither
- *                     page nor sort this list.
- *   Member counts     not stored on the org at all — seats are counted by
- *                     reading members. Filtering needs a maintained counter,
- *                     and a counter that can drift is worse than no filter.
- *   Site limit        derived from plan and entitlements when the row renders;
- *                     `entitlements` holds feature flags, not a number.
- *
- * `enterprise` is likewise absent: it is written only on the organizations
- * that have it, so `is false` would return nothing rather than everyone else —
- * a filter that lies in exactly one direction.
+/*
+ * Organizations are declared in `org-list-query.ts`, beside the query their
+ * two staff lists plan from (AGL-3321).
  */
-export const ORG_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
-  {
-    column: 'name',
-    kind: 'text',
-    path: 'name',
-    lowerPath: 'nameLower',
-    tokensPath: 'nameTokens',
-    reversedPath: 'nameReversed',
-    presence: 'always',
-  },
-  {
-    // Slugs are lower-case by construction (`generateOrgSlug`), so the stored
-    // value is its own normalized key and needs no `slugLower` twin.
-    column: 'slug',
-    kind: 'text',
-    path: 'slug',
-    lowerPath: 'slug',
-    presence: 'always',
-  },
-  { column: '$id', kind: 'id', path: '__name__' },
-  { column: 'ownerUid', kind: 'exact', path: 'ownerUid', presence: 'always' },
-  { column: 'plan', kind: 'exact', path: 'plan' },
-  {
-    /*
-     * The DENORMALIZED billing status, not the live subscription.
-     *
-     * The subscription itself moved to `orgs/{orgId}/billing/stripe`
-     * (AGL-1028) and the row merges it in after the query has run, so it is
-     * not something the query can narrow by. `billingStatus` is the mirror
-     * `writeOrgBilling` keeps on the org document for the dunning banner, and
-     * it is the only status a predicate can reach.
-     */
-    column: 'subscription',
-    kind: 'exact',
-    path: 'billingStatus',
-  },
-  { column: 'createdAt', kind: 'date', path: 'createdAt', presence: 'always' },
-  { column: 'updatedAt', kind: 'date', path: 'updatedAt', presence: 'always' },
-]
-
-/**
- * How each field above reads — as a hidden column's header, and on the chip
- * over the grid. `plan` and `subscription` name what the query matches, the
- * STORED values, which is not always what the row shows beside them.
- */
-export const ORG_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  name: 'Organization',
-  plan: 'Stored plan',
-  subscription: 'Billing status',
-  createdAt: 'Created',
-  $id: 'Org ID',
-  slug: 'Org slug',
-  ownerUid: 'Owner UID',
-  updatedAt: 'Updated',
-}
 
 /*
  * The staff ACCOUNT list is not a Firestore query (AGL-2501).

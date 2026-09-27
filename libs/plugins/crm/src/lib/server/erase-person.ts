@@ -38,6 +38,7 @@ import {
 import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { FieldValue } from 'firebase-admin/firestore'
 import { authorizeOrgCaller, orgHostIds, readCrmRouteScope } from './org-caller'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /** The route key, as `registerCrmConsoleApi` registers it. */
 export const CRM_ERASE_PERSON_ROUTE = 'crm/erase-person'
@@ -342,20 +343,18 @@ export const crmErasePersonHandler: PluginApiHandler = async (req, res) => {
         () => undefined,
       )
     }
-    await firestore
-      .collection('adminAudit')
-      .add({
-        actorUid: actor.uid,
-        action: 'person.erasure-requested',
-        target: `orgs/${orgId}/people/${key}`,
-        before: null,
-        after: {
-          hostId: hostId || null,
-          hosts: hostIds.length,
-          from: byAddress ? 'address' : contactId ? 'contact' : 'lead',
-        },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firestore, {
+      actorUid: actor.uid,
+      action: 'person.erasure-requested',
+      target: `orgs/${orgId}/people/${key}`,
+      before: null,
+      after: {
+        hostId: hostId || null,
+        hosts: hostIds.length,
+        from: byAddress ? 'address' : contactId ? 'contact' : 'lead',
+      },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     const answer: ErasePersonResponse = {

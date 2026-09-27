@@ -26,6 +26,7 @@ import {
   writeOrgBilling,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Enterprise custom-billing provisioning (AGL-1110) — the staff door that
@@ -469,7 +470,7 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: decoded.uid,
       action: 'org.enterprise.provision',
       target: `orgs/${orgId}`,

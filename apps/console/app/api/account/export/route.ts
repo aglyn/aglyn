@@ -25,6 +25,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Download everything we hold about YOU (AGL-1974).
@@ -122,24 +123,20 @@ async function handler(request: Request): Promise<Response> {
     // point (§7 of the runbook: when it arrived, what was asked, what was
     // done). Ids and a count — never the content, which is the AGL-1443 rule
     // that removed the erasure's own dump.
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'account.exported.self',
-        target: `users/${decoded.uid}`,
-        before: null,
-        after: {
-          sources: Object.keys(exported.data),
-          documents: Object.values(exported.data).reduce(
-            (total, rows) => total + rows.length,
-            0,
-          ),
-        },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'account.exported.self',
+      target: `users/${decoded.uid}`,
+      before: null,
+      after: {
+        sources: Object.keys(exported.data),
+        documents: Object.values(exported.data).reduce(
+          (total, rows) => total + rows.length,
+          0,
+        ),
+      },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     return new Response(JSON.stringify(exported, null, 2), {

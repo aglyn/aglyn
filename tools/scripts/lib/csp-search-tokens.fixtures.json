@@ -1,0 +1,10 @@
+{
+  "//": "Worked examples for cspSearchTokens in libs/tenant/data/admin/src/lib/server/csp-aggregate.ts and its script-side restatement in tools/scripts/backfill-csp-search-tokens.mjs. Asserted by csp-aggregate.spec.ts and by the backfill's --self-test (AGL-3321).",
+  "tokens": [
+    {"key":{"origin":"www.googletagmanager.com","directive":"script-src-elem","app":"console"},"tokens":["w","ww","www","www.","www.g","www.go","www.goo","www.goog","www.googl","www.google","www.googlet","www.googleta","g","go","goo","goog","googl","google","googlet","googleta","googletag","googletagm","googletagma","googletagman","c","co","com","s","sc","scr","scri","scrip","script","script-","script-s","script-sr","script-src","script-src-","script-src-e","sr","src","e","el","ele","elem","con","cons","conso","consol","console"]},
+    {"key":{"origin":"inline","directive":"script-src","app":"tenant"},"tokens":["i","in","inl","inli","inlin","inline","s","sc","scr","scri","scrip","script","script-","script-s","script-sr","script-src","sr","src","t","te","ten","tena","tenan","tenant"]},
+    {"key":{"origin":"cdn.example.com:8443","directive":"img-src","app":"tenant"},"tokens":["c","cd","cdn","cdn.","cdn.e","cdn.ex","cdn.exa","cdn.exam","cdn.examp","cdn.exampl","cdn.example","cdn.example.","e","ex","exa","exam","examp","exampl","example","co","com","8","84","844","8443","i","im","img","img-","img-s","img-sr","img-src","s","sr","src","t","te","ten","tena","tenan","tenant"]},
+    {"key":{"origin":"data","directive":"other"},"tokens":["d","da","dat","data","o","ot","oth","othe","other"]},
+    {"key":{"origin":"","directive":null},"tokens":[]}
+  ]
+}

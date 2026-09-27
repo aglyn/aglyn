@@ -24,6 +24,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Close your own account (AGL-1140).
@@ -132,18 +133,14 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ ok: true, alreadyGone: true }, { status: 200 })
     }
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'account.closed.self',
-        target: `users/${decoded.uid}`,
-        before: { email: decoded.email ?? null, tenantId: tenantId ?? null },
-        after: result.deleted,
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'account.closed.self',
+      target: `users/${decoded.uid}`,
+      before: { email: decoded.email ?? null, tenantId: tenantId ?? null },
+      after: result.deleted,
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     return Response.json({ ok: true, deleted: result.deleted }, { status: 200 })

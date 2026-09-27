@@ -23,11 +23,14 @@ import {
 } from '@aglyn/aglyn'
 import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
-import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
@@ -47,72 +50,31 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
-import {
-  CONTENT_MAX_WIDTH,
-  TABLE_PAGE_SIZE_DEFAULT,
-} from '../../../../constants/shared'
+import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { useIsStaff } from '../../../../hooks/use-is-staff'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import {
+  COUPON_DURATIONS,
+  COUPON_FILTER_FIELDS,
+  COUPON_FILTER_HEADERS,
+  COUPON_FILTER_OPTIONS,
+  type CouponListRow,
+  type CouponRow,
+} from '../../../../utils/coupon-list-query'
 
-interface CouponRow {
-  id: string
-  name: string | null
-  percentOff: number | null
-  amountOffUsd: number | null
-  duration: string | null
-  durationInMonths: number | null
-  maxRedemptions: number | null
-  timesRedeemed: number
-  redeemBy: string | null
-  valid: boolean
-  codes: Array<{ id: string; code: string; active: boolean; timesRedeemed: number }>
-}
+/** The picked fields, which the panel shows as selects. */
+const COUPON_SELECT_FIELDS = Object.keys(COUPON_FILTER_OPTIONS)
 
-/** A Stripe coupon's durations, as the create form offers them. */
-const COUPON_DURATIONS = [
-  { value: 'once', label: 'Once' },
-  { value: 'repeating', label: 'Repeating' },
-  { value: 'forever', label: 'Forever' },
-] as const
-
-/** A coupon row as the list matches it: the fields the panel reads, derived. */
-type CouponListRow = CouponRow & {
-  $id: string
-  status: 'valid' | 'expired'
-  codeText: string[]
-}
-
-/*
- * What the coupons grid filters and searches by. The list holds every coupon
- * one `/api/admin/coupons` read returned and pages them itself, so both
- * answer over all of them before a page is sliced.
- */
-const COUPON_FILTER_FIELDS = [
-  inMemoryListField('name', 'text'),
-  inMemoryListField('duration', 'select'),
-  inMemoryListField('status', 'select'),
-  inMemoryListField('timesRedeemed', 'number'),
-]
-const COUPON_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  name: 'Coupon',
-  duration: 'Duration',
-  status: 'Status',
-  timesRedeemed: 'Redeemed',
-}
-const COUPON_FILTER_OPTIONS = {
-  duration: COUPON_DURATIONS.map(({ value, label }) => ({ value, label })),
-  status: [
-    { value: 'valid', label: 'Valid' },
-    { value: 'expired', label: 'Expired' },
-  ],
-}
-const COUPON_SEARCH_PATHS = ['name', 'id', 'codeText']
+/** Asks the route for the Coupons page's list rather than the picker's set. */
+const COUPON_LIST_PARAMS = { view: 'list' } as const
 
 /**
  * A representative paying subscription for the live rating readout — a
@@ -162,20 +124,31 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
   const { enqueueSnackbar } = useSnackbar()
   const isStaff = useIsStaff()
 
-  const [coupons, setCoupons] = useState<CouponRow[]>([])
   /*
-   * The list PAGES (AGL-2501). Every Stripe coupon the platform has ever
-   * created rendered in one wall, and a coupon row is tall — a name, an id, a
-   * chip per promotion code — so a few dozen of them is a page a reader
-   * scrolls past rather than reads.
-   *
-   * The rows are already in memory (one `/api/admin/coupons` fetch), so the
-   * footer is handed a real total rather than the "more than 10" a cursor
-   * feed has to settle for.
+   * The list PAGES (AGL-2501), and the route answers every filter and the
+   * search (AGL-3321). A coupon is a Stripe object, so there is no query to
+   * put a clause on: the route reads every coupon and every promotion code
+   * Stripe holds and matches the clauses over all of them, then hands back
+   * one page. Nothing here narrows the rows it is given.
    */
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const [loading, setLoading] = useState(true)
+  const gridFilter = useListGridFilter({ selectFields: COUPON_SELECT_FIELDS })
+  // Stable, because the list re-reads whenever its error handler changes.
+  const onListError = useCallback(
+    (error: unknown) =>
+      enqueueSnackbar(
+        error instanceof Error && error.message ? error.message : 'Loading coupons failed',
+        { variant: 'error' },
+      ),
+    [enqueueSnackbar],
+  )
+  const couponList = useStaffListQuery<CouponListRow>({
+    endpoint: isStaff ? '/api/admin/coupons' : null,
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+    params: COUPON_LIST_PARAMS,
+    onError: onListError,
+  })
+  const { refresh: refreshCoupons } = couponList
   const [busy, setBusy] = useState(false)
 
   const [form, setForm] = useState({
@@ -193,29 +166,6 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
 
   const [pendingToggle, setPendingToggle] = useState<PendingToggle | null>(null)
   const [toggleConfirmed, setToggleConfirmed] = useState(false)
-
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    try {
-      const response = await authorizedFetch(user, '/api/admin/coupons')
-      if (response.status === 501) {
-        setCoupons([])
-        return
-      }
-      if (!response.ok) throw new Error(`Load failed (${response.status})`)
-      const payload = await response.json()
-      setCoupons(payload.coupons ?? [])
-    } catch (error) {
-      console.error(error)
-      enqueueSnackbar('Loading coupons failed', { variant: 'error' })
-    } finally {
-      setLoading(false)
-    }
-  }, [user, enqueueSnackbar])
-
-  useEffect(() => {
-    if (isStaff) void refresh()
-  }, [isStaff, refresh])
 
   // Live rating (AGL-1105): rate the proposed discount against a typical
   // Business subscription so staff see the margin impact as they type.
@@ -260,7 +210,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
       }
       enqueueSnackbar('Coupon created', { variant: 'success' })
       update({ code: '', name: '', confirmHighDiscount: false })
-      await refresh()
+      refreshCoupons()
     } catch (error: any) {
       console.error(error)
       enqueueSnackbar(error?.message ?? 'Creating the coupon failed', {
@@ -309,7 +259,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
         variant: 'success',
       })
       setPendingToggle(null)
-      await refresh()
+      refreshCoupons()
     } catch (error: any) {
       console.error(error)
       enqueueSnackbar(error?.message ?? 'Updating the code failed', {
@@ -320,35 +270,21 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
     }
   }
 
-  const couponRows = useMemo<CouponListRow[]>(
+  const couponRefusals = useMemo(
     () =>
-      coupons.map((row) => ({
-        ...row,
-        $id: row.id,
-        status: row.valid ? 'valid' : 'expired',
-        codeText: row.codes.map((code) => code.code),
-      })),
-    [coupons],
+      listQueryRefusals(couponList.refused, {
+        fields: COUPON_FILTER_FIELDS,
+        headers: COUPON_FILTER_HEADERS,
+        options: COUPON_FILTER_OPTIONS,
+      }),
+    [couponList.refused],
   )
-  const couponFilter = useListRowsFilter({
-    rows: couponRows,
-    fields: COUPON_FILTER_FIELDS,
-    options: COUPON_FILTER_OPTIONS,
-    headers: COUPON_FILTER_HEADERS,
-    search: COUPON_SEARCH_PATHS,
-  })
-  const filteredCoupons = couponFilter.rows
-  const pagedCoupons = useMemo(
-    () => filteredCoupons.slice(page * pageSize, page * pageSize + pageSize),
-    [filteredCoupons, page, pageSize],
-  )
-  // A refresh that returns fewer coupons, or a filter that narrows them, can
-  // strand a reader past the last page, which MUI renders as an empty table
-  // with no explanation.
-  useEffect(() => {
-    const lastPage = Math.max(0, Math.ceil(filteredCoupons.length / pageSize) - 1)
-    if (page > lastPage) setPage(lastPage)
-  }, [filteredCoupons.length, page, pageSize])
+  const noCouponsYet =
+    !couponList.loading &&
+    !couponList.failed &&
+    !couponList.filtering &&
+    couponList.rows.length === 0 &&
+    couponList.pageIndex === 0
 
   const discountLabel = (row: Pick<CouponRow, 'percentOff' | 'amountOffUsd'>) =>
     row.percentOff != null
@@ -357,7 +293,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
         ? `$${row.amountOffUsd} off`
         : '—'
 
-  const couponColumns = useMemo(() => couponFilter.filterColumns([
+  const couponColumns = useMemo(() => listFilterGridColumns([
     {
       field: 'name',
       headerName: 'Coupon',
@@ -464,10 +400,11 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
         />
       ),
     },
-  ] as GridColDef<CouponListRow>[] as GridColDef[]),
-  // `discountLabel` reads nothing from the component's state.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [couponFilter.filterColumns, busy, openToggle])
+  ] as GridColDef<CouponListRow>[] as GridColDef[],
+  COUPON_FILTER_FIELDS,
+  COUPON_FILTER_OPTIONS,
+  COUPON_FILTER_HEADERS),
+  [busy, openToggle])
 
   return (
     <DashboardLayout
@@ -696,7 +633,7 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
             </CardDisplay>
 
             <CardDisplay
-              header={`Existing coupons (${coupons.length})`}
+              header={'Existing coupons'}
               help={docsHelp('staffConsole', {
                 anchor: '#existing-coupons',
                 excerpt:
@@ -705,40 +642,42 @@ const AdminCoupons: NextPageWithLayout<Record<string, never>> = () => {
               contentGutterX
               contentGutterY
             >
-              {loading && coupons.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  {'Loading coupons…'}
-                </Typography>
-              ) : coupons.length === 0 ? (
+              {noCouponsYet ? (
                 <Typography variant="body2" color="text.secondary">
                   {'No coupons yet.'}
                 </Typography>
               ) : (
                 <>
                 <Stack spacing={1}>
-                <ListFilterChips {...couponFilter.chipsProps} />
+                <ListFilterChips
+                  fields={COUPON_FILTER_FIELDS}
+                  headers={COUPON_FILTER_HEADERS}
+                  options={COUPON_FILTER_OPTIONS}
+                  clauses={gridFilter.clauses}
+                  onChange={gridFilter.setClauses}
+                />
+                <ListQueryNotices refused={couponRefusals} notices={couponList.notices} />
                 <ListTable
                   aria-label="Existing coupons"
-                  rows={pagedCoupons}
+                  rows={couponList.rows}
                   columns={couponColumns}
-                  {...couponFilter.gridProps}
+                  loading={couponList.loading}
+                  filterMode="server"
+                  filterModel={gridFilter.filterModel}
+                  onFilterModelChange={gridFilter.onFilterModelChange}
+                  quickFilter
                   // A coupon lists one line per promotion code, so a row is
                   // as tall as its codes.
                   getRowHeight={() => 'auto'}
-                  // Every coupon is held and paged by the footer below, so
-                  // the grid draws the page it is handed and slices nothing.
+                  // The route answers one page at a time; the footer below
+                  // walks the pages.
                   hideFooter
-                  noRowsLabel="No coupons match these filters"
+                  noRowsLabel={
+                    couponList.loading ? 'Loading coupons…' : 'No coupons match these filters'
+                  }
                 />
                 </Stack>
-                <ListPagination
-                  page={page}
-                  pageSize={pageSize}
-                  rowCount={pagedCoupons.length}
-                  count={filteredCoupons.length}
-                  onPageChange={setPage}
-                  onPageSizeChange={setPageSize}
-                />
+                <StaffListPaginationControls pagination={couponList} />
                 </>
               )}
             </CardDisplay>

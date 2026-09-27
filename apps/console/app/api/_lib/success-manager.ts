@@ -17,6 +17,7 @@
 
 import { sendEmail, type SendEmailResult } from '@aglyn/shared-util-email'
 import { firebaseAdmin, meterPlatformEmail } from '@aglyn/tenant-data-admin'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * The named success manager an Enterprise org is promised (AGL-2332).
@@ -122,16 +123,14 @@ export async function writeSuccessManager(
       { merge: true },
     )
   }
-  await firestore
-    .collection('adminAudit')
-    .add({
-      actorUid,
-      action: manager ? 'org.successManagerSet' : 'org.successManagerCleared',
-      target: `orgs/${orgId}/support/manager`,
-      before: null,
-      after: manager ? { name: manager.name, email: manager.email } : null,
-      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-    })
+  await addAdminAudit(firestore, {
+    actorUid,
+    action: manager ? 'org.successManagerSet' : 'org.successManagerCleared',
+    target: `orgs/${orgId}/support/manager`,
+    before: null,
+    after: manager ? { name: manager.name, email: manager.email } : null,
+    at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+  })
     .catch(() => undefined)
 }
 

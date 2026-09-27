@@ -189,12 +189,13 @@ async function handler(request: Request): Promise<Response> {
         .get(),
       // A null `paidAt` is INVISIBLE to a range query, so a row that failed to
       // date itself would silently vanish from the total rather than be
-      // reported missing. Counted out loud, exactly as the staff return does.
+      // reported missing. Counted out loud, exactly as the staff return does:
+      // an aggregate over every such row, not the size of a capped read.
       firestore
         .collection('storefrontTaxCollected')
         .where('hostId', '==', hostId)
         .where('paidAt', '==', null)
-        .limit(50)
+        .count()
         .get(),
     ])
 
@@ -209,7 +210,7 @@ async function handler(request: Request): Promise<Response> {
         period: { from: range.start.toISOString(), to: range.end.toISOString() },
         summary: storefrontTaxSummary(rows, range),
         truncated,
-        undatedRows: undated.size,
+        undatedRows: undated.data().count,
         /**
          * NOT A REMITTANCE DETERMINATION. Every one of these is a fact about
          * the DATA — what it does not yet reflect, and what it could not read

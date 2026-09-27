@@ -263,6 +263,9 @@ await put(
 // ── Org, membership mirror, host, hostIndex ────────────────────────────────
 await put(firestore.collection('orgs').doc(orgId), {
   name: 'E2E Bakery Co',
+  // The search keys every org writer stamps (`createOrganization`), so the
+  // staff Organizations list's search and name filter find it (AGL-3321).
+  ...displayNameSearchFields('E2E Bakery Co'),
   slug: E2E_ORG_SLUG,
   ownerUid: E2E_UID,
   plan: 'business',

@@ -31,6 +31,7 @@ import {
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
 import { revalidateHostAliases } from '../../../../utils/server/tenant-revalidate'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Staff host management (AGL-390): retarget a host's subdomain (validated,
@@ -152,7 +153,7 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: decoded.uid,
       action: 'host.set-subdomain',
       target: `hosts/${hostId}`,
@@ -299,7 +300,7 @@ async function reattachDomain(
   // Audited like every other staff write on this route. The row records the
   // PROBED state rather than "re-attached", because the interesting question
   // afterwards is what the platform said, not that somebody pressed a button.
-  await firestore.collection('adminAudit').add({
+  await addAdminAudit(firestore, {
     actorUid,
     action: 'host.reattach-domain',
     target: `hosts/${hostId}`,

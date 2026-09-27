@@ -211,8 +211,10 @@ describe('the search box reaches every pool', () => {
 })
 
 describe('the column filter is answered by the server', () => {
+  const filters = (...clauses: Array<[string, string, string?]>) =>
+    JSON.stringify(clauses.map(([field, op, value = '']) => ({ field, op, value })))
   const filter = (field: string, op: string, value = '') =>
-    call({ filterField: field, filterOp: op, filterValue: value })
+    call({ filters: filters([field, op, value]) })
 
   it('email · contains matches MID-string, which no index can', async () => {
     // The capability that comes free with matching in memory, and the reason
@@ -273,28 +275,90 @@ describe('the column filter is answered by the server', () => {
       'uid-grace',
     ])
   })
+})
 
-  it('an unknown field lists everything rather than nothing', async () => {
-    // A filter this console cannot serve must not read as "no such account",
-    // which is exactly what an empty page would say.
-    expect(uids(await filter('nonesuch', 'contains', 'x'))).toEqual([
-      'uid-ada',
-      'uid-grace',
+describe('every clause and the search apply TOGETHER (AGL-3321)', () => {
+  const filters = (...clauses: Array<[string, string, string?]>) =>
+    JSON.stringify(clauses.map(([field, op, value = '']) => ({ field, op, value })))
+
+  it('two clauses are an AND over the whole directory', async () => {
+    // Both accounts match one clause each; only Ada matches both.
+    const payload = await call({
+      filters: filters(['email', 'contains', 'example'], ['staff', 'is', 'true']),
+    })
+    expect(uids(payload)).toEqual(['uid-ada'])
+    expect(payload.refused).toEqual([])
+    expect(mockScanCalls).toBe(1)
+  })
+
+  it('a clause and the search apply together, neither set aside', async () => {
+    expect(
+      uids(await call({ search: 'o', filters: filters(['disabled', 'is', 'true']) })),
+    ).toEqual(['uid-grace'])
+    expect(
+      uids(await call({ search: 'lovelace', filters: filters(['disabled', 'is', 'true']) })),
+    ).toEqual([])
+  })
+
+  it('an exact email is still a lookup, with the other clauses over its one account', async () => {
+    const payload = await call({
+      filters: filters(['email', 'equals', 'ada@example.com'], ['disabled', 'is', 'true']),
+    })
+    // Ada is not disabled: the lookup found her and the second clause did not.
+    expect(uids(payload)).toEqual([])
+    expect(mockScanCalls).toBe(0)
+  })
+
+  it('refuses by name what it cannot answer, and applies none of it', async () => {
+    // A filter this console cannot serve must not read as "no such account"
+    // — and must not read as applied either.
+    const payload = await call({
+      filters: filters(
+        ['nonesuch', 'contains', 'x'],
+        ['email', 'contains', '   '],
+        ['staffRole', 'contains', 'sup'],
+      ),
+    })
+    expect(uids(payload)).toEqual(['uid-ada', 'uid-grace'])
+    expect(payload.refused.map((entry: any) => entry.clause.field)).toEqual([
+      'nonesuch',
+      'email',
+      'staffRole',
     ])
+    // Nothing served, so nothing walked.
+    expect(mockScanCalls).toBe(0)
   })
 
-  it('says so when the directory outran the scan', async () => {
+  it('refuses rather than answers from PART of the directory', async () => {
     // A partial answer that reads as a complete one is the failure this whole
-    // change is about.
+    // change is about: past the bound every clause and the search are
+    // refused, by name, and the list is the unfiltered walk it says it is.
     mockScanTruncated = true
-    const payload = await filter('email', 'contains', 'example')
-    expect(payload.scanTruncated).toBe(true)
+    const payload = await call({
+      search: 'ada',
+      filters: filters(['email', 'contains', 'example']),
+    })
+    expect(payload.refused.map((entry: any) => entry.clause.field ?? entry.clause)).toEqual([
+      'email',
+      'search',
+    ])
+    expect(payload.refused[0].reason).toMatch(/exact email or uid/)
+    expect(uids(payload)).toEqual(['uid-ada', 'uid-grace'])
   })
 
-  it('a filtered response carries no cursor to resume', async () => {
-    // Resuming one would page through the UNFILTERED directory, which is how
-    // a narrowed list quietly turns back into the whole one.
-    const payload = await filter('email', 'contains', 'example')
-    expect(payload.nextPageToken).toBeNull()
+  it('pages more matches than one response carries, and never cuts them', async () => {
+    for (let index = 0; index < 205; index += 1) {
+      mockScanned.push(pooled({ uid: `uid-bulk-${index}`, email: `bulk${index}@example.com` }))
+    }
+    const first = await call({ filters: filters(['email', 'contains', 'bulk']) })
+    expect(first.users).toHaveLength(200)
+    expect(first.nextPageToken).toBe('match:200')
+    const second = await call({
+      filters: filters(['email', 'contains', 'bulk']),
+      nextPageToken: first.nextPageToken,
+    })
+    expect(second.users).toHaveLength(5)
+    expect(second.nextPageToken).toBeNull()
+    expect(new Set([...first.users, ...second.users].map((row: any) => row.uid)).size).toBe(205)
   })
 })

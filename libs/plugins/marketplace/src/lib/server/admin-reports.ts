@@ -27,6 +27,7 @@ import { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { MARKETPLACE_REPORTS_QUERY } from '../model/listing-query'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * The staff end of the marketplace report button (AGL-2310), served at
@@ -265,7 +266,7 @@ async function handler(request: Request): Promise<Response> {
      * `targetType` on the report document says `listing` or `review` — the
      * same key naming two different things one hop apart.
      */
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       action: 'marketplace-report-status',
       actorUid: decoded.uid,
       actorEmail: decoded.email ? String(decoded.email) : null,

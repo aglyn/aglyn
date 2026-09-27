@@ -39,6 +39,8 @@
 import type { ReactNode } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { TaxReturnPayload, TaxReturnRow } from '../utils/tx-return-webfile'
+import { taxFindingListRows } from '../utils/tax-findings-list'
+import { serveTaxFindings } from '../utils/server/tax-findings-list'
 
 jest.mock('@aglyn/shared-data-enums', () => ({
   __esModule: true,
@@ -193,11 +195,33 @@ function payload(overrides: Partial<TaxReturnPayload> = {}): TaxReturnPayload {
  * blanket response would serve the return's shape to the entry card and make
  * every Item 3 assertion below pass or fail for the wrong reason.
  */
+/**
+ * The findings list as the route answers it (AGL-3321): the SAME server
+ * function over the same payload, so the card is asserted against what the
+ * route would hand it rather than a hand-made page.
+ */
+function findingsAnswer(body: TaxReturnPayload, url: string) {
+  const asked = new URL(url, 'https://console.test').searchParams
+  return serveTaxFindings(
+    taxFindingListRows(body),
+    {
+      clauses: JSON.parse(asked.get('filters') ?? '[]'),
+      search: (asked.get('search') ?? '').split(/\s+/).filter(Boolean),
+      cursor: asked.get('cursor'),
+      pageSize: Number(asked.get('pageSize') ?? 25),
+      sort: null,
+    },
+    !body.truncated,
+  )
+}
+
 function serve(body: TaxReturnPayload, entry: unknown = null) {
   global.fetch = jest.fn(async (url: string) => ({
     ok: true,
     json: async () =>
-      String(url).includes('/api/admin/tax-purchases')
+      String(url).includes('view=findings')
+        ? findingsAnswer(body, String(url))
+        : String(url).includes('/api/admin/tax-purchases')
         ? { role: 'super', period: body.period, entry, limits: { noteMax: 280 } }
         : String(url).includes('/api/admin/tax-filing')
           ? { config: { firstTaxablePeriod: '2026-09' } }

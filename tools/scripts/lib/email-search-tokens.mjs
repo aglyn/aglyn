@@ -20,11 +20,11 @@
  *
  * A backfill cannot import `emailSearchTokens`
  * (`libs/tenant/data/admin/src/lib/server/email-suppression.ts`) or
- * `listMemberSearchTokens` (`libs/tenant/data/admin/src/lib/server/list-members.ts`),
- * yet it must stamp exactly the tokens they stamp: a list's search asks
+ * `listMemberSearchTokens` (`libs/tenant/data/admin/src/lib/server/list-members.ts`)
+ * or `emailDeliverySearchTokens` (`.../email-delivery-log.ts`), yet it must stamp exactly the tokens they stamp: a list's search asks
  * `array-contains` for the token a typed word becomes, so a script that
  * spelled one differently would write rows no search can find. This file is
- * the ONE script-side restatement of the two, built on the one restatement
+ * the ONE script-side restatement of the three, built on the one restatement
  * of the name builders (`name-search-tokens.mjs`). Every backfill that stamps
  * address tokens imports it.
  *
@@ -70,4 +70,25 @@ export function emailSearchTokens(email) {
  */
 export function listMemberSearchTokens(email, name) {
   return [...new Set([...emailSearchTokens(email), ...nameSearchTokens(name)])]
+}
+
+/** `EMAIL_DELIVERY_SEARCH_TOKEN_LIMIT` (`.../email-delivery-log.ts`). */
+export const EMAIL_DELIVERY_SEARCH_TOKEN_LIMIT = 200
+
+/**
+ * `emailDeliverySearchTokens` (`libs/tenant/data/admin/src/lib/server/email-delivery-log.ts`):
+ * a delivery message's recipient address tokens, then the word prefixes of
+ * its subject and of its sender tag, without repeats, capped.
+ *
+ * @param {{ to?: unknown, subject?: unknown, context?: unknown }} message
+ * @returns {string[]}
+ */
+export function emailDeliverySearchTokens(message) {
+  const text = (value) => (typeof value === 'string' ? value : '')
+  const tokens = new Set([
+    ...emailSearchTokens(text(message?.to)),
+    ...nameSearchTokens(text(message?.subject)),
+    ...nameSearchTokens(text(message?.context)),
+  ])
+  return [...tokens].slice(0, EMAIL_DELIVERY_SEARCH_TOKEN_LIMIT)
 }

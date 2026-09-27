@@ -26,14 +26,19 @@ import { ICON_VARIANT_SYMBOL_SECURE } from '@aglyn/shared-data-enums'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
-  filterListRows,
   type ListFilterClause,
   type ListFilterOption,
   listFilterGridColumns,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { Alert, Button, Chip, Stack, TextField, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
@@ -41,14 +46,13 @@ import {
   collection,
   getDocs,
   limit,
-  orderBy,
   query,
   type QueryDocumentSnapshot,
   startAfter,
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
-import { listFilterConstraints } from '@aglyn/tenant-feature-instance/hooks/list-filter-constraints'
+import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
 import StaffOnly from '../../../../components/staff-only.component'
@@ -62,15 +66,13 @@ import {
   TABLE_ROW_HEIGHT,
 } from '../../../../constants/shared'
 import {
-  ADMIN_AUDIT_FILTER_FIELDS,
-  ADMIN_AUDIT_FILTER_HEADERS,
-  ADMIN_AUDIT_SCAN,
-  ADMIN_AUDIT_SEARCH_PATHS,
-  ADMIN_AUDIT_SELECT_FIELDS,
-  adminAuditClauseStandsAlongside,
-  adminAuditPlan,
-} from '../../../../utils/audit-log-filters'
-import { scanCursorPage } from '../../../../utils/scan-cursor-page'
+  ADMIN_AUDIT_KNOWN_SCOPES,
+  ADMIN_AUDIT_KNOWN_TARGET_KINDS,
+  ADMIN_AUDIT_LIST_FIELDS,
+  ADMIN_AUDIT_LIST_HEADERS,
+  ADMIN_AUDIT_LIST_QUERY,
+  ADMIN_AUDIT_LIST_SELECT_FIELDS,
+} from '../../../../utils/admin-audit-list-query'
 
 /**
  * THE ARCHIVE, GIVEN A DOOR (AGL-2324).
@@ -272,10 +274,18 @@ function ArchiveCard() {
  */
 const EXPORT_CEILING = 5000
 
-/** A stored entry as the list holds it, with the group its action files under. */
+/**
+ * A stored entry as the list holds it. The group is the one the writer
+ * stamped, which is what the Action group filter queries; a row the backfill
+ * has not reached yet shows the group the registry gives it today.
+ */
 const auditRow = (doc: QueryDocumentSnapshot): Record<string, any> => {
   const data = doc.data() as Record<string, any>
-  return { ...data, $id: doc.id, actionGroup: staffAuditActionGroup(data['action']) }
+  return {
+    ...data,
+    $id: doc.id,
+    actionGroup: data['actionGroup'] ?? staffAuditActionGroup(data['action']),
+  }
 }
 
 /**
@@ -299,27 +309,24 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   const firestore = useFirestore()
 
   /*==========================================
-   * ONE QUERY, FILTERED WHERE IT CAN BE (AGL-3321).
+   * EVERY CLAUSE ON THE QUERY (AGL-3321).
    *
    * `orderBy('at','desc')` and a cursor, so a page is the newest N entries
    * after the last one read — an unordered `limit()` is answered in
    * document-id order, and every row here is keyed by a generated id, so a
    * window without the order is an arbitrary sample of the log (AGL-2324).
    * `orderBy('at')` matches only documents that HAVE `at`; every writer sets
-   * it on the same write that creates the entry, and `adminAudit` has no
-   * client write path.
+   * it on the same write that creates the entry.
    *
-   * The toolbar's clauses split two ways (`adminAuditPlan`):
-   *
-   *  - SERVED: one of Action, Who (uid) or Target as an equality, each on its
-   *    own composite, and When as a range over the sort field. They narrow
-   *    the query, so they reach every entry in the log.
-   *  - MATCHED: Action group, Scope and the search. A group is a namespace
-   *    prefix or a plugin's list of codes and `scope` has no composite, so no
-   *    query under the date sort can ask for them; the page reads the log in
-   *    batches and keeps what matches, up to `ADMIN_AUDIT_SCAN` entries a
-   *    page, and Next resumes after the last entry READ. Nothing is skipped —
-   *    a page can only come back short.
+   * Every clause in the toolbar and the search word go onto that one query
+   * (`planListQuery` over `ADMIN_AUDIT_LIST_QUERY`): Action, Action group,
+   * Who, Target, Target type, Site and Scope as equalities on the fields each
+   * row carries — the group, the target type, the site and the search tokens
+   * stamped by the writer (`withAdminAuditIndex`) — and When as a range over
+   * the sort field. So each reaches every entry in the log, and nothing is
+   * matched over the rows a read happened to fetch. A combination one query
+   * cannot hold (two "any of" filters past thirty values, say) is refused by
+   * name above the list and not applied at all.
    *
    * The scope facet exists because `scope` is stored top-level for exactly
    * this (AGL-2287): `lockdowns/` alone covers several different scopes, so
@@ -329,104 +336,78 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
   const [clauses, setClauses] = useState<ListFilterClause[]>([])
   const [searchWords, setSearchWords] = useState<string[]>([])
   const gridFilter = useListGridFilter({
-    selectFields: ADMIN_AUDIT_SELECT_FIELDS,
-    // One served equality at a time; the date and the matched fields stand
-    // beside it.
-    single: true,
-    keepAlongside: adminAuditClauseStandsAlongside,
+    selectFields: ADMIN_AUDIT_LIST_SELECT_FIELDS,
     clauses,
     onChange: setClauses,
     search: { words: searchWords, onChange: setSearchWords },
   })
-  const plan = useMemo(() => adminAuditPlan(clauses), [clauses])
-  const servedConstraints = useMemo(
+  const plan = useMemo(
     () =>
-      plan.served.flatMap(
-        (clause) =>
-          listFilterConstraints(ADMIN_AUDIT_FILTER_FIELDS, clause, { fixedOrderBy: 'at' }) ?? [],
+      planListQuery(
+        ADMIN_AUDIT_LIST_QUERY,
+        { clauses, search: searchWords },
+        nameSearchNormalizers,
       ),
-    [plan],
+    [clauses, searchWords],
   )
-  const matching = plan.matched.length > 0 || searchWords.length > 0
-  const matches = useCallback(
-    (row: Record<string, any>) =>
-      filterListRows([row], ADMIN_AUDIT_FILTER_FIELDS, plan.matched, {
-        paths: ADMIN_AUDIT_SEARCH_PATHS,
-        words: searchWords,
-      }).length > 0,
-    [plan, searchWords],
-  )
+  const constraints = useMemo(() => listQueryConstraints(plan), [plan])
 
   const [rows, setRows] = useState<Record<string, any>[]>([])
   const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  /** `cursors[i]` is the last entry page `i` READ, which page `i + 1` resumes after. */
+  /** `cursors[i]` is the last entry page `i` read, which page `i + 1` starts after. */
   const [cursors, setCursors] = useState<QueryDocumentSnapshot[]>([])
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [unreadable, setUnreadable] = useState(false)
   /*
-   * The scopes and action groups of every entry read so far — what the
-   * pickers offer. A fixed vocabulary would drift the first time a route
-   * audits a new scope and offer choices that match nothing; the registered
-   * plugin groups are offered from the start because the catalog names them.
+   * The scopes and target types of every entry read so far, offered beside
+   * the ones the writers are known to store. Only what the pickers OFFER —
+   * the pick itself is a query over the whole log.
    */
-  const [seen, setSeen] = useState<{ scopes: string[]; groups: string[] }>({
+  const [seen, setSeen] = useState<{ scopes: string[]; targetKinds: string[] }>({
     scopes: [],
-    groups: [],
+    targetKinds: [],
   })
 
   const loadPage = useCallback(
     async (targetPage: number, after: QueryDocumentSnapshot | null) => {
       setLoading(true)
-      const scopes = new Set<string>()
-      const groups = new Set<string>()
       try {
-        const base = collection(firestore, 'adminAudit')
-        const result = await scanCursorPage<QueryDocumentSnapshot, Record<string, any>>({
-          pageSize,
-          scanCap: matching ? ADMIN_AUDIT_SCAN : pageSize,
-          // One extra row says whether a next page exists; a matched page
-          // reads in larger batches so it is not one round trip per row.
-          batchSize: matching ? Math.max(pageSize + 1, 100) : pageSize + 1,
-          after,
-          read: async (from, count) =>
-            (
-              await getDocs(
-                query(
-                  base,
-                  ...servedConstraints,
-                  orderBy('at', 'desc'),
-                  ...(from ? [startAfter(from)] : []),
-                  limit(count),
-                ),
-              )
-            ).docs,
-          accept: (doc) => {
-            const row = auditRow(doc)
-            if (typeof row['scope'] === 'string' && row['scope']) scopes.add(row['scope'])
-            if (row['actionGroup']) groups.add(row['actionGroup'])
-            return matches(row) ? row : null
-          },
-        })
+        // One extra row says whether a next page exists.
+        const snapshot = await getDocs(
+          query(
+            collection(firestore, 'adminAudit'),
+            ...constraints,
+            ...(after ? [startAfter(after)] : []),
+            limit(pageSize + 1),
+          ),
+        )
+        const docs = snapshot.docs.slice(0, pageSize)
+        const read = docs.map(auditRow)
         setUnreadable(false)
-        setRows(result.rows)
-        setHasMore(!result.exhausted)
+        setRows(read)
+        setHasMore(snapshot.docs.length > pageSize)
         setPage(targetPage)
         setCursors((previous) => {
           const next = previous.slice(0, targetPage)
-          if (result.last) next[targetPage] = result.last
+          const last = docs[docs.length - 1]
+          if (last) next[targetPage] = last
           return next
         })
         setSeen((previous) => {
-          const merged = {
-            scopes: [...new Set([...previous.scopes, ...scopes])].sort(),
-            groups: [...new Set([...previous.groups, ...groups])].sort(),
+          const scopes = new Set(previous.scopes)
+          const targetKinds = new Set(previous.targetKinds)
+          for (const row of read) {
+            if (typeof row['scope'] === 'string' && row['scope']) scopes.add(row['scope'])
+            if (typeof row['targetKind'] === 'string' && row['targetKind']) {
+              targetKinds.add(row['targetKind'])
+            }
           }
-          return merged.scopes.length === previous.scopes.length &&
-            merged.groups.length === previous.groups.length
+          return scopes.size === previous.scopes.length &&
+            targetKinds.size === previous.targetKinds.length
             ? previous
-            : merged
+            : { scopes: [...scopes].sort(), targetKinds: [...targetKinds].sort() }
         })
       } catch (error) {
         console.error(error)
@@ -437,7 +418,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         setLoading(false)
       }
     },
-    [firestore, pageSize, servedConstraints, matching, matches],
+    [firestore, pageSize, constraints],
   )
 
   // A new filter, search or page size is a different query: page one.
@@ -450,14 +431,29 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
       actionGroup: [
         ...new Set([
           ...listPluginActivityFilters().map(({ group }) => group.id),
-          ...seen.groups,
+          ...rows.map((row) => String(row['actionGroup'] ?? '')).filter(Boolean),
+          ...clauses.filter((clause) => clause.field === 'actionGroup').map((clause) => clause.value),
         ]),
       ]
         .sort()
         .map((group) => ({ value: group, label: staffAuditActionGroupLabel(group) })),
-      scope: seen.scopes.map((scope) => ({ value: scope, label: scope })),
+      scope: [...new Set([...ADMIN_AUDIT_KNOWN_SCOPES, ...seen.scopes])]
+        .sort()
+        .map((scope) => ({ value: scope, label: scope })),
+      targetKind: [...new Set([...ADMIN_AUDIT_KNOWN_TARGET_KINDS, ...seen.targetKinds])]
+        .sort()
+        .map((type) => ({ value: type, label: type })),
     }),
-    [seen],
+    [seen, rows, clauses],
+  )
+  const refused = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: ADMIN_AUDIT_LIST_FIELDS,
+        headers: ADMIN_AUDIT_LIST_HEADERS,
+        options,
+      }),
+    [plan, options],
   )
 
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -560,7 +556,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
         },
       },
     ]
-    return listFilterGridColumns(shown, ADMIN_AUDIT_FILTER_FIELDS, options, ADMIN_AUDIT_FILTER_HEADERS)
+    return listFilterGridColumns(shown, ADMIN_AUDIT_LIST_FIELDS, options, ADMIN_AUDIT_LIST_HEADERS)
   }, [options])
 
   /*==========================================
@@ -569,8 +565,8 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
    * A CSV of the page on screen would be a document cut to a size chosen for
    * READING, and one that looks complete, because a CSV carries no footer
    * saying which page it came off. So the export runs its own one-shot read
-   * over the same served filters the list is showing, matches the same
-   * clauses and search over it, and happens on a CLICK.
+   * of the same query the list is showing — every clause and the search on
+   * it — and happens on a CLICK.
    *
    * Bounded, and the bound is reported. Reading the ceiling PLUS ONE is what
    * makes truncation a fact rather than a guess.
@@ -584,15 +580,10 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
     let exported: Record<string, any>[]
     try {
       const snapshot = await getDocs(
-        query(
-          collection(firestore, 'adminAudit'),
-          ...servedConstraints,
-          orderBy('at', 'desc'),
-          limit(EXPORT_CEILING + 1),
-        ),
+        query(collection(firestore, 'adminAudit'), ...constraints, limit(EXPORT_CEILING + 1)),
       )
       const capped = snapshot.size > EXPORT_CEILING
-      exported = snapshot.docs.slice(0, EXPORT_CEILING).map(auditRow).filter(matches)
+      exported = snapshot.docs.slice(0, EXPORT_CEILING).map(auditRow)
       setExportNote(
         capped
           ? `Exported from the newest ${EXPORT_CEILING.toLocaleString()} entries these filters reach — there are more. Narrow the dates to export the rest.`
@@ -677,7 +668,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
             help={docsHelp('staffConsole', {
               anchor: '#audit-log',
               excerpt:
-                'Append-only record of every staff mutation with before/after diffs. Filter by action, who, target, scope or date, search it, and export the slice as CSV.',
+                'Append-only record of every staff mutation with before/after diffs. Filter by action, action group, who, target, target type, site, scope or date, search it, and export the slice as CSV.',
             })}
             contentGutterX
             contentGutterY
@@ -711,20 +702,13 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
                 ) : null}
               </Stack>
               <ListFilterChips
-                fields={ADMIN_AUDIT_FILTER_FIELDS}
-                headers={ADMIN_AUDIT_FILTER_HEADERS}
+                fields={ADMIN_AUDIT_LIST_FIELDS}
+                headers={ADMIN_AUDIT_LIST_HEADERS}
                 options={options}
                 clauses={clauses}
                 onChange={setClauses}
               />
-              {matching ? (
-                <Typography variant="caption" color="text.secondary">
-                  {'Action group, Scope and the search are matched as the log ' +
-                    `is read: each page looks through up to ${ADMIN_AUDIT_SCAN} ` +
-                    'entries, so a page can come back short — Next carries on ' +
-                    'from where it stopped.'}
-                </Typography>
-              ) : null}
+              <ListQueryNotices refused={refused} notices={plan.notices} />
               {unreadable && !loading ? (
                 <Alert severity="warning">
                   {'Could not read the audit log. This is not the same as there ' +
@@ -788,8 +772,7 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
               ) : null}
               {/*
                 The shared footer (AGL-2501). `hasMore` is a FACT: the read
-                over-fetches by one, or the matched walk stopped before the
-                log ran out.
+                over-fetches by one.
               */}
               <ListPagination
                 page={page}

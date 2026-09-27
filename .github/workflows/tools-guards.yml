@@ -1290,6 +1290,15 @@ jobs:
       # the parser being correct is worth nothing if the script does not use it.
       - run: npm run test:deploy-args
 
+      # AGL-3321. The script-side list-search keys and the `adminAudit` stamp
+      # restate library functions a plain Node script cannot import. Each is
+      # held to a fixtures JSON the library's spec asserts too, and these run
+      # the script side, so a backfill cannot write keys no query asks for.
+      - run: npm run test:name-search-tokens
+      - run: npm run test:admin-audit-index
+      - run: npm run test:email-search-tokens
+      - run: npm run test:staff-list-backfills
+
       # AGL-1877. The Texas data-processing tax code (`txcd_10103001`) on
       # Aglyn's own Stripe products — the single input that decides how much
       # sales tax is collected and remitted from Sep 1. It was set by hand in

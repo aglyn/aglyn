@@ -86,6 +86,7 @@ import {
  */
 import { emailPublisher } from './publisher-review-email'
 import { dropCachesForListing } from './revoke-cache-drop'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Marketplace review queue (AGL-432) — Strapi Market's two-phase review
@@ -867,7 +868,7 @@ async function handler(request: Request): Promise<Response> {
         }
       }
 
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: `plugins.takedown.${action}`,
         target: reviewUid
@@ -941,7 +942,7 @@ async function handler(request: Request): Promise<Response> {
       // Audited (AGL-971): a checklist tick is the record that a human
       // looked, so it needs the same trail as the verdict it unlocks —
       // including WHICH bytes were looked at.
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: `plugins.review.checklist.${checked ? 'check' : 'uncheck'}`,
         target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
@@ -1131,7 +1132,7 @@ async function handler(request: Request): Promise<Response> {
         await repairLatestApprovedVersion(listingRef, revocation)
       }
 
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: `plugins.review.version.${approving ? 'approve' : 'reject'}`,
         target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
@@ -1310,7 +1311,7 @@ async function handler(request: Request): Promise<Response> {
       // Both directions, because both change what is installable.
       await repairLatestApprovedVersion(listingRef, next)
 
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         action: `plugins.revocation.${revoking ? 'revoke' : 'restore'}`,
         target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
@@ -1401,7 +1402,7 @@ async function handler(request: Request): Promise<Response> {
        * column and searches it (AGL-1652) — a why nobody can filter on is a
        * why nobody reads.
        */
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         actorEmail: decoded.email ? String(decoded.email) : null,
         action: 'plugins.verification.decline',
@@ -1585,7 +1586,7 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: decoded.uid,
       action: `plugins.review.${action}`,
       target: `marketplaceListings/${listingId}`,
