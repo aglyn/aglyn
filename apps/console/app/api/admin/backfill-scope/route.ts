@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
+import { crmListFields, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -196,8 +196,18 @@ async function handler(request: Request): Promise<Response> {
           })),
         )
         addPlan(totals, collection, plan)
+        const stored = new Map(snapshot.docs.map((doc) => [doc.id, doc.data()]))
         for (const write of plan.writes) {
-          pending.push([orgRef.collection(collection).doc(write.id), write.data])
+          // A contact's scoped search tokens are its scope joined to its
+          // words (AGL-3321), so a scope stamped here restamps them too.
+          const data =
+            collection === 'contacts'
+              ? {
+                  ...write.data,
+                  ...crmListFields('contacts', { ...stored.get(write.id), ...write.data }),
+                }
+              : write.data
+          pending.push([orgRef.collection(collection).doc(write.id), data])
         }
       }
     }

@@ -312,7 +312,7 @@ export const GLOBAL_SEARCH_ENTITIES: GlobalSearchEntityDef[] = [
     /*
      * And every site's leads at the org hub (AGL-2662), which is where the
      * org-level Leads list already shows them. Read a site at a time for
-     * the reason `useOrgLeads` gives: there is no org-level collection, no
+     * the reason the org-level Leads list once gave: there was no org-level collection, no
      * `orgId` on the document to group by, and no rule admitting a
      * collection-group read.
      */

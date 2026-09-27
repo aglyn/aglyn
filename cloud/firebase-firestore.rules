@@ -1523,7 +1523,9 @@ service cloud.firestore {
        * `emailState` (AGL-3245) stays closed, exactly as the host block had
        * it: the senders write the platform's verdict on an address — a
        * bounce, a gateway block, a do-not-contact mark — and a member who
-       * could clear it could email a person who asked not to be.
+       * could clear it could email a person who asked not to be. Its list
+       * key `emailStatus` (AGL-3321) is closed with it, or a member could
+       * file a bounced lead under "Email OK" in the list's filter.
        *
        * DELETE IS SOLE-HOLDER ONLY, for the reason it is on a contact: in a
        * multi-brand org the row is shared, and one brand removing a lead must
@@ -1537,7 +1539,7 @@ service cloud.firestore {
         allow update: if isStaff() ||
           (canWriteScopedOrgData() && (isOrgWideMember() || scopeUnchanged()) &&
            orgCarriesCrmSuite(orgId) &&
-           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState']));
+           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['emailState', 'emailStatus']));
         allow delete: if isStaff() ||
           (canWriteScopedOrgData() &&
            resource.data.visibleTo.hasOnly(

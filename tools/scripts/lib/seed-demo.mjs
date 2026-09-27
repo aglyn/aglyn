@@ -41,6 +41,7 @@ import { datasetFilterFields, effectiveModel } from './record-filter-keys.mjs'
 import { buildHomeNodes } from './demo-brands.mjs'
 import { putMediaDocument } from './media-counter.mjs'
 import { displayNameSearchFields, nameSearchTokens } from './name-search-tokens.mjs'
+import { withCrmListFields } from './org-record-list-fields.mjs'
 import { seedSendId } from './org-campaign-backfill.mjs'
 
 /** Every host subcollection the seeder writes into. Order is cosmetic. */
@@ -189,7 +190,8 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
   const nowMs = Date.now()
   let written = 0
   const put = async (ref, data) => {
-    await ref.set({ ...data, updatedAt: now }, { merge: true })
+    // A CRM record carries the fields its list queries (AGL-3321).
+    await ref.set({ ...withCrmListFields(ref, data), updatedAt: now }, { merge: true })
     written += 1
   }
 

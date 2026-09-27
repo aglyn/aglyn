@@ -19,6 +19,7 @@
 import {
   CRM_COLLECTIONS,
   CRM_RECORDS_BAND_FULL_MESSAGE,
+  crmNewRecordListFields,
   dealHasLineItems,
   findOrgMember,
   nameSearchKey,
@@ -79,6 +80,7 @@ import {
 } from '../model/crm-custom-draft'
 import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { CrmSitePicker } from './crm-site-picker'
+import { CRM_CLIENT_SEARCH_FIELDS, crmClientListFields } from '../model/crm-list-query'
 import {
   DEAL_CURRENCIES,
   type DealDoc,
@@ -357,6 +359,14 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
                 ...Object.fromEntries(clear.map((key) => [key, deleteField()])),
                 // The custom keys that changed, merged into the stored map.
                 ...crmCustomDraftWrites(storedCustom, custom),
+                // The title is what the Deals table searches (AGL-3321),
+                // from the listener's row with the edit over it.
+                ...crmClientListFields(
+                  'deals',
+                  deal as unknown as Record<string, unknown>,
+                  set,
+                  CRM_CLIENT_SEARCH_FIELDS,
+                ),
               },
             )
           },
@@ -372,17 +382,20 @@ export function DealEditDrawer(props: DealEditDrawerProps) {
         // again here because a callback can outlive the render that held it.
         if (!createHostId) return
         const customDocument = crmCustomDraftDocument(custom)
+        const record: Record<string, unknown> = {
+          ...dealDocumentFromForm(values, {
+            visibleTo: [...createTokens],
+            hostId: createHostId,
+            uid: user.uid,
+            nowMs,
+          }),
+          ...(customDocument ? { custom: customDocument } : {}),
+        }
         const created = await addDoc(
           collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.deals),
-          {
-            ...dealDocumentFromForm(values, {
-              visibleTo: [...createTokens],
-              hostId: createHostId,
-              uid: user.uid,
-              nowMs,
-            }),
-            ...(customDocument ? { custom: customDocument } : {}),
-          },
+          // What the Deals table searches and filters by (AGL-3321), and
+          // nothing scheduled against a deal that did not exist.
+          { ...record, ...crmNewRecordListFields('deals', record) },
         )
         // Setup → Activity shows CRM work (AGL-2622): the deal is org data,
         // but the act happened in this site's console and belongs in its

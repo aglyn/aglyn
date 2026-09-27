@@ -48,6 +48,7 @@ import {
 import { E2E_ORG_RELEASE_FLAGS } from './lib/e2e-release-flags.mjs'
 import { datasetFilterFields, effectiveModel } from './lib/record-filter-keys.mjs'
 import { readLegalDocumentVersion } from './lib/legal-document-version.mjs'
+import { withCrmListFields } from './lib/org-record-list-fields.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
 import { listMemberSearchTokens } from './lib/email-search-tokens.mjs'
 import { displayNameSearchFields, nameSearchTokens } from './lib/name-search-tokens.mjs'
@@ -228,7 +229,8 @@ await auth.setCustomUserClaims(E2E_UNVERIFIED_OWNER_UID, {})
 const now = FieldValue.serverTimestamp()
 let written = 0
 const put = async (ref, data) => {
-  await ref.set({ ...data, updatedAt: now }, { merge: true })
+  // A CRM record carries the fields its list queries (AGL-3321).
+  await ref.set({ ...withCrmListFields(ref, data), updatedAt: now }, { merge: true })
   written += 1
 }
 

@@ -87,6 +87,7 @@
     "test:brand-literals": "node --test tools/scripts/lib/brand-literals.test.mjs",
     "test:name-search-tokens": "node --test tools/scripts/lib/name-search-tokens.test.mjs",
     "test:outreach-list-search-backfill": "node tools/scripts/backfill-outreach-list-search.mjs --self-test",
+    "test:org-record-list-fields": "node --test tools/scripts/lib/org-record-list-fields.test.mjs",
     "test:email-search-tokens": "node --test tools/scripts/lib/email-search-tokens.test.mjs",
     "test:british-spellings": "node --test tools/scripts/lib/british-spellings.test.mjs",
     "test:node-version": "node --test tools/scripts/lib/node-version.test.mjs",

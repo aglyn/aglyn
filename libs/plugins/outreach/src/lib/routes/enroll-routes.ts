@@ -34,6 +34,7 @@ import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plu
 import type { PluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { FieldValue } from 'firebase-admin/firestore'
 import { outreachCuratedEntry, outreachEnrolledEntry } from '../engine/enrollment-activity'
 import { buildOutreachEnrollment, planOutreachFirstDue } from '../engine/enrollment-state'
@@ -361,6 +362,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         const field =
           candidate.target === 'lead' ? CAMPAIGN_MEMBERSHIP_FIELD : contactCampaignFieldPath(contactGroupId)
         await ref.update({ [field]: FieldValue.arrayUnion(...campaignIds), updatedAt: FieldValue.serverTimestamp() })
+        // A lead's campaigns are what the Leads list's Campaign filter reads
+        // under a site (AGL-3321): restamped from the lead as it now stands.
+        if (candidate.target === 'lead') await restampCrmListFieldsAt(ref, 'leads')
       }
     } catch (error) {
       console.error('[outreach] the enrolled person could not join the sequence’s campaigns', error)

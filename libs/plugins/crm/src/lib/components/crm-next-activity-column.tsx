@@ -73,14 +73,17 @@ export function nextActivityColumn(nowMs: number): GridColDef {
  * "No next activity" as a filter of the grid's own panel (AGL-3313): the
  * Next activity column offers "is empty", which stores the clause
  * `isNoNextActivityClause` names, so a view saved with the old toggle on
- * reopens filtered the same way. Window-only: absence has no index, so it
- * narrows the loaded rows beside whatever the query serves.
+ * reopens filtered the same way. Asked of the query as `nextTaskAtMs ==
+ * null` (AGL-3321): every contact, company and deal is created carrying
+ * `null`, and the task writers put `null` back when nothing is left
+ * scheduled.
  */
 export const CRM_NEXT_ACTIVITY_FILTER_FIELD: ListFilterField = {
   column: CRM_NEXT_ACTIVITY_FIELD,
   kind: 'date',
   path: CRM_NEXT_ACTIVITY_FIELD,
-  windowOnly: true,
+  presence: 'nullable',
+  storedAs: 'millis',
   operators: ['isEmpty'],
 }
 

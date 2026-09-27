@@ -35,6 +35,7 @@
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
+import { withCrmListFields } from '../scripts/lib/org-record-list-fields.mjs'
 // The Inbox list's search keys, as the submit route stamps them (AGL-3321).
 import { messageSearchFields } from '../scripts/lib/message-search.mjs'
 
@@ -65,7 +66,8 @@ if (!getApps().length) initializeApp({ projectId })
 const firestore = getFirestore()
 
 const put = async (ref, data) => {
-  await ref.set(data, { merge: true })
+  // A CRM record carries the fields its list queries (AGL-3321).
+  await ref.set(withCrmListFields(ref, data), { merge: true })
   console.log(`  ${ref.path}`)
 }
 
@@ -593,7 +595,8 @@ for (const name of ['contacts', 'leads', 'companies', 'crmActivities', 'crmTasks
   let moved = 0
   for (const doc of snapshot.docs) {
     const data = doc.data()
-    const next = reserve(data)
+    // The addresses moved, and with them what the CRM lists search (AGL-3321).
+    const next = withCrmListFields(doc.ref, reserve(data))
     if (JSON.stringify(next) !== JSON.stringify(data)) {
       await doc.ref.set(next)
       moved += 1

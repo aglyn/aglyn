@@ -82,6 +82,7 @@ const companiesHandle = {
           .map(([id, data]) => ({
             id,
             get: (key: string) => data[key],
+            data: () => data,
             ref: {
               update: async (patch: Record<string, unknown>) => {
                 companies[id] = { ...companies[id], ...patch }
@@ -130,6 +131,10 @@ const firestoreHandle = {
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
+  restampCrmListFieldsAt: async () => 'current',
+  restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
+  restampCrmListFields: async () => ({ restamped: 0, current: 0, missing: 0 }),
   __esModule: true,
   firebaseAdmin: {
     app: () => ({

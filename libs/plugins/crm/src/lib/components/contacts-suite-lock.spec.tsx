@@ -62,6 +62,20 @@ jest.mock('./recent-activity-feed', () => ({
   default: () => null,
   RecentActivityFeed: () => null,
 }))
+// The list's query (AGL-3321), planned for real and answered from the
+// fixture rows by the list-query double — every row visible and dated.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() =>
+      (mockContacts ?? []).map((row: Record<string, unknown>) => ({
+        visibleTo: ['org'],
+        updatedAt: new Date(0),
+        ...row,
+      })),
+      jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    ),
+)
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual('@aglyn/tenant-feature-instance')
     .listFilterConstraints,

@@ -76,6 +76,7 @@ import {
   memberHasOrgPermission,
   orgDataCollectionForHost,
   resolveOrgMembership,
+  restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import { isRefusedIdToken } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { captureHostContact, emitHostEvent } from '@aglyn/tenant-runtime'
@@ -84,9 +85,11 @@ import { CRM_API_ROUTES } from './constants/api-routes'
 import { registerCrmServerDeclarations } from './declarations.server'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { CRM_NEXT_ACTIVITY_ROUTE } from './model/next-activity'
+import { CRM_LIST_FIELDS_ROUTE } from './model/list-fields'
 import { CRM_LEAD_SOURCE_VALUES_ROUTE } from './model/lead-source-values'
 import { CRM_TASK_ROUTES } from './model/task-routes'
 import { crmNextActivityHandler } from './server/next-activity-routes'
+import { crmListFieldsHandler } from './server/list-fields-routes'
 import { crmLeadSourceValuesHandler } from './server/lead-source-values'
 import { registerCrmRecordEmailStateWriter } from './server/record-email-state'
 import { registerCrmRecordTimelineWriter } from './server/record-timeline'
@@ -277,6 +280,8 @@ export const contactStageHandler: PluginApiHandler = async (req, res) => {
         : lifecycleStage,
       updatedAt: FieldValue.serverTimestamp(),
     })
+    // The stage is what the Contacts list filters by (AGL-3321).
+    await restampCrmListFieldsAt(snapshot.ref, 'contacts')
     // Awaited, not floated: a serverless response ending cancels in-flight
     // work, and the event is the reason this route exists. A clear has none.
     if (!clearing) {
@@ -538,6 +543,8 @@ export const crmContactsCreateHandler: PluginApiHandler = async (req, res) => {
           : {}),
         updatedAt: FieldValue.serverTimestamp(),
       })
+      // The tags are what the Contacts list filters by (AGL-3321).
+      await restampCrmListFieldsAt(contacts.doc(result.contactId), 'contacts')
     }
 
     /*
@@ -587,6 +594,9 @@ export function registerCrmConsoleApi(): void {
   registerPluginApiRoute(CRM_TASK_ROUTES.complete, crmTaskCompleteHandler)
   // A client-direct task write's door to `nextTaskAtMs` (AGL-2661).
   registerPluginApiRoute(CRM_NEXT_ACTIVITY_ROUTE, crmNextActivityHandler)
+  // What a client-direct write the browser cannot follow up asks for: the
+  // fields the CRM lists query, restamped from the record (AGL-3321).
+  registerPluginApiRoute(CRM_LIST_FIELDS_ROUTE, crmListFieldsHandler)
   // A lead source value renamed or deleted (AGL-3298): the list and every
   // lead and contact holding the old label, in one request.
   registerPluginApiRoute(CRM_LEAD_SOURCE_VALUES_ROUTE, crmLeadSourceValuesHandler)

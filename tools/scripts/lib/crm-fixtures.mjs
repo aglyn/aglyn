@@ -72,6 +72,7 @@
 //   is the seed invariant `docs/E2E_LOCAL.md` states.
 
 import { Timestamp } from 'firebase-admin/firestore'
+import { withCrmListFields } from './org-record-list-fields.mjs'
 import { displayNameSearchFields } from './name-search-tokens.mjs'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -247,8 +248,11 @@ export async function seedCrmFixtures(options) {
     ownerName,
     teammateUid,
     nowMs = Date.now(),
-    write = (ref, data) => ref.set(data),
+    write: writeRaw = (ref, data) => ref.set(data),
   } = options
+  // Every CRM record carries the fields its list queries (AGL-3321), as
+  // the writers stamp them.
+  const write = (ref, data) => writeRaw(ref, withCrmListFields(ref, data))
   const orgRef = firestore.collection('orgs').doc(orgId)
   const hostRef = firestore.collection('hosts').doc(hostId)
   const F = CRM_FIXTURE

@@ -94,11 +94,9 @@ export interface ContactListColumnOptions {
  *
  * Owner and Stage read off the flattened row, which is already this
  * holder's facet (`contactRecordFromDoc`), so neither column can show
- * another holder's assignment. Both are `filterable: false` on purpose: the
- * grid's filter panel translates to a Firestore query over the top-level
- * fields in `CONTACT_LIST_FILTER_FIELDS`, and a facet path is not one of
- * them. The toolbar's stage select and "Assigned to me" switch narrow the
- * loaded window instead, and say so.
+ * another holder's assignment. Filtering by either is the list's: the panel
+ * names the field and the list asks the holder's facet key of its query
+ * (`contactQueryClause`, AGL-3321).
  */
 export function contactListColumns(
   options: ContactListColumnOptions,
@@ -179,8 +177,8 @@ export function contactListColumns(
      * them. `capturedByHostIds` is a top-level array precisely so the
      * question can be answered without opening a facet. Not filterable from
      * the panel: an `array-contains` on it would displace the scope clause
-     * under a site, and at the org level a saved view narrows the window
-     * instead. A row that names no site predates attribution and says so,
+     * under a site, and a search or a facet filter at the org level (one
+     * array clause per query, AGL-3321). A row that names no site predates attribution and says so,
      * rather than reading as "every site".
      */
     ...(siteName

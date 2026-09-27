@@ -9769,6 +9769,147 @@ describe('contacts are per-site, and letting go of one is not a delete', () => {
 })
 
 /**
+ * EVERY QUERY SHAPE THE CRM LISTS ISSUE, AS THE RULES JUDGE IT (AGL-3321).
+ *
+ * Each list puts its filters and search on one query. A reader whose access
+ * is some sites (`EDITOR`) always keeps the `visibleTo array-contains-any`
+ * scope clause, which is what `canReadScoped()` proves a list from; the
+ * other clauses ride beside it. An ORG-WIDE reader (`OWNER`) may drop it —
+ * the rules short-circuit on `isOrgWideMember()` — which is when a list
+ * folds its search into `scopedSearchTokens`, asks a holder's facet key or a
+ * site's campaign in the scope clause's place. The same unscoped shapes are
+ * DENIED to the scoped reader, which is why the list never sends them one:
+ * a query on the scoped-token field says nothing the rules can check
+ * against `visibleTo`.
+ */
+describe('the CRM lists’ query shapes (AGL-3321)', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+  const contacts = (uid) => collection(authed(uid), 'orgs', ORG, 'contacts')
+  const leads = (uid) => collection(authed(uid), 'orgs', ORG, 'leads')
+  const companies = (uid) => collection(authed(uid), 'orgs', ORG, 'companies')
+  const deals = (uid) => collection(authed(uid), 'orgs', ORG, 'deals')
+  const tasks = (uid) => collection(authed(uid), 'orgs', ORG, 'crmTasks')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [id, scope] of [['mine', MINE], ['theirs', THEIRS]]) {
+        await setDoc(doc(db, 'orgs', ORG, 'contacts', id), {
+          email: `${id}@acme.test`,
+          name: 'Acme Buyer',
+          nameLower: 'acme buyer',
+          createdAt: new Date(1),
+          visibleTo: [scope],
+          searchTokens: ['a', 'ac', 'acm', 'acme'],
+          scopedSearchTokens: [`${scope}~acm`],
+          facetKeys: [`${scope.slice(5)}:owner=uid-owner`, '*:owner=uid-owner'],
+          emailStatus: 'none',
+          nextTaskAtMs: null,
+          updatedAt: new Date(1),
+        })
+        await setDoc(doc(db, 'orgs', ORG, 'leads', id), {
+          email: `${id}@acme.test`,
+          visibleTo: [scope],
+          status: 'new',
+          emailStatus: 'none',
+          leadSourceKey: null,
+          campaignIds: ['spring'],
+          scopedCampaignIds: [`${scope}~spring`],
+          scopedSearchTokens: [`${scope}~acm`],
+          lastSeenAtMs: 1,
+        })
+        await setDoc(doc(db, 'orgs', ORG, 'companies', id), {
+          name: 'Acme', nameLower: 'acme', ownerUid: 'uid-owner', visibleTo: [scope],
+          nextTaskAtMs: null, updatedAt: new Date(1),
+        })
+        await setDoc(doc(db, 'orgs', ORG, 'deals', id), {
+          title: 'Acme renewal', titleLower: 'acme renewal', pipelineId: 'sales', status: 'open', visibleTo: [scope],
+          nextTaskAtMs: null, updatedAt: new Date(1),
+        })
+        await setDoc(doc(db, 'orgs', ORG, 'crmTasks', id), {
+          title: 'Call Acme', status: 'open', kind: 'call', priority: 'high', visibleTo: [scope],
+          dueAtMs: 5,
+        })
+      }
+    })
+  })
+
+  it('admits the scoped reader every shape it sends: the scope clause and what rides beside it', async () => {
+    const scope = where('visibleTo', 'array-contains-any', ['org', MINE])
+    for (const [label, shape] of [
+      ['contacts by verdict', query(contacts(EDITOR), scope, where('emailStatus', '==', 'none'), orderBy('updatedAt', 'desc'))],
+      ['contacts with nothing scheduled', query(contacts(EDITOR), scope, where('nextTaskAtMs', '==', null), orderBy('updatedAt', 'desc'))],
+      ['contacts changed since a day', query(contacts(EDITOR), scope, where('updatedAt', '>=', new Date(0)), orderBy('updatedAt', 'desc'))],
+      ['open leads', query(leads(EDITOR), scope, where('status', 'in', ['new', 'working']), orderBy('lastSeenAtMs', 'desc'))],
+      ['leads with no lead source', query(leads(EDITOR), scope, where('leadSourceKey', '==', null), orderBy('lastSeenAtMs', 'desc'))],
+      ['companies by owner', query(companies(EDITOR), scope, where('ownerUid', 'in', ['uid-owner']), orderBy('updatedAt', 'desc'))],
+      ['companies by a name prefix', query(companies(EDITOR), scope, where('nameLower', '>=', 'ac'), where('nameLower', '<=', 'ac\uf8ff'), orderBy('nameLower', 'asc'))],
+      ['a pipeline’s open deals', query(deals(EDITOR), scope, where('pipelineId', '==', 'sales'), where('status', '==', 'open'), orderBy('updatedAt', 'desc'))],
+      ['open calls due soon', query(tasks(EDITOR), scope, where('status', '==', 'open'), where('kind', '==', 'call'), where('dueAtMs', '>=', 0), orderBy('dueAtMs', 'asc'))],
+      // A collaborator's search: the start of the name, address or title,
+      // beside the scope clause.
+      ['contacts by a name prefix', query(contacts(EDITOR), scope, where('nameLower', '>=', 'acm'), where('nameLower', '<=', 'acm\uf8ff'), orderBy('nameLower', 'asc'))],
+      ['open leads by an address prefix', query(leads(EDITOR), scope, where('status', 'in', ['new', 'working']), where('email', '>=', 'min'), where('email', '<=', 'min\uf8ff'), orderBy('email', 'asc'))],
+      ['deals by a title prefix', query(deals(EDITOR), scope, where('pipelineId', '==', 'sales'), where('titleLower', '>=', 'acme'), where('titleLower', '<=', 'acme\uf8ff'), orderBy('titleLower', 'asc'))],
+      // A solo range, beside the scope clause alone.
+      ['contacts created since', query(contacts(EDITOR), scope, where('createdAt', '>=', new Date(0)), orderBy('createdAt', 'desc'))],
+    ]) {
+      const answer = await assertSucceeds(getDocs(shape))
+      assert.deepEqual(answer.docs.map((entry) => entry.id), ['mine'], label)
+    }
+  })
+
+  it('denies the scoped reader the unscoped shapes an org-wide reader may send', async () => {
+    await assertFails(
+      getDocs(query(contacts(EDITOR), where('scopedSearchTokens', 'array-contains-any', ['org~acm', `${MINE}~acm`]))),
+    )
+    await assertFails(
+      getDocs(query(contacts(EDITOR), where('facetKeys', 'array-contains', `${HOST}:owner=uid-owner`))),
+    )
+    await assertFails(
+      getDocs(query(leads(EDITOR), where('scopedCampaignIds', 'array-contains-any', ['org~spring', `${MINE}~spring`]))),
+    )
+  })
+
+  it('admits the org-wide reader the folded search, the facet key and the scoped campaign', async () => {
+    const folded = await assertSucceeds(
+      getDocs(
+        query(
+          contacts(OWNER),
+          where('scopedSearchTokens', 'array-contains-any', ['org~acm', `${MINE}~acm`]),
+          orderBy('updatedAt', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(folded.docs.map((entry) => entry.id), ['mine'])
+    const facet = await assertSucceeds(
+      getDocs(query(contacts(OWNER), where('facetKeys', 'array-contains', '*:owner=uid-owner'), orderBy('updatedAt', 'desc'))),
+    )
+    assert.deepEqual(facet.docs.map((entry) => entry.id).sort(), ['mine', 'theirs'])
+    const campaign = await assertSucceeds(
+      getDocs(
+        query(
+          leads(OWNER),
+          where('scopedCampaignIds', 'array-contains-any', ['org~spring', `${MINE}~spring`]),
+          orderBy('lastSeenAtMs', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(campaign.docs.map((entry) => entry.id), ['mine'])
+  })
+
+  it('keeps a lead’s verdict key the platform’s, as its verdict is', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG), { plan: 'starter' }, { merge: true })
+    })
+    await assertFails(updateDoc(doc(authed(OWNER), 'orgs', ORG, 'leads', 'mine'), { emailStatus: 'ok' }))
+    // THE CONTROL: the status beside it is still the member's to set.
+    await assertSucceeds(updateDoc(doc(authed(OWNER), 'orgs', ORG, 'leads', 'mine'), { status: 'working' }))
+  })
+})
+
+/**
  * THE INBOX'S LISTS ASK WHAT THE RULES CAN PROVE (AGL-3321).
  *
  * Every Inbox filter and search is a predicate on the list's query, so each

@@ -92,6 +92,7 @@
 import firebaseAdmin from '@aglyn/tenant-data-admin/server/firebase-admin'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import { logResourceDuplicated } from '@aglyn/tenant-data-admin/server/duplicate-activity'
+import { restampCrmListFieldsOf } from '@aglyn/tenant-data-admin/server/crm-records'
 import {
   DUPLICATE_BUSY_MESSAGE,
   duplicateDisplayName,
@@ -268,6 +269,11 @@ async function detachMembership(
       })
     }
     await batch.commit()
+    // A lead's campaigns are what the Leads list's Campaign filter reads
+    // under a site (AGL-3321): restamped from each lead as it now stands.
+    if (collectionRef.id === 'leads') {
+      await restampCrmListFieldsOf(page.docs.map((member) => member.ref), 'leads')
+    }
     detached += page.size
     if (page.size < DETACH_BATCH) return { detached, remaining: false }
   }

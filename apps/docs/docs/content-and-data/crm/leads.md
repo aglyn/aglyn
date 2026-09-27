@@ -133,7 +133,8 @@ consent, so none is recorded.
 
 The list shows the most recently seen leads first — a person who booked
 yesterday sits above one who signed up last month, whichever came first.
-Each row carries:
+It keeps that order: the column headers do not re-sort it. Each row
+carries:
 
 | Column | What it shows |
 | --- | --- |
@@ -143,7 +144,7 @@ Each row carries:
 | **Email** | The last verdict on the lead's address — see [Email state](#email-state) — or a dash when nothing is known. |
 | **Owner** | The team member working the lead, or *Unassigned*. A lead inherits its [contact's owner](#who-owns-a-lead) when one is assigned on capture. |
 | **Source** | Every surface that captured this person: Booking, the form they submitted, an import, New lead, or the API — and Sign-up on leads filed before sign-ups stopped making leads. |
-| **Lead source** | The lead's [lead source](./custom-fields.md#lead-source-values). Sorting by it follows the order of your list, not the alphabet. |
+| **Lead source** | The lead's [lead source](./custom-fields.md#lead-source-values). |
 | **Tags** | The lead's tags. |
 | **Campaign** | The campaigns the lead is filed under, by name. Under a site only — a campaign belongs to one site. |
 | **Last seen** | When the person last did something on your site. |
@@ -151,7 +152,9 @@ Each row carries:
 ### Filter and search the leads {#filter-the-leads}
 
 The table's own toolbar filters the list: **Filters** opens the filter
-panel, and **Search** finds a lead by name, email, company, title or tag.
+panel, and **Search** finds a lead by a word of its name, its email address —
+and each part of the address, so the domain alone finds it — its company,
+its title or its tags.
 **Status**, **Email**, **Owner**, **Lead source** and **Campaign** are
 picked from a list in the panel, and from each column's menu. **Status**
 starts on **Open (new or working)**, every lead that still needs working;
@@ -159,10 +162,10 @@ pick one status instead, or remove the filter to see every lead. A lead
 nobody has touched yet has no status of its own and reads as **New**, so the
 leads your site collected before the CRM existed are already in the Open
 view. **Email** narrows by the address's verdict — **Cannot be emailed** for
-every lead a sender has refused, one verdict on its own, or **Nothing
-known**. **Campaign** narrows to the leads filed under one of the campaigns,
+every verdict but OK, one verdict on its own, or **Nothing known**. **Campaign** narrows to the leads filed under one of the campaigns,
 by name, and **Lead source** to one of your lead source values — inactive
-ones included, marked — or to **No lead source**.
+ones included, marked — or to **No lead source**. **Owner** keeps one
+teammate's leads.
 
 The panel edits one filter at a time, and filters on different columns add
 up: filter **Lead source**, then **Status**, and the list keeps both. Every
@@ -171,11 +174,22 @@ removes it. The filters are part of the saved view, and a view saved before
 the panel existed filters exactly as it did. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search) for the toolbar every console list shares.
 
-The list reads the 200 most recently seen leads and shows them a page at a
-time, with the usual footer to turn the page and pick how many rows it holds.
-When a site holds more than 200, a notice says so; the filters and the
-search narrow those 200, and older leads are still listed in the Inbox and still reached by
-campaign audiences.
+Every filter and the search are answered by the list's query, so they reach
+every lead the site holds, not only the page on screen. The list shows them a
+page at a time, newest seen first, with the usual footer to pick how many
+rows a page holds and to turn to the next page while there are more.
+
+The search matches whole words from their start: "cof" finds *Coffee*, but a
+fragment from the middle of a word does not. It looks for one word at a time
+— type several and it searches the first, and says so — and reads the first
+12 letters of a long word.
+
+A few combinations cannot be answered by one query. **Campaign** and the
+search cannot be combined: while the search box holds a word, the Campaign
+filter is not applied, and a notice above the table names it and says why. Under a site, a member
+whose access is limited to particular sites searches by the start of a lead's
+email address, and a notice says so; the Campaign filter is not applied for
+them.
 
 ### Working a lead from the row
 
@@ -195,14 +209,15 @@ Every change here is saved immediately; there is no separate save step.
 Every row has a checkbox. Tick one or more — or the header's checkbox for
 the page — and a bar appears over the list with **Set owner**, **Set
 status**, **Unqualify** (one reason for all of them), **Add to campaign**
-(under a site) and **Export CSV** for the selection. What each does, and which leads it skips by name, is in
+(under a site) and **Export CSV** for the selection, beside **Export all…**
+for every lead. What each does, and which leads it skips by name, is in
 [Bulk actions → Leads](./bulk-actions.md#leads). The selection clears when
 the filters or the search change.
 
 ### Export CSV
 
-**Export CSV** at the top of the card downloads the listed leads — every row
-the filters and the search admit, not only the page on screen — as `leads.csv`:
+**Export CSV** at the top of the card downloads the page on screen as
+`leads.csv`; the bulk bar's **Export all…** writes every lead. The file holds
 email, name, company, job title, phone, website, status, the owner by email
 address, the lead source, the sources by name, first and last seen, the
 number of captures, the address in six columns, tags, the unqualified reason,

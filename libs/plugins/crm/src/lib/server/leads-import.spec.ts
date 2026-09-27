@@ -204,6 +204,10 @@ jest.mock('../../../../../tenant/data/admin/src/lib/server/notifications', () =>
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
+  restampCrmListFieldsAt: async () => 'current',
+  restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
+  restampCrmListFields: async () => ({ restamped: 0, current: 0, missing: 0 }),
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
@@ -646,13 +650,17 @@ describe('what a row becomes', () => {
   it('reports a cell it could not read without refusing the row', async () => {
     const out = await importRows([{ email: 'dana@example.com', status: 'Qualified' }])
     expect(out.body).toMatchObject({ created: 1, skipped: [], dropped: { status: 1 } })
-    expect(leadAt('dana@example.com')).not.toHaveProperty('status')
+    // The unreadable cell is not written: the lead stands as the capture
+    // door stores a lead nobody has touched — `new` (AGL-3321).
+    expect(leadAt('dana@example.com')).toHaveProperty('status', 'new')
   })
 
   it('touches nothing on the document when the file names no working state', async () => {
     await importRows([{ email: 'dana@example.com' }])
     const lead = leadAt('dana@example.com') as Record<string, unknown>
-    expect(lead).not.toHaveProperty('status')
+    // `new` is the capture door's, which every lead carries so the Open
+    // view's query finds it (AGL-3321) — not a working state the file set.
+    expect(lead).toHaveProperty('status', 'new')
     expect(lead).not.toHaveProperty('ownerUid')
     expect(lead).not.toHaveProperty('updatedAt')
   })
