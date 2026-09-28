@@ -378,13 +378,13 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                         <Typography variant="caption" color="text.secondary">
                           {'Organization'}
                         </Typography>
-                        {orgId ? (
-                          <AppLink href={buildRoute(Route.ADMIN_ORG_DETAIL, { orgId })}>
-                            {site?.org?.name ?? orgId}
-                          </AppLink>
-                        ) : (
-                          <Typography variant="body2">{'—'}</Typography>
-                        )}
+                        {/* An anchor either way: one without an href is
+                            the placeholder link, not a different element. */}
+                        <AppLink
+                          href={orgId ? buildRoute(Route.ADMIN_ORG_DETAIL, { orgId }) : undefined}
+                        >
+                          {orgId ? (site?.org?.name ?? orgId) : '—'}
+                        </AppLink>
                         {site?.org?.plan ? (
                           <Typography variant="caption" color="text.secondary">
                             {`stored plan: ${site.org.plan}`}
@@ -395,15 +395,17 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                         <Typography variant="caption" color="text.secondary">
                           {'Owner'}
                         </Typography>
-                        {site?.owner ? (
-                          <AppLink
-                            href={buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.owner.uid })}
-                          >
-                            {site.owner.email ?? site.owner.displayName ?? site.owner.uid}
-                          </AppLink>
-                        ) : (
-                          <Typography variant="body2">{'—'}</Typography>
-                        )}
+                        <AppLink
+                          href={
+                            site?.owner
+                              ? buildRoute(Route.ADMIN_USER_DETAIL, { uid: site.owner.uid })
+                              : undefined
+                          }
+                        >
+                          {site?.owner
+                            ? (site.owner.email ?? site.owner.displayName ?? site.owner.uid)
+                            : '—'}
+                        </AppLink>
                       </Stack>
                       {orgId ? (
                         <StaffOrgOwnershipTransfer

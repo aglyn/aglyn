@@ -96,7 +96,10 @@ export function StaffSiteContentCard(props: StaffSiteContentCardProps) {
   const { hostId, host, orgId } = props
   const [tab, setTab] = useState<ContentTab>('screens')
   const [automation, setAutomation] = useState<StaffDocRow | null>(null)
-  const routing = (host?.['screens'] ?? {}) as Record<string, string>
+  const routing = useMemo(
+    () => (host?.['screens'] ?? {}) as Record<string, string>,
+    [host],
+  )
 
   const previewActions = useCallback(
     (kind: PreviewKind, extra?: (row: StaffDocRow) => RowActionsMenuItem[]) =>
