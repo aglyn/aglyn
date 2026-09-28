@@ -52,12 +52,13 @@ import {
  * cache already holding exactly that.
  *
  * The other half of that argument was real and is answered rather than
- * dropped: `flipDueEntry` is a write, and nothing else publishes a content
- * entry, so a cache that stored a collection with a schedule still pending
- * would suppress the render that publishes it. `getPublishedCollectionSource`
- * therefore declines to STORE exactly those collections — see its `store`
- * predicate — which leaves scheduled publishing on the render window it has
- * always been on, and puts everything else on this TTL.
+ * dropped: `flipDueEntry` is a write, and a render is the backstop that
+ * publishes a content entry when the `apply-entry-schedules` beat has not
+ * (AGL-3340), so a cache that stored a collection with a schedule still
+ * pending would suppress the render that publishes it.
+ * `getPublishedCollectionSource` therefore declines to STORE exactly those
+ * collections — see its `store` predicate — which keeps that backstop on the
+ * render window, and puts everything else on this TTL.
  */
 const COLLECTION_SOURCE_TTL_SECONDS = PUBLISHED_SITE_DATA_TTL_SECONDS
 
@@ -373,9 +374,9 @@ export function isDueScheduled(value: FirebaseFirestore.DocumentData): boolean {
 
 /**
  * A scheduled entry still waiting on its time: not due yet, and not refused.
- * Nothing but a render publishes a content entry, so a cache that stored a
- * read holding one would withhold the render that notices it come due — see
- * {@link LiveEntriesRead.pendingSchedule}.
+ * A render is the backstop that publishes a content entry the beat has not
+ * reached, so a cache that stored a read holding one would withhold the render
+ * that notices it come due — see {@link LiveEntriesRead.pendingSchedule}.
  */
 export function isPendingScheduled(
   value: FirebaseFirestore.DocumentData,
@@ -385,6 +386,27 @@ export function isPendingScheduled(
     !scheduleAlreadyRefused(value) &&
     !isDueScheduled(value)
   )
+}
+
+/**
+ * When this entry's schedule comes due, in epoch ms — or null when it holds
+ * no schedule to act on: not `scheduled`, already refused, or carrying no
+ * `publishAt` (AGL-3340).
+ *
+ * The beat orders its probe by this instant. A refused schedule keeps
+ * `status: 'scheduled'` forever (see {@link ENTRY_SCHEDULE_SKIPPED}), so
+ * reading one as due would make every beat re-probe for work that will never
+ * be done. Seconds, like {@link isDueScheduled}, so the two agree about the
+ * instant an entry comes due.
+ */
+export function entryScheduleDueAtMs(
+  value: FirebaseFirestore.DocumentData,
+): number | null {
+  if (value['status'] !== 'scheduled' || scheduleAlreadyRefused(value)) {
+    return null
+  }
+  const seconds = value['publishAt']?.seconds
+  return typeof seconds === 'number' ? seconds * 1000 : null
 }
 
 /**
@@ -437,7 +459,10 @@ export async function scheduledPublishingPermission(
 /**
  * Scheduled entries (AGL-123) go live lazily like AGL-61: a due
  * `publishAt` counts as published for this render, and the doc is flipped
- * to `published` fail-open so the state becomes durable.
+ * to `published` fail-open so the state becomes durable. The tenant's
+ * `apply-entry-schedules` beat makes the same flip at the entry's time and
+ * drops the pages that list it (AGL-3340); this render-time half stays as the
+ * backstop for a beat that is down or has not reached the entry yet.
  *
  * PLAN GATE (AGL-471). `scheduledPublishing` is a Business entitlement, and
  * until now nothing on the entry path checked it: the console let any plan
@@ -462,6 +487,15 @@ export function isLive(
 }
 
 /**
+ * What {@link flipDueEntry} did to one entry.
+ *
+ * `published` is the only outcome that changes what a visitor sees, so it is
+ * the only one a caller drops pages for. `refused` changes the stored state
+ * and nothing on the site — a refused entry was never live.
+ */
+export type EntryScheduleOutcome = 'published' | 'refused' | 'unchanged' | 'failed'
+
+/**
  * Make the due state durable — or record that it was refused.
  *
  * The refusal is TERMINAL, for the AGL-1185 reason: left as a bare pending
@@ -473,35 +507,75 @@ export function isLive(
  * subsequent render.
  *
  * Both writes fail open: an error leaves today's state, and the next render
- * retries.
+ * retries. A render does not wait for them (`void`); the beat does, because
+ * it drops pages only for a flip that landed.
+ *
+ * `precondition` is the beat's: it read the entry some milliseconds earlier,
+ * and an author rescheduling it in between must win. A render passes none —
+ * it writes exactly what it just rendered.
  */
-function flipDueEntry(
+async function flipDueEntry(
   docRef: FirebaseFirestore.DocumentReference,
   value: FirebaseFirestore.DocumentData,
   permission: SchedulePermission,
-): void {
-  if (value['status'] !== 'scheduled') return
-  if (scheduleAlreadyRefused(value)) return
+  precondition?: FirebaseFirestore.Precondition,
+): Promise<EntryScheduleOutcome> {
+  if (value['status'] !== 'scheduled') return 'unchanged'
+  if (scheduleAlreadyRefused(value)) return 'unchanged'
   // `unresolved` writes NOTHING. It withholds this render and leaves the
   // schedule exactly as it found it, so a later render can still publish it.
-  if (permission === 'unresolved') return
-  if (permission === 'refused') {
-    if (!isDueScheduled(value)) return
-    docRef
-      .update({ scheduleStatus: ENTRY_SCHEDULE_SKIPPED })
-      .catch((error) => console.error(error))
-    return
+  if (permission === 'unresolved') return 'unchanged'
+  if (!isDueScheduled(value)) return 'unchanged'
+  const update: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData> =
+    permission === 'refused'
+      ? { scheduleStatus: ENTRY_SCHEDULE_SKIPPED }
+      : // The console's sort key follows the flip (AGL-3323). It already held
+        // `publishAt` while the entry waited, and `publishedAt` takes that
+        // same instant, so the entry keeps its place in the console's
+        // Published order.
+        {
+          status: 'published',
+          publishedAt: value['publishAt'],
+          [ENTRY_PUBLISH_SORT_FIELD]: value['publishAt'],
+        }
+  try {
+    if (precondition) await docRef.update(update, precondition)
+    else await docRef.update(update)
+    return permission === 'refused' ? 'refused' : 'published'
+  } catch (error) {
+    console.error(error)
+    return 'failed'
   }
-  // The console's sort key follows the flip (AGL-3323). It already held
-  // `publishAt` while the entry waited, and `publishedAt` takes that same
-  // instant, so the entry keeps its place in the console's Published order.
-  docRef
-    .update({
-      status: 'published',
-      publishedAt: value['publishAt'],
-      [ENTRY_PUBLISH_SORT_FIELD]: value['publishAt'],
-    })
-    .catch((error) => console.error(error))
+}
+
+/**
+ * Apply one due entry schedule outside a render (AGL-3340) — the executor the
+ * `apply-entry-schedules` beat runs, and the same one a render runs, so the
+ * two cannot come to disagree about the plan gate or the fields a flip
+ * writes.
+ *
+ * Asks the plan only for an entry that is actually due, as every render path
+ * does. Guarded on the snapshot's own `updateTime`: a schedule edited after
+ * the beat read it is left for the next beat, which reads it fresh.
+ */
+export async function applyDueEntrySchedule(options: {
+  hostId: string
+  entry: Pick<
+    FirebaseFirestore.DocumentSnapshot,
+    'ref' | 'data' | 'updateTime'
+  >
+}): Promise<EntryScheduleOutcome> {
+  const value = options.entry.data()
+  if (!value || !isDueScheduled(value)) return 'unchanged'
+  const permission = await scheduledPublishingPermission(options.hostId)
+  return flipDueEntry(
+    options.entry.ref,
+    value,
+    permission,
+    options.entry.updateTime
+      ? { lastUpdateTime: options.entry.updateTime }
+      : undefined,
+  )
 }
 
 export interface CollectionContent {
@@ -675,13 +749,14 @@ interface LiveEntriesRead {
    * which has not been terminally refused — a schedule this collection is
    * still waiting on.
    *
-   * Nothing promotes a content entry on a beat: `publish-schedule-job.ts` is
-   * screens-only, so `isLive`/`flipDueEntry` running during a render is the
-   * entire mechanism. A cached source therefore does not merely serve stale
-   * entries, it withholds the render that would have published one, for as
-   * long as the entry stays cached. This is what lets the cache decline to
-   * store exactly those collections, so a schedule keeps landing on the
-   * render window rather than on the TTL.
+   * The `apply-entry-schedules` beat publishes a due entry at its time and
+   * drops the pages that list it (AGL-3340), but a beat can be down, and
+   * `isLive`/`flipDueEntry` running during a render is what publishes the
+   * entry then. A cached source would not merely serve stale entries, it
+   * would withhold that render for as long as the entry stayed cached. This
+   * is what lets the cache decline to store exactly those collections, so a
+   * schedule the beat missed still lands on the render window rather than on
+   * the TTL.
    */
   pendingSchedule: boolean
 }
@@ -742,9 +817,9 @@ const LIVE_ENTRY_FIELDS = [
  *
  * Read by its own query rather than taken from the dated page below, because
  * a schedule is invisible to that page: scheduling writes `publishAt` and
- * never `publishedAt`, and `flipDueEntry` during a render is the only thing
- * that publishes one. A schedule the read misses is a post that never goes
- * out. The set is small by nature — a hundred pending schedules on one
+ * never `publishedAt`, and when the beat has not reached one, `flipDueEntry`
+ * during a render is the only thing that publishes it. A schedule the read
+ * misses is then a post that does not go out. The set is small by nature — a hundred pending schedules on one
  * collection is already an unusual editorial calendar.
  */
 const SCHEDULED_SOURCE_MAX = 100
@@ -884,7 +959,7 @@ function toLiveEntries(
       .filter((entryDoc) => isLive(entryDoc.data(), permission))
       .map((entryDoc) => {
         const value = entryDoc.data()
-        flipDueEntry(entryDoc.ref, value, permission)
+        void flipDueEntry(entryDoc.ref, value, permission)
         return {
           $id: entryDoc.id,
           title: value['title'] ?? entryDoc.id,
@@ -929,7 +1004,7 @@ async function listLiveEntries(
   // re-reading the org on each one.
   if (permission !== 'allowed') {
     for (const entryDoc of due) {
-      flipDueEntry(entryDoc.ref, entryDoc.data(), permission)
+      void flipDueEntry(entryDoc.ref, entryDoc.data(), permission)
     }
   }
 
@@ -1038,7 +1113,7 @@ async function readCollectionListingPage(options: {
       : 'allowed'
     if (permission !== 'allowed') {
       for (const entryDoc of due) {
-        flipDueEntry(entryDoc.ref, entryDoc.data(), permission)
+        void flipDueEntry(entryDoc.ref, entryDoc.data(), permission)
       }
     }
     const entries = toLiveEntries(docs, permission)
@@ -1156,13 +1231,13 @@ export async function getPublishedCollectionSource(options: {
       read: () => readPublishedCollectionSource(options),
       // A collection with a schedule still pending is SERVED but not STORED.
       //
-      // No beat publishes a content entry — `flipDueEntry` during a render is
-      // the whole mechanism — so storing this source would suppress the very
-      // renders that would have noticed the entry coming due, and the post
-      // would wait out the TTL rather than land at its time. Declining to
-      // store leaves those collections exactly as uncached as they were
-      // before this cache existed, which is the only cost this cache is not
-      // allowed to reduce.
+      // The beat publishes a due entry and drops this tag (AGL-3340); when
+      // the beat is down, `flipDueEntry` during a render is what publishes
+      // it, so storing this source would suppress the very renders that would
+      // have noticed the entry coming due, and the post would wait out the
+      // TTL rather than land at its time. Declining to store leaves those
+      // collections exactly as uncached as they were before this cache
+      // existed, which is the only cost this cache is not allowed to reduce.
       //
       // Also refuses a collection that resolved to nothing, for the reason
       // `withRenderCache` states about negatives generally: a slug that
@@ -1549,14 +1624,14 @@ export async function getCollectionContent(options: {
     // something is due, and record the refusal on its own pass because a
     // refused entry never becomes the `entryDoc` below (AGL-471).
     //
-    // A PREVIEW RENDER SKIPS BOTH WRITES (AGL-3205). `flipDueEntry` is the
-    // entire publishing mechanism for a content entry, and it is a mechanism
-    // that belongs to the PUBLIC render: a preview is one person looking at
-    // one post through a link, and it must not be able to publish it, nor to
-    // burn its schedule with the terminal refusal marker. Skipping the writes
-    // costs nothing — the next public render asks the same questions and
-    // writes the same answers — and it is what keeps "nothing but a render
-    // publishes a content entry" true of renders anybody can reach.
+    // A PREVIEW RENDER SKIPS BOTH WRITES (AGL-3205). `flipDueEntry` is how a
+    // content entry is published — by the beat, or by a render as its
+    // backstop — and the render half belongs to the PUBLIC render: a preview
+    // is one person looking at one post through a link, and it must not be
+    // able to publish it, nor to burn its schedule with the terminal refusal
+    // marker. Skipping the writes costs nothing — the beat or the next public
+    // render asks the same questions and writes the same answers — and it is
+    // what keeps a preview link from publishing anything.
     const dueHere = entryQuery.docs.filter((docSnapshot) =>
       isDueScheduled(docSnapshot.data()),
     )
@@ -1565,7 +1640,7 @@ export async function getCollectionContent(options: {
       : 'allowed'
     if (permission !== 'allowed' && !preview) {
       for (const docSnapshot of dueHere) {
-        flipDueEntry(docSnapshot.ref, docSnapshot.data(), permission)
+        void flipDueEntry(docSnapshot.ref, docSnapshot.data(), permission)
       }
     }
     /**
@@ -1588,7 +1663,7 @@ export async function getCollectionContent(options: {
       ) ?? (preview ? entryQuery.docs[0] : undefined)
     if (entryDoc) {
       const value = entryDoc.data()
-      if (!preview) flipDueEntry(entryDoc.ref, value, permission)
+      if (!preview) void flipDueEntry(entryDoc.ref, value, permission)
       if (preview && !isLive(value, permission)) {
         // The facts the preview chrome states back to the reader, so the page
         // cannot be mistaken for the published post. Read from the stored

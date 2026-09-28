@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+// The leaf module, not the server barrel: the list keys every artifact
+// create stamps (AGL-3321), which the install specs' closed-world barrel
+// mocks have no reason to stage.
+import { artifactCreateListKeys, artifactDeleteListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
   checkQuota,
   createResourceUid,
@@ -301,14 +305,19 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
       let replaced = 0
       for (const stale of superseded) {
         if (stale.get('deletedAt')) continue
-        tx.update(stale.ref, { deletedAt: now, updatedAt: now })
+        tx.update(stale.ref, {
+          deletedAt: now,
+          updatedAt: now,
+          ...artifactDeleteListKeys('templates'),
+        })
         replaced += 1
       }
       let created = 0
       for (const screen of screens) {
+        const pageName = String(screen.displayName ?? 'Page').slice(0, 80)
         tx.set(templatesRef.doc(createResourceUid()), {
           kind: 'page',
-          displayName: String(screen.displayName ?? 'Page').slice(0, 80),
+          displayName: pageName,
           ...(screen.description && { description: screen.description }),
           ...(screen.seo && { seo: screen.seo }),
           // A suggestion only — de-conflicted against the routing map when a
@@ -327,6 +336,12 @@ export const installTemplateHandler: PluginApiHandler = async (req, res) => {
           ...(template.theme ? { theme: template.theme } : {}),
           source,
           installedFrom: provenance.installedFrom,
+          // The keys the templates library finds it by (AGL-3321).
+          ...artifactCreateListKeys('templates', {
+            kind: 'page',
+            displayName: pageName,
+            source,
+          }),
           createdAt: now,
           updatedAt: now,
         })

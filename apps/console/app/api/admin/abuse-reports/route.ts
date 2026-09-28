@@ -23,6 +23,14 @@
  * `/api/admin/media-quarantine` — this is the surface those two levers
  * finally have an input for.
  *
+ * `GET` answers three reads, each served by its own query
+ * (`utils/abuse-report-list-query.ts`, AGL-3321):
+ *
+ *   (default)                one page of reports — the staff list wire,
+ *                            Status and Category on the query, cursor-paged
+ *   `queue=counterNotices`   one page of counter-notices, oldest receipt first
+ *   `view=summary`           the queue's counts, each a query of its own
+ *
  * ## Why a route rather than a client Firestore listener
  *
  * `abuseReports` is `allow write: if false` for every client including a
@@ -101,6 +109,20 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  ABUSE_REPORT_LIST_QUERY,
+  COUNTER_NOTICE_AWAITING_STATUSES,
+  COUNTER_NOTICE_LIST_QUERY,
+  COUNTER_NOTICE_LIST_SORT,
+  COUNTER_NOTICE_OVERDUE_READ_MAX,
+  URGENT_ABUSE_CATEGORIES,
+  counterNoticeOverdueBefore,
+} from '../../../../utils/abuse-report-list-query'
+import {
+  readStaffListQuery,
+  runStaffListQuery,
+} from '../../../../utils/server/staff-list-query'
 
 export const dynamic = 'force-dynamic'
 
@@ -116,9 +138,6 @@ export const dynamic = 'force-dynamic'
  * a repeat infringer looks clean.
  */
 const STRIKE_LOOKUP_MAX_ORGS = 25
-
-/** Rows returned by one listing. The queue is triaged, not browsed. */
-const PAGE_SIZE = 100
 
 /** Doc ids are hex from the intake's sha256 — nothing else is addressable. */
 const REPORT_ID = /^[a-f0-9]{8,64}$/
@@ -570,130 +589,178 @@ async function handler(request: Request): Promise<Response> {
     const collection = firestore.collection(Aglyn.ABUSE_REPORT_COLLECTION)
 
     if (method === 'GET') {
-      const status = asString(query?.['status'])
-      let listing = collection.orderBy('updatedAt', 'desc').limit(PAGE_SIZE)
-      if (status && Aglyn.isAbuseReportStatus(status)) {
-        listing = collection
-          .where('status', '==', status)
-          .orderBy('updatedAt', 'desc')
-          .limit(PAGE_SIZE)
-      }
-      const snapshot = await listing.get()
-      const reports = snapshot.docs.map((entry) =>
-        rowPayload(entry.id, entry.data() as Record<string, unknown>, canSeeIdentity),
-      )
-      // Counted from the returned page, and SAID so. An operator reading "3
-      // urgent" has to know whether that is the whole truth or the first
-      // hundred rows' worth of it — a count that silently means the latter is
-      // how a queue gets trusted while it is behind.
-      const openUrgent = reports.filter(
-        (report) => report.status === 'open' && report.severity === 'urgent',
-      ).length
+      const nowMs = Date.now()
 
       /**
-       * The §512(g) queue, alongside the reports rather than behind a tab.
+       * The queue's counts, each its own query over the whole queue — never
+       * a count of the rows one page happened to hold. An operator reading
+       * "3 urgent" is reading the queue, whatever page the list is on.
+       */
+      if (asString(query?.['view']) === 'summary') {
+        const counterNotices = firestore.collection(
+          Aglyn.DMCA_COUNTER_NOTICE_COLLECTION,
+        )
+        const [urgent, received, candidates] = await Promise.all([
+          collection
+            .where('status', '==', 'open')
+            .where('category', 'in', [...URGENT_ABUSE_CATEGORIES])
+            .count()
+            .get(),
+          counterNotices.where('status', '==', 'received').count().get(),
+          /**
+           * The §512(g) breaches: the awaiting counter-notices old enough to
+           * be past their ceiling, each checked against its own clock. Read
+           * in the list's order, so a queue past the bound still says
+           * "at least" about the oldest — the ones furthest past the date.
+           */
+          counterNotices
+            .where('status', 'in', [...COUNTER_NOTICE_AWAITING_STATUSES])
+            .where(
+              COUNTER_NOTICE_LIST_SORT.path,
+              '<=',
+              counterNoticeOverdueBefore(nowMs),
+            )
+            .orderBy(COUNTER_NOTICE_LIST_SORT.path, COUNTER_NOTICE_LIST_SORT.direction)
+            .limit(COUNTER_NOTICE_OVERDUE_READ_MAX + 1)
+            .get(),
+        ])
+        const overdue = candidates.docs
+          .slice(0, COUNTER_NOTICE_OVERDUE_READ_MAX)
+          .filter((entry: any) => {
+            const receivedAtMs = entry.get(COUNTER_NOTICE_LIST_SORT.path)
+            return (
+              typeof receivedAtMs === 'number' &&
+              Aglyn.counterNoticeClock(receivedAtMs).latestMs <= nowMs
+            )
+          }).length
+        return Response.json(
+          {
+            // Open reports in an urgent category, across the whole queue.
+            openUrgent: Number(urgent.data().count ?? 0),
+            // Two numbers, and they mean different things. `awaitingForward`
+            // is work; `overdueRestorations` is a breach that has already
+            // happened and a customer already locked out past the date we
+            // owed them.
+            awaitingForward: Number(received.data().count ?? 0),
+            overdueRestorations: overdue,
+            // The oldest `COUNTER_NOTICE_OVERDUE_READ_MAX` candidates were
+            // read and more exist: the count is a floor, and says so.
+            overdueAtLeast: candidates.docs.length > COUNTER_NOTICE_OVERDUE_READ_MAX,
+            counterNoticeStatuses: Aglyn.COUNTER_NOTICE_STATUSES,
+            restoreBusinessDays: Aglyn.COUNTER_NOTICE_RESTORE_BUSINESS_DAYS,
+            identityVisible: canSeeIdentity,
+            actorRole,
+            statuses: Aglyn.ABUSE_REPORT_STATUSES,
+            readAtMs: nowMs,
+          },
+          { status: 200, headers: { 'Cache-Control': 'no-store' } },
+        )
+      }
+
+      // Both lists answer the staff list wire (`readStaffListQuery`): every
+      // Filters-panel clause on the query, paged by a cursor in the list's
+      // own order. A request whose filters cannot be read is refused rather
+      // than answered with the whole queue under chips that say otherwise.
+      const listRequest = readStaffListQuery(query ?? {})
+      if (!listRequest) {
+        return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+      }
+
+      /**
+       * The §512(g) queue, paged on its own beside the reports.
        *
        * Ordered by RECEIPT ascending, not by `updatedAt` descending like the
-       * reports above, and the difference is the point: a report queue is
-       * read newest-first because the freshest report is the most urgent
-       * thing in it, while a counter-notice queue is read oldest-first
-       * because the oldest one is the one whose statutory deadline is closest.
-       * Sorting these two the same way would bury the row that is about to
-       * become a violation.
+       * reports, and the difference is the point: a report queue is read
+       * newest-first because the freshest report is the most urgent thing in
+       * it, while a counter-notice queue is read oldest-first because the
+       * oldest one is the one whose statutory deadline is closest. Sorting
+       * these two the same way would bury the row that is about to become a
+       * violation.
        */
-      const nowMs = Date.now()
-      const counterSnapshot = await firestore
-        .collection(Aglyn.DMCA_COUNTER_NOTICE_COLLECTION)
-        .orderBy('receivedAtMs', 'asc')
-        .limit(PAGE_SIZE)
-        .get()
-      const counterNotices = counterSnapshot.docs.map((entry) =>
-        counterNoticePayload(
-          entry.id,
-          entry.data() as Record<string, unknown>,
-          canSeeIdentity,
-          nowMs,
-        ),
-      )
-      // Two numbers, and they mean different things. `awaitingForward` is
-      // work; `overdueRestorations` is a breach that has already happened and
-      // a customer already locked out past the date we owed them.
-      const awaitingForward = counterNotices.filter(
-        (notice) => notice.status === 'received',
-      ).length
-      const overdueRestorations = counterNotices.filter(
-        (notice) => notice.overdue,
-      ).length
+      if (asString(query?.['queue']) === 'counterNotices') {
+        const page = await runStaffListQuery({
+          firestore,
+          collection: firestore.collection(Aglyn.DMCA_COUNTER_NOTICE_COLLECTION),
+          declaration: COUNTER_NOTICE_LIST_QUERY,
+          request: listRequest,
+          row: (entry) =>
+            counterNoticePayload(
+              entry.id,
+              entry.data() as Record<string, unknown>,
+              canSeeIdentity,
+              nowMs,
+            ),
+        })
+        return Response.json(
+          {
+            counterNotices: page.rows,
+            nextCursor: page.nextCursor,
+            hasMore: page.hasMore,
+            refused: page.refused,
+            notices: page.notices,
+            identityVisible: canSeeIdentity,
+            actorRole,
+            readAtMs: nowMs,
+          },
+          { status: 200, headers: { 'Cache-Control': 'no-store' } },
+        )
+      }
+
+      const page = await runStaffListQuery({
+        firestore,
+        collection,
+        declaration: ABUSE_REPORT_LIST_QUERY,
+        request: listRequest,
+        row: (entry) =>
+          rowPayload(entry.id, entry.data() as Record<string, unknown>, canSeeIdentity),
+      })
 
       /**
-       * Submitters on this page who are holding NOTHING (AGL-2400).
-       *
-       * Counted across both queues because it is one failure with one remedy —
-       * a human re-sends the reference to the address already on the row — and
-       * splitting it in two would let the smaller half go unread.
-       *
-       * Counted from `'failed'` ONLY. A row with no receipt record is unknown,
-       * not broken (see `receiptStatus`), and a count that swept those in
-       * would read as hundreds on the day this deploys and be ignored by the
-       * second day. Like `openUrgent` this describes the returned PAGE, not
-       * the queue, and the page says so.
-       */
-      const receiptsFailed =
-        reports.filter((report) => report.receiptStatus === 'failed').length +
-        counterNotices.filter((notice) => notice.receiptStatus === 'failed')
-          .length
-
-      /**
-       * Strike counts for the orgs on this page, one read per DISTINCT org.
+       * Strike counts for the orgs on this page, one read per DISTINCT org,
+       * carried on each copyright row.
        *
        * Only orgs that actually have a copyright report here: a strike count
        * beside a phishing report would invite reading it as a general
        * misconduct score, which is not what §512(i) counts and not what the
-       * published policy will say.
+       * published policy will say. An org past the lookup cap is marked
+       * `strikeUnknown` — an UNKNOWN count, which the page must never render
+       * as zero, because a zero there is how a repeat infringer looks clean.
        */
       const strikeOrgIds = [
         ...new Set(
-          reports
+          page.rows
             .filter((report) => report.category === 'dmca' && report.orgId)
             .map((report) => report.orgId as string),
         ),
       ]
-      const strikes: Record<string, unknown> = {}
+      const strikes: Record<string, Record<string, unknown>> = {}
       for (const orgId of strikeOrgIds.slice(0, STRIKE_LOOKUP_MAX_ORGS)) {
         const ledger = await strikeLedger(firestore, orgId)
         strikes[orgId] = {
           ...Aglyn.repeatInfringerVerdict(ledger.standing),
           // THE EVIDENCE BEHIND THE NUMBER (AGL-2328). The verdict alone is
           // an assertion; the ledger is what makes it a §512(i) defence.
-          // Every field here was already being written and thrown away one
-          // line above the only reader.
           ledger: ledger.rows,
         }
       }
+      const reports = page.rows.map((report) => {
+        const counted = report.category === 'dmca' && report.orgId
+        return {
+          ...report,
+          strike: counted ? (strikes[report.orgId as string] ?? null) : null,
+          strikeUnknown: Boolean(counted && !strikes[report.orgId as string]),
+        }
+      })
       return Response.json(
         {
           reports,
-          counterNotices,
-          strikes,
-          // Said explicitly rather than inferred from a short map: an org
-          // past the cap has an UNKNOWN count, and a page that rendered that
-          // as zero would show a repeat infringer as clean.
-          strikesTruncated: strikeOrgIds.length > STRIKE_LOOKUP_MAX_ORGS,
-          counterNoticeCount: counterNotices.length,
-          counterNoticesTruncated: counterNotices.length === PAGE_SIZE,
-          awaitingForward,
-          overdueRestorations,
-          receiptsFailed,
-          counterNoticeStatuses: Aglyn.COUNTER_NOTICE_STATUSES,
-          restoreBusinessDays: Aglyn.COUNTER_NOTICE_RESTORE_BUSINESS_DAYS,
-          count: reports.length,
-          pageSize: PAGE_SIZE,
-          truncated: reports.length === PAGE_SIZE,
-          openUrgent,
+          nextCursor: page.nextCursor,
+          hasMore: page.hasMore,
+          refused: page.refused,
+          notices: page.notices,
           identityVisible: canSeeIdentity,
           actorRole,
-          statuses: Aglyn.ABUSE_REPORT_STATUSES,
-          readAtMs: Date.now(),
+          readAtMs: nowMs,
         },
         { status: 200, headers: { 'Cache-Control': 'no-store' } },
       )
@@ -875,7 +942,7 @@ async function handler(request: Request): Promise<Response> {
         { merge: true },
       )
 
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         actorEmail: decoded.email ? String(decoded.email) : null,
         action: `dmcaCounterNotice.${nextStatus}`,
@@ -1030,7 +1097,7 @@ async function handler(request: Request): Promise<Response> {
       : null
     const strikesAfter = ledgerAfter?.standing ?? 0
 
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: decoded.uid,
       actorEmail: decoded.email ? String(decoded.email) : null,
       action: `abuseReport.${status}`,

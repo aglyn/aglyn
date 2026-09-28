@@ -189,6 +189,10 @@ reads as the job keeping up.
 
 Neither read can be paged, since a tally over page one is not a tally.
 
+Since AGL-3321 neither read exists: every chip is a Firestore count query over
+the whole collection, on a `recoveryState` field every checkout writer stamps,
+and the only listener left is the five newest open checkouts.
+
 ### The content entries list, and the entry it could not open
 
 `content-scope.context.tsx` capped the entries collection at 200 with no

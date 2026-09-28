@@ -43,25 +43,33 @@ const snapshotFor = (docs: FakeDoc[]) => ({
 interface MockQueryState {
   after?: string | null
   limit: number
-  /** `field == value` predicates on the stored data (`actorId` aside). */
-  equals?: Array<[string, unknown]>
+  /** Every predicate, as the query was handed it. */
+  wheres?: Array<[string, string, unknown]>
 }
 
+/** Every query's predicates, as `field op value`, in the order they were added. */
+let mockWheres: string[][] = []
+
 jest.mock('@aglyn/tenant-data-admin', () => {
+  const holds = (data: Record<string, unknown>, [field, op, value]: [string, string, unknown]) => {
+    const stored = data[field]
+    if (op === '==') return stored === value
+    if (op === 'array-contains') return Array.isArray(stored) && stored.includes(value)
+    throw new Error(`unexpected operator ${op}`)
+  }
   const build = (state: MockQueryState) => ({
     where: (field: string, op: string, value: unknown) =>
-      build(
-        op === '==' && field !== 'actorId'
-          ? { ...state, equals: [...(state.equals ?? []), [field, value]] }
-          : state,
-      ),
+      build({ ...state, wheres: [...(state.wheres ?? []), [field, op, value]] }),
     orderBy: () => build(state),
     startAfter: (doc: { ref: { path: string } }) =>
       build({ ...state, after: doc.ref.path }),
     limit: (value: number) => build({ ...state, limit: value }),
     get: async () => {
+      mockWheres.push(
+        (state.wheres ?? []).map(([field, op, value]) => `${field} ${op} ${JSON.stringify(value)}`),
+      )
       const matching = mockCorpus.filter((entry) =>
-        (state.equals ?? []).every(([field, value]) => entry.data[field] === value),
+        (state.wheres ?? []).every((where) => holds(entry.data, where)),
       )
       const index = state.after
         ? matching.findIndex(
@@ -104,25 +112,32 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   }
 })
 
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import {
   orgActivityScopePaths,
   readActorActivity,
 } from '../utils/server/actor-activity'
 
-const doc = (id: string, parent: string, seconds = 1000): FakeDoc => ({
-  id,
-  parent,
-  data: {
-    actorId: 'u1',
-    action: 'Saved the screen',
-    target: { type: 'screen', name: `S${id}` },
-    createdAt: { seconds },
-  },
-})
+const doc = (id: string, parent: string, seconds = 1000): FakeDoc => {
+  const target = { type: 'screen', name: `S${id}` }
+  return {
+    id,
+    parent,
+    data: {
+      actorId: 'u1',
+      actorEmail: 'ada@example.test',
+      action: 'Saved the screen',
+      target,
+      searchTokens: activitySearchTokens({ actorEmail: 'ada@example.test', target }),
+      createdAt: { seconds },
+    },
+  }
+}
 
 beforeEach(() => {
   mockCorpus = []
   mockHostsInOrg = []
+  mockWheres = []
 })
 
 describe('readActorActivity', () => {
@@ -184,18 +199,44 @@ describe('readActorActivity', () => {
         action: i % 2 === 0 ? 'Published the screen' : 'Saved the screen',
       },
     }))
-    const filter = { field: 'action', op: 'equals', value: 'Published the screen' }
-    const first = await readActorActivity({ actorId: 'u1', pageSize: 2, filter })
+    const clauses = [{ field: 'action', op: 'equals', value: 'Published the screen' }]
+    const first = await readActorActivity({ actorId: 'u1', pageSize: 2, clauses })
     expect(first.entries.map((e) => e.$id)).toEqual(['d0', 'd2'])
     expect(first.nextCursor).toBe('hosts/h1/activity/d2')
 
     const second = await readActorActivity({
       actorId: 'u1',
       pageSize: 2,
-      filter,
+      clauses,
       cursor: first.nextCursor,
     })
     expect(second.entries.map((e) => e.$id)).toEqual(['d4', 'd6'])
+  })
+
+  it('puts the search word on the query beside the person, and reads nothing it discards (AGL-3321)', async () => {
+    mockCorpus = [
+      doc('a', 'hosts/h1', 900),
+      doc('b', 'hosts/h1', 800),
+      doc('c', 'orgs/o1', 700),
+    ]
+    const page = await readActorActivity({ actorId: 'u1', pageSize: 25, search: ['Sb'] })
+    expect(page.entries.map((entry) => entry.$id)).toEqual(['b'])
+    expect(mockWheres).toEqual([['actorId == "u1"', 'searchTokens array-contains "sb"']])
+    expect(page.refused).toEqual([])
+  })
+
+  it('says what it could not put on the query, and does not apply it', async () => {
+    mockCorpus = [doc('a', 'hosts/h1', 900)]
+    const page = await readActorActivity({
+      actorId: 'u1',
+      pageSize: 25,
+      clauses: [{ field: 'target', op: 'equals', value: 'Sa' }],
+    })
+    expect(page.entries.map((entry) => entry.$id)).toEqual(['a'])
+    expect(page.refused).toEqual([
+      { clause: { field: 'target', op: 'equals', value: 'Sa' }, reason: expect.any(String) },
+    ])
+    expect(mockWheres).toEqual([['actorId == "u1"']])
   })
 
   it('stops offering a next page when the query runs out', async () => {
@@ -204,41 +245,11 @@ describe('readActorActivity', () => {
     expect(page.nextCursor).toBeNull()
   })
 
-  describe('scoped to one organization', () => {
-    it('keeps only what happened inside it', async () => {
-      mockCorpus = [
-        doc('a', 'hosts/mine', 900),
-        doc('b', 'hosts/theirs', 800),
-        doc('c', 'orgs/mine-org', 700),
-        doc('d', 'orgs/other-org', 600),
-      ]
-      const page = await readActorActivity({
-        actorId: 'u1',
-        pageSize: 25,
-        scopePaths: new Set(['hosts/mine', 'orgs/mine-org']),
-      })
-      expect(page.entries.map((entry) => entry.$id)).toEqual(['a', 'c'])
-      // The filtered-out rows were still READ, which is the number that says
-      // whether the filter has stopped being affordable.
-      expect(page.scanned).toBe(4)
-    })
-
-    it('answers empty for a scope with nothing in it, without querying', async () => {
-      mockCorpus = [doc('a', 'hosts/h1')]
-      const page = await readActorActivity({
-        actorId: 'u1',
-        pageSize: 25,
-        scopePaths: new Set<string>(),
-      })
-      expect(page).toEqual({ entries: [], nextCursor: null, scanned: 0 })
-    })
-  })
-
   it('answers empty for no actor rather than reading everything', async () => {
     mockCorpus = [doc('a', 'hosts/h1')]
     const page = await readActorActivity({ actorId: '', pageSize: 25 })
     expect(page.entries).toEqual([])
-    expect(page.scanned).toBe(0)
+    expect(mockWheres).toEqual([])
   })
 })
 

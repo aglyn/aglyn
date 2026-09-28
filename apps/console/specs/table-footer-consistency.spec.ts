@@ -37,6 +37,13 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { LIST_QUERY_ID_PATH } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  ARTIFACT_LIST_ORDER,
+  COMPONENT_LIST_QUERY,
+  LAYOUT_LIST_QUERY,
+  TEMPLATE_LIST_QUERY,
+} from '../utils/artifact-list-queries'
 import {
   TABLE_PAGE_SIZE_DEFAULT,
   TABLE_PAGE_SIZE_OPTIONS,
@@ -177,10 +184,11 @@ const SHARED_FOOTER: Array<[string, string]> = [
 /**
  * The two lists that keep "Load more", and why.
  *
- * Neither is a table. The DAM grid completes a SEARCH as it loads — it reads
- * until the filter is satisfied or a document ceiling is hit (AGL-1460), so
- * "how many pages" is not a question it can answer, and a page number would
- * be a number about the wrong thing. The storefront product grid is a
+ * Neither is a table. The DAM is a thumbnail grid read down a page at a
+ * time, and its List view shares that one cursor so the two views never
+ * disagree about what is loaded (AGL-3327). Every filter and the search are
+ * on its query, which has no count to divide into pages beside the
+ * cursor, so a page number would be a number about the wrong thing. The storefront product grid is a
  * shopper's browse surface on a published site, where a pager is a different
  * design decision from a console list's.
  *
@@ -190,6 +198,12 @@ const SHARED_FOOTER: Array<[string, string]> = [
 const LOAD_MORE_ALLOWED = [
   'apps/console/components/media/media-library.component.tsx',
   'libs/plugins/commerce/src/lib/components/product-grid.tsx',
+  // The Sites page's site CARDS (AGL-3321): a tile grid, like the media
+  // library and the product grid, and kept a grid of cards rather than made a
+  // table. Each "Load more" widens the served query by a page — the query
+  // over the reader's site memberships, every filter and the search on it —
+  // so what grows is always a page of the answer, never a loaded window.
+  'apps/console/app/(app)/[orgSlug]/hosts/page.tsx',
 ]
 
 /**
@@ -564,8 +578,13 @@ const withoutComments = (source: string) =>
  * moved theirs into `hostArtifactQuery`: the decision is subtle, identical
  * everywhere, and wrong in a way nobody sees. A guard that only knew the word
  * would have reported every one of those conversions as unordered.
+ *
+ * `useListQuery` and `listQueryConstraints` are the same case for a list
+ * whose query is planned (AGL-3321): the plan always carries one order, and
+ * the query ends in it.
  */
-const NAMES_ITS_ORDER = /\borderBy\(|\bcollectionPage\(|\bcollectionCeiling\(/
+const NAMES_ITS_ORDER =
+  /\borderBy\(|\bcollectionPage\(|\bcollectionCeiling\(|\blistQueryConstraints\(|\buseListQuery(<[^>]*>)?\(/
 
 const DRAWS_A_FOOTER =
   /<ListPagination|<ListTable|<DataTableComponent|<TablePagination|<DataGrid|<ScreensHierarchyTable/
@@ -635,6 +654,10 @@ describe('every list that DRAWS a footer names its order (AGL-2501)', () => {
     expect(NAMES_ITS_ORDER.test("orderBy('createdAt', 'desc')")).toBe(true)
     expect(NAMES_ITS_ORDER.test('collectionPage(ref, pageLimit)')).toBe(true)
     expect(NAMES_ITS_ORDER.test('collectionCeiling(ref, CEILING)')).toBe(true)
+    expect(NAMES_ITS_ORDER.test('useListQuery<Row>({ collection, declaration })')).toBe(true)
+    // A list query plan's constraints end in the plan's one order (AGL-3321).
+    expect(NAMES_ITS_ORDER.test('listQueryConstraints(plan)')).toBe(true)
+    expect(NAMES_ITS_ORDER.test('query(ref, ...listQueryConstraints(plan), limit(11))')).toBe(true)
     expect(NAMES_ITS_ORDER.test('query(ref, limit(200))')).toBe(false)
   })
 })
@@ -686,7 +709,7 @@ describe('the shared plugin query builder orders on the document NAME', () => {
 })
 
 /**
- * The four site artifact lists ask ONE query builder (AGL-2501).
+ * The four site artifact lists share ONE ordering decision (AGL-2501).
  *
  * They read four different collections under `hosts/{id}` and every one of
  * them faces the same question: `orderBy` matches only documents that HAVE
@@ -695,11 +718,14 @@ describe('the shared plugin query builder orders on the document NAME', () => {
  * sites answering that separately is how three of them answered it by not
  * ordering at all.
  *
- * `hostArtifactQuery` is where the answer lives, so this asserts the surfaces
- * ASK through it rather than merely that they contain an `orderBy` somewhere.
+ * The screens tree asks `hostArtifactQuery`, where the answer lives. The
+ * layouts, components and templates lists page their LIST QUERY (AGL-3321),
+ * whose declarations in `artifact-list-queries.ts` all walk
+ * `ARTIFACT_LIST_ORDER` — the document name — so this asserts both halves:
+ * that each surface asks through its own route, and that the route orders on
+ * the name.
  */
 const ARTIFACT_LISTS: Array<[string, string]> = [
-  ['screens', 'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'],
   ['layouts', 'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx'],
   ['components', 'apps/console/components/host-components-card.component.tsx'],
   [
@@ -709,56 +735,58 @@ const ARTIFACT_LISTS: Array<[string, string]> = [
 ]
 
 describe('the site artifact lists share one ordering decision (AGL-2501)', () => {
-  it.each(ARTIFACT_LISTS)('the %s list asks through the shared builder', (
-    _label,
-    path,
-  ) => {
-    const code = withoutComments(read(path))
+  it('the screens tree asks through the shared builder', () => {
+    const code = withoutComments(
+      read('apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'),
+    )
     expect(code).toContain('hostArtifactQuery(')
+  })
+
+  it.each(ARTIFACT_LISTS)('the %s list pages its list query', (_label, path) => {
+    const code = withoutComments(read(path))
+    expect(code).toContain('useListQuery<')
+    expect(code).toMatch(/_LIST_QUERY\b/)
     // And does not go around it. A second capped query written beside the
-    // shared one is how a list ends up with two orderings, only one of which
+    // list's own is how a list ends up with two orderings, only one of which
     // anybody reviews — so these files build no `limit()` of their own at
-    // all. (Uncapped reads are untouched: the templates card counts screens
-    // with a server aggregate, which is a different question from a list.)
+    // all. (Uncapped reads are untouched: the templates card counts its
+    // library with a server aggregate, which is a different question.)
     expect(code).not.toMatch(/\blimit\(/)
   })
 
-  it('the builder orders on the document NAME, which cannot be absent', () => {
+  it('every list query walks the document NAME, which cannot be absent', () => {
     // The decision itself, asserted where it lives. `orderBy('displayName')`
-    // here would not mis-sort these lists, it would silently drop every
-    // artifact created without a name — a worse failure, and an invisible one.
+    // would not mis-sort these lists, it would silently drop every artifact
+    // created without a name — a worse failure, and an invisible one.
     const builder = withoutComments(
       read('apps/console/utils/host-artifact-queries.ts'),
     )
     expect(builder).toContain('orderBy(documentId())')
     expect(builder).not.toMatch(/orderBy\('displayName'/)
+    for (const declaration of [LAYOUT_LIST_QUERY, COMPONENT_LIST_QUERY, TEMPLATE_LIST_QUERY]) {
+      expect(declaration.sorts).toEqual([ARTIFACT_LIST_ORDER])
+    }
+    expect(ARTIFACT_LIST_ORDER).toEqual({ path: LIST_QUERY_ID_PATH, direction: 'asc' })
   })
 
-  it('none of them re-sorts the window it was handed', () => {
+  it('none of them re-sorts the page it was handed', () => {
     // Sorting a server-ordered page in the browser is what made the original
     // bug invisible: the rows run in a believable order and are the wrong
-    // rows. The two lists that read a CEILING rather than a page may sort —
-    // they hold the whole collection — so this covers the paged two.
-    for (const path of [
-      'apps/console/app/(app)/[orgSlug]/hosts/[host]/layouts/page.tsx',
-      'apps/console/components/host-components-card.component.tsx',
-    ]) {
-      expect(withoutComments(read(path))).not.toMatch(/\.sort\(/)
+    // rows.
+    for (const [, path] of ARTIFACT_LISTS) {
+      expect(withoutComments(read(path))).not.toMatch(/\.sort\(\s*\(/)
     }
   })
 
-  it('the two ceilinged reads probe for what they could not read', () => {
-    // A tree and a template bundle cannot be sliced by document, so both read
-    // a ceiling. A ceiling with no probe is a partial site rendered as a whole
-    // one, which is the failure the pager solves for every other list.
-    for (const path of [
-      'apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx',
-      'apps/console/components/templates/host-templates-card.component.tsx',
-    ]) {
-      const code = withoutComments(read(path))
-      expect(code).toContain('ceilingedWindow')
-      expect(code).toMatch(/WINDOW \+ 1/)
-    }
+  it('the screens tree probes for what its ceiling could not read', () => {
+    // A tree cannot be sliced by document, so it reads a ceiling. A ceiling
+    // with no probe is a partial site rendered as a whole one, which is the
+    // failure the pager solves for every other list.
+    const code = withoutComments(
+      read('apps/console/app/(app)/[orgSlug]/hosts/[host]/screens/page.tsx'),
+    )
+    expect(code).toContain('ceilingedWindow')
+    expect(code).toMatch(/WINDOW \+ 1/)
   })
 })
 
@@ -785,7 +813,7 @@ describe('a paged list names its order (AGL-2501)', () => {
       .filter((path) => !UNORDERED_BY_DESIGN.includes(path))
       .filter((path) => {
         const code = withoutComments(read(path))
-        return /\blimit\(/.test(code) && !/\borderBy\(/.test(code)
+        return /\blimit\(/.test(code) && !NAMES_ITS_ORDER.test(code)
       })
     expect(unordered).toEqual([])
   })
@@ -1212,9 +1240,10 @@ const NOT_A_LIST: Array<[string, string]> = [
   ],
   [
     'apps/console/components/media/media-library.component.tsx',
-    'The DAM grid, already exempt and already explained: it completes a ' +
-      'SEARCH as it loads (AGL-1460), so "how many pages" is not a question ' +
-      'it can answer. Named here too because the widened shape reaches it.',
+    'The DAM grid, already exempt and already explained: it reads down ' +
+      'one cursor that its Grid and List views share (AGL-3327), so "how ' +
+      'many pages" is not a question it answers. Named here too because ' +
+      'the widened shape reaches it.',
   ],
   [
     'libs/plugins/commerce/src/lib/components/console/commerce-analytics-card.component.tsx',
@@ -2007,10 +2036,9 @@ describe('CRM lists filter through the grid, by the shared path', () => {
  *
  * A converted list holds its clauses in `useListGridFilter`, hands the grid
  * the model with `filterMode="server"` so the grid never narrows a page on
- * its own, and answers the clauses itself — over every row it read
- * (`filterListRows`), or on its query where one is served. The file list
- * grows with each area; one that falls off the path, or turns the panel
- * off, is red here.
+ * its own, and answers the clauses on its query (AGL-3321; the hooks that
+ * matched loaded rows are deleted). The file list grows with each area; one
+ * that falls off the path, or turns the panel off, is red here.
  */
 const GRID_FILTER_LISTS: readonly string[] = [
   // Sequences
@@ -2058,8 +2086,9 @@ const GRID_FILTER_LISTS: readonly string[] = [
   'apps/console/components/content/collection-entries-page.component.tsx',
   'apps/console/components/org-members-card.component.tsx',
   'apps/console/app/(app)/[orgSlug]/billing/(sections)/invoices/page.tsx',
-  // AGL-3321
-  'apps/console/app/(app)/[orgSlug]/hosts/page.tsx',
+  // AGL-3321. The org Sites page is not here: it is a card view, and a
+  // filter sweep never turns cards into a table (a855970ab). Its filters and
+  // search are `ListFilterToolbar` over the cards (`sites-cards-filter.spec`).
   'apps/console/components/host-members-card.component.tsx',
   'libs/plugins/data/src/lib/components/host-datasets-card.component.tsx',
 ]
@@ -2073,20 +2102,12 @@ describe('converted lists filter through the grid, by the shared path (AGL-3317)
   it('each one binds the panel through the shared hook and never turns it off', () => {
     const off = GRID_FILTER_LISTS.filter((path) => {
       const source = read(path)
-      // The bare hook, wired by hand…
       const bound =
         source.includes('useListGridFilter(') &&
         source.includes('filterMode="server"') &&
         source.includes('onFilterModelChange={gridFilter.onFilterModelChange}')
-      // …or the recipe for a list that holds its rows (or pages a live
-      // window of them), spread whole.
-      const spread =
-        /use(List|Paged)RowsFilter(<[^>]*>)?\(/.test(source) &&
-        /\{\.\.\.\w+\.gridProps\}/.test(source)
       return (
-        source.includes('disableColumnFilter') ||
-        source.includes('quickFilter={false}') ||
-        !(bound || spread)
+        source.includes('disableColumnFilter') || source.includes('quickFilter={false}') || !bound
       )
     })
     expect(off).toEqual([])

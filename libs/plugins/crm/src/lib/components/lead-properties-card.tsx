@@ -71,6 +71,10 @@ import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { LeadOwnerSelect } from './lead-owner-select'
 import { LeadSourceSelect } from './lead-source-select'
 import { LeadStatusChip } from './lead-status-chip'
+import { crmClientListFields, CRM_CLIENT_SEARCH_FIELDS } from '../model/crm-list-query'
+
+/** The Leads list's fields a profile save rewrites; the verdict key is the server's. */
+const LEAD_CLIENT_LIST_FIELDS = [...CRM_CLIENT_SEARCH_FIELDS, 'leadSourceKey'] as const
 
 const NOTES_MAX = Aglyn.CRM_LEAD_NOTES_MAX
 const TEXT_MAX = Aglyn.CRM_LEAD_TEXT_MAX
@@ -383,7 +387,15 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
         })
         return
       }
-      Object.assign(update, profileWrite(patch), crmCustomDraftWrites(storedCustom, custom))
+      const profileFields = profileWrite(patch)
+      Object.assign(
+        update,
+        profileFields,
+        crmCustomDraftWrites(storedCustom, custom),
+        // The company, title, tags and lead source are what the Leads list
+        // searches and filters by (AGL-3321).
+        crmClientListFields('leads', lead, profileFields, LEAD_CLIENT_LIST_FIELDS),
+      )
     }
     if (notesDirty) update['notes'] = notes.trim().slice(0, NOTES_MAX)
     if (!Object.keys(update).length) return

@@ -20,6 +20,7 @@
  */
 
 import { MEDIA_EMBEDDED_METADATA_VERSION } from '@aglyn/aglyn/app-utils/media-embedded-fields'
+import { crc32 } from 'zlib'
 import {
   embeddedMetadataAtIngress,
   embeddedMetadataIsCurrent,
@@ -104,6 +105,69 @@ describe('embeddedMetadataAtIngress', () => {
     await expect(
       embeddedMetadataAtIngress({ contentType: 'image/jpeg', reader: failing }),
     ).resolves.toBeNull()
+    warn.mockRestore()
+  })
+
+  /** A 1×1 PNG carrying a `tEXt` title — enough for the real reader. */
+  const titledPng = (title: string) => {
+    const chunk = (type: string, data: Buffer) => {
+      const body = Buffer.concat([Buffer.from(type, 'latin1'), data])
+      const length = Buffer.alloc(4)
+      length.writeUInt32BE(data.length)
+      const crc = Buffer.alloc(4)
+      crc.writeUInt32BE(crc32(body))
+      return Buffer.concat([length, body, crc])
+    }
+    const header = Buffer.alloc(13)
+    header.writeUInt32BE(1, 0)
+    header.writeUInt32BE(1, 4)
+    header[8] = 8
+    header[9] = 2
+    return new Uint8Array(
+      Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        chunk('IHDR', header),
+        chunk('tEXt', Buffer.from(`Title\0${title}`, 'latin1')),
+        chunk('IEND', Buffer.alloc(0)),
+      ]),
+    )
+  }
+
+  it('reads bytes the route is already holding', async () => {
+    const record = await embeddedMetadataAtIngress({
+      contentType: 'image/png',
+      bytes: titledPng('Harbor'),
+      contentSha256: 'sha-1',
+    })
+    expect(record?.format).toBe('png')
+    expect(record?.contentSha256).toBe('sha-1')
+    expect(record?.fields.find((field) => field.key === 'title')?.value).toBe(
+      'Harbor',
+    )
+  })
+
+  it('answers null when there is nothing to read', async () => {
+    await expect(
+      embeddedMetadataAtIngress({ contentType: 'image/png' }),
+    ).resolves.toBeNull()
+  })
+
+  it('answers null, not a throw, when the reader cannot even be built', async () => {
+    // A server barrel without the reader — what a route spec's fake of
+    // `@aglyn/aglyn/server` is. The route must still finish its write.
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+    let ingress: typeof embeddedMetadataAtIngress | undefined
+    jest.isolateModules(() => {
+      jest.doMock('@aglyn/aglyn/server', () => ({}))
+      ingress = require('./media-embedded').embeddedMetadataAtIngress
+    })
+    await expect(
+      (ingress as typeof embeddedMetadataAtIngress)({
+        contentType: 'image/png',
+        bytes: titledPng('Harbor'),
+      }),
+    ).resolves.toBeNull()
+    expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })
 })

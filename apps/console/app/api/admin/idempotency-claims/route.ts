@@ -21,6 +21,18 @@ import {
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
+import {
+  CLAIM_LIST_QUERY,
+  CLAIM_LIST_SORT,
+  CLAIM_PENDING_BASE,
+  IDEMPOTENCY_CLAIMS_COLLECTION,
+  STRANDED_AFTER_MS,
+  splitClaimTimeClauses,
+} from '../../../../utils/idempotency-claims-list-query'
+import {
+  readStaffListQuery,
+  runStaffListQuery,
+} from '../../../../utils/server/staff-list-query'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
 /**
@@ -40,14 +52,21 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * support ticket that reads as "it said it was busy". Finding those needs
  * the query this route is.
  *
- * ## Why the query is an equality and nothing else
+ * ## The list, and the two numbers
  *
- * `where('status','==','pending')` alone. Adding `where('createdAtMs','<',x)`
- * — the obvious way to say "stranded" — is an equality plus a range on a
- * DIFFERENT field, which needs a composite index that does not exist and
- * would throw in production. The age cut is therefore applied here, over a
- * result set that is naturally tiny: a pending row is either in flight right
- * now or stuck, and there are never many of either.
+ * `GET` answers the card's list: every Filters-panel clause on one query
+ * over `status == 'pending'`, oldest claim first, paged by a cursor in that
+ * order (`utils/idempotency-claims-list-query.ts`). Age and State are ranges
+ * over `createdAtMs`, the field the list is ordered by, so they stand beside
+ * any other clause; the equalities merge with that order through composites
+ * the index file carries. Nothing is matched over rows already read.
+ *
+ * `GET ?view=summary` answers the two figures above it — pending, and
+ * stranded — as COUNT aggregations over the same base, so they are totals
+ * rather than counts of a window. It also counts pending claims that carry
+ * no `createdAtMs`: those have no age, so the claim-time order cannot list
+ * them, and the card says how many there are rather than letting them
+ * vanish.
  *
  * ⚠️ Read-only, deliberately. Deleting a claim is releasing an idempotency
  * key, and a key released while its request is genuinely in flight is a
@@ -56,22 +75,8 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * returns; the route will not do it for them.
  */
 
-const COLLECTION = 'apiIdempotency'
-
-/**
- * How old a `pending` claim must be before it is called stranded.
- *
- * Comfortably longer than any checkout round trip, including a slow Stripe
- * call behind a cold start. Under this, "pending" means "working"; over it,
- * the process that made the claim is not coming back.
- */
-const STRANDED_AFTER_MS = 10 * 60 * 1000
-
-/** A ceiling, not a page. Reported when hit rather than silently applied. */
-const SCAN_CEILING = 500
-
 async function handler(request: Request): Promise<Response> {
-  const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
+  const { method, query, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
   if (method !== 'GET') {
     return Response.json({ error: 'Method not allowed' }, { status: 405 })
@@ -93,21 +98,46 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({ error: 'Staff only' }, { status: 403 })
     }
 
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
-      .collection(COLLECTION)
-      .where('status', '==', 'pending')
-      // Ceiling PLUS ONE, so truncation is detectable rather than assumed.
-      .limit(SCAN_CEILING + 1)
-      .get()
-
-    const truncated = snapshot.size > SCAN_CEILING
-    const docs = truncated ? snapshot.docs.slice(0, SCAN_CEILING) : snapshot.docs
+    const firestore = firebaseAdmin.app().firestore()
+    const claims = firestore.collection(IDEMPOTENCY_CLAIMS_COLLECTION)
+    const pending = claims.where('status', '==', 'pending')
     const now = Date.now()
+    const asked = (query ?? {}) as Record<string, unknown>
 
-    const claims = docs
-      .map((doc: any) => {
+    if (asked['view'] === 'summary') {
+      // Totals, not a window: COUNT aggregations over the list's own base.
+      const [all, timed, stranded] = await Promise.all([
+        pending.count().get(),
+        pending.where(CLAIM_LIST_SORT.path, '>=', 0).count().get(),
+        pending.where(CLAIM_LIST_SORT.path, '<=', now - STRANDED_AFTER_MS).count().get(),
+      ])
+      const pendingCount = Number(all.data().count ?? 0)
+      return Response.json(
+        {
+          // Reported as separate numbers because they mean different things:
+          // a pending claim is normal traffic, a stranded one is a stuck key.
+          pending: pendingCount,
+          stranded: Number(stranded.data().count ?? 0),
+          untimed: Math.max(0, pendingCount - Number(timed.data().count ?? 0)),
+          strandedAfterMs: STRANDED_AFTER_MS,
+        },
+        { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+
+    const listed = readStaffListQuery(asked)
+    if (!listed) {
+      return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+    }
+    // Age and State are ranges over the claim time, read now.
+    const split = splitClaimTimeClauses(listed.clauses, now)
+    const page = await runStaffListQuery({
+      firestore,
+      collection: claims,
+      declaration: CLAIM_LIST_QUERY,
+      request: { ...listed, clauses: split.rest },
+      base: [...CLAIM_PENDING_BASE, ...split.base],
+      row: (doc) => {
         const createdAtMs = Number(doc.get('createdAtMs') ?? 0)
         const ageMs = createdAtMs > 0 ? now - createdAtMs : null
         return {
@@ -122,23 +152,10 @@ async function handler(request: Request): Promise<Response> {
           ageMs,
           stranded: ageMs != null && ageMs >= STRANDED_AFTER_MS,
         }
-      })
-      // Oldest first: the longest-stuck key is the one holding up a customer
-      // who has been retrying, and it belongs at the top rather than wherever
-      // Firestore's document order happens to put it.
-      .sort((a, b) => (b.ageMs ?? -1) - (a.ageMs ?? -1))
-
-    return Response.json(
-      {
-        claims,
-        // Reported as separate numbers because they mean different things: a
-        // pending claim is normal traffic, a stranded one is a stuck key.
-        pending: claims.length,
-        stranded: claims.filter((claim) => claim.stranded).length,
-        strandedAfterMs: STRANDED_AFTER_MS,
-        truncated,
-        ceiling: SCAN_CEILING,
       },
+    })
+    return Response.json(
+      { ...page, refused: [...split.refused, ...page.refused] },
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {

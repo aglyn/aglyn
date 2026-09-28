@@ -227,6 +227,8 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/dataset-models'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/name-search'),
+  // And the REAL list keys every restored artifact is stamped with (AGL-3321).
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/artifact-list-keys'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/binding-tokens'),
   // And the REAL page-claim rule, which both of the import route's cap legs
   // read (AGL-1383, AGL-1399) — including the one that decides whether a
@@ -544,7 +546,9 @@ const SEEDS: Array<{
         status: 'pending',
         publishAt: PUBLISH_AT,
       },
-      kind: 'component',
+      // A component's stored kind: `site` or `email` (AGL-3287), the word
+      // the components list filters by (AGL-3321).
+      kind: 'site',
     },
     dropped: ['versionId'],
   },
@@ -1673,7 +1677,12 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
     expect(subcollectionWrites.length).toBe(SEEDS.length)
     for (const { path, data } of subcollectionWrites) {
       expect({ path, key: '$id' in data }).toEqual({ path, key: false })
-      expect({ path, key: 'deletedAt' in data }).toEqual({ path, key: false })
+      // The bundle's soft delete is never stored; a screen is written live,
+      // with the stored null a campaign's screens list asks for (AGL-3321).
+      expect({ path, deletedAt: data['deletedAt'] }).toEqual({
+        path,
+        deletedAt: /^hosts\/[^/]+\/screens\/[^/]+$/.test(path) ? null : undefined,
+      })
       expect({ path, key: 'staff' in data }).toEqual({ path, key: false })
       expect({ path, key: 'role' in data }).toEqual({ path, key: false })
       expect({ path, key: 'memberRoles' in data }).toEqual({ path, key: false })
@@ -1732,7 +1741,9 @@ describe('an unexpected key in a bundle is not stored (AGL-1382)', () => {
     bundle.screens[0].deletedAt = { _seconds: 1, _nanoseconds: 0 }
     await runImport(bundle)
     const stored = storedAt('hosts/host-1/screens/screen-1')
-    expect(stored).not.toHaveProperty('deletedAt')
+    // Live: the stored null every screen create writes (AGL-3321), never
+    // the bundle's time.
+    expect(stored['deletedAt']).toBeNull()
     expect(stored['displayName']).toBe('Pricing')
   })
 

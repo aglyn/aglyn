@@ -390,6 +390,10 @@ export function AiSiteBatchCard(
               columns={runColumns}
               getRowId={(job: AiJobSummary) => job.id}
               rowHeight={TABLE_ROW_HEIGHT}
+              // One run's sites, at most `AI_SITE_BATCH_MAX`, read whole: a
+              // bounded readout offers no filter to narrow it (AGL-3321).
+              disableColumnFilter
+              quickFilter={false}
             />
           </Box>
         )}

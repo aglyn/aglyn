@@ -105,6 +105,7 @@ import {
   contactCompanyLinkFields,
   firebaseAdmin,
   resolveOrgMembership,
+  restampCrmListFieldsOf,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -375,20 +376,29 @@ async function commitContactWrites(
   if (!writes.length) return failed
   const batch = firestore.batch()
   for (const write of writes) batch.update(write.ref, write.update)
+  let committed = false
   try {
     await batch.commit()
-    return failed
+    committed = true
   } catch {
     // A batch names no document; the pass below finds the one it was.
   }
-  for (const write of writes) {
-    try {
-      await write.ref.update(write.update)
-    } catch (error) {
-      console.error('[crm] contact-update could not write a contact', write.contactId, error)
-      failed.add(write.contactId)
+  if (!committed) {
+    for (const write of writes) {
+      try {
+        await write.ref.update(write.update)
+      } catch (error) {
+        console.error('[crm] contact-update could not write a contact', write.contactId, error)
+        failed.add(write.contactId)
+      }
     }
   }
+  // The owner, tags, company and custom values are what the Contacts list
+  // filters by through `facetKeys` (AGL-3321): restamped from each row.
+  await restampCrmListFieldsOf(
+    writes.filter((write) => !failed.has(write.contactId)).map((write) => write.ref),
+    'contacts',
+  )
   return failed
 }
 

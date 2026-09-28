@@ -37,13 +37,17 @@
  * what the assertions read, fabricate nothing beyond it).
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { CspViolation } from '@aglyn/aglyn/app-utils/csp-report'
 import {
   CSP_AGGREGATE_COLLECTION,
   CSP_AGGREGATE_RETENTION_DAYS,
+  CSP_SEARCH_TOKENS_PATH,
   MAX_DISTINCT_ORIGINS_PER_DAY,
   cspBlockedOrigin,
+  cspSearchTokens,
   recordCspViolations,
   resetCspAggregateStateForTests,
 } from './csp-aggregate'
@@ -262,5 +266,43 @@ describe('CSP violation aggregation (AGL-1799)', () => {
   it('writes nothing for an empty batch', async () => {
     expect(await record([])).toBe(0)
     expect(sets).toHaveLength(0)
+  })
+})
+
+describe('the staff table’s search tokens (AGL-3321)', () => {
+  /*
+   * The worked examples the backfill's `--self-test` asserts against its
+   * restatement of `cspSearchTokens`: the two must stamp the same array, or
+   * a counter the backfill wrote is one the search cannot find.
+   */
+  const fixtures = JSON.parse(
+    readFileSync(
+      join(__dirname, '..', '..', '..', '..', '..', '..', '..', 'tools', 'scripts', 'lib', 'csp-search-tokens.fixtures.json'),
+      'utf8',
+    ),
+  ) as { tokens: Array<{ key: Record<string, unknown>; tokens: string[] }> }
+
+  it.each(fixtures.tokens.map((entry) => [JSON.stringify(entry.key), entry] as const))(
+    '%s',
+    (_name, entry) => {
+      expect(cspSearchTokens(entry.key)).toEqual(entry.tokens)
+    },
+  )
+
+  it('is stamped on every write, from the counter’s own key', async () => {
+    resetCspAggregateStateForTests()
+    const sets: CapturedSet[] = []
+    await recordCspViolations([violation('https://www.googletagmanager.com/gtm.js', 'script-src-elem')], {
+      app: 'tenant',
+      now: NOW,
+      firestore: captureFirestore(sets),
+    })
+    expect(sets).toHaveLength(1)
+    const tokens = sets[0].data[CSP_SEARCH_TOKENS_PATH]
+    expect(tokens).toEqual(
+      cspSearchTokens({ origin: 'www.googletagmanager.com', directive: 'script-src-elem', app: 'tenant' }),
+    )
+    // A typed word finds it by any part of the host, the directive or the app.
+    expect(tokens).toEqual(expect.arrayContaining(['googletagman', 'www.google', 'elem', 'tenant']))
   })
 })

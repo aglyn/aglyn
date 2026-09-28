@@ -62,13 +62,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { type GridColDef, type GridSortModel } from '@mui/x-data-grid'
 import {
-  getGridSingleSelectOperators,
-  type GridColDef,
-  type GridFilterModel,
-  type GridSortModel,
-} from '@mui/x-data-grid'
-import { deleteDoc, deleteField, doc, updateDoc } from 'firebase/firestore'
+  collection,
+  deleteDoc,
+  deleteField,
+  doc,
+  updateDoc,
+} from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
@@ -90,9 +91,17 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import { gridFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  type ListFilterOption,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../../constants/docs-links'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -131,6 +140,12 @@ import {
   entryListSortFromModel,
 } from './entry-list-query'
 import {
+  AUTHOR_LIST_FILTER_FIELDS,
+  AUTHOR_LIST_FILTER_HEADERS,
+  AUTHOR_LIST_FILTER_OPTIONS,
+  AUTHOR_LIST_QUERY,
+} from './author-list-query'
+import {
   ENTRY_LIST_FILTER_FIELDS,
   ENTRY_LIST_FILTER_HEADERS,
 } from '../../utils/list-filters'
@@ -155,36 +170,22 @@ const AUTHORS_TAB_ID = 'authors'
  */
 const TOOLBAR_CONTROL_HEIGHT = 40
 
-/**
- * The one operator a single-choice filter offers: `is`. The entries query
- * serves equality, and `not` or `is any of` would read as supported while
- * matching nothing the translator builds.
- */
-const SINGLE_CHOICE_OPERATORS = getGridSingleSelectOperators().filter(
-  (operator) => operator.value === 'is',
-)
+/** A column sortable in exactly these directions, or not at all. */
+const sortableAs = (
+  orders: ReadonlyArray<'asc' | 'desc'>,
+): Pick<GridColDef, 'sortable' | 'sortingOrder'> =>
+  orders.length
+    ? { sortable: true, sortingOrder: [...orders] }
+    : { sortable: false }
 
-/*
- * What the Authors grid's Filters panel and quick search offer (AGL-3317).
- * A site holds at most `AUTHORS_MAX_PER_HOST` authors and the tab reads all
- * of them, so both are answered over the whole set. Type is matched on the
- * schema type the row is READ as (`typeKey`), which is what the column shows.
- */
-const AUTHOR_FILTER_FIELDS = [
-  inMemoryListField('name', 'text'),
-  inMemoryListField('type', 'select', 'typeKey'),
-]
-const AUTHOR_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  name: 'Author',
-  type: 'Type',
-}
-const AUTHOR_FILTER_OPTIONS = {
-  type: (['Person', 'Organization'] as const).map((type) => ({
-    value: type,
-    label: type,
-  })),
-}
-const AUTHOR_SEARCH_FIELDS = ['name', 'jobTitle', 'slug'] as const
+/** The entries table's columns that show a value; the rest are filters only. */
+const ENTRY_VISIBLE_COLUMNS = [
+  'title',
+  'status',
+  'updatedAt',
+  'publishedAt',
+  'actions',
+] as const
 
 /**
  * The collections list and one collection's entries (AGL-2498).
@@ -215,10 +216,13 @@ export function CollectionEntriesPage() {
     setEntryPage,
     entriesPerPage,
     setEntriesPerPage,
-    entrySort,
     setEntrySort,
-    entryFilter,
-    setEntryFilter,
+    entryClauses,
+    setEntryClauses,
+    entrySearch,
+    setEntrySearch,
+    clearEntryFilters,
+    entryView,
     categories,
     authors,
     hostDoc,
@@ -974,7 +978,14 @@ export function CollectionEntriesPage() {
         // no slot under `AUTHORS_MAX_PER_HOST` — the `actions` split.
         await updateDoc(
           doc(firestore, 'hosts', hostId, 'authors', authorEditor.id),
-          { ...data, updatedAt: Timestamp.now() },
+          {
+            ...data,
+            // What the Authors table queries (AGL-3321), from the name and
+            // type this write stores. The create's copy is stamped by the
+            // route, which drops any key a client sends for it.
+            ...Aglyn.contentAuthorQueryFields(data),
+            updatedAt: Timestamp.now(),
+          },
         )
       } else {
         /**
@@ -1147,12 +1158,19 @@ export function CollectionEntriesPage() {
    * The entries table, in the grid every console list uses (AGL-2853).
    *
    * Four data columns sort, and the query does the sorting — see the scope's
-   * window. Status and category filter, each as a single choice from the
-   * values the collection can hold, because both are matched by equality on
-   * the stored value and a free-text box would invite a spelling nothing
-   * stores. Category is a filter without a column: the panel lists columns,
-   * hidden ones included, so it is declared as a permanently hidden one.
+   * window. A narrowed list sorts only by the orders its composites serve, so
+   * each column offers the directions `entryView.sortingOrders` names NOW and
+   * none at all when it names none (AGL-3321).
+   *
+   * Every filter is `ENTRY_LIST_FILTER_FIELDS`, made columns by
+   * `listFilterGridColumns` below: Status, Category and Author as a choice
+   * from the values the collection can hold, because each is matched by
+   * equality on the stored value and a free-text box would invite a spelling
+   * nothing stores. Category and Author are filters without a column — the
+   * panel lists columns, hidden ones included, so they are added as
+   * permanently hidden ones.
    */
+  const entrySortingOrders = entryView.sortingOrders
   const entryColumns = useMemo<GridColDef[]>(
     () => [
       {
@@ -1160,8 +1178,7 @@ export function CollectionEntriesPage() {
         headerName: 'Title',
         flex: 1,
         minWidth: 220,
-        sortingOrder: ['asc', 'desc'],
-        filterable: false,
+        ...sortableAs(entrySortingOrders.title),
         renderCell: ({ row }: { row: any }) => (
           <Stack
             sx={{
@@ -1194,10 +1211,7 @@ export function CollectionEntriesPage() {
         field: 'status',
         headerName: 'Status',
         width: 130,
-        sortingOrder: ['asc', 'desc'],
-        type: 'singleSelect',
-        valueOptions: [...ENTRY_STATUS_OPTIONS],
-        filterOperators: SINGLE_CHOICE_OPERATORS,
+        ...sortableAs(entrySortingOrders.status),
         renderCell: ({ row }: { row: any }) => (
           /*
             Outlined, and the label is the status word alone. A filled chip
@@ -1222,8 +1236,11 @@ export function CollectionEntriesPage() {
         field: 'updatedAt',
         headerName: 'Updated',
         width: 130,
-        sortingOrder: ['desc', 'asc'],
-        filterable: false,
+        // A date, so the Filters panel offers a date picker for it.
+        type: 'date',
+        valueGetter: (_value: any, row: any) =>
+          row.updatedAt?.toDate?.() ?? null,
+        ...sortableAs(entrySortingOrders.updatedAt),
         renderCell: ({ row }: { row: any }) => (
           <Box component="span" title={formatStampFull(row.updatedAt)}>
             {formatStampShort(row.updatedAt)}
@@ -1245,8 +1262,7 @@ export function CollectionEntriesPage() {
         type: 'date',
         valueGetter: (_value: any, row: any) =>
           entryPublishStamp(row)?.toDate?.() ?? null,
-        sortingOrder: ['desc', 'asc'],
-        filterable: false,
+        ...sortableAs(entrySortingOrders.publishedAt),
         renderCell: ({ row }: { row: any }) => {
           const stamp = entryPublishStamp(row)
           return (
@@ -1264,20 +1280,6 @@ export function CollectionEntriesPage() {
           )
         },
       },
-      {
-        field: 'categoryId',
-        headerName: 'Category',
-        type: 'singleSelect',
-        valueOptions: categories.map((category) => ({
-          value: category.id,
-          label: category.name,
-        })),
-        // A collection with no categories has nothing to choose from.
-        filterable: categories.length > 0,
-        filterOperators: SINGLE_CHOICE_OPERATORS,
-        sortable: false,
-        hideable: false,
-      },
       listActionsColumn(
         (row) => (
           <ListRowActions
@@ -1288,7 +1290,7 @@ export function CollectionEntriesPage() {
         { width: 72 },
       ),
     ],
-    [selected?.slug, categories, entryActions],
+    [selected?.slug, entryActions, entrySortingOrders],
   )
 
   /*
@@ -1374,65 +1376,80 @@ export function CollectionEntriesPage() {
     [hostId, entries, openAuthor, handleDeleteAuthor],
   )
 
-  const authorRows = useMemo(
-    () =>
-      authors.map((author) => ({
-        ...author,
-        typeKey: Aglyn.contentAuthorSchemaType(author.type),
-      })),
-    [authors],
-  )
-  const authorFilter = useListRowsFilter({
-    rows: authorRows,
-    fields: AUTHOR_FILTER_FIELDS,
-    options: AUTHOR_FILTER_OPTIONS,
-    headers: AUTHOR_FILTER_HEADERS,
-    search: AUTHOR_SEARCH_FIELDS,
-  })
-
   /*
-    The entry filter as the chips read it: one clause, which the provider
-    holds and the query serves, with the choices each field's select offers.
+    The choices of the entry fields that are picked rather than typed. The
+    categories are the collection's own, and the authors are every author the
+    scope read for the byline picker — a bounded set, at most
+    `AUTHORS_MAX_PER_HOST`.
   */
-  const entryFilterClauses = useMemo(
-    () => (entryFilter ? [entryFilter] : []),
-    [entryFilter],
-  )
-  const entryFilterOptions = useMemo(
+  const entryFilterOptions = useMemo<
+    Record<string, readonly ListFilterOption[]>
+  >(
     () => ({
       status: ENTRY_STATUS_OPTIONS,
       categoryId: categories.map((category) => ({
         value: category.id,
         label: category.name,
       })),
+      authorId: authors.map((author) => ({
+        value: String(author.$id),
+        label: author.name,
+      })),
     }),
-    [categories],
+    [categories, authors],
+  )
+  const entrySelectFields = useMemo(
+    () => Object.keys(entryFilterOptions),
+    [entryFilterOptions],
   )
 
-  const entrySortModel = useMemo<GridSortModel>(
-    () => [{ field: entrySort.field, sort: entrySort.direction }],
-    [entrySort],
-  )
   /*
-    The filter the provider holds, shown in the panel as the single-select
-    `is` the panel offers. Controlled rather than left to the grid, because the
-    filter outlives the grid: opening an entry unmounts the table, and coming
-    back must show the filter the rows are still narrowed by.
+    The grid's Filters panel and quick search, bound to the clauses and words
+    the SCOPE holds — the query's inputs, which outlive the grid: opening an
+    entry unmounts the table, and coming back must show what the rows are
+    still narrowed by. Every clause stands beside the others, because every
+    one is on the query (AGL-3321).
   */
-  const entryFilterModel = useMemo<GridFilterModel>(
-    () => ({
-      items: entryFilter
-        ? [
-            {
-              id: 'entries',
-              field: entryFilter.field,
-              operator: entryFilter.op === 'equals' ? 'is' : entryFilter.op,
-              value: entryFilter.value,
-            },
-          ]
-        : [],
-    }),
-    [entryFilter],
+  const entrySearchBinding = useMemo(
+    () => ({ words: [...entrySearch], onChange: setEntrySearch }),
+    [entrySearch, setEntrySearch],
+  )
+  const entryGridFilter = useListGridFilter({
+    clauses: entryClauses,
+    onChange: setEntryClauses,
+    selectFields: entrySelectFields,
+    search: entrySearchBinding,
+  })
+  const entryGridColumns = useMemo(
+    () =>
+      listFilterGridColumns(
+        entryColumns,
+        ENTRY_LIST_FILTER_FIELDS,
+        entryFilterOptions,
+        ENTRY_LIST_FILTER_HEADERS,
+      ),
+    [entryColumns, entryFilterOptions],
+  )
+  const entryNarrowed = entryClauses.length > 0 || entrySearch.length > 0
+  const entryRefusals = useMemo(
+    () =>
+      listQueryRefusals(entryView.plan.refused, {
+        fields: ENTRY_LIST_FILTER_FIELDS,
+        headers: ENTRY_LIST_FILTER_HEADERS,
+        options: entryFilterOptions,
+      }),
+    [entryView, entryFilterOptions],
+  )
+
+  /*
+    The order the rows ARE in, which a narrowed list may have moved off the
+    one the reader asked for — the notice above the table says so.
+  */
+  const entrySortModel = useMemo<GridSortModel>(
+    () => [
+      { field: entryView.columnSort.field, sort: entryView.columnSort.direction },
+    ],
+    [entryView],
   )
 
   return (
@@ -2039,8 +2056,8 @@ export function CollectionEntriesPage() {
                                         // The dialog's entry check reads the
                                         // table's first page, which only
                                         // speaks for the whole collection
-                                        // while no filter narrows it.
-                                        setEntryFilter(null)
+                                        // while nothing narrows it.
+                                        clearEntryFilters()
                                         // Started beside the open and never
                                         // awaited, so the dialog does not
                                         // wait on the scan (AGL-2806).
@@ -2071,12 +2088,12 @@ export function CollectionEntriesPage() {
                             collection. An empty later one is a page that has
                             been emptied underneath the reader, and the effect
                             above walks them back rather than telling them they
-                            have never written anything. A FILTERED empty page
-                            keeps the table, because the table is where the
-                            filter is cleared. */}
+                            have never written anything. A FILTERED or searched
+                            empty page keeps the table, because the table is
+                            where the filter is cleared. */}
                         {entries.length === 0 &&
                         entryPage === 0 &&
-                        !entryFilter &&
+                        !entryNarrowed &&
                         entriesStatus === 'success' ? (
                           <Stack
                             spacing={1.5}
@@ -2115,35 +2132,37 @@ export function CollectionEntriesPage() {
                           <Stack spacing={1}>
                             <ListFilterChips
                               fields={ENTRY_LIST_FILTER_FIELDS}
-                              headers={{
-                                status: 'Status',
-                                ...ENTRY_LIST_FILTER_HEADERS,
-                              }}
-                              clauses={entryFilterClauses}
-                              onChange={(clauses) =>
-                                setEntryFilter(clauses[0] ?? null)
-                              }
+                              headers={ENTRY_LIST_FILTER_HEADERS}
+                              clauses={entryGridFilter.clauses}
+                              onChange={entryGridFilter.setClauses}
                               options={entryFilterOptions}
+                            />
+                            {/* What the query could not take, and an order
+                                that moved: said, never applied to the rows
+                                that happen to be loaded (AGL-3321). */}
+                            <ListQueryNotices
+                              refused={entryRefusals}
+                              notices={entryView.notices}
                             />
                             {entriesStatus === 'error' ? (
                               <Alert severity="error">
                                 {'These entries could not be loaded. Try ' +
-                                  'another sort, or clear the filter.'}
+                                  'another sort, or clear the filters.'}
                               </Alert>
                             ) : null}
                             <ListTable
                               rows={entries}
-                              columns={entryColumns}
+                              columns={entryGridColumns}
                               rowHeight={TABLE_ROW_HEIGHT}
                               onOpen={(id) => router.push(entryHref(id))}
                               loading={entriesStatus === 'loading'}
                               /*
-                                The grid sorts and filters NOTHING itself: the
-                                query answers both, over the whole collection.
-                                A grid sorting the rows it holds would reorder
-                                one page of ten, and a grid filtering them
-                                would answer "no entries" for a match on page
-                                four.
+                                The grid sorts, filters and searches NOTHING
+                                itself: the query answers all three, over the
+                                whole collection. A grid sorting the rows it
+                                holds would reorder one page of ten, and a
+                                grid filtering them would answer "no entries"
+                                for a match on page four.
                               */
                               sortingMode="server"
                               sortModel={entrySortModel}
@@ -2151,20 +2170,17 @@ export function CollectionEntriesPage() {
                                 setEntrySort(entryListSortFromModel(model))
                               }
                               filterMode="server"
-                              filterModel={entryFilterModel}
-                              onFilterModelChange={(model) => {
-                                // The panel offers the single-select `is`;
-                                // the declaration serves it as `equals`.
-                                const request = gridFilterRequest(model)
-                                setEntryFilter(
-                                  request && request.op === 'is'
-                                    ? { ...request, op: 'equals' }
-                                    : request,
-                                )
-                              }}
+                              filterModel={entryGridFilter.filterModel}
+                              onFilterModelChange={
+                                entryGridFilter.onFilterModelChange
+                              }
+                              quickFilter
                               initialState={{
                                 columns: {
-                                  columnVisibilityModel: { categoryId: false },
+                                  columnVisibilityModel: hiddenFilterVisibility(
+                                    ENTRY_LIST_FILTER_FIELDS,
+                                    ENTRY_VISIBLE_COLUMNS,
+                                  ),
                                 },
                               }}
                               // The empty grid only speaks of a filter when
@@ -2172,13 +2188,13 @@ export function CollectionEntriesPage() {
                               // a page emptied underneath the reader, is not a
                               // filter matching nothing.
                               noRowsLabel={
-                                entryFilter
-                                  ? 'No entries match this filter'
+                                entryNarrowed
+                                  ? 'No entries match these filters'
                                   : 'No entries to show'
                               }
                               noRowsDescription={
-                                entryFilter
-                                  ? 'Clear the filter to see every entry in this collection.'
+                                entryNarrowed
+                                  ? 'Clear the filters and the search to see every entry in this collection.'
                                   : undefined
                               }
                               // Paged by the footer below, so the grid must
@@ -2288,20 +2304,11 @@ export function CollectionEntriesPage() {
                             'Setup → SEO.'}
                         </Typography>
                       ) : (
-                        <>
-                          <ListFilterChips {...authorFilter.chipsProps} />
-                          <ListTable
-                            aria-label="Authors"
-                            rows={authorFilter.rows}
-                            columns={authorFilter.filterColumns(authorColumns)}
-                            rowHeight={TABLE_ROW_HEIGHT}
-                            onOpen={(_id, row) => openAuthor(row)}
-                            // The panel and the search are the grid's; the tab
-                            // answers them over every author (AGL-3317).
-                            {...authorFilter.gridProps}
-                            noRowsLabel="No authors match these filters"
-                          />
-                        </>
+                        <AuthorsTable
+                          hostId={hostId}
+                          columns={authorColumns}
+                          onOpen={openAuthor}
+                        />
                       )}
                     </Stack>
                   </CardDisplay>
@@ -2783,5 +2790,122 @@ export function CollectionEntriesPage() {
   )
 }
 CollectionEntriesPage.displayName = 'CollectionEntriesPage'
+
+/**
+ * The Authors tab's table (AGL-2486): its own paged query, with every clause
+ * and the search word on it (AGL-3321).
+ *
+ * A component of its own so its read opens with the tab. `HubTabs` mounts a
+ * panel only once it is visited, and a query held by the page would subscribe
+ * for every reader of the entries list. The scope's whole read of the authors
+ * is left alone: the byline picker and the entries table's Author filter
+ * choose from all of them, and this table does not narrow that read — it
+ * pages its own, so a filter answers for every author and not the ten on
+ * screen.
+ */
+function AuthorsTable(props: {
+  hostId: string
+  columns: GridColDef[]
+  onOpen: (author: Aglyn.ContentAuthorRecord) => void
+}) {
+  const { hostId, columns, onOpen } = props
+  const firestore = useFirestore()
+  const selectFields = useMemo(() => Object.keys(AUTHOR_LIST_FILTER_OPTIONS), [])
+  const gridFilter = useListGridFilter({ selectFields })
+  const {
+    rows,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    status,
+    plan,
+  } = useListQuery<any>({
+    collection: collection(firestore, 'hosts', hostId, 'authors'),
+    declaration: AUTHOR_LIST_QUERY,
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    deps: [firestore, hostId],
+    idField: '$id',
+  })
+  // The row the editor opens is the record as the rest of the console reads
+  // it, sanitized — the same shape the scope hands the byline picker.
+  const authorRows = useMemo(
+    () =>
+      rows
+        .map((row: any) => Aglyn.normalizeContentAuthor(row, row.$id))
+        .filter((row): row is Aglyn.ContentAuthorRecord => Boolean(row)),
+    [rows],
+  )
+  const gridColumns = useMemo(
+    () =>
+      listFilterGridColumns(
+        columns,
+        AUTHOR_LIST_FILTER_FIELDS,
+        AUTHOR_LIST_FILTER_OPTIONS,
+        AUTHOR_LIST_FILTER_HEADERS,
+      ),
+    [columns],
+  )
+  const refused = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: AUTHOR_LIST_FILTER_FIELDS,
+        headers: AUTHOR_LIST_FILTER_HEADERS,
+        options: AUTHOR_LIST_FILTER_OPTIONS,
+      }),
+    [plan],
+  )
+  const narrowed =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.length > 0
+  return (
+    <Stack spacing={1}>
+      <ListFilterChips
+        fields={AUTHOR_LIST_FILTER_FIELDS}
+        headers={AUTHOR_LIST_FILTER_HEADERS}
+        clauses={gridFilter.clauses}
+        onChange={gridFilter.setClauses}
+        options={AUTHOR_LIST_FILTER_OPTIONS}
+      />
+      <ListQueryNotices refused={refused} notices={plan.notices} />
+      {status === 'error' ? (
+        <Alert severity="error">
+          {'These authors could not be loaded. Clear the filters and try again.'}
+        </Alert>
+      ) : null}
+      <ListTable
+        aria-label="Authors"
+        rows={authorRows}
+        columns={gridColumns}
+        rowHeight={TABLE_ROW_HEIGHT}
+        onOpen={(_id, row) => onOpen(row)}
+        loading={status === 'loading'}
+        // The query answers the panel, the search and the order — by name,
+        // the one order this list's composites serve — over every author.
+        filterMode="server"
+        filterModel={gridFilter.filterModel}
+        onFilterModelChange={gridFilter.onFilterModelChange}
+        quickFilter
+        sortingMode="server"
+        disableColumnSorting
+        noRowsLabel={
+          narrowed ? 'No authors match these filters' : 'No authors to show'
+        }
+        // Paged by the footer below, so the grid must not also slice.
+        hideFooter
+      />
+      {rows.length > 0 || page > 0 ? (
+        <ListPagination
+          page={page}
+          pageSize={pageSize}
+          rowCount={rows.length}
+          hasMore={hasMore}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      ) : null}
+    </Stack>
+  )
+}
 
 export default CollectionEntriesPage

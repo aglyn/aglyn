@@ -84,17 +84,24 @@ value** (each amount multiplied by its stage's probability).
 
 Switch to the **table** for a paged list with the title, stage, amount, owner,
 expected close date, status and [**next activity**](./tasks.md#next-activity)
-of every deal in the pipeline, including the closed ones. The table's
-**Filters** panel narrows it by **Status** (open, won or lost), and **Next
-activity** › **is empty** keeps only the deals on the page with no open task
-scheduled against them — the ones the reports page counts as
-[stuck](./reports.md#pipeline). **Search** finds a deal by any word of its
-title, the middle of a title too, across every deal of the status and
-pipeline on screen rather than only the page. While it holds a word, the
-table lists the matches a page at a time, and a notice says so if it read
-the 1,000 most recently changed deals rather than all of them. **Status** is
-answered by the query, and **Next activity** stays beside it; see
+of every deal in the chosen pipeline, including the closed ones, most recently
+changed first. The table's **Filters** panel narrows it by **Status** (open,
+won or lost — one, or any of them), and **Next activity** › **is empty** keeps
+only the deals with no open task scheduled against them — the ones the
+reports page counts as [stuck](./reports.md#pipeline). **Search** finds a deal
+by any word of its title.
+
+Every filter and the search are answered by the table's query, so they reach
+every deal in the pipeline, a page at a time, not only the page on screen, and
+filters on different columns add up. The search matches whole words from
+their start — "cof" finds *Coffee*, a fragment from the middle of a word does
+not — one word at a time: type several and it searches the first, and says
+so. Under a site, a member whose access is limited to particular sites
+searches by the start of a deal's title, and a notice says so. When a
+combination cannot be answered by one query, the table does not
+apply that filter, and a notice above it names the filter and says why; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+The board has no filters.
 
 The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
 appears above it to set their stage, set their owner, mark them lost with one

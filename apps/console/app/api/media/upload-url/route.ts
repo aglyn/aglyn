@@ -30,6 +30,7 @@ import {
   isSvgUploadType,
   sanitizeSvgBuffer,
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
@@ -701,6 +702,14 @@ async function handler(request: Request): Promise<Response> {
       url,
       storagePath: objectPath,
       folderId,
+      // What the library filters and searches by (AGL-3327), as the direct
+      // upload route writes it.
+      ...mediaFilterKeys({
+        fileName,
+        contentType,
+        ...(dimensions ?? {}),
+        video: videoFields['video'],
+      }),
       // AGL-1476 — the four fields that only `/api/media/upload` used to
       // write. `dimensions` spreads to nothing when the header was
       // unreadable, exactly as on that route: best-effort metadata, never a

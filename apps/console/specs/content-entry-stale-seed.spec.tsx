@@ -172,6 +172,18 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: mockEntries.status,
     fromCache: mockEntries.fromCache,
   }),
+  // The ranged read (a date filter, AGL-3321): handed no query while the
+  // list is not ranged, which is every case here.
+  usePagedCollection: () => ({
+    rows: [],
+    hasMore: false,
+    page: 0,
+    setPage: () => undefined,
+    pageSize: 10,
+    setPageSize: () => undefined,
+    status: 'success',
+    fromCache: false,
+  }),
   useHostResourceApi: () => mockCreateResource,
   useUser: () => ({ data: { uid: 'uid-author', getIdToken: jest.fn() } }),
   // The REAL guard, not a stub — a stub would let the write through whatever

@@ -46,7 +46,7 @@
  * Tasks are not CRM records for the band: no quota is asked.
  */
 
-import { CRM_COLLECTIONS, type PluginApiHandler } from '@aglyn/aglyn/server'
+import { CRM_COLLECTIONS, crmTaskListFields, type PluginApiHandler } from '@aglyn/aglyn/server'
 import {
   TASK_IMPORT_CHUNK_SIZE,
   TASK_IMPORT_MAX_BODY_BYTES,
@@ -119,6 +119,8 @@ export const crmTasksImportHandler: PluginApiHandler = async (req, res) => {
         }
       }
       batch.set(tasks.doc(), {
+        // What the Tasks list searches by (AGL-3321).
+        ...crmTaskListFields({ title: row.title, visibleTo: context.scopeTokens }),
         title: row.title,
         kind: row.kind,
         priority: row.priority,

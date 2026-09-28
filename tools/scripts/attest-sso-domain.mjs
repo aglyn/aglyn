@@ -73,6 +73,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { stampAdminAuditIndex } from './lib/admin-audit-index.mjs'
 
 import {
   parseAttestArgs,
@@ -217,7 +218,8 @@ await claimRef.set(
 // An out-of-band ownership assertion is exactly the sort of act that gets
 // asked about months later, so it lands in the same audit collection as
 // impersonation and the lockdown levers rather than only in this terminal.
-await firestore.collection('adminAudit').add({
+// Stamped with the fields the staff audit page queries (AGL-3321).
+await firestore.collection('adminAudit').add(stampAdminAuditIndex({
   actorUid: by,
   action: 'org.sso.attestDomain',
   target: `orgs/${orgId}/ssoDomains/${domain}`,
@@ -228,7 +230,7 @@ await firestore.collection('adminAudit').add({
   },
   after: { orgId, domain, attestedBy: by },
   at: FieldValue.serverTimestamp(),
-})
+}))
 
 console.log(
   `\n✓ Attested ${domain} for ${orgId}. ` +

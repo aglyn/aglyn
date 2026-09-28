@@ -187,3 +187,43 @@ export async function lookupMx(host: string): Promise<DnsLookupResult<MxRecord>>
     }
   }
 }
+
+/**
+ * Whether `host` has an address record, A or AAAA — the implicit MX a domain
+ * with no MX is still delivered to (RFC 5321 §5.1). `records` holds the
+ * addresses found; empty on a conclusive "none". Unanswered only when
+ * neither family could be asked.
+ */
+export async function lookupAddress(host: string): Promise<DnsLookupResult<string>> {
+  const ask = async (family: 4 | 6): Promise<DnsLookupResult<string>> => {
+    try {
+      const resolver = new CallbackResolver()
+      resolver.setServers(PUBLIC_DNS_RESOLVERS)
+      const records = await new Promise<string[]>((resolve, reject) => {
+        const done = (error: NodeJS.ErrnoException | null, addresses: string[]) =>
+          error ? reject(error) : resolve(addresses)
+        if (family === 4) resolver.resolve4(host, done)
+        else resolver.resolve6(host, done)
+      })
+      return { answered: true, records }
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code
+      if (isConclusiveDnsCode(code)) return { answered: true, records: [] }
+      try {
+        return {
+          answered: true,
+          records: family === 4 ? await dns.resolve4(host) : await dns.resolve6(host),
+        }
+      } catch (fallbackError) {
+        const fallbackCode = (fallbackError as NodeJS.ErrnoException)?.code
+        if (isConclusiveDnsCode(fallbackCode)) return { answered: true, records: [] }
+        return { answered: false, records: [] }
+      }
+    }
+  }
+  const v4 = await ask(4)
+  if (v4.records.length) return v4
+  const v6 = await ask(6)
+  if (v6.records.length) return v6
+  return { answered: v4.answered && v6.answered, records: [] }
+}

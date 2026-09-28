@@ -46,8 +46,13 @@ import {
   seedFreePlanWorkspace,
 } from './lib/crm-free-plan-fixtures.mjs'
 import { E2E_ORG_RELEASE_FLAGS } from './lib/e2e-release-flags.mjs'
+import { datasetFilterFields, effectiveModel } from './lib/record-filter-keys.mjs'
 import { readLegalDocumentVersion } from './lib/legal-document-version.mjs'
+import { withCrmListFields } from './lib/org-record-list-fields.mjs'
 import { putMediaDocument } from './lib/media-counter.mjs'
+import { listingQueryFieldsPatch } from './lib/listing-query-fields.mjs'
+import { listMemberSearchTokens } from './lib/email-search-tokens.mjs'
+import { displayNameSearchFields, nameSearchTokens } from './lib/name-search-tokens.mjs'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -225,7 +230,8 @@ await auth.setCustomUserClaims(E2E_UNVERIFIED_OWNER_UID, {})
 const now = FieldValue.serverTimestamp()
 let written = 0
 const put = async (ref, data) => {
-  await ref.set({ ...data, updatedAt: now }, { merge: true })
+  // A CRM record carries the fields its list queries (AGL-3321).
+  await ref.set({ ...withCrmListFields(ref, data), updatedAt: now }, { merge: true })
   written += 1
 }
 
@@ -257,6 +263,9 @@ await put(
 // ── Org, membership mirror, host, hostIndex ────────────────────────────────
 await put(firestore.collection('orgs').doc(orgId), {
   name: 'E2E Bakery Co',
+  // The search keys every org writer stamps (`createOrganization`), so the
+  // staff Organizations list's search and name filter find it (AGL-3321).
+  ...displayNameSearchFields('E2E Bakery Co'),
   slug: E2E_ORG_SLUG,
   ownerUid: E2E_UID,
   plan: 'business',
@@ -531,9 +540,14 @@ const teamRows = [
   ['Sam Rivera', 'Pastry Chef', 'https://picsum.photos/seed/sam/240'],
   ['Jordan Lee', 'Front of House', 'https://picsum.photos/seed/jordan/240'],
 ]
+// Every record carries the filter fields its writers stamp (AGL-3321), or
+// the records table's filters and search find none of the seeded rows.
+const teamModel = effectiveModel({ fields: ['name', 'role', 'photo'] })
 for (const [index, [name, role, photo]] of teamRows.entries()) {
+  const values = { name, role, photo }
   await put(teamDataset.collection('records').doc(`seed-${index}`), {
-    values: { name, role, photo },
+    values,
+    ...datasetFilterFields(teamModel, values),
     order: index,
     createdAt: now,
   })
@@ -558,6 +572,9 @@ await put(ratesDataset, {
 })
 await put(ratesDataset.collection('records').doc('seed-rate-1'), {
   values: { name: 'INTERNAL-RATE-CARD-SECRET' },
+  ...datasetFilterFields(effectiveModel({ fields: ['name'] }), {
+    name: 'INTERNAL-RATE-CARD-SECRET',
+  }),
   order: 0,
   createdAt: now,
 })
@@ -605,10 +622,13 @@ for (const [id, email, name, tags] of contacts) {
 }
 
 const list = orgRef.collection('lists').doc('seed-newsletter')
-await put(list, { name: 'Newsletter', createdAt: now })
+// The keys the Emails lists table queries (AGL-3321), as its writers stamp them.
+await put(list, { name: 'Newsletter', ...displayNameSearchFields('Newsletter'), kind: 'manual', createdAt: now })
 await put(list.collection('members').doc('seed-member-1'), {
   email: 'wholesale@example.com',
   name: 'Robin Wholesale',
+  searchTokens: listMemberSearchTokens('wholesale@example.com', 'Robin Wholesale'),
+  via: 'manual',
   createdAt: now,
 })
 
@@ -624,6 +644,10 @@ const mediaFixtures = [
 // (AGL-1488) — this seed is re-run constantly, and the helper's delta rule is
 // what keeps a second run from over-counting what the first already counted.
 for (const [id, fileName, tags, seed] of mediaFixtures) {
+  // The size in the picsum path is the image's own, and an upload writes it
+  // as `width`/`height` with its uploader (AGL-3327): the media List view's
+  // Dimensions and Uploaded by columns, and the filters that read them.
+  const [width, height] = seed.split('/').slice(1).map(Number)
   await putMediaDocument({
     firestore,
     scopeRef: hostRef,
@@ -635,6 +659,9 @@ for (const [id, fileName, tags, seed] of mediaFixtures) {
       url: `https://picsum.photos/seed/${seed}`,
       tags,
       alt: fileName.replace('.jpg', ''),
+      width,
+      height,
+      uploadedBy: E2E_UID,
       createdAt: now,
       updatedAt: now,
     },
@@ -681,6 +708,9 @@ await putMediaDocument({
     folderId: 'seed-folder-blog',
     tags: ['blog'],
     alt: 'blog cover',
+    width: 600,
+    height: 400,
+    uploadedBy: E2E_UID,
     createdAt: now,
     updatedAt: now,
   },
@@ -819,6 +849,9 @@ const componentRef = hostRef.collection('components').doc(COMPONENT_ID)
 await put(componentRef, {
   hostId,
   displayName: 'Marketing CTA',
+  // The keys the components list finds it by (AGL-3321).
+  ...displayNameSearchFields('Marketing CTA'),
+  kind: 'site',
   description:
     'Closing call-to-action band — one component, different words per page.',
   rootId: COMPONENT_ROOT_ID,
@@ -845,6 +878,11 @@ await put(componentRef.collection('versions').doc(COMPONENT_VERSION_ID), {
 const homeScreen = hostRef.collection('screens').doc('seed-home')
 await put(homeScreen, {
   displayName: 'Home',
+  // The keys the screen lists find a screen by (AGL-835, AGL-3321).
+  ...displayNameSearchFields('Home'),
+  // A live screen STORES its null: a campaign's screens list asks
+  // `deletedAt == null`, which cannot match an absent field (AGL-3321).
+  deletedAt: null,
   slug: 'home',
   versionId: 'seed-home-v1',
   createdAt: now,
@@ -924,6 +962,8 @@ await put(homeScreen.collection('versions').doc('seed-home-v1'), {
 const scopedScreen = hostRef.collection('screens').doc('seed-scoped')
 await put(scopedScreen, {
   displayName: 'Scoped',
+  ...displayNameSearchFields('Scoped'),
+  deletedAt: null,
   slug: 'scoped',
   versionId: 'seed-scoped-v1',
   createdAt: now,
@@ -980,6 +1020,8 @@ await put(scopedScreen.collection('versions').doc('seed-scoped-v1'), {
 const surveyScreen = hostRef.collection('screens').doc('seed-guide-survey-screen')
 await put(surveyScreen, {
   displayName: 'Survey',
+  ...displayNameSearchFields('Survey'),
+  deletedAt: null,
   slug: 'survey',
   versionId: 'seed-guide-survey-screen-v1',
   createdAt: now,
@@ -1057,6 +1099,8 @@ await put(
 const emailScreen = hostRef.collection('screens').doc('seed-email-welcome')
 await put(emailScreen, {
   displayName: 'Welcome email',
+  ...displayNameSearchFields('Welcome email'),
+  deletedAt: null,
   kind: 'email',
   versionId: 'seed-email-v1',
   emailSubject: 'Welcome to the bakery, {{contact.firstName}}',
@@ -1101,6 +1145,8 @@ await put(blog, { displayName: 'Blog', slug: 'blog', createdAt: now })
 const sourdoughPublishedAt = Timestamp.now()
 await put(blog.collection('entries').doc('seed-sourdough'), {
   title: 'Why our sourdough takes three days',
+  // The words the console's entries table searches by (AGL-3321).
+  titleTokens: nameSearchTokens('Why our sourdough takes three days'),
   slug: 'three-day-sourdough',
   excerpt: 'Slow fermentation is the whole secret.',
   status: 'published',
@@ -1169,6 +1215,10 @@ await put(orgRef.collection('campaigns').doc('seed-campaign'), {
   hostId,
   visibleTo: [`host:${hostId}`],
   subject: 'Welcome to the bakery',
+  // The fields the marketing lists query on (AGL-3321).
+  subjectTokens: nameSearchTokens('Welcome to the bakery'),
+  emailCampaignId: null,
+  createdAtMs: Date.now() - dayMs,
   body: 'Hi {{firstName|there}} — thanks for signing up!',
   audience: 'leads',
   status: 'sent',
@@ -1181,6 +1231,9 @@ await put(orgRef.collection('campaigns').doc('seed-campaign-scheduled'), {
   hostId,
   visibleTo: [`host:${hostId}`],
   subject: 'Holiday preorder window',
+  subjectTokens: nameSearchTokens('Holiday preorder window'),
+  emailCampaignId: null,
+  createdAtMs: Date.now(),
   body: 'Hi {{firstName|there}} — preorders open next week!',
   audience: 'leads',
   status: 'scheduled',
@@ -1191,6 +1244,8 @@ await put(orgRef.collection('campaigns').doc('seed-campaign-scheduled'), {
 // Draft A/B experiment (AGL-252/273): business plan unlocks the card.
 await put(hostRef.collection('experiments').doc('seed-experiment'), {
   name: 'Hero copy test',
+  // The keys the A/B testing list's filter and search read (AGL-3321).
+  ...displayNameSearchFields('Hero copy test'),
   status: 'draft',
   target: 'screen',
   screenId: 'seed-screen',
@@ -1273,7 +1328,14 @@ await put(
 // exercise. The sha matches tools/plugin-loader/realm/demo's bundle when
 // that has been built; install tests re-seed the sha as needed.
 const demoListing = firestore.collection('marketplaceListings').doc('realm-demo')
-await put(demoListing, {
+// What browse and the staff queue query by (AGL-3321), as every listing
+// writer stamps it; `latestVersionReviewState` is the summary the queue's
+// Awaiting review asks for, and this version has no verdict yet.
+const withListingQueryFields = (listing) => ({
+  ...listing,
+  ...listingQueryFieldsPatch(listing),
+})
+await put(demoListing, withListingQueryFields({
   type: 'plugin',
   profileId: 'seed-publisher',
   pluginId: 'realm-demo',
@@ -1290,10 +1352,11 @@ await put(demoListing, {
   license: 'MIT',
   priceUsd: 0,
   latestVersion: '1.0.0',
+  latestVersionReviewState: 'pending',
   deletedAt: null,
   reviewStatus: 'listed',
   createdAt: now,
-})
+}))
 await put(demoListing.collection('pluginVersions').doc('1.0.0'), {
   version: '1.0.0',
   sha256: 'seed-sha-placeholder',
@@ -1310,7 +1373,7 @@ await put(demoListing.collection('pluginVersions').doc('1.0.0'), {
 })
 
 // A submitted listing so the staff review queue (AGL-432) has content.
-await put(firestore.collection('marketplaceListings').doc('pending-review'), {
+await put(firestore.collection('marketplaceListings').doc('pending-review'), withListingQueryFields({
   type: 'plugin',
   profileId: 'seed-publisher',
   pluginId: 'pending-review',
@@ -1319,10 +1382,11 @@ await put(firestore.collection('marketplaceListings').doc('pending-review'), {
   license: 'MIT',
   priceUsd: 0,
   latestVersion: '0.1.0',
+  latestVersionReviewState: 'pending',
   deletedAt: null,
   reviewStatus: 'submitted',
   createdAt: now,
-})
+}))
 await put(
   firestore
     .collection('marketplaceListings')

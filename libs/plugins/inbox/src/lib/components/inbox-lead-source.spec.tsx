@@ -29,15 +29,19 @@
  * `name` is the same row's other half (AGL-2303) — the writers only began
  * storing it once `campaign-send` was found reading it with nobody writing it.
  *
+ * The writers keep `sources` now — every surface that captured the person,
+ * `arrayUnion`ed by `addHostLead` — and a lead written before it carries the
+ * one `source` it came in by; the Source column reads either.
+ *
  * WHAT THIS CATCHES. Two leads from two different sources must render two
  * different chips. A page printing a constant, or the first row's source
  * beside every row, looks right in a screenshot and is wrong for every row but
  * one — so the fixture below is deliberately heterogeneous, and the negative
- * control proves a pre-AGL-109 row still renders rather than printing a
- * dangling separator.
+ * control proves a row with no source still renders rather than printing
+ * `undefined`.
  */
 
-import { render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { InboxConsolePage } from './inbox-console-page'
 import { INBOX_CONSOLE_SECTIONS } from './inbox-console-sections'
@@ -51,45 +55,38 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   // The signed-in account a member removal is authorized as (AGL-3308).
   useUser: () => ({ data: null }),
-  // Routed by the collection the factory addresses, exactly as Firestore
-  // would. One shared blob would hand the leads table the form submissions
-  // and pass on data the real reads can never produce.
-  useFirestoreCollection: (factory: () => string) => ({
-    data: collections[factory()] ?? [],
-    status: 'success',
-    fromCache: false,
-  }),
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
   useFirestoreDoc: () => ({
     data: undefined,
-    status: 'success',
-    fromCache: false,
-  }),
-  // The submissions table pages its own query (AGL-2501) and is routed by the
-  // same collection name, so a lead row still reaches the contacts table
-  // whether or not any submissions exist.
-  usePagedCollection: (factory: (pageLimit: number) => string) => ({
-    rows: collections[factory(11)] ?? [],
-    hasMore: false,
-    page: 0,
-    setPage: jest.fn(),
-    pageSize: 10,
-    setPageSize: jest.fn(),
     status: 'success',
     fromCache: false,
   }),
 }))
 
 jest.mock('firebase/firestore', () => ({
-  collection: (_db: unknown, ...segments: string[]) =>
-    segments[segments.length - 1],
-  query: (name: string) => name,
-  limit: () => undefined,
-  orderBy: () => undefined,
-  where: () => undefined,
+  collection: (_db: unknown, ...segments: string[]) => ({
+    __name: segments[segments.length - 1],
+  }),
   doc: (_db: unknown, ...segments: string[]) => segments[segments.length - 1],
   deleteDoc: jest.fn().mockResolvedValue(undefined),
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
+
+// Each list's query, answered by the shared double over the collection the
+// card opened — routed by collection NAME, exactly as Firestore would. One
+// shared blob would hand the leads table the members and pass on data the
+// real reads can never produce.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const actual = jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...actual,
+    useListQuery: (options: { collection: { __name: string } | null }) =>
+      useListQueryDouble(() => collections[options.collection?.__name ?? ''] ?? [], options),
+  }
+})
 
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
   useSnackbar: () => ({ enqueueSnackbar: jest.fn() }),
@@ -135,32 +132,44 @@ beforeEach(() => {
   collections = {}
 })
 
+/** The Leads list of the section: Members is the one it opens on. */
+const renderLeads = async () => {
+  const view = renderPage()
+  await act(async () => {
+    fireEvent.click(view.getByRole('button', { name: 'Leads' }))
+  })
+  return view
+}
+
 describe('AGL-2338 · the inbox says where each lead came from', () => {
-  it('renders EACH lead’s own source, not one constant', () => {
+  it('renders EACH lead’s own source, not one constant', async () => {
     collections.leads = [
       {
         $id: 'l-1',
         email: 'dana@example.com',
         name: 'Dana Reed',
-        source: 'signup',
+        sources: ['booking'],
+        visibleTo: ['host:host-1'],
         createdAt: { seconds: 2 },
       },
       {
+        // Written before `sources`: the one surface it came in by.
         $id: 'l-2',
         email: 'sam@example.com',
         name: 'Sam Okafor',
-        source: 'booking',
+        source: 'signup',
+        visibleTo: ['host:host-1'],
         createdAt: { seconds: 1 },
       },
     ]
-    const text = renderPage().container.textContent ?? ''
+    const text = (await renderLeads()).container.textContent ?? ''
     // Both, from their own rows. A page rendering a constant — or the first
     // row's source beside every row — cannot produce both strings.
-    expect(text).toContain('Lead · signup')
-    expect(text).toContain('Lead · booking')
+    expect(text).toContain('Booking')
+    expect(text).toContain('Sign-up')
   })
 
-  it('shows the lead’s name beside the address', () => {
+  it('shows the lead’s name beside the address', async () => {
     // The AGL-2303 half: a list of bare addresses is a list nobody recognises
     // anyone in, and the writers now store the name the person typed.
     collections.leads = [
@@ -168,38 +177,39 @@ describe('AGL-2338 · the inbox says where each lead came from', () => {
         $id: 'l-1',
         email: 'dana@example.com',
         name: 'Dana Reed',
-        source: 'signup',
+        sources: ['booking'],
+        visibleTo: ['org'],
         createdAt: { seconds: 1 },
       },
     ]
-    const text = renderPage().container.textContent ?? ''
+    const text = (await renderLeads()).container.textContent ?? ''
     expect(text).toContain('dana@example.com')
     expect(text).toContain('Dana Reed')
   })
 
-  it('NEGATIVE CONTROL: a row written before the field renders a bare chip', () => {
-    // Not `Lead · undefined`, and not a dangling separator. A lead recorded
-    // before AGL-109, or by a future writer that omits the field, is still a
-    // lead.
+  it('NEGATIVE CONTROL: a row written before the field renders no source', async () => {
+    // Not `undefined`, and not an empty chip. A lead recorded before AGL-109,
+    // or by a future writer that omits the field, is still a lead.
     collections.leads = [
-      { $id: 'l-1', email: 'old@example.com', createdAt: { seconds: 1 } },
+      { $id: 'l-1', email: 'old@example.com', visibleTo: ['org'], createdAt: { seconds: 1 } },
     ]
-    const text = renderPage().container.textContent ?? ''
+    const view = await renderLeads()
+    const text = view.container.textContent ?? ''
     expect(text).toContain('old@example.com')
-    expect(text).toContain('Lead')
-    expect(text).not.toContain('Lead ·')
     expect(text).not.toContain('undefined')
+    expect(view.container.querySelectorAll('[data-field="sources"] .MuiChip-root')).toHaveLength(0)
   })
 
-  it('a lead who became a member is shown once, as the member', () => {
-    // The page already de-duplicates by email. Pinned here because the source
-    // chip made the two rows visibly different, and a de-duplication that
-    // regressed would now show one person twice with two different labels.
+  it('a lead who became a member is in both lists, each as what it is there', async () => {
+    // Two paged collections cannot be deduped against each other (AGL-3321):
+    // the person is a member in Members and a lead in Leads, which is what
+    // each collection holds.
     collections.leads = [
       {
         $id: 'l-1',
         email: 'dana@example.com',
-        source: 'signup',
+        sources: ['signup'],
+        visibleTo: ['host:host-1'],
         createdAt: { seconds: 1 },
       },
     ]
@@ -211,8 +221,15 @@ describe('AGL-2338 · the inbox says where each lead came from', () => {
         createdAt: { seconds: 2 },
       },
     ]
-    const text = renderPage().container.textContent ?? ''
-    expect(text).toContain('Member')
-    expect(text).not.toContain('Lead · signup')
+    const view = renderPage()
+    expect(view.getByRole('grid', { name: 'Site members' }).textContent).toContain(
+      'dana@example.com',
+    )
+    await act(async () => {
+      fireEvent.click(view.getByRole('button', { name: 'Leads' }))
+    })
+    const leads = view.getByRole('grid', { name: 'Leads' }).textContent ?? ''
+    expect(leads).toContain('dana@example.com')
+    expect(leads).toContain('Sign-up')
   })
 })

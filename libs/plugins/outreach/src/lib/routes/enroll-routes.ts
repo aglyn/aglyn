@@ -34,9 +34,11 @@ import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plu
 import type { PluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { FieldValue } from 'firebase-admin/firestore'
 import { outreachCuratedEntry, outreachEnrolledEntry } from '../engine/enrollment-activity'
 import { buildOutreachEnrollment, planOutreachFirstDue } from '../engine/enrollment-state'
+import { outreachEnrollmentSearchTokens } from '../enrollment/enrollment-search'
 import type { OutreachGateLookups } from '../engine/gates'
 import {
   decideOutreachEnrollment,
@@ -61,7 +63,7 @@ import {
 } from '../model/outreach-api'
 import type { OutreachSequence, OutreachStepOverrides } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
-import type { OutreachDomainIntelReadInput } from '../storage/domain-intel-store'
+import { type OutreachDomainIntelReadInput, outreachMailboxSendingDomain } from '../storage/domain-intel-store'
 import { fileOutreachNote } from '../runtime/timeline'
 import {
   outreachEnrollmentId,
@@ -226,6 +228,27 @@ async function enrollContext(
  * from being enrolled beside the lead they were converted from: the lead's
  * enrollment followed them, under the lead's key, and still names them.
  */
+/**
+ * The domain the sequence's mailbox sends from (AGL-3328), whose gateway
+ * ledger the Check-people chips read — or `null` when the mailbox cannot
+ * be read, which shows the gateways without a history.
+ */
+async function sequenceSendingDomain(
+  firestore: Firestore,
+  orgId: string,
+  sequence: OutreachSequence,
+): Promise<string | null> {
+  if (!sequence.mailboxId) return null
+  try {
+    const snapshot = await outreachOrgCollection(firestore, orgId, 'mailboxes').doc(sequence.mailboxId).get()
+    const mailbox = readStoredOutreachMailbox(sequence.mailboxId, snapshot?.exists ? snapshot.data() : undefined)
+    return outreachMailboxSendingDomain(mailbox)
+  } catch (error) {
+    console.error('[outreach] the sequence mailbox could not be read for its sending domain', error)
+    return null
+  }
+}
+
 async function readPeople(
   firestore: Firestore,
   caller: OutreachRouteCaller,
@@ -360,6 +383,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         const field =
           candidate.target === 'lead' ? CAMPAIGN_MEMBERSHIP_FIELD : contactCampaignFieldPath(contactGroupId)
         await ref.update({ [field]: FieldValue.arrayUnion(...campaignIds), updatedAt: FieldValue.serverTimestamp() })
+        // A lead's campaigns are what the Leads list's Campaign filter reads
+        // under a site (AGL-3321): restamped from the lead as it now stands.
+        if (candidate.target === 'lead') await restampCrmListFieldsAt(ref, 'leads')
       }
     } catch (error) {
       console.error('[outreach] the enrolled person could not join the sequence’s campaigns', error)
@@ -484,7 +510,12 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       sequence,
       context,
       named.people,
-      { resolveMx: deps.resolveMx, nowMs: deps.now() },
+      {
+        resolveMx: deps.resolveMx,
+        resolveAddress: deps.resolveAddress,
+        nowMs: deps.now(),
+        sendingDomain: await sequenceSendingDomain(firestore, caller.orgId, sequence),
+      },
     )
     const people = candidates.map((candidate) =>
       previewOutreachPerson(
@@ -591,7 +622,12 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
       sequence,
       context,
       [...requested.values()].map((entry) => entry.ref),
-      { resolveMx: deps.resolveMx, nowMs },
+      {
+        resolveMx: deps.resolveMx,
+        resolveAddress: deps.resolveAddress,
+        nowMs,
+        sendingDomain: outreachMailboxSendingDomain(mailbox),
+      },
     )
     const enrollments = outreachOrgCollection(firestore, caller.orgId, 'enrollments')
     const campaignNames = await sequenceCampaignNames(firestore, caller.orgId, sequence)
@@ -672,6 +708,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         // The person's own copies of steps (AGL-3324) ride with the
         // enrollment from its first write: nothing sends between.
         if (Object.keys(stepOverrides).length) enrollment.stepOverrides = stepOverrides
+        // What the enrollments table searches the person by (AGL-3321),
+        // from the name and address this document captures for good.
+        enrollment.searchTokens = outreachEnrollmentSearchTokens(enrollment)
         try {
           await enrollments.doc(id).create(enrollment)
         } catch (error) {

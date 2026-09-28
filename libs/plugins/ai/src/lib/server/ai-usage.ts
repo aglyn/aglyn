@@ -43,6 +43,7 @@ import {
   type OrgAiUsageTableWire,
   type UserAiUsageWire,
 } from '../usage/ai-usage-wire'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — a READ-ONLY usage report that writes nothing to the
 // workspace, the posture of ai/billing/credits beside it: a billing-locked
@@ -224,16 +225,14 @@ async function handler(request: Request): Promise<Response> {
 
     // Ids and counts only, never content: a report about people leaving
     // the platform is worth a row; who was in it is the workspace's own.
-    void firestore
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'ai-usage.exported',
-        target: `orgs/${orgId}/aiUsageByUser`,
-        before: null,
-        after: { month, rows: rows.length, hostId: hostId || null },
-        at: FieldValue.serverTimestamp(),
-      })
+    void addAdminAudit(firestore, {
+      actorUid: decoded.uid,
+      action: 'ai-usage.exported',
+      target: `orgs/${orgId}/aiUsageByUser`,
+      before: null,
+      after: { month, rows: rows.length, hostId: hostId || null },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     return new Response(stream, {

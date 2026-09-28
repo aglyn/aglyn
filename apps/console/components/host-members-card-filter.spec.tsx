@@ -72,11 +72,15 @@ const mockFirestore = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => mockFirestore,
   useUser: () => ({ data: { uid: 'admin-1', getIdToken: async () => 'tok' } }),
-  /*
-   * Modelled rather than stubbed. The card's whole defect was a PAGE of rows
-   * presented as the site's seat usage, so a double that handed back every
-   * staged row would erase the distinction this file exists to guard.
-   */
+}))
+
+/*
+ * The pager `useListQuery` pages the plan's query with, doubled where it
+ * lives: the list-query hook reaches it by its own module, not the barrel.
+ * Each query it is handed is recorded, which is what this file asserts on.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-paged-collection', () => ({
+  __esModule: true,
   usePagedCollection: (
     build: (pageLimit: number) => unknown,
     _deps: unknown,

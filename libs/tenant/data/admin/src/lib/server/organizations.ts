@@ -58,6 +58,7 @@ import {
   organizationAcquisition,
 } from '@aglyn/aglyn/app-utils/account-acquisition'
 import type { HostActivityActor } from '@aglyn/aglyn/app-utils/activity-presenter'
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import {
   nameSearchKey,
   nameSearchReversed,
@@ -86,6 +87,11 @@ import {
   syncHostProjectionForMembers,
   syncMemberHostProjections,
 } from './host-memberships'
+import {
+  ORG_MEMBER_LIST_FIELD_NAMES,
+  orgMemberListFields,
+  orgMemberSearchTokens,
+} from './org-member-list-fields'
 import { updateExisting } from './update-existing'
 import { attachWorkspaceDomain } from './workspace-domains'
 
@@ -394,6 +400,14 @@ export async function createOrganization(
          * with the projection every other path uses.
          */
         scopeTokens: projectMemberScopeTokens({ role: 'owner', allHosts: true }),
+        // The roster query's fields (AGL-3321), for the same reason: nothing
+        // after this transaction reaches the pass that stamps them.
+        ...orgMemberListFields({
+          role: 'owner',
+          allHosts: true,
+          email: ownerEmail ?? undefined,
+          displayName: ownerDisplayName ?? undefined,
+        }),
         /*
          * The permission projection, stamped here for the same reason and
          * with the same consequence if it is missed.
@@ -1067,7 +1081,7 @@ const HOST_PROJECTION_WRITE: FirebaseFirestore.SetOptions = {
   mergeFields: ['orgId', 'memberRoles', 'memberPermissions', 'updatedAt'],
 }
 const MEMBER_PROJECTION_WRITE: FirebaseFirestore.SetOptions = {
-  mergeFields: ['scopeTokens', 'resolvedPermissions'],
+  mergeFields: ['scopeTokens', 'resolvedPermissions', ...ORG_MEMBER_LIST_FIELD_NAMES],
 }
 
 /**
@@ -1166,6 +1180,9 @@ export async function syncOrgAuthProjections(
               // but the null says the lookup happened and missed.
               member.roleId ? (customRoles.get(member.roleId) ?? null) : null,
             ),
+            // What the roster's query filters and searches by (AGL-3321),
+            // re-derived with the projection every membership write reaches.
+            ...orgMemberListFields(member),
           },
           MEMBER_PROJECTION_WRITE,
         ] as [
@@ -1270,6 +1287,8 @@ export async function logOrgActivity(
         ...(target.name ? { name: target.name } : {}),
         ...(target.versionId ? { versionId: target.versionId } : {}),
       },
+      // What the log's search box finds the entry by (AGL-3321).
+      searchTokens: activitySearchTokens({ actorEmail: actor.email, target }),
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
@@ -1333,6 +1352,13 @@ export async function logHostActivity(
         ...(target.name ? { name: target.name } : {}),
         ...(target.versionId ? { versionId: target.versionId } : {}),
       },
+      // What the log's search box finds the entry by (AGL-3321): the key's
+      // name stands in for an address an integration does not have.
+      searchTokens: activitySearchTokens({
+        actorEmail: actor.email,
+        apiKeyName: actor.apiKeyName,
+        target,
+      }),
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
@@ -2049,7 +2075,18 @@ export async function backfillMemberIdentity(
   }
   if (!Object.keys(patch).length) return []
 
-  await ref.set(patch, { merge: true })
+  // A filled name is a name the roster's search finds (AGL-3321); a photo
+  // alone changes nothing the search reads.
+  const searchTokens = patch['displayName']
+    ? {
+        searchTokens: orgMemberSearchTokens({
+          displayName: patch['displayName'],
+          email: snapshot.get('email'),
+          title: snapshot.get('title'),
+        }),
+      }
+    : {}
+  await ref.set({ ...patch, ...searchTokens }, { merge: true })
   return Object.keys(patch)
 }
 

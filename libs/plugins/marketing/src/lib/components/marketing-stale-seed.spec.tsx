@@ -43,6 +43,7 @@
  */
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useListQueryDouble } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import { setDoc, updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import AnnouncementBarCard from './announcement-bar-card.component'
@@ -118,27 +119,25 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: listener.status,
     fromCache: listener.fromCache,
   }),
-  /*
-   * The experiments table pages its own query (AGL-2501), and this file's
-   * subject rides on the SAME hook result: `status` and `fromCache` are what
-   * the seed guard reads, so the double has to carry them here too or every
-   * case below refuses for the wrong reason.
-   */
-  usePagedCollection: (build: (pageLimit: number) => unknown) => ({
-    rows: build(11) === 'experiments' ? experimentDocs : [],
-    hasMore: false,
-    page: 0,
-    setPage: jest.fn(),
-    pageSize: 10,
-    setPageSize: jest.fn(),
-    status: listener.status,
-    fromCache: listener.fromCache,
-  }),
   useHostActivityLogger: () => mockLogActivity,
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the card passed it, which is the one thing these specs disprove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
     .writeGuardedBySeed,
+}))
+
+/*
+ * The experiments table pages its own list query (AGL-2501, AGL-3321), and
+ * this file's subject rides on the SAME hook result: `status` and
+ * `fromCache` are what the seed guard reads, so the double carries the
+ * listener's verdict too or every case below refuses for the wrong reason.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: unknown) => ({
+    ...(useListQueryDouble(() => experimentDocs, options as never) as object),
+    status: listener.status,
+    fromCache: listener.fromCache,
+  }),
 }))
 
 // Only the ref builders are stubbed; the real module rides along because
@@ -337,6 +336,10 @@ describe('HostExperimentsCard (AGL-1358)', () => {
     // The whole row, `status` included — the reason this one is not merely
     // a lost edit.
     expect(payload.status).toBe('running')
+    // With the name's search keys, which the list's filter and search read
+    // (AGL-3321).
+    expect(payload.nameLower).toBe('hero copy')
+    expect(payload.nameTokens).toEqual(expect.arrayContaining(['h', 'hero', 'c', 'copy']))
     expect(mockLogActivity).toHaveBeenCalledTimes(1)
   })
 

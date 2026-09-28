@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+// The leaf module, not the server barrel: the list keys every artifact
+// create stamps (AGL-3321), which the install specs' closed-world barrel
+// mocks have no reason to stage.
+import { artifactCreateListKeys, artifactDeleteListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
   checkQuota,
   createResourceUid,
@@ -281,11 +285,16 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
           !entry.get('deletedAt') && entry.get('source.listingId') === listingId,
       )
       for (const stale of superseded) {
-        tx.update(stale.ref, { deletedAt: now, updatedAt: now })
+        tx.update(stale.ref, {
+          deletedAt: now,
+          updatedAt: now,
+          ...artifactDeleteListKeys('templates'),
+        })
       }
+      const layoutName = String(listing.displayName ?? 'Layout').slice(0, 80)
       tx.set(templatesRef.doc(createResourceUid()), {
         kind: 'layout',
-        displayName: String(listing.displayName ?? 'Layout').slice(0, 80),
+        displayName: layoutName,
         ...(listing.description && { description: listing.description }),
         rootId: layout.rootId,
         // Compressed at rest, matching the template converter (AGL-1151).
@@ -301,6 +310,12 @@ export const installLayoutHandler: PluginApiHandler = async (req, res) => {
           version: listing.latestVersion ?? null,
         },
         installedFrom: provenance.installedFrom,
+        // The keys the templates library finds it by (AGL-3321).
+        ...artifactCreateListKeys('templates', {
+          kind: 'layout',
+          displayName: layoutName,
+          source: { type: 'marketplace' },
+        }),
         createdAt: now,
         updatedAt: now,
       })

@@ -21,10 +21,13 @@ update every place a thing appears, you want a
 many pages, you want a [layout](../screens-and-layouts/layouts.md).
 
 **Filters** in the library's toolbar narrows it by **Kind** (page, component, or
-layout), **Source** (marketplace, starter, or saved here), name, description, or date,
-and **Search** matches any word of the name, description or template ID. Filters look
-at every template the library read — its first 200 — not only the page on screen, and
-each one in force shows as a chip above the table. See
+layout), **Source** (marketplace, starter, or saved here), name (a word of it, or the
+whole name), or the date it was last updated, and **Search** finds a template by the
+start of any word of its name — a starter by its starter's name. Every filter and the
+search word are part of the library's query, so they look through every template on
+the site, and the library pages through the matches. Each filter in force shows as a
+chip above the table; a combination that cannot be asked at once is left out, and the
+table says which one and why. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## The three kinds

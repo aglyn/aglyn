@@ -120,6 +120,8 @@ import {
   countNoun,
 } from './crm-bulk-bar-frame'
 import CrmExportAllButton from './crm-export-all-button'
+import { restampCrmListFields } from '../model/list-fields-api'
+import { crmTaskCallScope } from '../model/task-routes'
 import { CrmSuiteLockedButton } from './crm-suite-lock'
 
 export interface ContactsBulkBarProps {
@@ -408,12 +410,23 @@ function ContactsBulkBarBody(props: ContactsBulkBarProps) {
     // The rows that went are gone from the table; the refused ones stay
     // selected, so the reader can see which they are and try again.
     const refused = new Set(outcome.refused.map((row) => row.label))
+    // A detached row still carries the facet keys and scoped search tokens
+    // of the holder that let it go; the rules keep a client from restamping
+    // them, so the route does (AGL-3321). A deleted row answers `missing`.
+    await restampCrmListFields(
+      user,
+      crmTaskCallScope(hostId, scope?.[1] ?? null),
+      'contacts',
+      selectedRows
+        .filter((row) => !refused.has(contactBulkAddressOf(row)))
+        .map((row) => row.$id),
+    )
     onSelectedChange(
       selectedRows
         .filter((row) => refused.has(contactBulkAddressOf(row)))
         .map((row) => row.$id),
     )
-  }, [scope, selectedRows, confirm, apply, writers, consentGroup, onSelectedChange])
+  }, [scope, selectedRows, confirm, apply, writers, consentGroup, onSelectedChange, user, hostId])
 
   const emails = selectedRows
     .map((row) => String(row.email ?? '').trim())

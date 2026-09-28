@@ -46,7 +46,7 @@ import {
   type OutreachTaskStep,
 } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
-import { recordOutreachGatewayOutcome } from '../storage/domain-intel-store'
+import { outreachMailboxSendingDomain, recordOutreachGatewayOutcome } from '../storage/domain-intel-store'
 import {
   outreachEnrollmentLink,
   outreachEnrollmentPerson,
@@ -334,7 +334,12 @@ async function runMailbox(
         hostId,
         consentHostIds: consentGroup.hostIds,
         consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
-        gateway: { resolveMx: deps.resolveMx, nowMs },
+        gateway: {
+          resolveMx: deps.resolveMx,
+          resolveAddress: deps.resolveAddress,
+          nowMs,
+          sendingDomain: outreachMailboxSendingDomain(mailbox),
+        },
         people: enrollments.map((enrollment) => {
           const person = outreachEnrollmentPerson(enrollment)
           return {
@@ -966,7 +971,7 @@ async function runEmailStep(
   const recipientDomain = outreachEmailDomain(enrollment.email)
   if (standing && recipientDomain) {
     await recordOutreachGatewayOutcome(firestore, run.orgId, {
-      domain: recipientDomain,
+      sendingDomain: outreachMailboxSendingDomain(mailbox),
       gateway: standing.gateway,
       outcome: 'sent',
       atMs: record.atMs,

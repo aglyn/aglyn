@@ -131,6 +131,16 @@ import {
   takeDownAssetDeliveryCopies,
 } from '../../../../utils/server/media-delivery-copies'
 import { FieldValue } from 'firebase-admin/firestore'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  compareDenyRows,
+  DENY_FILTER_FIELDS,
+  DENY_SEARCH_PATHS,
+  denyListRow,
+  type QuarantineRecord,
+} from '../../../../utils/media-quarantine-list-query'
+import { answerStaffCompleteList } from '../../../../utils/server/staff-complete-list'
+import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 
 export const dynamic = 'force-dynamic'
 
@@ -480,6 +490,53 @@ async function handler(request: Request): Promise<Response> {
           { status: 200, headers: { 'Cache-Control': 'no-store' } },
         )
       }
+      /*
+       * The deny-list table's reads (AGL-3321). `view=list` is the staff list
+       * wire (`readStaffListQuery`): its Filters clauses and search answered
+       * over EVERY entry of the one index document, a page at a time, oldest
+       * first — the entries of one document cannot be queried, so the whole
+       * source is read and matched, never a window of it
+       * (`utils/media-quarantine-list-query.ts`). `view=summary` is the facts
+       * about the whole list the page states above the table, without the
+       * entries. The plain `GET` below still answers every entry.
+       */
+      const view = String(query?.['view'] ?? '')
+      if (view === 'list' || view === 'summary') {
+        const readAtMs = Date.now()
+        const rows = Object.entries(entries)
+          .map(([key, entry]) => ({ ...entry, key }) as QuarantineRecord)
+          .sort(compareDenyRows)
+          .map((record) => denyListRow(record, readAtMs))
+        if (view === 'summary') {
+          return Response.json(
+            {
+              count: rows.length,
+              maxEntries: MEDIA_QUARANTINE_MAX_ENTRIES,
+              // Entries that refuse nothing right now and still hold a slot.
+              clearable: rows.filter((row) => row.state !== 'active').length,
+              readAtMs,
+            },
+            { status: 200, headers: { 'Cache-Control': 'no-store' } },
+          )
+        }
+        const listRequest = readStaffListQuery(query ?? {})
+        if (!listRequest) {
+          return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+        }
+        return Response.json(
+          {
+            ...answerStaffCompleteList({
+              rows,
+              fields: DENY_FILTER_FIELDS,
+              searchPaths: DENY_SEARCH_PATHS,
+              request: listRequest,
+              cursorOf: (row) => row.key,
+            }),
+            readAtMs,
+          },
+          { status: 200, headers: { 'Cache-Control': 'no-store' } },
+        )
+      }
       const probe = String(query?.['key'] ?? '').trim()
       if (probe) {
         const state = normalizeMediaQuarantine(entries[probe], probe)
@@ -792,7 +849,7 @@ async function handler(request: Request): Promise<Response> {
     // ever in force.
     for (const acted of actedKeys) {
       const actedBefore = entriesBefore[acted] ?? null
-      await firestore.collection('adminAudit').add({
+      await addAdminAudit(firestore, {
         actorUid: decoded.uid,
         actorEmail: decoded.email ? String(decoded.email) : null,
         action: `mediaQuarantine.${action}`,

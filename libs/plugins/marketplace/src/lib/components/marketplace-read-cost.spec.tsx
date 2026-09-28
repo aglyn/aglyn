@@ -40,7 +40,9 @@
  * whether the answer means anything.
  */
 
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
+import { listingQueryFields } from '../model/listing-query'
 import type { ReactNode } from 'react'
 
 jest.setTimeout(30_000)
@@ -59,20 +61,38 @@ const mockOverflowing = new Set<string>()
 
 const FIRESTORE = {}
 
-const LISTINGS = [
-  {
-    $id: 'lst-1',
-    displayName: 'Promo Countdown',
-    profileId: 'pub-1',
-    category: 'Marketing',
-    artifactType: 'component',
-    latestVersion: '1.0.0',
-    createdAt: { seconds: 10 },
-    priceUsd: 0,
-    reviewStatus: 'approved',
-    deletedAt: null,
-  },
-]
+/** Stored as the publish routes store a listing, query fields included (AGL-3321). */
+const stored = (listing: Record<string, any>) => ({
+  ...listing,
+  ...listingQueryFields(listing),
+})
+const LISTING = stored({
+  $id: 'lst-1',
+  displayName: 'Promo Countdown',
+  profileId: 'pub-1',
+  category: 'marketing',
+  artifactType: 'component',
+  latestVersion: '1.0.0',
+  createdAt: { seconds: 10 },
+  priceUsd: 0,
+  reviewStatus: 'approved',
+  deletedAt: null,
+})
+let mockShelf: Array<Record<string, any>> = [LISTING]
+
+/*
+ * The shelf is a LIST QUERY (AGL-3321): the contract's double runs the real
+ * plan and answers it over the fixture the way Firestore would.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) => useListQueryDouble(() => mockShelf, options),
+  }
+})
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
@@ -99,6 +119,7 @@ jest.mock('firebase/firestore', () => ({
     get: () => undefined,
     data: () => undefined,
   }),
+  Timestamp: { fromDate: (date: Date) => date },
 }))
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -119,9 +140,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       limit: typeof cap === 'number' ? cap : 0,
       constraints,
     })
-    if (path === 'marketplaceListings') {
-      return { data: LISTINGS, status: 'success', fromCache: false }
-    }
     // The fixture answers a lookup at its CAP when the collection is meant to
     // overflow, which is exactly the reading that makes `truncated` true.
     const name = path.split('/').pop() ?? ''
@@ -153,6 +171,7 @@ import { MarketplaceBrowse } from './marketplace-browse.component'
 beforeEach(() => {
   mockListens.length = 0
   mockOverflowing.clear()
+  mockShelf = [LISTING]
 })
 
 const meter = () => [
@@ -176,11 +195,12 @@ describe('the marketplace shelf’s install-state lookups (AGL-2501)', () => {
     // The whole set, path and ceiling together. Five of these are siblings
     // answering the same question, so an assertion naming one of them would
     // go green again with the other four back on an unordered `limit(200)`.
+    // The shelf itself is not among them: it is a paged list query now
+    // (AGL-3321), asserted below.
     expect(meter().sort()).toEqual([
       'hosts/h1/components#101',
       'hosts/h1/emailTemplates#101',
       'hosts/h1/installs#101',
-      'marketplaceListings#90',
       'orgs/o1/datasets#101',
       'orgs/o1/installs#101',
     ])
@@ -212,11 +232,10 @@ describe('the marketplace shelf’s install-state lookups (AGL-2501)', () => {
     // The listings query answers a reader-visible sort and has ordered on
     // `createdAt` since it was fixed; a sweep that replaced it with the
     // document name would silently turn "Newest" into "arbitrary".
-    expect(
-      listenOn('marketplaceListings')?.constraints.find(
-        (item) => 'orderBy' in item,
-      ),
-    ).toEqual({ orderBy: 'createdAt', direction: 'desc' })
+    expect(lastListQueryPlan()?.orderBy).toEqual({
+      path: 'createdAt',
+      direction: 'desc',
+    })
   })
 
   it('says nothing when no ceiling bit', async () => {
@@ -244,5 +263,85 @@ describe('the marketplace shelf’s install-state lookups (AGL-2501)', () => {
     expect(
       screen.getByText(/Installed state is resolved from the first 100/),
     ).toBeTruthy()
+  })
+})
+
+/*
+ * THE SHELF'S SEARCH, CATEGORY AND SORT ARE ITS QUERY (AGL-3321). They were
+ * matched over the newest ninety listings, so a listing past them could not
+ * be found by any control on the page.
+ */
+describe('the marketplace shelf serves its controls by the query (AGL-3321)', () => {
+  const many = () =>
+    Array.from({ length: 30 }, (_, index) =>
+      stored({
+        $id: `lst-${String(index).padStart(2, '0')}`,
+        displayName: index === 27 ? 'Zebra Stripes' : `Widget ${index}`,
+        profileId: 'pub-1',
+        category: index === 27 ? 'design' : 'content',
+        artifactType: 'component',
+        latestVersion: '1.0.0',
+        // Oldest last: the match is the third-oldest, on page three.
+        createdAt: { seconds: 100 - index },
+        installCount: index,
+        ratingAverage: null,
+        priceUsd: 0,
+        deletedAt: null,
+      }),
+    )
+
+  it('finds by search a listing past the first page', async () => {
+    mockShelf = many()
+    await mount()
+    expect(screen.queryByText('Zebra Stripes')).toBeNull()
+    fireEvent.change(screen.getByPlaceholderText('Search components…'), {
+      target: { value: 'zeb' },
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350))
+    })
+    expect(screen.getByText('Zebra Stripes')).toBeTruthy()
+    // The fixture's `hostIndex` names no org, so the viewer's scope is the
+    // public one alone.
+    expect(lastListQueryPlan()?.filters).toEqual([
+      {
+        path: 'browseTokens',
+        op: 'array-contains-any',
+        value: ['*~zeb'],
+      },
+    ])
+  })
+
+  it('narrows by a category chip on the query', async () => {
+    mockShelf = many()
+    await mount()
+    fireEvent.click(screen.getByText('design'))
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(screen.getByText('Zebra Stripes')).toBeTruthy()
+    expect(lastListQueryPlan()?.filters).toContainEqual({
+      path: 'category',
+      op: '==',
+      value: 'design',
+    })
+  })
+
+  it('never shows a listing browse’s audience excludes', async () => {
+    mockShelf = [
+      LISTING,
+      stored({ ...LISTING, $id: 'gone', displayName: 'Unpublished Thing', deletedAt: { seconds: 1 } }),
+      stored({
+        ...LISTING,
+        $id: 'pending',
+        displayName: 'Someone Elses Pending',
+        artifactType: 'plugin',
+        reviewStatus: 'submitted',
+      }),
+    ]
+    await mount()
+    expect(screen.getByText('Promo Countdown')).toBeTruthy()
+    expect(screen.queryByText('Unpublished Thing')).toBeNull()
+    expect(screen.queryByText('Someone Elses Pending')).toBeNull()
   })
 })

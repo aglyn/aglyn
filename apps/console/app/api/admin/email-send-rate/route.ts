@@ -56,6 +56,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -150,19 +151,15 @@ async function handler(request: Request): Promise<Response> {
     // others converge within the config TTL.
     invalidateEmailSendRateConfigCache()
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'emailSendRate.update',
-        target: `${RATE_LIMIT_COLLECTION}/${EMAIL_SEND_RATE_CONFIG_DOC}`,
-        before: { perHour: before.perHour, enabled: before.enabled },
-        after: { perHour: write.perHour, enabled: write.enabled },
-        ...(note ? { note } : {}),
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'emailSendRate.update',
+      target: `${RATE_LIMIT_COLLECTION}/${EMAIL_SEND_RATE_CONFIG_DOC}`,
+      before: { perHour: before.perHour, enabled: before.enabled },
+      after: { perHour: write.perHour, enabled: write.enabled },
+      ...(note ? { note } : {}),
+      at: FieldValue.serverTimestamp(),
+    })
 
     return Response.json(
       { ok: true, config: normalizeEmailSendRateConfig(write) },

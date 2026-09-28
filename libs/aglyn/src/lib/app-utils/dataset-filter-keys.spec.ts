@@ -20,8 +20,10 @@ import { join } from 'node:path'
 import {
   DATASET_FILTER_KEYS_MAX,
   datasetFilterKeys,
+  datasetFilterTextKey,
   datasetFilterToken,
-  datasetFilterTokens,
+  datasetFilterValuePath,
+  datasetFilterValues,
   datasetFilterWords,
   datasetSearchToken,
 } from './dataset-models'
@@ -164,9 +166,6 @@ describe('datasetFilterToken', () => {
   it('serves a text `contains` as the first word’s prefix', () => {
     expect(token('title', 'contains', 'Ket')).toBe('f:title^ket')
     expect(token('title', 'contains', 'red kett')).toBe('f:title^red')
-    expect(
-      datasetFilterTokens(model, { field: 'title', op: 'contains', value: 'red kett' }),
-    ).toEqual(['f:title^red', 'f:title^kett'])
   })
 
   it('serves nothing a token cannot answer', () => {
@@ -210,7 +209,65 @@ describe('datasetSearchToken', () => {
   })
 })
 
+describe('datasetFilterValues', () => {
+  const stamped = datasetFilterValues(model, {
+    title: '  Red Kettle ',
+    status: 'Open',
+    active: false,
+    price: '19.50',
+    count: 3,
+    tags: ['Kitchen'],
+    due: 1_700_000_000_000,
+    owner: 'person-1',
+    meta: { a: 1 },
+  })
+
+  it('holds one scalar per field an equality can be asked of', () => {
+    expect(stamped).toEqual({
+      title: 'red kettle',
+      status: 'Open',
+      active: false,
+      price: 19.5,
+      count: 3,
+    })
+  })
+
+  it('stores plain text as the key a typed value is compared by', () => {
+    expect(stamped.title).toBe(datasetFilterTextKey('RED KETTLE'))
+    expect(datasetFilterTextKey(`  ${'A'.repeat(70)}`)).toBe('a'.repeat(64))
+  })
+
+  it('leaves out a field with no value, and one no query path can name', () => {
+    expect(datasetFilterValues(model, { title: ' ', active: 'maybe', price: 'n/a' })).toEqual({})
+    expect(datasetFilterValues(model, undefined)).toEqual({})
+    const legacy: DatasetModel = {
+      order: ['e.mail', 'Unit price'],
+      fields: {
+        'e.mail': { name: 'E-mail', type: 'text' },
+        'Unit price': { name: 'Unit price', type: 'float' },
+      },
+    }
+    expect(datasetFilterValues(legacy, { 'e.mail': 'a@b.co', 'Unit price': 4 })).toEqual({
+      'Unit price': 4,
+    })
+    expect(datasetFilterValuePath('e.mail')).toBeNull()
+    expect(datasetFilterValuePath('Unit price')).toBe('filterValues.Unit price')
+  })
+})
+
 describe('the integrity writers carry the tokens', () => {
+  it('writes filterValues whole on a merge, and clears it when empty', () => {
+    // `update` and `mergeFields` replace the map outright, so a value
+    // cleared since the last write leaves it with the rest.
+    const clear = Symbol('deleteField')
+    expect(datasetIntegrityUpdate(model, { status: 'Open' }, clear).filterValues).toEqual({
+      status: 'Open',
+    })
+    expect(datasetIntegrityUpdate(model, { due: 5 }, clear).filterValues).toBe(clear)
+    expect('filterValues' in datasetIntegrityFields(model, { due: 5 })).toBe(false)
+    expect(datasetIntegrityFields(model, { active: true }).filterValues).toEqual({ active: true })
+  })
+
   it('omits an empty array on a create and clears it on a merge', () => {
     expect('filterKeys' in datasetIntegrityFields(model, { due: 5 })).toBe(false)
     expect(datasetIntegrityFields(model, { status: 'Open' }).filterKeys).toEqual([
@@ -242,6 +299,13 @@ describe('the integrity writers carry the tokens', () => {
     }
     for (const one of fixtures.search) {
       expect(datasetSearchToken(one.word)).toEqual(one.expected)
+    }
+    expect(fixtures.values.length).toBeGreaterThan(0)
+    for (const one of fixtures.values) {
+      expect(datasetFilterValues(fixtures.model, one.values)).toEqual(one.expected)
+    }
+    for (const one of fixtures.paths) {
+      expect(datasetFilterValuePath(one.fieldId)).toEqual(one.expected)
     }
   })
 })

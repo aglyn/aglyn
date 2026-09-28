@@ -47,13 +47,21 @@ overdue on its own.
 Each row shows a checkbox that completes or reopens the task, the title (with the first
 line of notes under it), the kind, the priority, the due date colored by where it stands
 — red when overdue, amber when due today — with a snooze beside it, the assignee, and
-the record it is for, as a link into that record's page. A view shows at most 200 rows
-and says so when it is full; narrow the view to see the rest.
+the record it is for, as a link into that record's page. The list shows a view a page
+at a time, with the usual footer to pick how many rows a page holds and to turn to the
+next page.
 
 Beside **Show**, the **Filters** panel narrows a view by **Kind** (call, email,
 meeting, to-do), **Priority** (low, normal, high) and **Assignee**, and
-**Search** matches words in a task's title and notes. Those narrow the rows the
-view loaded — at most 200 — and add up with each other; see
+**Search** finds a task by a word of its title. The view, the filters and the search
+are all answered by the list's query, so they reach every task in the view, page by
+page, and add up with each other. The search matches whole words from their start —
+"cof" finds *Coffee*, a fragment from the middle of a word does not — one word at a
+time: type several and it searches the first, and says so. Under a site, a member
+whose access is limited to particular sites cannot search the tasks, and the
+notice says so. When a combination cannot
+be answered by one query, the list does not apply that filter, and a notice above the
+table names it and says why; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### The calendar view
@@ -62,11 +70,11 @@ view loaded — at most 200 — and add up with each other; see
 placing each task on the day it is **due**, and clicking one opens the same drawer a
 row does. The arrows page a month at a time and **Today** comes back.
 
-The calendar draws the **same tasks the list is showing** — the same view, the same
-window, and no extra reading — so a month that looks empty may simply be a month the
-view's tasks are not in. It says so underneath: how many of them are due outside the
-month on screen, how many have no due date at all (a calendar cannot place those), and
-whether the view is showing only its first page.
+The calendar draws the tasks of the **same view, with the same filters and search**,
+up to 200 of them, and says so when the view holds more. A month that looks empty may
+simply be a month the view's tasks are not in. It says so underneath: how many of them
+are due outside the month on screen, and how many have no due date at all (a calendar
+cannot place those).
 
 A day that has more than three tasks lists three and counts the rest. Overdue titles are
 red, completed ones are struck through, and today's square is outlined.

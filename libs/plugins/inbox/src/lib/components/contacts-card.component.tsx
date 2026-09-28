@@ -16,11 +16,7 @@
  */
 'use client'
 
-import {
-  normalizeContactEmail,
-  pluginDocsHelp,
-  type ConsolePluginOrgMount,
-} from '@aglyn/aglyn'
+import { pluginDocsHelp, type ConsolePluginOrgMount } from '@aglyn/aglyn'
 // A deep import, NOT the plugin barrel (AGL-1151): the barrel is the entry
 // point the tenant's loader dynamically imports to activate the marketing
 // plugin's SITE half, so a console card named there ships to every published
@@ -29,6 +25,7 @@ import { InboxRecordAttributionZone } from './inbox-attribution-zone'
 // The CRM's route builder by its leaf path, not the plugin barrel: the barrel
 // carries the plugin registration, and a link needs only the address grammar.
 import { pluginRecordHref } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
+import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import {
   mdiAccountArrowRight,
   mdiAccountRemoveOutline,
@@ -36,25 +33,32 @@ import {
 } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import {
+  type ListFilterOption,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import {
   useFirestore,
-  useFirestoreCollection,
   useOrgDataScope,
+  useScopeTokens,
   useUser,
 } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
-  Alert,
   Button,
   Chip,
   Dialog,
@@ -62,72 +66,69 @@ import {
   DialogContent,
   DialogTitle,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { collection, limit, orderBy, query, where } from 'firebase/firestore'
+import { collection } from 'firebase/firestore'
 import { useCallback, useMemo, useState } from 'react'
-import { useRecordRouteContext } from './use-record-route-context'
-import { scopeTokensForHost } from '@aglyn/aglyn/app-utils/scope-tokens'
+import {
+  LEAD_FILTER_HEADERS,
+  LEAD_LIST_QUERY,
+  LEAD_SOURCE_OPTIONS,
+  ORG_LEAD_LIST_QUERY,
+  SITE_MEMBER_FILTER_HEADERS,
+  SITE_MEMBER_LIST_QUERY,
+  leadListBase,
+  LEAD_ADDRESS_SEARCH_COLUMN,
+  LEAD_ADDRESS_SEARCH_NOTICE,
+  leadListQueryFor,
+  leadSourceLabel,
+} from '../constants/list-queries'
 import { orgSiteNames } from './inbox-org-sites'
+import { useRecordRouteContext } from './use-record-route-context'
+
+/** Which of the two collections the card lists. */
+export type ContactsView = 'members' | 'leads'
+
+/** The organization's Inbox's Source and Site are picked, so the panel shows selects. */
+const ORG_LEAD_SELECT_FIELDS = ['sources', 'capturedByHostIds']
+const NO_SELECT_FIELDS: readonly string[] = []
 
 /**
- * How many members and how many leads the contacts table reads.
- *
- * A ceiling rather than a page size — see the two queries, which explain why
- * this one table cannot be paged by the server without breaking the dedupe
- * between them.
+ * Every surface a lead was captured by: `sources`, which every capture
+ * `arrayUnion`s, or the single `source` a lead written before it carries.
  */
-const CONTACT_CEILING = 200
-
-/*
- * What the contacts grid's Filters panel offers (AGL-3317). The card holds
- * both capped windows, so it answers the panel over every contact they read;
- * the notice under the table says when a cap truncated one. Type reads
- * `typeKey`: `member`, or `lead` with the lead's `source` when it has one,
- * which is what the column draws. On the organization's Inbox, Site matches
- * any site that captured the lead.
- */
-const CONTACT_FILTER_FIELDS = [
-  inMemoryListField('email', 'text'),
-  inMemoryListField('contactKind', 'select', 'typeKey'),
-]
-const ORG_CONTACT_FILTER_FIELDS = [
-  ...CONTACT_FILTER_FIELDS,
-  {
-    ...inMemoryListField('capturedByHostIds', 'select'),
-    tokensPath: 'capturedByHostIds',
-    verbatimTokens: true,
-  },
-]
-const CONTACT_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  email: 'Email',
-  contactKind: 'Type',
-  capturedByHostIds: 'Site',
-}
-const CONTACT_SEARCH_FIELDS = ['email', 'displayName', 'name', 'source'] as const
-
-/** How a contact's type reads, from its `typeKey`. */
-const contactTypeLabel = (typeKey: string): string =>
-  typeKey === 'member'
-    ? 'Member'
-    : typeKey.startsWith('lead:')
-      ? `Lead · ${typeKey.slice('lead:'.length)}`
-      : 'Lead'
+const leadSources = (lead: any): string[] =>
+  Array.isArray(lead?.sources)
+    ? lead.sources.filter((source: unknown): source is string => typeof source === 'string')
+    : typeof lead?.source === 'string' && lead.source
+      ? [lead.source]
+      : []
 
 /**
- * The Members & leads section of the Inbox (AGL-109): everybody a site
- * collected, in one list.
+ * The Members & leads section of the Inbox (AGL-109): the people a site
+ * collected — its members, who signed up to it, and its leads, whom a form,
+ * a booking or a teammate captured.
  *
- * Its own component since AGL-2501, when the Inbox's tabs became routes. The
- * split is what makes "mount only the section being read" structural: hooks
- * cannot be conditional, so a page holding every section's reads pays for all
- * of them whichever one the URL names.
+ * ## Two lists, one table (AGL-3321)
+ *
+ * Members and leads are two collections, and the table shows one at a time,
+ * chosen by the toggle above it. Each is its own Firestore query, every
+ * filter and search word on it, paged by the server — so a page is a page of
+ * the answer, and a site with thousands of either reaches all of them.
+ *
+ * It used to read the two hundred newest of each and interleave them, hiding
+ * a lead whose address matched a member. That dedupe is only correct while
+ * both reads are whole, which is exactly what a paged query is not, so it is
+ * gone: a person who left their address and later signed up is a lead in one
+ * list and a member in the other, which is what they are in each collection.
  *
  * On the organization's Inbox (`hostId: null`, AGL-3303) it lists the
  * organization's leads with the sites each was captured by. A member signs up
- * to ONE site and lives under it, so members are listed once a site is
- * picked, which is the page handing this card that site.
+ * to ONE site and lives under it, so Members waits for a site to be picked,
+ * which is the page handing this card that site.
  */
 export function ContactsCard({
   hostId,
@@ -149,164 +150,144 @@ export function ContactsCard({
       ? pluginRecordHref('lead', routeContext, String(contact.$id))
       : null
 
-  /*==========================================
-   * SITE MEMBERS + LEADS (AGL-109): ORDERED AND CEILINGED, NOT PAGED BY QUERY.
-   *
-   * Both reads were `limit(200)` with no `orderBy` and a client sort on top —
-   * the same document-id sample the submissions list used to take, and both
-   * now name the order the rows are rendered in. `createdAt` is safe on both:
-   * `membership-register.ts` is the only writer that CREATES a site member
-   * and stamps it inside its transaction (every other membership path
-   * updates an existing document), `recordVisitorLead` is the only writer
-   * that creates a lead and stamps it on every `tx.create`, and neither
-   * collection is in `IMPORTABLE_FIELDS`.
-   *
-   * What they must NOT do is page the query, and the reason is the dedupe
-   * below: a lead is hidden when a MEMBER already exists on the same address.
-   * That test is only correct while both windows are whole. On a ten-row
-   * server page it would compare a page of leads against a page of members, so
-   * somebody who signed up after leaving their address would render as a
-   * Member on one page and again as a Lead on another — one person counted
-   * twice, in a list a site owner uses to count people.
-   *
-   * So the CEILING stays and the page is a slice of the assembled rows. The
-   * probe row makes "there are more contacts than these" a fact rather than a
-   * guess from `length === CONTACT_CEILING`, which is wrong at exactly the
-   * count that equals the ceiling.
-   *=========================================*/
-  const { data: memberDocs } = useFirestoreCollection<any>(
-    () =>
-      hostId
-        ? query(
-            collection(firestore, 'hosts', hostId, 'siteMembers'),
-            orderBy('createdAt', 'desc'),
-            limit(CONTACT_CEILING + 1),
-          )
-        : null,
-    [firestore, hostId],
-    { idField: '$id' },
-  )
   /*
-   * The lead silo is the org's (AGL-3275), narrowed to this site by
-   * `visibleTo`. Reading `hosts/{hostId}/leads` showed a site its
-   * pre-migration rows and nothing captured since.
+   * The list shown. Members exist only under a site, so the organization's
+   * Inbox shows leads whatever was chosen, and the toggle says why.
    */
+  const [chosen, setChosen] = useState<ContactsView>('members')
+  const view: ContactsView = hostId ? chosen : 'leads'
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const gridFilter = useListGridFilter({
+    selectFields: view === 'leads' && hostId == null ? ORG_LEAD_SELECT_FIELDS : NO_SELECT_FIELDS,
+    search: { words: searchWords, onChange: setSearchWords },
+  })
+  /*
+   * A switch of list starts it clean: the two lists filter by different
+   * fields, and a clause carried across would be one the other list cannot
+   * ask — refused on arrival, for a question the reader asked of the list
+   * they just left.
+   */
+  const switchView = (next: ContactsView | null) => {
+    if (!next || next === view) return
+    gridFilter.setClauses([])
+    setSearchWords([])
+    setChosen(next)
+  }
+  const request = { clauses: gridFilter.clauses, search: gridFilter.searchWords }
+
+  /*==========================================
+   * SITE MEMBERS — `hosts/{hostId}/siteMembers`, newest first
+   * (`SITE_MEMBER_LIST_QUERY`). `createdAt` is safe to order on:
+   * `membership-register.ts` is the only writer that CREATES a site member
+   * and stamps it inside its transaction, and the collection is not in
+   * `IMPORTABLE_FIELDS`. No query opens while the other list is shown.
+   *=========================================*/
+  const members = useListQuery<any>({
+    collection:
+      hostId && view === 'members'
+        ? collection(firestore, 'hosts', hostId, 'siteMembers')
+        : null,
+    declaration: SITE_MEMBER_LIST_QUERY,
+    request: view === 'members' ? request : { clauses: [] },
+    deps: [firestore, hostId, view],
+    idField: '$id',
+  })
+
+  /*==========================================
+   * LEADS — `orgs/{orgId}/leads`, newest first (`LEAD_LIST_QUERY`). The
+   * silo is the org's (AGL-3275), narrowed to this site by `visibleTo`;
+   * reading `hosts/{hostId}/leads` showed a site its pre-migration rows and
+   * nothing captured since. `addHostLead`, every lead door's one writer,
+   * stamps `createdAt` on every create.
+   *
+   * Every site's, on the organization's Inbox: an org-wide member reads the
+   * collection unscoped — the rules short-circuit on their reach, as for the
+   * CRM's own org list — so a clause there would only narrow what they may
+   * already read.
+   *=========================================*/
   const { orgId } = useOrgDataScope({
     hostId: hostId ?? undefined,
     orgId: hostId == null ? orgMount?.orgId : undefined,
   })
-  const siteMembers = (memberDocs ?? []).slice(0, CONTACT_CEILING)
-  const { data: leadDocs } = useFirestoreCollection<any>(
+  /*
+   * Whether the search may fold into the scope clause (`scopedSearch`): a
+   * query without `visibleTo` is one the rules prove only for an ORG-WIDE
+   * member. Anyone else keeps the clause, and the plan refuses their search
+   * by name rather than sending a query the rules deny. Until the reach has
+   * answered, the answer is no. Asked only while Leads is shown: the member
+   * document is a read, and Members has no scope to fold into.
+   */
+  const reach = useScopeTokens(hostId && orgId && view === 'leads' ? orgId : undefined)
+  const foldsScope = hostId == null || (reach.loaded && reach.orgWide)
+  const leadDeclaration = hostId ? LEAD_LIST_QUERY : ORG_LEAD_LIST_QUERY
+  const leadBase = useMemo(
+    () => leadListBase(hostId ? scopeTokensForHost(hostId) : null),
+    [hostId],
+  )
+  const leadQuery = useMemo(
     () =>
-      orgId
-        ? query(
-            collection(firestore, 'orgs', orgId, 'leads'),
-            /*
-             * Every site's, on the organization's Inbox: an org-wide member
-             * reads the collection unscoped — the rules short-circuit on
-             * their reach, as for the CRM's own org list — so a clause here
-             * would only narrow what they may already read.
-             */
-            ...(hostId
-              ? [
-                  where(
-                    'visibleTo',
-                    'array-contains-any',
-                    scopeTokensForHost(hostId),
-                  ),
-                ]
-              : []),
-            orderBy('createdAt', 'desc'),
-            limit(CONTACT_CEILING + 1),
-          )
-        : null,
-    [firestore, orgId, hostId],
-    { idField: '$id' },
-  )
-  const leads = (leadDocs ?? []).slice(0, CONTACT_CEILING)
-  const contactsTruncated =
-    (memberDocs?.length ?? 0) > CONTACT_CEILING ||
-    (leadDocs?.length ?? 0) > CONTACT_CEILING
-  /*
-   * One person renders once, whichever way they came in.
-   *
-   * Raw `===` made `Bob@x.com` and `bob@x.com` two different people, so
-   * somebody could appear as a Member on one row and a Lead on another. The
-   * comparison is now the same NORMALIZATION a lead document is keyed by —
-   * `personKey` is `sha256(normalizeContactEmail(email))`, and hashing an
-   * already-normalized address cannot merge or split anything the normalizer
-   * did not, so the two agree by construction.
-   *
-   * `personKey` itself cannot run here: it needs `node:crypto` and this is a
-   * client component. That is why the shared half is the normalizer rather
-   * than the digest.
-   */
-  const dedupedLeads = useMemo(() => {
-    const memberKeys = new Set(
-      siteMembers
-        .map((member: any) => normalizeContactEmail(member.email))
-        .filter(Boolean),
-    )
-    return leads.filter(
-      (lead: any) => !memberKeys.has(normalizeContactEmail(lead.email)),
-    )
-  }, [leads, siteMembers])
-  /*
-   * ONE list of two collections — members first, then the leads that are not
-   * already members — so the grid pages the concatenation rather than either
-   * read, and a page stays whole across the seam between them. Both reads are
-   * ceilinged and complete below the ceiling, so the grid's count is the whole
-   * deduped list.
-   */
-  const contacts = useMemo(
-    () => [
-      ...siteMembers.map((member: any) => ({
-        ...member,
-        contactKind: 'member',
-        typeKey: 'member',
-      })),
-      ...dedupedLeads.map((lead: any) => ({
-        ...lead,
-        contactKind: 'lead',
-        typeKey: lead.source ? `lead:${lead.source}` : 'lead',
-      })),
-    ],
-    [siteMembers, dedupedLeads],
-  )
-  /*
-   * A lead's source is open-ended, so the Type choices are the ones the rows
-   * hold, member and plain lead first.
-   */
-  const contactFilterOptions = useMemo(() => {
-    const leadSources = [
-      ...new Set(
-        contacts
-          .map((contact: any) => contact.typeKey as string)
-          .filter((typeKey) => typeKey.startsWith('lead:')),
+      leadListQueryFor(
+        leadDeclaration,
+        foldsScope,
+        view === 'leads' ? { ...request, base: leadBase } : { clauses: [] },
       ),
-    ].sort()
-    return {
-      contactKind: ['member', 'lead', ...leadSources].map((value) => ({
-        value,
-        label: contactTypeLabel(value),
-      })),
-      ...(hostId == null
+    // The request is data; its JSON is its identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [leadDeclaration, foldsScope, view, leadBase, JSON.stringify(request)],
+  )
+  const leads = useListQuery<any>({
+    collection:
+      orgId && view === 'leads' ? collection(firestore, 'orgs', orgId, 'leads') : null,
+    declaration: leadQuery.declaration,
+    request: leadQuery.request,
+    deps: [firestore, orgId, hostId, view],
+    idField: '$id',
+  })
+
+  const shown = view === 'members' ? members : leads
+  const declaration = view === 'members' ? SITE_MEMBER_LIST_QUERY : leadDeclaration
+  const headers = view === 'members' ? SITE_MEMBER_FILTER_HEADERS : LEAD_FILTER_HEADERS
+  const options = useMemo<Readonly<Record<string, readonly ListFilterOption[]>>>(
+    () =>
+      view === 'leads' && hostId == null
         ? {
+            sources: LEAD_SOURCE_OPTIONS,
             capturedByHostIds: (orgMount?.hosts ?? []).map((host) => ({
               value: host.id,
               label: host.name || host.id,
             })),
           }
-        : {}),
-    }
-  }, [contacts, hostId, orgMount])
-  const contactFilter = useListRowsFilter({
-    rows: contacts,
-    fields: hostId == null ? ORG_CONTACT_FILTER_FIELDS : CONTACT_FILTER_FIELDS,
-    options: contactFilterOptions,
-    headers: CONTACT_FILTER_HEADERS,
-    search: CONTACT_SEARCH_FIELDS,
-  })
+        : {},
+    [view, hostId, orgMount],
+  )
+  /*
+   * A site collaborator's search rides the query as an address-prefix clause
+   * (`leadListQueryFor`); a refusal of it is the search's, and when it is
+   * served the list says what it matched and how it is now ordered.
+   */
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(
+        shown.plan.refused.map((entry) =>
+          entry.clause !== 'search' && entry.clause.field === LEAD_ADDRESS_SEARCH_COLUMN
+            ? { ...entry, clause: 'search' as const }
+            : entry,
+        ),
+        { fields: declaration.fields, headers, options },
+      ),
+    [shown.plan.refused, declaration, headers, options],
+  )
+  const addressSearched =
+    view === 'leads' &&
+    leadQuery.addressSearch &&
+    leads.plan.served.some((clause) => clause.field === LEAD_ADDRESS_SEARCH_COLUMN)
+  const notices = useMemo(
+    () => (addressSearched ? [...shown.plan.notices, LEAD_ADDRESS_SEARCH_NOTICE] : shown.plan.notices),
+    [addressSearched, shown.plan.notices],
+  )
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+
   /*
    * REMOVED BY THE ROUTE THAT OWNS MEMBER ACCOUNTS (AGL-3308), not by a
    * client delete. A member's password hash lives in a document no client can
@@ -376,43 +357,42 @@ export function ContactsCard({
   }
   const leadOriginSite = leadOrigin ? originSite(leadOrigin) : null
 
-  const contactActions = (contact: any): RowActionsMenuItem[] =>
-    contact.contactKind === 'member'
+  const memberActions = (member: any): RowActionsMenuItem[] => [
+    {
+      key: 'remove',
+      label: 'Remove member',
+      icon: <MdiIcon path={mdiAccountRemoveOutline.path} size={0.8} />,
+      destructive: true,
+      onClick: () => void handleDeleteMember(member)(),
+    },
+  ]
+  const leadActions = (lead: any): RowActionsMenuItem[] => [
+    // Offered only where a plugin publishes a lead's address: text-less
+    // rather than a link to a page this workspace cannot open.
+    ...(leadHref(lead)
       ? [
           {
-            key: 'remove',
-            label: 'Remove member',
-            icon: <MdiIcon path={mdiAccountRemoveOutline.path} size={0.8} />,
-            destructive: true,
-            onClick: () => void handleDeleteMember(contact)(),
+            key: 'crm',
+            label: 'Open in CRM',
+            icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
+            href: leadHref(lead) as string,
           },
         ]
-      : [
-          // Offered only where a plugin publishes a lead's address: text-less
-          // rather than a link to a page this workspace cannot open.
-          ...(leadHref(contact)
-            ? [
-                {
-                  key: 'crm',
-                  label: 'Open in CRM',
-                  icon: <MdiIcon path={mdiAccountArrowRight.path} size={0.8} />,
-                  href: leadHref(contact) as string,
-                },
-              ]
-            : []),
-          // A lead no site captured has no site to ask for its campaign.
-          ...(originSite(contact)
-            ? [
-                {
-                  key: 'origin',
-                  label: 'Where this came from',
-                  icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
-                  onClick: () => setLeadOrigin(contact),
-                },
-              ]
-            : []),
+      : []),
+    // A lead no site captured has no site to ask for its campaign.
+    ...(originSite(lead)
+      ? [
+          {
+            key: 'origin',
+            label: 'Where this came from',
+            icon: <MdiIcon path={mdiBullhornOutline.path} size={0.8} />,
+            onClick: () => setLeadOrigin(lead),
+          },
         ]
-  const contactColumns: GridColDef[] = [
+      : []),
+  ]
+
+  const columns: GridColDef[] = [
     {
       field: 'email',
       headerName: 'Email',
@@ -424,8 +404,7 @@ export function ContactsCard({
         a list nobody recognizes anyone in.
        */
       renderCell: ({ row: contact }) => {
-        const name =
-          contact.contactKind === 'member' ? contact.displayName : contact.name
+        const name = view === 'members' ? contact.displayName : contact.name
         return (
           <Stack direction="row" spacing={1} sx={{ alignItems: 'baseline', minWidth: 0 }}>
             <Typography variant="body2" noWrap>
@@ -440,40 +419,44 @@ export function ContactsCard({
         )
       },
     },
-    {
-      /*
-        WHERE A LEAD CAME FROM (AGL-2338). `source` has been written by both
-        lead writers — `'signup'` and `'booking'` — since AGL-109, so a site
-        owner can tell a membership sign-up from a booking. Falls back to the
-        bare label for a row written before the field, or by a future writer
-        that omits it.
-       */
-      field: 'contactKind',
-      headerName: 'Type',
-      width: 170,
-      valueGetter: (_value, contact) => contact.typeKey,
-      renderCell: ({ row: contact }) =>
-        contact.contactKind === 'member' ? (
-          <Chip label={contactTypeLabel(contact.typeKey)} color="primary" size="small" />
-        ) : (
-          <Chip label={contactTypeLabel(contact.typeKey)} size="small" variant="outlined" />
-        ),
-    },
+    /*
+      WHERE A LEAD CAME FROM (AGL-2338): every surface that captured the
+      person — a form, a booking, a lead added by hand — one chip each. A lead
+      written before `sources` carries the one `source` it was captured by,
+      and a row with neither simply shows none.
+     */
+    ...(view === 'leads'
+      ? [
+          {
+            field: 'sources',
+            headerName: 'Source',
+            width: 200,
+            sortable: false,
+            valueGetter: (_value: unknown, lead: any) =>
+              leadSources(lead).map(leadSourceLabel).join(', '),
+            renderCell: ({ row: lead }: { row: any }) => (
+              <Stack direction="row" spacing={0.5} sx={{ alignItems: 'center', height: '100%' }}>
+                {[...new Set(leadSources(lead).map(leadSourceLabel))].map((label) => (
+                  <Chip key={label} label={label} size="small" variant="outlined" />
+                ))}
+              </Stack>
+            ),
+          } satisfies GridColDef,
+        ]
+      : []),
     /*
       KNOWN BY, on the organization's Inbox: every site that captured the
       person, as the CRM's organization Leads list names them. A lead is one
       org row, so "which site" is a set, never one answer.
      */
-    ...(hostId == null
+    ...(view === 'leads' && hostId == null
       ? [
           {
             field: 'capturedByHostIds',
             headerName: 'Site',
             flex: 1,
             minWidth: 160,
-            // Sorted and drawn by name; the filter matches the ids.
-            valueGetter: (_value: unknown, contact: any) =>
-              orgSiteNames(orgMount, contact.capturedByHostIds),
+            sortable: false,
             renderCell: ({ row: contact }: { row: any }) =>
               orgSiteNames(orgMount, contact.capturedByHostIds),
           } satisfies GridColDef,
@@ -481,10 +464,8 @@ export function ContactsCard({
       : []),
     {
       field: 'createdAt',
-      headerName: 'Joined',
+      headerName: view === 'members' ? 'Joined' : 'Captured',
       width: 200,
-      // Sorted on the instant, drawn as a local string.
-      valueGetter: (_value, contact) => contact.createdAt?.toDate?.()?.getTime?.() ?? 0,
       renderCell: ({ row: contact }) =>
         contact.createdAt?.toDate?.().toLocaleString() ?? '--',
     },
@@ -492,12 +473,20 @@ export function ContactsCard({
       (contact) => (
         <ListRowActions
           label={String(contact.email ?? contact.$id)}
-          items={contactActions(contact)}
+          items={view === 'members' ? memberActions(contact) : leadActions(contact)}
         />
       ),
       { width: 72 },
     ),
   ]
+
+  const empty = shown.rows.length === 0 && !shown.hasMore && !filtering
+  const emptyLabel =
+    view === 'members'
+      ? 'No members yet — visitors can join at /signup on your site.'
+      : hostId == null
+        ? 'No leads on any site yet.'
+        : 'No leads yet — the forms and bookings that file leads add them here.'
 
   return (
     <>
@@ -510,53 +499,81 @@ export function ContactsCard({
         contentGutterY
         contentBordered="all"
       >
-        {hostId == null ? (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ mb: leads.length ? 2 : 1 }}
-          >
-            {'Every site’s leads, newest first. Members sign up to one site ' +
-              'each — choose a site to list its members beside its leads.'}
-          </Typography>
-        ) : null}
-        {siteMembers.length === 0 && leads.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            {hostId == null
-              ? 'No leads on any site yet.'
-              : 'No members yet — visitors can join at /signup on your ' +
-                'site; sign-ups also appear here as leads.'}
-          </Typography>
-        ) : (
-          <>
-            <ListFilterChips {...contactFilter.chipsProps} />
-            <ListTable
-              aria-label="Site members and leads"
-              rows={contactFilter.rows}
-              columns={contactFilter.filterColumns(contactColumns)}
-              // The panel and the search are the grid's; the card answers
-              // them over every contact both windows read.
-              {...contactFilter.gridProps}
-              noRowsLabel="No contacts match these filters"
-              // A member and a lead are two collections, so an id alone could
-              // name one of each.
-              getRowId={(contact: any) => `${contact.contactKind}:${contact.$id}`}
-              rowHeight={TABLE_ROW_HEIGHT}
-            />
-            {contactsTruncated ? (
-              <Alert severity="info" sx={{ mt: 1 }}>
-                {hostId == null
-                  ? `Paging the ${CONTACT_CEILING} newest leads. Your ` +
-                    'sites hold more than that — the CRM’s Leads list ' +
-                    'reaches every one of them.'
-                  : `Paging the ${CONTACT_CEILING} newest members and the ` +
-                    `${CONTACT_CEILING} newest leads. This site has more ` +
-                    'than that — the campaign audiences still reach ' +
-                    'everyone, whether or not they are listed here.'}
-              </Alert>
+        <Stack spacing={1.5}>
+          <Stack direction="row" spacing={1.5} sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={view}
+              onChange={(_event, next: ContactsView | null) => switchView(next)}
+              aria-label="Which people to list"
+            >
+              {/*
+                Disabled on the organization's Inbox rather than hidden: a
+                member signs up to one site, and the line beside the toggle
+                says how to reach a site's members, where a missing button
+                would say nothing.
+               */}
+              <ToggleButton value="members" disabled={hostId == null}>
+                {'Members'}
+              </ToggleButton>
+              <ToggleButton value="leads">{'Leads'}</ToggleButton>
+            </ToggleButtonGroup>
+            {hostId == null ? (
+              <Typography variant="body2" color="text.secondary">
+                {'Every site’s leads, newest first. Members sign up to one ' +
+                  'site each — choose a site to list its members.'}
+              </Typography>
             ) : null}
-          </>
-        )}
+          </Stack>
+          {empty ? (
+            <Typography variant="body2" color="text.secondary">
+              {emptyLabel}
+            </Typography>
+          ) : (
+            <>
+              <ListFilterChips
+                fields={declaration.fields}
+                headers={headers}
+                clauses={gridFilter.clauses}
+                onChange={gridFilter.setClauses}
+                options={options}
+              />
+              <ListQueryNotices refused={refusals} notices={notices} />
+              <ListTable
+                // One grid per list, so the other list's search box and
+                // panel state never carry across the toggle.
+                key={view}
+                aria-label={view === 'members' ? 'Site members' : 'Leads'}
+                rows={shown.rows}
+                columns={listFilterGridColumns(columns, declaration.fields, options, headers)}
+                rowHeight={TABLE_ROW_HEIGHT}
+                // Paged by the footer below, so the grid must not also slice.
+                hideFooter
+                // The panel and the search go to the query; the grid neither
+                // filters nor sorts the page it holds.
+                filterMode="server"
+                filterModel={gridFilter.filterModel}
+                onFilterModelChange={gridFilter.onFilterModelChange}
+                quickFilter
+                disableColumnSorting
+                noRowsLabel={
+                  view === 'members'
+                    ? 'No members match these filters'
+                    : 'No leads match these filters'
+                }
+              />
+              <ListPagination
+                page={shown.page}
+                pageSize={shown.pageSize}
+                rowCount={shown.rows.length}
+                hasMore={shown.hasMore}
+                onPageChange={shown.setPage}
+                onPageSizeChange={shown.setPageSize}
+              />
+            </>
+          )}
+        </Stack>
       </CardDisplay>
       {/*
         WHERE A LEAD CAME FROM.

@@ -15,23 +15,7 @@
  * limitations under the License.
  */
 
-/**
- * Every status a site's pill can show, in the order the pill decides them,
- * keyed by the value a filter stores. The Sites list offers these as its
- * Status choices, so the pill and the filter cannot name different states.
- */
-export const HOST_STATUS_LABELS = {
-  suspended: 'Suspended',
-  maintenance: 'Maintenance',
-  live: 'Live',
-  draft: 'Draft',
-} as const
-
-export type HostStatusKey = keyof typeof HOST_STATUS_LABELS
-
 export interface HostStatus {
-  /** Which of {@link HOST_STATUS_LABELS} this is. */
-  key: HostStatusKey
   /** `Live`, `Draft`, `Maintenance`, `Suspended`. */
   label: string
   color: 'success' | 'default' | 'warning' | 'error'
@@ -95,8 +79,7 @@ export function describeHostStatus(host: {
     const until = host.suspendedUntilMs
     if (!until || until > Date.now()) {
       return {
-        key: 'suspended',
-        label: HOST_STATUS_LABELS.suspended,
+        label: 'Suspended',
         color: 'error',
         detail: 'This site is serving a lockdown notice instead of content.',
       }
@@ -104,8 +87,7 @@ export function describeHostStatus(host: {
   }
   if (host?.maintenance) {
     return {
-      key: 'maintenance',
-      label: HOST_STATUS_LABELS.maintenance,
+      label: 'Maintenance',
       color: 'warning',
       detail: 'Every path serves the maintenance screen.',
     }
@@ -113,15 +95,13 @@ export function describeHostStatus(host: {
   const published = publishedScreenCount(host)
   if (published > 0) {
     return {
-      key: 'live',
-      label: HOST_STATUS_LABELS.live,
+      label: 'Live',
       color: 'success',
       detail: `${published} published page${published === 1 ? '' : 's'}.`,
     }
   }
   return {
-    key: 'draft',
-    label: HOST_STATUS_LABELS.draft,
+    label: 'Draft',
     color: 'default',
     detail: 'Nothing published yet — visitors see the placeholder.',
   }

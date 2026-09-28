@@ -88,6 +88,7 @@ import type {
   ConsentGroupChangeRunResult,
 } from '@aglyn/aglyn/plugin-manager/plugin-consent-group-change'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin/server/firebase-admin'
+import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
 import { summarizeConsentGroupChange } from '../model/consent-group-summary'
 
@@ -518,6 +519,9 @@ export function createConsentGroupParticipant(
         patch: planned.patch,
         after: async () => {
           count(planned)
+          // The holders moved, and with them the facet keys the Contacts
+          // list filters by (AGL-3321).
+          await restampCrmListFieldsAt(snapshot.ref, 'contacts')
           // A count that could not move is logged and left: the company's own
           // page takes the live aggregate, which corrects it.
           await Promise.all(

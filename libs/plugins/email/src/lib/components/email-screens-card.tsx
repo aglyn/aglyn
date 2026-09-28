@@ -30,67 +30,42 @@ import {
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  ceilingedWindow,
-  collectionCeiling,
-} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
 import {
   DUPLICATE_MENU_LABEL,
   useConsoleHostRoute,
   useDuplicateResource,
   useFirestore,
-  useFirestoreCollection,
   useHostResourceApi,
   useHostVersionApi,
 } from '@aglyn/tenant-feature-instance'
-import {
-  Alert,
-  Button,
-  Chip,
-  Stack,
-  Typography,
-} from '@mui/material'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { Button, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { collection, doc, Timestamp, updateDoc } from 'firebase/firestore'
+import { collection, doc, updateDoc } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useMemo } from 'react'
+import {
+  EMAIL_TEMPLATE_BASE,
+  EMAIL_TEMPLATE_FILTER_HEADERS,
+  EMAIL_TEMPLATE_QUERY,
+} from '../constants/list-queries'
 import { templateProvenance } from '../model/template-provenance'
 import { createEmailScreen } from '../utils/create-email-screen'
-
-/** How many of the site's screens one read of this list covers. */
-const TEMPLATE_CEILING = 200
-
-/*
- * What the templates grid's Filters panel offers (AGL-3317). The card holds
- * the templates its capped window read, so it answers the panel over all of
- * them; the notice under the table says when the cap truncated the window.
- * Origin reads `originKey`, the provenance the column draws.
- */
-const TEMPLATE_FILTER_FIELDS = [
-  inMemoryListField('displayName', 'text', 'templateName'),
-  inMemoryListField('origin', 'select', 'originKey'),
-]
-const TEMPLATE_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  displayName: 'Template',
-  origin: 'Origin',
-}
-const TEMPLATE_FILTER_OPTIONS = {
-  origin: [
-    { value: 'local', label: 'Yours' },
-    { value: 'installed', label: 'Installed' },
-  ],
-}
-const TEMPLATE_SEARCH_FIELDS = ['templateName'] as const
+import { emailTemplateSoftDelete } from '../utils/email-template-soft-delete'
 
 // The besigner route is `/[orgSlug]/hosts/[host]/screens/[screenId]/
 // versions/[versionId]/besigner`. This built `/{hostDocId}/screens/…`, the
@@ -127,16 +102,15 @@ const besignerHref = (
  * audiences table reads by. Delete in particular: it sat inline, one mis-click
  * from the name beside it.
  *
- * ## Why the read is a CEILING with a probe
+ * ## The list IS its query
  *
- * `screens` holds every kind of screen the site has and the email ones are
- * picked out here, so the cap cannot be a page: a page of the collection is
- * not a page of this list. `collectionCeiling` orders on the document name,
- * which is the one ordering that cannot drop a screen — `orderBy('displayName')`
- * matches only documents that HAVE the field, so a screen created without a
- * name would vanish rather than sort oddly. It reads one past the ceiling so
- * the card can SAY when the site holds more than it drew, and the footer under
- * the table pages the window the card already has.
+ * `kind == 'email'`, by name, paged by the query — and every Filters clause
+ * and search word is a predicate on it (AGL-3321, `EMAIL_TEMPLATE_QUERY`), so
+ * a page is a page of the templates that match and none is matched in the
+ * browser. The order is `nameLower`, which every screen writer stamps from
+ * `displayName`; a deleted template has its name keys cleared with the
+ * delete (`emailTemplateSoftDelete`), so the order leaves it out rather than
+ * the card dropping it after the read.
  */
 export function EmailScreensCard(props: {
   hostId: string
@@ -159,43 +133,36 @@ export function EmailScreensCard(props: {
   })
   const { confirm } = useConfirmationContext()
 
-  const { data: screenDocs } = useFirestoreCollection<any>(
-    () =>
-      collectionCeiling(
-        collection(firestore, 'hosts', hostId, 'screens'),
-        TEMPLATE_CEILING,
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
-  )
-  const { rows: readScreens, truncated } = ceilingedWindow<any>(
-    screenDocs,
-    TEMPLATE_CEILING,
-  )
-  const emailScreens = useMemo(
-    () =>
-      [...readScreens]
-        .filter((screen: any) => !screen.deletedAt && screen.kind === 'email')
-        .sort((a: any, b: any) =>
-          String(a.displayName ?? '').localeCompare(
-            String(b.displayName ?? ''),
-          ),
-        )
-        .map((screen: any) => ({
-          ...screen,
-          templateName: String(screen.displayName ?? 'Untitled template'),
-          originKey:
-            templateProvenance(screen).origin === 'installed' ? 'installed' : 'local',
-        })),
-    [readScreens],
-  )
-  const templateFilter = useListRowsFilter<any>({
+  const gridFilter = useListGridFilter()
+  const {
     rows: emailScreens,
-    fields: TEMPLATE_FILTER_FIELDS,
-    options: TEMPLATE_FILTER_OPTIONS,
-    headers: TEMPLATE_FILTER_HEADERS,
-    search: TEMPLATE_SEARCH_FIELDS,
+    hasMore,
+    page,
+    setPage,
+    pageSize,
+    setPageSize,
+    plan,
+  } = useListQuery<any>({
+    collection: collection(firestore, 'hosts', hostId, 'screens'),
+    declaration: EMAIL_TEMPLATE_QUERY,
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      base: EMAIL_TEMPLATE_BASE,
+    },
+    deps: [firestore, hostId],
+    idField: '$id',
   })
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: EMAIL_TEMPLATE_QUERY.fields,
+        headers: EMAIL_TEMPLATE_FILTER_HEADERS,
+      }),
+    [plan.refused],
+  )
 
   const handleCreate = async () => {
     try {
@@ -227,9 +194,10 @@ export function EmailScreensCard(props: {
       .then(() => true)
       .catch(() => false)
     if (!confirmed) return
-    await updateDoc(doc(firestore, 'hosts', hostId, 'screens', screen.$id), {
-      deletedAt: Timestamp.now(),
-    })
+    await updateDoc(
+      doc(firestore, 'hosts', hostId, 'screens', screen.$id),
+      emailTemplateSoftDelete(),
+    )
   }
 
   const templateHref = (screen: any) => `${basePath}/templates/${screen.$id}`
@@ -281,8 +249,7 @@ export function EmailScreensCard(props: {
   ]
 
   /*
-   * The templates are a window this card already holds, so the grid pages
-   * it. The name is a link AND the row opens the template.
+   * The name is a link AND the row opens the template.
    */
   const columns: GridColDef[] = [
     {
@@ -313,7 +280,8 @@ export function EmailScreensCard(props: {
       field: 'origin',
       headerName: 'Origin',
       width: 140,
-      valueGetter: (_value, row) => row.originKey,
+      valueGetter: (_value, row) =>
+        templateProvenance(row).origin === 'installed' ? 'installed' : 'local',
       renderCell: ({ value }) =>
         value === 'installed' ? (
           <Chip size="small" label="Installed" />
@@ -351,7 +319,7 @@ export function EmailScreensCard(props: {
     >
       {duplicate.dialog}
       <Stack spacing={1.5}>
-        {emailScreens.length === 0 ? (
+        {emailScreens.length === 0 && !hasMore && !filtering ? (
           <Typography variant="body2" color="text.secondary">
             {'Design a reusable email here, then send it from a campaign. A ' +
               'new template opens in the besigner with email-safe components ' +
@@ -359,27 +327,45 @@ export function EmailScreensCard(props: {
           </Typography>
         ) : (
           <>
-            <ListFilterChips {...templateFilter.chipsProps} />
+            <ListFilterChips
+              fields={EMAIL_TEMPLATE_QUERY.fields}
+              headers={EMAIL_TEMPLATE_FILTER_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+            />
+            <ListQueryNotices refused={refusals} notices={plan.notices} />
             <ListTable
               aria-label="Email templates"
-              rows={templateFilter.rows}
-              columns={templateFilter.filterColumns(columns)}
+              rows={emailScreens}
+              columns={listFilterGridColumns(
+                columns,
+                EMAIL_TEMPLATE_QUERY.fields,
+                {},
+                EMAIL_TEMPLATE_FILTER_HEADERS,
+              )}
               rowHeight={TABLE_ROW_HEIGHT}
               onOpen={(_id, row) => router.push(templateHref(row))}
-              // The panel and the search are the grid's; the card answers
-              // them over every template its window read.
-              {...templateFilter.gridProps}
+              // Paged by the footer below, so the grid must not also slice.
+              hideFooter
+              // The panel and the search go to the query; the grid neither
+              // filters nor sorts the page it holds.
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              disableColumnSorting
               noRowsLabel="No templates match these filters"
+            />
+            <ListPagination
+              page={page}
+              pageSize={pageSize}
+              rowCount={emailScreens.length}
+              hasMore={hasMore}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
             />
           </>
         )}
-        {truncated ? (
-          <Alert severity="info">
-            {`This site holds more than ${TEMPLATE_CEILING} screens, and the ` +
-              'templates listed are drawn from the first of them. Any beyond ' +
-              'that are not in this list.'}
-          </Alert>
-        ) : null}
       </Stack>
     </CardDisplay>
   )

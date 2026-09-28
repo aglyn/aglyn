@@ -70,16 +70,6 @@ const FIRESTORE = {}
 const SCOPE = { scope: ['orgs', 'org-1'] }
 const USER = { data: { uid: 'uid-test' } }
 const NO_SEGMENTS = { data: [] }
-const PAGE = {
-  rows: listDocs,
-  hasMore: false,
-  page: 0,
-  setPage: () => undefined,
-  pageSize: 10,
-  setPageSize: () => undefined,
-  status: 'success',
-  fromCache: false,
-}
 
 /** What the org scope was last asked for — a site, or the org itself. */
 let scopeAskedFor: unknown = null
@@ -92,8 +82,13 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
   useUser: () => USER,
   useFirestoreCollection: () => NO_SEGMENTS,
-  usePagedCollection: () => PAGE,
 }))
+
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() => listDocs, jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')),
+)
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({

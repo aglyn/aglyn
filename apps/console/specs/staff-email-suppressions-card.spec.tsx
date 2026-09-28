@@ -18,9 +18,11 @@
 /**
  * The staff Platform suppressions list is filtered and searched by its ROUTE
  * (AGL-3321): the search box and the Filters panel are the grid's, and what
- * they ask travels to `/api/admin/emails/suppressions` rather than narrowing
- * the page on screen. A released entry stays listed, marked, with nothing to
- * release; an ask the route refuses is shown as the route's reason.
+ * they ask travels to `/api/admin/emails/suppressions`, which puts all of it
+ * on one query, rather than narrowing the page on screen. A released entry
+ * stays listed, marked, with nothing to release; what the route could not
+ * apply is named above the list; a failed read is shown as the route's
+ * reason, never as an empty list.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -84,7 +86,7 @@ const urls = () => mockAuthorizedFetch.mock.calls.map((call) => String(call[1]))
 
 beforeEach(() => {
   mockAuthorizedFetch.mockReset()
-  mockAuthorizedFetch.mockResolvedValue(answer(200, { entries: ENTRIES, hasMore: false }))
+  mockAuthorizedFetch.mockResolvedValue(answer(200, { rows: ENTRIES, hasMore: false, refused: [], notices: [] }))
 })
 
 describe('StaffEmailSuppressionsCard (AGL-3321)', () => {
@@ -105,19 +107,33 @@ describe('StaffEmailSuppressionsCard (AGL-3321)', () => {
   it('sends the search to the route, which answers it, rather than narrowing the page', async () => {
     render(<StaffEmailSuppressionsCard />)
     await screen.findByText('jane@example.com')
-    mockAuthorizedFetch.mockResolvedValue(answer(200, { entries: [], hasMore: false }))
+    mockAuthorizedFetch.mockResolvedValue(answer(200, { rows: [], hasMore: false, refused: [], notices: [] }))
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'jane' } })
     await waitFor(() => expect(urls().some((url) => /[?&]search=jane(&|$)/.test(url))).toBe(true))
     await screen.findByText('No suppressions match these filters')
   })
 
-  it('sends the search alone, never beside an equality filter', async () => {
+  it('names what the route could not apply, rather than narrowing some rows', async () => {
+    mockAuthorizedFetch.mockResolvedValue(
+      answer(200, {
+        rows: ENTRIES,
+        hasMore: false,
+        refused: [
+          {
+            clause: { field: 'reason', op: 'equals', value: 'bounce' },
+            reason: 'too many values at once (the limit is 30)',
+          },
+        ],
+        notices: ['Search matches one word at a time: showing results for "jane".'],
+      }),
+    )
     render(<StaffEmailSuppressionsCard />)
-    await screen.findByText('jane@example.com')
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'jane' } })
-    await waitFor(() => expect(urls().some((url) => /[?&]search=jane(&|$)/.test(url))).toBe(true))
-    const searched = urls().filter((url) => /[?&]search=/.test(url))
-    for (const url of searched) expect(url).not.toMatch(/filters=/)
+    await screen.findByText(
+      'Reason is Bounced is not applied: too many values at once (the limit is 30).',
+    )
+    expect(
+      screen.getByText('Search matches one word at a time: showing results for "jane".'),
+    ).toBeTruthy()
   })
 
   it('keeps the inline Why box on a release', async () => {
@@ -130,10 +146,10 @@ describe('StaffEmailSuppressionsCard (AGL-3321)', () => {
 
   it("shows the route's refusal instead of an empty list", async () => {
     mockAuthorizedFetch.mockResolvedValue(
-      answer(400, { error: 'Filter by one of Reason, Learned from or Site ID at a time' }),
+      answer(400, { error: 'Unreadable filters' }),
     )
     render(<StaffEmailSuppressionsCard />)
-    await screen.findByText('Filter by one of Reason, Learned from or Site ID at a time')
+    await screen.findByText('Unreadable filters')
     expect(screen.queryByText('Nothing is suppressed platform-wide.')).toBeNull()
   })
 })

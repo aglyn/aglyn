@@ -80,10 +80,16 @@ const pickFilter = (field: string, value: string) =>
     }),
   )
 
+/*
+ * Stored as the create route stores them: `deletedAt: null` and `nameLower`
+ * are what the products hub's own list query asks for.
+ */
 const productDocs = [
   {
     $id: 'prod-1',
     name: 'Desk lamp',
+    nameLower: 'desk lamp',
+    deletedAt: null,
     slug: 'desk-lamp',
     status: 'active',
     type: 'physical',
@@ -92,6 +98,8 @@ const productDocs = [
   {
     $id: 'prod-2',
     name: 'Bookend',
+    nameLower: 'bookend',
+    deletedAt: null,
     slug: 'bookend',
     status: 'active',
     type: 'physical',
@@ -112,6 +120,24 @@ const collections: Record<string, Array<Record<string, unknown>>> = {
     return adjustmentDocs
   },
 }
+
+/*
+ * The ledger is a LIST QUERY (AGL-3321): every clause is on the query, and
+ * its pages are the query's. The contract's double stands in for
+ * `useListQuery`: it runs the real plan and answers it over the fixture for
+ * the collection asked, the way Firestore would.
+ */
+const mockCollections = () => collections
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: { collection: string }) =>
+      useListQueryDouble(() => mockCollections()[options.collection] ?? [], options),
+  }
+})
 
 const mockCreateResource = jest.fn().mockResolvedValue({ id: 'prod-new' })
 
@@ -155,10 +181,9 @@ jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, _a: string, _b: string, name: string) => name,
   query: (name: string) => name,
   limit: () => undefined,
-  // The movements card orders newest-first in the QUERY (a single-field
-  // index, so no composite and no index drift). The double has to accept it
-  // and stay transparent, or the builder stops returning a collection name
-  // and the card silently reads nothing.
+  // The products hub orders its reads in the QUERY. The double has to accept
+  // it and stay transparent, or the builder stops returning a collection name
+  // and the hub silently reads nothing.
   orderBy: () => undefined,
   doc: () => ({}),
   deleteDoc: jest.fn(),
@@ -294,10 +319,15 @@ describe('EACH ROW carries its own number', () => {
     expect(rows[2].textContent).toContain('-1')
   })
 
-  it('finds a movement through the grid’s own search (AGL-3317)', async () => {
+  it('finds a movement by its order, through the Order filter on the query (AGL-3321)', () => {
     render(<StockMovementsCard hostId="host-1" />)
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'ord-77' } })
-    await waitFor(() => expect(screen.queryByText('+25')).toBeNull())
+    act(() =>
+      mockGrid.onFilterModelChange({
+        items: [{ id: 'panel', field: 'orderId', operator: 'equals', value: 'ord-77' }],
+        quickFilterValues: mockGrid.filterModel.quickFilterValues,
+      }),
+    )
+    expect(screen.queryByText('+25')).toBeNull()
     expect(screen.getByText('-3')).toBeTruthy()
   })
 

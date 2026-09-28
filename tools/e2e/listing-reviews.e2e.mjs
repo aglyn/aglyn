@@ -29,6 +29,7 @@
 import { initializeApp, getApps } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
+import { listingQueryFieldsPatch } from '../scripts/lib/listing-query-fields.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 process.env.FIRESTORE_EMULATOR_HOST ??= 'localhost:8082'
@@ -78,12 +79,17 @@ const PUBLISHER_ORG = 'e2e-owner' // the org e2e-owner belongs to
 const RATER = 'e2e-nonstaff-owner' // owns a different org
 
 const listingRef = db.collection('marketplaceListings').doc(LISTING)
-await listingRef.set({
+const listingFields = {
   displayName: 'Reviewed Thing',
   artifactType: 'component',
   profileId: PUBLISHER_ORG,
   latestVersion: 1,
   priceUsd: 0,
+}
+// What the marketplace lists query by (AGL-3321), as every writer stamps it.
+await listingRef.set({
+  ...listingFields,
+  ...listingQueryFieldsPatch(listingFields),
   createdAt: new Date(),
 })
 // Start from a clean slate so counts are absolute, not cumulative.

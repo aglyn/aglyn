@@ -17,23 +17,26 @@
 
 import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 
+import { CRM_NEXT_ACTIVITY_FILTER_FIELD } from '../components/crm-next-activity-column'
+import type { ListQueryDeclaration, ListQuerySort } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { CRM_LIST_SEARCH } from '../model/crm-list-query'
+
 /*
- * Companies (`orgs/{orgId}/companies`, read scoped to a host).
+ * Companies (`orgs/{orgId}/companies`, read scoped to a host) — every clause
+ * and the search word on the list's one query, newest change first
+ * (AGL-3321).
  *
- * Every predicate here is appended to the listener's `visibleTo
- * array-contains-any`, which is the constraint that decides what a company
- * filter may be. Firestore carries ONE array clause per query, so the
- * word-prefix `contains` search the contact list declares through
- * `nameTokens` cannot run beside the scope predicate — a query with both is
- * refused outright, not served slowly. The name is therefore offered as a
- * PREFIX range and an exact match over `nameLower`, which the
- * `(visibleTo CONTAINS, nameLower ASC)` index serves with the scope in
- * place. No `tokensPath`, deliberately.
+ * The search box reads `searchTokens`, the word prefixes of the name and
+ * the domain every company writer stamps (`crmCompanyListFields`). Under a
+ * site the scope clause (`visibleTo array-contains-any`) is the query's one
+ * array clause, and the search folds into it (`scopedSearchTokens`) for a
+ * reader who may drop it.
  *
- * `ownerUid` is declared so the translator can answer it; the column itself
- * renders a person's name from the roster and offers a single-select
- * operator in the panel, which the section maps onto this field's `equals`.
- * Served by `(visibleTo CONTAINS, ownerUid ASC)`.
+ * The name is also an exact match and a PREFIX range over `nameLower` — the
+ * list's one range, which then orders the list by name. The owner is a
+ * choice from the roster, and "No next activity" asks `nextTaskAtMs ==
+ * null`. Each equality rides one `(field, updatedAt DESC)` composite, and
+ * one `(field, nameLower ASC)` beside it for the prefix.
  */
 export const COMPANY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   {
@@ -42,11 +45,35 @@ export const COMPANY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     path: 'name',
     lowerPath: 'nameLower',
     presence: 'always',
+    operators: ['equals', 'startsWith'],
   },
   {
     column: 'ownerUid',
     kind: 'exact',
     path: 'ownerUid',
-    operators: ['equals'],
+    operators: ['equals', 'isAnyOf'],
   },
+  CRM_NEXT_ACTIVITY_FILTER_FIELD,
 ]
+
+/**
+ * A collaborator's search (see `prefixSearch` in `useCrmListQuery`): the
+ * start of the name, beside the scope clause — the prefix range the
+ * `(field, nameLower)` composites already serve.
+ */
+export const COMPANY_PREFIX_SEARCH = {
+  field: COMPANY_LIST_FILTER_FIELDS[0],
+  notice: 'Search matches the start of a company’s name for access limited to specific sites.',
+}
+
+/** The list's orders: newest change first, and by name under a prefix. */
+export const COMPANY_LIST_SORTS: readonly ListQuerySort[] = [
+  { path: 'updatedAt', direction: 'desc' },
+  { path: 'nameLower', direction: 'asc' },
+]
+
+export const COMPANY_LIST_DECLARATION: ListQueryDeclaration = {
+  fields: COMPANY_LIST_FILTER_FIELDS,
+  sorts: COMPANY_LIST_SORTS,
+  search: CRM_LIST_SEARCH,
+}

@@ -65,6 +65,7 @@ import {
 import { invalidateTokenRevocationCache } from './token-revocation'
 import firebaseAdmin from './firebase-admin'
 import { notifyUsers } from './notifications'
+import { addAdminAudit } from './admin-audit-write'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -257,7 +258,7 @@ export async function enforceSsoSignInMethods(
       // This process refuses the old token NOW (AGL-1881); every other one
       // converges within TOKEN_REVOCATION_TTL_MS.
       invalidateTokenRevocationCache(record.uid, tenantId)
-      await db.collection('adminAudit').add({
+      await addAdminAudit(db, {
         actorUid,
         action: 'org.sso.enforceSignInMethods',
         target: `users/${record.uid}`,

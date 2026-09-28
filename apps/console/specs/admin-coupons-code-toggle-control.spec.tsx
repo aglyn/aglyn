@@ -37,9 +37,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
  * own idea of where sign-off starts is the bug this arm exists to catch.
  */
 
+// One user object for the whole run, as the real hook holds it in state: the
+// list re-reads whenever the signed-in user changes, so a fresh object per
+// render would read as a new user every render.
+const mockUser = { uid: 'staff-1', getIdToken: async () => 'tok' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
-  useUser: () => ({ data: { uid: 'staff-1', getIdToken: async () => 'tok' } }),
+  useUser: () => ({ data: mockUser }),
 }))
 
 const mockEnqueueSnackbar = jest.fn()
@@ -84,33 +88,63 @@ jest.mock('../constants/docs-links', () => ({
   docsHelp: () => ({}),
 }))
 
+// The route's parser is used to answer the page below; the Admin SDK half
+// of its module is not.
+jest.mock('../utils/server/list-filter', () => ({
+  __esModule: true,
+  applyListQuery: jest.fn(),
+}))
+
 import AdminCoupons from '../app/(app)/admin/coupons/page'
+import {
+  COUPON_FILTER_FIELDS,
+  COUPON_SEARCH_PATHS,
+  couponListRow,
+} from '../utils/coupon-list-query'
+import { answerStaffCompleteList } from '../utils/server/staff-complete-list'
+import { readStaffListQuery } from '../utils/server/staff-list-query'
 
 /** Every non-GET body the page sent to `/api/admin/coupons`. */
 let writes: any[]
 
+/** Every list read the page sent, as the URL it asked. */
+let reads: URL[]
+
 /**
- * One coupon with one promotion code, as `GET /api/admin/coupons` returns it.
- * The list is re-read after a write, so the double flips the code's `active`
- * to whatever the write asked for — a fixture that always answered the same
- * way could not tell a page that re-reads from one that does not.
+ * One coupon with one promotion code, answered the way `GET
+ * /api/admin/coupons?view=list` answers: the route's own matcher over the
+ * whole set, so a clause or a search word the page sends is answered by the
+ * route and never by the page. The list is re-read after a write, so the
+ * double flips the code's `active` to whatever the write asked for — a
+ * fixture that always answered the same way could not tell a page that
+ * re-reads from one that does not.
  */
 const mockApi = (coupon: { percentOff: number; active: boolean }) => {
   writes = []
+  reads = []
   let active = coupon.active
-  ;(globalThis as any).fetch = jest.fn(async (_url: string, init: any = {}) => {
+  ;(globalThis as any).fetch = jest.fn(async (rawUrl: string, init: any = {}) => {
     if ((init.method ?? 'GET') !== 'GET') {
       const body = JSON.parse(init.body)
       writes.push(body)
       active = body.action === 'activate'
       return { ok: true, status: 200, json: async () => ({ code: { active } }) }
     }
+    const url = new URL(rawUrl, 'https://console.aglyn.com')
+    reads.push(url)
+    const request = readStaffListQuery(Object.fromEntries(url.searchParams))
+    if (!request) throw new Error(`unreadable list request ${rawUrl}`)
     return {
       ok: true,
       status: 200,
-      json: async () => ({
-        coupons: [
-          {
+      json: async () =>
+        answerStaffCompleteList({
+          fields: COUPON_FILTER_FIELDS,
+          searchPaths: COUPON_SEARCH_PATHS,
+          request,
+          cursorOf: (row) => row.id,
+          rows: [
+            {
             id: 'cpn_1',
             name: 'Smoke test',
             percentOff: coupon.percentOff,
@@ -130,8 +164,8 @@ const mockApi = (coupon: { percentOff: number; active: boolean }) => {
               },
             ],
           },
-        ],
-      }),
+          ].map(couponListRow),
+        }),
     }
   })
 }
@@ -142,15 +176,28 @@ beforeEach(() => {
 })
 
 describe('/admin/coupons promotion code activate/deactivate', () => {
-  it('searches the coupons by promotion code from the grid toolbar', async () => {
+  it('reads the page’s list, not the apply picker’s whole set', async () => {
     render(<AdminCoupons />)
     await screen.findByText('AGLYNSMOKELIVE')
+    expect(reads[0].pathname).toBe('/api/admin/coupons')
+    expect(reads[0].searchParams.get('view')).toBe('list')
+  })
+
+  it('sends the search to the route, which answers it over every coupon', async () => {
+    render(<AdminCoupons />)
+    await screen.findByText('AGLYNSMOKELIVE')
+    // The grid's quick filter and the list's own search each settle before a
+    // read goes out, so the wait is longer than a render.
+    const settled = { timeout: 3000 }
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nosuchcode' } })
-    await waitFor(() =>
-      expect(screen.getByText('No coupons match these filters')).toBeTruthy(),
+    await waitFor(
+      () => expect(screen.getByText('No coupons match these filters')).toBeTruthy(),
+      settled,
     )
+    expect(reads[reads.length - 1].searchParams.get('search')).toBe('nosuchcode')
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'smokelive' } })
-    await waitFor(() => expect(screen.getByText('AGLYNSMOKELIVE')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('AGLYNSMOKELIVE')).toBeTruthy(), settled)
+    expect(reads[reads.length - 1].searchParams.get('search')).toBe('smokelive')
   })
 
   it('offers Activate on an inactive code', async () => {

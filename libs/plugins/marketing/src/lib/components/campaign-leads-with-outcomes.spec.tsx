@@ -55,6 +55,33 @@ let sends: Record<string, unknown>[] = []
 
 const describeQuery = (parts: string[]): string => parts.join('|')
 
+/*
+ * The campaign's emails table is its own list query (AGL-3321), answered by
+ * the shared double over the same staged sends, each as the backfilled
+ * corpus holds it: dated, and carrying the campaign and site the query's
+ * scope names.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: any) =>
+    jest
+      .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+      .useListQueryDouble(
+        () =>
+          options.collection
+            ? sends.map((send: any, at: number) => ({
+                createdAtMs: 1_000_000 - at,
+                ...Object.fromEntries(
+                  (options.request.base ?? [])
+                    .filter((filter: any) => filter.op === '==')
+                    .map((filter: any) => [filter.path, filter.value]),
+                ),
+                ...send,
+              }))
+            : [],
+        options,
+      ),
+}))
+
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
   collection: (_db: unknown, ...segments: string[]) => ({

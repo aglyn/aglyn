@@ -31,8 +31,10 @@ import {
   outreachCurrentStepLabel,
   outreachStopLabel,
 } from './enrollments-table'
+import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
+import { outreachEnrollmentSearchTokens } from '../enrollment/enrollment-search'
 import type { OutreachApi } from './use-outreach-api'
-import type { OutreachEnrollmentsLoad } from './use-outreach-data'
+import type { OutreachLoadStatus } from './use-outreach-data'
 
 /**
  * A sequence's enrollments (AGL-2980): each state the read can be in, the
@@ -40,6 +42,49 @@ import type { OutreachEnrollmentsLoad } from './use-outreach-data'
  * mailbox's timezone, last activity, stop reason — and the four actions,
  * the two final ones asked first.
  */
+
+/*
+ * The table's page, answered by the list-query DOUBLE over the fixture
+ * enrollments (AGL-3321): the real plan of the table's declaration, applied
+ * the way Firestore would apply it, a page at a time — so a spec proves what
+ * the query asked for and that a match past the first page is found.
+ */
+let mockLoad: { status: OutreachLoadStatus; data: OutreachEnrollment[] }
+jest.mock('./use-outreach-data', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  const { OUTREACH_ENROLLMENT_LIST_QUERY, outreachEnrollmentListBase } = jest.requireActual(
+    '../model/enrollment-list-query',
+  )
+  return {
+    useOutreachEnrollmentList: (
+      _orgId: string,
+      sequenceId: string,
+      request: Record<string, unknown>,
+    ) => {
+      const listed = useListQueryDouble(
+        () => mockLoad.data.map((row) => ({ ...row, $id: row.id })),
+        {
+          collection: null,
+          declaration: OUTREACH_ENROLLMENT_LIST_QUERY,
+          request: { ...request, base: outreachEnrollmentListBase(sequenceId) },
+          deps: [],
+        },
+      )
+      return {
+        status: mockLoad.status,
+        rows: mockLoad.status === 'ready' ? listed.rows : [],
+        hasMore: listed.hasMore,
+        page: listed.page,
+        setPage: listed.setPage,
+        pageSize: listed.pageSize,
+        setPageSize: listed.setPageSize,
+        plan: listed.plan,
+      }
+    },
+  }
+})
 
 const mockEnqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
@@ -79,10 +124,11 @@ const DUE = Date.parse('2026-09-22T14:14:00Z')
 
 const enrollment = (
   overrides: Partial<OutreachEnrollment>,
-): OutreachEnrollment =>
-  ({
+): OutreachEnrollment => {
+  const made = {
     id: 'seq-1_c-1',
     sequenceId: 'seq-1',
+    target: 'contact',
     contactId: 'c-1',
     contactName: 'Casey Morgan',
     email: 'casey.morgan@example.com',
@@ -95,31 +141,31 @@ const enrollment = (
     lastSentAtMs: Date.parse('2026-09-18T15:00:00Z'),
     createdAtMs: Date.parse('2026-09-17T15:00:00Z'),
     ...overrides,
-  }) as OutreachEnrollment
+  } as OutreachEnrollment
+  // What the enroll route stamps beside the name and the address.
+  return { ...made, searchTokens: outreachEnrollmentSearchTokens(made) }
+}
 
 const loaded = (
   data: OutreachEnrollment[],
-  extra: Partial<OutreachEnrollmentsLoad> = {},
-): OutreachEnrollmentsLoad => ({
-  status: 'ready',
-  data,
-  hasMore: false,
-  showMore: jest.fn(),
-  ...extra,
-})
+  extra: { status?: OutreachLoadStatus } = {},
+) => ({ status: extra.status ?? ('ready' as OutreachLoadStatus), data })
 
 let api: jest.Mocked<Pick<OutreachApi, 'actOnEnrollment' | 'curateDrafts' | 'saveCuratedStep'>>
 
-const renderTable = (enrollments: OutreachEnrollmentsLoad) =>
-  render(
+const renderTable = (load: ReturnType<typeof loaded>) => {
+  mockLoad = load
+  return render(
     <OutreachEnrollmentsTable
-      enrollments={enrollments}
+      orgId="org-1"
+      sequenceId="seq-1"
       steps={steps}
       timeZone="America/Chicago"
       api={api as unknown as OutreachApi}
       enrollAction={<button>Enroll people</button>}
     />,
   )
+}
 
 const rowOf = (name: string) =>
   screen
@@ -141,15 +187,12 @@ beforeEach(() => {
 })
 
 describe('the enrollments table: what it shows (AGL-2980)', () => {
-  it('filters through the grid’s own search, and says it narrows the window read so far (AGL-3317)', async () => {
+  it('searches on the query, by a word of the name or the address (AGL-3321)', async () => {
     renderTable(
-      loaded(
-        [
-          enrollment({}),
-          enrollment({ id: 'seq-1_c-2', contactId: 'c-2', contactName: '', email: 'avery.quinn@example.org' }),
-        ],
-        { hasMore: true },
-      ),
+      loaded([
+        enrollment({}),
+        enrollment({ id: 'seq-1_c-2', contactId: 'c-2', contactName: '', email: 'avery.quinn@example.org' }),
+      ]),
     )
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'avery' } })
     await waitFor(() => {
@@ -157,7 +200,30 @@ describe('the enrollments table: what it shows (AGL-2980)', () => {
       expect(grid.textContent).toContain('avery.quinn@example.org')
       expect(grid.textContent).not.toContain('Morgan')
     })
-    expect(screen.getByText(/Filtering the 2 enrollments read so far/)).toBeTruthy()
+    expect(lastListQueryPlan()?.filters).toEqual([
+      { path: 'sequenceId', op: '==', value: 'seq-1' },
+      { path: 'searchTokens', op: 'array-contains', value: 'avery' },
+    ])
+    expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'createdAtMs', direction: 'desc' })
+  })
+
+  it('finds a match past the first page, which the loaded rows never held (AGL-3321)', async () => {
+    const many = Array.from({ length: 25 }, (_, index) =>
+      enrollment({
+        id: `seq-1_c-${index}`,
+        contactId: `c-${index}`,
+        contactName: index === 24 ? 'Zed Oldest' : `Person ${index}`,
+        email: `p${index}@example.com`,
+        // Newest first: the last one made is the first one listed.
+        createdAtMs: Date.parse('2026-09-17T15:00:00Z') - index * 60_000,
+      }),
+    )
+    renderTable(loaded(many))
+    expect(screen.getByRole('grid', { name: 'Enrollments' }).textContent).not.toContain('Zed')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zed' } })
+    await waitFor(() =>
+      expect(screen.getByRole('grid', { name: 'Enrollments' }).textContent).toContain('Zed Oldest'),
+    )
   })
 
   it('shows progress, a failure, a refusal, and an empty sequence with the way to enroll', () => {
@@ -221,19 +287,19 @@ describe('the enrollments table: what it shows (AGL-2980)', () => {
     expect(outreachStopLabel({ stopReason: null, stopDetail: null })).toBe('')
   })
 
-  it('pages the rows it read, and reads another window past the last of them', () => {
-    const showMore = jest.fn()
+  it('pages through the query, a page at a time', async () => {
     const many = Array.from({ length: 12 }, (_, index) =>
       enrollment({
         id: `seq-1_c-${index}`,
         contactId: `c-${index}`,
         contactName: `Person ${index}`,
+        createdAtMs: Date.parse('2026-09-17T15:00:00Z') - index * 60_000,
       }),
     )
-    renderTable(loaded(many, { hasMore: true, showMore }))
+    renderTable(loaded(many))
     expect(screen.getAllByRole('row')).toHaveLength(11)
     fireEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
-    expect(showMore).toHaveBeenCalled()
+    await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(3))
   })
 })
 

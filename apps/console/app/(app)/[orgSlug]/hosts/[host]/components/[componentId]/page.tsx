@@ -17,6 +17,7 @@
 'use client'
 
 import * as Aglyn from '@aglyn/aglyn'
+import { artifactRenameListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
   ICON_VARIANT_APP_SETTINGS,
   ICON_VARIANT_BESIGNER,
@@ -148,7 +149,13 @@ const ComponentDetails: NextPageWithLayout<Record<string, never>> = () => {
       // `updateDoc` on a converter-less ref: field-scoped writes stay field
       // scoped here, unlike the besigner's version docs (AGL-1250).
       await updateDoc(doc(firestore, 'hosts', hostId, 'components', componentId), {
-        ...(name != null ? { displayName: name.trim() } : {}),
+        ...(name != null
+          ? {
+              displayName: name.trim(),
+              // The keys the components list finds it by (AGL-3321).
+              ...artifactRenameListKeys('components', name.trim()),
+            }
+          : {}),
         ...(description != null ? { description: description.trim() } : {}),
         ...(icon != null ? { icon } : {}),
         updatedAt: Timestamp.now(),

@@ -18,6 +18,7 @@
 import type { AttemptClaim, PluginApiHandler } from '@aglyn/aglyn/server'
 import * as Aglyn from '@aglyn/aglyn/server'
 import * as CommerceModel from '../model'
+import { checkoutRecoveryState } from '../model/checkout-recovery'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
@@ -1089,6 +1090,9 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
         itemsCents,
         resumeUrl: backUrl,
         status: 'open',
+        // Explicit, so the recovery queue can COUNT it (AGL-3321): a query
+        // cannot ask for a checkout that lacks an email or a reminder.
+        recoveryState: checkoutRecoveryState({ email }),
         createdAtMs: Date.now(),
       })
       .catch(() => undefined)

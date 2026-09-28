@@ -18,14 +18,22 @@
 
 import type { CampaignLinkRollup } from '@aglyn/shared-ui-email-campaigns/model'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import type {
+  ListQueryDeclaration,
+  ListQueryPlan,
+  ListQueryRequest,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   collection,
   doc,
+  type DocumentData,
   documentId,
   getCountFromServer,
   limit,
   onSnapshot,
   orderBy,
+  type Query,
   query,
   where,
 } from 'firebase/firestore'
@@ -42,6 +50,12 @@ import {
   readStoredOutreachEnrollment,
   readStoredOutreachSequence,
 } from '../model/stored-records'
+import { OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY } from '../model/do-not-contact-domain-list-query'
+import {
+  OUTREACH_ENROLLMENT_LIST_QUERY,
+  outreachEnrollmentListBase,
+} from '../model/enrollment-list-query'
+import { OUTREACH_SEQUENCE_LIST_QUERY } from '../model/sequence-list-query'
 
 /**
  * The Outreach documents the console reads LIVE (AGL-2980): sequences,
@@ -73,53 +87,98 @@ function failed<T>(data: T, error: unknown, what: string): OutreachLoad<T> {
   return { status: 'error', data }
 }
 
-/** The most sequences the list reads. */
-export const OUTREACH_SEQUENCES_LIMIT = 200
-
-/** The sequences read, and whether the organization holds older ones. */
-export interface OutreachSequencesLoad extends OutreachLoad<OutreachSequence[]> {
-  /** True when there are sequences older than the `OUTREACH_SEQUENCES_LIMIT` read. */
-  truncated?: boolean
+/**
+ * One page of a list whose every filter and search word is on its Firestore
+ * query (AGL-3321): the rows of the page on screen, whether another page
+ * exists, the pager, and the plan — what the query holds and what it could
+ * not take, which the list says above itself.
+ */
+export interface OutreachListPage<T> {
+  status: OutreachLoadStatus
+  rows: T[]
+  hasMore: boolean
+  page: number
+  setPage(page: number): void
+  pageSize: number
+  setPageSize(pageSize: number): void
+  plan: ListQueryPlan
 }
 
-/** The organization's sequences, newest first. */
-export function useOutreachSequences(
-  orgId: string | null,
-): OutreachSequencesLoad {
-  const firestore = useFirestore()
-  const [result, setResult] = useState<OutreachSequencesLoad>({
-    status: 'loading',
-    data: [],
+/**
+ * A list read through `useListQuery`, in this module's four states and with
+ * each document read through its stored-record reader. A document the reader
+ * cannot make sense of is left out, as every Outreach read leaves it out.
+ */
+function useOutreachListQuery<T>(options: {
+  collection: Query<DocumentData> | null
+  declaration: ListQueryDeclaration
+  request: ListQueryRequest
+  deps: readonly unknown[]
+  read(id: string, data: DocumentData): T | null
+  what: string
+}): OutreachListPage<T> {
+  const listed = useListQuery<DocumentData & { $id: string }>({
+    collection: options.collection,
+    declaration: options.declaration,
+    request: options.request,
+    deps: options.deps,
+    idField: '$id',
   })
+  const { read, what } = options
+  const rows = useMemo(
+    () =>
+      listed.rows
+        .map((row) => read(String(row.$id), row))
+        .filter((row): row is NonNullable<typeof row> => row !== null) as T[],
+    [listed.rows, read],
+  )
+  const refused = listed.serverDenied || denied(listed.error)
   useEffect(() => {
-    setResult({ status: 'loading', data: [] })
-    if (!orgId) return undefined
-    return onSnapshot(
-      query(
-        collection(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.sequences),
-        // Ordered, so the cap keeps the newest rather than an arbitrary set;
-        // every sequence carries `createdAtMs`, stamped by the save route.
-        orderBy('createdAtMs', 'desc'),
-        // One past the cap: the extra document says there are older
-        // sequences, and is never listed.
-        limit(OUTREACH_SEQUENCES_LIMIT + 1),
-      ),
-      (snapshot) => {
-        const sequences = snapshot.docs
-          .slice(0, OUTREACH_SEQUENCES_LIMIT)
-          .map((entry) => readStoredOutreachSequence(entry.id, entry.data()))
-          .filter((sequence): sequence is OutreachSequence => sequence !== null)
-          .sort((a, b) => b.createdAtMs - a.createdAtMs)
-        setResult({
-          status: 'ready',
-          data: sequences,
-          truncated: snapshot.docs.length > OUTREACH_SEQUENCES_LIMIT,
-        })
-      },
-      (error) => setResult(failed([], error, 'sequences')),
-    )
-  }, [firestore, orgId])
-  return result
+    if (listed.status === 'error' && !refused) {
+      console.error(`[outreach] ${what} could not be read`, listed.error)
+    }
+  }, [listed.status, listed.error, refused, what])
+  return {
+    status:
+      listed.status === 'loading'
+        ? 'loading'
+        : listed.status === 'error'
+          ? refused
+            ? 'refused'
+            : 'error'
+          : 'ready',
+    rows,
+    hasMore: listed.hasMore,
+    page: listed.page,
+    setPage: listed.setPage,
+    pageSize: listed.pageSize,
+    setPageSize: listed.setPageSize,
+    plan: listed.plan,
+  }
+}
+
+const readSequence = (id: string, data: DocumentData) =>
+  readStoredOutreachSequence(id, data)
+
+/**
+ * The organization's sequences, newest first, one page at a time — each
+ * clause and the search on the query (`OUTREACH_SEQUENCE_LIST_QUERY`).
+ */
+export function useOutreachSequenceList(
+  orgId: string | null,
+  request: ListQueryRequest,
+): OutreachListPage<OutreachSequence> {
+  const firestore = useFirestore()
+  return useOutreachListQuery({
+    collection: orgId
+      ? collection(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.sequences)
+      : null,
+    declaration: OUTREACH_SEQUENCE_LIST_QUERY,
+    request,
+    deps: [firestore, orgId],
+    read: readSequence,
+    what: 'sequences',
+  })
 }
 
 /** One sequence, or `null` once it is known not to exist. */
@@ -194,104 +253,60 @@ export function useOutreachSequenceLinks(
   return result
 }
 
+const readDomain = (id: string, data: DocumentData): OutreachDoNotContactDomainEntry => ({
+  ...(data as OutreachDoNotContactDomainEntry),
+  domain: id,
+})
+
 /**
  * The domains on the organization's do-not-contact list (AGL-3244),
- * alphabetically, live: an add or a remove through the route shows up here
- * without a reload, and so does a domain the sending runtime files after a
- * gateway block.
+ * alphabetically — the document id is the domain — one page at a time, live:
+ * an add or a remove through the route shows up without a reload, and so
+ * does a domain the sending runtime files after a gateway block. Each clause
+ * and the search are on the query (`OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY`).
  */
-export function useOutreachDoNotContactDomains(
+export function useOutreachDoNotContactDomainList(
   orgId: string | null,
-): OutreachLoad<OutreachDoNotContactDomainEntry[]> {
+  request: ListQueryRequest,
+): OutreachListPage<OutreachDoNotContactDomainEntry> {
   const firestore = useFirestore()
-  const [result, setResult] = useState<OutreachLoad<OutreachDoNotContactDomainEntry[]>>({
-    status: 'loading',
-    data: [],
+  return useOutreachListQuery({
+    collection: orgId
+      ? collection(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.doNotContactDomains)
+      : null,
+    declaration: OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY,
+    request,
+    deps: [firestore, orgId],
+    read: readDomain,
+    what: 'the do-not-contact domains',
   })
-  useEffect(() => {
-    setResult({ status: 'loading', data: [] })
-    if (!orgId) return undefined
-    return onSnapshot(
-      collection(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.doNotContactDomains),
-      (snapshot) => {
-        const domains = snapshot.docs
-          .map((entry) => ({ ...(entry.data() as OutreachDoNotContactDomainEntry), domain: entry.id }))
-          .sort((a, b) => a.domain.localeCompare(b.domain))
-        setResult({ status: 'ready', data: domains })
-      },
-      (error) => setResult(failed([], error, 'the do-not-contact domains')),
-    )
-  }, [firestore, orgId])
-  return result
 }
 
-/** How many enrollments one page of the table reads; "Show more" reads another. */
-export const OUTREACH_ENROLLMENTS_PAGE = 200
-
-export interface OutreachEnrollmentsLoad extends OutreachLoad<
-  OutreachEnrollment[]
-> {
-  /** Whether a further page may exist. */
-  hasMore: boolean
-  showMore(): void
-}
+const readEnrollment = (id: string, data: DocumentData) =>
+  readStoredOutreachEnrollment(id, data)
 
 /**
- * A sequence's enrollments, the most recently enrolled first.
- *
- * Paged by document id — an equality on `sequenceId` in the id's own order
- * needs no composite index — and sorted by enrollment time once read, so a
- * table of up to a page reads in the order people were enrolled.
+ * A sequence's enrollments, the most recently enrolled first, one page at a
+ * time — the sequence is the query's base (`sequenceId ==`), and each clause
+ * and the search are on it beside that (`OUTREACH_ENROLLMENT_LIST_QUERY`).
  */
-export function useOutreachEnrollments(
+export function useOutreachEnrollmentList(
   orgId: string | null,
   sequenceId: string | null,
-): OutreachEnrollmentsLoad {
+  request: Omit<ListQueryRequest, 'base'>,
+): OutreachListPage<OutreachEnrollment> {
   const firestore = useFirestore()
-  const [pages, setPages] = useState(1)
-  const [result, setResult] = useState<
-    OutreachLoad<OutreachEnrollment[]> & { size: number }
-  >({
-    status: 'loading',
-    data: [],
-    size: 0,
+  return useOutreachListQuery({
+    collection:
+      orgId && sequenceId
+        ? collection(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.enrollments)
+        : null,
+    declaration: OUTREACH_ENROLLMENT_LIST_QUERY,
+    request: { ...request, base: sequenceId ? outreachEnrollmentListBase(sequenceId) : [] },
+    deps: [firestore, orgId, sequenceId],
+    read: readEnrollment,
+    what: 'the enrollments',
   })
-  useEffect(() => setPages(1), [orgId, sequenceId])
-  useEffect(() => {
-    if (!orgId || !sequenceId) {
-      setResult({ status: 'loading', data: [], size: 0 })
-      return undefined
-    }
-    return onSnapshot(
-      query(
-        collection(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.enrollments),
-        where('sequenceId', '==', sequenceId),
-        orderBy(documentId()),
-        limit(pages * OUTREACH_ENROLLMENTS_PAGE),
-      ),
-      (snapshot) => {
-        const enrollments = snapshot.docs
-          .map((entry) => readStoredOutreachEnrollment(entry.id, entry.data()))
-          .filter(
-            (enrollment): enrollment is OutreachEnrollment =>
-              enrollment !== null,
-          )
-          .sort((a, b) => b.createdAtMs - a.createdAtMs)
-        setResult({ status: 'ready', data: enrollments, size: snapshot.size })
-      },
-      (error) =>
-        setResult({ ...failed([], error, 'the enrollments'), size: 0 }),
-    )
-  }, [firestore, orgId, sequenceId, pages])
-  return useMemo(
-    () => ({
-      status: result.status,
-      data: result.data,
-      hasMore: result.size >= pages * OUTREACH_ENROLLMENTS_PAGE,
-      showMore: () => setPages((count) => count + 1),
-    }),
-    [result, pages],
-  )
 }
 
 /** The counts the sequence list shows beside each sequence. */

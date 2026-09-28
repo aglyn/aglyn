@@ -56,6 +56,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { SuppressionsCard } from './suppressions-card'
 
 jest.setTimeout(30_000)
@@ -82,13 +83,21 @@ const TOTAL = 60
  *    with AGL-1918 and nothing back-filled it;
  *  * the same oldest third carries no `reason`, which is what makes
  *    "unsubscribed" a REMAINDER rather than a `where` clause.
+ *
+ * Every row carries `emailTokens`, the search keys each writer stamps and
+ * the backfill stamps on the rows before them (AGL-3321): the address's
+ * word prefixes, here built from the same words `emailSearchTokens` splits.
  */
+const tokensFor = (email: string) =>
+  nameSearchTokens([email, ...email.split(/[@._+-]+/)].join(' '))
 const rows = Array.from({ length: TOTAL }, (_, index) => {
   const legacy = index < 20
   const day = TOTAL - index
+  const email = `person${String(index).padStart(2, '0')}@example.test`
   return {
     $id: `${String(TOTAL - 1 - index).padStart(2, '0')}a1b2c3`,
-    email: `person${String(index).padStart(2, '0')}@example.test`,
+    email,
+    emailTokens: tokensFor(email),
     createdAt: { seconds: day * 86_400 },
     ...(legacy ? {} : { suppressedAt: { seconds: (day + 1) * 86_400 } }),
     ...(legacy
@@ -142,8 +151,9 @@ const firestoreAnswer = (
   return typeof cap === 'number' ? sorted.slice(0, cap) : sorted
 }
 
-/** Every page limit the card asked its query builder for, in order. */
-let mockLimitsAsked: number[] = []
+/** The plan the card asked its query for last. */
+const lastPlan = (): { orderBy: { path: string; direction: string }; filters: unknown[] } | null =>
+  jest.requireActual('@aglyn/tenant-feature-instance/testing/list-query-double').lastListQueryPlan()
 
 /**
  * ONE Firestore handle for the whole file.
@@ -161,37 +171,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // returning undefined throws on destructure and would take every paging
   // case with it — a harness failure wearing a product failure's clothes.
   useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'tok' } }),
-  /*
-   * The real hook's arithmetic over a query that is actually EVALUATED.
-   * `usePagedCollection` widens the query to cover page 0..n plus a probe row
-   * and slices the page out of the answer; feeding that widened query through
-   * `firestoreAnswer` is what makes the ordering the card chose observable in
-   * the rendered rows rather than only in its source.
-   */
-  usePagedCollection: (build: (pageLimit: number) => any) => {
-    const { useState } = require('react')
-    const [page, setPage] = useState(0)
-    const [pageSize, setPageSizeState] = useState(10)
-    const windowSize = pageSize * (page + 1)
-    mockLimitsAsked.push(windowSize + 1)
-    const built = build(windowSize + 1)
-    const answered = firestoreAnswer(rows, built?.constraints ?? [])
-    return {
-      data: answered,
-      rows: answered.slice(page * pageSize, windowSize),
-      hasMore: answered.length > windowSize,
-      page,
-      setPage,
-      pageSize,
-      setPageSize: (next: number) => {
-        setPageSizeState(next)
-        setPage(0)
-      },
-      status: 'success',
-      fromCache: false,
-    }
-  },
 }))
+
+/*
+ * The card's REAL plan, answered the way Firestore would answer it: every
+ * predicate applied, `orderBy` sorting AND dropping a row without the field,
+ * and the answer paged (AGL-3321). What the card asked for is observable in
+ * the rendered rows rather than only in its source.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() => rows, jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')),
+)
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
@@ -244,7 +236,6 @@ beforeEach(() => {
     ok: true,
     json: async () => ({ platform: [] }),
   }) as unknown as typeof fetch
-  mockLimitsAsked = []
 })
 
 const mountCard = async () => {
@@ -314,18 +305,14 @@ describe('the suppression list walks the collection (AGL-2501)', () => {
     expect(renderedAddresses()).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
   })
 
-  it('the window GROWS with the page instead of being a fixed ceiling', async () => {
+  it('asks the QUERY for the newest first, with nothing narrowing it', async () => {
     await mountCard()
-    // One page plus the probe row that makes `hasMore` a fact rather than a
-    // guess from `length === pageSize`.
-    expect(mockLimitsAsked.at(-1)).toBe(TABLE_PAGE_SIZE_DEFAULT + 1)
-    fireEvent.click(screen.getByLabelText('Go to next page'))
-    await waitFor(() =>
-      expect(mockLimitsAsked.at(-1)).toBe(TABLE_PAGE_SIZE_DEFAULT * 2 + 1),
-    )
-    // The property the old query lacked: nothing caps the walk at a number a
-    // long suppression list can exceed.
-    expect(mockLimitsAsked).not.toContain(501)
+    // The pager (`usePagedCollection`, under `useListQuery`) grows the limit
+    // with the page; what the card owns is the order and the predicates.
+    expect(lastPlan()).toMatchObject({
+      orderBy: { path: 'createdAt', direction: 'desc' },
+      filters: [],
+    })
   })
 
   it('THE TRAP: ordering on `suppressedAt` would hide rows, not reorder them', () => {
@@ -396,10 +383,14 @@ describe('the breakdown counts the COLLECTION, not the page (AGL-2501)', () => {
   })
 })
 
-describe('the suppression list filters through the grid toolbar (AGL-3317)', () => {
-  it('searches every entry its window read, not only the page on screen', async () => {
+describe('the suppression list searches on its query (AGL-3321)', () => {
+  it('finds an entry pages past the first, by its search tokens', async () => {
     await mountCard()
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'person37' } })
     await waitFor(() => expect(renderedAddresses()).toEqual(['person37@example.test']))
+    // Asked of the query, not matched over a window.
+    expect(lastPlan()?.filters).toEqual([
+      { path: 'emailTokens', op: 'array-contains', value: 'person37' },
+    ])
   })
 })

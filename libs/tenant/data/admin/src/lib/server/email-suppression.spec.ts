@@ -32,6 +32,15 @@ import {
   suppressionCursorTimestamp,
 } from './email-suppression'
 import { fakeFirestore } from './test-firestore'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const EMAIL_TOKEN_FIXTURES = JSON.parse(
+  readFileSync(
+    join(__dirname, '..', '..', '..', '..', '..', '..', '..', 'tools', 'scripts', 'lib', 'email-search-tokens.fixtures.json'),
+    'utf8',
+  ),
+) as { emailTokens: Array<{ email: string; tokens: string[] }> }
 
 /**
  * AGL-2407. The platform-wide email suppression list.
@@ -157,10 +166,16 @@ describe('the fields the staff list filters and searches by (AGL-3321)', () => {
   })
 
   /*
-   * The SAME fixtures `tools/scripts/backfill-email-suppression-filters.mjs`
-   * runs in its `--self-test`, so the records it stamps are found by the
-   * search exactly as the ones written here are.
+   * The worked examples the script-side twin
+   * (`tools/scripts/lib/email-search-tokens.mjs`, which every suppression
+   * backfill imports) is held to by `email-search-tokens.test.mjs`, so the
+   * records a backfill stamps are found by the search exactly as the ones
+   * written here are.
    */
+  it.each(EMAIL_TOKEN_FIXTURES.emailTokens)('tokens for $email are the fixtures', ({ email, tokens }) => {
+    expect(emailSearchTokens(email)).toEqual(tokens)
+  })
+
   it.each([
     ['jane.doe@mail.example.com', ['jane', 'doe', 'jane.doe@mai', 'mail.example', '@mail.exampl', 'example', 'com', 'm']],
     ['Dana@Example.com', ['dana', 'dana@example', 'example.com', '@example.com', 'example', 'com']],

@@ -417,6 +417,13 @@ function SignUp() {
       if (optedIn) {
         await postMarketingConsent(credential.user, 'granted', 'console-signup')
       }
+      // Where the visit that became this account began (AGL-3289), before
+      // the workspace below is created: it copies its creator's record at
+      // birth. Above the new-account return, like the popup door: an account
+      // /signin created and bounced here for consent is NOT new to Firebase
+      // by now, and the server — which reads the auth record's creation time
+      // — is what decides whether it still counts, not this credential.
+      await rememberAccountAcquisition(credential.user)
       // The mobile door provisions the workspace too (AGL-1942). It used to
       // record the acceptance and stop, so a phone sign-up — the majority of
       // them — reached the picker no matter what: not even the AGL-1117 plan
@@ -439,10 +446,6 @@ function SignUp() {
       // phone — so leaving it out would attribute the minority of them
       // (AGL-1731/AGL-1942).
       await rememberSignUpCampaign(firestore, credential.user.uid, campaign)
-      // Where the visit that became this account began (AGL-3289), before
-      // the workspace below is created: it copies its creator's record at
-      // birth.
-      await rememberAccountAcquisition(credential.user)
       await provisionAndLandSignUp(
         firestore,
         credential,

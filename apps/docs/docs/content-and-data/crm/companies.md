@@ -21,16 +21,25 @@ contacts and deals against your plan's records band — see
 
 ## The companies list
 
-The list shows every company your site may see, newest activity first, with
-its domain, how many **contacts** are linked to it, its owner, when it was
+The list shows every company your site may see, most recently changed first,
+with its domain, how many **contacts** are linked to it, its owner, when it was
 last changed and its [**next activity**](./tasks.md#next-activity) — when the
-earliest open task against it is due. The table's **Search** box, or
-**Filters** › **Company**, finds a company by the start of its name — the
-search reaches every company, not only the page on screen — **Filters** ›
-**Owner** shows one teammate's accounts, and **Next activity** › **is
-empty** keeps only the companies with nothing scheduled. Company and Owner are
-answered by the query, one at a time — a new one replaces the other — while
-**Next activity** narrows the page already loaded and stays beside either; see
+earliest open task against it is due. The table's **Search** box finds a
+company by a word of its name or its domain. **Filters** › **Company** finds
+one whose name **is** exactly what you type, or **starts with** it — which
+orders the list by name — **Filters** › **Owner** shows one teammate's
+accounts, or any of several, and **Next activity** › **is empty** keeps only
+the companies with nothing scheduled.
+
+Every filter and the search are answered by the list's query, so they reach
+every company, a page at a time, not only the page on screen, and filters on
+different columns add up. The search matches whole words from their start —
+"cof" finds *Coffee*, a fragment from the middle of a word does not — one word
+at a time: type several and it searches the first, and says so. Under a
+site, a member whose access is limited to particular sites searches by the
+start of a company's name, and a notice says so. When a
+combination cannot be answered by one query, the list does not apply that
+filter, and a notice above the table names it and says why; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). Clicking a row opens the company's
 page.
 

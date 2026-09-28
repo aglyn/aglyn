@@ -20,17 +20,21 @@ import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
-import { listFilterConstraints } from '@aglyn/tenant-feature-instance/hooks/list-filter-constraints'
+import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import type { GridColDef } from '@mui/x-data-grid'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import {
   collection,
   getDocs,
   limit,
-  orderBy,
   query,
   startAfter,
   type QueryDocumentSnapshot,
@@ -46,34 +50,25 @@ import {
 } from '@aglyn/aglyn/app-utils/activity-presenter'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
-import { ACTIVITY_LIST_FILTER_FIELDS } from '../utils/list-filters'
+import {
+  ACTIVITY_LIST_FILTER_FIELDS,
+  ACTIVITY_LIST_FILTER_HEADERS,
+} from '../utils/list-filters'
+import {
+  ACTIVITY_LIST_QUERY,
+  ACTIVITY_SEARCH_HINT,
+} from '../utils/activity-list-query'
 import { formatStaffTimestamp } from '../utils/staff-timestamps'
 
 /*
- * What the log's Filters panel offers (AGL-3317): only what the feed's own
- * query can serve, over the whole log. The feed is ordered `createdAt` DESC
- * and its cursor is a document in that order, so a clause is added beneath
- * the pinned sort and never reorders it — an action equality (or `in`),
- * which the `action ASC, createdAt DESC` index serves, and a range over the
- * sort field itself.
- *
- * `is` (a whole day) is left off the date: it is served as a
- * `startAt`/`endAt` pair, and this feed already spends its start point on
- * the page cursor. `after` and `before` reach the same rows.
- *
- * No quick search: a word search would need a token field no entry carries,
- * and matching the page on screen would call one page the whole log.
+ * What the log's Filters panel and search box offer (AGL-3317, AGL-3321):
+ * only what the feed's own query can serve, over the whole log — Action,
+ * When and the search, every one on the query through `planListQuery`
+ * (`ACTIVITY_LIST_QUERY`). The feed is ordered `createdAt` DESC and its
+ * cursor is a document in that order, so the plan keeps that order: an
+ * action equality (or `in`), a range over the sort field itself, and the
+ * `searchTokens` word, each served by its `(field, createdAt DESC)` index.
  */
-const HOST_ACTIVITY_FILTER_FIELDS: readonly ListFilterField[] =
-  ACTIVITY_LIST_FILTER_FIELDS.map((field) =>
-    field.column === 'createdAt'
-      ? { ...field, operators: ['after', 'onOrAfter', 'before', 'onOrBefore'] }
-      : field,
-  )
-const HOST_ACTIVITY_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  action: 'Action',
-  createdAt: 'When',
-}
 
 export interface HostActivityTableProps {
   hostId: string
@@ -111,16 +106,25 @@ export function HostActivityTable(props: HostActivityTableProps) {
    */
   const [unreadable, setUnreadable] = useState(false)
   const gridFilter = useListGridFilter()
-  const filterConstraints = useMemo(
+  const { clauses, searchWords } = gridFilter
+  /*
+   * Every clause and the search word as ONE query — or as much of it as one
+   * query holds, with the rest refused by name and shown, never matched over
+   * the page already read.
+   */
+  const requestKey = JSON.stringify({ clauses, searchWords })
+  const plan = useMemo(
     () =>
-      gridFilter.clauses.flatMap(
-        (clause) =>
-          listFilterConstraints(HOST_ACTIVITY_FILTER_FIELDS, clause, {
-            fixedOrderBy: 'createdAt',
-          }) ?? [],
+      planListQuery(
+        ACTIVITY_LIST_QUERY,
+        { clauses, search: searchWords },
+        nameSearchNormalizers,
       ),
-    [gridFilter.clauses],
+    // The request is data; its JSON is its identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [requestKey],
   )
+  const planConstraints = useMemo(() => listQueryConstraints(plan), [plan])
 
   const loadPage = useCallback(
     async (targetPage: number, cursor?: QueryDocumentSnapshot) => {
@@ -131,8 +135,8 @@ export function HostActivityTable(props: HostActivityTableProps) {
         const snapshot = await getDocs(
           query(
             base,
-            ...filterConstraints,
-            orderBy('createdAt', 'desc'),
+            // Every predicate, then the plan's one order.
+            ...planConstraints,
             ...(cursor ? [startAfter(cursor)] : []),
             limit(pageSize + 1),
           ),
@@ -157,7 +161,7 @@ export function HostActivityTable(props: HostActivityTableProps) {
         setLoading(false)
       }
     },
-    [firestore, hostId, pageSize, filterConstraints],
+    [firestore, hostId, pageSize, planConstraints],
   )
 
   useEffect(() => {
@@ -246,13 +250,14 @@ export function HostActivityTable(props: HostActivityTableProps) {
     () =>
       listFilterGridColumns(
         activityColumns,
-        HOST_ACTIVITY_FILTER_FIELDS,
+        ACTIVITY_LIST_FILTER_FIELDS,
         {},
-        HOST_ACTIVITY_FILTER_HEADERS,
+        ACTIVITY_LIST_FILTER_HEADERS,
       ),
     [activityColumns],
   )
-  const filtered = gridFilter.clauses.length > 0
+  const searching = searchWords.some((word) => word.trim())
+  const filtered = clauses.length > 0 || searching
 
   return (
     <CardDisplay
@@ -269,11 +274,23 @@ export function HostActivityTable(props: HostActivityTableProps) {
     >
       <Stack spacing={1.5}>
         <ListFilterChips
-          fields={HOST_ACTIVITY_FILTER_FIELDS}
-          headers={HOST_ACTIVITY_FILTER_HEADERS}
-          clauses={gridFilter.clauses}
+          fields={ACTIVITY_LIST_FILTER_FIELDS}
+          headers={ACTIVITY_LIST_FILTER_HEADERS}
+          clauses={clauses}
           onChange={gridFilter.setClauses}
         />
+        <ListQueryNotices
+          refused={listQueryRefusals(plan.refused, {
+            fields: ACTIVITY_LIST_FILTER_FIELDS,
+            headers: ACTIVITY_LIST_FILTER_HEADERS,
+          })}
+          notices={plan.notices}
+        />
+        {searching ? (
+          <Typography variant="caption" color="text.secondary">
+            {ACTIVITY_SEARCH_HINT}
+          </Typography>
+        ) : null}
         {unreadable && !loading ? (
           <Stack spacing={1.5} sx={{ alignItems: 'flex-start' }}>
             <Alert severity="warning" sx={{ width: '100%' }}>
@@ -301,14 +318,16 @@ export function HostActivityTable(props: HostActivityTableProps) {
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
             /*
-             * The grid holds ONE page of a cursor feed, so it must not filter
-             * that page and call it the answer. The panel's clauses go onto
-             * the feed's query instead (see the fields above), and the search
-             * box stays hidden because nothing can serve it.
+             * The grid holds ONE page of a cursor feed, so it must not filter,
+             * search or re-sort that page and call it the answer. The panel's
+             * clauses and the search word go onto the feed's query instead
+             * (see the plan above), and the feed keeps its one order.
              */
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
+            quickFilter
+            disableColumnSorting
             loading={loading}
             noRowsLabel="No activity matches these filters"
           />

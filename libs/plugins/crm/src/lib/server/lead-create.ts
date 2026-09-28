@@ -68,6 +68,7 @@ import {
   getOrgForHost,
   logHostActivity,
   orgLeadsForHost,
+  restampCrmListFieldsAt,
   readLeadForHost,
   scopedToHost,
 } from '@aglyn/tenant-data-admin'
@@ -370,6 +371,9 @@ export const leadCreateHandler: PluginApiHandler = async (req, res) => {
       await leadsRef
         .doc(leadId)
         .set({ ...working, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+      // The profile, tags and lead source are what the Leads list searches
+      // and filters by (AGL-3321): restamped from the merged lead.
+      await restampCrmListFieldsAt(leadsRef.doc(leadId), 'leads')
     }
     /*
      * The filing on the lead's Activity (AGL-3274): one "Filed under" per

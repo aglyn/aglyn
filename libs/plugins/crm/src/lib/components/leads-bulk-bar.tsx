@@ -61,6 +61,7 @@ import { useCrmBulkApply } from '../hooks/use-crm-bulk-apply'
 import { useCrmCampaigns } from '../hooks/use-crm-campaigns'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
 import { downloadTextFile } from '../model/contacts-csv'
+import { crmClientListFields } from '../model/crm-list-query'
 import {
   type CrmBulkPlan,
   type CrmBulkSkip,
@@ -216,11 +217,17 @@ function LeadsBulkBarBody(props: LeadsBulkBarProps) {
       // Added to what each lead carries — `arrayUnion`, the way a sequence's
       // enroll and the import add one — never in place of it.
       for (const lead of selectedRows) {
+        // The union as it will stand, for the list field it moves (AGL-3321).
+        const union = [...new Set([...readCampaignIds(lead), ...campaignIds])]
         writes.push({
           id: lead.$id,
           label: labelOf(lead),
           kind: 'update',
-          data: { campaignIds: arrayUnion(...campaignIds), updatedAt: serverTimestamp() },
+          data: {
+            campaignIds: arrayUnion(...campaignIds),
+            ...crmClientListFields('leads', lead, { campaignIds: union }, ['scopedCampaignIds']),
+            updatedAt: serverTimestamp(),
+          },
         })
       }
       const outcome = await runPlan(

@@ -51,6 +51,7 @@ import { GmailTransportError, isReconnectRequired } from '../transport/gmail-err
 import { creditOutreachReply } from './campaign-credit'
 import { applyOutreachEvent, recordOutreachOptOut } from './enrollment-events'
 import { creditOutreachGatewayDeliveries, recordOutreachGatewayBlock } from './gateway-ledger'
+import { outreachMailboxSendingDomain } from '../storage/domain-intel-store'
 import {
   applyOutreachMailboxHealth,
   emptyOutreachHealthDelta,
@@ -364,6 +365,7 @@ async function syncMailbox(
     report.deliveries += await creditOutreachGatewayDeliveries(firestore, {
       orgId,
       enrollments: watchedEnrollments,
+      sendingDomain: outreachMailboxSendingDomain(mailbox),
       resolveMx: deps.resolveMx,
       nowMs,
     })
@@ -558,6 +560,8 @@ async function applyMessages(
           orgId: context.orgId,
           email: enrollment.email,
           remoteMta: decidedBy?.bounce?.remoteMta ?? null,
+          sendingDomain: outreachMailboxSendingDomain(context.mailbox),
+          diagnostic,
           resolveMx: deps.resolveMx,
           nowMs,
         })

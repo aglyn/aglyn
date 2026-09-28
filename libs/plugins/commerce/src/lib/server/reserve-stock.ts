@@ -208,7 +208,8 @@ export async function decrementVariantStock(options: {
         productRef,
         {
           variants,
-          inventory: CommerceModel.productInventory(after),
+          // The total and the storefront's In stock verdict (AGL-3321).
+          ...CommerceModel.productStockFields(after),
         },
         { merge: true },
       )

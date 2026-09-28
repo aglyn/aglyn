@@ -49,8 +49,13 @@ import {
 import QuotaReadoutComponent from '@aglyn/shared-ui-jsx/components/quota-readout.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { checkOrgQuota } from '../../../../../../constants/entitlements'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import ListTable, {
@@ -62,21 +67,20 @@ import ArtifactDeleteConfirmDescription, {
 } from '../../../../../../components/artifacts/artifact-delete-confirm.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
-import { Button, Stack, Typography } from '@mui/material'
+import { Button, Stack } from '@mui/material'
 import DocumentPresenceChips from '../../../../../../components/document-presence-chips.component'
 import usePresenceSummary from '../../../../../../hooks/use-presence-summary'
 import TemplateGalleryDialog from '../../../../../../components/templates/template-gallery-dialog.component'
 import { type GridColDef } from '@mui/x-data-grid'
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import { collection, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 import { useParams, useRouter } from 'next/navigation'
-import { forwardRef, useCallback, useEffect, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DUPLICATE_MENU_LABEL,
   useDuplicateResource,
   useFirestore,
   useHostResourceApi,
   useHostVersionApi,
-  usePagedCollection,
   useUser,
 } from '@aglyn/tenant-feature-instance'
 import CreateArtifactDrawer from '../../../../../../components/create-artifact-drawer.component'
@@ -97,7 +101,10 @@ import {
   CONTENT_MAX_WIDTH,
   TABLE_ROW_HEIGHT,
 } from '../../../../../../constants/shared'
-import { hostArtifactQuery } from '../../../../../../utils/host-artifact-queries'
+import {
+  LAYOUT_LIST_HEADERS,
+  LAYOUT_LIST_QUERY,
+} from '../../../../../../utils/artifact-list-queries'
 import { useLiveArtifactCount } from '@aglyn/tenant-feature-instance'
 
 const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
@@ -106,27 +113,6 @@ const CellItemLinkComponent = forwardRef<any, AppLinkNakedLinkProps>(
   },
 )
 CellItemLinkComponent.displayName = 'CellItemLinkComponent'
-
-/*
- * What the layouts grid's Filters panel and quick search offer (AGL-3317).
- * The list is a paged listener, so a filter matches over what its window has
- * read, which the first filter widens (`usePagedRowsFilter`).
- */
-const LAYOUT_FILTER_FIELDS = [
-  inMemoryListField('displayName', 'text'),
-  inMemoryListField('$id', 'text'),
-  inMemoryListField('description', 'text'),
-  inMemoryListField('updatedAt', 'date'),
-  inMemoryListField('createdAt', 'date'),
-]
-const LAYOUT_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  displayName: 'Display name',
-  $id: 'ID',
-  description: 'Description',
-  updatedAt: 'Updated',
-  createdAt: 'Created',
-}
-const LAYOUT_SEARCH_FIELDS = ['displayName', '$id', 'description'] as const
 
 function Layouts(props) {
   const params = useParams<{ hostId: string }>()
@@ -205,64 +191,60 @@ function Layouts(props) {
     [firestore, hostId],
   )
   /**
-   * The list PAGES, over an ordered walk (AGL-2501).
+   * The list PAGES, over an ordered walk (AGL-2501), and every clause and
+   * search word is on that walk's query (AGL-3321).
    *
-   * It was `limit(pageSize)` with no `orderBy` and no pager: one page-sized
-   * read, and the grid's own footer paging a window that never grew. So the
-   * "next page" button led to an empty grid on a site with more layouts than
-   * the page size, and the rows on the first page were a pseudo-random sample
-   * — Firestore answers an unordered limit in document-id order.
+   * It was `limit(pageSize)` with no `orderBy` and no pager; then a window
+   * the Filters panel matched over. Now the panel and the search box are the
+   * query's own — `LAYOUT_LIST_QUERY` names what each asks and the index it
+   * reads — so a page of a filtered list is a page of the matches, and a
+   * layout on page four is found from page one.
    *
-   * `hostArtifactQuery` holds the ordering decision and the reason it is the
-   * document id rather than `displayName`; the walk it produces is total, so
-   * every layout is reachable by paging.
+   * The walk is the document id (`ARTIFACT_LIST_ORDER`; `hostArtifactQuery`
+   * explains why), and the rows are rendered as they arrive — never re-sorted.
    */
-  const {
-    status,
-    data: layoutData,
-    rows: layoutWindow,
-    hasMore,
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
-  } = usePagedCollection<any>(
-    (pageLimit) => hostArtifactQuery(firestore, hostId, 'layouts', pageLimit),
-    [firestore, hostId],
-    { idField: '$id' },
+  const gridFilter = useListGridFilter()
+  const layoutList = useListQuery<any>({
+    collection: hostId ? collection(firestore, 'hosts', hostId, 'layouts') : null,
+    declaration: LAYOUT_LIST_QUERY,
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    deps: [firestore, hostId],
+    idField: '$id',
+    /*
+     * A predicate on a MUTABLE field — a name, a date — can drop a document
+     * out of the live target mid-session, and the SDK caches that as a
+     * tombstone every other reader of the path is then served (AGL-827/929).
+     * Confirmed against the server before it is believed.
+     */
+    confirmDisappearances: true,
+  })
+  const { status, hasMore } = layoutList
+  const layoutsNarrowed =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.length > 0
+  const layoutRefusals = useMemo(
+    () =>
+      listQueryRefusals(layoutList.plan.refused, {
+        fields: LAYOUT_LIST_QUERY.fields,
+        headers: LAYOUT_LIST_HEADERS,
+      }),
+    [layoutList.plan],
   )
   /**
    * A deleted layout is a TOMBSTONE, not a row (AGL-2501).
    *
    * Delete here stamps `deletedAt` and leaves the document in place so
    * published tenant pages keep rendering their chrome until the next
-   * revalidate. Nothing filtered them out, so a deleted layout stayed in this
-   * list forever — the screens page and the components card have always
-   * dropped theirs, and this was the one artifact list that did not.
-   *
-   * Client-side because it has to be: Firestore cannot ask for the ABSENCE of
-   * a field, and the two live shapes are not one value — a layout created
-   * through the resources route carries no `deletedAt`, one installed from the
-   * marketplace carries an explicit `null`. The cost is that a tombstone still
-   * spends a slot in the page it falls in, so a page can render fewer rows
-   * than its size; `hasMore` and the walk are unaffected.
+   * revalidate. Firestore cannot ask for the ABSENCE of a field, and the two
+   * live shapes are not one value — a layout created through the resources
+   * route carries no `deletedAt`, one installed from the marketplace carries
+   * an explicit `null` — so the tombstone is dropped from the page it falls
+   * in. It is the list's scope, not a filter: no clause or search word is
+   * matched here, and a page can only render FEWER rows than its size;
+   * `hasMore` and the walk are unaffected.
    */
-  const layouts = layoutWindow.filter((layout: any) => !layout.deletedAt)
-  const layoutFilter = usePagedRowsFilter<any>(
-    {
-      data: (layoutData ?? []).filter((layout: any) => !layout.deletedAt),
-      rows: layouts,
-      hasMore,
-      page,
-      setPage,
-      pageSize,
-      setPageSize,
-    },
-    {
-      fields: LAYOUT_FILTER_FIELDS,
-      headers: LAYOUT_FILTER_HEADERS,
-      search: LAYOUT_SEARCH_FIELDS,
-    },
+  const layouts = useMemo(
+    () => layoutList.rows.filter((layout: any) => !layout.deletedAt),
+    [layoutList.rows],
   )
   /**
    * `sharedLayoutsPerHost` is enforced by `/api/hosts/resources` and had no
@@ -704,16 +686,22 @@ function Layouts(props) {
             blurb="Layout templates add a ready-made layout you can restyle in the besigner. Existing layouts are never touched."
           />
           <CardDisplay>
-            <ListFilterChips {...layoutFilter.chipsProps} />
-            {layoutFilter.filtering && hasMore ? (
-              <Typography variant="caption" color="text.secondary">
-                {`Filtering the ${layoutFilter.read} layouts read so far — the next page reads more.`}
-              </Typography>
-            ) : null}
+            <ListFilterChips
+              fields={LAYOUT_LIST_QUERY.fields}
+              headers={LAYOUT_LIST_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+            />
+            <ListQueryNotices refused={layoutRefusals} notices={layoutList.plan.notices} />
             <ListTable
               aria-label="Layouts"
               rowHeight={TABLE_ROW_HEIGHT}
-              columns={layoutFilter.filterColumns(columns)}
+              columns={listFilterGridColumns(
+                columns,
+                LAYOUT_LIST_QUERY.fields,
+                {},
+                LAYOUT_LIST_HEADERS,
+              )}
               /*
                 THE WAY OUT, not just the picture (AGL-1152). This list drew
                 the illustration and offered nothing to do about it, while the
@@ -721,8 +709,12 @@ function Layouts(props) {
                 omission from two sides. A filtered-to-nothing list says so
                 instead: the layouts exist, the filter found none of them.
               */
-              {...(layoutFilter.filtering
-                ? { noRowsLabel: 'No layouts match these filters' }
+              {...(layoutsNarrowed
+                ? {
+                    noRowsLabel: hasMore
+                      ? 'No layouts match on this page — the next one has more'
+                      : 'No layouts match these filters',
+                  }
                 : {
                     noRowsLabel: 'No layouts yet',
                     noRowsDescription:
@@ -741,7 +733,7 @@ function Layouts(props) {
                       </Stack>
                     ),
                   })}
-              rows={layoutFilter.rows}
+              rows={layouts}
               onOpen={(id) =>
                 router.push(
                   buildRoute(Route.LAYOUT_DETAILS, {
@@ -754,11 +746,22 @@ function Layouts(props) {
               loading={status === 'loading'}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search are the grid's; the page answers
-              // them over what its window read (AGL-3317).
-              {...layoutFilter.gridProps}
+              // The panel and the search are the grid's; the QUERY answers
+              // them (AGL-3321), so the grid filters and sorts nothing.
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              disableColumnSorting
             />
-            <ListPagination {...layoutFilter.pagination} />
+            <ListPagination
+              page={layoutList.page}
+              pageSize={layoutList.pageSize}
+              rowCount={layouts.length}
+              hasMore={hasMore}
+              onPageChange={layoutList.setPage}
+              onPageSizeChange={layoutList.setPageSize}
+            />
           </CardDisplay>
         </Container>
       </DashboardLayout>

@@ -177,7 +177,8 @@ describe('the org-wide log’s toolbar (AGL-3321)', () => {
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'ada' } })
     await waitFor(() => expect(lastUrl().searchParams.get('search')).toBe('ada'))
     expect(lastUrl().searchParams.get('scope')).toBe('org-wide')
-    expect(await screen.findByText(/Each page looks through up to 250 entries/)).toBeTruthy()
+    // The search is on the route's query, so there is no read budget to confess.
+    expect(await screen.findByText(/across the whole log/)).toBeTruthy()
   })
 
   it('asks for the Who and Where choices once, with the first page', async () => {
@@ -207,9 +208,30 @@ describe('the org-wide log’s toolbar (AGL-3321)', () => {
     expect(filtersOf(lastUrl())).toHaveLength(1)
   })
 
-  it('the organization-level feed offers no search, which its route cannot answer', async () => {
+  it('the organization-level feed searches too, on its route’s query (AGL-3321)', async () => {
     render(<OrgActivityCard orgId="org-1" />)
     await screen.findByText('AI generated — Home')
-    expect(screen.queryByRole('searchbox')).toBeNull()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'home' } })
+    await waitFor(() => expect(lastUrl().searchParams.get('search')).toBe('home'))
+    expect(lastUrl().searchParams.get('scope')).toBeNull()
+  })
+
+  it('says what the route could not put on its query, rather than narrowing the page', async () => {
+    ;(global as any).fetch = jest.fn(async (url: string) => {
+      urls.push(new URL(String(url), 'http://localhost'))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          entries: AI_ROWS,
+          nextCursor: null,
+          refused: [{ clause: 'search', reason: 'this list has no search' }],
+          notices: ['Search matches one word at a time: showing results for "ada".'],
+        }),
+      }
+    })
+    render(<OrgActivityCard orgId="org-1" />)
+    expect(await screen.findByText('Search is not applied: this list has no search.')).toBeTruthy()
+    expect(await screen.findByText(/one word at a time/)).toBeTruthy()
   })
 })

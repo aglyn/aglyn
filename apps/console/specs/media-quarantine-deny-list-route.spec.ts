@@ -329,3 +329,75 @@ describe('AGL-1700 · the listing the table renders', () => {
     expect(row.originMediaId).toBe('m1')
   })
 })
+
+/** A read of the table's own views, as the page sends them (AGL-3321). */
+async function view(params: Record<string, string>): Promise<Response> {
+  return route.GET(
+    new Request(
+      `https://app.aglyn.com/api/admin/media-quarantine?${new URLSearchParams(params).toString()}`,
+      { headers: { authorization: 'Bearer staff-token' } },
+    ),
+  )
+}
+
+describe('AGL-3321 · the table’s filters and search are answered over every entry', () => {
+  it('pages the whole list oldest first, with the note and the breadcrumb', async () => {
+    seedList()
+    const first = await (await view({ view: 'list', pageSize: '2' })).json()
+    expect(first.rows.map((row: any) => row.key)).toEqual([LEGACY_KEY, ASSET_KEY])
+    expect(first.hasMore).toBe(true)
+    expect(first.nextCursor).toBe(ASSET_KEY)
+    const second = await (
+      await view({ view: 'list', pageSize: '2', cursor: first.nextCursor })
+    ).json()
+    expect(second.rows.map((row: any) => row.key)).toEqual([SHA_KEY])
+    expect(second.rows[0].note).toBe('notice 2026-114, Meridian Publishing')
+    expect(second.rows[0].origin).toBe('org:acme / m1')
+    expect(second.hasMore).toBe(false)
+  })
+
+  it('answers every clause and the search at once, not the page on screen', async () => {
+    seedList()
+    const byState = await (
+      await view({
+        view: 'list',
+        pageSize: '1',
+        filters: JSON.stringify([{ field: 'state', op: 'equals', value: 'active' }]),
+      })
+    ).json()
+    // The expired entry is oldest, so a page-then-filter read would hold
+    // nothing; the route filters the whole list first.
+    expect(byState.rows.map((row: any) => row.key)).toEqual([ASSET_KEY])
+    expect(byState.total).toBe(2)
+    const bySearch = await (await view({ view: 'list', search: 'meridian' })).json()
+    expect(bySearch.rows.map((row: any) => row.key)).toEqual([SHA_KEY])
+  })
+
+  it('refuses by name what the table does not filter by, and applies none of it', async () => {
+    seedList()
+    const payload = await (
+      await view({
+        view: 'list',
+        filters: JSON.stringify([{ field: 'actorUid', op: 'equals', value: 'staff-super-1' }]),
+      })
+    ).json()
+    expect(payload.rows).toHaveLength(3)
+    expect(payload.refused.map((entry: any) => entry.clause.field)).toEqual(['actorUid'])
+  })
+
+  it('refuses unreadable filters rather than list everything under them', async () => {
+    seedList()
+    expect((await view({ view: 'list', filters: '[{"field":1}]' })).status).toBe(400)
+  })
+
+  it('states the whole list’s facts without its entries', async () => {
+    seedList()
+    const payload = await (await view({ view: 'summary' })).json()
+    expect(payload).toEqual({
+      count: 3,
+      maxEntries: 2000,
+      clearable: 1,
+      readAtMs: expect.any(Number),
+    })
+  })
+})

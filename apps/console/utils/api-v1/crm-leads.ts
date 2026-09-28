@@ -98,6 +98,7 @@ import {
   listOrgMembers,
   listResponse,
   parseLimit,
+  restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import {
   type ConvertHostLeadInput,
@@ -439,6 +440,8 @@ async function updateLead(
   }
   if (Object.keys(update).length > 0) {
     await ref.update({ ...update, updatedAt: Timestamp.now() })
+    // What the console's Leads list searches and filters by (AGL-3321).
+    await restampCrmListFieldsAt(ref, 'leads')
   }
   return apiJson(leadView(site.siteId, await ref.get()), { headers: ctx.headers })
 }
@@ -597,6 +600,8 @@ async function createLead(request: Request, ctx: ApiV1Context, url: URL): Promis
     const ref = leadsRef.doc(leadId)
     if (Object.keys(working).length) {
       await ref.set({ ...working, updatedAt: Timestamp.now() }, { merge: true })
+      // What the console's Leads list searches and filters by (AGL-3321).
+      await restampCrmListFieldsAt(ref, 'leads')
     }
     const view = leadView(site.siteId, await ref.get())
     await claim.record(created ? 201 : 200, view)

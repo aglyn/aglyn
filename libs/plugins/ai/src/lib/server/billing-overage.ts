@@ -53,6 +53,7 @@ import {
 } from '../billing/ai-overage-standing'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — self-serve billing surface, same posture as
 // billing/storage-overage beside it. AGL-1501 keeps billing-locked sessions
@@ -283,19 +284,15 @@ async function handler(request: Request): Promise<Response> {
         },
         { merge: true },
       )
-      await firebaseAdmin
-        .app()
-        .firestore()
-        .collection('adminAudit')
-        .add({
-          actorUid: decoded.uid,
-          actorEmail: decoded.email ?? null,
-          action: 'billing.assistOverage.setCap',
-          target: `orgs/${orgId}`,
-          before: { capUsd },
-          after: { capUsd: requestedCap },
-          at: FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firebaseAdmin.app().firestore(), {
+        actorUid: decoded.uid,
+        actorEmail: decoded.email ?? null,
+        action: 'billing.assistOverage.setCap',
+        target: `orgs/${orgId}`,
+        before: { capUsd },
+        after: { capUsd: requestedCap },
+        at: FieldValue.serverTimestamp(),
+      })
         .catch(() => undefined)
       // The customer's own feed (AGL-2929): `adminAudit` is staff-only, and
       // the workspace should see who set its ceiling. Nothing when the value
@@ -343,19 +340,15 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        actorEmail: decoded.email ?? null,
-        action: 'billing.assistOverage.setHardCap',
-        target: `orgs/${orgId}`,
-        before: { hardCap },
-        after: { hardCap: requested },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      actorEmail: decoded.email ?? null,
+      action: 'billing.assistOverage.setHardCap',
+      target: `orgs/${orgId}`,
+      before: { hardCap },
+      after: { hardCap: requested },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
     await logAiOverageControl(
       orgId,

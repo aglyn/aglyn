@@ -24,11 +24,25 @@
  * site on every row, opens each on its own site's page, and makes a new one
  * AS a site: the same document a site's own list creates, then that site's
  * besigner. The reads are asserted in `emails-console-read-cost.spec.tsx`;
- * this file holds what the table says and where it sends people.
+ * this file holds what the table says and where it sends people — and that
+ * every clause and search word is on each site's QUERY (AGL-3321): the
+ * Firestore double below answers the constraints the card built, so a row
+ * the query would not return is never drawn.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+import { answerListQuery } from '@aglyn/tenant-feature-instance/testing/list-query-double'
+
+/** A screen as its writers store it: the name keys beside `displayName`. */
+const stamped = (screen: Record<string, unknown>) => ({
+  ...screen,
+  ...displayNameSearchFields(screen['displayName']),
+})
+
+/** Every where-constraint the last read of each site asked for. */
+const asked: Record<string, Array<{ path: string; op: string; value: unknown }>> = {}
 
 const mockPush = jest.fn()
 jest.mock('next/navigation', () => ({
@@ -41,6 +55,8 @@ let screensByHost: Record<string, Array<Record<string, unknown>>> = {}
 /** Every site whose screens were read. */
 const readFor = new Set<string>()
 const NO_SCREENS: Array<Record<string, unknown>> = []
+/** The answer each question got, per staged rows — see the double below. */
+const answers = new Map<string, { staged: unknown; rows: unknown[] }>()
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
@@ -51,34 +67,50 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   }),
   useHostResourceApi: () => jest.fn(),
   useHostVersionApi: () => jest.fn(),
-  // Answers from the path the builder asked for, so each site's reader gets
-  // that site's screens and nobody else's.
-  // The same array for a site with nothing staged, as the real hook holds
-  // one snapshot's rows until the next snapshot arrives.
-  useFirestoreCollection: (build: () => { path: string }) => {
-    const hostId = build().path.split('/')[1]
+  // Answers the QUERY the builder made, over the site its path names: every
+  // `where`, the order (dropping a screen without the ordered field, as
+  // `orderBy` does) and the limit — so each site's reader gets that site's
+  // matching screens and nobody else's.
+  useFirestoreCollection: (build: () => { path: string; constraints: any[] }) => {
+    const built = build()
+    const hostId = built.path.split('/')[1]
     readFor.add(hostId)
-    return { data: screensByHost[hostId] ?? NO_SCREENS, status: 'success' }
+    const filters = built.constraints.filter((entry) => entry.where).map((entry) => entry.where)
+    const order = built.constraints.find((entry) => entry.orderBy)?.orderBy
+    const cap = built.constraints.find((entry) => typeof entry.limit === 'number')?.limit
+    asked[hostId] = filters
+    // One answer per snapshot, as the real hook holds one snapshot's rows
+    // until the next arrives: the same question over the same rows answers
+    // with the same array.
+    const staged = screensByHost[hostId] ?? NO_SCREENS
+    const key = JSON.stringify({ hostId, constraints: built.constraints })
+    const held = answers.get(key)
+    if (held && held.staged === staged) return { data: held.rows, status: 'success' }
+    const answered = answerListQuery(staged, {
+      filters,
+      orderBy: order ?? { path: '__name__', direction: 'asc' },
+    } as never)
+    const rows = typeof cap === 'number' ? answered.slice(0, cap) : answered
+    answers.set(key, { staged, rows })
+    return { data: rows, status: 'success' }
   },
 }))
-jest.mock(
-  '@aglyn/tenant-feature-instance/hooks/host-collection-queries',
-  () => ({
-    collectionCeiling: (ref: unknown) => ref,
-    ceilingedWindow: (rows: unknown[] | undefined, ceiling: number) => ({
-      rows: (rows ?? []).slice(0, ceiling),
-      truncated: (rows ?? []).length > ceiling,
-    }),
-  }),
-)
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
     path: segments.join('/'),
+    constraints: [],
   }),
-  query: (base: unknown) => base,
-  where: () => ({}),
+  query: (base: any, ...constraints: unknown[]) => ({
+    path: base.path,
+    constraints: [...base.constraints, ...constraints],
+  }),
+  where: (path: string, op: string, value: unknown) => ({ where: { path, op, value } }),
+  orderBy: (path: string, direction: string) => ({ orderBy: { path, direction } }),
+  limit: (value: number) => ({ limit: value }),
+  documentId: () => '__name__',
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
-  Timestamp: { now: () => ({ seconds: 0 }) },
+  Timestamp: { now: () => ({ seconds: 0 }), fromDate: (date: Date) => date },
+  deleteField: () => '__deleteField',
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
 jest.mock('@aglyn/aglyn', () => ({
@@ -114,7 +146,7 @@ jest.mock('../utils/create-email-screen', () => ({
 }))
 
 import { EmailOrgMountProvider } from './email-org-mount'
-import { OrgEmailTemplatesCard } from './org-email-templates-card'
+import { OrgEmailTemplatesCard, orgTemplateSiteScope } from './org-email-templates-card'
 
 const SITES = [
   { id: 'host-1', name: 'Store', subdomain: 'store' },
@@ -155,20 +187,23 @@ const rowFor = (name: string) =>
 beforeEach(() => {
   screensByHost = {
     'host-1': [
-      {
+      stamped({
         $id: 'scr_1',
         displayName: 'Spring promo',
         kind: 'email',
         versionId: 'v1',
-      },
+      }),
+      // A page on the same site: the email scope is on the query.
+      stamped({ $id: 'scr_home', displayName: 'Home', kind: 'page' }),
     ],
     'host-2': [
-      {
+      stamped({
         $id: 'scr_1',
         displayName: 'Weekly digest',
         kind: 'email',
         versionId: 'v2',
-      },
+      }),
+      // Deleted: the delete cleared its name keys, so the order leaves it out.
       {
         $id: 'scr_gone',
         displayName: 'Deleted one',
@@ -187,6 +222,8 @@ describe('the organization’s templates', () => {
     expect(rowFor('Weekly digest').textContent).toContain('Blog')
     // A deleted template is not a row, on this list or a site's own.
     expect(screen.queryByText('Deleted one')).toBeNull()
+    expect(screen.queryByText('Home')).toBeNull()
+    expect(asked['host-1']).toEqual([{ path: 'kind', op: '==', value: 'email' }])
   })
 
   it('keeps two sites’ same-id screens apart', async () => {
@@ -235,11 +272,13 @@ describe('the organization’s templates', () => {
   })
 
   it('says when a site holds more templates than the list reads', async () => {
-    screensByHost['host-1'] = Array.from({ length: 51 }, (_, index) => ({
-      $id: `scr_${index}`,
-      displayName: `Template ${index}`,
-      kind: 'email',
-    }))
+    screensByHost['host-1'] = Array.from({ length: 51 }, (_, index) =>
+      stamped({
+        $id: `scr_${index}`,
+        displayName: `Template ${index}`,
+        kind: 'email',
+      }),
+    )
     await mount()
 
     expect(screen.getByText(/Store has more than 50 templates/)).toBeTruthy()
@@ -260,8 +299,8 @@ describe('an organization with more sites than one page', () => {
 
   it('reads one page of sites, and the next page only when it is chosen', async () => {
     screensByHost = {
-      'site-01': [{ $id: 'a', displayName: 'First page', kind: 'email' }],
-      'site-12': [{ $id: 'b', displayName: 'Last page', kind: 'email' }],
+      'site-01': [stamped({ $id: 'a', displayName: 'First page', kind: 'email' })],
+      'site-12': [stamped({ $id: 'b', displayName: 'Last page', kind: 'email' })],
     }
     await mount(MANY)
 
@@ -286,11 +325,13 @@ describe('an organization with more sites than one page', () => {
 
   it('pages the templates themselves on the shared footer', async () => {
     screensByHost = {
-      'host-1': Array.from({ length: 12 }, (_, index) => ({
-        $id: `scr_${index}`,
-        displayName: `Template ${String(index).padStart(2, '0')}`,
-        kind: 'email',
-      })),
+      'host-1': Array.from({ length: 12 }, (_, index) =>
+        stamped({
+          $id: `scr_${index}`,
+          displayName: `Template ${String(index).padStart(2, '0')}`,
+          kind: 'email',
+        }),
+      ),
     }
     await mount()
 
@@ -304,13 +345,38 @@ describe('an organization with more sites than one page', () => {
   })
 })
 
-describe('the organization’s templates filter through the grid toolbar (AGL-3317)', () => {
-  it('searches template and site names over every site read', async () => {
+describe('the organization’s templates filter on every site’s query (AGL-3321)', () => {
+  it('puts the search word on each site’s query, not over the rows read', async () => {
     await mount()
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'blog' } })
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'digest' } })
     await waitFor(() => {
       expect(rowFor('Weekly digest')).toBeTruthy()
       expect(rowFor('Spring promo')).toBeUndefined()
     })
+    for (const hostId of ['host-1', 'host-2']) {
+      expect(asked[hostId]).toEqual([
+        { path: 'kind', op: '==', value: 'email' },
+        { path: 'nameTokens', op: 'array-contains', value: 'digest' },
+      ])
+    }
+  })
+})
+
+describe('the Site clause chooses which sites are read', () => {
+  it('reads the sites a clause names', () => {
+    expect(orgTemplateSiteScope([{ field: 'site', op: 'isAnyOf', value: 'a, b' }])).toEqual(['a', 'b'])
+  })
+
+  it('reads the sites every clause names, when there are several', () => {
+    expect(
+      orgTemplateSiteScope([
+        { field: 'site', op: 'isAnyOf', value: 'a,b' },
+        { field: 'site', op: 'equals', value: 'b' },
+      ]),
+    ).toEqual(['b'])
+  })
+
+  it('THE CONTROL: no Site clause reads the page of sites', () => {
+    expect(orgTemplateSiteScope([{ field: 'displayName', op: 'contains', value: 'x' }])).toBeNull()
   })
 })

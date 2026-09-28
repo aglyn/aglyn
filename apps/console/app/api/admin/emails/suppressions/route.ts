@@ -21,19 +21,18 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
-  listEmailSuppressions,
   releaseEmail,
-  suppressionCursorFrom,
 } from '@aglyn/tenant-data-admin'
 import {
   maskEmailAddresses,
   recordAdminAudit,
   subjectAddressKeyForRecipients,
 } from '@aglyn/tenant-data-admin/server/admin-audit'
+import { SUPPRESSION_LIST_QUERY } from '../../../../../utils/email-suppression-filters'
 import {
-  readSuppressionFilters,
-  suppressionQuery,
-} from '../../../../../utils/server/email-suppression-filter'
+  readStaffListQuery,
+  runStaffListQuery,
+} from '../../../../../utils/server/staff-list-query'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 
 /**
@@ -78,7 +77,7 @@ import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
  * produces a record nobody reads and hides the acts that matter.
  */
 
-/** Bound on one page, matching what the module itself will answer. */
+/** Bound on one page. */
 const PAGE_MAX = 200
 
 interface StaffContext {
@@ -112,65 +111,38 @@ async function listHandler(request: Request): Promise<Response> {
   try {
     const staff = await authorize(headers)
     if (staff instanceof Response) return staff
-    const requested = Number((query as Record<string, unknown>)?.limit)
-    const limit = Number.isFinite(requested)
-      ? Math.min(Math.max(Math.floor(requested), 1), PAGE_MAX)
-      : 25
-    const cursor =
-      String((query as Record<string, unknown>)?.cursor ?? '').trim() || null
     /*
-     * THE FILTERS AND THE SEARCH, served by the query (AGL-3321).
+     * THE FILTERS AND THE SEARCH, on the query (AGL-3321).
      *
-     * Every clause is a predicate beneath the `suppressedAt` cursor, so each
-     * page is a page of the narrowed list rather than a narrowed page — on
-     * this list, "not suppressed" for an address past the page on screen is
-     * the wrong answer in the reassuring direction. An ask the query cannot
-     * serve is refused with the reason, never answered unfiltered under a
-     * chip that says otherwise. See `utils/email-suppression-filters.ts`.
+     * Every clause and the search word are planned onto ONE query in the
+     * list's `suppressedAt` DESC order, and paged by a cursor in that order,
+     * so each page is a page of the narrowed list rather than a narrowed page
+     * — on this list, "not suppressed" for an address past the page on screen
+     * is the wrong answer in the reassuring direction. What one query cannot
+     * hold comes back in `refused` and is not applied, and the card says so.
+     * An unreadable ask is refused outright rather than answered unfiltered.
+     * See `utils/email-suppression-filters.ts`.
      */
-    const clauses = readSuppressionFilters(query as Record<string, unknown>)
-    if (!clauses) {
+    const asked = readStaffListQuery(query as Record<string, unknown>, {
+      maxPageSize: PAGE_MAX,
+    })
+    if (!asked) {
       return Response.json({ error: 'Unreadable filters' }, { status: 400 })
     }
-    const rawSearch = (query as Record<string, unknown>)?.search
-    const search = typeof rawSearch === 'string' ? rawSearch : ''
-    const narrowed = suppressionQuery(
-      firebaseAdmin.app().firestore().collection(EMAIL_SUPPRESSIONS_COLLECTION),
-      clauses,
-      search,
-    )
-    if (narrowed.error || !narrowed.query) {
-      return Response.json({ error: narrowed.error }, { status: 400 })
-    }
-    const narrowedQuery = narrowed.query
-    /*
-     * OVER-FETCH BY ONE, so "is there another page" is an observation rather
-     * than a guess. A footer that offers Next on faith takes an operator to
-     * an empty page; one that hides it on faith strands whatever is past the
-     * window, which on this list is the customer nobody can explain.
-     */
-    const page = await listEmailSuppressions({
-      limit: limit + 1,
-      startAfter: cursor,
-      narrow: () => narrowedQuery,
-    })
-    // The search tokens are the query's, not the reader's.
-    const entries = page.slice(0, limit).map((entry) => {
-      const shown: Partial<typeof entry> = { ...entry }
-      delete shown.emailTokens
-      return shown
-    })
-    const hasMore = page.length > limit
-    return Response.json(
-      {
-        entries,
-        hasMore,
-        nextCursor: hasMore
-          ? suppressionCursorFrom(entries[entries.length - 1])
-          : null,
+    const firestore = firebaseAdmin.app().firestore()
+    const page = await runStaffListQuery({
+      firestore,
+      collection: firestore.collection(EMAIL_SUPPRESSIONS_COLLECTION),
+      declaration: SUPPRESSION_LIST_QUERY,
+      request: asked,
+      row: (doc) => {
+        // The search tokens are the query's, not the reader's.
+        const shown: Record<string, unknown> = { ...doc.data() }
+        delete shown['emailTokens']
+        return { $id: doc.id, ...shown }
       },
-      { status: 200 },
-    )
+    })
+    return Response.json(page, { status: 200 })
   } catch (error) {
     const unauthenticated = invalidIdTokenResponse(error)
     if (unauthenticated) return unauthenticated

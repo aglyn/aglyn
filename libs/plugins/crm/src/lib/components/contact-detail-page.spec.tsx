@@ -156,6 +156,8 @@ const mockRow = {
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreDoc: () => ({ data: mockRow, status: 'success', fromCache: false }),
+  // The reader, whose token asks the list-fields route to restamp (AGL-3321).
+  useUser: () => ({ data: { uid: 'user-1' } }),
 }))
 jest.mock('firebase/firestore', () => ({
   arrayRemove: jest.fn(),

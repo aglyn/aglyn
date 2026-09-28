@@ -22,7 +22,9 @@ import { mdiDeleteOutline, mdiMerge } from '@aglyn/shared-data-mdi'
 import { AppLink, MdiIcon, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
+import { useFirestore, useFirestoreDoc, useUser } from '@aglyn/tenant-feature-instance'
+import { restampCrmListFields } from '../model/list-fields-api'
+import { crmTaskCallScope } from '../model/task-routes'
 import { Stack, Tooltip, Typography } from '@mui/material'
 import {
   arrayRemove,
@@ -240,6 +242,7 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     [emailsHub, hostId],
   )
 
+  const { data: user } = useUser()
   const handleRemove = useCallback(async () => {
     if (!row || !scope) return
     const confirmed = await confirm({
@@ -269,6 +272,10 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
           capturedByHostIds: arrayRemove(...plan.removeHostIds),
           updatedAt: new Date(),
         })
+        // The facet and the scope just let go of are what the Contacts list
+        // filters and searches by; the rules keep a client from restamping
+        // them, so the route does (AGL-3321).
+        await restampCrmListFields(user, crmTaskCallScope(hostId, orgId), 'contacts', [id])
       }
       // `siteLabel` and not "this site": at the organization level the line
       // lands in a feed that spans every site, so it has to name the one.
@@ -304,6 +311,9 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
     row,
     scope,
     siteLabel,
+    user,
+    hostId,
+    orgId,
   ])
 
   const overflowItems: RowActionsMenuItem[] = [

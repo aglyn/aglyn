@@ -231,14 +231,14 @@ describe('AGL-1466 · the sharing editor shows what is stored', () => {
  */
 describe('AGL-1480 · the detail drawer shows what is stored', () => {
   /**
-   * The `onDetails` seed, from the `visibleItems.map` card down to the close
-   * of the `setEditor` call. Anchored on `onDetails=` rather than on a
-   * callback name because this one is an inline JSX prop, not a `useCallback`.
+   * The drawer's seed: `openDetails`, which the card and the List view's row
+   * both call since AGL-3327. Anchored on its declaration down to the close
+   * of the `setEditor` call.
    */
   const onDetails = (): string => {
-    const start = CODE.indexOf('onDetails={')
+    const start = CODE.indexOf('const openDetails = useCallback(')
     expect(start).toBeGreaterThan(-1)
-    const end = CODE.indexOf('onDelete=', start)
+    const end = CODE.indexOf('}, [])', start)
     expect(end).toBeGreaterThan(start)
     return CODE.slice(start, end)
   }

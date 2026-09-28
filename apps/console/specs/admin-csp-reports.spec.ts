@@ -28,8 +28,10 @@
  * page paths, so the properties pinned here are the gate (staff claim, not
  * merely a valid token) and the window arithmetic the reader depends on —
  * `days` clamped to the retention, the cutoff counted so `days=1` means
- * today, and the in-memory app/directive filters that keep the Firestore
- * query on the automatic single-field index.
+ * today — and, for the table (`view=rows`, AGL-3321), that every clause and
+ * the search reach the Firestore query beneath the window and nothing is
+ * matched after it. The plan's shapes and their composites are pinned by
+ * `csp-report-list-query.spec.ts`.
  */
 
 // A module, not a script: without this, tsc puts the file in the global
@@ -38,22 +40,44 @@ export {}
 
 let mockDecodedToken: Record<string, unknown>
 let mockRows: Array<Record<string, unknown>>
-let mockQueries: Array<{ field: string; op: string; value: unknown; limit: number }>
+/** Every query the route ran: its predicates, its order and its limit. */
+let mockQueries: Array<{
+  where: Array<{ field: string; op: string; value: unknown }>
+  orderBy: Array<{ field: string; direction: string }>
+  limit: number
+}>
+
+/**
+ * A query that records what it was built from and answers with `mockRows` as
+ * given — it filters nothing, so a row it returns that a clause excludes
+ * would show the route matching after the read.
+ */
+const mockQuery = (
+  where: Array<{ field: string; op: string; value: unknown }> = [],
+  orderBy: Array<{ field: string; direction: string }> = [],
+): any => ({
+  where: (field: unknown, op: string, value: unknown) =>
+    mockQuery([...where, { field: String(field), op, value }], orderBy),
+  orderBy: (field: unknown, direction = 'asc') =>
+    mockQuery(where, [...orderBy, { field: String(field), direction }]),
+  startAfter: () => mockQuery(where, orderBy),
+  limit: (limit: number) => ({
+    get: async () => {
+      mockQueries.push({ where, orderBy, limit })
+      return {
+        docs: mockRows.map((row, index) => ({
+          id: `c${index}`,
+          ref: { path: `cspViolationDaily/c${index}` },
+          data: () => row,
+        })),
+      }
+    },
+  }),
+})
 
 const mockFirestore = {
-  collection: (collection: string) => ({
-    where: (field: string, op: string, value: unknown) => ({
-      orderBy: () => ({
-        limit: (limit: number) => ({
-          get: async () => {
-            mockQueries.push({ field, op, value, limit })
-            void collection
-            return { docs: mockRows.map((row) => ({ data: () => row })) }
-          },
-        }),
-      }),
-    }),
-  }),
+  collection: () => mockQuery(),
+  doc: () => ({ get: async () => ({ exists: false }) }),
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -112,44 +136,97 @@ describe('GET /api/admin/csp-reports (AGL-1799)', () => {
     expect(body.truncated).toBe(false)
   })
 
-  it('queries a single field range so no composite index is needed', async () => {
+  it('reads the window with a single field range so no composite index is needed', async () => {
     // The `/api/health/rate-limits` lesson: a range + orderBy on ONE field
     // rides the automatic index. If this asserts a different field pair, the
-    // route now needs `firebase-firestore.indexes.json` and a deploy.
+    // rollup now needs `firebase-firestore.indexes.json` and a deploy.
     await get('?days=3')
     expect(mockQueries).toHaveLength(1)
-    expect(mockQueries[0].field).toBe('day')
-    expect(mockQueries[0].op).toBe('>=')
+    expect(mockQueries[0].where).toHaveLength(1)
+    expect(mockQueries[0].where[0].field).toBe('day')
+    expect(mockQueries[0].where[0].op).toBe('>=')
     // days=3 counts TODAY as day one: cutoff is two days back, not three.
     const expected = new Date(Date.now() - 2 * 86_400_000)
       .toISOString()
       .slice(0, 10)
-    expect(mockQueries[0].value).toBe(expected)
+    expect(mockQueries[0].where[0].value).toBe(expected)
   })
 
   it('clamps `days` to the retention window instead of trusting the query string', async () => {
     await get('?days=5000')
     const floor = new Date(Date.now() - 59 * 86_400_000).toISOString().slice(0, 10)
-    expect(mockQueries[0].value).toBe(floor)
+    expect(mockQueries[0].where[0].value).toBe(floor)
     mockQueries = []
     await get('?days=-2')
     const today = new Date().toISOString().slice(0, 10)
-    expect(mockQueries[0].value).toBe(today)
+    expect(mockQueries[0].where[0].value).toBe(today)
   })
 
-  it('filters by app and directive in memory, not in the query', async () => {
-    const byApp = await (await get('?app=console')).json()
-    expect(byApp.rows.map((row: any) => row.origin)).toEqual([
-      'a.example',
-      'c.example',
+  it('answers the rollup whole: no filter narrows the window read', async () => {
+    const body = await (await get('?app=console&directive=img-src')).json()
+    expect(body.rowCount).toBe(3)
+    expect(mockQueries[0].where).toHaveLength(1)
+  })
+
+  it('hands back the counter, not its search tokens or its TTL stamp', async () => {
+    mockRows = [
+      { ...mockRows[0], searchTokens: ['a'], expiresAt: new Date() },
+    ]
+    const body = await (await get()).json()
+    expect(Object.keys(body.rows[0])).not.toContain('searchTokens')
+    expect(Object.keys(body.rows[0])).not.toContain('expiresAt')
+    expect(body.rows[0].origin).toBe('a.example')
+  })
+})
+
+describe('GET /api/admin/csp-reports?view=rows — the table (AGL-3321)', () => {
+  const rows = (params: Record<string, string>) =>
+    get(`?${new URLSearchParams({ view: 'rows', ...params }).toString()}`)
+
+  it('puts every clause and the search on the query, beneath the window', async () => {
+    const response = await rows({
+      days: '14',
+      pageSize: '2',
+      search: 'googletag',
+      filters: JSON.stringify([
+        { field: 'app', op: 'equals', value: 'tenant' },
+        { field: 'directive', op: 'isAnyOf', value: 'img-src,script-src-elem' },
+      ]),
+    })
+    expect(response.status).toBe(200)
+    expect(mockQueries).toHaveLength(1)
+    const since = new Date(Date.now() - 13 * 86_400_000).toISOString().slice(0, 10)
+    expect(mockQueries[0].where).toEqual([
+      { field: 'day', op: '>=', value: since },
+      { field: 'searchTokens', op: 'array-contains', value: 'googletag' },
+      { field: 'app', op: '==', value: 'tenant' },
+      { field: 'directive', op: 'in', value: ['img-src', 'script-src-elem'] },
     ])
-    const byDirective = await (await get('?directive=img-src')).json()
-    expect(byDirective.rows.map((row: any) => row.origin)).toEqual([
-      'b.example',
-      'a.example',
-    ])
-    // Both still issued the same one-field query — the filters must never
-    // migrate into `where` clauses without an index plan.
-    expect(mockQueries.every((query) => query.field === 'day')).toBe(true)
+    expect(mockQueries[0].orderBy).toEqual([{ field: 'day', direction: 'desc' }])
+    // One past the page, so "is there more" is observed.
+    expect(mockQueries[0].limit).toBe(3)
+  })
+
+  it('pages what the query returned and matches nothing after it', async () => {
+    const body = await (
+      await rows({ pageSize: '2', filters: JSON.stringify([{ field: 'app', op: 'equals', value: 'tenant' }]) })
+    ).json()
+    // The double returns console rows too; the route hands them on as read.
+    expect(body.rows.map((row: any) => row.origin)).toEqual(['a.example', 'b.example'])
+    expect(body.hasMore).toBe(true)
+    expect(body.nextCursor).toBe('cspViolationDaily/c1')
+  })
+
+  it('refuses what one query cannot hold, by name, rather than apply it to some rows', async () => {
+    const body = await (
+      await rows({ filters: JSON.stringify([{ field: 'count', op: '>', value: '5' }]) })
+    ).json()
+    expect(body.refused.map((entry: any) => entry.clause.field)).toEqual(['count'])
+    expect(mockQueries[0].where).toHaveLength(1)
+  })
+
+  it('refuses unreadable filters with a 400', async () => {
+    expect((await rows({ filters: 'nope' })).status).toBe(400)
+    expect(mockQueries).toEqual([])
   })
 })

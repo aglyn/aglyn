@@ -44,6 +44,7 @@ jest.mock('@aglyn/aglyn/app-utils/screen-route', () => ({
   NON_PAGE_SCREEN_MAX_PER_HOST: 3,
 }))
 
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugin'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
@@ -217,7 +218,10 @@ describe('the email design writer', () => {
     })
     expect(store.get('hosts/host-1/screens/job-1')).toEqual({
       ...screen,
-      nameLower: 'weekend buns',
+      // The keys the email templates list finds it by, and the stored null
+      // a campaign's screens list asks for (AGL-3321).
+      ...displayNameSearchFields('Weekend buns'),
+      deletedAt: null,
       emailSubject: CONTENT.subject,
       emailPreheader: CONTENT.preheader,
       emailSubjectVariants: CONTENT.subjectVariants,
