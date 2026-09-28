@@ -141,7 +141,7 @@ import {
   unregisterPluginApiRoute,
 } from '@aglyn/aglyn/app-utils/api-plugins'
 import { CARD_PAYMENT_VELOCITY } from '@aglyn/aglyn/app-utils/card-payment-velocity'
-import { resetCardPaymentAlarmsForTests } from '../../../libs/tenant/data/admin/src/lib/server/card-payment-velocity'
+import { resetCardPaymentAlarmsForTests } from '@aglyn/tenant-data-admin/server/card-payment-velocity'
 import { POST } from '../app/api/[...pluginApi]/route'
 
 const noop = () => undefined
