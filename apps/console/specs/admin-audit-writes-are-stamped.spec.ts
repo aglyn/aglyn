@@ -66,6 +66,10 @@ const READ_AFTER =
 const READ_BEFORE = /(?:\bquery|\bapplyListQuery)\(\s*(?:[\w$]+(?:\(\))?\.)*$/
 const STAMPED_ADD = /^\s*\.\s*add\(\s*(?:withAdminAuditIndex|stampAdminAuditIndex)\(/
 const STAMPED_DOC = /^\s*\)\s*,\s*withAdminAuditIndex\(/
+// `collection('adminAudit').doc(id).set(stampAdminAuditIndex(…))` — a named
+// row written through the stamp, as the e2e fixture seed does.
+const STAMPED_SET =
+  /^\s*\.\s*doc\([^()]*\)\s*\.\s*set\(\s*(?:withAdminAuditIndex|stampAdminAuditIndex)\(/
 const DOC_BEFORE = /doc\(\s*$/
 
 /**
@@ -109,7 +113,7 @@ function unstampedAuditWrites(source: string): string[] {
     const before = source.slice(Math.max(0, at - 40), at)
     const after = source.slice(at + match[0].length, at + match[0].length + 80)
     if (READ_AFTER.test(after) || READ_BEFORE.test(before)) continue
-    if (STAMPED_ADD.test(after)) continue
+    if (STAMPED_ADD.test(after) || STAMPED_SET.test(after)) continue
     if (DOC_BEFORE.test(before) && STAMPED_DOC.test(after)) continue
     offenders.push(source.slice(Math.max(0, at - 30), at + match[0].length + 30).replace(/\s+/g, ' '))
   }
@@ -167,6 +171,7 @@ describe('AGL-3321 · every adminAudit write carries the fields its list queries
       "const audit = db.collection('adminAudit'); await audit.add(entry)",
       "batch.set(doc(collection(firestore, 'adminAudit')), { action: 'org.erasureRequested' })",
       "await addDoc(collection(firestore, 'adminAudit'), { action: 'x' })",
+      "await firestore.collection('adminAudit').doc(id).set({ action: 'x' })",
     ]
     for (const shape of refused) expect(unstampedAuditWrites(shape)).toHaveLength(1)
 
@@ -177,6 +182,7 @@ describe('AGL-3321 · every adminAudit write carries the fields its list queries
       'applyListQuery(firestore.collection(ADMIN_AUDIT_COLLECTION), plan).limit(26).get()',
       "await firestore.collection('adminAudit').add(stampAdminAuditIndex({ action: 'x' }))",
       "batch.set(doc(collection(firestore, 'adminAudit')), withAdminAuditIndex({ action: 'x' }))",
+      "await firestore.collection('adminAudit').doc(id).set(stampAdminAuditIndex({ action: 'x' }), { merge: true })",
       "await addAdminAudit(firestore, { action: 'org.override' })",
       "setAdminAudit(batch, firestore, { action: 'org.override' })",
     ]
