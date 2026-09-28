@@ -24,6 +24,7 @@ import {
   useConsoleHostRoute,
   useFirestore,
   useFirestoreCollection,
+  usePluginApiPost,
 } from '@aglyn/tenant-feature-instance'
 import { Button, Stack, Tooltip, Typography } from '@mui/material'
 import {
@@ -129,6 +130,7 @@ export function useTurnOnLeadRouting(): {
 } {
   const firestore = useFirestore()
   const { enqueueSnackbar } = useSnackbar()
+  const postPluginApi = usePluginApiPost()
   const [turningOn, setTurningOn] = useState<LeadRoutingTarget | null>(null)
   const turnOn = useCallback(
     async ({
@@ -148,6 +150,10 @@ export function useTurnOnLeadRouting(): {
           'routing.lead': true,
           updatedAt: serverTimestamp(),
         })
+        // A lead-routing form holds `0` leads until its first (AGL-3330); the
+        // counters are the forms plugin's to write, so it recounts them —
+        // by address, since this plugin may not import that one.
+        void postPluginApi('/api/forms/stats', { hostId, formIds: [form.$id] })
         enqueueSnackbar(
           `"${form.displayName}"${where} now files a lead from every submission ` +
             'that carries an email address.',
@@ -163,7 +169,7 @@ export function useTurnOnLeadRouting(): {
         setTurningOn(null)
       }
     },
-    [turningOn, firestore, enqueueSnackbar],
+    [turningOn, firestore, enqueueSnackbar, postPluginApi],
   )
   return { turningOn, turnOn }
 }

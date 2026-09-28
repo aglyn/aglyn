@@ -94,6 +94,7 @@ import {
   restampCrmListFieldsAt,
   settleCompanyContactsCounts,
 } from '@aglyn/tenant-data-admin'
+import { runPluginEventHandlers } from '@aglyn/aglyn/plugin-manager/plugin-events'
 // The leaf, not the barrel: the console's API specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
@@ -1487,7 +1488,21 @@ async function deleteFormSubmission(
         headers: ctx.headers,
       })
     }
+    const removed = { id: snap.id, data: (snap.data() ?? {}) as Record<string, unknown> }
     await submissionRef.delete()
+    /*
+     * Whatever counted this row when it arrived (a form's counters, AGL-3330)
+     * cannot see a delete, so the plugins are told what left. Best effort,
+     * isolated per plugin by the seam: the delete is the request, and a
+     * recount that fails leaves its figures for the next one rather than
+     * failing a purge that already happened.
+     */
+    await runPluginEventHandlers('host.records.removed', {
+      orgId: ctx.orgId,
+      hostIds: [hostId],
+      collection: 'formSubmissions',
+      records: [removed],
+    }).catch((error) => console.error('records-removed event after an API delete failed', error))
     const view = {
       id: submissionRef.id,
       object: 'form_submission',

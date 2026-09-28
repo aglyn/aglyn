@@ -12137,6 +12137,7 @@ describe('the Forms list filters and searches the way the rules can prove (AGL-3
     retired: false,
     routing: { lead: true },
     campaignIds: ['cmp-fall'],
+    inCampaign: true,
     stats,
     updatedAt: new Date('2026-09-21T12:00:00Z'),
     ...extra,
@@ -12167,7 +12168,7 @@ describe('the Forms list filters and searches the way the rules can prove (AGL-3
         doc(db, 'hosts', HOST, 'forms', 'form-retired'),
         stored('form-retired', 'Launch notification', {
           submissions: null, leads: null, lastSubmissionAtMs: null,
-        }, { retired: true, archivedAt: 1788811670330, routing: { lead: false }, campaignIds: [] }),
+        }, { retired: true, archivedAt: 1788811670330, routing: { lead: false }, campaignIds: [], inCampaign: false }),
       )
     })
   })
@@ -12187,6 +12188,8 @@ describe('the Forms list filters and searches the way the rules can prove (AGL-3
     ['Status is Retired', query(forms(db), where('retired', '==', true), limit(25))],
     ['Lead routing is off', query(forms(db), inUse, where('routing.lead', '==', false), limit(25))],
     ['Campaign is any of', query(forms(db), inUse, where('campaignIds', 'array-contains-any', ['cmp-fall', 'cmp-spring']), limit(25))],
+    ['In a campaign is No', query(forms(db), inUse, where('inCampaign', '==', false), limit(25))],
+    ['In a campaign beside a range', query(forms(db), inUse, where('inCampaign', '==', true), where('stats.submissions', '>', 0), orderBy('stats.submissions', 'asc'), limit(25))],
     ['Slug equals', query(forms(db), inUse, where('slug', '==', 'contact'), limit(25))],
     ['Display name contains', query(forms(db), inUse, where('nameTokens', 'array-contains', 'audit'), limit(25))],
     ['a range beside every kind of equality', query(
@@ -12232,9 +12235,11 @@ describe('the Forms list filters and searches the way the rules can prove (AGL-3
 
   it('lets an editor retire and rename a form with its list keys, and never write its counters', async () => {
     const ref = doc(authed(EDITOR), 'hosts', HOST, 'forms', 'form-demo')
+    // Every client edit moves Updated (AGL-3330), so each write carries it.
+    const edited = () => ({ updatedAt: new Date() })
     await mustAllow(
       "an editor's retire, with the mirror the list asks",
-      updateDoc(ref, { archivedAt: Date.now(), retired: true }),
+      updateDoc(ref, { archivedAt: Date.now(), retired: true, ...edited() }),
     )
     await mustAllow(
       "an editor's rename, with the keys the list searches",
@@ -12244,28 +12249,71 @@ describe('the Forms list filters and searches the way the rules can prove (AGL-3
         nameTokens: ['b', 'bo', 'boo', 'book', 'a', 'd', 'de', 'dem', 'demo'],
         nameReversed: 'omed a koob',
         searchTokens: ['b', 'bo', 'boo', 'book', 'a', 'd', 'de', 'dem', 'demo'],
+        ...edited(),
       }),
     )
     await mustDeny(
       "an editor's write to the counters the list filters by",
-      updateDoc(ref, { 'stats.submissions': 99 }),
+      updateDoc(ref, { 'stats.submissions': 99, ...edited() }),
+    )
+    await mustDeny(
+      "an editor's write of the lead counter a recount keeps",
+      updateDoc(ref, { 'stats.leads': 0, ...edited() }),
     )
     // The mirror cannot come apart from the fact it mirrors, either way.
     await mustDeny(
       "an editor's restore that leaves the list's mirror saying retired",
-      updateDoc(ref, { archivedAt: null }),
+      updateDoc(ref, { archivedAt: null, ...edited() }),
     )
     await mustDeny(
       "an editor's write of the mirror alone",
-      updateDoc(ref, { retired: false }),
+      updateDoc(ref, { retired: false, ...edited() }),
     )
     await mustAllow(
       "an editor's restore, with the mirror",
-      updateDoc(ref, { archivedAt: null, retired: false }),
+      updateDoc(ref, { archivedAt: null, retired: false, ...edited() }),
     )
     await mustAllow(
       "an editor's edit that touches neither",
+      updateDoc(ref, { consentFieldName: 'consent', ...edited() }),
+    )
+  })
+
+  it('refuses a client edit that leaves Updated where it was (AGL-3330)', async () => {
+    const ref = doc(authed(EDITOR), 'hosts', HOST, 'forms', 'form-demo')
+    // The shape the retire and restore had: the list's Updated never moved.
+    await mustDeny(
+      "an editor's retire that leaves updatedAt alone",
+      updateDoc(ref, { archivedAt: Date.now(), retired: true }),
+    )
+    await mustDeny(
+      "an editor's edit that leaves updatedAt alone",
       updateDoc(ref, { consentFieldName: 'consent' }),
+    )
+    await mustAllow(
+      "an editor's edit stamped with the server's clock",
+      updateDoc(ref, { consentFieldName: 'consent', updatedAt: serverTimestamp() }),
+    )
+  })
+
+  it('keeps In a campaign agreeing with the campaigns a form is filed under (AGL-3330)', async () => {
+    const ref = doc(authed(EDITOR), 'hosts', HOST, 'forms', 'form-demo')
+    const edited = () => ({ updatedAt: new Date() })
+    await mustAllow(
+      "an editor's campaign pick, with the flag the list asks",
+      updateDoc(ref, { campaignIds: ['cmp-fall', 'cmp-spring'], inCampaign: true, ...edited() }),
+    )
+    await mustAllow(
+      "an editor's clear, to the one shape of \"in no campaign\"",
+      updateDoc(ref, { campaignIds: [], inCampaign: false, ...edited() }),
+    )
+    await mustDeny(
+      "an editor's pick that leaves the flag saying no campaign",
+      updateDoc(ref, { campaignIds: ['cmp-fall'], inCampaign: false, ...edited() }),
+    )
+    await mustDeny(
+      "an editor's write of the flag alone",
+      updateDoc(ref, { inCampaign: true, ...edited() }),
     )
   })
 
@@ -12276,10 +12324,13 @@ describe('the Forms list filters and searches the way the rules can prove (AGL-3
       })
     })
     const ref = doc(authed(EDITOR), 'hosts', HOST, 'forms', 'form-legacy')
-    await mustAllow("an editor's edit of a form with no mirror", updateDoc(ref, { consentFieldName: 'c' }))
+    await mustAllow(
+      "an editor's edit of a form with no mirror",
+      updateDoc(ref, { consentFieldName: 'c', updatedAt: new Date() }),
+    )
     await mustAllow(
       "an editor's retire of a form with no mirror",
-      updateDoc(ref, { archivedAt: Date.now(), retired: true }),
+      updateDoc(ref, { archivedAt: Date.now(), retired: true, updatedAt: new Date() }),
     )
   })
 })

@@ -62,10 +62,11 @@ function recorded(value: unknown): number | null {
  * created repeatedly.
  *
  *  - `stats.submissions` / `stats.leads` — `/api/forms/submit`, on the single
- *    `update` it already issues per submission. `leads` counts submissions
- *    this form FILED to the site's Leads; `addHostLead` keys one person to
- *    one document, so a returning visitor's second submission is a second
- *    capture and not a second person.
+ *    `update` it already issues per submission, and recounted from their rows
+ *    after a removal (AGL-3330). `leads` counts the PEOPLE this form filed to
+ *    the Leads list that are still there: `addHostLead` keys one person to one
+ *    document, so a returning visitor's second submission is a second
+ *    submission and not a second lead.
  *  - `stats.views` / `stats.starts` — `/api/analytics/collect`, from the
  *    form's own beacon, in the same shape the overlay counters use.
  *  - `stats.periods` — all four again, keyed by month, riding the same
@@ -186,9 +187,9 @@ export function FormMetricsCard(props: FormMetricsCardProps) {
             note="since this form was created"
           />
           <Figure
-            label="Lead captures"
+            label="Leads"
             value={leads}
-            note="submissions filed to Leads"
+            note="people this form filed to Leads"
           />
           <Figure
             label="Declared fields"

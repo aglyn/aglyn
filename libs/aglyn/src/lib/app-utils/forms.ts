@@ -33,6 +33,7 @@
 
 import type { AglynNodeSchema, NodeId } from '../foundation/definitions/components.types'
 import { FORMS_PLUGIN_ID } from '../plugin-manager/enabled-plugins'
+import { campaignMembershipValue } from './campaign-membership'
 import type { PlacementKind } from './compose-reusable-components'
 import { submissionMonthKey } from './form-abuse-ceiling'
 import { displayNameSearchFields, nameSearchTokens } from './name-search'
@@ -212,6 +213,16 @@ export interface FormDocument<N = AglynNodeSchema> {
    * `false` on every create — see {@link newFormListFields}.
    */
   retired?: boolean
+  /** The campaigns the form is filed under — see {@link formCampaignFields}. */
+  campaignIds?: string[]
+  /**
+   * Whether the form is in any campaign, as a boolean the Forms list can
+   * QUERY (AGL-3330): "in no campaign" is an empty array, and Firestore can
+   * neither find a document by an absent field nor ask an array for its
+   * length. Written beside `campaignIds` by every writer of it, through
+   * {@link formCampaignFields}.
+   */
+  inCampaign?: boolean
   /** The Forms list's search fields — see {@link formListFields}. */
   nameLower?: string
   nameTokens?: string[]
@@ -325,17 +336,51 @@ export function formListFields(form: {
 }
 
 /**
+ * The campaign fields a form is written with, from the campaigns it is filed
+ * under (AGL-3330): the normalized ids, and `inCampaign`, the boolean the
+ * Forms list's "In a campaign" filter asks by equality.
+ *
+ * ⚠️ The ONE way to write a form's `campaignIds`. A writer that sets the ids
+ * without `inCampaign` leaves the form answering the filter by what it used
+ * to be filed under; `apps/console/specs/form-writers-use-the-helpers.spec.ts`
+ * refuses one. The campaign deletion pass removes an id with `arrayRemove`
+ * and restamps `inCampaign` from the form as it then stands.
+ */
+export function formCampaignFields(selected: unknown): {
+  campaignIds: string[]
+  inCampaign: boolean
+} {
+  const campaignIds = campaignMembershipValue(Array.isArray(selected) ? selected : [])
+  return { campaignIds, inCampaign: campaignIds.length > 0 }
+}
+
+/**
+ * The `stats.leads` a form holds when nothing has been counted for it.
+ *
+ * A form that routes leads holds `0` until its first lead, so "Leads = 0"
+ * finds the lead surfaces that have produced nothing yet. A form that does
+ * not route leads holds `null`: it has no leads measurement, which is what
+ * "Leads is empty" asks. The recount and every writer of the switch agree
+ * through this and {@link formCountersFromSource}.
+ */
+export function formLeadsStatWhenUncounted(routesLeads: boolean): 0 | null {
+  return routesLeads ? 0 : null
+}
+
+/**
  * What a NEW form is written with so the Forms list can query every filter
- * it offers (AGL-3330): its search fields, and an explicit value for each
+ * it offers (AGL-3330): its search keys, and an explicit value for each
  * field a query would otherwise have to find by its absence.
  *
  *  - `retired: false`, the queryable mirror of an unset `archivedAt`.
  *  - `routing.lead` as a boolean, `false` unless the form routes to leads, so
  *    "Lead routing is off" is an equality rather than a missing field.
- *  - `stats` with a NULL for each counter. Null, never zero: a form that has
- *    counted nothing has no figure, which is what the list's dash says, and a
- *    zero would claim a measurement. `/api/forms/submit` increments these,
- *    and an increment on null starts from nothing, so it needs no change.
+ *  - `inCampaign`, from the campaigns the form is created in.
+ *  - `stats` with a NULL for each counter, except `leads` on a form that
+ *    routes leads, which starts at `0` (see {@link formLeadsStatWhenUncounted}).
+ *    Null, never zero, where nothing is measured: a zero would claim a
+ *    measurement. `/api/forms/submit` increments these, and an increment on
+ *    null starts from nothing, so it needs no change.
  *
  * `routing` keeps whatever else it carries (a dataset binding).
  */
@@ -344,16 +389,159 @@ export function newFormListFields(form: {
   displayName?: unknown
   slug?: unknown
   routing?: FormRouting | null
+  campaignIds?: unknown
 }): FormListSearchFields & {
   retired: false
   routing: FormRouting
-  stats: { submissions: null; leads: null; lastSubmissionAtMs: null }
+  inCampaign: boolean
+  stats: { submissions: null; leads: 0 | null; lastSubmissionAtMs: null }
 } {
+  const routesLeads = form.routing?.lead === true
   return {
     ...formListFields(form),
     retired: false,
-    routing: { ...(form.routing ?? {}), lead: form.routing?.lead === true },
-    stats: { submissions: null, leads: null, lastSubmissionAtMs: null },
+    routing: { ...(form.routing ?? {}), lead: routesLeads },
+    inCampaign: formCampaignFields(form.campaignIds).inCampaign,
+    stats: {
+      submissions: null,
+      leads: formLeadsStatWhenUncounted(routesLeads),
+      lastSubmissionAtMs: null,
+    },
+  }
+}
+
+/*==========================================
+ * THE COUNTERS, RECOUNTED FROM WHAT THEY COUNT (AGL-3330).
+ *
+ * `stats.submissions`, `stats.leads` and `stats.lastSubmissionAtMs` are kept
+ * by increments on the submit path, which is cheap and never re-reads the
+ * collection it counts. An increment cannot see a delete, a failed write or
+ * a history written before it, so the stored figure drifts; the recount is
+ * what puts it back, from the rows themselves:
+ *
+ *  - submissions: the site's `formSubmissions` whose `formId` is the form;
+ *  - leads: the organization's leads whose `sources` name the form
+ *    (`form:{formId}`, {@link formLeadSource}) — PEOPLE this form brought in
+ *    that the workspace still holds, which is what the submit path counts
+ *    (a returning visitor, or a person already on the list through this
+ *    form, files no second lead);
+ *  - last submission: the newest of those submissions' `createdAt`.
+ *
+ * A server helper (`recountFormStats`) runs it after anything that removes a
+ * row, and `tools/scripts/recount-form-stats.mjs` runs it over every form.
+ * Both decide with the pure functions below; the script's twin answers
+ * `tools/scripts/lib/site-form-stats-recount.fixtures.json`, as this does.
+ *=========================================*/
+
+/** The source a lead filed by a form carries in `sources`. */
+export const FORM_LEAD_SOURCE_PREFIX = 'form:'
+
+/** `form:{formId}` — the lead source a form's capture writes. */
+export function formLeadSource(formId: string): string {
+  return `${FORM_LEAD_SOURCE_PREFIX}${formId}`
+}
+
+/** The form ids a lead's `sources` name, in order, deduplicated. */
+export function formIdsOfLeadSources(sources: unknown): string[] {
+  if (!Array.isArray(sources)) return []
+  const ids: string[] = []
+  for (const source of sources) {
+    if (typeof source !== 'string' || !source.startsWith(FORM_LEAD_SOURCE_PREFIX)) continue
+    const id = source.slice(FORM_LEAD_SOURCE_PREFIX.length)
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
+/** The three counters the Forms list filters by. */
+export interface FormCounterStats {
+  submissions: number | null
+  leads: number | null
+  lastSubmissionAtMs: number | null
+}
+
+/** The counter fields, in reading order. */
+export const FORM_COUNTER_FIELDS: readonly (keyof FormCounterStats)[] = [
+  'submissions',
+  'leads',
+  'lastSubmissionAtMs',
+]
+
+/**
+ * The counters a form should hold, from the rows counted.
+ *
+ * Zero submissions is `null`, the list's "none yet", matching a new form.
+ * Leads follow {@link formLeadsStatWhenUncounted} when there are none — and
+ * a form that stopped routing leads keeps the leads it did file, because
+ * those people are still on the list.
+ */
+export function formCountersFromSource(source: {
+  submissions: number
+  leads: number
+  newestSubmissionAtMs: number | null
+  routesLeads: boolean
+}): FormCounterStats {
+  const submissions = source.submissions > 0 ? source.submissions : null
+  return {
+    submissions,
+    leads: source.leads > 0 ? source.leads : formLeadsStatWhenUncounted(source.routesLeads),
+    lastSubmissionAtMs:
+      submissions !== null && typeof source.newestSubmissionAtMs === 'number'
+        ? source.newestSubmissionAtMs
+        : null,
+  }
+}
+
+/**
+ * How far the stored `lastSubmissionAtMs` may sit from the newest
+ * submission's `createdAt` and still agree.
+ *
+ * The submit path stamps the counter from its own clock after it has written
+ * the submission, whose `createdAt` is the server's commit time, and a lead
+ * capture runs between the two — so a counter that is right reads a little
+ * after the row. Ten minutes is far past that gap and far short of two
+ * submissions a merchant would tell apart.
+ */
+export const FORM_LAST_SUBMISSION_TOLERANCE_MS = 10 * 60_000
+
+/** A stored counter as the recount compares it: a finite number, or `null`. */
+function storedCounter(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/**
+ * The counters on which `stored` disagrees with `recounted`, in reading
+ * order; empty when the form holds what its rows say.
+ *
+ * An ABSENT counter disagrees with a `null` one: "is empty" asks
+ * `== null`, which a missing field does not answer.
+ */
+export function formCounterDrift(
+  stored: Record<string, unknown> | null | undefined,
+  recounted: FormCounterStats,
+): (keyof FormCounterStats)[] {
+  const drift: (keyof FormCounterStats)[] = []
+  for (const field of FORM_COUNTER_FIELDS) {
+    const raw = stored?.[field]
+    const value = storedCounter(raw)
+    const want = recounted[field]
+    if (raw === undefined || (value === null && raw !== null)) {
+      drift.push(field)
+    } else if (field === 'lastSubmissionAtMs' && value !== null && want !== null) {
+      if (Math.abs(value - want) > FORM_LAST_SUBMISSION_TOLERANCE_MS) drift.push(field)
+    } else if (value !== want) {
+      drift.push(field)
+    }
+  }
+  return drift
+}
+
+/** The dotted-path update that puts `recounted` on a form. */
+export function formCounterPatch(recounted: FormCounterStats): Record<string, number | null> {
+  return {
+    'stats.submissions': recounted.submissions,
+    'stats.leads': recounted.leads,
+    'stats.lastSubmissionAtMs': recounted.lastSubmissionAtMs,
   }
 }
 
@@ -380,7 +568,10 @@ export interface FormVersion<N = AglynNodeSchema> {
  * bound and is the one the customer is billed on; a console surface that
  * counted it on render would be the expensive-read shape this product has
  * created repeatedly. `hosts/{hostId}/overlays/{overlayId}.stats` is the same
- * pattern with the same reasoning.
+ * pattern with the same reasoning. What an increment cannot see — a deleted
+ * submission, an erased lead, a failed write — is put back by the RECOUNT
+ * ({@link formCountersFromSource}), which runs after a removal and over every
+ * form from `tools/scripts/recount-form-stats.mjs`; never on render.
  */
 export interface FormStats {
   /*
@@ -389,6 +580,12 @@ export interface FormStats {
    * cannot answer. A reader treats null and absent alike, as no figure.
    */
   submissions?: number | null
+  /*
+   * The people this form filed as leads that the workspace still holds: one
+   * per lead whose `sources` name the form, however often they submitted.
+   * `0` on a form that routes leads and has filed none, `null` on one that
+   * has never routed any — see {@link formLeadsStatWhenUncounted}.
+   */
   leads?: number | null
   lastSubmissionAtMs?: number | null
   /**
@@ -586,9 +783,10 @@ export function formPeriodKey(atMs: number | null | undefined): string | null {
  *
  * Every counter is `number | null` and the distinction is load-bearing. A
  * counter is `null` when nothing was recorded for it at all: `leads` is
- * incremented only by a form whose `routing.lead` is set, so a form that does
+ * counted only for a form whose `routing.lead` is set, so a form that does
  * not route leads has no leads measurement rather than a measured zero, and a
- * `0` in that slot states a result nobody took.
+ * `0` in that slot states a result nobody took. A form that routes leads and
+ * has filed none holds `0`, which is a measurement.
  */
 export interface FormStatsTotals {
   views: number | null

@@ -72,6 +72,7 @@ import FormDesignPreview from './form-design-preview.component'
 import FormMetricsCard from './form-metrics-card.component'
 import FormSubmissionsCard from './form-submissions-card.component'
 import useFormPromoteApi from './use-form-promote-api'
+import useFormStatsRecountApi from './use-form-stats-recount-api'
 
 export interface FormDetailCardProps {
   hostId: string
@@ -146,6 +147,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
   const { orgSlug, subdomain: host } = useConsoleHostRoute(hostId)
   const createHostVersion = useHostVersionApi()
   const promoteForm = useFormPromoteApi()
+  const recountFormStats = useFormStatsRecountApi()
   const router = useRouter()
   const { enqueueSnackbar } = useSnackbar()
   const { queueLoading } = useLoading()
@@ -309,13 +311,10 @@ export function FormDetailCard(props: FormDetailCardProps) {
           : {}),
         // An empty selection is stored as an empty array rather than removing
         // the field: one shape for "in no campaign", which is what keeps this
-        // writer and the campaign's own detach agreeing.
-        ...(campaignIds != null
-          ? {
-              [Aglyn.CAMPAIGN_MEMBERSHIP_FIELD]:
-                Aglyn.campaignMembershipValue(campaignIds),
-            }
-          : {}),
+        // writer and the campaign's own detach agreeing. `inCampaign` rides
+        // with it, the boolean the list's "In a campaign" filter asks
+        // (AGL-3330).
+        ...(campaignIds != null ? Aglyn.formCampaignFields(campaignIds) : {}),
         updatedAt: Timestamp.now(),
       })
       setName(null)
@@ -323,6 +322,14 @@ export function FormDetailCard(props: FormDetailCardProps) {
       setConsentField(null)
       setCampaignIds(null)
       enqueueSnackbar('Form saved', { variant: 'success', persist: false })
+      /*
+       * A form that routes leads holds `0` of them until its first, and one
+       * that does not holds none (AGL-3330). The counters are the server's
+       * to write, so the switch asks for them to be recounted.
+       */
+      if (lead != null && lead !== (form?.routing?.lead === true)) {
+        void recountFormStats({ hostId, formIds: [formId] })
+      }
     } catch (error) {
       console.error(error)
       enqueueSnackbar('An error has occurred', {
@@ -343,6 +350,7 @@ export function FormDetailCard(props: FormDetailCardProps) {
     campaignIds,
     queueLoading,
     enqueueSnackbar,
+    recountFormStats,
   ])
 
   /**

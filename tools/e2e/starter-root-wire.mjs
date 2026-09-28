@@ -87,6 +87,7 @@ import { setDefaultResultOrder } from 'node:dns'
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
 import { createJiti } from 'jiti'
+import { displayNameSearchFields } from '../scripts/lib/name-search-tokens.mjs'
 
 // `<sub>.localhost` resolves to BOTH `::1` and `127.0.0.1` on macOS and Node
 // prefers the v6 answer, while `next start` listens on IPv4 only — so every
@@ -265,6 +266,8 @@ const applyToScratchHost = async (hostId, plan) => {
     const screenRef = hostRef.collection('screens').doc(screenId)
     await screenRef.set({
       displayName: page.displayName,
+      // The keys the screens list searches by, as a create stamps them.
+      ...displayNameSearchFields(page.displayName),
       ...(page.description ? { description: page.description } : {}),
       ...(page.seo ? { seo: page.seo } : {}),
       versionId,

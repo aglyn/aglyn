@@ -42,7 +42,10 @@ let rows: Array<Record<string, unknown>>
 /** The list query the card opened last: its collection and its plan. */
 let mockListQuery: { collection: string; plan: any } | null = null
 
+const mockRecountFormStats = jest.fn(async (_path: string, _body: unknown) => true)
 jest.mock('@aglyn/tenant-feature-instance', () => ({
+  // The form counters' recount (AGL-3330); `form-stats.spec.ts` owns what it writes.
+  usePluginApiPost: () => mockRecountFormStats,
   // The lead silo is the org's (AGL-3275), so these cards resolve it.
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   useFirestore: () => ({}),
