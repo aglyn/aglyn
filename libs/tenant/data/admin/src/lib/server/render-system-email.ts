@@ -18,6 +18,7 @@
 import {
   EMAIL_NODE_ROOT_ID,
   PLATFORM_EMAIL_PALETTE,
+  chromeForDesign,
   SYSTEM_EMAIL_COLLECTION,
   buildEmailPalette,
   buildDefaultEmailNodeMap,
@@ -327,6 +328,9 @@ function systemEmailTheme(options: SystemEmailBrandOptions): EmailTheme {
  *   marketing site, or whose blocks could not be read. The chrome is in the
  *   brand of the send — the org's email logo rides in its header, so a
  *   white-label mail carries exactly one logo.
+ *
+ * Either way, a band the design draws itself is left out of the chrome
+ * (AGL-3372): a design that opens with its own Header gets the footer only.
  */
 export function renderLoadedSystemEmail(
   loaded: LoadedSystemEmail,
@@ -335,10 +339,26 @@ export function renderLoadedSystemEmail(
 ): RenderedSystemEmail | null {
   const merged = { ...PLATFORM_BRAND_MERGE_TOKENS, ...merge }
   const blocks = drawsPlatformBlocks(loaded, merged, options)
-  const rendered = renderEmailHtml({
-    nodes: (blocks
+  const nodes = (
+    blocks
       ? composeReusableComponentNodes(loaded.nodes as never, loaded.components)
-      : loaded.nodes) as never,
+      : loaded.nodes
+  ) as Record<string, unknown>
+  // The brand's chrome around every copy, less any band the design draws
+  // itself (AGL-3372). Unexpanded placements draw nothing in this send, so
+  // they only count when the blocks are drawn.
+  const chrome = chromeForDesign({
+    stored: blocks ? loaded.nodes : null,
+    composed: nodes,
+    chrome: buildSystemEmailChrome({
+      definition: loaded.definition,
+      merged,
+      brandLogoUrl: options.brandLogoUrl,
+      brandHomeUrl: options.brandHomeUrl,
+    }),
+  })
+  const rendered = renderEmailHtml({
+    nodes: nodes as never,
     // Besigner maps are rooted at '_@_', not renderEmailHtml's default
     // 'root' — without this a designed template rendered empty and the send
     // fell back to built-in copy, so designing did nothing (AGL-765).
@@ -362,16 +382,7 @@ export function renderLoadedSystemEmail(
     // No `brandLogoUrl`: the org's email logo (AGL-2139) is the chrome
     // header's logo whenever there is one to draw, and a send that draws the
     // platform's blocks is by definition one that carries none.
-    ...(blocks
-      ? {}
-      : {
-          chrome: buildSystemEmailChrome({
-            definition: loaded.definition,
-            merged,
-            brandLogoUrl: options.brandLogoUrl,
-            brandHomeUrl: options.brandHomeUrl,
-          }),
-        }),
+    ...(chrome ? { chrome } : {}),
   })
   if (!rendered?.html) return null
   return {

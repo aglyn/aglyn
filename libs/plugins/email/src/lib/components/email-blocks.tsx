@@ -62,6 +62,12 @@ export const SECTION_ID: Aglyn.ComponentId = 'emailSection'
 
 export interface EmailSectionProps extends EmailBlockStyleProps {
   backgroundColor?: string
+  /**
+   * `header` or `footer` when the section is the email's own band of that
+   * kind (AGL-3372): the send then leaves the sender's matching band out.
+   * Set by the Header and Footer presets; draws nothing itself.
+   */
+  emailRole?: 'header' | 'footer'
   /** Inner padding in px (default 24). */
   padding?: number
   align?: 'left' | 'center' | 'right'
@@ -70,7 +76,9 @@ export interface EmailSectionProps extends EmailBlockStyleProps {
 
 export const EmailSection = forwardRef<HTMLDivElement, EmailSectionProps>(
   (props, ref) => {
-    const { backgroundColor, padding, align, children, sx, ...rest } = props
+    // `emailRole` is read at send time and must not reach the DOM.
+    const { backgroundColor, padding, align, children, sx, emailRole: _emailRole, ...rest } =
+      props
     return (
       <Box
         ref={ref}
@@ -759,7 +767,9 @@ export const EMAIL_HEADER_PRESET: Aglyn.PresetSchema = {
     $id: null,
     componentId: SECTION_ID,
     pluginId: BUNDLE_ID,
-    props: { align: 'center', padding: 24 },
+    // Marks the band as the email's header, so the sender's own header is
+    // not drawn above it (AGL-3372).
+    props: { align: 'center', padding: 24, emailRole: 'header' },
     nodes: [
       {
         $id: null,
@@ -804,7 +814,9 @@ export const EMAIL_FOOTER_PRESET: Aglyn.PresetSchema = {
     $id: null,
     componentId: SECTION_ID,
     pluginId: BUNDLE_ID,
-    props: { align: 'center', padding: 24 },
+    // Marks the band as the email's footer, so the sender's own footer is
+    // not drawn under it (AGL-3372).
+    props: { align: 'center', padding: 24, emailRole: 'footer' },
     nodes: [
       {
         $id: null,

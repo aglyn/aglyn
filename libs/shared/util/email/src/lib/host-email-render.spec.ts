@@ -525,8 +525,9 @@ describe('reusable blocks go through the composer (AGL-3287)', () => {
 
 /**
  * The site's header, footer and theme (AGL-3370): the frame goes around the
- * built-in copy only, since a published design is the owner's; the theme goes
- * on both, since a design's picked colors are palette tokens.
+ * built-in copy and around a published design, less any band the design
+ * draws itself (AGL-3372); the theme goes on both, since a design's picked
+ * colors are palette tokens.
  */
 describe('the site frame and theme (AGL-3370)', () => {
   const CHROME = {
@@ -560,7 +561,7 @@ describe('the site frame and theme (AGL-3370)', () => {
     expect(result?.html).toContain('border-radius:8px;background-color:#00b0ff;color:#ffffff;')
   })
 
-  it('sends a published design as the owner built it, but resolves its picked colors', async () => {
+  it('frames a published design in the site chrome too, and resolves its picked colors (AGL-3372)', async () => {
     const fs = fakeFirestore(
       { versionId: 'v1', subject: 'Hi' },
       { nodes: TOKEN_BUTTON },
@@ -572,7 +573,8 @@ describe('the site frame and theme (AGL-3370)', () => {
       chrome: CHROME,
       theme: THEME,
     })
-    expect(result?.html).not.toContain('Northwind Coffee')
+    expect(result?.html).toContain('Northwind Coffee')
+    expect(result?.html).toContain('You’re receiving this because you booked with Northwind Coffee.')
     expect(result?.html).toContain('background-color:#00b0ff;')
     expect(result?.html).not.toContain('primary.main')
   })

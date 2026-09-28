@@ -527,7 +527,8 @@ Every one of them goes out with a header and footer of its own: the Aglyn wordma
 linked to aglyn.com, above it, and below it a line saying why the recipient is getting
 the mail, a link to support, and the copyright line with Aglyn's postal address. A
 designed template that places none of the marketing site's email blocks goes out in the
-same header and footer. Mail Aglyn sends to its own staff, and receipts to people who
+same header and footer, less any part it draws itself: a design with its own **Header**
+gets only the footer, and one with its own **Footer** gets only the header. Mail Aglyn sends to its own staff, and receipts to people who
 filed a report, always use Aglyn's brand. Mail to an organization's people uses that
 organization's brand. Buttons and links use the console theme's colors, or a white-label organization's brand
 color when it set one, and a color picked from the theme in the editor goes out as that
