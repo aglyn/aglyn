@@ -56,6 +56,7 @@ import type {
   OutreachMailboxStatus,
   OutreachSendWindow,
 } from '../model/outreach.types'
+import { outreachPacingNote } from './next-send'
 import type { OutreachMailboxApi } from './use-outreach-mailbox-api'
 
 export interface MailboxCardProps {
@@ -371,6 +372,9 @@ export function MailboxCard(props: MailboxCardProps) {
           </Stack>
           <Typography variant="caption" color="text.secondary" aria-label="Tests today">
             {`Tests today: ${testsToday}`}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" component="p" aria-label="Pacing">
+            {outreachPacingNote(mailbox, nowMs)}
           </Typography>
         </Box>
 

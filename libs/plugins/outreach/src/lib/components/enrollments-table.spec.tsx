@@ -25,6 +25,7 @@ import {
 import type { ComponentProps } from 'react'
 import type {
   OutreachEnrollment,
+  OutreachMailbox,
   OutreachSequenceStep,
 } from '../model/outreach.types'
 import {
@@ -177,8 +178,12 @@ const rowOf = (name: string) =>
     .getByRole('gridcell', { name: new RegExp(name) })
     .closest('[role="row"]') as HTMLElement
 
+// The clock the rows are read at: a day before DUE, so a next send is a time ahead.
+const BEFORE_DUE = Date.parse('2026-09-21T15:00:00Z')
+
 beforeEach(() => {
   jest.clearAllMocks()
+  jest.spyOn(Date, 'now').mockReturnValue(BEFORE_DUE)
   api = {
     actOnEnrollment: jest.fn().mockResolvedValue({
       ok: true,
@@ -281,6 +286,35 @@ describe('the enrollments table: what it shows (AGL-2980)', () => {
     // word of it on hover (AGL-3332).
     const reason = within(avery).getByText('On the do-not-contact list')
     expect(reason.getAttribute('title')).toBe('On the do-not-contact list — Asked on a call')
+  })
+
+  it('says a due first email is queued behind pacing, not a time already past (AGL-3366)', () => {
+    // 10:05 AM in Chicago, 51 minutes after DUE, with 12 of 30 sent today.
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-22T15:05:00Z'))
+    const mailbox = {
+      id: 'mbx-1',
+      status: 'connected',
+      dailyCap: 30,
+      rampStartedAtMs: null,
+      timezone: 'America/Chicago',
+      window: { days: [1, 2, 3, 4, 5], startMinute: 8 * 60, endMinute: 17 * 60 },
+      health: { sentToday: 12, sentOnDay: '2026-09-22' },
+    } as OutreachMailbox
+    renderTable(loaded([enrollment({ stepIndex: 0 })]), {
+      mailbox,
+      sequence: { status: 'active', steps, settings: {} as never },
+    })
+    const cell = within(rowOf('Casey Morgan')).getByText('Queued · paced')
+    // The exact due time stays on hover, beside why it is waiting.
+    expect(cell.getAttribute('title')).toMatch(/^Due Sep 22, 9:14 AM CDT\. Emails go out a few at a time every 15 minutes, follow-ups first/)
+    expect(cell.getAttribute('title')).toContain('This mailbox has sent 12 of 30 today and may send 1 in this run.')
+    expect(within(rowOf('Casey Morgan')).queryByText(/Sep 22, 9:14 AM CDT/)).toBeNull()
+  })
+
+  it('says a due enrollment is held when its mailbox is not sending (AGL-3366)', () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-22T15:05:00Z'))
+    renderTable(loaded([enrollment({ stepIndex: 0 })]), { mailbox: null })
+    expect(within(rowOf('Casey Morgan')).getByText('Held · mailbox not sending')).toBeTruthy()
   })
 
   it('says where a finished person is, and why a stopped one stopped', () => {
