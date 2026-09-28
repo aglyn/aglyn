@@ -459,3 +459,62 @@ describe('manifest icon sizes are never fabricated (AGL-2204)', () => {
     ).toThrow()
   })
 })
+
+/**
+ * The manifest a link unfurler reads (AGL-3382). Measured on production for
+ * `ready-to-roll.aglyn.app`: `short_name` was `Ready To Rol`, cut mid-word by
+ * this route itself, and a site whose only mark was a favicon installed with
+ * no icon at all.
+ */
+describe('link-preview manifest fields (AGL-3382)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  const SITE = {
+    $id: 'ZG22ootbN-',
+    displayName: 'Ready To Roll',
+    subdomain: 'ready-to-roll',
+  }
+  const ORIGIN = 'https://ready-to-roll.aglyn.app/api/media/cdn/'
+
+  it('cuts short_name at a word, never inside one', async () => {
+    mockGetHost.mockResolvedValue({ host: SITE })
+    const { body } = await manifestFor('ready-to-roll')
+    expect(body.short_name).toBe('Ready To')
+  })
+
+  it('lists the app icon first and the favicon after it', async () => {
+    mockGetHost.mockResolvedValue({
+      host: {
+        ...SITE,
+        seo: {
+          appIcon: 'media:org:Ok7uFGMCC-/mKeulwfbL0',
+          favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA',
+        },
+      },
+    })
+    const { body } = await manifestFor('ready-to-roll')
+    expect(body.icons.map((icon: { src: string }) => icon.src)).toEqual([
+      `${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/mKeulwfbL0`,
+      `${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA`,
+    ])
+    // The favicon claims no size either (AGL-2204).
+    expect(body.icons[1]).not.toHaveProperty('sizes')
+  })
+
+  it('installs a favicon-only site with its favicon', async () => {
+    mockGetHost.mockResolvedValue({
+      host: { ...SITE, seo: { favicon: 'media:org:Ok7uFGMCC-/o0-uaWHCNA' } },
+    })
+    const { body } = await manifestFor('ready-to-roll')
+    expect(body.icons).toEqual([
+      { src: `${ORIGIN}org:Ok7uFGMCC-:ZG22ootbN-/o0-uaWHCNA`, purpose: 'any' },
+    ])
+  })
+
+  it('still lists no icons, and nothing of ours, for a site with neither', async () => {
+    mockGetHost.mockResolvedValue({ host: SITE })
+    const { body } = await manifestFor('ready-to-roll')
+    expect(body).not.toHaveProperty('icons')
+    expect(JSON.stringify(body)).not.toMatch(/_static|brand/)
+  })
+})

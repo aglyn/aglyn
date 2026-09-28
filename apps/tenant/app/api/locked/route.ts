@@ -63,6 +63,10 @@ import {
 import { escapeHtml } from '@aglyn/shared-util-tools/escape-html'
 import { CNAME_HOST_PREFIX, getHost } from '../../../utils/get-host'
 import { getOrgBilling } from '../../../utils/get-org-billing'
+import {
+  siteAppleTouchIconSrc,
+  siteFaviconSrc,
+} from '../../../utils/site-icons'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,7 +88,37 @@ type Refusal =
   | { kind: 'contained' }
   | { kind: 'none' }
 
-function noticeHtml(refusal: Refusal): string {
+/**
+ * The site's own icons on its notice page (AGL-3382), for the two refusals
+ * that are about traffic rather than about the site.
+ *
+ * A capped or contained site is a customer's healthy site having a busy
+ * month, and a link to it shared while it is down should still preview as
+ * that site. A LOCKED site gets none: a takedown stops advertising the site,
+ * the same reason the middleware serves this page for its sitemap and
+ * manifest. Neither case falls back to ours — with no link the browser asks
+ * the origin's `/favicon.ico`, which the middleware answers with this same
+ * notice while the refusal holds.
+ */
+interface NoticeIcons {
+  favicon?: string
+  appleTouchIcon?: string
+}
+
+function noticeIconLinks(marks: NoticeIcons): string {
+  return [
+    marks.favicon
+      ? `<link rel="icon" href="${escapeHtml(marks.favicon)}">`
+      : '',
+    marks.appleTouchIcon
+      ? `<link rel="apple-touch-icon" href="${escapeHtml(marks.appleTouchIcon)}">`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function noticeHtml(refusal: Refusal, siteMarks: NoticeIcons = {}): string {
   const notice =
     refusal.kind === 'lock'
       ? lockdownNotice(refusal.state)
@@ -106,6 +140,7 @@ function noticeHtml(refusal: Refusal): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+${noticeIconLinks(siteMarks)}
 <title>${escapeHtml(notice.title)}</title>
 <style>
   body { margin: 0; font-family: system-ui, -apple-system, sans-serif;
@@ -142,6 +177,7 @@ export async function GET(request: Request): Promise<Response> {
     url.searchParams.get('host') ??
     ''
   let refusal: Refusal = { kind: 'none' }
+  let siteMarks: NoticeIcons = {}
   try {
     if (host && !host.includes('/')) {
       const hostRes = await getHost({ host })
@@ -181,6 +217,12 @@ export async function GET(request: Request): Promise<Response> {
                 )
               ? { kind: 'contained' }
               : { kind: 'none' }
+        if (refusal.kind === 'cap' || refusal.kind === 'contained') {
+          siteMarks = {
+            favicon: siteFaviconSrc(hostRes.host),
+            appleTouchIcon: siteAppleTouchIconSrc(hostRes.host),
+          }
+        }
       }
     }
   } catch (error) {
@@ -192,7 +234,7 @@ export async function GET(request: Request): Promise<Response> {
       : refusal.kind === 'cap' || refusal.kind === 'contained'
         ? BANDWIDTH_CAP_RETRY_AFTER_SECONDS
         : undefined
-  return new Response(noticeHtml(refusal), {
+  return new Response(noticeHtml(refusal, siteMarks), {
     status: 503,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',

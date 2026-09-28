@@ -28,6 +28,11 @@ import AdminBarSlot from '../admin-bar/admin-bar-slot'
 import getOrgBilling from '../../../utils/get-org-billing'
 import { getHostCached } from '../host-data'
 import { orgBrandFavicon, resolveSiteFaviconHref } from '../site-favicon'
+import {
+  siteAppleTouchIconSrc,
+  siteFaviconSrc,
+  siteThemeColorMeta,
+} from '../../../utils/site-icons'
 import { HostThemeProviders } from '../host-theme-providers'
 
 /**
@@ -87,9 +92,20 @@ export default async function HostLayout({
    * stored value carries no MIME, and a WRONG `type` is worse than none —
    * browsers use it to pick between candidates and will skip the only one.
    */
-  const siteFavicon = resolveMediaSrc(hostRes.host?.seo?.favicon, {
-    hostId: hostRes.host?.$id,
-  })
+  const siteFavicon = siteFaviconSrc(hostRes.host)
+  /**
+   * The touch icon and theme color a link preview reads (AGL-3382).
+   *
+   * iMessage, Slack and Safari look for `apple-touch-icon` before anything
+   * else, and with no link on the page they fetch the origin's own files —
+   * which answered with Aglyn's mark, so every customer's link previewed as
+   * ours. The app icon first, then the favicon; neither means no link, and
+   * the origin's `/apple-touch-icon.png` now answers for the site too.
+   *
+   * The theme color is the manifest's `theme_color` read, per scheme.
+   */
+  const appleTouchIcon = siteAppleTouchIconSrc(hostRes.host)
+  const themeColors = siteThemeColorMeta(hostTheme)
   /**
    * The site's public top-level pages (AGL-2187), for the error boundaries.
    *
@@ -221,6 +237,17 @@ export default async function HostLayout({
           the layout needing to know which it is on. */}
       <link rel="manifest" href="/manifest.webmanifest" />
       {faviconHref ? <link rel="icon" href={faviconHref} /> : null}
+      {appleTouchIcon ? (
+        <link rel="apple-touch-icon" href={appleTouchIcon} />
+      ) : null}
+      {themeColors.map(({ content, media }) => (
+        <meta
+          key={media ?? 'theme-color'}
+          name="theme-color"
+          content={content}
+          media={media}
+        />
+      ))}
       {fontsHref ? (
         <>
           <link

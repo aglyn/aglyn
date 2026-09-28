@@ -19,6 +19,7 @@ import { hostPublicOrigin } from '@aglyn/aglyn/app-utils/host-naming'
 import { resolveSiteTheme } from '@aglyn/aglyn/app-utils/marketplace-theme'
 import { absoluteMediaSrc } from '@aglyn/aglyn/app-utils/media-ref'
 import getHost from '../../../utils/get-host'
+import { manifestShortName, siteThemeColor } from '../../../utils/site-icons'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,8 +55,9 @@ export async function GET(request: Request): Promise<Response> {
 
   const name = site?.displayName || site?.name || 'Site'
   // `short_name` is what a home screen actually shows, and it is truncated
-  // hard. Better to cut it deliberately than let the OS do it mid-word.
-  const shortName = name.length > 12 ? `${name.slice(0, 12).trim()}` : name
+  // hard. Better to cut it deliberately, at a word, than let the OS do it
+  // mid-word — or do it mid-word ourselves, which this once did (AGL-3382).
+  const shortName = manifestShortName(name)
 
   // The site's own colours, from the LIGHT scheme.
   //
@@ -68,7 +70,7 @@ export async function GET(request: Request): Promise<Response> {
   // Defaults are neutral rather than ours: a site with no theme should look
   // unbranded, not like Aglyn.
   const light = theme?.colorSchemes?.light
-  const themeColor = light?.primary?.main || '#000000'
+  const themeColor = siteThemeColor(theme, 'light') || '#000000'
   const backgroundColor = light?.background?.default || '#ffffff'
 
   /**
@@ -114,7 +116,7 @@ export async function GET(request: Request): Promise<Response> {
     hostId: site?.$id,
     origin: hostPublicOrigin(site),
   })
-  const icons = iconSrc
+  const icons: Array<{ src: string; purpose: string; sizes?: string }> = iconSrc
     ? [
         {
           src: iconSrc,
@@ -166,7 +168,24 @@ export async function GET(request: Request): Promise<Response> {
           sizes: 'any',
         },
       ]
-    : undefined
+    : []
+  /**
+   * The favicon as a second entry (AGL-3382), after the square mark.
+   *
+   * Some installers and every link unfurler that reads the manifest take the
+   * first icon they can fetch, and a site that set only a favicon — the
+   * common case — otherwise had nothing here at all. It carries no `sizes`
+   * for the AGL-2204 reason above, and it follows the app icon rather than
+   * leading, because a 16–32px glyph is the worse of the two at any size an
+   * installer asks for.
+   */
+  const faviconSrc = absoluteMediaSrc(site?.seo?.favicon, {
+    hostId: site?.$id,
+    origin: hostPublicOrigin(site),
+  })
+  if (faviconSrc && faviconSrc !== iconSrc) {
+    icons.push({ src: faviconSrc, purpose: 'any' })
+  }
 
   const manifest = {
     name,
@@ -176,7 +195,7 @@ export async function GET(request: Request): Promise<Response> {
     display: 'standalone',
     theme_color: themeColor,
     background_color: backgroundColor,
-    ...(icons ? { icons } : {}),
+    ...(icons.length ? { icons } : {}),
   }
 
   return new Response(JSON.stringify(manifest, null, 2), {
