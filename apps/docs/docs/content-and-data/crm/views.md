@@ -83,28 +83,28 @@ not apply that filter, and a notice above the table names it and says why.
 ## Filters on the Contacts list
 
 On the Contacts list the fields are the list's columns and a few that are not
-— owner, stage, source, company, tags, form, site, orders, lifetime value,
-the updated date, email verdict, next activity, and one field per
-[custom field](./custom-fields.md) your organization has defined.
+— the address, source, company, form, site, orders, lifetime value, the
+created date, and one field per [custom field](./custom-fields.md) your
+organization has defined.
 
 Each field offers what the list's query can answer:
 
 | Field | Filter by |
 | --- | --- |
-| **Contact** | The name **contains** a word, **is** exactly a name, **starts with** or **ends with** some letters. |
-| **Email** | **is** an address, or **starts with** some letters. |
-| **Tags** | **contains** a tag, **any of** several, or **is not empty**. |
+| **Contact** | The name **contains** a word, **equals** a whole name, **starts with** or **ends with** some letters. |
+| **Email** (the address) | **equals** an address, or **starts with** some letters. |
+| **Email** (the verdict column) | **is** one verdict, or **is any of** several. |
+| **Tags** | **contains** a tag, **is any of** several, or **is not empty**. |
 | **Form ID** | **contains** a form's ID — the form's own page links here with it. |
-| **Site ID** | **is** a site's ID, or **any of** several. |
-| **Orders**, **Lifetime value** | **is not empty** — the person has bought, or is worth something. Each site keeps its own figures on its own record of the person, where no range reaches, so there are no numeric ranges. |
-| **Created** | **on**, **after** or **before** a date. |
-| **Updated** | **on**, **after** or **before** a date. |
+| **Site ID** | **equals** a site's ID, or **is any of** several. |
+| **Orders**, **Lifetime value (cents)** | **is not empty** — the person has bought, or is worth something. Each site keeps its own figures on its own record of the person, where no range reaches, so there are no numeric ranges. |
+| **Created** | **is**, **is after**, **is on or after**, **is before** or **is on or before** a date. |
+| **Last activity** | The same five date conditions, asked of when the contact's record last changed; its chip reads **Updated**. |
 | **Next activity** | **is empty** — no next activity scheduled. |
-| **Owner**, **Stage** | **is** one, **any of** several, or **is not empty**. |
-| **Source** | **is** one, or **any of** several. |
-| **Company** | **is** one, or **is not empty**. |
-| **Email verdict** | **is** one verdict, **any of** several, **is empty** (nothing known) or **is not empty**. |
-| A custom field | **equals** a choice, or **any of** several, for a choice field; **equals** for text or a number; **is** or **is not** ticked for a checkbox; **is not empty** for any. |
+| **Owner**, **Stage** | **is** one, or **is any of** several. **Owner** offers **Me** first. |
+| **Source** | **is** one, or **is any of** several. |
+| **Company** | **is** one. |
+| A custom field | **is** a choice, or **is any of** several, for a choice field; **equals** and **is not empty** for text; **=** and **is not empty** for a number; **is not empty** for a date; **is** ticked or not for a checkbox. |
 
 **Search** finds a person by a word of their name, their email addresses or
 their company, or by the digits of their phone number — the whole number, or
@@ -114,7 +114,7 @@ have their own filter.
 **Created**, and a name or address that **starts with** or **ends with**
 some letters, each order the list by their own field, so each stands on its
 own: with another filter or the search beside it, it is not applied, and the
-notice says so. **Updated** combines with anything.
+notice says so. **Last activity** combines with anything.
 
 Under a site, the owner, stage, source, company, tags, custom-field and orders
 filters read that site's own record of the person; at the organization level,
@@ -123,7 +123,11 @@ they match on any site's record.
 Only one of these filters stands at a time: a name **contains** word,
 **Tags**, **Form ID**, one of the other per-site fields — Owner, Stage,
 Source, Company, a custom field, Orders or Lifetime value — or the search.
-A second one is not applied, and the notice says so. A member whose access is limited to
+A second one is not applied, and the notice says so. Under a site, the
+site's own narrowing already holds that one place, so a name **contains**
+word is not applied there — use **starts with**, or the search; Tags, Form
+ID and the per-site fields take the narrowing's place for an
+organization-wide member. A member whose access is limited to
 particular sites cannot use the per-site fields or **Form ID** under a site;
 the notice says that too. Their search matches the start of a contact's name,
 and a notice says so.
@@ -134,11 +138,12 @@ footer to turn the page.
 
 ## Filters on the other lists
 
-- **Leads** — Status, Email, Owner, Lead source and Campaign; the search
+- **Leads** — Status, Email, Owner and Lead source (one, or any of several)
+  and Campaign (one); the search
   finds a lead by a word of its name, email address, company, title or tags.
   **Campaign** and the search cannot be combined. See
   [the leads list](./leads.md#filter-the-leads).
-- **Companies** — Company (**is** exactly, or **starts with**, which orders
+- **Companies** — Company (**equals**, or **starts with**, which orders
   the list by name), Owner (one teammate, or any of several) and Next
   activity; the search finds a company by a word of its name or domain. See
   [the companies list](./companies.md#the-companies-list).
@@ -146,8 +151,9 @@ footer to turn the page.
   Next activity; the search finds a deal by any word of its title. See
   [the board and the table](./deals.md#the-board-and-the-table).
 - **Tasks** — **Show** is the task view (My tasks, Overdue, Today, Upcoming,
-  All open, Done); Kind, Priority and Assignee filter it, and the search finds
-  a task by a word of its title.
+  All open, Done); Kind, Priority and Assignee (one, or any of several)
+  filter it, and the search finds a task by a word of its title. See
+  [the tasks page](./tasks.md#the-tasks-page).
 
 On the contacts, companies and deals lists, **Next activity** › **is empty**
 keeps only the records with no open task scheduled against them (see
@@ -159,9 +165,11 @@ answered by the query and adds up with the rest.
 **Manage columns** in any list's column menu chooses what shows, and **Move
 left** / **Move right** in the same menu put a column where you want it. A view
 keeps both — the choice and the order — and a view saved before a column existed
-shows the new column too, after the ones it names. On the Leads and Contacts
-lists the column headers do not sort: those lists keep their newest-first
-order.
+shows the new column too, after the ones it names. On the Leads, Contacts and
+Tasks lists the column headers do not sort: each keeps its query's order —
+newest first, or for tasks soonest due first (**Done**: most recently due
+first). On the Companies and Deals tables a column header sorts the rows of
+the page on screen only; the pages themselves keep the list's own order.
 
 ## Segments and views
 

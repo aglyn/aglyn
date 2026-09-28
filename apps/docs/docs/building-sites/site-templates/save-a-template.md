@@ -38,13 +38,12 @@ Starter sites and marketplace templates are whole-site page bundles, so they app
 only on **Screens** — a layout or component picker would have nothing to do with
 them.
 
-The picker's search box finds a template, a starter or a marketplace listing by the
-start of any word of its name. Each shelf asks its own query, so the search looks
-through your whole library and the whole marketplace, not only the cards on screen,
-and your templates and the marketplace templates page through what matched.
-
-Use the filter icon in the dialog's header to search by name, description or
-category.
+The filter icon in the dialog's header opens the picker's search box, which finds a
+template, a starter or a marketplace listing by the start of any word of its name —
+its name only, not its description or category. It reads the first word you type.
+Each shelf asks its own query, so the search looks through your whole library and the
+whole marketplace, not only the cards on screen, and your templates and the
+marketplace templates page through what matched.
 
 ## Save your site as a template
 

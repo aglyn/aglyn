@@ -187,6 +187,12 @@ describe('the staff Organizations list draws its zone through it', () => {
     expect(page).toContain('rows={sortedOrgs}')
   })
 
+  it("keeps the query's order under the grid's own headers", () => {
+    expect(page).toContain('disableColumnSorting')
+    expect(page).not.toContain('onSortModelChange')
+    expect(page).not.toContain('sortModel=')
+  })
+
   it('places the columns after the limits and before Created', () => {
     const limits = page.indexOf("field: 'siteLimit'")
     const plugins = page.indexOf('...pluginGridCols')

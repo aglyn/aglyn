@@ -255,6 +255,9 @@ export function NotificationsTable(props: NotificationsTableProps) {
           columns={columns}
           rowHeight={TABLE_ROW_HEIGHT}
           hideFooter
+          // One page of the feed, in the feed's order; a header sort would
+          // order only that page and read as the whole list's.
+          disableColumnSorting
           // No index holds a notification's words; see above.
           quickFilter={false}
           onOpen={(_id, row) => onOpen(row)}

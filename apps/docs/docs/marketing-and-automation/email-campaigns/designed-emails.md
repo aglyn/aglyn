@@ -31,8 +31,8 @@ email document and opens it in the besigner with the email blocks:
 
 ## Find a template
 
-The templates table filters through its toolbar by name (it contains a word,
-it is, or it starts with), and **Search** matches the start of any word of a
+The templates table filters through its toolbar by **Template**, the name (it
+contains a word, it is, or it starts with), and **Search** matches the start of any word of a
 template's name, up to its first twelve characters. The filters and the search
 are asked of the site's templates themselves, so they reach every template the
 site holds, a page at a time in name order, not only the page on screen. A name
@@ -42,7 +42,7 @@ them applies at a time; a note above the table says which was set aside. The
 listing, but it is not a filter.
 
 On your organization's Emails page the same filters and search run on each
-site's templates, and **Site** chooses which sites are read: any of your sites,
+site's templates, and the **Site** filter (is, is any of) chooses which sites are read: any of your sites,
 wherever it sits in the pages of sites. Without it, the table reads the page of
 sites the **Sites** picker shows. It lists up to 50 matching templates from each
 site; where a site has more, the note under the table says so and links to that

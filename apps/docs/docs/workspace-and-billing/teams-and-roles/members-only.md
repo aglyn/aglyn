@@ -15,7 +15,7 @@ paywall need the content-gating feature; on lower plans (or if a
 subscription lapses) gated content is not served.
 :::
 
-![A site's Users page: the Site users table of members with their email, name, join date and status, above the Users card that grants site access](/img/teams-and-roles/host-users-page.png)
+![A site's Users page: the Site users table of members with their email, name, join date and status, under its Columns, Filters, Export and Search controls, above the Users card that grants site access](/img/teams-and-roles/host-users-page.png)
 
 ## Let visitors sign up
 
@@ -73,8 +73,12 @@ link on the sign-in form (or by visiting `/recover` directly):
 The site's **Users** page lists everyone who signed up on your published site —
 paged, newest first. The search box finds a member by the start of any word of their
 name or email address, and **Filters** in the table's toolbar narrows the list by email,
-name, join date or **Status** (Active or Suspended). They add up, across every member
-rather than the page on screen, because the query that reads the list answers them all.
+name, join date or **Status** (Active or Suspended). They add up — except that a
+**Name contains** filter and a search can't stand together, and the list says which it
+set aside — across every member rather than the page on screen, because the query that
+reads the list answers them all. The
+[member guide](../../guides/member-accounts.md#5-manage-members-from-the-console) names
+each filter's operators.
 See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search). Click a member to open their detail drawer:
 
 - **Profile** — email, display name, join date, and saved addresses.
