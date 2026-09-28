@@ -21,14 +21,25 @@ import {
   type OutreachEnrollmentEvent,
 } from '../engine/enrollment-state'
 import { OUTREACH_OPEN_ENROLLMENT_STATUSES } from '../engine/gates'
+import { outreachEmailDomain } from '../engine/do-not-contact-domain'
 import type {
   OutreachEnrollmentAction,
   OutreachEnrollmentActionResponse,
+  OutreachEnrollmentGatewayResponse,
 } from '../model/outreach-api'
 import { outreachActionHistoryRow, outreachHistoryEntryId } from '../model/enrollment-history'
 import { OUTREACH_ENROLLMENT_HISTORY, type OutreachEnrollment } from '../model/outreach.types'
 import { addOutreachDoNotContact } from '../storage/do-not-contact-store'
-import { outreachOrgCollection, readStoredOutreachEnrollment } from '../storage/outreach-records'
+import {
+  outreachMailboxSendingDomain,
+  readOutreachDomainIntel,
+  readOutreachGatewayStandings,
+} from '../storage/domain-intel-store'
+import {
+  outreachOrgCollection,
+  readStoredOutreachEnrollment,
+  readStoredOutreachMailbox,
+} from '../storage/outreach-records'
 import type { OutreachRouteDeps } from './route-deps'
 import { outreachRouteGate } from './route-gate'
 import {
@@ -204,4 +215,67 @@ async function optOutOtherEnrollments(
   }
   if (writes) await batch.commit()
   return writes
+}
+
+/**
+ * THE MAIL GATEWAY IN FRONT OF ONE ENROLLED PERSON (AGL-3332):
+ * `outreach/enrollments/gateway`, for the Details of their page.
+ *
+ * The same two reads the Check-people step makes (AGL-3326, AGL-3328): the
+ * domain's MX through the platform cache, which no member may read and a
+ * lookup refreshes, and that gateway's standing with the domain the
+ * enrollment's mailbox sends from. Nothing is written but the cache.
+ */
+export function createOutreachEnrollmentGatewayRoute(deps: OutreachRouteDeps): PluginWebApiHandler {
+  return async (request) => {
+    if (request.method !== 'POST') return outreachMethodNotAllowed('POST')
+    const body = await readOutreachJsonBody(request)
+    const caller = await outreachRouteGate(request, body['orgId'], deps.gate)
+    if (caller instanceof Response) return caller
+    const enrollmentId = readOutreachDocumentId(body['enrollmentId'])
+    if (!enrollmentId) return outreachRefusal(400, 'invalid-request', 'Name the enrollment.')
+    const firestore = deps.firestore()
+    const snapshot = await outreachOrgCollection(firestore, caller.orgId, 'enrollments').doc(enrollmentId).get()
+    const enrollment = readStoredOutreachEnrollment(enrollmentId, snapshot.exists ? snapshot.data() : undefined)
+    if (!enrollment) return outreachRefusal(404, 'enrollment-not-found', 'That enrollment no longer exists.')
+    const domain = outreachEmailDomain(enrollment.email)
+    let sendingDomain: string | null = null
+    if (enrollment.mailboxId) {
+      try {
+        const mailbox = await outreachOrgCollection(firestore, caller.orgId, 'mailboxes').doc(enrollment.mailboxId).get()
+        sendingDomain = outreachMailboxSendingDomain(
+          readStoredOutreachMailbox(enrollment.mailboxId, mailbox.exists ? mailbox.data() : undefined),
+        )
+      } catch (error) {
+        console.error('[outreach] the enrollment mailbox could not be read for its sending domain', error)
+      }
+    }
+    const input = {
+      resolveMx: deps.resolveMx,
+      resolveAddress: deps.resolveAddress,
+      nowMs: deps.now(),
+      sendingDomain,
+    }
+    const [intel, standings] = domain
+      ? await Promise.all([
+          readOutreachDomainIntel(firestore, caller.orgId, [enrollment.email], input),
+          readOutreachGatewayStandings(firestore, caller.orgId, [enrollment.email], input).catch(
+            (error: unknown) => {
+              console.error('[outreach] the gateway standing could not be read', error)
+              return new Map()
+            },
+          ),
+        ])
+      : [new Map(), new Map()]
+    const found = intel.get(enrollment.email) ?? null
+    return outreachOk({
+      ok: true,
+      domain,
+      sendingDomain,
+      intel: found
+        ? { status: found.status, mx: found.mx, gateway: found.gateway, resolvedAtMs: found.resolvedAtMs }
+        : null,
+      standing: standings.get(enrollment.email) ?? null,
+    } satisfies OutreachEnrollmentGatewayResponse)
+  }
 }

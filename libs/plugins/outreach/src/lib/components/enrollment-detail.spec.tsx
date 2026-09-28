@@ -17,8 +17,8 @@
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import type { OutreachEnrollmentGatewayResponse } from '../model/outreach-api'
 import type {
-  OutreachDomainIntel,
   OutreachEnrollment,
   OutreachEnrollmentHistoryEntry,
   OutreachMailbox,
@@ -45,7 +45,7 @@ const mockEnqueueSnackbar = jest.fn()
 let mockSequence: OutreachLoad<OutreachSequence | null>
 let mockEnrollment: OutreachLoad<OutreachEnrollment | null>
 let mockHistory: OutreachLoad<OutreachEnrollmentHistoryEntry[]>
-let mockIntel: OutreachLoad<OutreachDomainIntel | null>
+let mockGateway: OutreachLoad<OutreachEnrollmentGatewayResponse | null>
 
 jest.mock('./use-outreach-api', () => ({
   ...jest.requireActual('./use-outreach-api'),
@@ -55,7 +55,7 @@ jest.mock('./use-outreach-data', () => ({ useOutreachSequence: () => mockSequenc
 jest.mock('./use-outreach-enrollment', () => ({
   useOutreachEnrollment: () => mockEnrollment,
   useOutreachEnrollmentHistory: () => mockHistory,
-  useOutreachDomainIntel: () => mockIntel,
+  useOutreachEnrollmentGateway: () => mockGateway,
 }))
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useOrgMemberOptions: () => ({
@@ -186,7 +186,7 @@ beforeEach(() => {
   mockSequence = { status: 'ready', data: sequence() }
   mockEnrollment = { status: 'ready', data: enrollment() }
   mockHistory = { status: 'ready', data: [] }
-  mockIntel = { status: 'ready', data: null }
+  mockGateway = { status: 'ready', data: null }
   mockApi.actOnEnrollment.mockResolvedValue({ ok: true, changed: true, stoppedOthers: 0, enrollment: {} })
 })
 
@@ -296,10 +296,7 @@ describe('the timeline: everything that happened to them', () => {
       status: 'ready',
       data: enrollment({ status: 'bounced', stopReason: 'hard_bounce', stopDetail: '550 5.7.1 Message rejected', stoppedAtMs: T + 5 * MIN, nextDueAtMs: null }),
     }
-    mockIntel = {
-      status: 'ready',
-      data: { domain: 'example.com', mx: ['d1.ess.barracudanetworks.com'], gateway: 'barracuda', resolvedAtMs: T, sent: 3, delivered: 0, blocked: 2, lastBlockedAtMs: T, updatedAtMs: T },
-    }
+    mockGateway = { status: 'ready', data: barracuda }
     renderDetail()
     const [row] = activity().getAllByRole('listitem')
     expect(row.textContent).toContain('Bounced')
@@ -321,7 +318,31 @@ describe('the timeline without its history rows', () => {
   })
 })
 
+const barracuda: OutreachEnrollmentGatewayResponse = {
+  ok: true,
+  domain: 'example.com',
+  sendingDomain: 'aglyn.io',
+  intel: { status: 'mx', mx: ['d1.ess.barracudanetworks.com'], gateway: 'barracuda', resolvedAtMs: T },
+  standing: { gateway: 'barracuda', blocked7: 2, delivered7: 0, blocked30: 2, delivered30: 0 },
+}
+
 describe('Details: everything else, closed until asked for', () => {
+  it('says the gateway in front of the domain, and what it did with mail from the sending domain', () => {
+    mockGateway = { status: 'ready', data: barracuda }
+    renderDetail()
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }))
+    const line = screen.getByText(/MX d1\.ess\.barracudanetworks\.com/).textContent
+    expect(line).toContain('Barracuda')
+    expect(line).toContain('0 delivered, 2 refused from aglyn.io in the last 30 days')
+  })
+
+  it('says why there is no gateway to show, rather than leaving it blank', () => {
+    mockGateway = { status: 'refused', data: null }
+    renderDetail()
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }))
+    expect(screen.getByText('Your role cannot look it up')).toBeTruthy()
+  })
+
   it('opens on the personal line, the campaigns, the curated copy and the id', () => {
     mockEnrollment = {
       status: 'ready',

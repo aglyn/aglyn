@@ -19,30 +19,27 @@
 import { useFirestore } from '@aglyn/tenant-feature-instance'
 import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
-import { outreachEmailDomain } from '../engine/do-not-contact-domain'
 import { readOutreachHistoryEntry } from '../model/enrollment-history'
 import {
   OUTREACH_COLLECTIONS,
   OUTREACH_ENROLLMENT_HISTORY,
   OUTREACH_ENROLLMENT_HISTORY_MAX,
-  type OutreachDomainIntel,
   type OutreachEnrollment,
   type OutreachEnrollmentHistoryEntry,
 } from '../model/outreach.types'
 import { readStoredOutreachEnrollment } from '../model/stored-records'
-// The reader alone, which touches no database: the same one the gates use,
-// so the page and the engine read one document one way.
-import { readStoredOutreachDomainIntel } from '../storage/domain-intel-store'
+import type { OutreachEnrollmentGatewayResponse } from '../model/outreach-api'
+import type { OutreachApi } from './use-outreach-api'
 import type { OutreachLoad } from './use-outreach-data'
 
 /**
  * What ONE enrollment's detail view reads (AGL-3332), and nothing else
- * reads: the enrollment itself, its history, and what the organization
- * knows about the person's mail domain.
+ * reads: the enrollment itself, its history, and the mail gateway in front
+ * of the person's domain.
  *
- * Each is its own listen, opened when the view mounts and closed when it
+ * The first two are listens, opened when the view mounts and closed when it
  * leaves, so the enrollments table — which lists hundreds of people — never
- * pays for any of it.
+ * pays for any of it; the gateway is one server read per page.
  */
 
 const denied = (error: unknown) =>
@@ -123,35 +120,37 @@ export function useOutreachEnrollmentHistory(
 }
 
 /**
- * What the organization knows about the domain an address is at (AGL-3326):
- * its mail gateway and what that gateway did with the organization's mail,
- * or `null` when the domain was never looked up.
+ * The mail gateway in front of the person's domain (AGL-3326, AGL-3328),
+ * and what it did with mail from the enrollment's sending domain — asked of
+ * the server once per page, because the domain's MX lives in the platform's
+ * cache, which no member reads.
  */
-export function useOutreachDomainIntel(
-  orgId: string | null,
-  email: string | null,
-): OutreachLoad<OutreachDomainIntel | null> {
-  const firestore = useFirestore()
-  const domain = outreachEmailDomain(email)
-  const [result, setResult] = useState<OutreachLoad<OutreachDomainIntel | null>>({
+export function useOutreachEnrollmentGateway(
+  api: Pick<OutreachApi, 'readEnrollmentGateway'>,
+  enrollmentId: string | null,
+): OutreachLoad<OutreachEnrollmentGatewayResponse | null> {
+  const [result, setResult] = useState<OutreachLoad<OutreachEnrollmentGatewayResponse | null>>({
     status: 'loading',
     data: null,
   })
   useEffect(() => {
+    let live = true
     setResult({ status: 'loading', data: null })
-    if (!orgId || !domain) {
-      setResult({ status: 'ready', data: null })
-      return undefined
-    }
-    return onSnapshot(
-      doc(firestore, 'orgs', orgId, OUTREACH_COLLECTIONS.domainIntel, domain),
-      (snapshot) =>
-        setResult({
-          status: 'ready',
-          data: readStoredOutreachDomainIntel(snapshot.id, snapshot.exists() ? snapshot.data() : undefined),
-        }),
-      (error) => setResult(failed(null, error, 'the domain’s mail gateway')),
+    if (!enrollmentId) return undefined
+    api.readEnrollmentGateway(enrollmentId).then(
+      (answer) => {
+        if (live) setResult({ status: 'ready', data: answer })
+      },
+      (error: unknown) => {
+        if (!live) return
+        const status = (error as { status?: unknown } | null)?.status
+        if (status === 403) setResult({ status: 'refused', data: null })
+        else setResult(failed(null, error, 'the domain’s mail gateway'))
+      },
     )
-  }, [firestore, orgId, domain])
+    return () => {
+      live = false
+    }
+  }, [api, enrollmentId])
   return result
 }

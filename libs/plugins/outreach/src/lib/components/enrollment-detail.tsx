@@ -81,7 +81,6 @@ import {
 import {
   OUTREACH_ATTESTATION_KINDS,
   OUTREACH_ATTESTATION_LABELS,
-  type OutreachDomainIntel,
   type OutreachEnrollment,
   type OutreachMailbox,
   type OutreachSequence,
@@ -102,9 +101,10 @@ import {
 import { OutreachFigure } from './sequence-report-card'
 import { useOutreachApi } from './use-outreach-api'
 import { useOutreachSequence } from './use-outreach-data'
+import type { OutreachEnrollmentGatewayResponse } from '../model/outreach-api'
 import {
-  useOutreachDomainIntel,
   useOutreachEnrollment,
+  useOutreachEnrollmentGateway,
   useOutreachEnrollmentHistory,
 } from './use-outreach-enrollment'
 import type { OutreachMailboxesResult } from './use-outreach-mailboxes'
@@ -277,14 +277,21 @@ function Fact(props: { label: string; children: ReactNode }) {
   )
 }
 
-/** What the organization's mail met at the person's domain, in a line. */
-function gatewaySentence(intel: OutreachDomainIntel, timeZone: string | null): string {
+/** What mail from the sequence's sending domain met at the person's domain, in a line. */
+function gatewaySentence(answer: OutreachEnrollmentGatewayResponse, timeZone: string | null): string {
+  const { intel, standing } = answer
+  if (!intel) return 'Could not be looked up'
+  if (intel.status === 'no_mx' || intel.status === 'null_mx') {
+    return `${answer.domain ?? 'The domain'} takes no mail · looked up ${formatOutreachTime(intel.resolvedAtMs, timeZone)}`
+  }
+  const from = answer.sendingDomain ? ` from ${answer.sendingDomain}` : ''
   const parts = [
     OUTREACH_MAIL_GATEWAY_LABELS[intel.gateway],
-    intel.mx.length ? `MX ${intel.mx.join(', ')}` : null,
-    `${intel.sent} sent, ${intel.delivered} delivered, ${intel.blocked} refused from this organization`,
-    intel.lastBlockedAtMs ? `last refused ${formatOutreachTime(intel.lastBlockedAtMs, timeZone)}` : null,
-    intel.resolvedAtMs ? `looked up ${formatOutreachTime(intel.resolvedAtMs, timeZone)}` : null,
+    intel.mx.length ? `MX ${intel.mx.join(', ')}` : 'no MX; delivered to its address record',
+    standing
+      ? `${standing.delivered30} delivered, ${standing.blocked30} refused${from} in the last 30 days`
+      : null,
+    `looked up ${formatOutreachTime(intel.resolvedAtMs, timeZone)}`,
   ]
   return parts.filter(Boolean).join(' · ')
 }
@@ -296,7 +303,9 @@ function EnrollmentDetails(props: {
   enrollment: OutreachEnrollment
   sequence: OutreachSequence
   mailbox: OutreachMailbox | null
-  intel: OutreachDomainIntel | null
+  gateway: OutreachEnrollmentGatewayResponse | null
+  /** What the Mail gateway line says while there is no answer to show. */
+  gatewayUnread: string
   campaignName: (id: string) => string
   memberName: (uid: string) => string
   orgMount?: ConsolePluginOrgMount
@@ -402,7 +411,7 @@ function EnrollmentDetails(props: {
           : '—'}
       </Fact>
       <Fact label="Mail gateway">
-        {props.intel ? gatewaySentence(props.intel, timeZone) : 'Not looked up yet'}
+        {props.gateway ? gatewaySentence(props.gateway, timeZone) : props.gatewayUnread}
       </Fact>
       <Fact label="Gateway hold">
         {enrollment.gatewayHold
@@ -536,7 +545,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
   const loadedSequence = useOutreachSequence(orgId, sequenceId)
   const loaded = useOutreachEnrollment(orgId, enrollmentId)
   const history = useOutreachEnrollmentHistory(orgId, enrollmentId)
-  const intel = useOutreachDomainIntel(orgId, loaded.data?.email ?? null)
+  const gateway = useOutreachEnrollmentGateway(api, enrollmentId)
   const roster = useOrgMemberOptions(orgId, { enabled: true })
   const [detailsOpen, setDetailsOpen] = useState(false)
   const enrollment = loaded.data
@@ -570,10 +579,10 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
             history: history.status === 'ready' ? history.data : null,
             memberName,
             formatTime: (ms) => formatOutreachTime(ms, timeZone),
-            gateway: intel.data?.gateway ?? null,
+            gateway: gateway.data?.intel?.gateway ?? null,
           })
         : [],
-    [enrollment, steps, history, memberName, timeZone, intel.data],
+    [enrollment, steps, history, memberName, timeZone, gateway.data],
   )
 
   const back = (
@@ -815,7 +824,14 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
               enrollment={enrollment}
               sequence={sequence}
               mailbox={mailbox}
-              intel={intel.data}
+              gateway={gateway.status === 'ready' ? gateway.data : null}
+              gatewayUnread={
+                gateway.status === 'loading'
+                  ? 'Looking it up…'
+                  : gateway.status === 'refused'
+                    ? 'Your role cannot look it up'
+                    : 'Could not be looked up'
+              }
               campaignName={campaignName}
               memberName={memberName}
               orgMount={orgMount}

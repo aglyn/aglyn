@@ -43,7 +43,10 @@ import {
   OUTREACH_LINK_DOMAIN_ACTIVITY,
   type OutreachTrackingHosts,
 } from './link-domain-routes'
-import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
+import {
+  createOutreachEnrollmentActionRoute,
+  createOutreachEnrollmentGatewayRoute,
+} from './enrollment-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
 import { OUTREACH_SEQUENCE_ACTIVITY_TARGET } from './route-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
@@ -1428,6 +1431,36 @@ describe('outreach/enrollments/action (AGL-2980)', () => {
 })
 
 // ── Preview ─────────────────────────────────────────────────────────────────
+
+describe('outreach/enrollments/gateway (AGL-3332)', () => {
+  const gateway = () => createOutreachEnrollmentGatewayRoute(deps())
+
+  it('answers the gateway in front of the person’s domain, read through the platform cache', async () => {
+    mx['held.example'] = [{ exchange: 'd1.ess.barracudanetworks.com', priority: 10 }]
+    docs.set(org('outreachEnrollments/seq-1_c-1'), {
+      sequenceId: 'seq-1',
+      contactId: 'c-1',
+      email: 'keith@held.example',
+      status: 'active',
+      stopReason: null,
+    })
+    const answer = await post(gateway(), REP, { enrollmentId: 'seq-1_c-1' })
+    expect(answer.status).toBe(200)
+    expect(answer.body).toMatchObject({
+      ok: true,
+      domain: 'held.example',
+      intel: { status: 'mx', gateway: 'barracuda', mx: ['d1.ess.barracudanetworks.com'], resolvedAtMs: AT },
+      standing: { gateway: 'barracuda', blocked30: 0, delivered30: 0 },
+    })
+    // The lookup warmed the platform cache, which no member reads directly.
+    expect(docs.get('mailDomains/held.example')).toMatchObject({ gateway: 'barracuda' })
+  })
+
+  it('refuses an enrollment that is not there', async () => {
+    const answer = await post(gateway(), REP, { enrollmentId: 'seq-1_nobody' })
+    expect(answer.status).toBe(404)
+  })
+})
 
 describe('outreach/preview (AGL-2980)', () => {
   const preview = () => createOutreachPreviewRoute(deps())
