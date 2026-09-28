@@ -52,6 +52,7 @@
  * for every other cancellation, so there is one writer of that state.
  */
 
+import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
 import { readOrgBilling } from '@aglyn/tenant-data-admin'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import { planFromPriceId } from '@aglyn/tenant-data-admin/server/billing-addons'
@@ -296,7 +297,7 @@ export function cancellationComment(options: {
 }): string {
   const note = options.note?.trim()
   return (
-    `Aglyn staff cancellation via ${options.via}: ${options.reason}` +
+    `${PLATFORM_BRAND_NAME} staff cancellation via ${options.via}: ${options.reason}` +
     `${note ? ` — ${note}` : ''} (actor ${options.actorUid}; no refund)`
   ).slice(0, STRIPE_COMMENT_MAX)
 }
