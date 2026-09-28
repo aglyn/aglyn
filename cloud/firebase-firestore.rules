@@ -4103,13 +4103,15 @@ service cloud.firestore {
       // route is what enforces https-only and the fixed social hosts, and a
       // client that could write `avatarUrl` directly could store a
       // `javascript:` URL the storefront would then have to distrust.
+      // Name, bio (phishing-screened) and payout hold too (AGL-3365).
       allow update: if publisherManager() && publisherFieldsValid() &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['handle', 'stripeAccountId', 'stripeChargesEnabled',
                    'stripeAccountLivemode', 'stripePayoutsEnabled',
                    'publisherAgreement', 'avatarUrl', 'website',
                    'supportEmail', 'supportUrl', 'githubUrl', 'xUrl',
-                   'linkedinUrl']);
+                   'linkedinUrl', 'displayName', 'bio',
+                   'payoutDelayDays', 'payoutPolicyAtMs']);
       allow delete: if isStaff();
     }
 
@@ -4241,18 +4243,15 @@ service cloud.firestore {
                      // way to set them, not the way — a publisher could put
                      // an arbitrary beacon host in either field with a direct
                      // client write and never touch the route that validates.
-                     //
-                     // Costs nothing for the same reason the block above
-                     // does: the listing editor saves through
-                     // `/api/marketplace/publish-plugin` (`update-listing`),
-                     // and the only client write to a listing in the repo is
-                     // the unpublish toggle, which writes `deletedAt` alone.
                      'logoUrl', 'screenshots',
                      // Server-derived list keys (AGL-3321).
                      'nameLower', 'nameTokens', 'nameReversed',
                      'browseAudience', 'browseTokens', 'takenDown',
                      // …and their inputs, written via publish-plugin.
-                     'displayName', 'deletedAt', 'visibility']));
+                     'displayName', 'deletedAt', 'visibility',
+                     // Buyer-read copy, phishing-screened by the API (AGL-3365).
+                     'description', 'readme', 'homepageUrl', 'repositoryUrl',
+                     'license']));
       allow delete: if isStaff() || listingManager();
       // Version snapshots hold the actual (possibly paid) content — no
       // client reads; installs go through /api/marketplace/install, which

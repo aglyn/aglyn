@@ -88,7 +88,9 @@ export const HELD_SEND_AT_MS = 253402300799000
 
 /**
  * Which surface held it: a campaign, an automation step, any other tenant
- * message at the send seam (`message`), or a site publish (`page`).
+ * message at the send seam (`message`), a site publish (`page`), or a
+ * submission to a public catalog a plugin keeps — a marketplace listing, its
+ * publisher profile (`listing`, AGL-3365).
  */
 export type HeldOutboundSendKind =
   | 'campaign'
@@ -97,6 +99,7 @@ export type HeldOutboundSendKind =
   | 'orgAutomation'
   | 'message'
   | 'page'
+  | 'listing'
 
 /** The decision state a held send carries on its review row. */
 export type HeldOutboundSendState = 'held' | 'released' | 'rejected'
@@ -355,7 +358,10 @@ export async function fileOutboundHold(
           ...describePhishingScreenSignals(filing.heldSend.signals),
           filing.heldSend.kind === 'page'
             ? 'Dismiss to release this publish; mark it actioned to reject it.'
-            : 'Dismiss to release this send; mark it actioned to reject it.',
+            : filing.heldSend.kind === 'listing'
+              ? 'Dismiss to release this submission (the publisher submits it again and it ' +
+                'goes through); mark it actioned to reject it.'
+              : 'Dismiss to release this send; mark it actioned to reject it.',
         ]
           .join('\n')
           .slice(0, 5000),

@@ -238,6 +238,8 @@ jest.mock('next/server', () => ({
 let mockDispatchClaimed = false
 /** The sites the claiming plugins named (AGL-3360). */
 let mockDispatchHostIds: string[] = []
+/** The seller workspaces the claiming plugins named (AGL-3365). */
+let mockDispatchOrgIds: string[] | undefined = undefined
 
 jest.mock('@aglyn/aglyn/server', () => ({
   // The platform's billing events (AGL-3011). The webhook raises them once an
@@ -266,6 +268,7 @@ jest.mock('@aglyn/aglyn/server', () => ({
   runBillingWebhookHandlers: async () => ({
     claimed: mockDispatchClaimed,
     hostIds: mockDispatchHostIds,
+    ...(mockDispatchOrgIds ? { orgIds: mockDispatchOrgIds } : {}),
   }),
   SELF_SERVE_PLANS: [
     'free',
@@ -1131,6 +1134,7 @@ describe('a seller’s fraud signals page staff only as a pattern (AGL-3360)', (
     mockRiskNotices.length = 0
     mockDispatchClaimed = true
     mockDispatchHostIds = ['host-shop']
+    mockDispatchOrgIds = undefined
     stripeCalls = []
     charges = {}
     global.fetch = jest.fn(
@@ -1267,6 +1271,26 @@ describe('a seller’s fraud signals page staff only as a pattern (AGL-3360)', (
     expect(
       (docs.get('paymentFraudLedger/acct_seller')?.['entries'] as unknown[]).length,
     ).toBe(2)
+  })
+
+  it('a marketplace sale names the PUBLISHER workspace, never the buyer (AGL-3365)', async () => {
+    // A publisher is a workspace, not a site: the marketplace plugin claims
+    // the sale and names the org it paid. The buyer's workspace appears
+    // nowhere on the row.
+    mockDispatchHostIds = []
+    mockDispatchOrgIds = ['org-publisher']
+    for (const id of ['ch_m1', 'ch_m2', 'ch_m3']) sellerCharge(id, 'acct_publisher')
+    const post = loadWithKey()
+    for (const id of ['ch_m1', 'ch_m2', 'ch_m3']) {
+      await post(signed(event('radar.early_fraud_warning.created', { id: `issfr_${id}`, charge: id })))
+    }
+    const rows = abuseRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      source: 'stripe-seller-fraud-pattern',
+      orgId: 'org-publisher',
+      sellerPattern: { sellerAccountId: 'acct_publisher', orgIds: ['org-publisher'] },
+    })
   })
 
   it('a Connect delivery keys the ledger by its account, and never sends Stripe-Account', async () => {

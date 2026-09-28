@@ -69,6 +69,8 @@ function makeDocRef(path: string): any {
   return {
     id: path.split('/').pop() as string,
     path,
+    // A subcollection — the seller org's `members` (AGL-3365).
+    collection: (name: string) => makeCollectionRef(`${path}/${name}`),
     get: async () => makeSnapshot(path),
     set: async (value: Record<string, any>, options?: { merge?: boolean }) => {
       docs.set(
