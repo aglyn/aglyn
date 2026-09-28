@@ -197,4 +197,54 @@ describe('NotificationsTable (AGL-3045)', () => {
     expect(screen.getByText("You're all caught up.")).toBeTruthy()
     expect(screen.queryByRole('grid')).toBeNull()
   })
+
+  /**
+   * A read that has not finished has found nothing YET (AGL-3373). The feed
+   * of 105 read "No notifications match these filters", with no filter set,
+   * for as long as a hung read kept `loading` true — because the table sent
+   * every non-caught-up empty page to the grid's no-rows copy and never told
+   * the grid it was loading.
+   */
+  describe('empty-state copy waits for the read (AGL-3373)', () => {
+    const readFilter = {
+      filterModel: { items: [] },
+      onFilterModelChange: jest.fn(),
+      searchWords: [],
+      clauses: [{ field: 'readAt', op: 'equals', value: 'false' }],
+      setClauses: jest.fn(),
+    }
+    const noFilter = { ...readFilter, clauses: [] }
+
+    it('says neither "no matches" nor "caught up" while an unfiltered page loads', () => {
+      renderTable({ rows: [], hasMore: false, loading: true, gridFilter: noFilter })
+      expect(screen.queryByText('No notifications match these filters')).toBeNull()
+      expect(screen.queryByText("You're all caught up.")).toBeNull()
+      // The grid is drawn, with its loading overlay rather than its copy.
+      expect(screen.getByRole('grid')).toBeTruthy()
+    })
+
+    it('says neither while a filtered page loads', () => {
+      renderTable({ rows: [], hasMore: false, loading: true, gridFilter: readFilter })
+      expect(screen.queryByText('No notifications match these filters')).toBeNull()
+      expect(screen.queryByText("You're all caught up.")).toBeNull()
+    })
+
+    it('says "no matches" once a filtered page has loaded empty', () => {
+      renderTable({ rows: [], hasMore: false, loading: false, gridFilter: readFilter })
+      expect(screen.getByText('No notifications match these filters')).toBeTruthy()
+      expect(screen.queryByText("You're all caught up.")).toBeNull()
+    })
+
+    it('says "caught up", never "no matches", once an unfiltered page has loaded empty', () => {
+      renderTable({ rows: [], hasMore: false, loading: false, gridFilter: noFilter })
+      expect(screen.getByText("You're all caught up.")).toBeTruthy()
+      expect(screen.queryByText('No notifications match these filters')).toBeNull()
+    })
+
+    it('says the read failed rather than "caught up" when it did', () => {
+      renderTable({ rows: [], hasMore: false, loading: false, failed: true })
+      expect(screen.queryByText("You're all caught up.")).toBeNull()
+      expect(screen.getByText("Notifications couldn't be loaded.")).toBeTruthy()
+    })
+  })
 })
