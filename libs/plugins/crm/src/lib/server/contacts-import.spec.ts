@@ -165,6 +165,24 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   }),
 }))
 
+/**
+ * The deliverability check's import half (AGL-3328): which addresses' domains
+ * take no mail, from a table rather than DNS. The records are stamped by the
+ * check the door queues; the route only counts.
+ */
+const mockNoMailServer = new Set<string>()
+jest.mock('@aglyn/tenant-data-admin/server/capture-email-check', () => ({
+  __esModule: true,
+  IMPORT_MAIL_CHECK_GRACE_MS: 5_000,
+  // The door's own queue, which this file's doubles never flush.
+  scheduleCapturedEmailCheck: () => undefined,
+  findUndeliverableEmails: async (emails: string[]) =>
+    new Set(emails.map((email) => email.toLowerCase()).filter((email) => mockNoMailServer.has(email))),
+  settleWithin: (promise: Promise<unknown>) => promise,
+  countUndeliverableEmails: (emails: string[], found: Set<string> | null) =>
+    found ? emails.filter((email) => found.has(email.toLowerCase())).length : undefined,
+}))
+
 import { crmContactsImportHandler } from './contacts-import'
 
 async function drive(
@@ -342,6 +360,20 @@ describe('the per-row verdicts', () => {
       { index: 1, email: 'broken@x.co', reason: 'write-failed' },
       { index: 2, email: 'odd@x.co', reason: 'invalid-email' },
     ])
+  })
+})
+
+describe('addresses with no mail server (AGL-3328)', () => {
+  beforeEach(() => mockNoMailServer.clear())
+
+  it('says how many of the stored rows would bounce, and counts no refused row', async () => {
+    mockNoMailServer.add('ada@parked.example')
+    mockNoMailServer.add('bo@parked.example')
+    upsert
+      .mockResolvedValueOnce({ contactId: 'c-1', created: true })
+      .mockResolvedValueOnce({ refused: 'band' })
+    const out = await importRows([{ email: 'Ada@Parked.example' }, { email: 'bo@parked.example' }])
+    expect(out.body).toMatchObject({ created: 1, noMailServer: 1 })
   })
 })
 

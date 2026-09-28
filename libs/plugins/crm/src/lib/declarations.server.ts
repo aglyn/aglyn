@@ -24,6 +24,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-contact-capture'
 import { registerPluginLeadConversionListener } from '@aglyn/aglyn/plugin-manager/plugin-lead-conversion'
 import { registerPluginPersonMatcher } from '@aglyn/aglyn/plugin-manager/plugin-person-matches'
+import { registerPluginRecordEmailStateWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { BUNDLE_ID } from './constants/bundle-common'
 import { summarizeConsentGroupChange } from './model/consent-group-summary'
 
@@ -102,6 +103,22 @@ export function registerCrmServerDeclarations(): void {
   // the CRM switched on, because the contacts — and the refusals on them —
   // outlive the switch. Deferred like the rest; the summary is plain words
   // and answers synchronously.
+  // The record email-state writer (AGL-3245), here as well as in the console
+  // API so the tenant's doors reach it too: a form submission's capture is
+  // checked for deliverability after its response (AGL-3328), and the "Would
+  // bounce" that check finds is written through this seam. Deferred like the
+  // rest; the console's own registration replaces this one with the same
+  // writer, loaded eagerly.
+  registerPluginRecordEmailStateWriter(
+    {
+      async stamp(request) {
+        const { createCrmRecordEmailStateWriter, defaultCrmRecordEmailStateDeps } =
+          await import('./server/record-email-state')
+        return createCrmRecordEmailStateWriter(defaultCrmRecordEmailStateDeps()).stamp(request)
+      },
+    },
+    { pluginId: BUNDLE_ID },
+  )
   registerPluginConsentGroupParticipant(
     {
       async preview(request) {

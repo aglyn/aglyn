@@ -65,6 +65,7 @@ import {
 } from './contact-address-fields'
 import { CrmCallButton, CrmPhoneLink } from './crm-call-actions'
 import { CrmEmailStateChip } from './crm-email-state-chip'
+import { CrmEmailGatewayChip } from './crm-email-check'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmSendEmailButton } from './crm-send-email-button'
 import type { OrgMemberOptions } from '../hooks/use-org-member-options'
@@ -539,6 +540,13 @@ export function LeadPropertiesCard(props: LeadPropertiesCardProps) {
                 bounce does not move New or Working, but it is the first
                 thing a person deciding whether to write must see. */}
             <CrmEmailStateChip state={emailState} />
+            {/* The mail gateway in front of the address, and what it did
+                with this site's mail this week (AGL-3328). */}
+            <CrmEmailGatewayChip
+              hostId={hostId}
+              email={String(lead['email'] ?? '')}
+              emailState={emailState}
+            />
             <CrmRecordChip
               label="Owner"
               value={lead.ownerUid ? roster.labelFor(lead.ownerUid) : undefined}

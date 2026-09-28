@@ -247,7 +247,8 @@ The three steps are the ones the [contacts import](./import.md) walks: choose
 the file (up to 5,000 rows), match its columns, check the ten-row preview,
 then import in batches of 200 with a result that says how many were
 **added**, **updated** and **skipped**, the skipped rows downloadable as a
-CSV that says why. **Download template** hands you the export's own header
+CSV that says why, and how many addresses have no mail server — those leads
+read [**Would bounce**](#email-state). **Download template** hands you the export's own header
 over no rows.
 
 | Field | What is read |
@@ -325,7 +326,8 @@ the filing above is separate, and the card says so.
 ### Email state {#email-state}
 
 Beside the status, a lead carries the last verdict on its address, when a
-sender has given one: **Bounced** (the mailbox does not exist), **Blocked by
+sender has given one: **Would bounce** (the address's domain has no mail
+server), **Bounced** (the mailbox does not exist), **Blocked by
 their mail gateway** (the company's mail filter refused the sender), **Unsubscribed**,
 **Marked as spam**, or **Do not contact** (on your organization's
 [do-not-contact list](./sequences.md#do-not-contact-domains), by a member's
@@ -333,7 +335,21 @@ mark or a reply asking to be left alone). Hover the chip for the date and
 what the server said. The verdict is written by the senders themselves — a
 sequence's bounce, a campaign's unsubscribe, a member's do-not-contact mark —
 never by a form, an import or the lead's editor, so a bounce cannot be
-edited away; it is lifted when the address is released. While the state
+edited away; it is lifted when the address is released.
+
+**Would bounce** is the platform's own check rather than a sender's verdict.
+Whenever a lead or a contact is captured — a form, an import, **New lead**,
+the API, an add to a list — Aglyn looks up the address's domain once the
+record is saved, and a domain that publishes no mail server (or a null MX
+record, which says it accepts no email) marks the record **Would bounce**.
+It never slows the capture, and it is the weakest verdict: a real bounce or
+block replaces it, and it is taken back on its own if the domain starts
+taking mail. **Email › Would bounce** in the list filter finds these records.
+
+Beside the verdict, the page shows which mail gateway stands in front of the
+address when its domain names one — Barracuda, Proofpoint, Mimecast, Google
+Workspace, Microsoft 365 — and, once your site has sent there, how many of
+this week's messages it delivered or refused. While the state
 forbids email, **Send email** is disabled with the reason, and the sequence
 enroll step refuses the lead in the same words. A bounce does not change
 the lead's status — you may still call — but the chip is the first thing

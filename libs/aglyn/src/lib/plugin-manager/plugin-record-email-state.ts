@@ -59,6 +59,13 @@ export interface PluginRecordEmailStateRequest {
   state: EmailState
   /** Write the state whatever the record holds — a release. */
   force?: boolean
+  /**
+   * Take the verdict back instead of writing it: a record whose standing
+   * state has `state.status` loses it, and any other record is left alone.
+   * The deliverability check's way back from `undeliverable` once the
+   * domain takes mail (AGL-3328); it never clears a verdict it did not give.
+   */
+  withdraw?: boolean
 }
 
 export interface PluginRecordEmailStateReport {

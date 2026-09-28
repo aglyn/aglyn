@@ -23,6 +23,7 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import {
   CRM_EMAIL_STATUS_FIELD,
+  CRM_EMAIL_STATUS_NONE,
   EMAIL_STATE_FIELD,
   nextEmailState,
   normalizeContactEmail,
@@ -31,6 +32,7 @@ import {
   type EmailState,
 } from '@aglyn/aglyn/server'
 import { findContactByEmail, firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { FieldValue } from 'firebase-admin/firestore'
 import { BUNDLE_ID } from '../constants/bundle-common'
 
 /**
@@ -77,10 +79,27 @@ async function stampRecord(
   ref: FirebaseFirestore.DocumentReference,
   incoming: EmailState,
   force: boolean,
+  withdraw = false,
 ): Promise<boolean> {
   const snapshot = await ref.get()
   if (!snapshot.exists) return false
   const current = readEmailState(snapshot.data() as Record<string, unknown>)
+  /*
+   * A WITHDRAWAL takes back the one verdict it names (AGL-3328): the
+   * deliverability check's "Would bounce" once the domain takes mail again.
+   * Any other standing verdict — a bounce DNS cannot see — is left alone.
+   */
+  if (withdraw) {
+    if (current?.status !== incoming.status) return false
+    await ref.update({
+      [EMAIL_STATE_FIELD]: FieldValue.delete(),
+      [CRM_EMAIL_STATUS_FIELD]: CRM_EMAIL_STATUS_NONE,
+    })
+    return true
+  }
+  // The deliverability check saying again what the record already holds:
+  // the date it was first found is the one worth keeping.
+  if (incoming.source === 'check' && current?.status === incoming.status) return false
   const next = nextEmailState(current, incoming, { force })
   // The current verdict stood, or the same verdict arrived again — a second
   // run of the caller — and there is nothing to write.
@@ -138,11 +157,12 @@ export function createCrmRecordEmailStateWriter(deps: CrmRecordEmailStateDeps): 
         ...(request.state.enrollmentId ? { enrollmentId: request.state.enrollmentId } : {}),
       }
       const force = request.force === true
+      const withdraw = request.withdraw === true
       let records = 0
       try {
         const contacts = firestore.collection('orgs').doc(orgId).collection('contacts')
         const contact = await findContactByEmail(contacts, email)
-        if (contact && (await stampRecord(contact.ref, state, force))) records += 1
+        if (contact && (await stampRecord(contact.ref, state, force, withdraw))) records += 1
       } catch (error) {
         console.error('[crm] the contact could not be stamped with an email state', orgId, error)
       }
@@ -157,6 +177,7 @@ export function createCrmRecordEmailStateWriter(deps: CrmRecordEmailStateDeps): 
           firestore.collection('orgs').doc(orgId).collection('leads').doc(key),
           state,
           force,
+          withdraw,
         )) {
           records += 1
         }

@@ -325,6 +325,13 @@ export interface ImportChunkResult<S extends ImportSkippedRow<string>> {
   dropped: Record<string, number>
   /** Owner addresses that matched no member of the organization. */
   ownersUnresolved: string[]
+  /**
+   * Of the rows stored, how many carry an address whose domain has no mail
+   * server (AGL-3328) — records that now read "Would bounce". Absent for a
+   * collection whose rows carry no address, and for a request whose check
+   * did not answer in time.
+   */
+  noMailServer?: number
 }
 
 /** An empty tally, for the drawer to fold chunk results into. */
@@ -372,5 +379,21 @@ export function mergeImportResults<S extends ImportSkippedRow<string>>(
     ownersUnresolved: [
       ...new Set([...total.ownersUnresolved, ...(chunk.ownersUnresolved ?? [])]),
     ],
+    ...(total.noMailServer !== undefined || chunk.noMailServer !== undefined
+      ? { noMailServer: Number(total.noMailServer ?? 0) + Number(chunk.noMailServer ?? 0) }
+      : {}),
   }
+}
+
+/**
+ * What an import's result says about the addresses that would bounce
+ * (AGL-3328), or `null` when none does.
+ */
+export function importNoMailServerSentence(count: number | null | undefined): string | null {
+  const n = Math.max(0, Math.floor(Number(count) || 0))
+  if (!n) return null
+  return n === 1
+    ? '1 address has no mail server. Its record reads "Would bounce", and campaigns and sequences skip it.'
+    : `${n.toLocaleString('en-US')} addresses have no mail server. Their records read "Would bounce", ` +
+        'and campaigns and sequences skip them.'
 }
