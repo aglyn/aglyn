@@ -786,3 +786,55 @@ describe('a Stripe fraud signal the billing webhook filed (AGL-3356)', () => {
     expect(row.heldSend).toBeNull()
   })
 })
+
+describe('a seller fraud pattern the billing webhook filed (AGL-3360)', () => {
+  const PATTERN_ID = 'e'.repeat(40)
+  beforeEach(() => {
+    state.reports[PATTERN_ID] = {
+      reference: 'PF-EEEEEEEEEE',
+      status: 'open',
+      category: 'phishing',
+      severity: 'urgent',
+      source: 'stripe-seller-fraud-pattern',
+      url: null,
+      reportedHostname: null,
+      hostId: 'host-shop',
+      orgId: 'org-seller',
+      details: '3 different charges paid to connected account acct_1.',
+      reporterEmail: null,
+      reporterName: null,
+      reportCount: 1,
+      createdAt: stamp(1000),
+      updatedAt: stamp(3000),
+      dmca: null,
+      sellerPattern: {
+        sellerAccountId: 'acct_1',
+        stripeAccountUrl: 'https://dashboard.stripe.com/connect/accounts/acct_1',
+        chargeIds: ['ch_a', 'ch_b', 'ch_c'],
+        orgIds: ['org-seller'],
+        hostIds: ['host-shop'],
+        threshold: 3,
+        windowDays: 7,
+        livemode: true,
+      },
+    }
+  })
+
+  it('hands the page the seller account, its charges, workspaces and sites', async () => {
+    asSupport()
+    const body = await (await get()).json()
+    const row = body.reports.find((report: any) => report.id === PATTERN_ID)
+    expect(row.source).toBe('stripe-seller-fraud-pattern')
+    expect(row.sellerPattern).toEqual({
+      sellerAccountId: 'acct_1',
+      stripeAccountUrl: 'https://dashboard.stripe.com/connect/accounts/acct_1',
+      chargeIds: ['ch_a', 'ch_b', 'ch_c'],
+      orgIds: ['org-seller'],
+      hostIds: ['host-shop'],
+      threshold: 3,
+      windowDays: 7,
+      livemode: true,
+    })
+    expect(row.paymentSignal).toBeNull()
+  })
+})

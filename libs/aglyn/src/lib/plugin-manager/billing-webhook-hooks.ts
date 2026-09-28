@@ -59,6 +59,13 @@ export interface BillingWebhookEvent {
 export interface BillingWebhookHandlerResult {
   /** True when this handler recognised the event as belonging to it. */
   claimed?: boolean
+  /**
+   * The site the claimed record belongs to (AGL-3360), when the handler
+   * knows it. The route reads it for a charge's fraud signal: the seller's
+   * pattern row names the sites the charges were for, whichever plugin sold
+   * them, without the route knowing what an order or a booking is.
+   */
+  hostId?: string
 }
 
 export type BillingWebhookHandler = (
@@ -72,6 +79,8 @@ export type BillingWebhookHandler = (
 export interface BillingWebhookDispatchResult {
   /** True when ANY handler claimed the event. */
   claimed: boolean
+  /** Every distinct `hostId` a handler reported, in handler order. */
+  hostIds: string[]
 }
 
 const handlers: BillingWebhookHandler[] = []
@@ -98,6 +107,7 @@ export async function runBillingWebhookHandlers(
   event: BillingWebhookEvent,
 ): Promise<BillingWebhookDispatchResult> {
   let claimed = false
+  const hostIds: string[] = []
   for (const handler of handlers) {
     // Narrowed through the union rather than read off it: the handler's
     // return type includes `void` — the shape every handler that does not
@@ -107,6 +117,8 @@ export async function runBillingWebhookHandlers(
       | BillingWebhookHandlerResult
       | undefined
     if (result?.claimed === true) claimed = true
+    const hostId = typeof result?.hostId === 'string' ? result.hostId : ''
+    if (hostId && !hostIds.includes(hostId)) hostIds.push(hostId)
   }
-  return { claimed }
+  return { claimed, hostIds }
 }

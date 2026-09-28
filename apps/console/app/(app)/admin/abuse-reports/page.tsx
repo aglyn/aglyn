@@ -127,6 +127,7 @@ import {
   Chip,
   Divider,
   LinearProgress,
+  Link,
   MenuItem,
   Stack,
   TextField,
@@ -212,6 +213,24 @@ interface AbuseReportRow {
   heldSend: HeldSendRow | null
   /** A Stripe fraud signal, when the billing webhook filed this row (AGL-3356). */
   paymentSignal: PaymentSignalRow | null
+  /** A seller's fraud pattern across its sales (AGL-3360). */
+  sellerPattern: SellerPatternRow | null
+}
+
+/**
+ * Several of one connected account's sales drew fraud warnings or disputes
+ * (AGL-3360), as `sellerPatternPayload()` hands it over. Nothing was
+ * refunded, canceled or paused.
+ */
+interface SellerPatternRow {
+  sellerAccountId: string | null
+  stripeAccountUrl: string | null
+  chargeIds: string[]
+  orgIds: string[]
+  hostIds: string[]
+  threshold: number | null
+  windowDays: number | null
+  livemode: boolean
 }
 
 /**
@@ -1419,6 +1438,48 @@ function AdminAbuseReports() {
                       </Alert>
                     ) : null}
 
+                    {report.sellerPattern ? (
+                      <Alert severity="error">
+                        <Stack spacing={0.5}>
+                          <Typography variant="subtitle2">
+                            {`Seller fraud pattern${report.sellerPattern.livemode ? '' : ' (test mode)'}`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {`Connected account ${report.sellerPattern.sellerAccountId ?? 'unknown'}: ` +
+                              `${report.sellerPattern.chargeIds.length} different charges drew a fraud warning or a dispute` +
+                              (report.sellerPattern.windowDays
+                                ? ` within ${report.sellerPattern.windowDays} days`
+                                : '') +
+                              '.'}
+                          </Typography>
+                          <Typography variant="body2">
+                            {`Workspace(s): ${report.sellerPattern.orgIds.join(', ') || 'not resolved'} · ` +
+                              `Site(s): ${report.sellerPattern.hostIds.join(', ') || 'not resolved'}`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {'Nothing has been refunded, canceled or paused. If the seller is the fraudster, lock the workspace and pause the account’s payouts in Stripe, then close this report with what you did.'}
+                          </Typography>
+                          {report.sellerPattern.orgIds[0] ? (
+                            <AppLink
+                              href={`/admin/orgs/${encodeURIComponent(report.sellerPattern.orgIds[0])}`}
+                            >
+                              {'Open the workspace'}
+                            </AppLink>
+                          ) : null}
+                          {report.sellerPattern.stripeAccountUrl ? (
+                            <Link
+                              href={report.sellerPattern.stripeAccountUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              variant="body2"
+                            >
+                              {'Open the connected account in Stripe'}
+                            </Link>
+                          ) : null}
+                        </Stack>
+                      </Alert>
+                    ) : null}
+
                     {report.heldSend ? (
                       <Alert
                         severity={
@@ -1464,7 +1525,8 @@ function AdminAbuseReports() {
                       <Typography variant="caption" color="text.secondary">
                         {report.source === 'outbound-screen'
                           ? 'What the screen recorded'
-                          : report.source === 'stripe-fraud-signal'
+                          : report.source === 'stripe-fraud-signal' ||
+                              report.source === 'stripe-seller-fraud-pattern'
                             ? 'What Stripe reported'
                             : 'What the reporter said'}
                       </Typography>
@@ -1483,6 +1545,10 @@ function AdminAbuseReports() {
                       {report.source === 'stripe-fraud-signal' ? (
                         <Typography variant="body2">
                           {'Filed by the Stripe billing webhook, not a person. There is no reporter to reply to; the card holder and the workspace are the subject.'}
+                        </Typography>
+                      ) : report.source === 'stripe-seller-fraud-pattern' ? (
+                        <Typography variant="body2">
+                          {'Filed by the Stripe billing webhook from the seller’s own sales, not by a person. There is no reporter to reply to; the seller is the subject.'}
                         </Typography>
                       ) : report.source === 'outbound-screen' ? (
                         <Typography variant="body2">

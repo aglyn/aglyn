@@ -178,6 +178,17 @@ nothing keeps the previous meaning ("not mine"), so existing handlers need no
 change. Every registered handler still runs after one has claimed; the claim is
 a report, never a dispatch rule.
 
+A claiming handler may also return the site the record belongs to,
+`{ claimed: true, hostId }`. The platform reads it on a card's fraud signals
+(`radar.early_fraud_warning.created`, `review.opened`, `charge.dispute.created`):
+the seller's fraud-pattern row names the sites the charges were for, whatever
+plugin sold them. To show a fraud signal on your own record, use
+`paymentRiskEventFrom` from `@aglyn/aglyn/app-utils/payment-risk` to read the
+event and `recordPaymentRiskOnRecord` from
+`@aglyn/tenant-data-admin/server/payment-risk-record` to stamp the shared
+`paymentRisk` field and notify the site's managers once. Render it with
+`describePaymentRisk`. Never refund or cancel on a signal; the merchant decides.
+
 :::tip Claim your chargebacks
 The one event where this matters today is `charge.dispute.*`. A dispute carries
 no metadata, so plugins self-select by joining on the payment intent — and a

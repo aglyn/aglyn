@@ -27,6 +27,9 @@ import {
   paymentFraudSignalReference,
   paymentFraudSignalReviewId,
   readStripeChargeForSignal,
+  SELLER_FRAUD_PATTERN,
+  type SellerFraudLedgerEntry,
+  sellerFraudPattern,
   staffSubscriptionCardPath,
 } from './payment-fraud-signal'
 
@@ -98,5 +101,100 @@ describe('readStripeChargeForSignal', () => {
     expect(
       await readStripeChargeForSignal('ch_1', { secretKey: 'sk', fetchImpl: throwing as never }),
     ).toBeNull()
+  })
+})
+
+describe('the seller fraud pattern (AGL-3360)', () => {
+  const NOW = 1_800_000_000_000
+  const DAY = 86_400_000
+  const entry = (
+    kind: SellerFraudLedgerEntry['kind'],
+    chargeId: string,
+    ageDays = 0,
+  ): SellerFraudLedgerEntry => ({
+    kind,
+    stripeObjectId: `${kind}-${chargeId}-${ageDays}`,
+    chargeId,
+    amountCents: 1000,
+    currency: 'usd',
+    detail: '',
+    hostIds: [],
+    atMs: NOW - ageDays * DAY,
+  })
+
+  it('matches three distinct charges with warnings or disputes inside the window', () => {
+    expect(SELLER_FRAUD_PATTERN.minDistinctCharges).toBe(3)
+    expect(
+      sellerFraudPattern(
+        [
+          entry('early-fraud-warning', 'a', 6),
+          entry('dispute', 'b', 2),
+          entry('early-fraud-warning', 'c'),
+        ],
+        NOW,
+      ),
+    ).toEqual({ matched: true, chargeIds: ['a', 'b', 'c'] })
+  })
+
+  it('counts a charge once however many signals it drew', () => {
+    expect(
+      sellerFraudPattern(
+        [
+          entry('early-fraud-warning', 'a'),
+          entry('dispute', 'a'),
+          entry('early-fraud-warning', 'b'),
+        ],
+        NOW,
+      ).matched,
+    ).toBe(false)
+  })
+
+  it('ignores reviews and anything older than the window', () => {
+    expect(
+      sellerFraudPattern(
+        [
+          entry('radar-review', 'a'),
+          entry('radar-review', 'b'),
+          entry('early-fraud-warning', 'c', 8),
+          entry('dispute', 'd'),
+          entry('dispute', 'e'),
+        ],
+        NOW,
+      ),
+    ).toEqual({ matched: false, chargeIds: ['d', 'e'] })
+  })
+})
+
+describe('readStripeChargeForSignal names the seller (AGL-3360)', () => {
+  const reply = (charge: Record<string, unknown>) =>
+    (async () => ({ ok: true, json: async () => charge })) as unknown as typeof fetch
+
+  it('reads a destination charge’s connected account', async () => {
+    const read = await readStripeChargeForSignal('ch_1', {
+      secretKey: 'sk_test_x',
+      fetchImpl: reply({ amount: 100, transfer_data: { destination: 'acct_1' } }),
+    })
+    expect(read?.sellerAccountId).toBe('acct_1')
+  })
+
+  it('is null for a charge that paid only the platform', async () => {
+    const read = await readStripeChargeForSignal('ch_1', {
+      secretKey: 'sk_test_x',
+      fetchImpl: reply({ amount: 100 }),
+    })
+    expect(read?.sellerAccountId).toBeNull()
+  })
+
+  it('sends the Stripe-Account header for a Connect delivery', async () => {
+    const seen: Array<Record<string, string>> = []
+    await readStripeChargeForSignal('ch_1', {
+      secretKey: 'sk_test_x',
+      stripeAccount: 'acct_direct',
+      fetchImpl: (async (_url: string, init: { headers: Record<string, string> }) => {
+        seen.push(init.headers)
+        return { ok: true, json: async () => ({ amount: 1 }) }
+      }) as unknown as typeof fetch,
+    })
+    expect(seen[0]['Stripe-Account']).toBe('acct_direct')
   })
 })

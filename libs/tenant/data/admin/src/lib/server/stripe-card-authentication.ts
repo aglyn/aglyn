@@ -62,9 +62,8 @@ export function requestThreeDSecureFor(
 }
 
 /**
- * The form-encoded params to spread into a Stripe request body:
- *
- *   new URLSearchParams({ mode: 'payment', ...cardAuthenticationParams('one-time') })
+ * The form-encoded params to spread into a Stripe request body, beside the
+ * request's own fields in the `URLSearchParams` it builds.
  */
 export function cardAuthenticationParams(
   use: CardAuthenticationUse,

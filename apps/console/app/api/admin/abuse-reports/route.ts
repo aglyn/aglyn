@@ -253,6 +253,31 @@ function rowPayload(
     source: asString(data['source']),
     heldSend: heldSendPayload(data['heldSend']),
     paymentSignal: paymentSignalPayload(data['paymentSignal']),
+    sellerPattern: sellerPatternPayload(data['sellerPattern']),
+  }
+}
+
+/**
+ * A seller's fraud pattern, shaped for the page (AGL-3360): the connected
+ * account whose sales drew several fraud warnings or disputes, the charges,
+ * the workspaces and sites they were for, and its Stripe Dashboard page.
+ */
+function sellerPatternPayload(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const pattern = value as Record<string, unknown>
+  const strings = (list: unknown) =>
+    Array.isArray(list) ? list.map((item) => String(item)).filter(Boolean) : []
+  const threshold = Number(pattern['threshold'])
+  const windowDays = Number(pattern['windowDays'])
+  return {
+    sellerAccountId: asString(pattern['sellerAccountId']),
+    stripeAccountUrl: asString(pattern['stripeAccountUrl']),
+    chargeIds: strings(pattern['chargeIds']),
+    orgIds: strings(pattern['orgIds']),
+    hostIds: strings(pattern['hostIds']),
+    threshold: Number.isFinite(threshold) ? threshold : null,
+    windowDays: Number.isFinite(windowDays) ? windowDays : null,
+    livemode: pattern['livemode'] === true,
   }
 }
 

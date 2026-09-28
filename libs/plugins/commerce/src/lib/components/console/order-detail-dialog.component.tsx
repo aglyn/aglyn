@@ -24,6 +24,7 @@ import { escapeHtml } from '../../utils/escape-html'
 // plugins. The shared builder is pinned against the CRM's own routes by a
 // spec, so the address is the same one the hub resolves.
 import { crmContactByEmailHref } from '@aglyn/aglyn'
+import { describePaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { AppLink, useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -646,6 +647,8 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
   // A lost chargeback leaves `status: 'refunded'` (AGL-1787), so the status
   // chip alone tells the merchant they chose this. The badge is the correction.
   const dispute = CommerceModel.describeOrderDispute(order)
+  // An early fraud warning or a Radar review on the payment (AGL-3360).
+  const paymentRisk = describePaymentRisk(order.paymentRisk)
   const reversal = CommerceModel.splitOrderReversal(order)
   // The restock question a reversal flagged, while it is still open
   // (AGL-1806). Absent `resolution` IS the open state — the writer only ever
@@ -687,6 +690,16 @@ export function OrderDetailDialog(props: OrderDetailDialogProps) {
                 label={dispute.label}
                 size="small"
                 color={DISPUTE_COLOR[dispute.tone]}
+                variant="filled"
+              />
+            </Tooltip>
+          ) : null}
+          {paymentRisk ? (
+            <Tooltip title={paymentRisk.detail}>
+              <Chip
+                label={paymentRisk.label}
+                size="small"
+                color="warning"
                 variant="filled"
               />
             </Tooltip>

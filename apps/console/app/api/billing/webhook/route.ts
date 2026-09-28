@@ -104,9 +104,11 @@ import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write
 // the row a fraud signal files must be the real one under them (AGL-3356).
 import {
   type PaymentFraudCardChecks,
+  type PaymentFraudSignal,
   type PaymentFraudSignalKind,
   readStripeChargeForSignal,
   recordPaymentFraudSignal,
+  recordSellerFraudSignal,
 } from '@aglyn/tenant-data-admin/server/payment-fraud-signal'
 
 // lockdown-423: exempt — Stripe server callback, no user caller — and the very path a lapsed
@@ -273,12 +275,22 @@ async function recordOrphanedSubscription(entry: {
  */
 async function fraudSignalSubject(
   firestore: FirebaseFirestore.Firestore,
-  input: { chargeId: string; paymentIntentId: string },
+  input: {
+    chargeId: string
+    paymentIntentId: string
+    /** `event.account` on a Connect delivery (AGL-3360). */
+    stripeAccount: string | null
+  },
 ): Promise<{
   orgId: string | null
   amountCents: number | null
   currency: string | null
   checks: PaymentFraudCardChecks | null
+  /**
+   * The connected account the charge paid — a site's own sale (AGL-3360).
+   * Null for a charge that paid only the platform.
+   */
+  sellerAccountId: string | null
 }> {
   let orgId: string | null = null
   let amountCents: number | null = null
@@ -302,6 +314,7 @@ async function fraudSignalSubject(
   }
   const charge = await readStripeChargeForSignal(input.chargeId, {
     secretKey: process.env.STRIPE_SECRET_KEY,
+    stripeAccount: input.stripeAccount,
   })
   if (!orgId && charge?.customerId) {
     orgId = await findOrgIdByStripeCustomer(charge.customerId).catch(() => null)
@@ -311,7 +324,31 @@ async function fraudSignalSubject(
     amountCents: amountCents ?? charge?.amountCents ?? null,
     currency: charge?.currency ?? null,
     checks: charge?.checks ?? null,
+    sellerAccountId: charge?.sellerAccountId ?? input.stripeAccount ?? null,
   }
+}
+
+/**
+ * The workspaces owning `hostIds` (AGL-3360), read off the host documents,
+ * which carry `orgId` (AGL-233). A courtesy for the seller-pattern row's
+ * prose, so it never throws.
+ */
+async function orgIdsForHosts(
+  firestore: FirebaseFirestore.Firestore,
+  hostIds: readonly string[],
+): Promise<string[]> {
+  const orgIds: string[] = []
+  for (const hostId of hostIds) {
+    try {
+      const orgId = String(
+        (await firestore.collection('hosts').doc(hostId).get()).get('orgId') ?? '',
+      )
+      if (orgId && !orgIds.includes(orgId)) orgIds.push(orgId)
+    } catch {
+      // The row still names the account and the site.
+    }
+  }
+  return orgIds
 }
 
 /**
@@ -2017,24 +2054,34 @@ async function handler(request: Request): Promise<Response> {
     }
 
     /*==========================================
-     * STRIPE'S FRAUD SIGNALS, TO STAFF (AGL-3356).
+     * STRIPE'S FRAUD SIGNALS (AGL-3356, AGL-3360).
      *
      * An issuer's early fraud warning, a Radar review and a dispute each say
      * a card may not be its holder's. The 9/26 fraud paid for Pro on exactly
-     * such a card, and until now the first two were not subscribed and the
-     * third reached `adminAudit` only. Each is filed as an urgent row in the
-     * abuse queue naming the workspace, the charge and the amount, linking
-     * the org's Subscription card, and staff are notified once — see
-     * `payment-fraud-signal.ts`.
+     * such a card. WHOSE card decides where the signal goes:
      *
-     * NOTHING IS REFUNDED OR CANCELED HERE. Staff decide.
+     * - A WORKSPACE's own charge (its subscription, its AI overage): an
+     *   urgent row in the abuse queue naming the workspace, the charge and
+     *   the amount, linking the org's Subscription card, staff notified once
+     *   — `recordPaymentFraudSignal`.
+     * - A SITE's own sale — a destination charge to the seller's connected
+     *   account (storefront, booking, membership, marketplace), or a charge
+     *   on the connected account itself when Connect delivers it: the plugin
+     *   that sold it puts the signal on its own record and tells the site's
+     *   managers (dispatch below), and the seller's ledger counts it. Staff
+     *   hear only when that ledger shows the seller-fraud PATTERN —
+     *   `recordSellerFraudSignal` — never per signal: a shopper's stolen card
+     *   is the merchant's to handle.
+     * - A charge that is neither: filed as before, saying so, because a
+     *   warning or review nobody owns is still worth a look. A dispute that
+     *   is neither is left to the platform-fault branch below.
      *
-     * Which charges: a warning or a review on ANY charge of this account is
-     * filed, because both are rare and a review holds the payment in Stripe
-     * until someone closes it. A dispute is filed only when the charge bills
-     * a WORKSPACE; a storefront or marketplace chargeback is the merchant's,
-     * handled by its plugin, and filing those would bury the ones about us.
+     * NOTHING IS REFUNDED OR CANCELED HERE. Merchants and staff decide.
      *=========================================*/
+    let sellerFraudSignal: {
+      signal: PaymentFraudSignal
+      sellerAccountId: string
+    } | null = null
     if (
       type === 'radar.early_fraud_warning.created' ||
       type === 'review.opened' ||
@@ -2054,38 +2101,47 @@ async function handler(request: Request): Promise<Response> {
           : String((value as { id?: unknown } | null)?.id ?? '')
       const chargeId = refOf(object?.charge)
       const paymentIntentId = refOf(object?.payment_intent)
+      const connectAccount =
+        typeof event?.account === 'string' && event.account ? event.account : null
       const subject = await fraudSignalSubject(observed(), {
         chargeId,
         paymentIntentId,
+        stripeAccount: connectAccount,
       })
       const orgId = subject.orgId
-      if (kind === 'dispute' && !orgId) {
-        // A storefront or marketplace chargeback, or one the platform-fault
-        // branch below reports. Not a workspace's card; said out loud.
+      const disputeAmount = Number(object?.amount)
+      const signal: PaymentFraudSignal = {
+        kind,
+        stripeObjectId: String(object?.id ?? event?.id ?? ''),
+        chargeId: chargeId || null,
+        paymentIntentId: paymentIntentId || null,
+        orgId,
+        // The dispute names its own amount; the other two do not.
+        amountCents:
+          kind === 'dispute' && Number.isFinite(disputeAmount)
+            ? disputeAmount
+            : subject.amountCents,
+        currency: String(object?.currency ?? subject.currency ?? 'usd'),
+        detail: String(
+          object?.fraud_type ?? object?.reason ?? object?.opened_reason ?? '',
+        ),
+        checks: subject.checks,
+        livemode: event?.livemode === true,
+      }
+      if (subject.sellerAccountId) {
+        // Counted after dispatch, once the plugins have said whose sale it
+        // was.
+        sellerFraudSignal = { signal, sellerAccountId: subject.sellerAccountId }
+      }
+      if (orgId || (!subject.sellerAccountId && kind !== 'dispute')) {
+        await recordPaymentFraudSignal(signal, {
+          firestore: observed(),
+          notify: notifyStaff,
+        })
+      } else if (!subject.sellerAccountId) {
+        // Neither a workspace's charge nor a seller's; the platform-fault
+        // branch below reports it if no plugin claims it. Said out loud.
         ledger.skip('dispute-is-not-a-workspace-charge')
-      } else {
-        const disputeAmount = Number(object?.amount)
-        await recordPaymentFraudSignal(
-          {
-            kind,
-            stripeObjectId: String(object?.id ?? event?.id ?? ''),
-            chargeId: chargeId || null,
-            paymentIntentId: paymentIntentId || null,
-            orgId,
-            // The dispute names its own amount; the other two do not.
-            amountCents:
-              kind === 'dispute' && Number.isFinite(disputeAmount)
-                ? disputeAmount
-                : subject.amountCents,
-            currency: String(object?.currency ?? subject.currency ?? 'usd'),
-            detail: String(
-              object?.fraud_type ?? object?.reason ?? object?.opened_reason ?? '',
-            ),
-            checks: subject.checks,
-            livemode: event?.livemode === true,
-          },
-          { firestore: observed(), notify: notifyStaff },
-        )
       }
     }
 
@@ -2107,6 +2163,21 @@ async function handler(request: Request): Promise<Response> {
       event,
       requestHost: headers['host'],
     })
+
+    // THE SELLER'S LEDGER (AGL-3360), after dispatch so the plugins that
+    // recognised the sale have named its site. The merchant has been told on
+    // its own record by now; staff hear only if this crosses the pattern.
+    if (sellerFraudSignal) {
+      const hostIds = dispatch?.hostIds ?? []
+      await recordSellerFraudSignal(
+        {
+          ...sellerFraudSignal,
+          hostIds,
+          orgIds: await orgIdsForHosts(observed(), hostIds),
+        },
+        { firestore: observed(), notify: notifyStaff },
+      )
+    }
 
     // THE PLATFORM-FAULT BRANCH (AGL-2429). A dispute that matched no
     // `platformRevenue` row AND that no plugin recognised is money moving

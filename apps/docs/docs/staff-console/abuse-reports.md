@@ -129,9 +129,15 @@ the reference is `PF-…`. It files one row for each of these Stripe events:
 
 | Event | Filed when |
 | -- | -- |
-| `radar.early_fraud_warning.created` | Always. The card issuer reports the charge as likely fraud. It is not a chargeback yet, and refunding now can prevent one. |
-| `review.opened` | Always. Radar put the payment into review, and it stays there until someone closes the review in Stripe. |
-| `charge.dispute.created` | Only when the charge bills a workspace subscription. Storefront and marketplace chargebacks belong to the merchant and their plugin. |
+| `radar.early_fraud_warning.created` | When the charge bills a workspace, or when it paid no one we can name. The card issuer reports the charge as likely fraud. It is not a chargeback yet, and refunding now can prevent one. |
+| `review.opened` | Same as above. Radar put the payment into review, and it stays there until someone closes the review in Stripe. |
+| `charge.dispute.created` | Only when the charge bills a workspace subscription. |
+
+A signal on a site's own sale (a storefront order, a booking, a membership or
+a marketplace purchase paid to a seller's connected account) is not filed
+here. It belongs to the merchant: the plugin puts it on the order or booking
+and notifies the site's managers. Staff hear about those only as a pattern;
+see [Seller fraud pattern](#seller-fraud-pattern).
 
 The row names the workspace, the charge and the amount. When the charge can be
 read from Stripe, it also shows what the card's own checks said: CVC, postal
@@ -152,6 +158,38 @@ The live webhook endpoint must be subscribed to the two new events. Run
 `node tools/scripts/setup-stripe.mjs`, which only adds missing events, or enable
 them on the endpoint in the Stripe dashboard. Until then, `/api/health/billing`
 reports the endpoint as missing required events.
+
+## Seller fraud pattern {#seller-fraud-pattern}
+
+A merchant who takes stolen cards through their own storefront leaves a
+pattern: several different sales on one connected account draw an issuer fraud
+warning or a chargeback within days. The billing webhook keeps every such
+signal for each connected account, and files one row when
+
+**3 different charges** on the same connected account draw an early fraud
+warning or a dispute **within 7 days**.
+
+The source is `stripe-seller-fraud-pattern`, the category is `phishing`, the
+severity is urgent and the reference is `PF-…`. Staff are notified once. A
+warning and a dispute on the same charge count as one charge. Radar reviews are
+listed but never counted. Once filed, the account is not filed again for 7
+days, so a burst is one row.
+
+A legitimate small shop sees one or two of these a month at most, so a single
+warning or dispute never reaches this queue. The merchant handles it.
+
+The row names the connected account, the charges, and the workspaces and sites
+they were for, with links to the workspace and to the account in the Stripe
+Dashboard. **Nothing is refunded, canceled or paused.** If the seller is the
+fraudster:
+
+- Lock the workspace at [Lockdown](./lockdown.md). A locked site's checkout,
+  bookings and memberships stop taking payments.
+- Pause the connected account's payouts in the Stripe Dashboard
+  (**Connect → Accounts → the account → Payouts**). Aglyn does not create
+  payouts, so Stripe pays out on the account's schedule until you do.
+
+Then close the row with a note saying what you did.
 
 ## Triage by severity {#triage-by-severity}
 

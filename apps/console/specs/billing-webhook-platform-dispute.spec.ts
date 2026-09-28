@@ -171,6 +171,21 @@ function mockMakeFirestore() {
   })
 
   return {
+    // Serial, which is all one delivery at a time needs: reads and writes go
+    // straight through the same map (AGL-3360's seller ledger).
+    runTransaction: async <T,>(
+      work: (transaction: Record<string, unknown>) => Promise<T>,
+    ): Promise<T> =>
+      work({
+        get: (ref: { get: () => Promise<unknown> }) => ref.get(),
+        set: (
+          ref: { set: (data: unknown, options?: unknown) => Promise<unknown> },
+          data: unknown,
+          options?: unknown,
+        ) => ref.set(data, options),
+        update: (ref: { update: (data: unknown) => Promise<unknown> }, data: unknown) =>
+          ref.update(data),
+      }),
     collection: (name: string) => ({
       doc: (id: string) => doc(`${name}/${id}`),
       add: async (data: Record<string, unknown>) => {
@@ -218,6 +233,8 @@ jest.mock('next/server', () => ({
  * unattributed-alert assertion pass for the wrong reason.
  */
 let mockDispatchClaimed = false
+/** The sites the claiming plugins named (AGL-3360). */
+let mockDispatchHostIds: string[] = []
 
 jest.mock('@aglyn/aglyn/server', () => ({
   // The platform's billing events (AGL-3011). The webhook raises them once an
@@ -243,7 +260,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ).observeWrites,
   buildRoute: () => '/acme/manage/billing',
   Route: { MANAGE_BILLING: 'MANAGE_BILLING', ADMIN_OVERVIEW: 'ADMIN_OVERVIEW' },
-  runBillingWebhookHandlers: async () => ({ claimed: mockDispatchClaimed }),
+  runBillingWebhookHandlers: async () => ({
+    claimed: mockDispatchClaimed,
+    hostIds: mockDispatchHostIds,
+  }),
   SELF_SERVE_PLANS: [
     'free',
     'starter',
@@ -1023,5 +1043,210 @@ describe('fraud signals are filed for staff, and nothing is refunded (AGL-3356)'
     const rows = abuseRows()
     expect(rows).toHaveLength(1)
     expect(mockStaffNotifications).toHaveLength(1)
+  })
+})
+
+/*==========================================
+ * A SITE'S OWN SALE: THE MERCHANT'S SIGNAL, STAFF ONLY ON A PATTERN (AGL-3360).
+ *
+ * Storefront, booking and membership sales are destination charges to the
+ * seller's connected account. A fraud signal on one of those is the
+ * merchant's to act on — its plugin stamps the order or booking and tells
+ * the site's managers — and it must NOT page staff one by one the way a
+ * workspace's own charge does. Staff get ONE row when a single connected
+ * account collects fraud warnings or disputes on 3 different charges within
+ * 7 days: the shape of a seller running stolen cards through its own shop.
+ *=========================================*/
+describe('a seller’s fraud signals page staff only as a pattern (AGL-3360)', () => {
+  let stripeCalls: Array<{ method: string; url: string; account: string | null }> = []
+  /** Every charge a GET answers, by id. */
+  let charges: Record<string, Record<string, unknown>> = {}
+
+  const abuseRows = () =>
+    [...docs.entries()]
+      .filter(([path]) => path.startsWith('abuseReports/'))
+      .map(([, value]) => value)
+
+  const event = (
+    type: string,
+    object: Record<string, unknown>,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    id: `evt_${Math.random().toString(36).slice(2)}`,
+    type,
+    livemode: false,
+    data: { object },
+    ...extra,
+  })
+
+  const sellerCharge = (id: string, account = 'acct_seller') => {
+    charges[id] = {
+      id,
+      amount: 12900,
+      currency: 'usd',
+      customer: null,
+      transfer_data: { destination: account },
+      payment_method_details: { card: { country: 'US', checks: { cvc_check: 'unavailable' } } },
+    }
+  }
+
+  beforeEach(() => {
+    docs = new Map()
+    docs.set('hosts/host-shop', { orgId: 'org-seller', subdomain: 'shop' })
+    mockStaffNotifications.length = 0
+    mockDispatchClaimed = true
+    mockDispatchHostIds = ['host-shop']
+    stripeCalls = []
+    charges = {}
+    global.fetch = jest.fn(
+      async (input: unknown, init?: { method?: string; headers?: Record<string, string> }) => {
+        const url = String(
+          typeof input === 'string' ? input : (input as { url?: string })?.url,
+        )
+        const method = String(init?.method ?? 'GET').toUpperCase()
+        if (url.includes('api.stripe.com')) {
+          stripeCalls.push({ method, url, account: init?.headers?.['Stripe-Account'] ?? null })
+          if (method !== 'GET' || !url.includes('/v1/charges/')) {
+            throw new Error(`REFUSED: only a charge READ is allowed — ${method} ${url}`)
+          }
+          const id = decodeURIComponent(url.split('/v1/charges/')[1] ?? '')
+          return { ok: Boolean(charges[id]), json: async () => charges[id] }
+        }
+        return { ok: true, json: async () => ({}) }
+      },
+    ) as never
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+  })
+
+  afterEach(() => {
+    process.env = ORIGINAL_ENV
+    jest.restoreAllMocks()
+  })
+
+  const loadWithKey = () => {
+    const post = loadWebhook()
+    process.env = { ...process.env, STRIPE_SECRET_KEY: 'sk_test_fake' }
+    return post
+  }
+
+  it('ONE warning on a storefront charge files no staff row and pages nobody', async () => {
+    sellerCharge('ch_shop_1')
+    const post = loadWithKey()
+    const response = await post(
+      signed(
+        event('radar.early_fraud_warning.created', {
+          id: 'issfr_s1',
+          charge: 'ch_shop_1',
+          payment_intent: 'pi_shop_1',
+          fraud_type: 'unauthorized_use_of_card',
+        }),
+      ),
+    )
+    expect(response.status).toBe(200)
+    expect(abuseRows()).toEqual([])
+    expect(mockStaffNotifications).toEqual([])
+    // Kept for the pattern, against the account the charge paid.
+    expect(docs.get('paymentFraudLedger/acct_seller')).toMatchObject({
+      entries: [
+        expect.objectContaining({
+          kind: 'early-fraud-warning',
+          chargeId: 'ch_shop_1',
+          hostIds: ['host-shop'],
+        }),
+      ],
+    })
+  })
+
+  it('warnings and disputes on THREE different charges file one urgent row naming the seller', async () => {
+    for (const id of ['ch_a', 'ch_b', 'ch_c', 'ch_d']) sellerCharge(id)
+    const post = loadWithKey()
+    await post(signed(event('radar.early_fraud_warning.created', { id: 'issfr_a', charge: 'ch_a' })))
+    await post(signed(event('charge.dispute.created', { id: 'du_b', charge: 'ch_b', amount: 12900, reason: 'fraudulent' })))
+    expect(abuseRows()).toEqual([])
+    await post(signed(event('radar.early_fraud_warning.created', { id: 'issfr_c', charge: 'ch_c' })))
+
+    const rows = abuseRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      category: 'phishing',
+      severity: 'urgent',
+      source: 'stripe-seller-fraud-pattern',
+      status: 'open',
+      orgId: 'org-seller',
+      hostId: 'host-shop',
+      sellerPattern: {
+        sellerAccountId: 'acct_seller',
+        chargeIds: ['ch_a', 'ch_b', 'ch_c'],
+        orgIds: ['org-seller'],
+        threshold: 3,
+        windowDays: 7,
+      },
+    })
+    expect(String(rows[0]['details'])).toContain('Nothing has been refunded, canceled or paused')
+    expect(mockStaffNotifications).toHaveLength(1)
+    expect(mockStaffNotifications[0]).toMatchObject({ type: 'system.abuseReportUrgent' })
+
+    // A fourth inside the same window joins the ledger, not a second row.
+    await post(signed(event('radar.early_fraud_warning.created', { id: 'issfr_d', charge: 'ch_d' })))
+    expect(abuseRows()).toHaveLength(1)
+    expect(mockStaffNotifications).toHaveLength(1)
+    // Nothing but charge READS reached Stripe.
+    expect(stripeCalls.filter((call) => call.method !== 'GET')).toEqual([])
+  })
+
+  it('a warning and a dispute on the SAME charge are one bad payment, not two', async () => {
+    for (const id of ['ch_x', 'ch_y']) sellerCharge(id)
+    const post = loadWithKey()
+    await post(signed(event('radar.early_fraud_warning.created', { id: 'issfr_x', charge: 'ch_x' })))
+    await post(signed(event('charge.dispute.created', { id: 'du_x', charge: 'ch_x', amount: 12900 })))
+    await post(signed(event('radar.early_fraud_warning.created', { id: 'issfr_y', charge: 'ch_y' })))
+    expect(abuseRows()).toEqual([])
+    expect(mockStaffNotifications).toEqual([])
+  })
+
+  it('Radar reviews never count toward the pattern', async () => {
+    for (const id of ['ch_r1', 'ch_r2', 'ch_r3']) sellerCharge(id)
+    const post = loadWithKey()
+    for (const id of ['ch_r1', 'ch_r2', 'ch_r3']) {
+      await post(signed(event('review.opened', { id: `prv_${id}`, charge: id, reason: 'rule' })))
+    }
+    expect(abuseRows()).toEqual([])
+    expect(mockStaffNotifications).toEqual([])
+  })
+
+  it('a redelivered signal is counted once', async () => {
+    for (const id of ['ch_1', 'ch_2']) sellerCharge(id)
+    const post = loadWithKey()
+    const warning = { id: 'issfr_same', charge: 'ch_1' }
+    await post(signed(event('radar.early_fraud_warning.created', warning)))
+    await post(signed(event('radar.early_fraud_warning.created', warning)))
+    await post(signed(event('radar.early_fraud_warning.created', { id: 'issfr_2', charge: 'ch_2' })))
+    expect(abuseRows()).toEqual([])
+    expect(
+      (docs.get('paymentFraudLedger/acct_seller')?.['entries'] as unknown[]).length,
+    ).toBe(2)
+  })
+
+  it('a Connect delivery reads the charge on the connected account and keys the ledger by it', async () => {
+    charges['ch_direct'] = { id: 'ch_direct', amount: 500, currency: 'usd' }
+    const post = loadWithKey()
+    await post(
+      signed(
+        event(
+          'radar.early_fraud_warning.created',
+          { id: 'issfr_direct', charge: 'ch_direct' },
+          { account: 'acct_direct' },
+        ),
+      ),
+    )
+    expect(stripeCalls).toEqual([
+      {
+        method: 'GET',
+        url: 'https://api.stripe.com/v1/charges/ch_direct',
+        account: 'acct_direct',
+      },
+    ])
+    expect(docs.get('paymentFraudLedger/acct_direct')).toBeDefined()
+    expect(abuseRows()).toEqual([])
   })
 })

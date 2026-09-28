@@ -124,18 +124,39 @@ export function formatSignalAmount(
  */
 export async function readStripeChargeForSignal(
   chargeId: string,
-  options: { secretKey: string | undefined; fetchImpl?: typeof fetch },
+  options: {
+    secretKey: string | undefined
+    fetchImpl?: typeof fetch
+    /**
+     * The connected account a Connect delivery came from (`event.account`),
+     * whose charge lives on THAT account and reads only with its header.
+     */
+    stripeAccount?: string | null
+  },
 ): Promise<{
   amountCents: number | null
   currency: string
   customerId: string | null
   checks: PaymentFraudCardChecks
+  /**
+   * The connected account the charge paid (AGL-3360): a destination
+   * charge's `transfer_data.destination`, else `on_behalf_of`. Null for a
+   * charge that paid only the platform — a workspace's own subscription.
+   */
+  sellerAccountId: string | null
 } | null> {
   if (!chargeId || !options.secretKey) return null
   try {
     const response = await (options.fetchImpl ?? fetch)(
       `https://api.stripe.com/v1/charges/${encodeURIComponent(chargeId)}`,
-      { headers: { Authorization: `Bearer ${options.secretKey}` } },
+      {
+        headers: {
+          Authorization: `Bearer ${options.secretKey}`,
+          ...(options.stripeAccount
+            ? { 'Stripe-Account': options.stripeAccount }
+            : {}),
+        },
+      },
     )
     if (!response.ok) return null
     const charge = (await response.json()) as Record<string, any>
@@ -155,10 +176,24 @@ export async function readStripeChargeForSignal(
         riskLevel: text(charge?.['outcome']?.['risk_level']),
         threeDSecure: text(card?.['three_d_secure']?.['result']),
       },
+      sellerAccountId:
+        accountRef(charge?.['transfer_data']?.['destination']) ??
+        accountRef(charge?.['on_behalf_of']) ??
+        options.stripeAccount ??
+        null,
     }
   } catch {
     return null
   }
+}
+
+/** A Stripe account reference, expanded or not, as an id or null. */
+function accountRef(value: unknown): string | null {
+  const id =
+    typeof value === 'string'
+      ? value
+      : String((value as { id?: unknown } | null)?.id ?? '')
+  return id.startsWith('acct_') ? id : null
 }
 
 /** The row's prose: what arrived, about which workspace, and what to do. */
@@ -266,4 +301,257 @@ export async function recordPaymentFraudSignal(
       .catch(() => undefined)
   }
   return { reviewId, reference, first }
+}
+
+/*==========================================
+ * THE SELLER PATTERN: WHEN THE MERCHANT MAY BE THE FRAUDSTER (AGL-3360).
+ *
+ * A site's own sales are destination charges on the platform account, so
+ * Stripe's fraud signals about a shopper's card arrive here too. One of them
+ * is the merchant's business — their customer, their order, their decision
+ * (`payment-risk-record.ts` puts it on the record and tells them). Staff are
+ * not paged for it.
+ *
+ * What IS staff's business is the shape a phishing actor leaves when they
+ * run stolen cards through a storefront of their own: several different
+ * charges on ONE connected account drawing issuer fraud reports or
+ * chargebacks in a short time. So every signal on a seller's charge is kept
+ * in a small per-account ledger, and one urgent abuse-queue row is filed when
+ *
+ *   ≥ 3 DISTINCT charges carry an early fraud warning or a dispute
+ *   within 7 days.
+ *
+ * Why those numbers. An early fraud warning is an issuer's report that the
+ * cardholder did not make the payment, and a dispute is a formal
+ * chargeback; a legitimate small merchant sees either rarely — card-network
+ * dispute monitoring starts near 0.9% of a month's transactions, single
+ * digits a MONTH for a shop doing hundreds of sales. One or two in a week is
+ * ordinary friendly fraud and must never page staff. Three separate charges
+ * in one week is a rate a real small shop does not produce, and is what a
+ * card tester or a stolen-card storefront produces within days. Counted by
+ * CHARGE, because a warning is routinely followed by a dispute on the same
+ * payment, and that is one bad payment, not two. Radar reviews are kept in
+ * the ledger for the row's prose but never counted: a review is Stripe's
+ * suspicion, not an issuer's report, and a busy shop can collect several
+ * that clear.
+ *
+ * One row per window: once filed, the account is not filed again until 7
+ * days have passed, so a burst is one row with everything in it rather than
+ * a row per signal. NOTHING IS DONE TO THE ACCOUNT OR THE MONEY: staff
+ * decide (lock the workspace, pause the account's payouts in Stripe).
+ *=========================================*/
+
+export const SELLER_FRAUD_PATTERN = {
+  /** Distinct charges with an early fraud warning or a dispute. */
+  minDistinctCharges: 3,
+  /** …within this window. */
+  windowMs: 7 * 24 * 60 * 60 * 1000,
+  /** How long the ledger keeps an entry at all. */
+  retainMs: 30 * 24 * 60 * 60 * 1000,
+} as const
+
+const WINDOW_DAYS = SELLER_FRAUD_PATTERN.windowMs / 86_400_000
+
+/** Admin-SDK only; no client rule opens it (default deny). */
+export const SELLER_FRAUD_LEDGER_COLLECTION = 'paymentFraudLedger'
+
+export interface SellerFraudLedgerEntry {
+  kind: PaymentFraudSignalKind
+  stripeObjectId: string
+  chargeId: string | null
+  amountCents: number | null
+  currency: string
+  detail: string
+  /** The sites a plugin recognised the charge as belonging to. */
+  hostIds: string[]
+  atMs: number
+}
+
+/** Whether a seller's ledger shows the pattern at `nowMs`. Pure. */
+export function sellerFraudPattern(
+  entries: readonly SellerFraudLedgerEntry[],
+  nowMs: number,
+): { matched: boolean; chargeIds: string[] } {
+  const since = nowMs - SELLER_FRAUD_PATTERN.windowMs
+  const chargeIds = [
+    ...new Set(
+      entries
+        .filter(
+          (entry) =>
+            (entry.kind === 'early-fraud-warning' || entry.kind === 'dispute') &&
+            entry.atMs >= since,
+        )
+        .map((entry) => entry.chargeId || entry.stripeObjectId),
+    ),
+  ]
+  return {
+    matched: chargeIds.length >= SELLER_FRAUD_PATTERN.minDistinctCharges,
+    chargeIds,
+  }
+}
+
+/** The connected account's page in the Stripe Dashboard. */
+export function stripeConnectedAccountUrl(
+  accountId: string,
+  livemode: boolean,
+): string {
+  return `https://dashboard.stripe.com/${livemode ? '' : 'test/'}connect/accounts/${encodeURIComponent(accountId)}`
+}
+
+/**
+ * Keep one signal on a seller's charge, and file the pattern row when the
+ * ledger crosses the threshold. Idempotent on the Stripe object id: a
+ * redelivery changes nothing and files nothing.
+ */
+export async function recordSellerFraudSignal(
+  input: {
+    signal: PaymentFraudSignal
+    sellerAccountId: string
+    /** The sites a plugin recognised the charge as belonging to. */
+    hostIds: string[]
+    /** Workspaces owning those sites, for the row. */
+    orgIds: string[]
+  },
+  deps: {
+    firestore: FirebaseFirestore.Firestore
+    notify: (payload: {
+      type: 'system.abuseReportUrgent'
+      title: string
+      body: string
+      link: string
+    }) => Promise<void>
+    nowMs?: number
+  },
+): Promise<{
+  first: boolean
+  matched: boolean
+  filed: { reviewId: string; reference: string } | null
+}> {
+  const nowMs = deps.nowMs ?? Date.now()
+  const { signal, sellerAccountId } = input
+  const ledgerRef = deps.firestore
+    .collection(SELLER_FRAUD_LEDGER_COLLECTION)
+    .doc(sellerAccountId)
+  const outcome = await deps.firestore.runTransaction(async (transaction) => {
+    const fresh = await transaction.get(ledgerRef)
+    const stored = (
+      Array.isArray(fresh.get('entries')) ? fresh.get('entries') : []
+    ) as SellerFraudLedgerEntry[]
+    if (stored.some((entry) => entry.stripeObjectId === signal.stripeObjectId)) {
+      return { first: false, matched: false, fileAtMs: 0, entries: stored }
+    }
+    const entries: SellerFraudLedgerEntry[] = [
+      ...stored.filter(
+        (entry) => entry.atMs >= nowMs - SELLER_FRAUD_PATTERN.retainMs,
+      ),
+      {
+        kind: signal.kind,
+        stripeObjectId: signal.stripeObjectId,
+        chargeId: signal.chargeId,
+        amountCents: signal.amountCents,
+        currency: signal.currency,
+        detail: signal.detail,
+        hostIds: input.hostIds,
+        atMs: nowMs,
+      },
+    ]
+    const { matched } = sellerFraudPattern(entries, nowMs)
+    const lastFiledAtMs = Number(fresh.get('lastFiledAtMs') ?? 0)
+    const fileAtMs =
+      matched &&
+      !(lastFiledAtMs && nowMs - lastFiledAtMs < SELLER_FRAUD_PATTERN.windowMs)
+        ? nowMs
+        : 0
+    transaction.set(
+      ledgerRef,
+      {
+        sellerAccountId,
+        entries,
+        livemode: signal.livemode,
+        updatedAtMs: nowMs,
+        ...(fileAtMs ? { lastFiledAtMs: fileAtMs } : {}),
+      },
+      { merge: true },
+    )
+    return { first: true, matched, fileAtMs, entries }
+  })
+  if (!outcome.fileAtMs) {
+    return { first: outcome.first, matched: outcome.matched, filed: null }
+  }
+
+  const { chargeIds } = sellerFraudPattern(outcome.entries, nowMs)
+  const inWindow = outcome.entries.filter(
+    (entry) => entry.atMs >= nowMs - SELLER_FRAUD_PATTERN.windowMs,
+  )
+  const reviewId = createHash('sha256')
+    .update(`stripe-seller-pattern:${sellerAccountId}:${outcome.fileAtMs}`)
+    .digest('hex')
+    .slice(0, 40)
+  const reference = paymentFraudSignalReference(reviewId)
+  const orgId = input.orgIds[0] ?? null
+  const hostIds = [...new Set(inWindow.flatMap((entry) => entry.hostIds ?? []))]
+  const stripeUrl = stripeConnectedAccountUrl(sellerAccountId, signal.livemode)
+  const details = [
+    `${chargeIds.length} different charges paid to connected account ${sellerAccountId} drew an issuer fraud warning or a dispute within ${WINDOW_DAYS} days` +
+      (signal.livemode ? '' : ' — TEST MODE') +
+      '.',
+    `Workspace(s): ${input.orgIds.length ? input.orgIds.join(', ') : 'not resolved'}. Site(s): ${hostIds.length ? hostIds.join(', ') : 'not resolved'}.`,
+    ...inWindow.map(
+      (entry) =>
+        `• ${KIND_LABEL[entry.kind]} ${entry.stripeObjectId} on ${entry.chargeId ?? 'an unnamed charge'} · ${formatSignalAmount(entry.amountCents, entry.currency)}` +
+        (entry.detail ? ` · ${entry.detail}` : ''),
+    ),
+    'A shop taking stolen cards through its own storefront leaves this shape. Each merchant has already been shown the signal on its own order or booking.',
+    `Nothing has been refunded, canceled or paused. If this is the seller's fraud, lock the workspace and pause the account's payouts in Stripe (${stripeUrl}), then close this row with what you did.`,
+  ]
+    .join('\n')
+    .slice(0, 5000)
+  await deps.firestore
+    .collection(ABUSE_REPORT_COLLECTION)
+    .doc(reviewId)
+    .set(
+      {
+        reference,
+        // "Phishing or fraud" — the queue's urgent fraud category.
+        category: 'phishing',
+        severity: 'urgent',
+        source: 'stripe-seller-fraud-pattern',
+        url: null,
+        reportedHostname: null,
+        hostId: hostIds[0] ?? null,
+        orgId,
+        details,
+        reporterEmail: null,
+        reporterName: null,
+        dmca: null,
+        reportCount: 1,
+        sellerPattern: {
+          sellerAccountId,
+          stripeAccountUrl: stripeUrl,
+          chargeIds,
+          orgIds: input.orgIds,
+          hostIds,
+          threshold: SELLER_FRAUD_PATTERN.minDistinctCharges,
+          windowDays: WINDOW_DAYS,
+          livemode: signal.livemode,
+        },
+        status: 'open',
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+  await deps
+    .notify({
+      type: 'system.abuseReportUrgent',
+      title: `Seller fraud pattern — ${chargeIds.length} charges on one account`,
+      body:
+        `Connected account ${sellerAccountId}` +
+        (orgId ? ` (workspace ${orgId})` : '') +
+        ` drew fraud warnings or disputes on ${chargeIds.length} different charges in ${WINDOW_DAYS} days. ` +
+        `Nothing has been refunded, canceled or paused. Reference ${reference}.`,
+      link: '/admin/abuse-reports',
+    })
+    .catch(() => undefined)
+  return { first: true, matched: true, filed: { reviewId, reference } }
 }
