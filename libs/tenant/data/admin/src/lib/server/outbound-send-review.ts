@@ -74,7 +74,7 @@ import {
 import { FieldValue } from 'firebase-admin/firestore'
 import { orgAgeDays } from './org-age'
 import firebaseAdmin from './firebase-admin'
-import { notifyRiskEvent, type RiskEventItem } from './risk-notice'
+import { notifyRiskEvent, type RiskEventInput, type RiskEventItem } from './risk-notice'
 
 /** A workspace younger than this many days has the soft rules applied. */
 export { OUTBOUND_REVIEW_YOUNG_DAYS }
@@ -273,6 +273,8 @@ export interface OutboundHoldFiling {
    * name the signals.
    */
   item?: RiskEventItem | null
+  /** A held page, described (AGL-3374): stored on the owners' notice for the console. */
+  page?: RiskEventInput['page']
 }
 
 /**
@@ -301,7 +303,9 @@ export function heldSendItem(input: {
     case 'action':
       return { label: `the automated email "${subject}"`, path: `/${input.hostId}/automation` }
     case 'page':
-      return { label: `the page ${subject}`, path: null }
+      // A page's subject is its label (`heldPageLabel`, AGL-3374); a row
+      // filed before that carried its URL.
+      return { label: /^https?:\/\//.test(subject) ? `the page ${subject}` : subject, path: null }
     case 'listing':
       // The publisher's own Listings section of the Marketplace hub.
       return { label: `the marketplace submission "${subject}"`, path: '/org/marketplace/listings' }
@@ -409,6 +413,7 @@ export async function fileOutboundHold(
           hostId: filing.heldSend.hostId,
           subject: filing.heldSend.subject,
         }),
+      page: filing.page ?? null,
       staffEvidence: [
         filing.alertBody,
         ...describePhishingScreenSignals(filing.heldSend.signals),

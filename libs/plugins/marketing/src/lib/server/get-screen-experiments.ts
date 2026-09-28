@@ -85,6 +85,14 @@ export async function getScreenExperiments(options: {
           screen: options.screen,
           versionId,
           host: options.host,
+          // Named as the variant it is if the page review holds it (AGL-3374).
+          page: {
+            variant: {
+              experimentId: doc.id,
+              variantId: variant.id,
+              name: variant.name ?? null,
+            },
+          },
         })
       }
       experiments.push({

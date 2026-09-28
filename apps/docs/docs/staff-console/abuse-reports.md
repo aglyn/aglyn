@@ -94,6 +94,22 @@ notification an intake phishing report raises, once per row.
 | Outreach sequences (connected mailboxes) | Before the step is claimed | The enrollment is paused with the reason. A member resumes it once the row is released. |
 | Published pages | When the page is put together for a visitor | The page serves the last version it served clean, or nothing if it has none. |
 
+A page row names the page by what it is and the route it serves, never by the
+site's root address:
+
+- a page, such as `the "Pricing" page (/pricing)`;
+- a collection list template, such as `(/blog)`;
+- a collection or product entry template, such as `(/videos/:slug)`, with the entry
+  address that was being shown;
+- an experiment variant, together with its page;
+- an error page.
+
+When the flagged content comes from a shared layout or component rather than the page
+itself, the row names that layout or component and how many pages use it. **Open in
+console** opens the held version of the page, or the layout or component, on this origin.
+The owners see the same name and a banner on the page in their console. They can request
+a review, but they cannot release the page.
+
 Pages are screened when they are served rather than when Publish is clicked.
 Publishing is a pointer move made from the browser in several places, and an
 author can edit a live version in place. Every one of those paths reaches a

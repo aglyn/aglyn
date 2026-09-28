@@ -108,7 +108,15 @@ import {
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  resolveHostConsolePaths,
 } from '@aglyn/tenant-data-admin'
+import {
+  heldPageConsolePath,
+  heldPageDetails,
+  heldPageLabel,
+  heldPageVisitorSentence,
+  type HeldPageSubject,
+} from '@aglyn/shared-util-email/held-page'
 import {
   renderStaffRiskNotice,
   resolveStaffRiskActions,
@@ -262,12 +270,85 @@ function rowPayload(
      */
     source: asString(data['source']),
     heldSend: heldSendPayload(data['heldSend']),
+    heldPage: heldPagePayload(data),
     paymentSignal: paymentSignalPayload(data['paymentSignal']),
     sellerPattern: sellerPatternPayload(data['sellerPattern']),
     riskNotice: riskNoticePayload(id, data),
     ownerReviewRequests: ownerReviewRequestsPayload(data['ownerReviewRequests']),
     reviewRequestedAtMs: asMillis(data['reviewRequestedAtMs']),
   }
+}
+
+/**
+ * The page a held or flagged row is about, by name (AGL-3374): what it is,
+ * its route, the entry it was showing, the layout or component its flagged
+ * content lives in, what visitors see, and where to open it in the console
+ * (`consoleHref`, filled by {@link withHeldPageLinks}). A row filed before
+ * rows described their page names what it recorded.
+ */
+function heldPagePayload(data: Record<string, unknown>) {
+  const held = (data['heldPage'] ?? null) as Record<string, unknown> | null
+  if (!held || typeof held !== 'object') return null
+  const hostId = asString(data['hostId'])
+  const subject = held['subject'] as HeldPageSubject | undefined
+  if (subject && typeof subject === 'object' && subject.screenId) {
+    return {
+      label: heldPageLabel(subject),
+      kind: subject.kind,
+      route: subject.route,
+      url: subject.url,
+      entryUrl: subject.entryUrl,
+      details: heldPageDetails(subject),
+      visitorSentence: heldPageVisitorSentence(subject),
+      consolePath: hostId ? heldPageConsolePath(subject, hostId) : null,
+      consoleHref: null as string | null,
+    }
+  }
+  const screenId = asString(held['screenId'])
+  const versionId = asString(held['versionId'])
+  return {
+    label: `screen ${screenId ?? 'unknown'}`,
+    kind: null,
+    route: null,
+    url: asString(held['url']),
+    entryUrl: null,
+    details: [] as string[],
+    visitorSentence: null,
+    consolePath:
+      hostId && screenId && versionId
+        ? `/${hostId}/screens/${encodeURIComponent(screenId)}/versions/${encodeURIComponent(versionId)}/view`
+        : null,
+    consoleHref: null as string | null,
+  }
+}
+
+/**
+ * Each page row's console link, resolved for staff — who have no org of
+ * their own to resolve a site path against — in one batch (AGL-3374).
+ */
+async function withHeldPageLinks<
+  T extends { hostId: string | null; orgId: string | null; heldPage: ReturnType<typeof heldPagePayload> },
+>(firestore: FirebaseFirestore.Firestore, rows: T[]): Promise<T[]> {
+  const entries = rows.flatMap((row) =>
+    row.heldPage?.consolePath && row.hostId
+      ? [{ hostId: row.hostId, orgId: row.orgId, path: row.heldPage.consolePath }]
+      : [],
+  )
+  if (!entries.length) return rows
+  const hrefs = await resolveHostConsolePaths(firestore, entries).catch(
+    () => new Map<string, string>(),
+  )
+  return rows.map((row) =>
+    row.heldPage?.consolePath && row.hostId
+      ? {
+          ...row,
+          heldPage: {
+            ...row.heldPage,
+            consoleHref: hrefs.get(`${row.hostId}\n${row.heldPage.consolePath}`) ?? null,
+          },
+        }
+      : row,
+  )
 }
 
 /**
@@ -782,14 +863,11 @@ async function handler(request: Request): Promise<Response> {
         if (!snapshot.exists) {
           return Response.json({ error: 'No such report' }, { status: 404 })
         }
+        const [report] = await withHeldPageLinks(firestore, [
+          rowPayload(oneId, snapshot.data() as Record<string, unknown>, canSeeIdentity),
+        ])
         return Response.json(
-          {
-            report: rowPayload(
-              oneId,
-              snapshot.data() as Record<string, unknown>,
-              canSeeIdentity,
-            ),
-          },
+          { report },
           { status: 200, headers: { 'Cache-Control': 'no-store' } },
         )
       }
@@ -946,7 +1024,7 @@ async function handler(request: Request): Promise<Response> {
           ledger: ledger.rows,
         }
       }
-      const reports = page.rows.map((report) => {
+      const reports = (await withHeldPageLinks(firestore, page.rows)).map((report) => {
         const counted = report.category === 'dmca' && report.orgId
         return {
           ...report,
@@ -1388,11 +1466,11 @@ async function handler(request: Request): Promise<Response> {
     const after = await ref.get()
     return Response.json(
       {
-        report: rowPayload(
-          id,
-          after.data() as Record<string, unknown>,
-          canSeeIdentity,
-        ),
+        report: (
+          await withHeldPageLinks(firestore, [
+            rowPayload(id, after.data() as Record<string, unknown>, canSeeIdentity),
+          ])
+        )[0],
         strike: strikeEffect,
         // What closing the row did to the send it held (AGL-3356), or null.
         heldSend: heldSendDecision,

@@ -93,6 +93,20 @@ import {
   type SendEmailOptions,
   type SendEmailResult,
 } from '@aglyn/shared-util-email'
+import {
+  heldPageDetails,
+  heldPageLabel,
+  heldPageTargets,
+  heldPageVisitorSentence,
+  isOpenPageHoldStatus,
+  isPageHoldNoticeKind,
+  PAGE_HOLD_NOTICE_KINDS,
+  pageHoldChip,
+  parseHeldPageItemPath,
+  type HeldPageSubject,
+  type HeldPageTarget,
+  type PageHoldNoticeKind,
+} from '@aglyn/shared-util-email/held-page'
 import { FieldValue } from 'firebase-admin/firestore'
 import { findUserByUidAcrossPools } from './auth-pools'
 import firebaseAdmin from './firebase-admin'
@@ -176,6 +190,12 @@ export interface RiskEventInput {
     scope?: string | null
     targetId?: string | null
   } | null
+  /**
+   * A held or flagged page, described (AGL-3374). Stored on the notice so
+   * the console can put the hold on the page, template, layout or component
+   * it is about, and name it there. Owner-safe: no signal, no evidence.
+   */
+  page?: HeldPageSubject | null
   /** Staff only: what the screen or Stripe reported. Never shown to owners. */
   staffEvidence?: string | null
   /** Overrides the default dedupe key. */
@@ -349,6 +369,52 @@ function emailPath(
       : null
   }
   return path
+}
+
+/**
+ * Stored-shape site paths (`/{hostId}/…`) as console routes, for a reader
+ * with no org context of its own — staff reading the abuse queue
+ * (AGL-3374). One read of the sites and one of their workspaces for the
+ * whole batch; a path that cannot be resolved is left out.
+ */
+export async function resolveHostConsolePaths(
+  firestore: FirebaseFirestore.Firestore,
+  entries: ReadonlyArray<{ hostId: string; orgId?: string | null; path: string }>,
+): Promise<Map<string, string>> {
+  const resolved = new Map<string, string>()
+  const hostIds = [...new Set(entries.map((entry) => entry.hostId).filter(Boolean))]
+  if (!hostIds.length) return resolved
+  const hosts = await firestore.getAll(
+    ...hostIds.map((id) => firestore.collection('hosts').doc(id)),
+  )
+  const hostFacts = new Map(
+    hosts.map((host) => [
+      host.id,
+      {
+        subdomain: String(host.get('subdomain') ?? '') || null,
+        orgId: String(host.get('orgId') ?? '') || null,
+      },
+    ]),
+  )
+  // The row names its workspace; a site document may too.
+  const orgOf = (entry: { hostId: string; orgId?: string | null }) =>
+    entry.orgId || hostFacts.get(entry.hostId)?.orgId || null
+  const orgIds = [...new Set(entries.map(orgOf).filter(Boolean))] as string[]
+  const orgs = orgIds.length
+    ? await firestore.getAll(...orgIds.map((id) => firestore.collection('orgs').doc(id)))
+    : []
+  const slugs = new Map(orgs.map((org) => [org.id, String(org.get('slug') ?? '') || null]))
+  for (const entry of entries) {
+    const facts = hostFacts.get(entry.hostId)
+    const orgId = orgOf(entry)
+    const href = emailPath(entry.path, {
+      orgSlug: orgId ? (slugs.get(orgId) ?? null) : null,
+      hostId: entry.hostId,
+      hostSubdomain: facts?.subdomain ?? null,
+    })
+    if (href && href !== entry.path) resolved.set(`${entry.hostId}\n${entry.path}`, href)
+  }
+  return resolved
 }
 
 /** The workspace facts every notice renders with. Never throws. */
@@ -656,6 +722,7 @@ export async function notifyRiskEvent(
         occurredAtMs,
         createdAtMs: nowMs,
         createdAt: FieldValue.serverTimestamp(),
+        ...(input.page ? { page: input.page } : {}),
       })
     } catch (error) {
       if (isAlreadyExists(error)) {
@@ -1207,6 +1274,132 @@ export interface OwnerRiskNoticeView {
   status: 'held' | 'in-review' | 'released' | 'rejected' | 'closed' | null
   reviewable: boolean
   reviewRequests: Array<{ atMs: number; note: string; mine: boolean }>
+  /** A page notice: the page by name, where it lives, and what visitors see (AGL-3374). */
+  page: OwnerPageHoldFacts | null
+}
+
+/** A page notice's facts, as every owner surface renders them (AGL-3374). */
+export interface OwnerPageHoldFacts {
+  /** `the "Video detail" template (/videos/:slug)`. */
+  label: string
+  /** Where it was seen, and the layout or component the content lives in. */
+  details: string[]
+  /** What visitors receive meanwhile. */
+  visitorSentence: string
+  /** The page, and the layout or component, the hold is shown on. */
+  targets: HeldPageTarget[]
+}
+
+/**
+ * A page notice's facts from its stored subject, or — for a notice written
+ * before notices carried one — from its label and item path. Pure.
+ */
+export function ownerPageHoldFacts(
+  kind: string,
+  notice: { page?: unknown; ownerValues?: unknown; actionParams?: unknown },
+): OwnerPageHoldFacts | null {
+  if (!isPageHoldNoticeKind(kind)) return null
+  const subject = notice.page as HeldPageSubject | undefined
+  if (subject && typeof subject === 'object' && subject.screenId) {
+    return {
+      label: heldPageLabel(subject),
+      details: heldPageDetails(subject),
+      visitorSentence: heldPageVisitorSentence(subject),
+      targets: heldPageTargets(subject),
+    }
+  }
+  const values = (notice.ownerValues ?? {}) as Record<string, string | undefined>
+  const params = (notice.actionParams ?? {}) as Record<string, string | undefined>
+  const parsed = parseHeldPageItemPath(params.itemPath)
+  return {
+    label: values['item.label'] || 'a page on your site',
+    details: [],
+    visitorSentence:
+      kind === 'page-flagged'
+        ? heldPageVisitorSentence({ visitorView: 'live' })
+        : 'Visitors see the previous version of this page, or a not-found page if it was never published, until the review is done.',
+    targets: parsed ? [{ type: 'screen', id: parsed.screenId }] : [],
+  }
+}
+
+/** One open page hold on a site, as the site's console surfaces show it (AGL-3374). */
+export interface PageHoldView extends OwnerPageHoldFacts {
+  noticeId: string
+  kind: PageHoldNoticeKind
+  status: OwnerRiskNoticeView['status']
+  /** The status chip. Never paired with a release control. */
+  chip: { label: string; color: 'warning' | 'error' | 'info' }
+  reference: string | null
+  occurredAtMs: number
+  /** Whether a review can be requested on it (the viewer's role decides the rest). */
+  reviewable: boolean
+  /** When anyone on the workspace last asked for a review, if they did. */
+  reviewRequestedAtMs: number | null
+}
+
+/**
+ * Every page on a site that is held, flagged or not approved (AGL-3374): the
+ * `riskNotices` of the two page kinds for this host, newest first — one
+ * query on (`hostId`, `kind`, `createdAtMs`), which
+ * `cloud/firebase-firestore.indexes.json` holds — and each notice's row for
+ * its state. A released or cleared page is not listed.
+ */
+export async function listHostPageHolds(
+  input: { hostId: string; limit?: number },
+  overrides: Partial<RiskNoticeDeps> = {},
+): Promise<PageHoldView[]> {
+  const deps = resolveDeps(overrides)
+  const snapshot = await deps.firestore
+    .collection(RISK_NOTICE_COLLECTION)
+    .where('hostId', '==', input.hostId)
+    .where('kind', 'in', [...PAGE_HOLD_NOTICE_KINDS])
+    .orderBy('createdAtMs', 'desc')
+    .limit(Math.min(Math.max(input.limit ?? 50, 1), 100))
+    .get()
+  const reviewIds = [
+    ...new Set(snapshot.docs.map((doc) => String(doc.get('reviewId') ?? '')).filter(Boolean)),
+  ]
+  const rows = new Map<string, FirebaseFirestore.DocumentSnapshot>()
+  if (reviewIds.length) {
+    const read = await deps.firestore.getAll(
+      ...reviewIds.map((id) => deps.firestore.collection(ABUSE_REPORT_COLLECTION).doc(id)),
+    )
+    for (const row of read) rows.set(row.id, row)
+  }
+  const views: PageHoldView[] = []
+  const seenRows = new Set<string>()
+  for (const doc of snapshot.docs) {
+    const kind = doc.get('kind')
+    if (!isPageHoldNoticeKind(kind)) continue
+    const reviewId = String(doc.get('reviewId') ?? '')
+    // One entry per case: a row re-notified keeps its newest notice.
+    if (reviewId && seenRows.has(reviewId)) continue
+    if (reviewId) seenRows.add(reviewId)
+    const row = reviewId ? rows.get(reviewId) : undefined
+    const status = row?.exists ? ownerRowStatus(row) : kind === 'page-flagged' ? 'in-review' : 'held'
+    if (!isOpenPageHoldStatus(status)) continue
+    const facts = ownerPageHoldFacts(kind, {
+      page: doc.get('page'),
+      ownerValues: doc.get('ownerValues'),
+      actionParams: doc.get('actionParams'),
+    })
+    if (!facts) continue
+    views.push({
+      ...facts,
+      noticeId: doc.id,
+      kind,
+      status,
+      chip: pageHoldChip(kind, status),
+      reference: (doc.get('reference') as string | null) ?? null,
+      occurredAtMs: Number(doc.get('occurredAtMs') ?? doc.get('createdAtMs') ?? 0),
+      reviewable: RISK_NOTICE_CATALOG[kind].reviewable && Boolean(row?.exists),
+      reviewRequestedAtMs:
+        typeof row?.get('reviewRequestedAtMs') === 'number'
+          ? (row.get('reviewRequestedAtMs') as number)
+          : null,
+    })
+  }
+  return views
 }
 
 /**
@@ -1290,6 +1483,11 @@ export async function listOwnerRiskNotices(
           note: String(request.note ?? ''),
           mine: request.uid === input.viewerUid,
         })),
+      page: ownerPageHoldFacts(kind, {
+        page: doc.get('page'),
+        ownerValues: values,
+        actionParams: params,
+      }),
     })
   }
   return views

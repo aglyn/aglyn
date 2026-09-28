@@ -76,6 +76,24 @@ The latest version of a page was held before visitors saw it.
   information. A new version you publish is checked on its own. If you think it is a
   mistake, request a review.
 - **When it is released.** Visitors see the held version.
+- **Templates.** A collection's entry or list template is named with the route it serves,
+  such as `/videos/:slug`. While a template with no earlier version is held, its pages show
+  the site's built-in design for that collection instead.
+
+### Where you see it {#where-held-pages-show}
+
+A held or flagged page shows a status chip in your site's lists: **Held for review**,
+**Flagged — live, under review** or **Not approved**. The chip appears on the page or
+template in **Screens**. If the flagged content comes from a shared layout or component, the
+chip appears on that layout or component as well. Open the page, template, layout or
+component and a banner at the top says what visitors see now. The banner has three
+actions:
+
+- **View details** opens the notice on this page.
+- **Request a review** sends a note to our review team.
+- **Contact support** opens a support ticket.
+
+Only our review team can release a page.
 
 
 ## A live page is being reviewed {#page-flagged}
