@@ -654,3 +654,91 @@ export async function sendOperatorAlertDigest(
   }
 }
 
+
+// ── The staff page ──────────────────────────────────────────────────────────
+
+/** One registry entry as Staff → Operator alerts lists it. */
+export interface OperatorAlertCatalogRow {
+  type: string
+  label: string
+  description: string
+  tier: OperatorAlertDefinition['tier']
+  category: OperatorAlertDefinition['category']
+  pluginId: string | null
+  defaults: { enabled: boolean; delivery: OperatorAlertDefinition['delivery'] }
+  effective: { enabled: boolean; delivery: OperatorAlertDefinition['delivery'] }
+  /** Whether staff have answered for this type, rather than the default. */
+  overridden: boolean
+}
+
+/** Every registered type with its default and its effective setting. */
+export function operatorAlertCatalogRows(
+  definitions: readonly OperatorAlertDefinition[],
+  settings: OperatorAlertSettingsDoc,
+): OperatorAlertCatalogRow[] {
+  return definitions.map((definition) => ({
+    type: definition.type,
+    label: definition.label,
+    description: definition.description,
+    tier: definition.tier,
+    category: definition.category,
+    pluginId: definition.pluginId ?? null,
+    defaults: { enabled: definition.defaultEnabled, delivery: definition.delivery },
+    effective: effectiveOperatorAlertSetting(definition, settings),
+    overridden: Boolean(settings.types?.[definition.type]),
+  }))
+}
+
+/**
+ * Sends one `[Test]` alert of a type straight to the operator's inbox and
+ * webhook, past dedupe and staff's switches, so an operator can prove the
+ * channels reach them. Writes no console notification.
+ */
+export async function sendOperatorAlertTest(
+  definition: OperatorAlertDefinition,
+): Promise<{ email: SendEmailResult; webhook: OperatorAlertWebhookResult }> {
+  const sample: Record<string, string> = {}
+  for (const [, name] of `${definition.title} ${definition.body} ${definition.link ?? ''}`.matchAll(
+    /\{\{\s*([\w.]+)\s*\}\}/g,
+  )) {
+    sample[name as string] = `sample ${name}`
+  }
+  const alert = renderOperatorAlert(definition, { context: sample })
+  alert.title = `[Test] ${alert.title}`
+  alert.body = [
+    alert.body,
+    'This is a test of the operator alert channels; nothing happened.',
+  ].join(' ')
+  const { sendOperatorAlertEmail } = await import('./staff-alert-email')
+  const [email, webhook] = await Promise.all([
+    isEmailConfigured()
+      ? sendOperatorAlertEmail({
+          title: alert.title,
+          body: alert.body,
+          url: operatorAlertAbsoluteLink(alert.link) || operatorAlertAbsoluteLink('/admin/operator-alerts'),
+          context: `operator-alert-test ${definition.type}`,
+        })
+      : Promise.resolve<SendEmailResult>({ sent: false, reason: 'unconfigured' }),
+    postOperatorAlertWebhook([alert]),
+  ])
+  return { email, webhook }
+}
+
+/** Where operator mail goes, named but never listed, for the staff page. */
+export async function describeOperatorAlertRecipients(): Promise<{
+  source: 'STAFF_ALERT_EMAIL' | 'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL' | 'staff-accounts' | 'none'
+  count: number
+}> {
+  const { resolveStaffAlertRecipients } = await import('./staff-alert-email')
+  const recipients = await resolveStaffAlertRecipients()
+  if (!recipients.length) return { source: 'none', count: 0 }
+  const configured = String(process.env['STAFF_ALERT_EMAIL'] ?? '').trim().toLowerCase()
+  if (configured.includes('@') && recipients[0] === configured) {
+    return { source: 'STAFF_ALERT_EMAIL', count: 1 }
+  }
+  const support = String(process.env['NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL'] ?? '').trim().toLowerCase()
+  if (support.includes('@') && recipients[0] === support) {
+    return { source: 'NEXT_PUBLIC_OPERATOR_SUPPORT_EMAIL', count: 1 }
+  }
+  return { source: 'staff-accounts', count: recipients.length }
+}

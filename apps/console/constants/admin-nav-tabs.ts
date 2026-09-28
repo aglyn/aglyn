@@ -148,6 +148,14 @@ function consoleAdminNavTabItems() {
       label: 'Health',
       href: buildRoute(Route.ADMIN_HEALTH),
     },
+    // Beside Health, because it is how Health reaches somebody who is not
+    // looking at it: which faults email the operator, and whether the
+    // channels work (AGL-3377).
+    {
+      id: 'nav-tab-admin-operator-alerts',
+      label: 'Alerts',
+      href: buildRoute(Route.ADMIN_OPERATOR_ALERTS),
+    },
     // Directly after Health, because it is the other half of the same job:
     // Health says a scheduled job stopped running, and this is where the
     // operator does something about it (AGL-1949).

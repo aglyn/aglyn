@@ -76,6 +76,9 @@ export enum Route {
   // screen for browsing individual orgs. Settings that describe the platform
   // rather than one org belong on their own tab, beside the flags.
   ADMIN_SETTINGS = '/admin/settings',
+  // Which operator alerts email the operator, immediately or in the daily
+  // digest, and whether the channels reach anybody (AGL-3377).
+  ADMIN_OPERATOR_ALERTS = '/admin/operator-alerts',
   // One submission or listed plugin in full (AGL-959): the queue index is
   // for scanning, this is where a reviewer reads the manifest, weighs the
   // verifier findings and acts.
@@ -580,6 +583,7 @@ export interface RoutePayload {
   [Route.ADMIN_USER_DETAIL]: { uid: string }
   [Route.ADMIN_FLAGS]: undefined
   [Route.ADMIN_SETTINGS]: undefined
+  [Route.ADMIN_OPERATOR_ALERTS]: undefined
   [Route.ADMIN_STAFF_PAGE]: { staffPage: string }
   [Route.ADMIN_SUPPORT]: undefined
   [Route.ADMIN_CONTACT_SUPPRESSIONS]: undefined

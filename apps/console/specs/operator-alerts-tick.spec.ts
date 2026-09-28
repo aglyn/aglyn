@@ -1,4 +1,7 @@
 /**
+ * @jest-environment node
+ */
+/**
  * @license
  * Copyright 2026 Aglyn LLC
  *
@@ -15,9 +18,6 @@
  * limitations under the License.
  */
 
-/**
- * @jest-environment node
- */
 
 import { readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'

@@ -145,6 +145,7 @@ export const DOCS_HELP_EXCERPTS = {
   multilingual: 'Offer your site in multiple languages with locale variants, hreflang, and a language switcher.',
   multiSelect: 'Select several elements at once and move the whole selection together.',
   onboardingDeepLinks: 'The plan-aware signup contract the marketing pricing page links into, and what the console does with it.',
+  operatorAlerts: 'Every event the operator of an install must hear about: which alerts exist, where they go (email and an optional webhook), how staff switch them or batch them into a daily digest, and how health checks alert on their own.',
   orgAutomations: 'Write an automation once for the whole organization and run it on the sites you choose, with a pause on each site.',
   passwordAScreen: 'Require a password to view a specific screen.',
   platformHealth: 'The staff health board — serving, backups, rate limiters, signup volume, email delivery and CSP violations, with what each red light means and what to do.',
