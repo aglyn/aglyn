@@ -211,3 +211,42 @@ describe('isCredentialFieldName (the form endpoint)', () => {
     },
   )
 })
+
+describe('media embeds and a workspace’s own brand (2026-09-28 aglyn.com outage)', () => {
+  const page = (href: string) => ({
+    a: { componentId: 'muiTypography', props: { children: 'Watch the film' } },
+    b: { componentId: 'muiButton', props: { children: 'Play', href } },
+  })
+
+  it.each([
+    'https://aglyn.wistia.com/medias/abc123',
+    'https://fast.wistia.net/embed/iframe/abc123',
+    'https://www.youtube.com/embed/xyz',
+    'https://youtu.be/xyz',
+    'https://player.vimeo.com/video/123',
+    'https://www.loom.com/share/abc',
+    'https://paypal.wistia.com/medias/abc',
+  ])('never flags a video link or embed: %s', (href) => {
+    expect(screenHostedPage({ nodes: page(href) }).signals).toEqual([])
+  })
+
+  it('never flags a brand’s own site linking to its own account elsewhere', () => {
+    const verdict = screenHostedPage({
+      nodes: page('https://aglyn.zendesk.com/hc'),
+      ownNames: ['Aglyn'],
+      ownDomains: ['aglyn.com'],
+    })
+    expect(verdict.signals).toEqual([])
+  })
+
+  it('still flags a lookalike when the workspace only CALLS itself the brand', () => {
+    const verdict = screenHostedPage({
+      nodes: page('https://poshmark.id63835663.shop/o/1'),
+      ownNames: ['Poshmark'],
+      ownDomains: ['poshmark.aglyn.app'],
+    })
+    expect(verdict.signals).toEqual([
+      expect.objectContaining({ code: 'lookalike-link', host: 'poshmark.id63835663.shop' }),
+    ])
+  })
+})

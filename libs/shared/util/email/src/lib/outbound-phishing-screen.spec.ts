@@ -432,3 +432,18 @@ describe('the platform is a brand too (AGL-3365)', () => {
     expect(brandForSubdomainLabel('harborview')).toBeNull()
   })
 })
+
+describe('a lookalike on a vendor account subdomain (2026-09-28 aglyn.com outage)', () => {
+  it('is SOFT: `aglyn.wistia.com` holds only a young workspace, never an established one', () => {
+    const vendor = { code: 'lookalike-link', brand: 'aglyn', host: 'aglyn.wistia.com' }
+    expect(phishingSignalTier(vendor)).toBe('soft')
+    expect(signalsThatHold([vendor], { ageDays: 80 })).toEqual([])
+    expect(signalsThatHold([vendor], { ageDays: 2 })).toEqual([vendor])
+  })
+
+  it('stays STRONG on any other host: `poshmark.id63835663.shop` holds everyone', () => {
+    const lure = { code: 'lookalike-link', brand: 'poshmark', host: 'poshmark.id63835663.shop' }
+    expect(phishingSignalTier(lure)).toBe('strong')
+    expect(signalsThatHold([lure], { ageDays: 400 })).toEqual([lure])
+  })
+})

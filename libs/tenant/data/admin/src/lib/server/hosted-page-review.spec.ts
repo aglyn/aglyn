@@ -152,21 +152,59 @@ describe('a published page', () => {
     expect(store.size).toBe(0)
   })
 
-  it('holds a lookalike link for an ESTABLISHED workspace and files a `page` row with its URL', async () => {
-    const answer = await review(LOOKALIKE_PAGE)
-    expect(answer).toMatchObject({ outcome: 'held', reference: expect.stringMatching(/^HS-/) })
+  it('never takes an ESTABLISHED workspace’s live page down: it serves it and flags the lookalike to staff', async () => {
+    await expect(review(LOOKALIKE_PAGE)).resolves.toEqual({ outcome: 'serve' })
     expect(pageRow()).toMatchObject({
       category: 'phishing',
       severity: 'urgent',
       status: 'open',
+      reportedHostname: 'poshmark.id63835663.shop',
+    })
+    expect(pageRow()?.['heldSend']).toBeUndefined()
+    // Once per host per process: a busy page is not a write per request.
+    await review(LOOKALIKE_PAGE, 'v3')
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+  })
+
+  it('still HOLDS new content from an established (possibly compromised) workspace: a new version of a live page', async () => {
+    store.set('hosts/host-1/pageReviews/screen-1', { servedVersionId: 'v1' })
+    await expect(review(LOOKALIKE_PAGE, 'v2')).resolves.toMatchObject({ outcome: 'held' })
+    expect(pageRow()?.['heldSend']).toMatchObject({ kind: 'page', state: 'held', ageDays: 400 })
+  })
+
+  it('still HOLDS a brand-new page from an established workspace: nothing was live, so nothing goes down', async () => {
+    store.set('hosts/host-1/screens/screen-1', { createdAt: NOW - 1 * DAY })
+    await expect(review(LOOKALIKE_PAGE)).resolves.toMatchObject({ outcome: 'held' })
+  })
+
+  it('keeps serving the version that is already live, and flags it', async () => {
+    store.set('hosts/host-1/pageReviews/screen-1', { servedVersionId: 'v2' })
+    await expect(review(LOOKALIKE_PAGE, 'v2')).resolves.toEqual({ outcome: 'serve' })
+    expect(pageRow()).toMatchObject({ reportedHostname: 'poshmark.id63835663.shop' })
+    expect(pageRow()?.['heldSend']).toBeUndefined()
+  })
+
+  it('serves an established page that links to its own account on a vendor (aglyn.wistia.com), and flags nothing', async () => {
+    const OWN_VIDEO = {
+      a: node('muiTypography', { children: 'Watch the film' }),
+      b: node('video', { src: 'https://aglyn.wistia.com/medias/abc123' }),
+    }
+    await expect(review(OWN_VIDEO)).resolves.toEqual({ outcome: 'serve' })
+    expect(store.size).toBe(0)
+  })
+
+  it('holds a lookalike link from a workspace in its first fortnight and files a `page` row with its URL', async () => {
+    mockOrg = { name: 'Harbor View', createdAt: NOW - 2 * DAY }
+    const answer = await review(LOOKALIKE_PAGE)
+    expect(answer).toMatchObject({ outcome: 'held', reference: expect.stringMatching(/^HS-/) })
+    expect(pageRow()).toMatchObject({
       hostId: 'host-1',
       orgId: 'org-1',
       url: expect.stringMatching(/^https:\/\/harborview\..+\/reviewfile$/),
       reportedHostname: 'poshmark.id63835663.shop',
       heldPage: { screenId: 'screen-1', versionId: 'v2' },
-      heldSend: { kind: 'page', state: 'held', path: 'hosts/host-1/screens/screen-1', ageDays: 400 },
+      heldSend: { kind: 'page', state: 'held', path: 'hosts/host-1/screens/screen-1', ageDays: 2 },
     })
-    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
   })
 
   it('serves an established workspace’s page that only the soft rules flag', async () => {
@@ -183,6 +221,7 @@ describe('a published page', () => {
   })
 
   it('serves once staff release it, and stays unserved once they reject it', async () => {
+    mockOrg = { name: 'Harbor View', createdAt: NOW - 2 * DAY }
     await review(LOOKALIKE_PAGE)
     const id = String(pageRow()?.id)
     await decideHeldOutboundSend({ reviewId: id, decision: 'release', actorUid: 's', actorEmail: null })
@@ -194,9 +233,10 @@ describe('a published page', () => {
     await expect(review(LOOKALIKE_PAGE)).resolves.toMatchObject({ outcome: 'rejected' })
   })
 
-  it('fails CLOSED for a strong signal when the store is down, OPEN for a soft one', async () => {
+  it('fails OPEN when the review cannot run: a screen error never takes a live page down', async () => {
+    mockOrg = { name: 'Harbor View', createdAt: NOW - 2 * DAY }
     failWrites = true
-    await expect(review(LOOKALIKE_PAGE)).resolves.toMatchObject({ outcome: 'held' })
+    await expect(review(LOOKALIKE_PAGE)).resolves.toEqual({ outcome: 'serve' })
     mockGetOrgForHost.mockRejectedValueOnce(new Error('down'))
     await expect(review(LURE_PAGE)).resolves.toEqual({ outcome: 'serve' })
   })
