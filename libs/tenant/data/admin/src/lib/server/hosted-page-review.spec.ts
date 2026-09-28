@@ -191,10 +191,10 @@ describe('a published page', () => {
     expect(pageRow()?.['heldSend']).toBeUndefined()
   })
 
-  it('serves an established page that links to its own account on a vendor (aglyn.wistia.com), and flags nothing', async () => {
+  it('serves an established page that embeds its own video account, and flags nothing', async () => {
     const OWN_VIDEO = {
       a: node('muiTypography', { children: 'Watch the film' }),
-      b: node('video', { src: 'https://aglyn.wistia.com/medias/abc123' }),
+      b: node('video', { src: 'https://harborview.wistia.com/medias/abc123' }),
     }
     await expect(review(OWN_VIDEO)).resolves.toEqual({ outcome: 'serve' })
     expect(store.size).toBe(0)

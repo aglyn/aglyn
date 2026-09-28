@@ -422,7 +422,7 @@ function isOfficialDomain(brand: PhishingScreenBrand, registrable: string): bool
 /**
  * Is the workspace the brand itself, by DOMAIN: one of its own domains is
  * one of the brand's official ones (Aglyn's site on aglyn.com linking to
- * `aglyn.<vendor>`). Deliberately not by name — a workspace can call itself
+ * its own account on a video or help-desk vendor). Deliberately not by name — a workspace can call itself
  * "Poshmark", but it cannot serve on poshmark.com.
  */
 export function isBrandsOwnDomain(
@@ -468,12 +468,12 @@ function labelNamesBrand(label: string, token: string, wordToken: boolean): bool
 
 /**
  * Video and audio platforms whose account subdomains and embed URLs a page
- * or email plays media from: `aglyn.wistia.com`, `player.vimeo.com`,
- * `www.youtube.com/embed/…`. Anyone may embed or link media from these, so a
+ * or email plays media from: `player.vimeo.com`, `www.youtube.com/embed/…`.
+ * A video plugin's own hosts are the plugin's to declare, not listed here. Anyone may embed or link media from these, so a
  * host on one is never a lookalike, whatever name its subdomain carries.
  */
 export const MEDIA_EMBED_HOSTS: ReadonlySet<string> = new Set([
-  'wistia.com', 'wistia.net', 'wi.st', 'vimeo.com', 'vimeocdn.com', 'youtube.com', 'youtu.be',
+  'vimeo.com', 'vimeocdn.com', 'youtube.com', 'youtu.be',
   'youtube-nocookie.com', 'ytimg.com', 'loom.com', 'vidyard.com', 'brightcove.net',
   'brightcove.com', 'jwplayer.com', 'jwpcdn.com', 'mux.com', 'cloudflarestream.com',
   'videodelivery.net', 'dailymotion.com', 'twitch.tv', 'spotify.com', 'soundcloud.com',
@@ -741,14 +741,13 @@ export const STRONG_PHISHING_SIGNAL_CODES: ReadonlySet<string> = new Set([
 
 /**
  * Hosts that give each customer an account subdomain named after the
- * customer: `aglyn.wistia.com` is Aglyn's own Wistia account, `acme.zendesk.com`
- * Acme's help desk. A brand's name there is usually the brand itself, so a
+ * customer: `acme.zendesk.com` is Acme's own help desk. A brand's name there is usually the brand itself, so a
  * lookalike on one of these is SOFT — held for a young workspace, never a
  * takedown of an established one's page or mail. A lookalike on any other
  * host (`poshmark.id63835663.shop`) stays STRONG.
  */
 export const ACCOUNT_SUBDOMAIN_HOSTS: ReadonlySet<string> = new Set([
-  'wistia.com', 'wistia.net', 'vimeo.com', 'vimeocdn.com', 'zendesk.com', 'freshdesk.com',
+  'vimeo.com', 'vimeocdn.com', 'zendesk.com', 'freshdesk.com',
   'helpscoutdocs.com', 'intercom.help', 'statuspage.io', 'atlassian.net', 'myshopify.com',
   'squarespace.com', 'wixsite.com', 'webflow.io', 'hubspotpagebuilder.com', 'substack.com',
   'typeform.com', 'calendly.com', 'gitbook.io', 'readme.io', 'notion.site', 'github.io',

@@ -434,8 +434,8 @@ describe('the platform is a brand too (AGL-3365)', () => {
 })
 
 describe('a lookalike on a vendor account subdomain (2026-09-28 aglyn.com outage)', () => {
-  it('is SOFT: `aglyn.wistia.com` holds only a young workspace, never an established one', () => {
-    const vendor = { code: 'lookalike-link', brand: 'aglyn', host: 'aglyn.wistia.com' }
+  it('is SOFT: `aglyn.zendesk.com` holds only a young workspace, never an established one', () => {
+    const vendor = { code: 'lookalike-link', brand: 'aglyn', host: 'aglyn.zendesk.com' }
     expect(phishingSignalTier(vendor)).toBe('soft')
     expect(signalsThatHold([vendor], { ageDays: 80 })).toEqual([])
     expect(signalsThatHold([vendor], { ageDays: 2 })).toEqual([vendor])
