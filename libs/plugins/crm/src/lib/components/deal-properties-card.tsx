@@ -130,6 +130,16 @@ export function DealPropertiesCard(props: DealPropertiesCardProps) {
             </Typography>
           </Row>
         ) : null}
+        {/*
+          The org's own deal fields (AGL-2661), after the built-in ones under
+          "More fields", as a record's Details keep them; none defined, none
+          drawn.
+        */}
+        {customFields.length ? (
+          <Typography variant="subtitle2" sx={{ pt: 1 }}>
+            {'More fields'}
+          </Typography>
+        ) : null}
         {customFields.map((definition) => {
           const text = formatContactCustomValue(definition, deal.custom?.[definition.key])
           return (

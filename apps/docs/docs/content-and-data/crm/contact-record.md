@@ -73,7 +73,10 @@ of the record:
 - **Properties** — the editable profile: name, phone (with a dial button
   beside it, see [click to call](./activities.md#click-to-call)), job title, company,
   lifecycle stage, owner, tags, address and an **About** box for your
-  team's notes. One **Save** writes everything at once. The email is shown
+  team's notes, then under **More fields** one control per
+  [custom field](./custom-fields.md) your organization has defined. One
+  **Save**, in the card's header, writes everything at once, and **Discard
+  changes** beside it puts back what you had not saved. The email is shown
   but cannot be edited here, because it is the shared identity. The
   **Company** field is the same picker the New contact drawer has: search
   the companies your site may see, create one by typing its name, or clear
@@ -86,18 +89,19 @@ of the record:
   checkout, a booking, an import, or by hand), the **campaign attribution**
   recorded from the link the person followed, the **marketing email** basis
   this site holds (opted in, opted out, or no record — the last is not a
-  refusal), and the campaigns your team has **filed** the person under.
-  Filing is your own bookkeeping; it never adds anyone to a send.
-- **Custom fields** — one control per field your organization has defined;
-  see [Custom fields](./custom-fields.md).
+  refusal), and the campaigns your team has **filed** the person under, saved
+  with **Save filing** in the card's header. Filing is your own bookkeeping;
+  it never adds anyone to a send.
 - **Timeline** — what the site recorded about the person, what your team
   has logged, and the campaigns they were sent, newest first: the forms they
   submitted, the orders they placed, the bookings they made, the calls,
   emails, meetings and notes filed against them, and every campaign email
-  with whether it was delivered, opened or clicked, with **Log activity** to
-  add one. A captured entry links to the record it names — **Open
-  submission**, **Open order**, and the Bookings and Users pages for a booking
-  and a sign-up — see [Activities & the timeline](./activities.md).
+  with whether it was delivered, opened or clicked. Each entry is one
+  collapsed row that opens to the rest, paged ten at a time, with **Expand
+  all** and **Log activity** in the card's header. A captured entry links to
+  the record it names — **Open submission**, **Open order**, and the Bookings
+  and Users pages for a booking and a sign-up — see
+  [Activities & the timeline](./activities.md#reading-the-timeline).
 - **Deals** — the deals the person is named on, with a **New deal** shortcut
   that starts one already linked to them — see [Deals pipeline](./deals.md).
 - **Tasks** — the open tasks about this person, each with a checkbox to

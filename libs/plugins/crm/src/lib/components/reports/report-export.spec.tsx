@@ -63,22 +63,18 @@ describe('ReportExport', () => {
     )
   })
 
-  it('writes nothing while disabled, and shows the window caption beside the button', () => {
+  it('writes nothing while disabled', () => {
     render(
       <ReportExport
         filename="crm-activity-30d.csv"
         columns={['Teammate']}
         rows={() => []}
         disabled
-        caption="Grouped from the 1,000 most recent activities."
       />,
     )
     const button = screen.getByRole('button', { name: 'Export CSV' }) as HTMLButtonElement
     expect(button.disabled).toBe(true)
     fireEvent.click(button)
     expect(download).not.toHaveBeenCalled()
-    expect(
-      screen.getByText('Grouped from the 1,000 most recent activities.'),
-    ).toBeTruthy()
   })
 })

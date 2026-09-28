@@ -204,6 +204,26 @@ export function PipelineCard(props: PipelineCardProps) {
       })}
       contentGutterX
       contentGutterY
+      HeaderProps={{
+        action: (
+          <ReportExport
+            filename={reportFilename('top-open-deals')}
+            columns={TOP_DEAL_COLUMNS}
+            rows={() =>
+              summary.top.map((deal) => [
+                deal.title || deal.$id,
+                summary.stageName(deal),
+                typeof deal.expectedCloseAtMs === 'number' && deal.expectedCloseAtMs > 0
+                  ? new Date(deal.expectedCloseAtMs).toISOString().slice(0, 10)
+                  : '',
+                (Number(deal.amountCents ?? 0) / 100).toFixed(2),
+                String(deal.currency || currency).toUpperCase(),
+              ])
+            }
+            disabled={!dealsRead || !summary.top.length}
+          />
+        ),
+      }}
     >
       <Stack spacing={2}>
         <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
@@ -340,27 +360,12 @@ export function PipelineCard(props: PipelineCardProps) {
                 ))}
               </TableBody>
             </ScrollTable>
-            <ReportExport
-              filename={reportFilename('top-open-deals')}
-              columns={TOP_DEAL_COLUMNS}
-              rows={() =>
-                summary.top.map((deal) => [
-                  deal.title || deal.$id,
-                  summary.stageName(deal),
-                  typeof deal.expectedCloseAtMs === 'number' && deal.expectedCloseAtMs > 0
-                    ? new Date(deal.expectedCloseAtMs).toISOString().slice(0, 10)
-                    : '',
-                  (Number(deal.amountCents ?? 0) / 100).toFixed(2),
-                  String(deal.currency || currency).toUpperCase(),
-                ])
-              }
-              disabled={!dealsRead}
-              caption={
-                dealWindow.truncated
-                  ? `Ranked within the ${OPEN_DEAL_CEILING.toLocaleString()} most recently updated open deals.`
-                  : undefined
-              }
-            />
+            {/* What the ranking, and so the export, is drawn from when that is not everything. */}
+            {dealWindow.truncated ? (
+              <Typography variant="caption" color="text.secondary">
+                {`Ranked within the ${OPEN_DEAL_CEILING.toLocaleString()} most recently updated open deals.`}
+              </Typography>
+            ) : null}
           </Section>
         ) : null}
       </Stack>

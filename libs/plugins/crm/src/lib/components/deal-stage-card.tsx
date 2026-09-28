@@ -95,8 +95,8 @@ export function DealStageCard(props: DealStageCardProps) {
     <CardDisplay
       header={'Stage'}
       help={pluginDocsHelp('deals', { anchor: '#moving-winning-and-losing' })}
-      actions={
-        !closed ? (
+      HeaderProps={{
+        action: !closed ? (
           <Stack direction="row" spacing={1}>
             <Button
               size="small"
@@ -119,8 +119,8 @@ export function DealStageCard(props: DealStageCardProps) {
               {'Lost'}
             </Button>
           </Stack>
-        ) : null
-      }
+        ) : null,
+      }}
       contentGutterX
       contentGutterY
     >

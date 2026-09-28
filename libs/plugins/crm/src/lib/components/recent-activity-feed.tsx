@@ -18,9 +18,9 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import type { CrmActivityRow } from '@aglyn/aglyn'
-import { AppLink } from '@aglyn/shared-ui-jsx'
-import { Stack, Typography } from '@mui/material'
-import { useCallback, useMemo } from 'react'
+import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
+import { Typography } from '@mui/material'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { crmRoutes } from '../model/crm-routes'
 import { ActivityList } from './activity-list'
 import {
@@ -28,6 +28,7 @@ import {
   useActivityScope,
   useActivityWindow,
 } from './activity-queries'
+import { TimelineExpandAllButton, useTimelineExpansion } from './activity-timeline'
 
 /** How the record an activity is about reads in the feed. */
 const RECORD_LABELS = {
@@ -37,7 +38,7 @@ const RECORD_LABELS = {
   lead: 'Lead',
 } as const
 
-/** The feed's default depth — a glance, not a log. */
+/** One page of the feed, and the step its listener widens by — a glance, not a log. */
 export const RECENT_ACTIVITY_LIMIT = 10
 
 /** The empty link: nothing to render, the query returns nothing. */
@@ -47,7 +48,7 @@ export interface RecentActivityFeedProps {
   /** The site the record is read under, or `null` at the organization level. */
   hostId: string | null
   org: CrmOrg
-  /** The newest this many, across every record. */
+  /** A page of the feed, and how far its listener widens when a page is turned past it. */
   limit?: number
   /**
    * The hub's mount path, for the link each row carries to its record. The
@@ -62,12 +63,16 @@ export interface RecentActivityFeedProps {
  * emails, meetings and notes anyone on the team filed against any record,
  * each linking to the record it is about.
  *
- * What the contacts landing shows under its list, so that opening the CRM
- * answers "what has the team been doing" before anybody opens a record. One
- * bounded listener on `(visibleTo, atMs DESC)` — the index that exists for
- * exactly this query — filtered to what this reader may see, the same
- * predicate the rules evaluate. Bounded to `limit` and no further: a feed
- * is a glance, and the record's own page is where the whole log lives.
+ * The contacts landing shows it as a card of its own under the list card,
+ * so that opening the CRM answers "what has the team been doing" before
+ * anybody opens a record, without the list running on into it. One bounded
+ * listener on `(visibleTo, atMs DESC)` — the index that exists for exactly
+ * this query — filtered to what this reader may see, the same predicate the
+ * rules evaluate. It reads one page, `limit`, and widens by a page only
+ * when the reader turns to the next one.
+ *
+ * Every row is collapsed to its kind, its heading, who and when, and opens
+ * in place to the body; **Expand all** in the card header opens them all.
  *
  * A row links to its CONTACT when it has one, else its deal, else its
  * company — `crmActivityRecordLink`'s precedence — through `crmRoutes`, so
@@ -79,6 +84,16 @@ export function RecentActivityFeed(props: RecentActivityFeedProps) {
   const { hostId, org, limit = RECENT_ACTIVITY_LIMIT, basePath } = props
   const scope = useActivityScope(hostId, org)
   const activities = useActivityWindow(scope, NO_RECORD, limit)
+  const expansion = useTimelineExpansion()
+  /*
+   * Whether the feed has ever had a row. A page turned past the window
+   * re-reads it, and the listener holds nothing while it does; the card has
+   * to stay through that rather than vanish with its page.
+   */
+  const [seen, setSeen] = useState(false)
+  useEffect(() => {
+    if (activities.rows.length) setSeen(true)
+  }, [activities.rows.length])
   const routes = useMemo(
     () => (basePath ? crmRoutes(basePath) : null),
     [basePath],
@@ -105,11 +120,23 @@ export function RecentActivityFeed(props: RecentActivityFeedProps) {
   // Nothing to show and nothing to say: a landing with no activity yet
   // should not carry an empty heading for a feature the reader has not
   // used, and the record pages are where the "log one" affordance lives.
-  if (activities.status !== 'error' && !activities.rows.length) return null
+  if (activities.status !== 'error' && !activities.rows.length && !seen) return null
 
   return (
-    <Stack spacing={1.5}>
-      <Typography variant="subtitle2">{'Recent activity'}</Typography>
+    <CardDisplay
+      header={'Recent activity'}
+      help={Aglyn.pluginDocsHelp('contactActivities', { anchor: '#the-recent-activity-feed' })}
+      contentGutterX
+      contentGutterY
+      HeaderProps={{
+        action: (
+          <TimelineExpandAllButton
+            expansion={expansion}
+            disabled={!activities.rows.length}
+          />
+        ),
+      }}
+    >
       {activities.status === 'error' ? (
         <Typography variant="body2" color="error">
           {'Recent activity could not be loaded.'}
@@ -120,9 +147,13 @@ export function RecentActivityFeed(props: RecentActivityFeedProps) {
           scope={scope}
           subjectFor={subjectFor}
           readOnly
+          hasMore={activities.hasMore}
+          onShowMore={activities.showMore}
+          loading={activities.status === 'loading'}
+          expansion={expansion}
         />
       )}
-    </Stack>
+    </CardDisplay>
   )
 }
 RecentActivityFeed.displayName = 'RecentActivityFeed'

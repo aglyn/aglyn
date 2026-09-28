@@ -143,8 +143,10 @@ Starter. On Free it is shown locked in the rail with the rest of the CRM; the pe
 your sites capture are still kept, and can be exported from
 [Settings → Privacy](../../workspace-and-billing/signing-in-and-sessions.md#privacy-requests).
 
-Under the list, a **Recent activity** feed shows the newest calls, emails,
-meetings and notes anyone on the team has logged against any record.
+Under the list, a **Recent activity** card shows the newest calls, emails,
+meetings and notes anyone on the team has logged against any record, each
+collapsed to one row that opens to the rest. **Import CSV**, **Export CSV** and
+**New contact** are in the header of the Contacts card.
 
 ## Import from CSV
 

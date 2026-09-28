@@ -72,7 +72,7 @@
 //   is the seed invariant `docs/E2E_LOCAL.md` states.
 
 import { Timestamp } from 'firebase-admin/firestore'
-import { withCrmListFields } from './org-record-list-fields.mjs'
+import { crmFieldListFields, withCrmListFields } from './org-record-list-fields.mjs'
 import { displayNameSearchFields } from './name-search-tokens.mjs'
 import { newFormListFields } from './site-form-list-fields.mjs'
 
@@ -609,6 +609,8 @@ export async function seedCrmFixtures(options) {
       order,
       // `null`, not absent: a `where('retiredAt', '==', null)` finds it.
       retiredAt: null,
+      // What the Fields table's query asks (AGL-3335).
+      ...crmFieldListFields({ key, label, object: 'contact' }),
       visibleTo,
       hostId,
       createdAt: stamp(at(28)),
