@@ -33,7 +33,6 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { Alert, Button, Stack, Typography } from '@mui/material'
 import {
   collection,
-  getDocs,
   limit,
   query,
   startAfter,
@@ -42,6 +41,7 @@ import {
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore } from '@aglyn/tenant-feature-instance'
+import { getDocsBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
 import { useResolvedActivityActors } from '@aglyn/tenant-feature-instance/hooks/use-resolved-activity-actors'
 import {
   activityActionLabel,
@@ -135,7 +135,10 @@ export function HostActivityTable(props: HostActivityTableProps) {
       try {
         const base = collection(firestore, 'hosts', hostId, 'activity')
         // One extra row detects whether a next page exists.
-        const snapshot = await getDocs(
+        // Bounded (AGL-3373): a stalled client answers from the cache after
+        // a few seconds and is asked to recover, instead of holding `loading`
+        // forever.
+        const { snapshot } = await getDocsBounded(
           query(
             base,
             // Every predicate, then the plan's one order.

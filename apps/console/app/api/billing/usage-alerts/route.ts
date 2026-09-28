@@ -59,6 +59,7 @@ import {
 import {
   firebaseAdmin,
   notifyOrgAdmins,
+  notifyRiskEvent,
   notifyStaff,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
@@ -67,6 +68,7 @@ import {
   shouldAutoLockOrgForBilling,
 } from '../../../../utils/billing-auto-lock'
 import { applyOrgLockdown } from '../../../../utils/server/org-lockdown'
+import { sendLockdownOwnerNotice } from '../../../../utils/server/lockdown-owner-notice'
 import {
   budgetAlertDue,
   BUDGET_GUARD_KEY,
@@ -1332,6 +1334,17 @@ async function handler(request: Request): Promise<Response> {
               before: { locked: false },
               after: { locked: true, reason: 'billing', automated: true },
               at: FieldValue.serverTimestamp(),
+            })
+            // The owners are told, like every lock (AGL-3368): the billing
+            // lock's own notice and how to lift it — update the card.
+            await sendLockdownOwnerNotice({
+              firestore,
+              notifyRisk: notifyRiskEvent,
+              action: 'lock',
+              scope: 'org',
+              targetId: org.id,
+              emailOwners: true,
+              lock: { reason: 'billing' },
             })
             alerted.push({ orgId: org.id, quota: 'billing-auto-lock', threshold: 100 })
           }

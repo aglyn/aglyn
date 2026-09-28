@@ -65,6 +65,7 @@ import {
 } from '@aglyn/tenant-feature-instance'
 import { Stack, Typography } from '@mui/material'
 import ComponentPropsDialog from '../../../../../../../../../../components/component-props-dialog.component'
+import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
 import revalidateLivePages, {
   describeRevalidateShortfall,
 } from '../../../../../../../../../../utils/revalidate-live-pages'
@@ -1096,6 +1097,13 @@ function ComponentBesignerPage(props) {
                         {remoteChanged && !draft.available ? (
                           <BesignerConflictAlertComponent noun="component" />
                         ) : null}
+                        {/* A page that renders this component is held or flagged
+                            (AGL-3374): the content to fix may be here. */}
+                        <PageHoldBanner
+                          hostId={hostId}
+                          target={{ type: 'component', id: componentId }}
+                          sx={{ position: 'relative', zIndex: 'appBar' }}
+                        />
                         <WorkspaceEditorComponent>
                           <ViewportRootComponent>
                             <ViewportCanvasComponent />

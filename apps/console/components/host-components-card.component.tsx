@@ -60,6 +60,8 @@ import {
   Typography,
 } from '@mui/material'
 import DocumentPresenceChips from './document-presence-chips.component'
+import PageHoldChips from './page-holds/page-hold-chips.component'
+import usePageHolds from './page-holds/use-page-holds'
 import usePresenceSummary from '../hooks/use-presence-summary'
 import * as Aglyn from '@aglyn/aglyn'
 import {
@@ -569,6 +571,8 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
    * read as "already in the one you are about to open".
    */
   const { peopleIn } = usePresenceSummary(hostId)
+  // A page rendering this component is held or flagged (AGL-3374).
+  const { holds: pageHolds } = usePageHolds(hostId)
 
   const columns: GridColDef[] = [
     {
@@ -587,6 +591,7 @@ export function HostComponentsCard(props: HostComponentsCardProps) {
           >
             {value || (id as string)}
           </AppLink>
+          <PageHoldChips holds={pageHolds} target={{ type: 'component', id: id as string }} />
           <DocumentPresenceChips people={peopleIn('component', id as string)} />
         </Stack>
       ),

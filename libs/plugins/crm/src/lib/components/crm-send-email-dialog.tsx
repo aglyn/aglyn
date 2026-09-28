@@ -63,6 +63,7 @@ import {
   CopyCaptureAddressButton,
 } from './copy-capture-address-button'
 import { CrmSitePicker } from './crm-site-picker'
+import { CrmEmailCheckAlert, useCrmEmailCheck } from './crm-email-check'
 import { useCrmApi } from './use-crm-api'
 import { useCrmInboundAddress } from './use-crm-inbound-address'
 import { useEmailsHubPath } from './use-emails-hub-path'
@@ -544,6 +545,14 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
     }
   }, [open, props.email, contactId, orgId, firestore])
 
+  /*
+   * What the platform knows about the address before Send (AGL-3328): a
+   * domain with no mail server, or a mail gateway that refused this site's
+   * sending domain twice this month. Read off the server's cache — the
+   * browser does no DNS — and said as a warning; the route decides.
+   */
+  const deliverability = useCrmEmailCheck(sendHostId, recipient, { enabled: open })
+
   const replyTo = normalizeContactEmail(user?.email) ?? ''
   const canSend =
     identity.status === 'ready' &&
@@ -656,6 +665,7 @@ export function CrmSendEmailDialog(props: CrmSendEmailDialogProps) {
           slotProps={{ input: { readOnly: true }, inputLabel: { shrink: true } }}
           sx={{ mt: identity.status === 'ready' || identity.status === 'loading' ? 1 : 0 }}
         />
+        <CrmEmailCheckAlert check={deliverability} />
         <TextField
           size="small"
           label="From"

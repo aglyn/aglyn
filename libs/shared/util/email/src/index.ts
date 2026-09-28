@@ -54,6 +54,10 @@ export * from './lib/email-merge'
 export * from './lib/mail-gateway'
 export * from './lib/mail-bounce'
 export * from './lib/email-deliverability'
+// The sender's side of the same engine (AGL-3328): SPF, DKIM and DMARC for
+// the domain mail leaves from, and whether they align. Pure as well; the
+// lookups are `@aglyn/tenant-data-admin`'s.
+export * from './lib/sender-readiness'
 // The outbound phishing screen a young workspace's campaigns and automated
 // email pass (AGL-3356). Pure; the hold it leads to is `tenant-data-admin`'s.
 export * from './lib/outbound-phishing-screen'
@@ -63,3 +67,8 @@ export * from './lib/outbound-screen-gate'
 // The same screen read over a published page (AGL-3356): lookalike links and
 // embeds, author-defined credential fields, a brand's call to action.
 export * from './lib/hosted-page-screen'
+// The site's theme palette as plain data (AGL-3370), so a palette token an
+// author picked resolves in mail. Built without MUI; `shared-ui-theme`'s
+// parity spec holds it equal to the theme.
+export * from './lib/email-palette'
+export * from './lib/email-design-chrome'

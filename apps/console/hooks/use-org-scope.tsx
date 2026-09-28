@@ -18,6 +18,7 @@
 
 import type { UserOrgMembership } from '@aglyn/aglyn'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { armFirestoreStallWatch } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-stall-recovery'
 import {
   collection,
   doc,
@@ -266,6 +267,15 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
     let retried = 0
     let timer: ReturnType<typeof setTimeout> | null = null
     let unsubscribe: (() => void) | null = null
+    /*
+     * The console shell's own listen, so the stall watch the shared listener
+     * hooks carry (AGL-3373) is here too: every page mounts it, and when the
+     * multi-tab cache is wedged this is the first listen that goes
+     * unanswered. The single-doc reads below stay unbounded on purpose — a
+     * stale cached absence there would 404 a real workspace — and settle once
+     * this recovery has the client syncing again.
+     */
+    const disarmStall = armFirestoreStallWatch(firestore)
 
     const subscribe = () => {
       unsubscribe = onSnapshot(
@@ -275,7 +285,10 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
           // A delivered snapshot re-arms the budget: a listen that worked and
           // later dies is a fresh outage, not attempt seven of this one.
           retried = 0
-          if (!snapshot.metadata.fromCache) setConfirmed(true)
+          if (!snapshot.metadata.fromCache) {
+            disarmStall()
+            setConfirmed(true)
+          }
           // Metadata-only ticks carry no doc changes — skip the list write so
           // the whole app doesn't re-render on the confirmation event.
           // A FULL window means the query hit its limit, so there may be
@@ -302,6 +315,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
           // as an indefinite spinner (AGL-1260). Resubscribe on the shared
           // backoff schedule; only an exhausted budget latches `error`, so a
           // single transient denial never flashes an error screen.
+          disarmStall()
           unsubscribe?.()
           if (retried < MAX_RETRIES) {
             timer = setTimeout(subscribe, retryDelayMs(retried))
@@ -321,6 +335,7 @@ export function OrgScopeProvider(props: { children?: ReactNode }) {
     }
     subscribe()
     return () => {
+      disarmStall()
       if (timer) clearTimeout(timer)
       unsubscribe?.()
     }

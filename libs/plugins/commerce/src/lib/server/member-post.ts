@@ -21,6 +21,10 @@ import {
   hostSendingIdentity,
   meterHostEmail,
 } from '@aglyn/tenant-data-admin'
+import {
+  loadHostEmailWithTokens,
+  renderLoadedHostEmailWithTokens,
+} from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import * as CommerceModel from '../model'
 import { isEmailConfigured, sendEmail } from '@aglyn/shared-util-email'
 import {
@@ -142,6 +146,24 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
        * trusted is the caller's declaration.
        */
       const identity = await hostSendingIdentity(hostId)
+      // The `member-post` site email (AGL-3370): the site's design, or the
+      // built-in copy in its header and footer. Read once for the batch, and
+      // the same message for everyone, so rendered once too.
+      const designed = await loadHostEmailWithTokens(
+        firestore,
+        hostId,
+        'member-post',
+        siteBase ? { origin: siteBase } : {},
+      )
+        .then((bundle) =>
+          bundle
+            ? renderLoadedHostEmailWithTokens(bundle, {
+                'post.title': title,
+                'post.body': postBody,
+              })
+            : null,
+        )
+        .catch(() => null)
       for (const to of recipients) {
         /*
          * MARKETING. A member post is a merchant mailing their audience, so
@@ -155,8 +177,9 @@ export const memberPostHandler: PluginApiHandler = async (req, res) => {
          */
         const result = await sendEmail({
           to,
-          subject: title,
-          text: postBody || title,
+          subject: designed?.subject || title,
+          text: designed?.text || postBody || title,
+          ...(designed?.html ? { html: designed.html } : {}),
           fromName: branding.fromName,
           sendingIdentity: identity,
           audience: 'tenant',

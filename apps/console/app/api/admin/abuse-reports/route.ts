@@ -103,11 +103,26 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  closeRiskNotice,
   decideHeldOutboundSend,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
+  resolveHostConsolePaths,
 } from '@aglyn/tenant-data-admin'
+import {
+  heldPageConsolePath,
+  heldPageDetails,
+  heldPageLabel,
+  heldPageVisitorSentence,
+  type HeldPageSubject,
+} from '@aglyn/shared-util-email/held-page'
+import {
+  renderStaffRiskNotice,
+  resolveStaffRiskActions,
+  RISK_NOTICE_CATALOG,
+  riskKindForAbuseRow,
+} from '@aglyn/shared-util-email/risk-notice-catalog'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import {
   describePhishingScreenSignals,
@@ -255,9 +270,153 @@ function rowPayload(
      */
     source: asString(data['source']),
     heldSend: heldSendPayload(data['heldSend']),
+    heldPage: heldPagePayload(data),
     paymentSignal: paymentSignalPayload(data['paymentSignal']),
     sellerPattern: sellerPatternPayload(data['sellerPattern']),
+    riskNotice: riskNoticePayload(id, data),
+    ownerReviewRequests: ownerReviewRequestsPayload(data['ownerReviewRequests']),
+    reviewRequestedAtMs: asMillis(data['reviewRequestedAtMs']),
   }
+}
+
+/**
+ * The page a held or flagged row is about, by name (AGL-3374): what it is,
+ * its route, the entry it was showing, the layout or component its flagged
+ * content lives in, what visitors see, and where to open it in the console
+ * (`consoleHref`, filled by {@link withHeldPageLinks}). A row filed before
+ * rows described their page names what it recorded.
+ */
+function heldPagePayload(data: Record<string, unknown>) {
+  const held = (data['heldPage'] ?? null) as Record<string, unknown> | null
+  if (!held || typeof held !== 'object') return null
+  const hostId = asString(data['hostId'])
+  const subject = held['subject'] as HeldPageSubject | undefined
+  if (subject && typeof subject === 'object' && subject.screenId) {
+    return {
+      label: heldPageLabel(subject),
+      kind: subject.kind,
+      route: subject.route,
+      url: subject.url,
+      entryUrl: subject.entryUrl,
+      details: heldPageDetails(subject),
+      visitorSentence: heldPageVisitorSentence(subject),
+      consolePath: hostId ? heldPageConsolePath(subject, hostId) : null,
+      consoleHref: null as string | null,
+    }
+  }
+  const screenId = asString(held['screenId'])
+  const versionId = asString(held['versionId'])
+  return {
+    label: `screen ${screenId ?? 'unknown'}`,
+    kind: null,
+    route: null,
+    url: asString(held['url']),
+    entryUrl: null,
+    details: [] as string[],
+    visitorSentence: null,
+    consolePath:
+      hostId && screenId && versionId
+        ? `/${hostId}/screens/${encodeURIComponent(screenId)}/versions/${encodeURIComponent(versionId)}/view`
+        : null,
+    consoleHref: null as string | null,
+  }
+}
+
+/**
+ * Each page row's console link, resolved for staff — who have no org of
+ * their own to resolve a site path against — in one batch (AGL-3374).
+ */
+async function withHeldPageLinks<
+  T extends { hostId: string | null; orgId: string | null; heldPage: ReturnType<typeof heldPagePayload> },
+>(firestore: FirebaseFirestore.Firestore, rows: T[]): Promise<T[]> {
+  const entries = rows.flatMap((row) =>
+    row.heldPage?.consolePath && row.hostId
+      ? [{ hostId: row.hostId, orgId: row.orgId, path: row.heldPage.consolePath }]
+      : [],
+  )
+  if (!entries.length) return rows
+  const hrefs = await resolveHostConsolePaths(firestore, entries).catch(
+    () => new Map<string, string>(),
+  )
+  return rows.map((row) =>
+    row.heldPage?.consolePath && row.hostId
+      ? {
+          ...row,
+          heldPage: {
+            ...row.heldPage,
+            consoleHref: hrefs.get(`${row.hostId}\n${row.heldPage.consolePath}`) ?? null,
+          },
+        }
+      : row,
+  )
+}
+
+/**
+ * The catalog's staff half for a row a risk source filed (AGL-3368): the
+ * same title and summary the staff alert carried, and the actions — each a
+ * deep link to the real control — so nobody has to hunt for where to act.
+ * Null for a row from the public report form.
+ */
+function riskNoticePayload(id: string, data: Record<string, unknown>) {
+  const stamp = (data['riskNotice'] ?? null) as Record<string, unknown> | null
+  const kind = riskKindForAbuseRow({
+    source: data['source'],
+    heldSend: (data['heldSend'] ?? null) as { kind?: unknown } | null,
+    riskNotice: stamp as { kind?: unknown } | null,
+  })
+  if (!kind) return null
+  const seller = (data['sellerPattern'] ?? null) as Record<string, unknown> | null
+  const orgId = asString(data['orgId'])
+  const hostId = asString(data['hostId'])
+  const createdAtMs = asMillis(data['createdAt'])
+  const copy = renderStaffRiskNotice(kind, {
+    'workspace.name': orgId,
+    'item.label':
+      asString(stamp?.['itemLabel']) ??
+      asString(data['url']) ??
+      asString(data['reportedHostname']),
+    reference: asString(data['reference']),
+    occurredAt: createdAtMs
+      ? `${new Date(createdAtMs).toISOString().replace('T', ' ').slice(0, 16)} UTC`
+      : null,
+    // The row's own details carry the evidence, right beside this.
+    'staff.evidence': '',
+  })
+  return {
+    kind,
+    noticeId: asString(stamp?.['noticeId']),
+    ownersNotifiedAtMs: asMillis(stamp?.['ownersNotifiedAtMs']),
+    title: copy.title,
+    summary: copy.summary,
+    reviewable: RISK_NOTICE_CATALOG[kind].reviewable,
+    actions: resolveStaffRiskActions(kind, {
+      reviewId: id,
+      orgId,
+      hostId,
+      stripeUrl:
+        asString(stamp?.['stripeUrl']) ?? asString(seller?.['stripeAccountUrl']),
+      lockScope: hostId ? 'host' : orgId ? 'org' : null,
+      lockTargetId: hostId ?? orgId,
+    }).map((action) => ({
+      id: action.id,
+      label: action.label,
+      hint: action.hint,
+      href: action.href,
+    })),
+  }
+}
+
+/** The owners' review requests on a row, oldest first (AGL-3368). */
+function ownerReviewRequestsPayload(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.slice(-20).map((entry) => {
+    const request = (entry ?? {}) as Record<string, unknown>
+    return {
+      atMs: asMillis(request['atMs']),
+      email: asString(request['email']),
+      note: asString(request['note']) ?? '',
+    }
+  })
 }
 
 /**
@@ -691,6 +850,29 @@ async function handler(request: Request): Promise<Response> {
       const nowMs = Date.now()
 
       /**
+       * One row by id (AGL-3368): what a staff alert's deep link opens. The
+       * queue is paged, so the row a notification names may be on no page
+       * the list has loaded.
+       */
+      const oneId = asString(query?.['id'])
+      if (oneId) {
+        if (!REPORT_ID.test(oneId)) {
+          return Response.json({ error: 'Malformed id' }, { status: 400 })
+        }
+        const snapshot = await collection.doc(oneId).get()
+        if (!snapshot.exists) {
+          return Response.json({ error: 'No such report' }, { status: 404 })
+        }
+        const [report] = await withHeldPageLinks(firestore, [
+          rowPayload(oneId, snapshot.data() as Record<string, unknown>, canSeeIdentity),
+        ])
+        return Response.json(
+          { report },
+          { status: 200, headers: { 'Cache-Control': 'no-store' } },
+        )
+      }
+
+      /**
        * The queue's counts, each its own query over the whole queue — never
        * a count of the rows one page happened to hold. An operator reading
        * "3 urgent" is reading the queue, whatever page the list is on.
@@ -842,7 +1024,7 @@ async function handler(request: Request): Promise<Response> {
           ledger: ledger.rows,
         }
       }
-      const reports = page.rows.map((report) => {
+      const reports = (await withHeldPageLinks(firestore, page.rows)).map((report) => {
         const counted = report.category === 'dmca' && report.orgId
         return {
           ...report,
@@ -1232,6 +1414,18 @@ async function handler(request: Request): Promise<Response> {
       url: asString(before.get('url')),
       withdrawalReason: 'staffReversed',
     })
+    /*
+     * The closing notice (AGL-3368): the owners who were told this item was
+     * held or flagged are told how it ended — released, or not approved —
+     * in the catalog's words. Only on a closing status, only for a row a
+     * risk source filed, and once per decision. Never throws.
+     */
+    const riskNoticeClose = closing
+      ? await closeRiskNotice({
+          reviewId: id,
+          decision: status === 'dismissed' ? 'released' : 'rejected',
+        })
+      : null
     const ledgerAfter = reportOrgId
       ? await strikeLedger(firestore, reportOrgId)
       : null
@@ -1272,14 +1466,23 @@ async function handler(request: Request): Promise<Response> {
     const after = await ref.get()
     return Response.json(
       {
-        report: rowPayload(
-          id,
-          after.data() as Record<string, unknown>,
-          canSeeIdentity,
-        ),
+        report: (
+          await withHeldPageLinks(firestore, [
+            rowPayload(id, after.data() as Record<string, unknown>, canSeeIdentity),
+          ])
+        )[0],
         strike: strikeEffect,
         // What closing the row did to the send it held (AGL-3356), or null.
         heldSend: heldSendDecision,
+        // Whether the owners were told how it ended (AGL-3368), or null.
+        ownerNotice: riskNoticeClose
+          ? {
+              duplicate: riskNoticeClose.duplicate,
+              emailed: riskNoticeClose.owners.emailed,
+              recipients: riskNoticeClose.owners.recipients,
+              error: riskNoticeClose.error,
+            }
+          : null,
         // Recomputed from the ledger rather than adjusted arithmetically, so
         // the number the page shows after an action is one the database
         // actually holds.

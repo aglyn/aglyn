@@ -109,6 +109,17 @@ export const commerceSitePageResolver: SitePageResolver = async ({
               product.mediaUrls?.[0] ?? product.imageUrl ?? '',
             'product.slug': product.slug,
           },
+          // Named as the product template it is if the page review holds it
+          // (AGL-3374); without it the route has no page.
+          page: {
+            template: {
+              role: 'entry',
+              route: '/products/:slug',
+              collectionName: 'Products',
+              entryPath: `/products/${product.slug}`,
+              fallback: 'not-found',
+            },
+          },
         })
         if (templateNodes) {
           return {
@@ -217,6 +228,16 @@ export const commerceSitePageResolver: SitePageResolver = async ({
             'collection.description': shopCollection.description ?? '',
             'collection.image': shopCollection.imageUrl ?? '',
             'collection.slug': shopCollection.slug,
+          },
+          // As on the PDP above (AGL-3374).
+          page: {
+            template: {
+              role: 'entry',
+              route: '/collections/:slug',
+              collectionName: 'Store collections',
+              entryPath: `/collections/${shopCollection.slug}`,
+              fallback: 'not-found',
+            },
           },
         })
         if (templateNodes) {

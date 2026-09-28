@@ -52,6 +52,9 @@ function deps(): OutreachMailboxRouteDeps {
     consumeRateLimit: async () => ({ allowed: true }),
     logOrgActivity: async () => undefined,
     confirmAliasesByProvider: async () => ({ ok: true, confirmed: [] }),
+    readSenderReadiness: async () => {
+      throw new Error('unscripted readiness read')
+    },
   }
 }
 
@@ -71,6 +74,7 @@ describe('registerOutreachMailboxRoutes (AGL-2978)', () => {
       OUTREACH_API_ROUTES.mailboxesStatus,
       OUTREACH_API_ROUTES.mailboxesTest,
       OUTREACH_API_ROUTES.mailboxesDisconnect,
+      OUTREACH_API_ROUTES.mailboxesReadiness,
     ]
     for (const path of paths) {
       expect(path.startsWith('outreach/mailboxes/')).toBe(true)

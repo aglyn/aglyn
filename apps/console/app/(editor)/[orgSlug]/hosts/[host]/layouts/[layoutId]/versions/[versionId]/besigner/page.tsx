@@ -74,6 +74,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // Dynamic site-plugin activation (AGL-417): canvas components register
 // via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
+import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
 import BesignerFunctionsButton from '../../../../../../../../../../components/besigner-functions-button.component'
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
 import InteractionsProvider from '../../../../../../../../../../components/interactions-provider.component'
@@ -868,6 +869,13 @@ function LayoutBesignerPage(props) {
                         {remoteChanged && !draft.available ? (
                           <BesignerConflictAlertComponent noun="layout" />
                         ) : null}
+                        {/* A page that renders this layout is held or flagged
+                            (AGL-3374): the content to fix may be here. */}
+                        <PageHoldBanner
+                          hostId={hostId}
+                          target={{ type: 'layout', id: layoutId }}
+                          sx={{ position: 'relative', zIndex: 'appBar' }}
+                        />
                         <WorkspaceEditorComponent>
                           <ViewportRootComponent>
                             <ViewportCanvasComponent />

@@ -54,6 +54,7 @@ import { consentGroupForGrant } from '@aglyn/aglyn/app-utils/consent-groups'
 import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { createHash, createHmac } from 'node:crypto'
 import { emailSearchTokens } from './email-suppression'
+import { scheduleCapturedEmailCheck } from './capture-email-check'
 
 /**
  * What a list's membership table searches a member by (AGL-3321): the word
@@ -419,6 +420,22 @@ export async function enrollListMember(
     },
     { merge: true },
   )
+
+  /*
+   * A person NEW to the list has their address's domain checked after the
+   * response (AGL-3328), so the CRM record they are reads "Would bounce"
+   * when it takes no mail. The list's owner names whose records those are:
+   * an organization's list its own, a site's list the site's organization.
+   */
+  if (!existing) {
+    const owner = input.listRef.parent?.parent
+    const ownerKind = owner?.parent?.id
+    scheduleCapturedEmailCheck({
+      orgId: ownerKind === 'orgs' ? owner?.id : null,
+      hostId: ownerKind === 'hosts' ? owner?.id : input.group?.hostId,
+      email,
+    })
+  }
 
   return {
     enrolled: true,

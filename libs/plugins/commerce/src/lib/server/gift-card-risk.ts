@@ -30,6 +30,7 @@
  * never failed by this.
  *=========================================*/
 
+import type { RiskEventInput } from '@aglyn/tenant-data-admin/server/risk-notice'
 import type * as CommerceModel from '../model'
 
 /** What happened to the payment that bought the cards. */
@@ -144,43 +145,39 @@ const FREEZE_CAUSE: Record<CommerceModel.GiftCardFreezeReason, string> = {
     'part of the payment was refunded outside your dashboard and the refund could not be matched to the gift cards',
 }
 
-/** The notifier's shape: `notifyHostManagers` from the admin barrel. */
-export type GiftCardHoldNotifier = (
-  hostId: string,
-  payload: { type: 'content.order'; title: string; body: string; link: string },
-) => Promise<void>
+/** The notifier's shape: `notifyRiskEvent` from the admin barrel (AGL-3368). */
+export type GiftCardHoldNotifier = (input: RiskEventInput) => Promise<unknown>
 
 /**
- * Tell the site's managers that an order's gift cards were frozen
- * (AGL-3363). The one notifier for this kind of signal, so a shared
- * risk-notice seam can take it over whole. Says what happened and what to
- * do, never a rule or a number. Never throws.
+ * Tell the site's managers, the workspace's owners and staff that an
+ * order's gift cards were frozen (AGL-3363), through the risk notice seam
+ * (AGL-3368). The owners read the catalog's `gift-card-hold` words — what
+ * happened, and the two ways out: release the cards from Gift cards, or
+ * refund the order — never a rule or a number. Never throws.
  */
 export async function notifyGiftCardHold(
   input: {
     hostId: string
-    /** The order as the merchant knows it: `Order 1042`. */
+    /** The order as the merchant knows it: `order 1042`. */
     orderLabel: string
+    /** The order's own dialog, where Refund lives. */
+    orderPath?: string | null
+    /** The order's id, so a redelivered signal notifies once. */
+    orderId?: string | null
     cards: number
     reason: CommerceModel.GiftCardFreezeReason
   },
   notify: GiftCardHoldNotifier,
 ): Promise<void> {
   if (!input.hostId || input.cards <= 0) return
-  const plural = input.cards === 1 ? 'gift card' : 'gift cards'
-  await notify(input.hostId, {
-    type: 'content.order',
-    title: `${input.cards === 1 ? 'A gift card is' : 'Gift cards are'} on hold`,
-    body:
-      `The ${plural} bought with ${input.orderLabel} cannot be redeemed for now, ` +
-      `because ${FREEZE_CAUSE[input.reason]}. The balance is kept. ` +
-      (input.reason === 'refund-review' ? 'If the customer ' : 'If you are ') +
-      (input.reason === 'refund-review'
-        ? 'kept the gift cards, release them from Gift cards; if the refund was ' +
-          'for them, void them there.'
-        : 'satisfied the payment is genuine, release it from Gift cards. If the ' +
-          'payment is refunded or the dispute is lost, the balance is voided for you.'),
-    link: `/${input.hostId}/products`,
+  await notify({
+    kind: 'gift-card-hold',
+    orgId: null,
+    hostId: input.hostId,
+    item: { label: input.orderLabel, path: input.orderPath ?? `/${input.hostId}/products/orders` },
+    ...(input.orderId ? { dedupeKey: `gift-card-hold:${input.hostId}:${input.orderId}:${input.reason}` } : {}),
+    staffEvidence:
+      `${input.cards} gift card${input.cards === 1 ? '' : 's'} frozen: ${FREEZE_CAUSE[input.reason]}.`,
   }).catch(() => undefined)
 }
 

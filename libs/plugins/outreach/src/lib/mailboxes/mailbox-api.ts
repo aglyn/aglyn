@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { SenderReadiness } from '@aglyn/shared-util-email'
 import type { OutreachMailbox, OutreachSendWindow } from '../model/outreach.types'
 
 /**
@@ -160,6 +161,19 @@ export interface OutreachMailboxDisconnectResponse {
    * either way.
    */
   revocation: 'revoked' | 'already-invalid' | 'kept-for-other-mailbox' | 'failed'
+}
+
+/**
+ * `POST outreach/mailboxes/readiness` — `{ mailboxId, fresh? }`. How
+ * receivers judge mail from the address the mailbox sends as (AGL-3328):
+ * `readiness` is null for a consumer Gmail address, whose records are
+ * Google's own and have nothing for its owner to publish.
+ */
+export interface OutreachMailboxReadinessResponse {
+  ok: true
+  /** The address whose domain was read. */
+  sendAs: string
+  readiness: SenderReadiness | null
 }
 
 /**

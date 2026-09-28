@@ -134,4 +134,32 @@ describe('composeScreenNodes × the page review (AGL-3362)', () => {
     expect(mockReview).toHaveBeenCalledTimes(2)
     expect(mockServedVersion).toHaveBeenCalledTimes(1)
   })
+
+  it('hands the review what the page IS, and its layouts and components on demand (AGL-3374)', async () => {
+    mockReview.mockResolvedValue({ outcome: 'serve' })
+    const template = {
+      role: 'entry' as const,
+      route: '/videos/:slug',
+      collectionName: 'Videos',
+      entryPath: '/videos/intro',
+      fallback: 'built-in-design' as const,
+    }
+    await composeScreenNodes({
+      hostId: 'h1',
+      screenId: 'tmpl',
+      screen: { versionId: 'v2', displayName: 'Video detail', kind: 'template', layoutId: 'main' } as never,
+      page: { template },
+    })
+    const { page } = mockReview.mock.calls[0][0] as {
+      page: { screen: unknown; template: unknown; variant: unknown; parts: () => Promise<Array<{ type: string; id: string }>> }
+    }
+    expect(page.screen).toEqual({ displayName: 'Video detail', name: undefined, kind: 'template' })
+    expect(page.template).toEqual(template)
+    expect(page.variant).toBeNull()
+    const parts = await page.parts()
+    expect(parts.map((part) => [part.type, part.id])).toEqual([
+      ['screen', 'tmpl'],
+      ['layout', 'main'],
+    ])
+  })
 })

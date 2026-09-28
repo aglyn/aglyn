@@ -50,6 +50,11 @@ export const OUTREACH_API_ROUTES = {
   mailboxesTest: 'outreach/mailboxes/test',
   /** `POST` — revoke the grant at Google and delete the mailbox. */
   mailboxesDisconnect: 'outreach/mailboxes/disconnect',
+  /**
+   * `POST` — SPF, DKIM and DMARC for the domain a mailbox sends as, and
+   * whether they align (AGL-3328).
+   */
+  mailboxesReadiness: 'outreach/mailboxes/readiness',
   // Settings, sequences and enrollments (AGL-2980). Every one names its org
   // (`orgId`, query or body); the contract is `model/outreach-api.ts`.
   /** `GET ?orgId` — the compliance settings; `POST` — save them. */

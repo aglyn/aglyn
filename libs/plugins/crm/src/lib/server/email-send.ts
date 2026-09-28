@@ -469,6 +469,12 @@ function sendRefusal(result: SendEmailResult): Refusal {
   if (reason === 'suppressed' || reason === 'unengaged') {
     return refuse(409, CRM_EMAIL_SUPPRESSED_MESSAGE, { reason: 'suppressed' })
   }
+  // The deliverability preflight (AGL-3328): the recipient's domain takes
+  // no mail. A standing fact about the address, said in the engine's words
+  // — not a provider fault the rep should retry.
+  if (reason === 'undeliverable' || reason === 'gateway-held') {
+    return refuse(409, detail || 'This address cannot receive email.', { reason: 'undeliverable' })
+  }
   if (reason === 'rate-limited') {
     const retryAtMs = Number((result as { retryAtMs?: unknown }).retryAtMs)
     return refuse(

@@ -26,6 +26,7 @@ import type {
   OutreachConnectResponse,
   OutreachMailboxAvailability,
   OutreachMailboxDisconnectResponse,
+  OutreachMailboxReadinessResponse,
   OutreachMailboxResponse,
   OutreachMailboxSettingsRequest,
   OutreachMailboxTestResponse,
@@ -57,6 +58,8 @@ export interface OutreachMailboxApi {
   /** A test from the mailbox — to `to`, or to the account's own address. */
   sendTest(mailboxId: string, to?: string): Promise<OutreachMailboxTestResponse>
   disconnect(mailboxId: string): Promise<OutreachMailboxDisconnectResponse>
+  /** SPF, DKIM and DMARC for the address it sends as; `fresh` skips the server's brief memory. */
+  readiness(mailboxId: string, fresh?: boolean): Promise<OutreachMailboxReadinessResponse>
 }
 
 /**
@@ -132,6 +135,11 @@ export function useOutreachMailboxApi(orgId: string | null): OutreachMailboxApi 
         call<OutreachMailboxDisconnectResponse>(OUTREACH_API_ROUTES.mailboxesDisconnect, {
           method: 'POST',
           body: { mailboxId },
+        }),
+      readiness: (mailboxId, fresh) =>
+        call<OutreachMailboxReadinessResponse>(OUTREACH_API_ROUTES.mailboxesReadiness, {
+          method: 'POST',
+          body: { mailboxId, ...(fresh ? { fresh: true } : {}) },
         }),
     }),
     [call],

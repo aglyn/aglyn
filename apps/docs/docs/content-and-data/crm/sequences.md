@@ -109,6 +109,11 @@ below that.
 **Health** shows the last seven days: messages sent, bounces and replies. A
 mailbox that has never sent shows zeros and **No sends yet**.
 
+**Sender readiness** shows SPF, DKIM and DMARC for the domain of the address
+the mailbox sends as, and whether they align with it — the records receivers
+use to decide the mail really is yours. **Check DNS again** reads them fresh.
+See [sender readiness](../../marketing-and-automation/email-campaigns/deliverability-checks.md#sender-readiness).
+
 ### When a mailbox pauses itself {#auto-pause}
 
 Bounces are the first sign that a list has bad addresses in it, and mailbox
@@ -469,6 +474,10 @@ twice**, on the Enrollments tab, and **Resume** on that row sends it anyway.
 A person you ticked past the red chip is not held again — you already
 decided.
 
+These are the same [deliverability checks](../../marketing-and-automation/email-campaigns/deliverability-checks.md)
+every email Aglyn sends goes through: an address whose domain takes no mail
+is never sent to, from a sequence or anywhere else.
+
 ### Cold contacts {#cold-contacts}
 
 A contact is **cold** when nothing on your site shows they came to you: no
@@ -694,5 +703,6 @@ one-way key — so they are never emailed again.
 ## Related
 
 - [CRM](./overview.md)
+- [Deliverability checks](../../marketing-and-automation/email-campaigns/deliverability-checks.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
 - [Custom roles](../../workspace-and-billing/teams-and-roles/custom-roles.md)

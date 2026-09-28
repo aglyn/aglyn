@@ -81,10 +81,11 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }))
 
-const mockNotifyStaff = jest.fn(async (_payload: unknown) => undefined)
-jest.mock('./notifications', () => ({
+// Every hold tells owners and staff through the risk notice seam (AGL-3368).
+const mockNotifyRisk = jest.fn(async (_input: unknown) => undefined)
+jest.mock('./risk-notice', () => ({
   __esModule: true,
-  notifyStaff: (payload: unknown) => mockNotifyStaff(payload),
+  notifyRiskEvent: (input: unknown) => mockNotifyRisk(input),
 }))
 
 import type { SendingWorkspace } from '@aglyn/shared-util-email/outbound-screen-gate'
@@ -131,7 +132,7 @@ const reviewRow = () => {
 beforeEach(() => {
   store.clear()
   failWrites = false
-  mockNotifyStaff.mockClear()
+  mockNotifyRisk.mockClear()
 })
 
 describe('who is screened', () => {
@@ -209,16 +210,19 @@ describe('a hold', () => {
       ]),
     })
     expect(String(row?.['details'])).toContain('Dismiss to release')
-    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
-    expect(mockNotifyStaff.mock.calls[0][0]).toMatchObject({
-      type: 'system.abuseReportUrgent',
-      link: '/admin/abuse-reports',
+    expect(mockNotifyRisk).toHaveBeenCalledTimes(1)
+    expect(mockNotifyRisk.mock.calls[0][0]).toMatchObject({
+      kind: 'email-held',
+      orgId: expect.anything(),
+      reviewId: expect.any(String),
+      reference: expect.stringMatching(/^HS-/),
+      item: { label: expect.stringContaining('automated email') },
     })
 
     // The workflow fires again on the next contact: counted, not re-alerted.
     await expect(screenOutboundSend(request())).resolves.toMatchObject({ outcome: 'held' })
     expect(reviewRow()?.['reportCount']).toBe(2)
-    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+    expect(mockNotifyRisk).toHaveBeenCalledTimes(1)
   })
 
   it('fails OPEN when the queue cannot be written', async () => {
@@ -354,7 +358,7 @@ describe('the send seam’s gate (every other tenant message)', () => {
       reportedHostname: 'poshmark.id63835663.shop',
       heldSend: { kind: 'message', state: 'held', path: 'hosts/host-1' },
     })
-    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+    expect(mockNotifyRisk).toHaveBeenCalledTimes(1)
 
     // A newsletter's next recipient: the process already knows, so no write.
     await expect(ask('Hi Sam')).resolves.toMatchObject({ outcome: 'held' })
@@ -364,7 +368,7 @@ describe('the send seam’s gate (every other tenant message)', () => {
     resetOutboundSeamMemoForTests()
     await ask('Hi Lee')
     expect(store.get(`abuseReports/${id}`)?.['reportCount']).toBe(2)
-    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+    expect(mockNotifyRisk).toHaveBeenCalledTimes(1)
   })
 
   it('sends once staff release the row, and never once they reject it', async () => {

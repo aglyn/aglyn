@@ -25,21 +25,22 @@ import {
 import {
   isDeferrableSendResult,
   isEmailConfigured,
-  loadHostEmail,
-  renderLoadedHostEmail,
   sendEmail,
-  type LoadedHostEmail,
 } from '@aglyn/shared-util-email'
 import {
   type PluginApiHandler,
   type PluginJobHostGate,
 } from '@aglyn/aglyn/server'
-import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 // The leaf, not the barrel: the console's `x-cron-secret` door asks the
 // site's lockdown directly (AGL-3356) — core's registry has no resolver in
 // the console process — and a spec that substitutes the barrel must still
 // reach the real verdict.
 import { siteLockdownJobGate } from '@aglyn/tenant-data-admin/server/tenant-write-lockdown'
+import {
+  loadHostEmailWithTokens,
+  renderLoadedHostEmailWithTokens,
+  type LoadedHostEmailWithTokens,
+} from '@aglyn/tenant-data-admin/server/host-email-tokens'
 
 import {
   CHECKOUT_GIVE_UP_AFTER_MS as GIVE_UP_AFTER_MS,
@@ -116,7 +117,7 @@ export async function scanAbandonedCheckouts(
    */
   const consentGroupByHost = new Map<string, Aglyn.ConsentGroup>()
   // Resolve each host's designed template once per run (AGL-770).
-  const templateCache = new Map<string, LoadedHostEmail | null>()
+  const templateCache = new Map<string, LoadedHostEmailWithTokens | null>()
   let skippedLocked = 0
   for (const docSnapshot of openCheckouts.docs) {
     const data = docSnapshot.data() as any
@@ -185,18 +186,15 @@ export async function scanAbandonedCheckouts(
     if (!entitledHosts.get(hostId)) continue
     let loaded = templateCache.get(hostId)
     if (loaded === undefined) {
-      loaded = await loadHostEmail(firestore, hostId, 'abandoned-cart', {
-        // The site's header and footer blocks, grafted once per site for the
-        // whole sweep (AGL-3287).
-        compose: composeHostComponentNodes,
-      })
+      loaded = await // The template, or the built-in copy in the site's header and
+        // footer, once per site for the whole batch (AGL-3287, AGL-3370).
+        loadHostEmailWithTokens(firestore, hostId, 'abandoned-cart')
       templateCache.set(hostId, loaded)
     }
     const designed = loaded
-      ? renderLoadedHostEmail(
+      ? renderLoadedHostEmailWithTokens(
           loaded,
           { 'cart.url': String(data.resumeUrl ?? '') },
-          Aglyn.sanitizeAuthorHtml,
         )
       : null
     /*

@@ -20,7 +20,13 @@
  * skipped-rows file and each report table's export quote the same way.
  */
 
-import { csvCell, csvDocument } from './csv-import'
+import {
+  csvCell,
+  csvDocument,
+  emptyImportResult,
+  importNoMailServerSentence,
+  mergeImportResults,
+} from './csv-import'
 
 describe('csvCell', () => {
   it('quotes only a cell that holds a comma, a quote or a line break', () => {
@@ -60,5 +66,25 @@ describe('csvDocument', () => {
 
   it('is the header alone over no rows', () => {
     expect(csvDocument(['a', 'b'], [])).toBe('a,b')
+  })
+})
+
+describe('the addresses an import found with no mail server (AGL-3328)', () => {
+  it('is summed across chunks, and absent where no chunk counted', () => {
+    const empty = emptyImportResult()
+    expect('noMailServer' in mergeImportResults(empty, { created: 2 })).toBe(false)
+    const once = mergeImportResults(empty, { created: 2, noMailServer: 1 })
+    expect(once.noMailServer).toBe(1)
+    expect(mergeImportResults(once, { created: 1, noMailServer: 2 }).noMailServer).toBe(3)
+    expect(mergeImportResults(once, { created: 1 }).noMailServer).toBe(1)
+  })
+
+  it('says so only when there is something to say', () => {
+    expect(importNoMailServerSentence(0)).toBeNull()
+    expect(importNoMailServerSentence(undefined)).toBeNull()
+    expect(importNoMailServerSentence(1)).toBe(
+      '1 address has no mail server. Its record reads "Would bounce", and campaigns and sequences skip it.',
+    )
+    expect(importNoMailServerSentence(1200)).toMatch(/^1,200 addresses have no mail server\. Their records read/)
   })
 })

@@ -419,6 +419,19 @@ function isOfficialDomain(brand: PhishingScreenBrand, registrable: string): bool
   return label === base && (/^[a-z]{2}$/.test(suffix) || TWO_LABEL_SUFFIXES.has(suffix))
 }
 
+/**
+ * Is the workspace the brand itself, by DOMAIN: one of its own domains is
+ * one of the brand's official ones (Aglyn's site on aglyn.com linking to
+ * its own account on a video or help-desk vendor). Deliberately not by name — a workspace can call itself
+ * "Poshmark", but it cannot serve on poshmark.com.
+ */
+export function isBrandsOwnDomain(
+  brand: PhishingScreenBrand,
+  ownRegistrables: ReadonlySet<string>,
+): boolean {
+  return [...ownRegistrables].some((registrable) => isOfficialDomain(brand, registrable))
+}
+
 /** Every brand's real domains, for "is this link just the brand itself". */
 function isAnyOfficialDomain(registrable: string): boolean {
   return PHISHING_SCREEN_BRANDS.some((brand) => isOfficialDomain(brand, registrable))
@@ -453,11 +466,26 @@ function labelNamesBrand(label: string, token: string, wordToken: boolean): bool
   return false
 }
 
+/**
+ * Video and audio platforms whose account subdomains and embed URLs a page
+ * or email plays media from: `player.vimeo.com`, `www.youtube.com/embed/…`.
+ * A video plugin's own hosts are the plugin's to declare, not listed here. Anyone may embed or link media from these, so a
+ * host on one is never a lookalike, whatever name its subdomain carries.
+ */
+export const MEDIA_EMBED_HOSTS: ReadonlySet<string> = new Set([
+  'vimeo.com', 'vimeocdn.com', 'youtube.com', 'youtu.be',
+  'youtube-nocookie.com', 'ytimg.com', 'loom.com', 'vidyard.com', 'brightcove.net',
+  'brightcove.com', 'jwplayer.com', 'jwpcdn.com', 'mux.com', 'cloudflarestream.com',
+  'videodelivery.net', 'dailymotion.com', 'twitch.tv', 'spotify.com', 'soundcloud.com',
+  'podbean.com', 'buzzsprout.com', 'simplecast.com', 'transistor.fm', 'anchor.fm',
+])
+
 /** The brand a host impersonates, or null. */
 export function lookalikeBrandForHost(host: string): PhishingScreenBrand | null {
   const normalized = String(host ?? '').toLowerCase().replace(/\.+$/, '')
   if (!normalized.includes('.')) return null
   const registrable = registrableDomain(normalized)
+  if (MEDIA_EMBED_HOSTS.has(registrable)) return null
   for (const brand of PHISHING_SCREEN_BRANDS) {
     if (isOfficialDomain(brand, registrable)) continue
     if (brand.hostedDomains?.includes(registrable)) continue
@@ -601,7 +629,7 @@ export function screenOutboundEmail(input: PhishingScreenInput): PhishingScreenV
   for (const host of [...linkHosts, ...addressHostsIn(`${copy}\n${replyTo}\n${fromAddress}`)]) {
     if (seenLookalike.has(host)) continue
     const brand = lookalikeBrandForHost(host)
-    if (brand) {
+    if (brand && !isBrandsOwnDomain(brand, ownRegistrables)) {
       seenLookalike.add(host)
       signals.push({ code: 'lookalike-link', brand: brand.id, host })
     }
@@ -711,8 +739,31 @@ export const STRONG_PHISHING_SIGNAL_CODES: ReadonlySet<string> = new Set([
   'credential-field',
 ])
 
-export function phishingSignalTier(signal: { code: string }): PhishingSignalTier {
-  return STRONG_PHISHING_SIGNAL_CODES.has(signal?.code) ? 'strong' : 'soft'
+/**
+ * Hosts that give each customer an account subdomain named after the
+ * customer: `acme.zendesk.com` is Acme's own help desk. A brand's name there is usually the brand itself, so a
+ * lookalike on one of these is SOFT — held for a young workspace, never a
+ * takedown of an established one's page or mail. A lookalike on any other
+ * host (`poshmark.id63835663.shop`) stays STRONG.
+ */
+export const ACCOUNT_SUBDOMAIN_HOSTS: ReadonlySet<string> = new Set([
+  'vimeo.com', 'vimeocdn.com', 'zendesk.com', 'freshdesk.com',
+  'helpscoutdocs.com', 'intercom.help', 'statuspage.io', 'atlassian.net', 'myshopify.com',
+  'squarespace.com', 'wixsite.com', 'webflow.io', 'hubspotpagebuilder.com', 'substack.com',
+  'typeform.com', 'calendly.com', 'gitbook.io', 'readme.io', 'notion.site', 'github.io',
+  'cloudfront.net', 'kajabi.com', 'thinkific.com', 'teachable.com', 'mailchimpsites.com',
+])
+
+export function phishingSignalTier(signal: { code: string; host?: string }): PhishingSignalTier {
+  if (!STRONG_PHISHING_SIGNAL_CODES.has(signal?.code)) return 'soft'
+  if (
+    signal.code === 'lookalike-link' &&
+    typeof signal.host === 'string' &&
+    ACCOUNT_SUBDOMAIN_HOSTS.has(registrableDomain(signal.host))
+  ) {
+    return 'soft'
+  }
+  return 'strong'
 }
 
 /** Is a workspace of this age (days, `null` = unreadable) screened by the soft rules? */
@@ -737,7 +788,7 @@ export interface OutboundScreenPolicy {
 }
 
 /** The signals that HOLD under the tiers, for this workspace and message. */
-export function signalsThatHold<T extends { code: string }>(
+export function signalsThatHold<T extends { code: string; host?: string }>(
   signals: readonly T[],
   policy: OutboundScreenPolicy,
 ): T[] {

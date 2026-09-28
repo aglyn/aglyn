@@ -96,6 +96,29 @@ anywhere. The blockers are listed in the order they stop delivery.
 Domain verification is **not** observable here — a sending-scoped key has no read
 permission for it — so a clean report can still bounce until DNS is verified.
 
+## Mail gateway ledger {#mail-gateway-ledger}
+
+What each mail gateway — Barracuda, Proofpoint, Mimecast, Google, Microsoft
+and the rest — did with mail from each sending domain the platform sends
+from: refusals and deliveries over the last thirty days, whether the pair is
+**Held** or **Clear**, and the last refusal's diagnostic with addresses
+removed.
+
+Two refusals of a sending domain in thirty days, with no delivery beside them,
+hold that domain's bulk mail — campaigns, workflows and sequences — to everyone
+behind the gateway. Transactional mail is never held. On the platform's own
+domain or a shared pool member a hold reaches **every** site on it, so those
+rows are marked **Shared sender** and a held one turns the alert above the
+table red.
+
+**Held now** names every held pair. It is read from every ledger with a
+refusal inside the window, which is the complete set a hold can come from. The
+table below it lists the whole ledger by sending domain, and filters by
+**Sending domain** (the start of it), **Gateway** and **Shared sender**, each
+asked of the ledger itself. A hold clears on its own at the next delivery, or
+once fewer than two refusals remain in the window. See
+[deliverability checks](../marketing-and-automation/email-campaigns/deliverability-checks.md#gateway-hold).
+
 ## CSP violations
 
 The durable Content-Security-Policy violation counters, over a window you choose.
@@ -329,5 +352,6 @@ reading rather than measuring again.
 
 ## Related
 
+- [Deliverability checks](../marketing-and-automation/email-campaigns/deliverability-checks.md)
 - [Lockdown](lockdown.md)
 - [Staff console overview](overview.md)

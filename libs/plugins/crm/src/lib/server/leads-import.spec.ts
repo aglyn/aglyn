@@ -303,6 +303,24 @@ jest.mock('../../../../../tenant/data/admin/src/lib/server/organizations', () =>
   scopedToHost: (ref: any) => ref,
 }))
 
+/**
+ * The deliverability check's import half (AGL-3328): which addresses' domains
+ * take no mail, from a table rather than DNS. The records are stamped by the
+ * check the door queues; the route only counts.
+ */
+const mockNoMailServer = new Set<string>()
+jest.mock('@aglyn/tenant-data-admin/server/capture-email-check', () => ({
+  __esModule: true,
+  IMPORT_MAIL_CHECK_GRACE_MS: 5_000,
+  // The door's own queue, which this file's doubles never flush.
+  scheduleCapturedEmailCheck: () => undefined,
+  findUndeliverableEmails: async (emails: string[]) =>
+    new Set(emails.map((email) => email.toLowerCase()).filter((email) => mockNoMailServer.has(email))),
+  settleWithin: (promise: Promise<unknown>) => promise,
+  countUndeliverableEmails: (emails: string[], found: Set<string> | null) =>
+    found ? emails.filter((email) => found.has(email.toLowerCase())).length : undefined,
+}))
+
 import { personKey, readMarketingBasis, soloConsentGroup } from '@aglyn/aglyn/server'
 import { crmLeadsImportHandler } from './leads-import'
 
@@ -663,6 +681,27 @@ describe('what a row becomes', () => {
     expect(lead).toHaveProperty('status', 'new')
     expect(lead).not.toHaveProperty('ownerUid')
     expect(lead).not.toHaveProperty('updatedAt')
+  })
+})
+
+describe('addresses with no mail server (AGL-3328)', () => {
+  beforeEach(() => mockNoMailServer.clear())
+
+  it('says how many of the stored rows would bounce, and counts no skipped row', async () => {
+    mockNoMailServer.add('dana@parked.example')
+    mockNoMailServer.add('lee@parked.example')
+    const out = await importRows([
+      { email: 'Dana@Parked.example' },
+      { email: 'sam@example.com' },
+      { email: 'dana@parked.example' },
+    ])
+    expect(out.body).toMatchObject({ created: 2, noMailServer: 1 })
+    expect(out.body.skipped).toEqual([{ index: 2, email: 'dana@parked.example', reason: 'duplicate' }])
+  })
+
+  it('reports zero when every domain takes mail', async () => {
+    const out = await importRows([{ email: 'sam@example.com' }])
+    expect(out.body.noMailServer).toBe(0)
   })
 })
 
