@@ -296,6 +296,49 @@ the grid with its reason and not applied. Organization name and owner are not
 filters because a site does not store them: filter by **Org ID**, or open the
 organization, whose page lists its sites.
 
+#### Site detail {#site-detail}
+
+A site's staff page opens from its row in **Sites**, or from the **Sites** card
+on its organization's page. The header carries **Visit live site** and **Open
+preview** (the home page's draft, in a new tab), and a menu to the organization
+and its owner. Below them:
+
+- **Site** — the live address, the subdomain (retargeting it needs the **super**
+  staff role and is audited), and whether the site is published, suspended or in
+  maintenance.
+- **Ownership** — the organization and its owner, each a link to its staff page.
+- **Usage**, **Custom domain**, **Settings snapshot** and the site's **Activity**
+  log.
+- **Content** — see below.
+
+#### Site ownership {#site-ownership}
+
+A site belongs to an organization, and the organization has one owner. The
+**Ownership** card names both and can **transfer organization ownership** to
+another member of the organization, after a confirmation. It is the same
+transfer the owner makes from Settings › Ownership: the new owner takes over
+billing and every site of the organization, and the previous owner stays on as
+an admin. A transfer that would lock the organization out of its own single
+sign-on is refused, with the reason shown.
+
+#### Site content {#site-content}
+
+The **Content** card lists everything the site holds, one tab per kind: **Pages**,
+**Email designs**, **Layouts**, **Components**, **Templates**, **Forms** and
+**Automations**. Each tab pages through every document in id order; nothing on it
+is filtered. A page shows whether it is live and at which path, or a draft, and
+whether it is in the trash; a form shows its submission count and whether it is
+retired or archived.
+
+Clicking a row — or its eye icon — opens that document's **draft preview in a
+new tab**: what the besigner last saved, rendered with the site's own theme and
+blocks. You do not need to be a member of the site or impersonate anyone, and
+nothing you do there changes the site. A published page's menu also has **Visit
+live page**. Automations have no rendering, so theirs opens a read-only view of
+the trigger and the steps; the tab lists the site's own automations, the
+organization automations that run on this site (with **paused here** where the
+site has paused one), and its workflows.
+
 ### Users admin {#users-admin}
 
 Staff-claim management and disabling users, with gated listing; a whole email
