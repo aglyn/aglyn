@@ -111,6 +111,30 @@ to part of it: Organization *contains* together with a search (the filter is sho
 cannot answer at all. A filter that is not applied is named, with its
 reason, and the rest still narrow the list. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search) for the toolbar itself.
 
+#### Organization detail {#organization-detail}
+
+An organization's staff page lists its **Sites** with the same row menu as the
+Sites list — visit the live site, open its preview, open the site's page — and,
+below the cards, **Emails sent** across its sites and **Email & automations**.
+**Transfer organization ownership** is under **Edit organization**, and asks
+for a confirmation before it hands the organization over.
+
+#### Email & automations {#org-email-and-automations}
+
+Three tabs of the organization's own email and automation work, each paged in
+id order:
+
+- **Email sends** — every campaign send: its subject and site, status (and
+  **held for review** when the outbound screen stopped it), how many were sent,
+  opened, clicked and bounced, and when. **View message** shows the stored
+  message in a frame that runs no scripts and loads nothing; **Open design
+  preview** opens the design it was composed from, in a new tab.
+- **Email campaigns** — the campaign containers, the sites each runs on, and
+  its window.
+- **Automations** — the organization-level automations, whether each is on,
+  paused on some sites, or deleted, with a read-only view of the trigger and
+  steps.
+
 #### Free workspace limit {#free-workspace-limit}
 
 How many **free** workspaces one account may hold, on a card at the top of the
@@ -338,6 +362,20 @@ live page**. Automations have no rendering, so theirs opens a read-only view of
 the trigger and the steps; the tab lists the site's own automations, the
 organization automations that run on this site (with **paused here** where the
 site has paused one), and its workflows.
+
+#### Emails sent {#emails-sent}
+
+**Emails sent** — on a site's staff page, and on an organization's for all of
+its sites — lists every email the site sent, newest first: the recipient, the
+subject and the sender tag (a campaign, a form notification, site account
+mail), what became of it (sent, delivered, opened, bounced and why), and its
+opens and clicks. It is the same delivery record the staff account page reads,
+seen from the site instead of the person. Message bodies are not kept, so this
+answers *whether* and *when*, not *what*; a campaign's content is under **Email
+& automations** on the organization. Mail the platform sends to the
+organization's own members — invitations, billing — belongs to no site and is on
+each member's staff page. An organization with more than thirty sites reads the
+first thirty and says so.
 
 ### Users admin {#users-admin}
 

@@ -48,6 +48,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import useFirestoreDoc from '../../../../../hooks/use-firestore-doc'
 import HostActivityTable from '../../../../../components/host-activity-table.component'
 import { StaffDomainCard } from '../../../../../components/staff-domain-card.component'
+import StaffEmailDeliveriesCard from '../../../../../components/staff-email-deliveries-card.component'
 import StaffOrgOwnershipTransfer from '../../../../../components/staff-org-ownership-transfer.component'
 import StaffSiteContentCard from '../../../../../components/staff-site-content-card.component'
 import {
@@ -452,6 +453,10 @@ const AdminHostDetail: NextPageWithLayout<Record<string, never>> = () => {
                 children: (
                   <StaffSiteContentCard hostId={hostId} host={host} orgId={orgId} />
                 ),
+              },
+              {
+                size: { xs: 12 },
+                children: <StaffEmailDeliveriesCard hostId={hostId} />,
               },
               {
                 size: { xs: 12 },
