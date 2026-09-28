@@ -22,7 +22,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { productSearchFields } from './commerce'
+import { liftLegacyProduct, productSearchFields, productStockFields } from './commerce'
 
 /**
  * A product's search keys travel with its name (AGL-2501).
@@ -137,8 +137,29 @@ describe('every product write path carries them', () => {
       read(ROUTE).indexOf('  product: {'),
       read(ROUTE).indexOf('  product: {') + 2500,
     )
-    for (const key of ['nameLower', 'nameTokens', 'nameReversed', 'skus']) {
+    for (const key of [
+      'nameLower',
+      'nameTokens',
+      'nameReversed',
+      'skus',
+      'barcodes',
+      'priceFromCents',
+      'soldOut',
+    ]) {
       expect(fields).toContain(`'${key}'`)
+    }
+  })
+
+  it('every stock writer stores the In stock verdict with the count', () => {
+    // A sale, a cancellation, a stock adjustment and the editor: each writes
+    // `variants`, and `soldOut` is derived from them (AGL-3321).
+    for (const path of [
+      'libs/plugins/commerce/src/lib/server/reserve-stock.ts',
+      'libs/plugins/commerce/src/lib/server/cancel-order.ts',
+      HUB,
+      DIALOG,
+    ]) {
+      expect(read(path)).toContain('productStockFields(')
     }
   })
 
@@ -149,5 +170,58 @@ describe('every product write path carries them', () => {
       expect(read(path).length).toBeGreaterThan(1000)
     }
     expect(read(ROUTE)).toContain("collection: 'products'")
+  })
+})
+
+/**
+ * The worked examples the products backfill restates this logic against
+ * (AGL-3321). `tools/scripts/backfill-products-list-fields.mjs` cannot import
+ * the library, so it carries a copy of the key builder, the stock verdict and
+ * the legacy lift's defaults; its `--self-test` runs these same fixtures, so
+ * the copy cannot stamp a key the writers and the queries do not use.
+ */
+describe('the backfill fixtures are what the library writes', () => {
+  const fixtures = JSON.parse(
+    read('tools/scripts/lib/product-list-fields.fixtures.json'),
+  ) as {
+    keys: Array<{ product: { name: string; variants?: never[] }; expected: Record<string, unknown> }>
+    stock: Array<{ product: Record<string, unknown>; expected: Record<string, unknown> }>
+    lift: Array<{ product: Record<string, unknown>; expected: Record<string, unknown> }>
+  }
+
+  it.each(fixtures.keys.map((fixture, at) => [at, fixture] as const))(
+    'search keys #%i',
+    (_at, { product, expected }) => {
+      expect(productSearchFields(product)).toEqual({ name: product.name, ...expected })
+    },
+  )
+
+  it.each(fixtures.stock.map((fixture, at) => [at, fixture] as const))(
+    'stock #%i',
+    (_at, { product, expected }) => {
+      expect(productStockFields(product as never)).toEqual(expected)
+    },
+  )
+
+  it.each(fixtures.lift.map((fixture, at) => [at, fixture] as const))(
+    'legacy lift #%i',
+    (_at, { product, expected }) => {
+      const lifted = liftLegacyProduct(product as never)
+      const keys = productSearchFields({ name: lifted.name, variants: lifted.variants })
+      const stored: Record<string, unknown> = {
+        status: lifted.status ?? null,
+        type: lifted.type ?? null,
+        nameLower: keys.nameLower,
+        priceFromCents: keys.priceFromCents,
+        soldOut: productStockFields(lifted).soldOut,
+      }
+      expect(stored).toEqual(expected)
+    },
+  )
+
+  it('covers every field the fixtures pin', () => {
+    expect(fixtures.keys.length).toBeGreaterThan(3)
+    expect(fixtures.stock.length).toBeGreaterThan(3)
+    expect(fixtures.lift.length).toBeGreaterThan(2)
   })
 })

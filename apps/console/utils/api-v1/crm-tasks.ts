@@ -40,12 +40,14 @@ import {
   crmTaskReminderPending,
   type CrmTaskStatus,
   createResourceUid,
+  crmTaskListFields,
 } from '@aglyn/aglyn/server'
 import {
   apiJson,
   ApiErrors,
   crmNextActivityLinksOf,
   recomputeCrmNextTaskAt,
+  restampCrmListFieldsAt,
 } from '@aglyn/tenant-data-admin'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, requireScope } from '../api-v1'
@@ -252,7 +254,7 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
     const { title, kind, priority, status, remindAtMs, ...rest } = parsed.values
     const id = createResourceUid()
     const stamp = crmCreateStamp(ctx, site.siteId)
-    await collection.doc(id).create({
+    const record: Record<string, unknown> = {
       title,
       kind: kind ?? 'todo',
       priority: priority ?? 'normal',
@@ -272,8 +274,16 @@ async function createTask(request: Request, ctx: ApiV1Context): Promise<Response
                 previous: null,
               }),
       }),
+      /*
+       * Stored as `null` when the body names none, never left absent: every
+       * tasks list orders by `dueAtMs`, and Firestore leaves a document
+       * without the ordered field out of the answer (AGL-3321).
+       */
+      dueAtMs: rest.dueAtMs ?? null,
       ...stamp,
-    })
+    }
+    // What the console's Tasks list searches by (AGL-3321).
+    await collection.doc(id).create({ ...record, ...crmTaskListFields(record) })
     await settleNextActivity(ctx, [rest as Record<string, unknown>])
     const view = taskView(await collection.doc(id).get())
     await claim.record(200, view)
@@ -301,6 +311,8 @@ async function updateTask(
 
   const { status, remindAtMs, ...rest } = parsed.values
   const update: Record<string, unknown> = updatePayload(rest)
+  // A cleared due date is stored `null`, not deleted — see the create.
+  if (rest.dueAtMs === null) update.dueAtMs = null
   // One instant for the write: a task completed at T reads updated at T.
   const now = Timestamp.now()
   const completing = status === 'done' && status !== snap.get('status')
@@ -335,6 +347,8 @@ async function updateTask(
   if (Object.keys(update).length > 0) {
     await ref.update({ ...update, updatedAt: now })
     await settleNextActivity(ctx, [snap.data(), rest as Record<string, unknown>])
+    // What the console's Tasks list searches (AGL-3321).
+    if ('title' in update) await restampCrmListFieldsAt(ref, 'crmTasks')
   }
   return apiJson(taskView(await ref.get()), { headers: ctx.headers })
 }

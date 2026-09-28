@@ -856,11 +856,19 @@ table. Reading it is open to every staff role; releasing from it needs
   still consume the cap. They are the safest thing to clear first, and nothing
   else on the platform would ever have told you they were there.
 
-The table's toolbar filters and searches the whole list before it is paged:
-**Reason**, **State** (*enforcing*, *expired*, *unreadable*) and **Key kind** are
-pickers, and the key and note filter as typed values; the search matches the key,
-reason, note or origin. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search). The Library picker and the id
-fields above belong to the per-file lookup, not to this table.
+The table pages, and its toolbar filters and searches the whole list, not only the
+page shown: **Reason**, **State** (*enforcing*, *expired*, *unreadable*) and **Key
+kind** are pickers; the key and the note filter as typed text (contains, does not
+contain, equals, starts with, ends with, empty, not empty); and the search matches the
+key, reason, note or the copy it was set from. Every filter combines with every other
+and with the search. The deny list is one document rather than one record per entry, so
+the console reads all of it — at most 2000 entries, the cap — and answers the filters
+over every entry. A filter the table cannot apply shows a notice above it, "*Filter* is
+not applied: *why*", and is left out rather than applied to some rows. The count, the
+full-list warning and the "enforce nothing" count above the table always describe the
+whole list. See [Filter and search a list](../getting-started/console-tour.md#filter-and-search).
+The Library picker and the id fields above belong to the per-file lookup, not to this
+table.
 
 ### From a terminal {#quarantine-curl}
 

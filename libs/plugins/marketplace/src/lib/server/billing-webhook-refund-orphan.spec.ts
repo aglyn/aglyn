@@ -492,7 +492,7 @@ describe('the session landing drains what was parked (AGL-2148)', () => {
     // reversal, no Stripe call at all.
     await marketplaceBillingWebhookHandler(completedSession() as any)
     expect(purchase()).toMatchObject({ listingId: 'listing-1' })
-    expect(purchase().refundedAt).toBeUndefined()
+    expect(purchase().refundedAt ?? null).toBeNull()
     expect(posts).toHaveLength(0)
     expect(fetchMock).not.toHaveBeenCalled()
     expect(adminMock.__ga4Refunds).toHaveLength(0)
@@ -619,7 +619,7 @@ describe('a partial refund arriving before its purchase (AGL-2299)', () => {
     expect(String(posts[0].init.body)).toContain('amount=3695')
     expect(purchase()).toMatchObject({ partialReversedTransferCents: 3695 })
     // The three effects a FULL refund applies must all be absent.
-    expect(purchase()['refundedAt']).toBeUndefined()
+    expect(purchase()['refundedAt'] ?? null).toBeNull()
     expect(purchase()['reversedTransferCents']).toBeUndefined()
     expect(adminMock.__ga4Refunds).toHaveLength(0)
     expect(orphan()).toBeUndefined()

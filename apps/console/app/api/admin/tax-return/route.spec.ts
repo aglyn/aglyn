@@ -57,6 +57,15 @@ function mockMakeFirestore() {
           return false
         },
       ]),
+    count: () => ({
+      get: async () => ({
+        data: () => ({
+          count: [...docs.entries()]
+            .filter(([path]) => path.startsWith(`${name}/`))
+            .filter(([, data]) => filters.every((filter) => filter(data))).length,
+        }),
+      }),
+    }),
     limit: (count: number) => ({
       get: async () => {
         const matched = [...docs.entries()]
@@ -207,6 +216,41 @@ describe('GET /api/admin/tax-return (AGL-1811)', () => {
     expect(body.summary.transactionCount).toBe(1)
     // …and said out loud instead of silently absent.
     expect(body.undatedRows).toBe(1)
+  })
+
+  /**
+   * AGL-3321. The findings list is filtered where it is computed: over the
+   * period's COMPLETE read, one page handed back, never the rows for the
+   * page to narrow itself.
+   */
+  it('?view=findings filters and searches the findings over the whole period', async () => {
+    seedRow('in_untaxed_a', { automaticTax: false, orgId: 'org-a' })
+    seedRow('in_untaxed_b', { automaticTax: false, orgId: 'org-b' })
+    seedRow('in_undated', { paidAt: null })
+    const findings = (search: string) =>
+      GET(new Request(`https://app.aglyn.com/api/admin/tax-return?period=2026-Q3&view=findings${search}`, {
+        method: 'GET',
+        headers: { authorization: 'Bearer staff-token' },
+      }))
+
+    const all = await (await findings('')).json()
+    expect(all.rows.map((row: any) => row.invoiceId).sort()).toEqual([
+      'in_undated',
+      'in_untaxed_a',
+      'in_untaxed_b',
+    ])
+    expect(all.refused).toEqual([])
+
+    const filters = encodeURIComponent(JSON.stringify([{ field: 'groups', op: 'equals', value: 'untaxedRows' }]))
+    const narrowed = await (await findings(`&filters=${filters}&search=org-b`)).json()
+    expect(narrowed.rows.map((row: any) => row.invoiceId)).toEqual(['in_untaxed_b'])
+
+    // Paged by the invoice id of the last row shown.
+    const first = await (await findings('&pageSize=1')).json()
+    expect(first.rows).toHaveLength(1)
+    expect(first.hasMore).toBe(true)
+    const second = await (await findings(`&pageSize=1&cursor=${first.nextCursor}`)).json()
+    expect(second.rows[0].invoiceId).not.toBe(first.rows[0].invoiceId)
   })
 
   /**

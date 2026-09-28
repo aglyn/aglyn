@@ -60,6 +60,7 @@
 
 import { render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import CrmConsolePage from './crm-console-page'
 import { CRM_CONSOLE_SECTIONS } from './crm-console-sections'
 
@@ -74,7 +75,7 @@ const ORG = { $id: 'org-1', plan: 'pro' } as any
 
 /** What the server says the org actually has. */
 const SERVER_COUNT = 40_000
-/** What the `limit(1000)` listener can ever hand back. */
+/** The rows the fixture org holds — far more than one page of the list. */
 const LISTENER_ROWS = 1_000
 
 const contactDocs = Array.from({ length: LISTENER_ROWS }, (_, index) => ({
@@ -120,6 +121,20 @@ jest.mock('./recent-activity-feed', () => ({
   default: () => null,
   RecentActivityFeed: () => null,
 }))
+// The list's query (AGL-3321), planned for real and answered from the
+// fixture rows by the list-query double — every row visible and dated.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() =>
+      (collections.contacts ?? []).map((row: Record<string, unknown>) => ({
+        visibleTo: ['org'],
+        updatedAt: new Date(0),
+        ...row,
+      })),
+      jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    ),
+)
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   /*
    * The real translator, not a stub. It is a pure function of the shared
@@ -304,29 +319,23 @@ describe('the Contacts head-count is a server aggregate (AGL-1706)', () => {
     expect(countSpy).toHaveBeenCalledTimes(3)
   })
 
-  it('keeps the list capped — the cap was never the defect', () => {
+  it('reads the list a page at a time — never the collection', () => {
     mount()
 
-    // The row list stays `limit(1000)`. Fixing the head-count must not turn
-    // this table into a 40,000-row stream; that the two questions now have
-    // two answers is the point.
-    expect(limitSpy).toHaveBeenCalledWith(1000)
+    // The rows are one page of the list's query (AGL-3321). Fixing the
+    // head-count must not turn this table into a 40,000-row stream; that the
+    // two questions have two answers is the point.
+    expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'updatedAt', direction: 'desc' })
+    expect(limitSpy).not.toHaveBeenCalledWith(LISTENER_ROWS)
   })
 
-  it('falls back to the row count, never to zero, when the read fails', async () => {
+  it('falls back to the rows it holds, never to zero, when the read fails', async () => {
     aggregate.count = null
-    // Free hard-bands at 100 with no overage rate, so 1,000 known rows are
-    // already over it. A defaulted 0 would resolve `allowed` true and delete
-    // this warning from a page whose ingestion has genuinely stopped.
     mount({ $id: 'org-1', plan: 'free' })
 
     await waitFor(() => expect(countSpy).toHaveBeenCalled())
-    expect(
-      screen.queryByText(/CRM records limit reached/)?.textContent ?? '',
-    ).toContain('new visitors are no longer captured')
-    // And the readout still shows what is known rather than nothing.
-    expect(
-      screen.queryByText(/1,000 contacts · 1,000 of 100 CRM records/),
-    ).not.toBeNull()
+    // The readout shows what is known — the page of rows the list holds
+    // (AGL-3321) — rather than nothing. It can only understate.
+    expect(screen.queryByText(/^10 contacts · /)).not.toBeNull()
   })
 })

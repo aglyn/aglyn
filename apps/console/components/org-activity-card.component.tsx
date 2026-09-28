@@ -18,6 +18,10 @@
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
@@ -26,6 +30,7 @@ import {
   listFilterGridColumns,
   upsertListFilterClause,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { GridColDef } from '@mui/x-data-grid'
 import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
@@ -43,13 +48,14 @@ import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_PAGE_SIZE_DEFAULT, TABLE_ROW_HEIGHT } from '../constants/shared'
 import {
+  ACTIVITY_SEARCH_HINT,
   ORG_ACTIVITY_FILTER_FIELDS,
-  ORG_ACTIVITY_FILTER_HEADERS,
-  ORG_ACTIVITY_SEARCH_SCAN,
   ORG_ACTIVITY_SELECT_FIELDS,
-  ORG_FEED_FILTER_FIELDS,
-  ORG_TARGET_FEED_FILTER_FIELDS,
-} from '../utils/audit-log-filters'
+} from '../utils/activity-list-query'
+import {
+  ACTIVITY_LIST_FILTER_FIELDS,
+  ACTIVITY_LIST_FILTER_HEADERS,
+} from '../utils/list-filters'
 import { formatWireTimestamp } from '../utils/staff-timestamps'
 
 export interface OrgActivityCardProps {
@@ -91,14 +97,16 @@ interface OrgActivityFacets {
  * reader walks back through the whole history and each step costs
  * `pageSize + 1` reads.
  *
- * ## The toolbar filters the whole log
+ * ## The toolbar filters and searches the whole log
  *
- * Every clause in the grid's Filters panel goes to the route, which puts it
- * on the query (see `ORG_ACTIVITY_FILTER_FIELDS`): Action, and on the
- * org-wide log Who and Where, from pickers, and When as a date range. The
- * search box (org-wide only) matches the actor's address and the target's
- * name as the route reads the log. A change to any of them is a different
- * query, so the walk starts again at page one with no cursor.
+ * Every clause in the grid's Filters panel and the search word go to the
+ * route, which puts them all on its query (AGL-3321, see
+ * `utils/activity-list-query.ts`): Action, and on the org-wide log Who and
+ * Where, from pickers, When as a date or a range, and the search over the
+ * written `searchTokens`. What the route could not put on the query it says,
+ * and the card shows (`ListQueryNotices`) rather than narrowing the page. A
+ * change to any of them is a different query, so the walk starts again at
+ * page one with no cursor.
  */
 export function OrgActivityCard(props: OrgActivityCardProps) {
   const { orgId, header = 'Recent Activity', targetId, orgWide } = props
@@ -112,11 +120,9 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
   userRef.current = user
   const uid = (user as { uid?: string } | undefined)?.uid ?? null
 
-  const fields = orgWide
-    ? ORG_ACTIVITY_FILTER_FIELDS
-    : targetId
-      ? ORG_TARGET_FEED_FILTER_FIELDS
-      : ORG_FEED_FILTER_FIELDS
+  // Who and Where belong to the org-wide log; one member's changes and the
+  // organization's own feed each read one collection.
+  const fields = orgWide ? ORG_ACTIVITY_FILTER_FIELDS : ACTIVITY_LIST_FILTER_FIELDS
   const [clauses, setClauses] = useState<ListFilterClause[]>([])
   const [searchWords, setSearchWords] = useState<string[]>([])
   const gridFilter = useListGridFilter({
@@ -125,8 +131,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
     onChange: setClauses,
     search: { words: searchWords, onChange: setSearchWords },
   })
-  // Only the org-wide log's route answers a search.
-  const search = orgWide ? searchWords.join(' ').trim() : ''
+  const search = searchWords.join(' ').trim()
   const [facets, setFacets] = useState<OrgActivityFacets | null>(null)
   const facetsRef = useRef(facets)
   facetsRef.current = facets
@@ -158,6 +163,9 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
    * says so instead of presenting itself as a clean record.
    */
   const [unreadable, setUnreadable] = useState(false)
+  /** What the route could not put on its query, and what it said about it. */
+  const [refused, setRefused] = useState<ListQueryRefusal[]>([])
+  const [notices, setNotices] = useState<string[]>([])
 
   /*==========================================
    * READ THROUGH THE ROUTE, not the client SDK (AGL-2444).
@@ -201,9 +209,13 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
           entries?: any[]
           nextCursor?: string | null
           facets?: OrgActivityFacets
+          refused?: ListQueryRefusal[]
+          notices?: string[]
         }
         if (!current()) return
         if (payload?.facets) setFacets(payload.facets)
+        setRefused(payload?.refused ?? [])
+        setNotices(payload?.notices ?? [])
         setUnreadable(false)
         setEntries(payload?.entries ?? [])
         setNextCursor(payload?.nextCursor ?? null)
@@ -321,7 +333,7 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         renderCell: ({ row }: any) => formatWireTimestamp(row.createdAt),
       },
     ]
-    return listFilterGridColumns(shown, fields, options, ORG_ACTIVITY_FILTER_HEADERS)
+    return listFilterGridColumns(shown, fields, options, ACTIVITY_LIST_FILTER_HEADERS)
   }, [orgSlug, orgWide, siteLabel, fields, options])
 
   const rows = entries ?? []
@@ -376,17 +388,22 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
         ) : null}
         <ListFilterChips
           fields={fields}
-          headers={ORG_ACTIVITY_FILTER_HEADERS}
+          headers={ACTIVITY_LIST_FILTER_HEADERS}
           options={options}
           clauses={clauses}
           onChange={setClauses}
         />
+        <ListQueryNotices
+          refused={listQueryRefusals(refused, {
+            fields,
+            headers: ACTIVITY_LIST_FILTER_HEADERS,
+            options,
+          })}
+          notices={notices}
+        />
         {search ? (
           <Typography variant="caption" color="text.secondary">
-            {`The search matches the actor’s address and the name of what ` +
-              `changed. Each page looks through up to ${ORG_ACTIVITY_SEARCH_SCAN} ` +
-              'entries for matches, so a page can come back short — Next ' +
-              'carries on from where it stopped.'}
+            {ACTIVITY_SEARCH_HINT}
           </Typography>
         ) : null}
         {unreadable ? (
@@ -415,14 +432,16 @@ export function OrgActivityCard(props: OrgActivityCardProps) {
             hideFooter
             rowHeight={TABLE_ROW_HEIGHT}
             /*
-             * The grid holds ONE page of a cursor feed, so it must not filter
-             * that page and call it the answer: the panel's clauses and the
-             * search words go to the route, which puts them on its query.
+             * The grid holds ONE page of a cursor feed, so it must not filter,
+             * search or re-sort that page and call it the answer: the panel's
+             * clauses and the search words go to the route, which puts them
+             * on its query, and the feed keeps its one order.
              */
             filterMode="server"
             filterModel={gridFilter.filterModel}
             onFilterModelChange={gridFilter.onFilterModelChange}
-            {...(orgWide ? { quickFilter: true } : {})}
+            quickFilter
+            disableColumnSorting
             loading={loading}
             noRowsLabel="No activity matches these filters"
           />

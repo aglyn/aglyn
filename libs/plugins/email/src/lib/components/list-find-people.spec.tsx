@@ -36,16 +36,6 @@ import { soloConsentGroup } from '@aglyn/aglyn'
 import { ListMembersPanel } from './list-members-panel'
 
 const FIRESTORE = {}
-const NO_MEMBERS = {
-  rows: [],
-  hasMore: false,
-  page: 0,
-  setPage: () => undefined,
-  pageSize: 10,
-  setPageSize: () => undefined,
-  status: 'success',
-  fromCache: false,
-}
 
 /** How the signed-in account answers `getIdToken()` for the test at hand. */
 let mockTokenBehavior: 'mints' | 'signed-out' = 'mints'
@@ -62,8 +52,13 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
         ? { uid: 'uid-test' }
         : { uid: 'uid-test', getIdToken: mockGetIdToken },
   }),
-  usePagedCollection: () => NO_MEMBERS,
 }))
+
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() => [], jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')),
+)
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({

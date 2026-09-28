@@ -83,10 +83,14 @@ const rowFor = async (operation: string) => {
 }
 
 describe('the stranded-claim card (AGL-2329)', () => {
-  const serve = (body: unknown) => {
-    global.fetch = jest.fn(async () => ({
+  /** The summary for `?view=summary`, the list page for every other read. */
+  const serve = (body: { claims: unknown[]; summary: Record<string, unknown> }) => {
+    global.fetch = jest.fn(async (url: unknown) => ({
       ok: true,
-      json: async () => body,
+      json: async () =>
+        String(url).includes('view=summary')
+          ? body.summary
+          : { rows: body.claims, hasMore: false, nextCursor: null, refused: [], notices: [] },
     })) as unknown as typeof fetch
   }
 
@@ -115,10 +119,7 @@ describe('the stranded-claim card (AGL-2329)', () => {
           stranded: false,
         },
       ],
-      pending: 2,
-      stranded: 1,
-      strandedAfterMs: 10 * MINUTE,
-      truncated: false,
+      summary: { pending: 2, stranded: 1, untimed: 0, strandedAfterMs: 10 * MINUTE },
     })
 
     render(<IdempotencyClaimsCard />)
@@ -146,10 +147,7 @@ describe('the stranded-claim card (AGL-2329)', () => {
   it('says the queue is empty rather than rendering a bare table', async () => {
     serve({
       claims: [],
-      pending: 0,
-      stranded: 0,
-      strandedAfterMs: 10 * MINUTE,
-      truncated: false,
+      summary: { pending: 0, stranded: 0, untimed: 0, strandedAfterMs: 10 * MINUTE },
     })
     render(<IdempotencyClaimsCard />)
     expect(
@@ -169,6 +167,31 @@ describe('the stranded-claim card (AGL-2329)', () => {
     await waitFor(() =>
       expect(screen.queryByText(/Every claim taken has settled/)).toBeNull(),
     )
+  })
+
+  it('names the pending claims the age-ordered list cannot show', async () => {
+    serve({
+      claims: [],
+      summary: { pending: 3, stranded: 0, untimed: 3, strandedAfterMs: 10 * MINUTE },
+    })
+    render(<IdempotencyClaimsCard />)
+    expect(await screen.findByText(/3 pending claims carry no claim time/)).toBeTruthy()
+    // Pending claims exist, so the card must not say there are none.
+    expect(screen.queryByText(/Every claim taken has settled/)).toBeNull()
+  })
+
+  it('sends the Filters panel to the route, which serves it on the query', async () => {
+    serve({
+      claims: [],
+      summary: { pending: 1, stranded: 1, untimed: 0, strandedAfterMs: 10 * MINUTE },
+    })
+    render(<IdempotencyClaimsCard />)
+    await screen.findByText('1 in flight or stuck')
+    const listed = (global.fetch as jest.Mock).mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => !url.includes('view=summary'))
+    expect(listed.length).toBeGreaterThan(0)
+    expect(listed[0]).toMatch(/\/api\/admin\/idempotency-claims\?pageSize=/)
   })
 
   it('formats an age in units an operator reads', () => {

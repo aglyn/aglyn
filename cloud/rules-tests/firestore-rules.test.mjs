@@ -40,6 +40,8 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  documentId,
+  getCountFromServer,
   getDoc,
   getDocs,
   limit,
@@ -3604,22 +3606,23 @@ describe('hosts', () => {
         { uid: VIEWER, rating: 5 },
       )
     })
-    // An org manager may edit their own listing's metadata.
+    // An org manager may edit their own listing's metadata. (Its copy — the
+    // name is written through the publish API since AGL-3321.)
     await assertSucceeds(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', 'listing-rated'), {
-        displayName: 'Renamed',
+        description: 'Reworded',
       }),
     )
     // A non-manager member of the same org may not.
     await assertFails(
       updateDoc(doc(authed(VIEWER), 'marketplaceListings', 'listing-rated'), {
-        displayName: 'Nope',
+        description: 'Nope',
       }),
     )
     // Nor may an outsider.
     await assertFails(
       updateDoc(doc(authed(OUTSIDER), 'marketplaceListings', 'listing-rated'), {
-        displayName: 'Nope',
+        description: 'Nope',
       }),
     )
     // Even the owner cannot invent a rating. Values must DIFFER from the
@@ -4527,6 +4530,19 @@ describe('campaigns and their sends belong to the org (AGL-3273)', () => {
         ),
       ),
     )
+    await mustDeny(
+      'a collaborator listing a sibling site\'s sends by hostId',
+      getDocs(
+        query(
+          collection(db, 'orgs', ORG, 'campaigns'),
+          where('hostId', '==', OTHER_HOST),
+        ),
+      ),
+    )
+    await mustDeny(
+      'a collaborator listing every send unfiltered',
+      getDocs(collection(db, 'orgs', ORG, 'campaigns')),
+    )
     for (const uid of [EDITOR, OWNER]) {
       await mustDeny(
         `forging a send's counters as ${uid}`,
@@ -4567,6 +4583,144 @@ describe('campaigns and their sends belong to the org (AGL-3273)', () => {
     await mustDeny(
       'an outsider reading a send',
       getDoc(doc(db, 'orgs', ORG, 'campaigns', 's-mine')),
+    )
+  })
+})
+
+/**
+ * The Marketing lists' queries, each shape exactly as a SITE COLLABORATOR
+ * runs it (AGL-3321): the Campaigns list's two kinds, a campaign's emails,
+ * the Emails list, and the figures each reads beside them.
+ *
+ * A send is proven through its `hostId` — an equality, so the lists' search
+ * keeps the query's one array clause. A campaign is proven through
+ * `visibleTo`, so a site's campaign search is a NAME RANGE beside that
+ * clause, never the folded scoped-token search: a query on another array
+ * field proves nothing about `visibleTo`, and the rules refuse it.
+ */
+describe('the Marketing lists as a site collaborator runs them (AGL-3321)', () => {
+  const OTHER_HOST = 'host-other'
+  const SCOPE = ['org', `host:${HOST}`]
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-mine'), {
+        name: 'Spring launch', nameLower: 'spring launch', nameTokens: ['s', 'sp', 'spr'],
+        visibleTo: [`host:${HOST}`], createdAtMs: 2, listIds: [],
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'emailCampaigns', 'c-theirs'), {
+        name: 'Spring sibling', nameLower: 'spring sibling', nameTokens: ['s', 'sp', 'spr'],
+        visibleTo: [`host:${OTHER_HOST}`], createdAtMs: 3, listIds: [],
+      })
+      for (const [id, hostId, emailCampaignId] of [
+        ['s-mine', HOST, 'c-mine'],
+        ['s-single', HOST, null],
+        ['s-theirs', OTHER_HOST, null],
+      ]) {
+        await setDoc(doc(db, 'orgs', ORG, 'campaigns', id), {
+          subject: 'Hello', subjectTokens: ['h', 'he', 'hel'], status: 'sent',
+          hostId, visibleTo: [`host:${hostId}`], emailCampaignId, createdAtMs: 1,
+        })
+      }
+    })
+  })
+
+  const campaigns = (...constraints) =>
+    getDocs(query(collection(authed(EDITOR), 'orgs', ORG, 'emailCampaigns'), ...constraints))
+  const sends = (...constraints) =>
+    getDocs(query(collection(authed(EDITOR), 'orgs', ORG, 'campaigns'), ...constraints))
+  const scoped = () => where('visibleTo', 'array-contains-any', SCOPE)
+  const mine = () => where('hostId', '==', HOST)
+  const newest = () => orderBy('createdAtMs', 'desc')
+
+  it('pages, filters and searches a site\'s campaigns', async () => {
+    await mustAllow('the campaigns page', campaigns(scoped(), newest(), limit(11)))
+    await mustAllow(
+      'Created on or after',
+      campaigns(scoped(), where('createdAtMs', '>=', 1), newest(), limit(11)),
+    )
+    await mustAllow(
+      'the search, as the start of the name',
+      campaigns(
+        scoped(),
+        where('nameLower', '>=', 'spr'),
+        where('nameLower', '<=', 'spr'),
+        orderBy('nameLower', 'asc'),
+        limit(11),
+      ),
+    )
+    await mustDeny(
+      'the search folded into scoped tokens, which proves nothing about visibleTo',
+      campaigns(
+        where('nameScopedTokens', 'array-contains-any', ['org~spr', `host:${HOST}~spr`]),
+        newest(),
+        limit(11),
+      ),
+    )
+    await mustDeny(
+      'a campaign name range with no scope',
+      campaigns(where('nameLower', '>=', 'spr'), orderBy('nameLower', 'asc')),
+    )
+  })
+
+  it('pages, filters and searches the site\'s emails', async () => {
+    await mustAllow('the emails page', sends(mine(), newest(), limit(11)))
+    await mustAllow(
+      'the search',
+      sends(mine(), where('subjectTokens', 'array-contains', 'hel'), newest(), limit(11)),
+    )
+    await mustAllow('Status is', sends(mine(), where('status', '==', 'sent'), newest()))
+    await mustAllow(
+      'Status is any of',
+      sends(mine(), where('status', 'in', ['sent', 'draft']), newest()),
+    )
+    await mustAllow('Campaign is', sends(mine(), where('emailCampaignId', '==', 'c-mine'), newest()))
+    await mustAllow('Campaign is Single send', sends(mine(), where('emailCampaignId', '==', null), newest()))
+    await mustAllow(
+      'Created on or before',
+      sends(mine(), where('createdAtMs', '<', 5), newest(), limit(11)),
+    )
+    await mustDeny(
+      'a sibling site\'s emails',
+      sends(where('hostId', '==', OTHER_HOST), newest(), limit(11)),
+    )
+  })
+
+  it('lists a campaign\'s emails, the single sends, and the figures beside them', async () => {
+    await mustAllow(
+      'a campaign\'s emails, searched and filtered',
+      sends(
+        where('emailCampaignId', '==', 'c-mine'),
+        mine(),
+        where('subjectTokens', 'array-contains', 'hel'),
+        where('status', 'in', ['sent']),
+        newest(),
+        limit(11),
+      ),
+    )
+    await mustAllow(
+      'the single sends, searched, in a date range',
+      sends(
+        where('emailCampaignId', '==', null),
+        mine(),
+        where('subjectTokens', 'array-contains', 'hel'),
+        where('createdAtMs', '>=', 0),
+        newest(),
+        limit(11),
+      ),
+    )
+    await mustAllow(
+      'the figures of the campaigns on a page',
+      sends(where('emailCampaignId', 'in', ['c-mine']), mine(), orderBy(documentId()), limit(51)),
+    )
+    await mustAllow(
+      'the figures on a campaign\'s own page',
+      sends(
+        where('visibleTo', 'array-contains-any', [`host:${HOST}`]),
+        where('emailCampaignId', '==', 'c-mine'),
+        orderBy(documentId()),
+        limit(51),
+      ),
     )
   })
 })
@@ -4739,6 +4893,29 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
     await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-org')))
     await assertSucceeds(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-mine')))
     await assertFails(getDoc(doc(db, 'orgs', ORG, 'datasets', 'ds-theirs')))
+  })
+
+  it('a collaborator runs the records table’s query on their own site’s dataset, and not another’s (AGL-3321)', async () => {
+    // The one query the records table issues: `filterValues` equalities and
+    // one `filterKeys` clause under the document-id order. The rule reads the
+    // PARENT dataset's scope, so the clauses neither widen nor narrow it.
+    const recordsQuery = (datasetId) =>
+      query(
+        collection(authed(EDITOR), 'orgs', ORG, 'datasets', datasetId, 'records'),
+        where('filterValues.status', '==', 'open'),
+        where('filterKeys', 'array-contains', 's:ope'),
+        orderBy(documentId()),
+      )
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG, 'datasets', 'ds-mine', 'records', 'r2'), {
+        values: { status: 'open' },
+        filterValues: { status: 'open' },
+        filterKeys: ['f:status=open', 's:o', 's:op', 's:ope', 's:open'],
+      })
+    })
+    const snapshot = await assertSucceeds(getDocs(recordsQuery('ds-mine')))
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['r2'])
+    await assertFails(getDocs(recordsQuery('ds-theirs')))
   })
 
   it('a doc with NO visibleTo is DENIED — fail closed (AGL-1047)', async () => {
@@ -4932,6 +5109,111 @@ describe('scoped datasets, media and folders (AGL-1041/1042)', () => {
         query(
           collection(db, 'orgs', ORG, 'media'),
           where('visibleTo', 'array-contains-any', ['org', `host:${HOST}`]),
+        ),
+      ),
+    )
+  })
+
+  /**
+   * The media library's served filters and search, as each reader's query
+   * actually runs (AGL-3327). Every fixture below carries the keys the query
+   * asks for, because a list no document can match is allowed vacuously and
+   * would prove nothing.
+   */
+  it('the media library filters and searches the way the rules can prove (AGL-3327)', async () => {
+    const at = new Date('2026-09-20T12:00:00Z')
+    const keys = (visibleTo) => ({
+      url: 'u', createdAt: at, sizeBytes: 1000, folderId: null, visibleTo,
+      kind: 'image', hasAlt: false, orientation: 'landscape',
+      nameLower: 'hero.png', nameTokens: ['h', 'he', 'her', 'hero', 'p', 'pn', 'png'],
+      // What a search folded into the scope clause would need stamped.
+      scopedNameTokens: visibleTo.map((scope) => `${scope}~hero`),
+    })
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'me-hero-mine'), keys([`host:${HOST}`]))
+      await setDoc(doc(db, 'orgs', ORG, 'media', 'me-hero-theirs'), keys([`host:${OTHER_HOST}`]))
+      await setDoc(doc(db, 'hosts', HOST, 'media', 'site-hero'), keys([]))
+    })
+    const scope = where('visibleTo', 'array-contains-any', ['org', `host:${HOST}`])
+    const orgMedia = (uid) => collection(authed(uid), 'orgs', ORG, 'media')
+
+    // A collaborator's filters: every equality and one range beside the
+    // scope clause, and only their own site's file comes back.
+    const filtered = await getDocs(
+      query(
+        orgMedia(EDITOR),
+        scope,
+        where('folderId', '==', null),
+        where('kind', '==', 'image'),
+        where('hasAlt', '==', false),
+        where('orientation', 'in', ['landscape', 'square']),
+        where('createdAt', '>=', new Date('2026-09-01T00:00:00Z')),
+        orderBy('createdAt', 'desc'),
+        limit(60),
+      ),
+    ).catch((error) => assert.fail(`a collaborator's filtered media list was denied: ${error}`))
+    assert.deepEqual(filtered.docs.map((snapshot) => snapshot.id), ['me-hero-mine'])
+
+    // A collaborator's search: a name range beside the scope clause.
+    await mustAllow(
+      "a collaborator's media search, as a name range beside the scope",
+      getDocs(
+        query(
+          orgMedia(EDITOR),
+          scope,
+          where('nameLower', '>=', 'her'),
+          where('nameLower', '<=', 'her\uf8ff'),
+          orderBy('nameLower', 'asc'),
+          limit(60),
+        ),
+      ),
+    )
+    // Why it is not the folded search: a query on the scoped tokens says
+    // nothing about `visibleTo`, which is what the rules read.
+    await mustDeny(
+      "a collaborator's media search folded into scoped tokens",
+      getDocs(
+        query(
+          orgMedia(EDITOR),
+          where('scopedNameTokens', 'array-contains-any', ['org~hero', `host:${HOST}~hero`]),
+          orderBy('createdAt', 'desc'),
+          limit(60),
+        ),
+      ),
+    )
+    await mustDeny(
+      "a collaborator's token search without the scope clause",
+      getDocs(query(orgMedia(EDITOR), where('nameTokens', 'array-contains', 'hero'), limit(60))),
+    )
+
+    // An org-wide member searches by word, with any filter beside it.
+    for (const uid of [OWNER, VIEWER]) {
+      await mustAllow(
+        `an org-wide member's media search (${uid})`,
+        getDocs(
+          query(
+            orgMedia(uid),
+            where('nameTokens', 'array-contains', 'hero'),
+            where('kind', '==', 'image'),
+            where('uploadedBy', 'in', ['u1', 'u2']),
+            orderBy('createdAt', 'desc'),
+            limit(60),
+          ),
+        ),
+      )
+    }
+
+    // A site's own library carries no scope clause: its members search it.
+    await mustAllow(
+      "a site member's search of the site library",
+      getDocs(
+        query(
+          collection(authed(EDITOR), 'hosts', HOST, 'media'),
+          where('nameTokens', 'array-contains', 'hero'),
+          where('orientation', '==', 'landscape'),
+          orderBy('createdAt', 'desc'),
+          limit(60),
         ),
       ),
     )
@@ -5348,9 +5630,32 @@ describe('pre-release hardening guards', () => {
   })
 
   it('listing owner cannot tamper server-managed fields (AGL-503)', async () => {
-    await assertSucceeds(
-      updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), { deletedAt: new Date() }),
-    )
+    // Unpublishing, renaming and going private go through the publish API
+    // since AGL-3321, which re-derives what the marketplace lists query by.
+    for (const field of [
+      { deletedAt: new Date() },
+      { displayName: 'Plugin v2' },
+      { visibility: 'public' },
+    ]) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),
+      )
+    }
+    // The derived fields themselves (AGL-3321): `browseAudience` decides who
+    // browse shows a listing to, so a publisher who could write it could put
+    // an unreviewed plugin on the public shelf.
+    for (const field of [
+      { browseAudience: ['*'] },
+      { browseTokens: ['*~plug'] },
+      { nameTokens: ['p'] },
+      { nameLower: 'plugin' },
+      { nameReversed: 'nigulp' },
+      { takenDown: false },
+    ]) {
+      await assertFails(
+        updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), field),
+      )
+    }
     await assertFails(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), { installCount: 9999 }),
     )
@@ -5428,12 +5733,12 @@ describe('pre-release hardening guards', () => {
     // the deny-list is that it names what is server-owned, not everything.
     await assertSucceeds(
       updateDoc(doc(authed(OWNER), 'marketplaceListings', LISTING), {
-        displayName: 'Plugin v2', readme: '# Docs', license: 'MIT',
+        description: 'Plugin v2', readme: '# Docs', license: 'MIT',
       }),
     )
     // Non-owners still can't touch someone else's listing.
     await assertFails(
-      updateDoc(doc(authed(EDITOR), 'marketplaceListings', LISTING), { deletedAt: new Date() }),
+      updateDoc(doc(authed(EDITOR), 'marketplaceListings', LISTING), { readme: '# Mine' }),
     )
   })
 
@@ -9489,6 +9794,285 @@ describe('contacts are per-site, and letting go of one is not a delete', () => {
 })
 
 /**
+ * EVERY QUERY SHAPE THE CRM LISTS ISSUE, AS THE RULES JUDGE IT (AGL-3321).
+ *
+ * Each list puts its filters and search on one query. A reader whose access
+ * is some sites (`EDITOR`) always keeps the `visibleTo array-contains-any`
+ * scope clause, which is what `canReadScoped()` proves a list from; the
+ * other clauses ride beside it. An ORG-WIDE reader (`OWNER`) may drop it —
+ * the rules short-circuit on `isOrgWideMember()` — which is when a list
+ * folds its search into `scopedSearchTokens`, asks a holder's facet key or a
+ * site's campaign in the scope clause's place. The same unscoped shapes are
+ * DENIED to the scoped reader, which is why the list never sends them one:
+ * a query on the scoped-token field says nothing the rules can check
+ * against `visibleTo`.
+ */
+describe('the CRM lists’ query shapes (AGL-3321)', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+  const contacts = (uid) => collection(authed(uid), 'orgs', ORG, 'contacts')
+  const leads = (uid) => collection(authed(uid), 'orgs', ORG, 'leads')
+  const companies = (uid) => collection(authed(uid), 'orgs', ORG, 'companies')
+  const deals = (uid) => collection(authed(uid), 'orgs', ORG, 'deals')
+  const tasks = (uid) => collection(authed(uid), 'orgs', ORG, 'crmTasks')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      for (const [id, scope] of [['mine', MINE], ['theirs', THEIRS]]) {
+        await setDoc(doc(db, 'orgs', ORG, 'contacts', id), {
+          email: `${id}@acme.test`,
+          name: 'Acme Buyer',
+          nameLower: 'acme buyer',
+          createdAt: new Date(1),
+          visibleTo: [scope],
+          searchTokens: ['a', 'ac', 'acm', 'acme'],
+          scopedSearchTokens: [`${scope}~acm`],
+          facetKeys: [`${scope.slice(5)}:owner=uid-owner`, '*:owner=uid-owner'],
+          emailStatus: 'none',
+          nextTaskAtMs: null,
+          updatedAt: new Date(1),
+        })
+        await setDoc(doc(db, 'orgs', ORG, 'leads', id), {
+          email: `${id}@acme.test`,
+          visibleTo: [scope],
+          status: 'new',
+          emailStatus: 'none',
+          leadSourceKey: null,
+          campaignIds: ['spring'],
+          scopedCampaignIds: [`${scope}~spring`],
+          scopedSearchTokens: [`${scope}~acm`],
+          lastSeenAtMs: 1,
+        })
+        await setDoc(doc(db, 'orgs', ORG, 'companies', id), {
+          name: 'Acme', nameLower: 'acme', ownerUid: 'uid-owner', visibleTo: [scope],
+          nextTaskAtMs: null, updatedAt: new Date(1),
+        })
+        await setDoc(doc(db, 'orgs', ORG, 'deals', id), {
+          title: 'Acme renewal', titleLower: 'acme renewal', pipelineId: 'sales', status: 'open', visibleTo: [scope],
+          nextTaskAtMs: null, updatedAt: new Date(1),
+        })
+        await setDoc(doc(db, 'orgs', ORG, 'crmTasks', id), {
+          title: 'Call Acme', status: 'open', kind: 'call', priority: 'high', visibleTo: [scope],
+          dueAtMs: 5,
+        })
+      }
+    })
+  })
+
+  it('admits the scoped reader every shape it sends: the scope clause and what rides beside it', async () => {
+    const scope = where('visibleTo', 'array-contains-any', ['org', MINE])
+    for (const [label, shape] of [
+      ['contacts by verdict', query(contacts(EDITOR), scope, where('emailStatus', '==', 'none'), orderBy('updatedAt', 'desc'))],
+      ['contacts with nothing scheduled', query(contacts(EDITOR), scope, where('nextTaskAtMs', '==', null), orderBy('updatedAt', 'desc'))],
+      ['contacts changed since a day', query(contacts(EDITOR), scope, where('updatedAt', '>=', new Date(0)), orderBy('updatedAt', 'desc'))],
+      ['open leads', query(leads(EDITOR), scope, where('status', 'in', ['new', 'working']), orderBy('lastSeenAtMs', 'desc'))],
+      ['leads with no lead source', query(leads(EDITOR), scope, where('leadSourceKey', '==', null), orderBy('lastSeenAtMs', 'desc'))],
+      ['companies by owner', query(companies(EDITOR), scope, where('ownerUid', 'in', ['uid-owner']), orderBy('updatedAt', 'desc'))],
+      ['companies by a name prefix', query(companies(EDITOR), scope, where('nameLower', '>=', 'ac'), where('nameLower', '<=', 'ac\uf8ff'), orderBy('nameLower', 'asc'))],
+      ['a pipeline’s open deals', query(deals(EDITOR), scope, where('pipelineId', '==', 'sales'), where('status', '==', 'open'), orderBy('updatedAt', 'desc'))],
+      ['open calls due soon', query(tasks(EDITOR), scope, where('status', '==', 'open'), where('kind', '==', 'call'), where('dueAtMs', '>=', 0), orderBy('dueAtMs', 'asc'))],
+      // A collaborator's search: the start of the name, address or title,
+      // beside the scope clause.
+      ['contacts by a name prefix', query(contacts(EDITOR), scope, where('nameLower', '>=', 'acm'), where('nameLower', '<=', 'acm\uf8ff'), orderBy('nameLower', 'asc'))],
+      ['open leads by an address prefix', query(leads(EDITOR), scope, where('status', 'in', ['new', 'working']), where('email', '>=', 'min'), where('email', '<=', 'min\uf8ff'), orderBy('email', 'asc'))],
+      ['deals by a title prefix', query(deals(EDITOR), scope, where('pipelineId', '==', 'sales'), where('titleLower', '>=', 'acme'), where('titleLower', '<=', 'acme\uf8ff'), orderBy('titleLower', 'asc'))],
+      // A solo range, beside the scope clause alone.
+      ['contacts created since', query(contacts(EDITOR), scope, where('createdAt', '>=', new Date(0)), orderBy('createdAt', 'desc'))],
+    ]) {
+      const answer = await assertSucceeds(getDocs(shape))
+      assert.deepEqual(answer.docs.map((entry) => entry.id), ['mine'], label)
+    }
+  })
+
+  it('denies the scoped reader the unscoped shapes an org-wide reader may send', async () => {
+    await assertFails(
+      getDocs(query(contacts(EDITOR), where('scopedSearchTokens', 'array-contains-any', ['org~acm', `${MINE}~acm`]))),
+    )
+    await assertFails(
+      getDocs(query(contacts(EDITOR), where('facetKeys', 'array-contains', `${HOST}:owner=uid-owner`))),
+    )
+    await assertFails(
+      getDocs(query(leads(EDITOR), where('scopedCampaignIds', 'array-contains-any', ['org~spring', `${MINE}~spring`]))),
+    )
+  })
+
+  it('admits the org-wide reader the folded search, the facet key and the scoped campaign', async () => {
+    const folded = await assertSucceeds(
+      getDocs(
+        query(
+          contacts(OWNER),
+          where('scopedSearchTokens', 'array-contains-any', ['org~acm', `${MINE}~acm`]),
+          orderBy('updatedAt', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(folded.docs.map((entry) => entry.id), ['mine'])
+    const facet = await assertSucceeds(
+      getDocs(query(contacts(OWNER), where('facetKeys', 'array-contains', '*:owner=uid-owner'), orderBy('updatedAt', 'desc'))),
+    )
+    assert.deepEqual(facet.docs.map((entry) => entry.id).sort(), ['mine', 'theirs'])
+    const campaign = await assertSucceeds(
+      getDocs(
+        query(
+          leads(OWNER),
+          where('scopedCampaignIds', 'array-contains-any', ['org~spring', `${MINE}~spring`]),
+          orderBy('lastSeenAtMs', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(campaign.docs.map((entry) => entry.id), ['mine'])
+  })
+
+  it('keeps a lead’s verdict key the platform’s, as its verdict is', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'orgs', ORG), { plan: 'starter' }, { merge: true })
+    })
+    await assertFails(updateDoc(doc(authed(OWNER), 'orgs', ORG, 'leads', 'mine'), { emailStatus: 'ok' }))
+    // THE CONTROL: the status beside it is still the member's to set.
+    await assertSucceeds(updateDoc(doc(authed(OWNER), 'orgs', ORG, 'leads', 'mine'), { status: 'working' }))
+  })
+})
+
+/**
+ * THE INBOX'S LISTS ASK WHAT THE RULES CAN PROVE (AGL-3321).
+ *
+ * Every Inbox filter and search is a predicate on the list's query, so each
+ * query shape the cards send is one the rules must admit as the real reader
+ * runs it — and the one they cannot is not sent. A site's Leads list keeps
+ * its `visibleTo` clause beside an Email equality for a collaborator, and
+ * folds a search into that clause (`scopedSearchTokens`) only for an
+ * org-wide member: a query without `visibleTo` proves nothing about a
+ * scoped reader's reach, so it is refused to them, which is why the card
+ * refuses their search by name instead of sending it.
+ */
+describe('the Inbox’s lists ask what the rules can prove (AGL-3321)', () => {
+  const MINE = `host:${HOST}`
+  const THEIRS = 'host:host-b'
+  const createdAt = new Date('2026-09-20T12:00:00Z')
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'lead-mine'), {
+        email: 'dana@acme.test',
+        visibleTo: [MINE],
+        searchTokens: ['d', 'da', 'dan', 'dana'],
+        scopedSearchTokens: [`${MINE}~d`, `${MINE}~da`, `${MINE}~dan`, `${MINE}~dana`],
+        createdAt,
+      })
+      await setDoc(doc(db, 'orgs', ORG, 'leads', 'lead-theirs'), {
+        email: 'dana@acme.test',
+        visibleTo: [THEIRS],
+        searchTokens: ['d', 'da', 'dan', 'dana'],
+        scopedSearchTokens: [`${THEIRS}~d`, `${THEIRS}~da`, `${THEIRS}~dan`, `${THEIRS}~dana`],
+        createdAt,
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'siteMembers', 'member-ada'), {
+        email: 'ada@acme.test',
+        searchTokens: ['a', 'ad', 'ada'],
+        createdAt,
+      })
+      await setDoc(doc(db, 'hosts', HOST, 'formSubmissions', 'fs-inbox'), {
+        orgId: ORG,
+        hostId: HOST,
+        fields: { email: 'visitor@acme.test' },
+        senderTokens: ['v', 'vi'],
+        searchTokens: ['v', 'vi'],
+        read: false,
+        createdAt,
+      })
+    })
+  })
+
+  const leads = (uid) => collection(authed(uid), 'orgs', ORG, 'leads')
+
+  it('admits a collaborator’s scoped Leads list with an Email equality', async () => {
+    const snapshot = await assertSucceeds(
+      getDocs(
+        query(
+          leads(EDITOR),
+          where('visibleTo', 'array-contains-any', ['org', MINE]),
+          where('email', '==', 'dana@acme.test'),
+          orderBy('createdAt', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['lead-mine'])
+  })
+
+  it('refuses a collaborator the folded search, and admits it to an org-wide member', async () => {
+    const folded = (uid) =>
+      query(
+        leads(uid),
+        where('scopedSearchTokens', 'array-contains-any', ['org~dana', `${MINE}~dana`]),
+        orderBy('createdAt', 'desc'),
+      )
+    // No `visibleTo` clause proves nothing about a scoped reader's reach.
+    await assertFails(getDocs(folded(EDITOR)))
+    // THE CONTROL: the same query, as the org, answers this site's lead only.
+    const snapshot = await assertSucceeds(getDocs(folded(OWNER)))
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['lead-mine'])
+  })
+
+  it('admits a collaborator’s search as an address prefix beside the scope clause', async () => {
+    // What the Leads list asks for a reader whose reach is some sites: the
+    // scope clause stays, and the search is a range on the stored address.
+    const snapshot = await assertSucceeds(
+      getDocs(
+        query(
+          leads(EDITOR),
+          where('visibleTo', 'array-contains-any', ['org', MINE]),
+          where('email', '>=', 'dan'),
+          where('email', '<=', 'dan\uf8ff'),
+          orderBy('email', 'asc'),
+        ),
+      ),
+    )
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['lead-mine'])
+  })
+
+  it('admits a site member’s Members list with its Email and name clauses', async () => {
+    const members = collection(authed(EDITOR), 'hosts', HOST, 'siteMembers')
+    await assertSucceeds(
+      getDocs(query(members, where('email', '==', 'ada@acme.test'), orderBy('createdAt', 'desc'))),
+    )
+    await assertSucceeds(
+      getDocs(
+        query(members, where('searchTokens', 'array-contains', 'ad'), orderBy('createdAt', 'desc')),
+      ),
+    )
+  })
+
+  it('admits the org Inbox’s group query with Read, Site and the search beside the org clause', async () => {
+    const snapshot = await assertSucceeds(
+      getDocs(
+        query(
+          collectionGroup(authed(OWNER), 'formSubmissions'),
+          where('orgId', '==', ORG),
+          where('read', '==', false),
+          where('hostId', '==', HOST),
+          where('searchTokens', 'array-contains', 'vi'),
+          orderBy('createdAt', 'desc'),
+        ),
+      ),
+    )
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['fs-inbox'])
+    // And a site's own list, by a collaborator on it.
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(authed(EDITOR), 'hosts', HOST, 'formSubmissions'),
+          where('senderTokens', 'array-contains', 'vi'),
+          where('read', '==', false),
+          orderBy('createdAt', 'desc'),
+        ),
+      ),
+    )
+  })
+})
+
+/**
  * READING THE CRM IS AN AUTHORITY, NOT A MEMBERSHIP.
  *
  * `contacts` and `contactSegments` asked `canReadScoped()` and nothing else,
@@ -11433,6 +12017,184 @@ describe("a site member's password hash is no client's (AGL-3308)", () => {
       hostServerOnlySubcollections().includes('siteMemberCredentials'),
       '`siteMemberCredentials` is no longer denied outright — something ' +
         're-grants it.',
+    )
+  })
+})
+
+/**
+ * The Forms list's queries, each as a site member runs it (AGL-3330).
+ *
+ * The list (`libs/plugins/forms/src/lib/components/form-list-query.ts`) puts
+ * every filter and the search on one Firestore query, and a list query is
+ * allowed only if the rules can prove every document it could return is
+ * readable. Forms are read at SITE level (`isHostMember`), with no
+ * per-document condition, so each shape below must be allowed for every
+ * member role and refused for a stranger. The search is the plain
+ * `searchTokens` array, not a scoped token field: a site-level read has no
+ * scope clause to fold it into.
+ *
+ * Every fixture carries the keys the queries ask for, because a query no
+ * document can match is allowed vacuously and would prove nothing; the
+ * first case asserts the rows that come back.
+ */
+describe('the Forms list filters and searches the way the rules can prove (AGL-3330)', () => {
+  const stored = (id, displayName, stats, extra = {}) => ({
+    displayName,
+    slug: displayName.toLowerCase().replace(/\s+/g, '-'),
+    nameLower: displayName.toLowerCase(),
+    nameTokens: displayName.toLowerCase().split(' ').flatMap((word) =>
+      [...word].map((_, end) => word.slice(0, end + 1)),
+    ),
+    nameReversed: [...displayName.toLowerCase()].reverse().join(''),
+    searchTokens: displayName.toLowerCase().split(' ').flatMap((word) =>
+      [...word].map((_, end) => word.slice(0, end + 1)),
+    ),
+    retired: false,
+    routing: { lead: true },
+    campaignIds: ['cmp-fall'],
+    stats,
+    updatedAt: new Date('2026-09-21T12:00:00Z'),
+    ...extra,
+  })
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(
+        doc(db, 'hosts', HOST, 'forms', 'form-contact'),
+        stored('form-contact', 'Contact', {
+          submissions: 5, leads: 4, lastSubmissionAtMs: Date.parse('2026-09-07T12:00:00Z'),
+        }),
+      )
+      await setDoc(
+        doc(db, 'hosts', HOST, 'forms', 'form-demo'),
+        stored('form-demo', 'Demo request', {
+          submissions: 1, leads: 1, lastSubmissionAtMs: Date.parse('2026-09-01T12:00:00Z'),
+        }),
+      )
+      await setDoc(
+        doc(db, 'hosts', HOST, 'forms', 'form-audit'),
+        stored('form-audit', 'Multi-brand site audit', {
+          submissions: null, leads: null, lastSubmissionAtMs: null,
+        }),
+      )
+      await setDoc(
+        doc(db, 'hosts', HOST, 'forms', 'form-retired'),
+        stored('form-retired', 'Launch notification', {
+          submissions: null, leads: null, lastSubmissionAtMs: null,
+        }, { retired: true, archivedAt: 1788811670330, routing: { lead: false }, campaignIds: [] }),
+      )
+    })
+  })
+
+  const forms = (db) => collection(db, 'hosts', HOST, 'forms')
+  const inUse = where('retired', '==', false)
+  /** Each shape the list's plan can put on the query, by what the reader asked. */
+  const shapes = (db) => [
+    ['the forms in use, in document order', query(forms(db), inUse, orderBy('__name__'), limit(25))],
+    ['the search box', query(forms(db), inUse, where('searchTokens', 'array-contains', 'demo'), limit(25))],
+    ['Submissions > 1', query(forms(db), inUse, where('stats.submissions', '>', 1), orderBy('stats.submissions', 'asc'), limit(25))],
+    ['Submissions is empty', query(forms(db), inUse, where('stats.submissions', '==', null), limit(25))],
+    ['Leads = 0', query(forms(db), inUse, where('stats.leads', '==', 0), limit(25))],
+    ['Leads is empty', query(forms(db), inUse, where('stats.leads', '==', null), limit(25))],
+    ['Last submission after Sep 10', query(forms(db), inUse, where('stats.lastSubmissionAtMs', '>=', Date.parse('2026-09-11T00:00:00Z')), orderBy('stats.lastSubmissionAtMs', 'desc'), limit(25))],
+    ['Updated before Sep 30', query(forms(db), inUse, where('updatedAt', '<', new Date('2026-09-30T00:00:00Z')), orderBy('updatedAt', 'desc'), limit(25))],
+    ['Status is Retired', query(forms(db), where('retired', '==', true), limit(25))],
+    ['Lead routing is off', query(forms(db), inUse, where('routing.lead', '==', false), limit(25))],
+    ['Campaign is any of', query(forms(db), inUse, where('campaignIds', 'array-contains-any', ['cmp-fall', 'cmp-spring']), limit(25))],
+    ['Slug equals', query(forms(db), inUse, where('slug', '==', 'contact'), limit(25))],
+    ['Display name contains', query(forms(db), inUse, where('nameTokens', 'array-contains', 'audit'), limit(25))],
+    ['a range beside every kind of equality', query(
+      forms(db), inUse,
+      where('searchTokens', 'array-contains', 'c'),
+      where('routing.lead', '==', true),
+      where('slug', '==', 'contact'),
+      where('stats.submissions', '>', 1),
+      orderBy('stats.submissions', 'asc'),
+      limit(25),
+    )],
+  ]
+
+  it('answers a site member with the rows the query names', async () => {
+    const [, overOne] = shapes(authed(EDITOR))[2]
+    const snapshot = await getDocs(overOne)
+      .catch((error) => assert.fail(`an editor's Submissions > 1 was denied: ${error}`))
+    assert.deepEqual(snapshot.docs.map((entry) => entry.id), ['form-contact'])
+    const [, empty] = shapes(authed(EDITOR))[5]
+    assert.deepEqual((await getDocs(empty)).docs.map((entry) => entry.id), ['form-audit'])
+  })
+
+  for (const [role, uid] of [['owner', OWNER], ['editor', EDITOR], ['author', AUTHOR], ['viewer', VIEWER]]) {
+    it(`allows every Forms list shape for a site ${role}`, async () => {
+      for (const [label, shape] of shapes(authed(uid))) {
+        await mustAllow(`a site ${role}'s Forms list — ${label}`, getDocs(shape))
+      }
+      await mustAllow(
+        `a site ${role}'s retired-forms count`,
+        getCountFromServer(query(forms(authed(uid)), where('retired', '==', true))),
+      )
+    })
+  }
+
+  it('refuses every Forms list shape to a stranger and to a signed-out reader', async () => {
+    for (const [label, shape] of shapes(authed(OUTSIDER))) {
+      await mustDeny(`an outsider's Forms list — ${label}`, getDocs(shape))
+    }
+    for (const [label, shape] of shapes(anon())) {
+      await mustDeny(`a signed-out Forms list — ${label}`, getDocs(shape))
+    }
+  })
+
+  it('lets an editor retire and rename a form with its list keys, and never write its counters', async () => {
+    const ref = doc(authed(EDITOR), 'hosts', HOST, 'forms', 'form-demo')
+    await mustAllow(
+      "an editor's retire, with the mirror the list asks",
+      updateDoc(ref, { archivedAt: Date.now(), retired: true }),
+    )
+    await mustAllow(
+      "an editor's rename, with the keys the list searches",
+      updateDoc(ref, {
+        displayName: 'Book a demo',
+        nameLower: 'book a demo',
+        nameTokens: ['b', 'bo', 'boo', 'book', 'a', 'd', 'de', 'dem', 'demo'],
+        nameReversed: 'omed a koob',
+        searchTokens: ['b', 'bo', 'boo', 'book', 'a', 'd', 'de', 'dem', 'demo'],
+      }),
+    )
+    await mustDeny(
+      "an editor's write to the counters the list filters by",
+      updateDoc(ref, { 'stats.submissions': 99 }),
+    )
+    // The mirror cannot come apart from the fact it mirrors, either way.
+    await mustDeny(
+      "an editor's restore that leaves the list's mirror saying retired",
+      updateDoc(ref, { archivedAt: null }),
+    )
+    await mustDeny(
+      "an editor's write of the mirror alone",
+      updateDoc(ref, { retired: false }),
+    )
+    await mustAllow(
+      "an editor's restore, with the mirror",
+      updateDoc(ref, { archivedAt: null, retired: false }),
+    )
+    await mustAllow(
+      "an editor's edit that touches neither",
+      updateDoc(ref, { consentFieldName: 'consent' }),
+    )
+  })
+
+  it('lets an editor edit a form the backfill has not reached yet', async () => {
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'hosts', HOST, 'forms', 'form-legacy'), {
+        displayName: 'Legacy', slug: 'legacy',
+      })
+    })
+    const ref = doc(authed(EDITOR), 'hosts', HOST, 'forms', 'form-legacy')
+    await mustAllow("an editor's edit of a form with no mirror", updateDoc(ref, { consentFieldName: 'c' }))
+    await mustAllow(
+      "an editor's retire of a form with no mirror",
+      updateDoc(ref, { archivedAt: Date.now(), retired: true }),
     )
   })
 })

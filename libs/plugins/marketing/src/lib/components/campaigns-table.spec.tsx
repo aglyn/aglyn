@@ -25,14 +25,14 @@
  * `/marketing/campaigns/{sendId}` is a URL merchants paste into messages.
  *
  * So the list adopts a container-less send as a campaign of one, at READ
- * time, and the row it draws links to that send's own id. Nothing is
- * rewritten; there is no backfill to run and no window during which a
- * merchant's history is missing.
+ * time, and the row it draws links to that send's own id. No send is
+ * re-filed and no id changes.
  *
- * The reads are still CEILINGED and still unorderable on any date — a sent
- * send carries `sentAt`, a scheduled one `sendAtMs`, and neither is on both —
- * so the window is bounded, the card probes one past the ceiling, and it says
- * so when the probe finds something.
+ * The two kinds are two QUERIES (AGL-3321): containers, and sends stored
+ * with `emailCampaignId: null`. The toggle above the table picks one, and
+ * the table shows a page of that query, newest first on `createdAtMs`, every
+ * filter and the search on the query. A container's figures are summed from
+ * the emails of the campaigns on the page on screen.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -84,6 +84,39 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       status: 'success',
       fromCache: false,
     }
+  },
+}))
+
+/**
+ * The records as the list's queries read them once the backfill has run:
+ * each dated (first in the array newest), a send the site hub's own and in
+ * no campaign unless it says otherwise, a campaign placed on the site hub.
+ */
+const stampedRows = (name: string) =>
+  (served[name] ?? []).map((row, at) => ({
+    createdAtMs: 1_000_000 - at,
+    ...(name === 'campaigns'
+      ? { hostId: 'host-1', emailCampaignId: null }
+      : { visibleTo: ['host:host-1'] }),
+    ...row,
+  }))
+
+/** Every list query the card built, by collection name, while it had one. */
+let listQueried: Record<string, any> = {}
+
+/*
+ * The list's queries, answered by the shared double over the staged rows —
+ * the REAL plan, as Firestore would answer it — by the collection each asks.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: any) => {
+    const name = options.collection
+      ? String(options.collection.path ?? '').split('/').pop() ?? ''
+      : ''
+    if (name) listQueried[name] = options
+    return jest
+      .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+      .useListQueryDouble(() => (name ? stampedRows(name) : []), options)
   },
 }))
 
@@ -200,11 +233,13 @@ let posted: Array<[string, Record<string, any>]> = []
 /** What the next POST answers with. */
 let postAnswer = { ok: true, body: {} as Record<string, unknown> }
 
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
+import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import HostCampaignsCard from './campaigns-card'
 import { MarketingOrgMountProvider } from './marketing-org-mount'
 
-const CONTAINER_CEILING = 50
-const SEND_CEILING = 30
+/** The rollup read's ceiling, per read of up to thirty campaigns. */
+const ROLLUP_CEILING = 50
 
 const sentSend = (id: string, over: Record<string, any> = {}) => ({
   $id: id,
@@ -218,6 +253,7 @@ const sentSend = (id: string, over: Record<string, any> = {}) => ({
 beforeEach(() => {
   capsAsked = {}
   queried = {}
+  listQueried = {}
   writes = []
   pushed = []
   drawerFields = []
@@ -279,6 +315,17 @@ const rowFor = (name: string) =>
     row.textContent?.includes(name),
   ) as HTMLElement
 
+/** The plan a recorded list query asked, as the hook plans it. */
+const planOf = (options: any) =>
+  planListQuery(options.declaration, options.request, nameSearchNormalizers)
+
+/** Switches the table to the other kind of row. */
+const showSingleSends = async () => {
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Single sends' }))
+  })
+}
+
 /** The trailing overflow menu on that row, opened. */
 const openMenuFor = (name: string) =>
   fireEvent.click(
@@ -286,11 +333,72 @@ const openMenuFor = (name: string) =>
   )
 
 describe('the campaigns table', () => {
-  it('reads each collection to its ceiling PLUS a probe', async () => {
+  it('pages the campaigns by their own query, newest first, and reads only the page’s emails', async () => {
     await mount()
 
-    expect(capsAsked['campaigns']).toContain(SEND_CEILING + 1)
-    expect(capsAsked['emailCampaigns']).toContain(CONTAINER_CEILING + 1)
+    const containers = listQueried['emailCampaigns']
+    expect(containers.collection.path).toBe('orgs/org-1/emailCampaigns')
+    expect(containers.request.base).toEqual([
+      { path: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:host-1'] },
+    ])
+    expect(planOf(containers).orderBy).toEqual({ path: 'createdAtMs', direction: 'desc' })
+    // No single-sends query while the table shows campaigns.
+    expect(listQueried['campaigns']).toBeUndefined()
+    // The figures: the emails of the campaigns ON THE PAGE, as this site.
+    await waitFor(() =>
+      expect(queried['campaigns'].constraints).toContainEqual({
+        where: ['emailCampaignId', 'in', ['camp-1']],
+      }),
+    )
+    expect(queried['campaigns'].constraints).toContainEqual({
+      where: ['hostId', '==', 'host-1'],
+    })
+    expect(capsAsked['campaigns']).toContain(ROLLUP_CEILING + 1)
+  })
+
+  it('finds a campaign past the first page, by searching for the start of its name', async () => {
+    served.emailCampaigns = Array.from({ length: 14 }, (_, at) => ({
+      $id: `camp-${at}`,
+      name: at === 13 ? 'Autumn clearance' : `Campaign ${at}`,
+      nameLower: at === 13 ? 'autumn clearance' : `campaign ${at}`,
+      listIds: [],
+    }))
+    await mount()
+    await waitFor(() => expect(cells()).toContain('Campaign 0'))
+    expect(cells()).not.toContain('Autumn clearance')
+
+    const search = screen.getByRole('searchbox')
+    await act(async () => {
+      fireEvent.change(search, { target: { value: 'aut' } })
+    })
+    await waitFor(() => expect(cells()).toContain('Autumn clearance'))
+    // A site's search is a range on the name beside the site's scope — the
+    // one array clause the rules can prove for a site collaborator.
+    expect(planOf(listQueried['emailCampaigns']).filters).toEqual([
+      { path: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:host-1'] },
+      { path: 'nameLower', op: '>=', value: 'aut' },
+      { path: 'nameLower', op: '<=', value: 'aut\uf8ff' },
+    ])
+    expect(
+      screen.getByText('Search on a site’s campaigns matches the start of a campaign’s name.'),
+    ).toBeTruthy()
+  })
+
+  it('searches the organization’s campaigns by any word of the name', async () => {
+    served.emailCampaigns = [
+      { $id: 'camp-1', name: 'Spring sale', visibleTo: ['org'], nameTokens: ['s', 'sa', 'sal', 'sale'] },
+      { $id: 'camp-2', name: 'Blog launch', visibleTo: ['org'], nameTokens: ['b', 'bl'] },
+    ]
+    await mountAtOrg()
+    await waitFor(() => expect(cells()).toContain('Blog launch'))
+    await act(async () => {
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'sale' } })
+    })
+    await waitFor(() => expect(cells()).not.toContain('Blog launch'))
+    expect(cells()).toContain('Spring sale')
+    expect(planOf(listQueried['emailCampaigns']).filters).toEqual([
+      { path: 'nameTokens', op: 'array-contains', value: 'sale' },
+    ])
   })
 
   it('shows a campaign and its rolled-up figures', async () => {
@@ -303,7 +411,12 @@ describe('the campaigns table', () => {
 
   it('ADOPTS a send that belongs to no campaign, under its own id', async () => {
     await mount()
+    await showSingleSends()
 
+    expect(listQueried['campaigns'].request.base).toEqual([
+      { path: 'emailCampaignId', op: '==', value: null },
+      { path: 'hostId', op: '==', value: 'host-1' },
+    ])
     await waitFor(() =>
       expect(screen.getByText('Last week’s news')).toBeTruthy(),
     )
@@ -334,6 +447,7 @@ describe('the campaigns table', () => {
 
   it('opens a legacy send at the URL that has always addressed it', async () => {
     await mount()
+    await showSingleSends()
     await waitFor(() =>
       expect(screen.getByText('Last week’s news')).toBeTruthy(),
     )
@@ -428,24 +542,27 @@ describe('the campaigns table', () => {
     ).not.toMatch(/alignRight/)
   })
 
-  it('does not list a send twice when it belongs to a campaign', async () => {
+  it('does not list a send as a single send when it belongs to a campaign', async () => {
     await mount()
     await waitFor(() => expect(cells()).toContain('Spring sale'))
-
     expect(cells()).not.toContain('Subject send-in-campaign')
+
+    await showSingleSends()
+    await waitFor(() => expect(screen.getByText('Last week’s news')).toBeTruthy())
+    expect(screen.queryByText('Subject send-in-campaign')).toBeNull()
   })
 
-  it('says so when a ceiling bit, and stays quiet when it did not', async () => {
+  it('says so when the figures’ read bit its ceiling, and stays quiet when it did not', async () => {
     await mount()
-    expect(screen.queryByText(/This site has more/)).toBeNull()
+    expect(screen.queryByText(/so their figures count the first/)).toBeNull()
 
-    served.campaigns = Array.from({ length: SEND_CEILING + 1 }, (_, index) =>
-      sentSend(`send-${String(index).padStart(2, '0')}`),
+    served.campaigns = Array.from({ length: ROLLUP_CEILING + 1 }, (_, index) =>
+      sentSend(`send-${String(index).padStart(3, '0')}`, { emailCampaignId: 'camp-1' }),
     )
     document.body.innerHTML = ''
     await mount()
 
-    expect(screen.getByText(/This site has more/)).toBeTruthy()
+    expect(screen.getByText(/so their figures count the first/)).toBeTruthy()
   })
 })
 
@@ -559,6 +676,7 @@ describe('deleting a campaign', () => {
 
   it('is refused on a SINGLE SEND row, which has no container', async () => {
     await mount()
+    await showSingleSends()
     await waitFor(() =>
       expect(screen.getByText('Last week’s news')).toBeTruthy(),
     )
@@ -770,13 +888,17 @@ describe('the org collections the table reads', () => {
   it('under a site, reads the org collections filtered to that site', async () => {
     await mount()
 
-    expect(queried['emailCampaigns'].path).toBe('orgs/org-1/emailCampaigns')
-    expect(queried['emailCampaigns'].constraints).toContainEqual({
-      where: ['visibleTo', 'array-contains-any', ['org', 'host:host-1']],
-    })
-    expect(queried['campaigns'].path).toBe('orgs/org-1/campaigns')
-    expect(queried['campaigns'].constraints).toContainEqual({
-      where: ['visibleTo', 'array-contains-any', ['host:host-1']],
+    expect(listQueried['emailCampaigns'].collection.path).toBe('orgs/org-1/emailCampaigns')
+    expect(listQueried['emailCampaigns'].request.base).toEqual([
+      { path: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:host-1'] },
+    ])
+    await showSingleSends()
+    expect(listQueried['campaigns'].collection.path).toBe('orgs/org-1/campaigns')
+    // A send is the site's by the site it is sent as: an equality.
+    expect(listQueried['campaigns'].request.base).toContainEqual({
+      path: 'hostId',
+      op: '==',
+      value: 'host-1',
     })
   })
 })
@@ -825,24 +947,24 @@ describe('the campaigns table on the org hub', () => {
         visibleTo: ['host:host-2'],
         listIds: [],
       },
-      { $id: 'camp-3', name: 'Unplaced', listIds: [] },
+      { $id: 'camp-3', name: 'Unplaced', visibleTo: undefined, listIds: [] },
     ]
     served.campaigns = [
       sentSend('legacy-send', { subject: 'Old news', hostId: 'host-1' }),
     ]
   })
 
-  it('reads every campaign and every send, unfiltered', async () => {
+  it('reads every campaign and every single send, unscoped', async () => {
     await mountAtOrg()
 
-    expect(queried['emailCampaigns'].path).toBe('orgs/org-1/emailCampaigns')
-    expect(
-      queried['emailCampaigns'].constraints.some((item) => 'where' in item),
-    ).toBe(false)
-    expect(queried['campaigns'].path).toBe('orgs/org-1/campaigns')
-    expect(
-      queried['campaigns'].constraints.some((item) => 'where' in item),
-    ).toBe(false)
+    expect(listQueried['emailCampaigns'].collection.path).toBe('orgs/org-1/emailCampaigns')
+    expect(listQueried['emailCampaigns'].request.base).toEqual([])
+    await showSingleSends()
+    expect(listQueried['campaigns'].collection.path).toBe('orgs/org-1/campaigns')
+    // Only the kind: sends in no campaign, from every site.
+    expect(listQueried['campaigns'].request.base).toEqual([
+      { path: 'emailCampaignId', op: '==', value: null },
+    ])
   })
 
   it('names the sites each campaign is placed on', async () => {
@@ -854,6 +976,8 @@ describe('the campaigns table on the org hub', () => {
     // An absent placement is NO site, and says so rather than going blank.
     expect(rowFor('Unplaced').textContent).toContain('No site')
     // A single send is on the one site it was sent as.
+    await showSingleSends()
+    await waitFor(() => expect(screen.getByText('Old news')).toBeTruthy())
     expect(rowFor('Old news').textContent).toContain('Store')
   })
 

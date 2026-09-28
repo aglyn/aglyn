@@ -40,6 +40,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { OrgListsCard } from './lists-card'
 
 jest.setTimeout(30_000)
@@ -53,7 +54,8 @@ const TOTAL = 45
  */
 const listDocs = Array.from({ length: TOTAL }, (_, index) => ({
   $id: `uid-${String(TOTAL - 1 - index).padStart(2, '0')}`,
-  name: `List ${String(index).padStart(2, '0')}`,
+  // The name and its search keys, as the create writes them (AGL-3321).
+  ...nameSearchFields(`List ${String(index).padStart(2, '0')}`),
 }))
 
 /** Every list's subscriber count, deliberately larger than a page. */
@@ -86,29 +88,17 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useOrgDataScope: () => SCOPE,
   useUser: () => ({ data: { uid: 'uid-test' } }),
-  usePagedCollection: (build: (pageLimit: number) => any) => {
-    const { useState } = require('react')
-    const [page, setPage] = useState(0)
-    const [pageSize, setPageSizeState] = useState(10)
-    const windowSize = pageSize * (page + 1)
-    const built = build(windowSize + 1)
-    const answered = firestoreAnswer(listDocs, built?.constraints ?? [])
-    return {
-      data: answered,
-      rows: answered.slice(page * pageSize, windowSize),
-      hasMore: answered.length > windowSize,
-      page,
-      setPage,
-      pageSize,
-      setPageSize: (next: number) => {
-        setPageSizeState(next)
-        setPage(0)
-      },
-      status: 'success',
-      fromCache: false,
-    }
-  },
 }))
+
+/*
+ * The card's REAL plan, answered the way Firestore would — `orderBy`
+ * sorting AND dropping a document without the field — and paged (AGL-3321).
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() => listDocs, jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')),
+)
 
 /**
  * Every QUERY the card and its panels build, by path.
@@ -315,9 +305,13 @@ describe('the email-list table walks the collection (AGL-2501)', () => {
     )
   })
 
-  it('searches every list its window read, not only the page on screen (AGL-3317)', async () => {
+  it('searches the QUERY, reaching a list pages past the first (AGL-3321)', async () => {
     await mountCard()
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'List 37' } })
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '37' } })
     await waitFor(() => expect(renderedNames()).toEqual(['List 37']))
+    const { lastListQueryPlan } = jest.requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    expect(lastListQueryPlan().filters).toEqual([
+      { path: 'nameTokens', op: 'array-contains', value: '37' },
+    ])
   })
 })

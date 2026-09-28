@@ -855,6 +855,13 @@ export interface OutreachEnrollment extends OutreachTimestamps {
   contactName: string
   /** The address the steps go to, normalized, captured at enrollment. */
   email: string
+  /**
+   * What the enrollments table's search box reads (AGL-3321): every prefix
+   * of the name and of the address and its parts
+   * (`outreachEnrollmentSearchTokens`), stamped by the enroll route beside
+   * the two it is made of, which nothing rewrites afterwards.
+   */
+  searchTokens?: string[]
   hostId: string
   mailboxId: string
   /** The index into `steps` of the NEXT step to run. */
@@ -909,6 +916,12 @@ export interface OutreachEnrollment extends OutreachTimestamps {
    * "no clicks" only for a sequence that tracks them at all.
    */
   engagement?: OutreachEnrollmentEngagement
+  /**
+   * Whether the person clicked a link (AGL-3332): what the enrollments
+   * table's "Clicked" filter asks Firestore. `false` from enrollment, set
+   * by the click route on a person's click, never a scanner's.
+   */
+  clicked?: boolean
   /**
    * The sequence's campaigns as they stood when the person was enrolled
    * (AGL-3254): what every outcome of this enrollment is credited to. A
@@ -1165,4 +1178,9 @@ export interface OutreachDoNotContactDomainEntry {
   sequenceId: string | null
   /** Plain-language detail: the member's note, or the bounce's diagnostic. */
   detail: string | null
+  /**
+   * What the domains list's search box reads (AGL-3321):
+   * `outreachDomainSearchTokens`, stamped by the one writer that adds it.
+   */
+  searchTokens?: string[]
 }

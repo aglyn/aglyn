@@ -17,6 +17,7 @@
 
 import { normalizeCampaignIds } from '@aglyn/aglyn/app-utils/campaign-membership'
 import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
+import { nameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { applyOutreachEnrollmentEvent } from '../engine/enrollment-state'
 import {
@@ -340,7 +341,12 @@ export function createOutreachSequenceRoutes(deps: OutreachRouteDeps): OutreachS
       createdAtMs: existing?.createdAtMs || nowMs,
       updatedAtMs: nowMs,
     }
-    await ref.set(sequence)
+    /*
+     * The list's search fields ride with every write of the name (AGL-3321):
+     * the sequences list asks Firestore for them, and a sequence missing
+     * them would list normally and never be found.
+     */
+    await ref.set({ ...sequence, ...nameSearchFields(sequence.name) })
     if (!existing) await activity(caller, OUTREACH_SEQUENCE_ACTIVITY.create, sequence)
     return outreachOk({
       ok: true,

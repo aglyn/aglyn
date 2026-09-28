@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+// The leaf module, not the server barrel: the list keys every artifact
+// create stamps (AGL-3321), which the install specs' closed-world barrel
+// mocks have no reason to stage.
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import {
   createResourceUid,
   decodeStoredNodes,
@@ -342,7 +346,9 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
           nodes: Buffer.from(encodeStoredNodes(content?.nodes ?? {})!),
         }),
         detach: {
-          source: { type: 'workspace' },
+          // The customer's own from here on: `authored`, the provenance the
+          // templates library's Source filter calls "Saved here" (AGL-3321).
+          source: { type: 'authored' },
           detachedFrom: { listingId, version: installedVersion },
         },
         // `hosts/{hostId}/templates` is private to its host; no scope.
@@ -647,12 +653,13 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
     const collectionRef = target.ref.parent
     const freshRef = collectionRef.doc(createResourceUid())
     const carried = (await target.ref.get()).data() ?? {}
+    const freshName = String(listing.displayName ?? carried.displayName ?? 'Untitled')
     batch.set(freshRef, {
       // Everything that is not content travels from the copy being replaced —
       // the display name, description and kind — so the new one lands in the
       // same place in the same library rather than as an unrecognisable stub.
       ...(carried.kind ? { kind: carried.kind } : {}),
-      displayName: String(listing.displayName ?? carried.displayName ?? 'Untitled'),
+      displayName: freshName,
       ...(listing.description ? { description: listing.description } : {}),
       // Not part of the `carried` spread above, deliberately: a spread
       // cannot carry a field the source is missing, and "the source had one"
@@ -683,6 +690,13 @@ export const updateArtifactHandler: PluginApiHandler = async (req, res) => {
           }),
       installedFrom: provenance.installedFrom,
       deletedAt: null,
+      // The keys the fresh copy's list finds it by (AGL-3321), for whichever
+      // artifact collection it lands in.
+      ...artifactCreateListKeys(collectionRef.id, {
+        kind: carried.kind,
+        displayName: freshName,
+        source: { type: 'marketplace' },
+      }),
       createdAt: now,
       updatedAt: now,
     })

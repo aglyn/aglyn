@@ -89,6 +89,12 @@ function taxQuery(collection: string) {
       return chain
     },
     limit: () => chain,
+    count: () => ({
+      get: async () => {
+        const { size } = await chain.get()
+        return { data: () => ({ count: size }) }
+      },
+    }),
     get: async () => {
       // The double models the real semantics that matter here: a `paidAt ==
       // null` query and a `paidAt` RANGE query are different populations, and

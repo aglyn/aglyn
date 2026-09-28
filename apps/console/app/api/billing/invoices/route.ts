@@ -26,6 +26,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { describeStripeModeSplit } from '../../_lib/stripe-customer-mode-notice'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  invoiceAnswers,
+  readInvoiceQueryParams,
+  stripeInvoiceSearchQuery,
+} from '../../../../utils/billing-invoice-query'
 
 // lockdown-423: exempt — a billing-locked org must be able to SEE what it owes to pay it;
 // part of the recovery surface AGL-1501 keeps sessions alive for.
@@ -34,7 +39,9 @@ import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
  * Org invoice history (AGL-248, AGL-534): the subscription page's billing
  * history table. Returns finalized invoices (drafts excluded) with the
  * Stripe-hosted view URL, direct PDF download, and the paid charge's
- * receipt URL, cursor-paginated via `startingAfter`/`hasMore`.
+ * receipt URL, cursor-paginated via `cursor`/`hasMore` (the older
+ * `startingAfter` is still read). Filtered and searched by Stripe itself
+ * (`planInvoiceQuery`, AGL-3321).
  * billing.view-gated (AGL-243); 501 without Stripe env.
  */
 async function handler(request: Request): Promise<Response> {
@@ -94,29 +101,62 @@ async function handler(request: Request): Promise<Response> {
     }
     // Drafts are excluded server-side: they have no number, hosted page,
     // or PDF yet, and Stripe may still discard them.
-    const startingAfter = String(query.startingAfter ?? '')
-    const response = await fetch(
-      `https://api.stripe.com/v1/invoices?customer=${encodeURIComponent(
-        String(customerId),
-      )}&limit=24&expand[]=data.charge` +
-        (startingAfter
-          ? `&starting_after=${encodeURIComponent(startingAfter)}`
-          : ''),
-      {
-        headers: {
-          Authorization: `Bearer ${stripeKey}`,
-          // Pinned: 2025-03-31.basil removed `invoice.charge`, so an
-          // account on a newer default would reject the expand. Only
-          // fields stable in this version are read below.
-          'Stripe-Version': '2024-06-20',
-        },
-      },
-    )
-    const payload = await response.json()
+    //
+    // THE FILTERS ARE STRIPE'S (AGL-3321). The page's Filters panel and
+    // search arrive as the parameters `planInvoiceQuery` wrote, and each is
+    // asked of Stripe itself — the list's `status` and `created` filters, the
+    // invoice search for a number, a retrieve for an id — so an older invoice
+    // is found as readily as this month's, and nothing is matched over a
+    // page after it is fetched. `cursor` is the list's `starting_after` or
+    // the search's `page`, whichever answered the last page.
+    const params = readInvoiceQueryParams(query)
+    const cursor = String(query.cursor ?? query.startingAfter ?? '')
+    const stripeHeaders = {
+      Authorization: `Bearer ${stripeKey}`,
+      // Pinned: 2025-03-31.basil removed `invoice.charge`, so an
+      // account on a newer default would reject the expand. Only
+      // fields stable in this version are read below.
+      'Stripe-Version': '2024-06-20',
+    }
+    let url: string
+    if (params.id) {
+      url = `https://api.stripe.com/v1/invoices/${encodeURIComponent(params.id)}?expand[]=charge`
+    } else if (params.number) {
+      url =
+        `https://api.stripe.com/v1/invoices/search?query=${encodeURIComponent(
+          stripeInvoiceSearchQuery(String(customerId), params),
+        )}&limit=24&expand[]=data.charge` +
+        (cursor ? `&page=${encodeURIComponent(cursor)}` : '')
+    } else {
+      url =
+        `https://api.stripe.com/v1/invoices?customer=${encodeURIComponent(
+          String(customerId),
+        )}&limit=24&expand[]=data.charge` +
+        (params.status ? `&status=${encodeURIComponent(params.status)}` : '') +
+        (params.createdGte !== undefined ? `&created[gte]=${params.createdGte}` : '') +
+        (params.createdLt !== undefined ? `&created[lt]=${params.createdLt}` : '') +
+        (cursor ? `&starting_after=${encodeURIComponent(cursor)}` : '')
+    }
+    const response = await fetch(url, { headers: stripeHeaders })
+    const raw = await response.json()
+    if (params.id && response.status === 404) {
+      // No such invoice: an empty answer, not a fault.
+      return Response.json({ invoices: [], hasMore: false, nextCursor: null }, { status: 200 })
+    }
     if (!response.ok) {
-      console.error('Stripe invoice list error', payload?.error)
+      console.error('Stripe invoice list error', raw?.error)
       return Response.json({ error: 'Invoice lookup failed' }, { status: 502 })
     }
+    // One invoice by id is the whole answer to "which invoice is this": it
+    // is this organization's, and it answers the other clauses, or there is
+    // no match.
+    const payload = params.id
+      ? {
+          data:
+            raw?.customer === customerId && invoiceAnswers(raw, params) ? [raw] : [],
+          has_more: false,
+        }
+      : raw
     const invoices = Array.isArray(payload?.data)
       ? payload.data
           .filter((invoice: any) => invoice.status !== 'draft')
@@ -155,11 +195,18 @@ async function handler(request: Request): Promise<Response> {
     //
     // First page only. On a cursor the emptiness means "no older invoices",
     // which is an observation about paging and not about the mode.
-    const emptyFirstPage = invoices.length === 0 && !startingAfter
+    // Nor under a filter: an empty filtered answer is about the filter.
+    const filtered = Object.keys(params).length > 0
+    const emptyFirstPage = invoices.length === 0 && !cursor && !filtered
     return Response.json({
       invoices,
       hasMore: payload?.has_more === true,
-      nextCursor: payload?.has_more === true ? (lastFetched?.id ?? null) : null,
+      nextCursor:
+        payload?.has_more === true
+          ? params.number
+            ? (payload?.next_page ?? null)
+            : (lastFetched?.id ?? null)
+          : null,
       ...(emptyFirstPage ? await describeStripeModeSplit(orgId) : {}),
     }, { status: 200 })
   } catch (error) {

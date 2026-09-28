@@ -33,6 +33,7 @@ import {
   isSvgUploadType,
   sanitizeSvgBuffer,
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   mediaPosterObjectPath,
   mediaRenditionObjectPath,
@@ -736,6 +737,18 @@ async function handler(request: Request): Promise<Response> {
     await mediaRef.set(
       {
         contentType,
+        // What the library filters by (AGL-3327), from the name and alt text
+        // the asset keeps and the type and pixel size the new bytes bring: a
+        // PDF reissued as a Word file is no longer a PDF, and a landscape
+        // photo replaced by a portrait one no longer lands under Landscape.
+        ...mediaFilterKeys({
+          fileName: mediaSnapshot.get('fileName'),
+          alt: mediaSnapshot.get('alt'),
+          contentType,
+          width: dimensions?.width,
+          height: dimensions?.height,
+          video: videoFields['video'],
+        }),
         sizeBytes: uploadedBytes,
         url,
         // Clear stale dimensions if the new header didn't parse — or if the
@@ -761,6 +774,10 @@ async function handler(request: Request): Promise<Response> {
         poster: videoFields['poster'] ?? remove,
         posterError: videoFields['posterError'] ?? remove,
         videoRenditions: remove,
+        // Read from the previous bytes (AGL-3331). Cleared rather than
+        // re-read here: the Details drawer reads the new file the first
+        // time it opens, and a replace must not wait on a caption.
+        embeddedMetadata: remove,
         // The delivery provider's copies were made from the previous bytes
         // (AGL-2824). The new `contentHash` already stops them being served;
         // clearing the record says so, and the copies themselves are removed

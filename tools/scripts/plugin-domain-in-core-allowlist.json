@@ -1738,7 +1738,6 @@
       "rules": [
         "domain-name",
         "plugin-collection:crm",
-        "domain-exports:crm",
         "domain-declares:crm"
       ],
       "lane": "crm"

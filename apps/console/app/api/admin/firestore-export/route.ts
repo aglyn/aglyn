@@ -22,6 +22,7 @@ import { getApp } from 'firebase-admin/app'
 // Imported for its side effect too: guarantees the firebase-admin default app
 // is initialized before `getApp()` runs, same as the health/backups route.
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Scheduled Firestore GCS export (AGL-1843): invoke weekly from the scheduler
@@ -138,26 +139,22 @@ async function handler(request: Request): Promise<Response> {
     // Best-effort and awaited-then-swallowed: the export has already started
     // on Google's side by this point, so failing the response over a lost
     // audit row would report a failure that did not happen.
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: 'system:cron',
-        action: 'firestore.export',
-        target: `gs://${bucket}`,
-        reason:
-          'Scheduled full-database export — the restore source for ' +
-          'DISASTER_RECOVERY procedures A–D, and the only backup outside ' +
-          "Firestore's own 7-day PITR window.",
-        before: null,
-        after: {
-          outputUriPrefix,
-          operation: operation.name ?? null,
-          projectId,
-        },
-        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: 'system:cron',
+      action: 'firestore.export',
+      target: `gs://${bucket}`,
+      reason:
+        'Scheduled full-database export — the restore source for ' +
+        'DISASTER_RECOVERY procedures A–D, and the only backup outside ' +
+        "Firestore's own 7-day PITR window.",
+      before: null,
+      after: {
+        outputUriPrefix,
+        operation: operation.name ?? null,
+        projectId,
+      },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
       .catch((auditError) => {
         console.error('firestore-export: audit append failed', auditError)
       })

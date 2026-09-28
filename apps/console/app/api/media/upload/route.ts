@@ -27,6 +27,7 @@ import {
   isSvgUploadType,
   sanitizeSvgBuffer,
 } from '@aglyn/aglyn/app-utils/sanitize-svg'
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   mediaStorageGate,
   scopeBillsStorageOverage,
@@ -35,6 +36,7 @@ import { resolveOrgMediaBand } from '../../../../utils/server/media-storage-band
 import { resolveUploadSite } from '../../../../utils/server/media-upload-site'
 import { scheduleMediaDeliveryCopies } from '../../../../utils/server/media-delivery-copies'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
+import { embeddedMetadataAtIngress } from '../../../../utils/server/media-embedded'
 import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
   deleteMediaWithTombstone,
@@ -420,6 +422,16 @@ async function handler(request: Request): Promise<Response> {
         }),
     })
 
+    // What the file carries inside itself (AGL-3331) — its caption, credit,
+    // camera, a PDF's title. Read here because this route already holds the
+    // bytes; best-effort and time-boxed, and an asset it skips is read the
+    // first time its Details drawer opens.
+    const embeddedMetadata = await embeddedMetadataAtIngress({
+      contentType,
+      bytes: new Uint8Array(buffer),
+      contentSha256,
+    })
+
     await scopeRef.collection('media').doc(mediaId).set({
       fileName,
       contentType,
@@ -427,6 +439,14 @@ async function handler(request: Request): Promise<Response> {
       url,
       storagePath: objectPath,
       folderId,
+      // What the library filters and searches by (AGL-3327) — a query cannot
+      // find a document that lacks the field it asks about.
+      ...mediaFilterKeys({
+        fileName,
+        contentType,
+        ...(dimensions ?? {}),
+        video: videoFields['video'],
+      }),
       ...(dimensions ?? {}),
       // AGL-2742 — `video`, `poster`, `posterError`, or no keys at all for a
       // non-video. See the signed route for the same spread and the same
@@ -446,6 +466,8 @@ async function handler(request: Request): Promise<Response> {
       // and a serverless log keeps it for about an hour — same reasoning as
       // `variantsError` above. Absent on every clean asset.
       ...(svg?.changed ? { svgSanitized: svg.removed } : {}),
+      // AGL-3331 — absent when the format has no reader or the read gave up.
+      ...(embeddedMetadata ? { embeddedMetadata } : {}),
       // The org's Default sharing (AGL-1048) applied to the site the upload
       // was made from, which is All sites when the org chose that or when no
       // site was on screen. Stamping it on every new asset is what makes the

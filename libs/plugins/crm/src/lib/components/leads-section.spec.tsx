@@ -33,12 +33,14 @@
  * The grid is a plain list that renders the actions cell; the row menu is
  * real, the dialog a stub that records what it was opened for.
  *
- * And the search box (AGL-3246): it narrows the WHOLE loaded window, not
- * the page the grid holds, so a lead on page two is found and the footer —
- * the real one — counts the matches. The footer is real for that reason.
+ * And the search box and filters (AGL-3246, AGL-3321): each is on the list's
+ * QUERY — planned for real and answered from the rows below by the
+ * list-query double, as Firestore would — so a lead on page two is found,
+ * and the footer, the real one, pages what the query returned.
  */
 
-import { CONTACT_ERASURE_REQUESTED_FIELD } from '@aglyn/aglyn'
+import { CONTACT_ERASURE_REQUESTED_FIELD, crmLeadListFields } from '@aglyn/aglyn'
+import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { CrmLeadsSection } from './leads-section'
@@ -64,6 +66,9 @@ jest.mock('../hooks/use-crm-org-mount', () => ({
   useCrmOrgMount: () => mount,
 }))
 jest.mock('../hooks/use-crm-scope', () => ({
+  // The real predicates the list query reads; only the scope is staged.
+  crmScopeListable: jest.requireActual('../hooks/use-crm-scope').crmScopeListable,
+  crmVisibleToClause: jest.requireActual('../hooks/use-crm-scope').crmVisibleToClause,
   useCrmScope: (props: { hostId: string | null }) => ({
     orgId: 'org-1',
     ready: true,
@@ -72,9 +77,15 @@ jest.mock('../hooks/use-crm-scope', () => ({
     visibleTo: null,
   }),
 }))
-jest.mock('../hooks/use-org-leads', () => ({
-  useOrgLeads: () => ({ data: orgRows, status: 'success', truncated: false }),
-}))
+// The list's query (AGL-3321), answered from every lead the org holds.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(
+      () => [...siteRows, ...orgRows],
+      jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    ),
+)
 jest.mock('../hooks/use-org-member-options', () => ({
   useOrgMemberOptions: () => ({
     options: [],
@@ -148,14 +159,10 @@ jest.mock('./lead-convert-dialog', () => ({
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
-  useFirestoreCollection: (factory: () => unknown) => {
-    // CALLED, not ignored. The double used to drop the factory on the floor,
-    // so nothing here could see which collection the section read — which is
-    // how the site branch went on reading the host path after AGL-3275 moved
-    // the silo, with this file still green.
-    factory()
-    return { data: siteRows, status: 'success', fromCache: false }
-  },
+  // The reader's reach: org-wide, so a site's search folds into its scope.
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
+  // The org's field definitions and the like: none here.
+  useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   // The campaigns placed on the site, for the Campaign filter and column
   // (AGL-3254) — and which site, and whether they were asked for at all.
   useHostCampaigns: (hostId: string | undefined, options?: { enabled?: boolean }) => {
@@ -191,19 +198,15 @@ let mockColumns: Array<{
   field: string
   valueGetter?: (value: unknown, row: unknown) => unknown
 }> = []
-/** Every collection path and scope clause the section asked Firestore for. */
+/** Every collection path the section asked Firestore for. */
 const mockPaths: string[] = []
-const mockScopes: unknown[][] = []
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => {
     mockPaths.push(segments.join('/'))
     return {}
   },
-  where: (field: string, _op: string, value: unknown) => {
-    if (field === 'visibleTo') mockScopes.push(value as unknown[])
-    return {}
-  },
+  where: () => ({}),
   query: () => ({}),
   orderBy: () => ({}),
   limit: () => ({}),
@@ -318,13 +321,18 @@ const gridRows = () =>
 const BASE_PATH = '/acme/hosts/shop/crm'
 const ORG = { $id: 'org-1', plan: 'pro' } as any
 
-const lead = (id: string, email: string, fields: Record<string, unknown> = {}) => ({
-  $id: id,
-  email,
-  name: email.split('@')[0],
-  lastSeenAtMs: 1_000,
-  ...fields,
-})
+/** A lead as its writers store it: its site's scope and the list fields (AGL-3321). */
+const lead = (id: string, email: string, fields: Record<string, unknown> = {}) => {
+  const row = {
+    $id: id,
+    email,
+    name: email.split('@')[0],
+    lastSeenAtMs: 1_000,
+    visibleTo: ['host:site-1'],
+    ...fields,
+  }
+  return { ...row, ...crmLeadListFields(row) }
+}
 
 const LEADS = [
   lead('l-open', 'maya@example.com'),
@@ -477,10 +485,11 @@ describe('Convert… on the Leads row menu (AGL-2641)', () => {
   })
 })
 
-describe("The grid's search and filters narrow the whole loaded window (AGL-3246, AGL-3313)", () => {
-  // Twelve leads at ten a page: eleven fillers, then Morgan on page two.
+describe("The grid's search and filters are on the query (AGL-3246, AGL-3313, AGL-3321)", () => {
+  // Twelve leads at ten a page: eleven fillers seen more recently, then
+  // Morgan, the oldest, on page two.
   const fillers = Array.from({ length: 11 }, (_, index) =>
-    lead(`l-${index}`, `person${index}@example.com`),
+    lead(`l-${index}`, `person${index}@example.com`, { lastSeenAtMs: 2_000 + index }),
   )
   const morgan = lead('l-morgan', 'morgan@example.com', {
     name: 'Morgan Lamphere',
@@ -492,30 +501,43 @@ describe("The grid's search and filters narrow the whole loaded window (AGL-3246
     siteRows = [...fillers, morgan]
   })
 
-  it('finds a lead on page two and counts the matches in the footer', () => {
+  it('finds a lead on page two by a word the query asks for', () => {
     renderSite()
     expect(screen.queryByText('morgan@example.com')).toBeNull()
-    expect(screen.getByText('1–10 of 12')).toBeTruthy()
+    expect(screen.getByText('1–10 of more than 10')).toBeTruthy()
 
     typeSearch('Lamphere')
     expect(gridRows()).toEqual(['morgan@example.com'])
     expect(screen.getByText('1–1 of 1')).toBeTruthy()
+    // Folded into the site's scope clause: one array clause answers both.
+    expect(lastListQueryPlan()?.filters).toEqual([
+      expect.objectContaining({ path: 'status' }),
+      {
+        path: 'scopedSearchTokens',
+        op: 'array-contains-any',
+        value: ['org~lamphere', 'host:site-1~lamphere'],
+      },
+    ].slice(1))
 
     typeSearch('')
     expect(gridRows()).toHaveLength(10)
-    expect(screen.getByText('1–10 of 12')).toBeTruthy()
+    expect(screen.getByText('1–10 of more than 10')).toBeTruthy()
   })
 
-  it('starts a new term on page one', () => {
+  it('pages through what the query answered', () => {
+    // A new query starting on page one is the pager's (`usePagedCollection`
+    // restarts on a new plan); this is the page the query's answer turns to.
     renderSite()
     fireEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
-    expect(gridRows()).toEqual(['person10@example.com', 'morgan@example.com'])
+    expect(gridRows()).toEqual(['person0@example.com', 'morgan@example.com'])
     expect(screen.getByText('11–12 of 12')).toBeTruthy()
+  })
 
-    // Page two of the twelve would be an empty page of the one match.
+  it('searches the first of two words, and says so', () => {
+    renderSite()
     typeSearch('lamphere coffee')
     expect(gridRows()).toEqual(['morgan@example.com'])
-    expect(screen.getByText('1–1 of 1')).toBeTruthy()
+    expect(screen.getByText(/Search matches one word at a time/)).toBeTruthy()
   })
 
   it('matches a tag, whatever the case, and says so when nothing matches', () => {
@@ -525,7 +547,7 @@ describe("The grid's search and filters narrow the whole loaded window (AGL-3246
 
     typeSearch('nobody')
     expect(gridRows()).toHaveLength(0)
-    expect(screen.getByText('No leads match among the 12 most recently seen')).toBeTruthy()
+    expect(screen.getByText('No leads match these filters')).toBeTruthy()
   })
 
   /**
@@ -582,6 +604,15 @@ describe("The grid's search and filters narrow the whole loaded window (AGL-3246
     )
     expect(gridRows()).toEqual(['icp2@example.com', 'both@example.com'])
     expect(screen.getByText('1–2 of 2')).toBeTruthy()
+    // Under a site the scope clause is the one array clause, so the campaign
+    // is asked behind the site's scope tokens and stands in its place.
+    expect(lastListQueryPlan()?.filters).toEqual([
+      {
+        path: 'scopedCampaignIds',
+        op: 'array-contains-any',
+        value: ['org~founder-icp2', 'host:site-1~founder-icp2'],
+      },
+    ])
   })
 })
 
@@ -640,14 +671,31 @@ describe('a view saved with the old dropdowns', () => {
 describe('the collection the section reads', () => {
   beforeEach(() => {
     mockPaths.length = 0
-    mockScopes.length = 0
   })
 
   it('reads the ORG collection under a site, narrowed to that site', () => {
     renderSite()
     expect(mockPaths).toContain('orgs/org-1/leads')
     expect(mockPaths.some((path) => path.startsWith('hosts/'))).toBe(false)
-    expect(mockScopes).toContainEqual(['org', 'host:site-1'])
+    expect(lastListQueryPlan()?.filters).toContainEqual({
+      path: 'visibleTo',
+      op: 'array-contains-any',
+      value: ['org', 'host:site-1'],
+    })
+    // Newest seen first, the one order every lead carries.
+    expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'lastSeenAtMs', direction: 'desc' })
+  })
+
+  it('asks Open of the query as the two open statuses every lead stores', () => {
+    mockFilters = []
+    siteRows = [lead('l-fresh', 'fresh@example.com'), ...LEADS.slice(1)]
+    renderSite()
+    expect(lastListQueryPlan()?.filters).toContainEqual({
+      path: 'status',
+      op: 'in',
+      value: ['new', 'working'],
+    })
+    expect(gridRows()).toEqual(['fresh@example.com', 'sam@example.com'])
   })
 })
 

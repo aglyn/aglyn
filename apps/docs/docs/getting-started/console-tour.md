@@ -62,7 +62,9 @@ matching section of these docs in a new tab.
 Most lists in the console are tables with the same toolbar above them:
 **Columns** shows and hides columns, **Filters** narrows the rows, **Export**
 downloads the table, and **Search** finds rows by their words. They work the
-same way on every list.
+same way on every list. A list drawn as cards rather than a table — such as
+[All Sites](#the-sites-list) — keeps its cards and has the same **Search** box,
+**Filters** panel and chips above them.
 
 - **Filters** opens a panel that edits one filter at a time: pick a column, an
   operator and a value. Pick another column and set it too, and both apply —
@@ -71,28 +73,34 @@ same way on every list.
 - **Chips** above the table show every filter in force, each read as a sentence
   such as "Status is Live". The panel shows one filter at a time; the chips show
   them all. Remove a chip to drop its filter.
-- **Search** matches words. Type several and a row is kept when every word
-  appears, in any order and either case, in one of the things that list
-  searches — each list's page names them. Search adds to the filters, and an
-  empty box shows the list unfiltered again.
+- **Search** finds records by the start of a word in the things that list
+  searches — each list's page names them. It matches one word at a time: type
+  "acm" and "Acme Coffee" is found; type two words and the list searches the
+  first and says so. A word is read up to its first 12 letters. Search adds to
+  the filters, and an empty box shows the list unfiltered again.
 - The **pager** at the foot of the table then turns through the matches, not
   the whole list.
 
-How far a filter or a search reaches depends on how the list reads its rows,
-and each list's page says which:
+Every filter and every search word is answered by the list's query, across
+the whole list — never only the rows already on screen. A record that matches
+is found whether it would have been on the first page or the fortieth. Two
+limits follow from asking one query:
 
-- **The whole list.** A list that reads every row at once, or whose query
-  applies the filter itself, answers across all of it — not only the page on
-  screen.
-- **The rows read.** A long list reads a window of its rows instead: its
-  newest rows up to a cap its page names, or, on a list that reads a page at a
-  time, 100 rows as soon as the first filter or search word is set, and one
-  page more each time you turn past the last match. A filter there looks
-  through what has been read, and the table says when there is more.
-- **One served filter.** Some lists hand one filter to the server, which looks
-  through every record, and apply the rest to the rows it returned. The served
-  filter's chip is filled in; hover a chip to see which kind it is. On such a
-  list a new served filter replaces the previous one.
+- **A filter a query can't answer isn't offered.** The panel lists only the
+  columns and operators the list can look up.
+- **A combination one query can't hold is refused by name.** A note above the
+  list names the filter or search it set aside — for example, two date ranges
+  at once, or a search together with a filter that also matches words — and
+  the list shows what the rest of them match. Remove one to apply the other.
+  Nothing is ever quietly left out of the results.
+
+Someone who can see only some sites searches the lists shared across sites by
+the start of a name (or of an address, where the list has no name), beside the
+sites they can see; the list says so when it does.
+
+A few lists read from somewhere other than the console's database and search
+there instead: billing invoices ask Stripe, and the staff Users list asks the
+sign-in service.
 
 ## Primary navigation
 
@@ -137,28 +145,36 @@ without opening the editor. When you want to design it, open the
 
 ## The Sites list {#the-sites-list}
 
-**All Sites** is the front door of a workspace: a table with one row per site, for the
-workspace currently selected in the switcher. A site you can reach in another organization
-isn't missing — it's behind the workspace switcher.
+**All Sites** is the front door of a workspace: one card per site, for the workspace
+currently selected in the switcher, in name order. A site you can reach in another
+organization isn't missing — it's behind the workspace switcher.
 
-Each row carries:
+Each card carries:
 
-- The site's **display name**, with its **hostname** underneath — the custom domain when
-  the site has one, otherwise its `name.aglyn.app` address. Both are also columns of their
-  own, **Aglyn domain** and **Custom domain**.
+- The site's **display name** as the title, with its **hostname** underneath as the
+  subheader — the custom domain when the site has one, otherwise its `name.aglyn.app`
+  address. Both are also listed inside the card, as **Aglyn Domain** and **Custom
+  Domain**.
 - A **status pill** (below).
-- When the site was **created** and last **updated**.
 - **Visit**, which opens the live site in a new tab, and **Manage**, which opens that
   site's dashboard in the console.
 
-**Filters** in the table's toolbar narrows the list by name, **Status** (Live, Draft,
-Maintenance or Suspended), either domain, **Custom domain status** (Connected, Pending
-while a connect or disconnect is unfinished, or None), or the date a site was created or
-last updated. **Search** matches any word of the name, the slug, or either domain. Each
-filter in force shows as a chip above the table; remove a chip to drop it. The list holds
-every site you have in the workspace, so a filter or a search looks through all of them,
-not only the page on screen. The site count beside the heading always counts every site.
-See [Filter and search a list](#filter-and-search).
+Above the cards are a **Search** box and a **Filters** button — the same controls a
+table's toolbar has, over the cards. **Search** finds a site by the start of any word of
+its name, its slug (the `name` in `name.aglyn.app`) or its custom domain: `harbor`,
+`bakery` and `shop.harbor` all find *Harbor Bakery* at `shop.harbor-bakery.com`.
+**Filters** narrows the cards by **Custom domain** (Connected or None) and by the date a
+site was **Created** (on, before or after a day). Each filter in force shows as a chip
+above the cards; remove a chip to drop it. A filter on the created date lists the cards
+newest first.
+
+The search and the filters are answered by the query that reads the cards, across every
+site you have in the workspace, not only the cards on screen. The cards come twelve at a
+time; **Load more** adds the next twelve that match. The site count beside the heading
+always counts every site. Status, plan, owner and the last-updated date are not filters:
+a site's status can change with no save at all (a timed suspension ends on its own), and
+a site doesn't store its plan, owner or template. See
+[Filter and search a list](#filter-and-search).
 
 ### The status pill {#the-status-pill}
 

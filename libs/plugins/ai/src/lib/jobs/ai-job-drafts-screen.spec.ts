@@ -48,6 +48,7 @@ jest.mock('@aglyn/tenant-data-admin/server/organizations', () => ({
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { findScreenIdByRoutePath } from '@aglyn/aglyn/app-utils/screen-route'
 import { decodeStoredNodes } from '@aglyn/aglyn/app-utils/stored-nodes'
 import { CANVAS_ROOT_ELEMENT_ID } from '@aglyn/aglyn/foundation/constants/canvas'
@@ -228,13 +229,19 @@ describe('the screen draft’s document', () => {
       displayName: 'Pricing',
       slug: 'pricing',
       versionId: result.versionId,
-      nameLower: 'pricing',
+      // The keys the screen lists find it by (AGL-835, AGL-3321).
+      ...artifactCreateListKeys('screens', { displayName: 'Pricing' }),
       createdAt: NOW,
       updatedAt: NOW,
       createdBy: 'uid-1',
     })
     const screen = mockDocs.get('hosts/host-1/screens/job-page') ?? {}
-    const stamps = new Set(['nameLower', 'createdAt', 'updatedAt', 'createdBy'])
+    const stamps = new Set([
+      ...Object.keys(artifactCreateListKeys('screens', {})),
+      'createdAt',
+      'updatedAt',
+      'createdBy',
+    ])
     for (const key of Object.keys(screen)) {
       expect([key, AI_DRAFT_FIELDS.screen.includes(key) || stamps.has(key)]).toEqual([key, true])
     }

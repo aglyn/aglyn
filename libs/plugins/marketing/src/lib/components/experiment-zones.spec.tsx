@@ -29,6 +29,7 @@
  */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useListQueryDouble } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 import type { ReactNode } from 'react'
 
 const experimentDocs = [
@@ -48,18 +49,13 @@ const experimentDocs = [
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
-  usePagedCollection: () => ({
-    rows: experimentDocs,
-    hasMore: false,
-    page: 0,
-    setPage: jest.fn(),
-    pageSize: 10,
-    setPageSize: jest.fn(),
-    status: 'success',
-    fromCache: false,
-  }),
   useHostActivityLogger: () => jest.fn(),
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance').writeGuardedBySeed,
+}))
+
+// The experiments table's list query (AGL-3321), answered over the fixture.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: unknown) => useListQueryDouble(() => experimentDocs, options as never),
 }))
 
 jest.mock('firebase/firestore', () => ({

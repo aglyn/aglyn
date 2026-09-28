@@ -31,15 +31,22 @@ email document and opens it in the besigner with the email blocks:
 
 ## Find a template
 
-The templates table filters through its toolbar by name and **Origin** (yours, or
-installed from a listing), and **Search** matches any word of a template's name.
-On your organization's Emails page it also filters by **Site**, and Search matches
-site names too. The filters look at every template the table read, not only the
-page on screen. A site's own table reads its first 200 screens of every kind and
-lists the email templates among them; the organization's table reads up to 50
-templates from each site on the page of sites it shows, and its **Site** filter
-offers those sites. Where a site holds more than the table reads, the note under
-it says so. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+The templates table filters through its toolbar by name (it contains a word,
+it is, or it starts with), and **Search** matches the start of any word of a
+template's name, up to its first twelve characters. The filters and the search
+are asked of the site's templates themselves, so they reach every template the
+site holds, a page at a time in name order, not only the page on screen. A name
+that contains a word and Search both match words of the name, so only one of
+them applies at a time; a note above the table says which was set aside. The
+**Origin** column shows whether a template is yours or installed from a
+listing, but it is not a filter.
+
+On your organization's Emails page the same filters and search run on each
+site's templates, and **Site** chooses which sites are read: any of your sites,
+wherever it sits in the pages of sites. Without it, the table reads the page of
+sites the **Sites** picker shows. It lists up to 50 matching templates from each
+site; where a site has more, the note under the table says so and links to that
+site's own list. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Duplicate a template
 

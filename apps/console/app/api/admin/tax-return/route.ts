@@ -37,6 +37,10 @@ import {
 import { TX_JURISDICTION } from '../../../../utils/tax-jurisdictions'
 import { resolveTaxFilingSettings } from '../../../../utils/server/tax-filing-store'
 import { readTaxablePurchases } from '../../../../utils/server/taxable-purchases-store'
+import { taxFindingListRows } from '../../../../utils/tax-findings-list'
+import { serveTaxFindings } from '../../../../utils/server/tax-findings-list'
+import type { TaxReturnPayload } from '../../../../utils/tx-return-webfile'
+import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 
 /**
  * The sales tax return for one filing period, summed from the
@@ -178,6 +182,199 @@ function projectRow(row: TaxReturnRowInput, scope: TaxReturnScope) {
   }
 }
 
+/**
+ * The whole return for one period, as the response carries it — read from
+ * every source the return sums. Shared by the return itself and by the
+ * findings list, which filters over this same complete read.
+ */
+async function readTaxReturn(
+  period: string,
+  range: NonNullable<ReturnType<typeof taxPeriodRange>>,
+) {
+  const firestore = firebaseAdmin.app().firestore()
+  const revenue = firestore.collection('platformRevenue')
+  // Storefront commerce tax (AGL-1904): a SEPARATE collection, queried and
+  // reported separately, because a storefront row's money is mostly the
+  // merchant's while a `platformRevenue` row's is Aglyn's. Summing the two
+  // would put other companies' receipts into this return's total sales —
+  // which is why they never meet in one query.
+  const storefront = firestore.collection('storefrontTaxCollected')
+  // Marketplace sales tax (AGL-2137): a THIRD source, and it was missing
+  // entirely. Marketplace checkout enables `automatic_tax` on the PLATFORM's
+  // own charge with the tax added `exclusive` on top and kept platform-side
+  // — the publisher's transfer is a fixed amount computed from the PRE-tax
+  // price — so under the marketplace-provider registration that tax is
+  // Aglyn's to remit, in full. Nothing read `marketplacePurchases.taxCents`:
+  // every dollar of it was collected and then absent from the return.
+  //
+  // Ranged on `createdAt`, which is a SINGLE-FIELD inequality and therefore
+  // served by Firestore's automatic index — deliberately, so this cannot be
+  // the query that 500s the staff page in production over a composite index
+  // nobody deployed.
+  const marketplace = firestore.collection('marketplacePurchases')
+  const [
+    inPeriod,
+    undatedProbe,
+    undatedCount,
+    storefrontInPeriod,
+    storefrontUndated,
+    marketplaceInPeriod,
+    registration,
+    taxablePurchases,
+  ] = await Promise.all([
+      revenue
+        .where('paidAt', '>=', range.start)
+        .where('paidAt', '<', range.end)
+        .limit(ROW_CAP + 1)
+        .get(),
+      // Rows a range query can never see — see the doc block.
+      revenue.where('paidAt', '==', null).limit(50).get(),
+      // …and how many there are, all of them: the probe above is capped for
+      // the list, and a count read off it stopped at fifty (AGL-3321).
+      revenue.where('paidAt', '==', null).count().get(),
+      storefront
+        .where('paidAt', '>=', range.start)
+        .where('paidAt', '<', range.end)
+        .limit(ROW_CAP + 1)
+        .get(),
+      storefront.where('paidAt', '==', null).count().get(),
+      marketplace
+        .where('createdAt', '>=', range.start)
+        .where('createdAt', '<', range.end)
+        .limit(ROW_CAP + 1)
+        .get(),
+      // Alongside the queries rather than before them: it is one cached
+      // document read and the return cannot be built without it either way.
+      taxRegistrationInForce(),
+      // Item 3, if anybody has entered one for this period. `null` when
+      // nobody has, which is what makes the line read `not computed`.
+      readTaxablePurchases(period),
+    ])
+  const truncated = inPeriod.size > ROW_CAP
+  const docs = inPeriod.docs.slice(0, ROW_CAP)
+  const rows: TaxReturnRowInput[] = docs.map((doc) => ({
+    invoiceId: doc.id,
+    ...(doc.data() as Omit<TaxReturnRowInput, 'invoiceId'>),
+  }))
+
+  // One scope, built once and used by BOTH the counting and the per-row
+  // projection below, so a row can never be scoped out of a count while
+  // still being named as needing attention.
+  const scope: TaxReturnScope = {
+    obligationStart: taxPeriodRange(registration.firstTaxablePeriod ?? '')?.start ?? null,
+  }
+  const summary = taxReturnSummary(rows, range, scope)
+  const storefrontDocs = storefrontInPeriod.docs.slice(0, ROW_CAP)
+  const storefrontRows: StorefrontTaxReturnRowInput[] = storefrontDocs.map(
+    (doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
+    }),
+  )
+  const marketplaceRows: MarketplaceTaxReturnRowInput[] =
+    marketplaceInPeriod.docs.slice(0, ROW_CAP).map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<MarketplaceTaxReturnRowInput, 'id'>),
+    }))
+  return {
+    period,
+    summary,
+    truncated,
+    /**
+     * Marketplace sales tax (AGL-2137) — ADDITIVE and separate, for the
+     * same reason `storefront` below is: a marketplace row's gross is mostly
+     * the PUBLISHER's money, so summing it into `summary` would put someone
+     * else's receipts into this return's sales figure. Unlike either
+     * sibling it has ONE liability arm — the platform's — and its tax is
+     * reported NET of refunds, with the charged and refunded halves stated
+     * separately so a reader is never handed a single number that could be
+     * either.
+     */
+    marketplace: {
+      summary: marketplaceTaxSummary(marketplaceRows, range),
+      truncated: marketplaceInPeriod.size > ROW_CAP,
+      rows: marketplaceRows.map((row) => ({
+        id: row.id,
+        sellerOrgId:
+          typeof row.sellerOrgId === 'string' ? row.sellerOrgId : null,
+        createdAt: asRowDate(row.createdAt)?.toISOString() ?? null,
+        grossCents: Number(row.amountCents ?? 0),
+        taxCents: Number(row.taxCents ?? 0),
+        refundedCents: Number(row.refundedCents ?? 0),
+      })),
+    },
+    /**
+     * AGL-2021 — operator config, not source. Null identifiers when
+     * unconfigured, and the jurisdiction they belong to so the surfaces can
+     * name the authority instead of assuming one.
+     */
+    registration,
+    /**
+     * Storefront commerce tax (AGL-1904) — ADDITIVE and separate. Three
+     * buckets with no grand total, on purpose: `aglynLiable` is tax Stripe
+     * computed against Aglyn's own registrations and is money Aglyn holds;
+     * `merchantManual` is a merchant's own configured rate and is not
+     * Aglyn's to remit. A reader that adds them has made the mistake this
+     * shape exists to prevent.
+     */
+    storefront: {
+      summary: storefrontTaxSummary(storefrontRows, range),
+      truncated: storefrontInPeriod.size > ROW_CAP,
+      undatedRows: storefrontUndated.data().count,
+      rows: storefrontRows.map((row) => ({
+        id: row.id,
+        hostId: typeof row.hostId === 'string' ? row.hostId : null,
+        orgId: row.orgId ?? null,
+        paidAt: asRowDate(row.paidAt)?.toISOString() ?? null,
+        taxMode: typeof row.taxMode === 'string' ? row.taxMode : null,
+        taxLiability:
+          typeof row.taxLiability === 'string' ? row.taxLiability : null,
+        grossCents: Number(row.grossCents ?? 0),
+        taxCents: Number(row.taxCents ?? 0),
+        taxableSalesCents: (Array.isArray(row.taxLines) ? row.taxLines : [])
+          .map((line) => Number(line?.taxableAmountCents ?? 0))
+          .reduce((sum, base) => sum + (Number.isFinite(base) ? base : 0), 0),
+        state:
+          typeof row.customerAddress?.state === 'string'
+            ? row.customerAddress.state
+            : null,
+        country:
+          typeof row.customerAddress?.country === 'string'
+            ? row.customerAddress.country
+            : null,
+      })),
+    },
+    /**
+     * ITEM 3 — the figure this report cannot derive, as somebody entered it.
+     *
+     * `null` when nobody has entered one for this period, and the surfaces
+     * render null as `not computed`. A zero here would be the exact claim
+     * the line refuses to make.
+     */
+    taxablePurchases,
+    /** Rows no period query can reach — must be zero before filing. */
+    undatedRows: undatedCount.data().count,
+    /**
+     * …AND WHICH ONES.
+     *
+     * The count alone is a blocking finding an operator cannot begin on:
+     * these rows are in no period query, including this one, so they are
+     * not in `rows` either and no amount of filtering the listing would
+     * produce them. The list is bounded by the probe's own limit and the
+     * count is not, so `truncated` says when the list is a subset of the
+     * number beside it rather than letting it pass for the whole.
+     */
+    undated: {
+      truncated: undatedCount.data().count > undatedProbe.size,
+      rows: undatedProbe.docs.map((doc) => {
+        const data = doc.data() as Omit<TaxReturnRowInput, 'invoiceId'>
+        return projectRow({ invoiceId: doc.id, ...data }, scope)
+      }),
+    },
+    rows: rows.map((row) => projectRow(row, scope)),
+  }
+}
+
 async function handler(request: Request): Promise<Response> {
   const { method, headers: rawHeaders } = await pluginRequestFromWeb(request)
   const headers = rawHeaders as Partial<Record<string, string>>
@@ -210,183 +407,28 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    const firestore = firebaseAdmin.app().firestore()
-    const revenue = firestore.collection('platformRevenue')
-    // Storefront commerce tax (AGL-1904): a SEPARATE collection, queried and
-    // reported separately, because a storefront row's money is mostly the
-    // merchant's while a `platformRevenue` row's is Aglyn's. Summing the two
-    // would put other companies' receipts into this return's total sales —
-    // which is why they never meet in one query.
-    const storefront = firestore.collection('storefrontTaxCollected')
-    // Marketplace sales tax (AGL-2137): a THIRD source, and it was missing
-    // entirely. Marketplace checkout enables `automatic_tax` on the PLATFORM's
-    // own charge with the tax added `exclusive` on top and kept platform-side
-    // — the publisher's transfer is a fixed amount computed from the PRE-tax
-    // price — so under the marketplace-provider registration that tax is
-    // Aglyn's to remit, in full. Nothing read `marketplacePurchases.taxCents`:
-    // every dollar of it was collected and then absent from the return.
-    //
-    // Ranged on `createdAt`, which is a SINGLE-FIELD inequality and therefore
-    // served by Firestore's automatic index — deliberately, so this cannot be
-    // the query that 500s the staff page in production over a composite index
-    // nobody deployed.
-    const marketplace = firestore.collection('marketplacePurchases')
-    const [
-      inPeriod,
-      undatedProbe,
-      storefrontInPeriod,
-      storefrontUndated,
-      marketplaceInPeriod,
-      registration,
-      taxablePurchases,
-    ] = await Promise.all([
-        revenue
-          .where('paidAt', '>=', range.start)
-          .where('paidAt', '<', range.end)
-          .limit(ROW_CAP + 1)
-          .get(),
-        // Rows a range query can never see — see the doc block.
-        revenue.where('paidAt', '==', null).limit(50).get(),
-        storefront
-          .where('paidAt', '>=', range.start)
-          .where('paidAt', '<', range.end)
-          .limit(ROW_CAP + 1)
-          .get(),
-        storefront.where('paidAt', '==', null).limit(50).get(),
-        marketplace
-          .where('createdAt', '>=', range.start)
-          .where('createdAt', '<', range.end)
-          .limit(ROW_CAP + 1)
-          .get(),
-        // Alongside the queries rather than before them: it is one cached
-        // document read and the return cannot be built without it either way.
-        taxRegistrationInForce(),
-        // Item 3, if anybody has entered one for this period. `null` when
-        // nobody has, which is what makes the line read `not computed`.
-        readTaxablePurchases(period),
-      ])
-    const truncated = inPeriod.size > ROW_CAP
-    const docs = inPeriod.docs.slice(0, ROW_CAP)
-    const rows: TaxReturnRowInput[] = docs.map((doc) => ({
-      invoiceId: doc.id,
-      ...(doc.data() as Omit<TaxReturnRowInput, 'invoiceId'>),
-    }))
+    const payload = await readTaxReturn(period, range)
 
-    // One scope, built once and used by BOTH the counting and the per-row
-    // projection below, so a row can never be scoped out of a count while
-    // still being named as needing attention.
-    const scope: TaxReturnScope = {
-      obligationStart: taxPeriodRange(registration.firstTaxablePeriod ?? '')?.start ?? null,
+    /*
+     * `?view=findings`: the findings list, filtered and searched HERE over
+     * the period's complete read, one page at a time (AGL-3321). A finding is
+     * computed from the rows rather than stored on any document, so there is
+     * no query to put a clause on; the route is where the whole period is,
+     * and a read the cap cut short refuses every clause rather than matching
+     * over part of it. See `utils/tax-findings-list.ts`.
+     */
+    const asked = new URL(request.url).searchParams
+    if (asked.get('view') === 'findings') {
+      const listed = readStaffListQuery(Object.fromEntries(asked))
+      if (!listed) {
+        return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+      }
+      const wire = JSON.parse(JSON.stringify(payload)) as TaxReturnPayload
+      return Response.json(
+        serveTaxFindings(taxFindingListRows(wire), listed, !payload.truncated),
+      )
     }
-    const summary = taxReturnSummary(rows, range, scope)
-    const storefrontDocs = storefrontInPeriod.docs.slice(0, ROW_CAP)
-    const storefrontRows: StorefrontTaxReturnRowInput[] = storefrontDocs.map(
-      (doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<StorefrontTaxReturnRowInput, 'id'>),
-      }),
-    )
-    const marketplaceRows: MarketplaceTaxReturnRowInput[] =
-      marketplaceInPeriod.docs.slice(0, ROW_CAP).map((doc) => ({
-        id: doc.id,
-        ...(doc.data() as Omit<MarketplaceTaxReturnRowInput, 'id'>),
-      }))
-    return Response.json({
-      period,
-      summary,
-      truncated,
-      /**
-       * Marketplace sales tax (AGL-2137) — ADDITIVE and separate, for the
-       * same reason `storefront` below is: a marketplace row's gross is mostly
-       * the PUBLISHER's money, so summing it into `summary` would put someone
-       * else's receipts into this return's sales figure. Unlike either
-       * sibling it has ONE liability arm — the platform's — and its tax is
-       * reported NET of refunds, with the charged and refunded halves stated
-       * separately so a reader is never handed a single number that could be
-       * either.
-       */
-      marketplace: {
-        summary: marketplaceTaxSummary(marketplaceRows, range),
-        truncated: marketplaceInPeriod.size > ROW_CAP,
-        rows: marketplaceRows.map((row) => ({
-          id: row.id,
-          sellerOrgId:
-            typeof row.sellerOrgId === 'string' ? row.sellerOrgId : null,
-          createdAt: asRowDate(row.createdAt)?.toISOString() ?? null,
-          grossCents: Number(row.amountCents ?? 0),
-          taxCents: Number(row.taxCents ?? 0),
-          refundedCents: Number(row.refundedCents ?? 0),
-        })),
-      },
-      /**
-       * AGL-2021 — operator config, not source. Null identifiers when
-       * unconfigured, and the jurisdiction they belong to so the surfaces can
-       * name the authority instead of assuming one.
-       */
-      registration,
-      /**
-       * Storefront commerce tax (AGL-1904) — ADDITIVE and separate. Three
-       * buckets with no grand total, on purpose: `aglynLiable` is tax Stripe
-       * computed against Aglyn's own registrations and is money Aglyn holds;
-       * `merchantManual` is a merchant's own configured rate and is not
-       * Aglyn's to remit. A reader that adds them has made the mistake this
-       * shape exists to prevent.
-       */
-      storefront: {
-        summary: storefrontTaxSummary(storefrontRows, range),
-        truncated: storefrontInPeriod.size > ROW_CAP,
-        undatedRows: storefrontUndated.size,
-        rows: storefrontRows.map((row) => ({
-          id: row.id,
-          hostId: typeof row.hostId === 'string' ? row.hostId : null,
-          orgId: row.orgId ?? null,
-          paidAt: asRowDate(row.paidAt)?.toISOString() ?? null,
-          taxMode: typeof row.taxMode === 'string' ? row.taxMode : null,
-          taxLiability:
-            typeof row.taxLiability === 'string' ? row.taxLiability : null,
-          grossCents: Number(row.grossCents ?? 0),
-          taxCents: Number(row.taxCents ?? 0),
-          taxableSalesCents: (Array.isArray(row.taxLines) ? row.taxLines : [])
-            .map((line) => Number(line?.taxableAmountCents ?? 0))
-            .reduce((sum, base) => sum + (Number.isFinite(base) ? base : 0), 0),
-          state:
-            typeof row.customerAddress?.state === 'string'
-              ? row.customerAddress.state
-              : null,
-          country:
-            typeof row.customerAddress?.country === 'string'
-              ? row.customerAddress.country
-              : null,
-        })),
-      },
-      /**
-       * ITEM 3 — the figure this report cannot derive, as somebody entered it.
-       *
-       * `null` when nobody has entered one for this period, and the surfaces
-       * render null as `not computed`. A zero here would be the exact claim
-       * the line refuses to make.
-       */
-      taxablePurchases,
-      /** Rows no period query can reach — must be zero before filing. */
-      undatedRows: undatedProbe.size,
-      /**
-       * …AND WHICH ONES.
-       *
-       * The count alone is a blocking finding an operator cannot begin on:
-       * these rows are in no period query, including this one, so they are
-       * not in `rows` either and no amount of filtering the listing would
-       * produce them. Bounded by the probe's own limit, which is also what
-       * bounds the count — so the list and the number are the same
-       * population, never a subset presented as the whole.
-       */
-      undated: {
-        rows: undatedProbe.docs.map((doc) => {
-          const data = doc.data() as Omit<TaxReturnRowInput, 'invoiceId'>
-          return projectRow({ invoiceId: doc.id, ...data }, scope)
-        }),
-      },
-      rows: rows.map((row) => projectRow(row, scope)),
-    })
+    return Response.json(payload)
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.

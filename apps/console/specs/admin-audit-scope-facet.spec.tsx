@@ -28,7 +28,9 @@
  * value, a Scope pick in the grid's Filters panel that changes which rows
  * survive, a search that matches on the email, and an exported CSV whose
  * bytes are read back. The load-bearing case is two rows differing ONLY in
- * `scope`, under the same `lockdowns/` target prefix.
+ * `scope`, under the same `lockdowns/` target prefix. The rows are stamped
+ * the way every writer stamps them (`withAdminAuditIndex`), because the
+ * filter and the search are asked of the query, which reads those fields.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -110,8 +112,8 @@ const queries: any[][] = []
 let mockRows: any[] = []
 
 /*==========================================
- * A Firestore double that ANSWERS the constraints: equalities and `in`,
- * ranges on `at`, the order, the cursor and the limit. An unordered query is
+ * A Firestore double that ANSWERS the constraints: equalities, `in` and
+ * `array-contains`, ranges on `at`, the order, the cursor and the limit. An unordered query is
  * answered in document-id order, as Firestore answers it.
  *=========================================*/
 const mockServe = (constraints: any[]) => {
@@ -124,6 +126,9 @@ const mockServe = (constraints: any[]) => {
         return bound.op === '>=' ? seconds(row) >= edge : seconds(row) < edge
       }
       if (bound.op === 'in') return bound.value.includes(row[bound.field])
+      if (bound.op === 'array-contains') {
+        return Array.isArray(row[bound.field]) && row[bound.field].includes(bound.value)
+      }
       return row[bound.field] === bound.value
     })
   }
@@ -172,6 +177,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useUser: () => ({ data: { getIdToken: async () => 'staff-token' } }),
 }))
 
+import { withAdminAuditIndex } from '@aglyn/aglyn/app-utils/admin-audit-index'
 import AdminAudit from '../app/(app)/admin/audit/page'
 
 /** Seconds, as Firestore hands a `Timestamp` to the browser. */
@@ -224,7 +230,7 @@ async function pickFilter(column: string, value: string) {
 
 beforeEach(() => {
   queries.length = 0
-  mockRows = ROWS.map((row) => ({ ...row }))
+  mockRows = ROWS.map((row) => withAdminAuditIndex({ ...row }))
 })
 
 describe('the staff audit log surfaces scope and actorEmail', () => {
@@ -243,7 +249,7 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
   })
 
   it('falls back to the uid on a row written before actorEmail', async () => {
-    mockRows = [{ ...ROWS[0], actorEmail: undefined }]
+    mockRows = [withAdminAuditIndex({ ...ROWS[0], actorEmail: undefined })]
     render(<AdminAudit />)
     expect(await screen.findByText('uid-alice')).toBeTruthy()
     expect(screen.queryByText(/alice@aglyn\.com/)).toBeNull()
@@ -261,19 +267,22 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
     await waitFor(() => expect(screen.queryByText('lockdowns/platform')).toBeNull())
     expect(screen.getByText('lockdowns/host-77')).toBeTruthy()
     expect(screen.queryByText('mediaQuarantines/index')).toBeNull()
-    // Matched as the log is read — `scope` has no composite — and said so.
-    expect(constraint('where')).toEqual([])
-    expect(screen.getByText(/matched as the log is read/)).toBeTruthy()
+    // On the query, as the equality the stored field answers, and chipped.
+    expect(constraint('where')).toEqual([
+      { kind: 'where', field: 'scope', op: '==', value: 'host' },
+    ])
     expect(screen.getByText('Scope is host')).toBeTruthy()
   })
 
-  it('offers exactly the scopes the log has shown — no phantom facet', async () => {
-    mockRows = [{ ...ROWS[0] }]
+  it('offers the scopes the writers store, and any the log has shown', async () => {
+    mockRows = [withAdminAuditIndex({ ...ROWS[0], scope: 'brand-new-scope' })]
     render(<AdminAudit />)
     await screen.findByText('lockdowns/platform')
-    expect(await pickFilter('Scope', 'platform')).toBeTruthy()
-    expect(screen.queryByRole('option', { name: 'host' })).toBeNull()
-    expect(screen.queryByRole('option', { name: 'asset' })).toBeNull()
+    // A known scope is pickable before any row on screen carries it — the
+    // pick is a query over the whole log, not a match over this page …
+    expect(await pickFilter('Scope', 'asset')).toBeTruthy()
+    // … and a scope a new writer introduced is offered once seen.
+    expect(screen.getByRole('option', { name: 'brand-new-scope' })).toBeTruthy()
   })
 
   it('the search matches an actor’s email address', async () => {
@@ -286,6 +295,10 @@ describe('the staff audit log surfaces scope and actorEmail', () => {
       timeout: 3000,
     })
     expect(screen.getByText('mediaQuarantines/index')).toBeTruthy()
+    // By the token the writer stamped, on the query.
+    expect(constraint('where')).toEqual([
+      { kind: 'where', field: 'searchTokens', op: 'array-contains', value: 'carol@aglyn.' },
+    ])
   })
 
   it('the compliance CSV carries scope and actorEmail as columns', async () => {

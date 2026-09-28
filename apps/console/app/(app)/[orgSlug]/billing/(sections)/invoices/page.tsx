@@ -18,9 +18,12 @@
 
 import { CardDisplay, GridItems } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import ListTable from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import {
   Alert,
@@ -32,13 +35,21 @@ import {
   Typography,
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import BillingOpenInvoicesCardComponent from '../../../../../../components/billing/billing-open-invoices-card.component'
 import { docsHelp } from '../../../../../../constants/docs-links'
 import useCurrentOrg from '../../../../../../hooks/use-current-org'
 import useOrgPermissions from '../../../../../../hooks/use-org-permissions'
+import {
+  INVOICE_FILTER_FIELDS,
+  INVOICE_FILTER_HEADERS,
+  INVOICE_FILTER_OPTIONS,
+  INVOICE_SELECT_FIELDS,
+  invoiceQueryString,
+  planInvoiceQuery,
+} from '../../../../../../utils/billing-invoice-query'
 import { stripeOtherModeInvoiceNotice } from '../../../../../../utils/stripe-mode-notice'
 
 /** One invoice as `/api/billing/invoices` serializes it. */
@@ -58,24 +69,20 @@ interface InvoiceRow {
 }
 
 /*
- * What the history grid's Filters panel and quick search offer (AGL-3317).
- * The list holds every invoice it has loaded, so both are answered over
- * those, and the caption under the chips says so while older ones remain.
- * Status is picked from the statuses the loaded invoices carry: the route
- * passes Stripe's word through, and a status no loaded invoice has would
- * match nothing here.
+ * The history grid's Filters panel and quick search are asked of STRIPE
+ * (AGL-3321): the page turns them into the parameters `planInvoiceQuery`
+ * writes, and `/api/billing/invoices` asks Stripe's own list, search and
+ * retrieve — see `utils/billing-invoice-query.ts`. Nothing is matched over
+ * the invoices already loaded, so an invoice from three years ago is found
+ * as readily as this month's.
  */
-const INVOICE_FILTER_FIELDS = [
-  inMemoryListField('number', 'text'),
-  inMemoryListField('created', 'date'),
-  inMemoryListField('status', 'select'),
-]
-const INVOICE_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  number: 'Invoice',
-  created: 'Date',
-  status: 'Status',
-}
-const INVOICE_SEARCH_FIELDS = ['number', 'id'] as const
+const INVOICE_GRID_COLUMNS = (): GridColDef[] =>
+  listFilterGridColumns(
+    INVOICE_COLUMNS as GridColDef[],
+    INVOICE_FILTER_FIELDS,
+    INVOICE_FILTER_OPTIONS,
+    INVOICE_FILTER_HEADERS,
+  )
 
 const INVOICE_COLUMNS: GridColDef<InvoiceRow>[] = [
   {
@@ -176,8 +183,6 @@ const INVOICE_COLUMNS: GridColDef<InvoiceRow>[] = [
  * Stripe and answers `alreadyPaid` if it has been settled, whichever copy the
  * button was pressed on.
  */
-const NO_INVOICES: InvoiceRow[] = []
-
 const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => {
   const { data: user } = useUser()
   const { orgId } = useCurrentOrg()
@@ -215,18 +220,31 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
   const [invoicesOtherMode, setInvoicesOtherMode] = useState<
     'live' | 'test' | null
   >(null)
+  const gridFilter = useListGridFilter({ selectFields: INVOICE_SELECT_FIELDS })
+  const invoicePlan = useMemo(
+    () => planInvoiceQuery(gridFilter.clauses, gridFilter.searchWords),
+    [gridFilter.clauses, gridFilter.searchWords],
+  )
+  const invoiceParams = invoiceQueryString(invoicePlan.params)
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.length > 0
+  /** The request a response answers, so a late one for old filters is dropped. */
+  const latestParams = useRef('')
   const fetchInvoices = useCallback(
     async (cursor?: string | null) => {
       if (!orgId || !user) return
+      latestParams.current = invoiceParams
       setInvoicesLoading(true)
       try {
         const response = await authorizedFetch(
           user,
           `/api/billing/invoices?orgId=${encodeURIComponent(orgId)}` +
-            (cursor ? `&startingAfter=${encodeURIComponent(cursor)}` : ''),
+            invoiceParams +
+            (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''),
         )
         if (!response.ok) return
         const payload = await response.json()
+        if (latestParams.current !== invoiceParams) return
         setInvoices((previous) =>
           cursor
             ? [...(previous ?? []), ...(payload.invoices ?? [])]
@@ -251,7 +269,7 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
         setInvoicesLoading(false)
       }
     },
-    [orgId, user],
+    [orgId, user, invoiceParams],
   )
   useEffect(() => {
     // `!permissionsLoaded ||`, never `permissionsLoaded && !can(…)`. Written
@@ -264,28 +282,19 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
     // becomes a real one.
     if (!orgId || !user || !permissionsLoaded || !can('billing.view')) return
     void fetchInvoices()
+    // A new filter or search is a new question: the history starts over.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgId, user, permissionsLoaded])
-
-  const invoiceStatusOptions = useMemo(
-    () => ({
-      status: [
-        ...new Set(
-          (invoices ?? [])
-            .map((invoice) => invoice.status)
-            .filter((status): status is string => Boolean(status)),
-        ),
-      ].map((status) => ({ value: status, label: status })),
-    }),
-    [invoices],
+  }, [orgId, user, permissionsLoaded, invoiceParams])
+  const invoiceColumns = useMemo(INVOICE_GRID_COLUMNS, [])
+  const invoiceRefusals = useMemo(
+    () =>
+      listQueryRefusals(invoicePlan.refused, {
+        fields: INVOICE_FILTER_FIELDS,
+        headers: INVOICE_FILTER_HEADERS,
+        options: INVOICE_FILTER_OPTIONS,
+      }),
+    [invoicePlan],
   )
-  const invoiceFilter = useListRowsFilter({
-    rows: invoices ?? NO_INVOICES,
-    fields: INVOICE_FILTER_FIELDS,
-    options: invoiceStatusOptions,
-    headers: INVOICE_FILTER_HEADERS,
-    search: INVOICE_SEARCH_FIELDS,
-  })
 
   /*
    * Masonry, and the two sizes are the point: `Outstanding` is usually one
@@ -340,7 +349,7 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
                             <Typography variant="body2" color="text.secondary">
                               {'Invoices appear here once billing is configured.'}
                             </Typography>
-                          ) : invoices.length === 0 ? (
+                          ) : invoices.length === 0 && !filtering ? (
                             // An empty list has two meanings and they are not
                             // interchangeable (AGL-2486): never billed, or
                             // billed in the Stripe mode this deployment cannot
@@ -356,25 +365,32 @@ const BillingInvoicesSection: NextPageWithLayout<Record<string, never>> = () => 
                             )
                           ) : (
                             <>
-                              <ListFilterChips {...invoiceFilter.chipsProps} />
-                              {invoiceFilter.filtering && invoicesHasMore ? (
-                                <Typography variant="caption" color="text.secondary">
-                                  {`Filtering the ${invoices.length} invoices loaded so far — loading older invoices reaches more.`}
-                                </Typography>
-                              ) : null}
+                              <ListFilterChips
+                                fields={INVOICE_FILTER_FIELDS}
+                                headers={INVOICE_FILTER_HEADERS}
+                                clauses={gridFilter.clauses}
+                                onChange={gridFilter.setClauses}
+                                options={INVOICE_FILTER_OPTIONS}
+                              />
+                              <ListQueryNotices
+                                refused={invoiceRefusals}
+                                notices={invoicePlan.notices}
+                              />
                               <ListTable
                                 aria-label="Invoices"
-                                rows={invoiceFilter.rows}
-                                columns={invoiceFilter.filterColumns(INVOICE_COLUMNS as GridColDef[])}
+                                rows={invoices}
+                                columns={invoiceColumns}
                                 getRowId={(invoice: InvoiceRow) => invoice.id}
                                 // Every loaded invoice is on screen, and the
                                 // button below loads older ones: the history
                                 // grows rather than pages.
                                 hideFooter
-                                // The panel and the search are the grid's; the
-                                // card answers them over what it loaded
-                                // (AGL-3317).
-                                {...invoiceFilter.gridProps}
+                                // The panel and the search are Stripe's: the
+                                // grid narrows nothing itself (AGL-3321).
+                                filterMode="server"
+                                filterModel={gridFilter.filterModel}
+                                onFilterModelChange={gridFilter.onFilterModelChange}
+                                quickFilter
                                 noRowsLabel="No invoices match these filters"
                               />
                               {invoicesHasMore ? (

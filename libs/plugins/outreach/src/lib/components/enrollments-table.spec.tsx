@@ -32,8 +32,10 @@ import {
   outreachCurrentStepLabel,
   outreachStopLabel,
 } from './enrollments-table'
+import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
+import { outreachEnrollmentSearchTokens } from '../enrollment/enrollment-search'
 import type { OutreachApi } from './use-outreach-api'
-import type { OutreachEnrollmentsLoad } from './use-outreach-data'
+import type { OutreachLoadStatus } from './use-outreach-data'
 
 /**
  * A sequence's enrollments (AGL-2980): each state the read can be in, the
@@ -41,6 +43,49 @@ import type { OutreachEnrollmentsLoad } from './use-outreach-data'
  * mailbox's timezone, last activity, stop reason — and the four actions,
  * the two final ones asked first.
  */
+
+/*
+ * The table's page, answered by the list-query DOUBLE over the fixture
+ * enrollments (AGL-3321): the real plan of the table's declaration, applied
+ * the way Firestore would apply it, a page at a time — so a spec proves what
+ * the query asked for and that a match past the first page is found.
+ */
+let mockLoad: { status: OutreachLoadStatus; data: OutreachEnrollment[] }
+jest.mock('./use-outreach-data', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  const { OUTREACH_ENROLLMENT_LIST_QUERY, outreachEnrollmentListBase } = jest.requireActual(
+    '../model/enrollment-list-query',
+  )
+  return {
+    useOutreachEnrollmentList: (
+      _orgId: string,
+      sequenceId: string,
+      request: Record<string, unknown>,
+    ) => {
+      const listed = useListQueryDouble(
+        () => mockLoad.data.map((row) => ({ ...row, $id: row.id })),
+        {
+          collection: null,
+          declaration: OUTREACH_ENROLLMENT_LIST_QUERY,
+          request: { ...request, base: outreachEnrollmentListBase(sequenceId) },
+          deps: [],
+        },
+      )
+      return {
+        status: mockLoad.status,
+        rows: mockLoad.status === 'ready' ? listed.rows : [],
+        hasMore: listed.hasMore,
+        page: listed.page,
+        setPage: listed.setPage,
+        pageSize: listed.pageSize,
+        setPageSize: listed.setPageSize,
+        plan: listed.plan,
+      }
+    },
+  }
+})
 
 const mockEnqueueSnackbar = jest.fn()
 jest.mock('@aglyn/shared-ui-snackstack', () => ({
@@ -80,10 +125,11 @@ const DUE = Date.parse('2026-09-22T14:14:00Z')
 
 const enrollment = (
   overrides: Partial<OutreachEnrollment>,
-): OutreachEnrollment =>
-  ({
+): OutreachEnrollment => {
+  const made = {
     id: 'seq-1_c-1',
     sequenceId: 'seq-1',
+    target: 'contact',
     contactId: 'c-1',
     contactName: 'Casey Morgan',
     email: 'casey.morgan@example.com',
@@ -96,28 +142,27 @@ const enrollment = (
     lastSentAtMs: Date.parse('2026-09-18T15:00:00Z'),
     createdAtMs: Date.parse('2026-09-17T15:00:00Z'),
     ...overrides,
-  }) as OutreachEnrollment
+  } as OutreachEnrollment
+  // What the enroll route stamps beside the name and the address.
+  return { ...made, searchTokens: outreachEnrollmentSearchTokens(made) }
+}
 
 const loaded = (
   data: OutreachEnrollment[],
-  extra: Partial<OutreachEnrollmentsLoad> = {},
-): OutreachEnrollmentsLoad => ({
-  status: 'ready',
-  data,
-  hasMore: false,
-  showMore: jest.fn(),
-  ...extra,
-})
+  extra: { status?: OutreachLoadStatus } = {},
+) => ({ status: extra.status ?? ('ready' as OutreachLoadStatus), data })
 
 let api: jest.Mocked<Pick<OutreachApi, 'actOnEnrollment' | 'curateDrafts' | 'saveCuratedStep'>>
 
 const renderTable = (
-  enrollments: OutreachEnrollmentsLoad,
+  load: ReturnType<typeof loaded>,
   extra: Partial<ComponentProps<typeof OutreachEnrollmentsTable>> = {},
-) =>
-  render(
+) => {
+  mockLoad = load
+  return render(
     <OutreachEnrollmentsTable
-      enrollments={enrollments}
+      orgId="org-1"
+      sequenceId="seq-1"
       steps={steps}
       timeZone="America/Chicago"
       api={api as unknown as OutreachApi}
@@ -125,6 +170,7 @@ const renderTable = (
       {...extra}
     />,
   )
+}
 
 const rowOf = (name: string) =>
   screen
@@ -146,15 +192,12 @@ beforeEach(() => {
 })
 
 describe('the enrollments table: what it shows (AGL-2980)', () => {
-  it('filters through the grid’s own search, and says it narrows the window read so far (AGL-3317)', async () => {
+  it('searches on the query, by a word of the name or the address (AGL-3321)', async () => {
     renderTable(
-      loaded(
-        [
-          enrollment({}),
-          enrollment({ id: 'seq-1_c-2', contactId: 'c-2', contactName: '', email: 'avery.quinn@example.org' }),
-        ],
-        { hasMore: true },
-      ),
+      loaded([
+        enrollment({}),
+        enrollment({ id: 'seq-1_c-2', contactId: 'c-2', contactName: '', email: 'avery.quinn@example.org' }),
+      ]),
     )
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'avery' } })
     await waitFor(() => {
@@ -162,7 +205,30 @@ describe('the enrollments table: what it shows (AGL-2980)', () => {
       expect(grid.textContent).toContain('avery.quinn@example.org')
       expect(grid.textContent).not.toContain('Morgan')
     })
-    expect(screen.getByText(/Filtering the 2 enrollments read so far/)).toBeTruthy()
+    expect(lastListQueryPlan()?.filters).toEqual([
+      { path: 'sequenceId', op: '==', value: 'seq-1' },
+      { path: 'searchTokens', op: 'array-contains', value: 'avery' },
+    ])
+    expect(lastListQueryPlan()?.orderBy).toEqual({ path: 'createdAtMs', direction: 'desc' })
+  })
+
+  it('finds a match past the first page, which the loaded rows never held (AGL-3321)', async () => {
+    const many = Array.from({ length: 25 }, (_, index) =>
+      enrollment({
+        id: `seq-1_c-${index}`,
+        contactId: `c-${index}`,
+        contactName: index === 24 ? 'Zed Oldest' : `Person ${index}`,
+        email: `p${index}@example.com`,
+        // Newest first: the last one made is the first one listed.
+        createdAtMs: Date.parse('2026-09-17T15:00:00Z') - index * 60_000,
+      }),
+    )
+    renderTable(loaded(many))
+    expect(screen.getByRole('grid', { name: 'Enrollments' }).textContent).not.toContain('Zed')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zed' } })
+    await waitFor(() =>
+      expect(screen.getByRole('grid', { name: 'Enrollments' }).textContent).toContain('Zed Oldest'),
+    )
   })
 
   it('shows progress, a failure, a refusal, and an empty sequence with the way to enroll', () => {
@@ -227,19 +293,19 @@ describe('the enrollments table: what it shows (AGL-2980)', () => {
     expect(outreachStopLabel({ stopReason: null, stopDetail: null })).toBe('')
   })
 
-  it('pages the rows it read, and reads another window past the last of them', () => {
-    const showMore = jest.fn()
+  it('pages through the query, a page at a time', async () => {
     const many = Array.from({ length: 12 }, (_, index) =>
       enrollment({
         id: `seq-1_c-${index}`,
         contactId: `c-${index}`,
         contactName: `Person ${index}`,
+        createdAtMs: Date.parse('2026-09-17T15:00:00Z') - index * 60_000,
       }),
     )
-    renderTable(loaded(many, { hasMore: true, showMore }))
+    renderTable(loaded(many))
     expect(screen.getAllByRole('row')).toHaveLength(11)
     fireEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
-    expect(showMore).toHaveBeenCalled()
+    await waitFor(() => expect(screen.getAllByRole('row')).toHaveLength(3))
   })
 })
 
@@ -412,22 +478,47 @@ describe('each row opens the person’s page (AGL-3332)', () => {
   })
 })
 
-describe('the Clicks column counts, and the click filters (AGL-3332)', () => {
-  const clicked = (id: string, name: string, engagement: Record<string, unknown>) =>
-    enrollment({ id, contactId: id, contactName: name, email: `${id}@example.com`, engagement } as never)
+describe('the Clicks column counts, and the click filters are on the query (AGL-3332)', () => {
+  // Each person as stored: the `clicked` flag and the destinations the click
+  // route (and, for clicks before it, the backfill) keeps beside the counts.
+  const clicked = (
+    id: string,
+    name: string,
+    engagement: Record<string, unknown> | undefined,
+    minutesAgo: number,
+  ) =>
+    enrollment({
+      id,
+      contactId: id,
+      contactName: name,
+      email: `${id}@example.com`,
+      createdAtMs: Date.parse('2026-09-17T15:00:00Z') - minutesAgo * 60_000,
+      ...(engagement ? { engagement } : {}),
+      clicked: Number(engagement?.['clicks'] ?? 0) > 0,
+    } as never)
   const people = [
     // Two clicks, both listed one by one, on one destination.
-    clicked('c-1', 'Casey Morgan', {
-      clicks: 2,
-      machineClicks: 1,
-      lastClickUrl: 'https://calendar.example.com/book',
-      links: ['https://calendar.example.com/book'],
-      loggedClicks: 2,
-      loggedMachineClicks: 1,
-    }),
+    clicked(
+      'c-1',
+      'Casey Morgan',
+      {
+        clicks: 2,
+        machineClicks: 1,
+        lastClickUrl: 'https://calendar.example.com/book',
+        links: ['https://calendar.example.com/book'],
+        loggedClicks: 2,
+        loggedMachineClicks: 1,
+      },
+      1,
+    ),
     // Clicks from before the history, which kept only the last link.
-    clicked('c-2', 'Jordan Lee', { clicks: 3, lastClickUrl: 'https://aglyn.com/pricing' }),
-    enrollment({ id: 'c-3', contactId: 'c-3', contactName: 'Avery Quinn', email: 'avery@example.com' }),
+    clicked(
+      'c-2',
+      'Jordan Lee',
+      { clicks: 3, lastClickUrl: 'https://aglyn.com/pricing', links: ['https://aglyn.com/pricing'] },
+      2,
+    ),
+    clicked('c-3', 'Avery Quinn', undefined, 3),
   ]
 
   it('shows the count and the distinct links, never the destination itself', () => {
@@ -438,33 +529,52 @@ describe('the Clicks column counts, and the click filters (AGL-3332)', () => {
     expect(screen.queryByText('https://calendar.example.com/book')).toBeNull()
   })
 
-  it('narrows to the people who clicked, and to those who followed one destination', () => {
+  it('asks Firestore for the people who clicked, and for those who followed one destination', async () => {
     const view = renderTable(loaded(people), {
       trackClicks: true,
-      clauses: [{ field: 'clicked', op: 'equals', value: 'yes' }],
+      clauses: [{ field: 'clicked', op: 'equals', value: 'true' }],
     })
     const grid = () => screen.getByRole('grid', { name: 'Enrollments' }).textContent
-    expect(grid()).toContain('Casey Morgan')
+    await waitFor(() => expect(grid()).toContain('Casey Morgan'))
     expect(grid()).toContain('Jordan Lee')
     expect(grid()).not.toContain('Avery Quinn')
+    expect(lastListQueryPlan()?.filters).toEqual([
+      { path: 'sequenceId', op: '==', value: 'seq-1' },
+      { path: 'clicked', op: '==', value: true },
+    ])
     expect(screen.getByRole('list', { name: 'Filters' }).textContent).toContain('Clicked is Yes')
     view.unmount()
 
     renderTable(loaded(people), {
       trackClicks: true,
-      clauses: [{ field: 'link', op: 'equals', value: 'https://aglyn.com/pricing' }],
+      clauses: [{ field: 'link', op: 'isAnyOf', value: 'https://aglyn.com/pricing' }],
     })
-    expect(grid()).toContain('Jordan Lee')
+    await waitFor(() => expect(grid()).toContain('Jordan Lee'))
     expect(grid()).not.toContain('Casey Morgan')
-    // Jordan's earlier clicks kept only the last link, and the list says what that can miss.
+    expect(lastListQueryPlan()?.filters).toEqual([
+      { path: 'sequenceId', op: '==', value: 'seq-1' },
+      { path: 'engagement.links', op: 'array-contains-any', value: ['https://aglyn.com/pricing'] },
+    ])
+    // Clicks before each was recorded kept only the last link, and the list says what that can miss.
     expect(screen.getByText(/kept only the person’s last link/)).toBeTruthy()
+  })
+
+  it('asks for the people who did not click, which the stored flag makes a query', async () => {
+    renderTable(loaded(people), {
+      trackClicks: true,
+      clauses: [{ field: 'clicked', op: 'equals', value: 'false' }],
+    })
+    const grid = () => screen.getByRole('grid', { name: 'Enrollments' }).textContent
+    await waitFor(() => expect(grid()).toContain('Avery Quinn'))
+    expect(grid()).not.toContain('Casey Morgan')
+    expect(grid()).not.toContain('Jordan Lee')
   })
 
   it('hands every clause change to the page that holds them', () => {
     const onClausesChange = jest.fn()
     renderTable(loaded(people), {
       trackClicks: true,
-      clauses: [{ field: 'clicked', op: 'equals', value: 'yes' }],
+      clauses: [{ field: 'clicked', op: 'equals', value: 'true' }],
       onClausesChange,
     })
     const chips = screen.getByRole('list', { name: 'Filters' })

@@ -33,6 +33,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { teardownSendingDomain } from '../../../../utils/server/provision-sending-domain'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * What the site's admin is told when its consent group still needs it
@@ -240,17 +241,13 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'host.deleted',
-        target: `hosts/${hostId}`,
-        before: { displayName: hostSnapshot.get('displayName') ?? null },
-        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'host.deleted',
+      target: `hosts/${hostId}`,
+      before: { displayName: hostSnapshot.get('displayName') ?? null },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     return Response.json({ ok: true }, { status: 200 })

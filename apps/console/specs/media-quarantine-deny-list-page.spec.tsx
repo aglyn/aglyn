@@ -34,13 +34,26 @@
  *  4. **The two facts AGL-1631's runbook work recorded are on screen**: a
  *     release removes only the key it names, and a full list refuses the next
  *     takedown.
+ *  5. **The route answers the filters and the search (AGL-3321).** The page
+ *     sends them and renders the page it is handed; the double below answers
+ *     with the route's own matcher over every entry.
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
+// One user object for the whole run, as the real hook holds it in state: the
+// table re-reads whenever the signed-in user changes.
+const mockUser = { uid: 'staff-1', getIdToken: async () => 'tok' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
-  useUser: () => ({ data: { uid: 'staff-1', getIdToken: async () => 'tok' } }),
+  useUser: () => ({ data: mockUser }),
+}))
+
+// The route's parser answers the table below; the Admin SDK half of its
+// module is not needed.
+jest.mock('../utils/server/list-filter', () => ({
+  __esModule: true,
+  applyListQuery: jest.fn(),
 }))
 
 const mockEnqueueSnackbar = jest.fn()
@@ -84,6 +97,15 @@ jest.mock('../hooks/use-is-staff', () => ({
 }))
 
 import AdminMediaQuarantine from '../app/(app)/admin/media-quarantine/page'
+import {
+  compareDenyRows,
+  DENY_FILTER_FIELDS,
+  DENY_SEARCH_PATHS,
+  denyListRow,
+  type QuarantineRecord,
+} from '../utils/media-quarantine-list-query'
+import { answerStaffCompleteList } from '../utils/server/staff-complete-list'
+import { readStaffListQuery } from '../utils/server/staff-list-query'
 
 const SHA_KEY = `hash--${'a'.repeat(64)}`
 const LEGACY_KEY = 'hash--0123456789abcdef'
@@ -136,6 +158,7 @@ let listReply: Record<string, unknown>
 let postReply: Record<string, unknown>
 let postOk: boolean
 const posted: Record<string, unknown>[] = []
+/** Every READ the page sent; writes are in `posted`. */
 const fetched: string[] = []
 
 beforeEach(() => {
@@ -147,14 +170,51 @@ beforeEach(() => {
   postOk = true
   postReply = { ok: true, action: 'release', key: SHA_KEY, keys: [SHA_KEY], confirmed: true }
   global.fetch = jest.fn(async (input: any, init?: any) => {
-    fetched.push(String(input))
     if (init?.method === 'POST') {
       posted.push(JSON.parse(String(init.body)))
       return { ok: postOk, status: 409, json: async () => postReply } as any
     }
-    return { ok: true, json: async () => listReply } as any
+    fetched.push(String(input))
+    return { ok: true, json: async () => answer(String(input)) } as any
   }) as any
 })
+
+/**
+ * What the route answers for a read of the deny list: the summary facts, or
+ * one page of the table matched by the route's own matcher over EVERY entry,
+ * oldest first — so the page is held to sending its clauses and rendering
+ * what comes back, never to narrowing rows itself.
+ */
+function answer(input: string): Record<string, unknown> {
+  const url = new URL(input, 'https://console.aglyn.com')
+  const records = listReply['records'] as QuarantineRecord[]
+  const readAtMs = listReply['readAtMs'] as number
+  const rows = [...records].sort(compareDenyRows).map((record) => denyListRow(record, readAtMs))
+  if (url.searchParams.get('view') === 'summary') {
+    return {
+      count: listReply['count'],
+      maxEntries: listReply['maxEntries'],
+      clearable: rows.filter((row) => row.state !== 'active').length,
+      readAtMs,
+    }
+  }
+  const request = readStaffListQuery(Object.fromEntries(url.searchParams))
+  if (!request) throw new Error(`unreadable list request ${input}`)
+  return {
+    ...answerStaffCompleteList({
+      rows,
+      fields: DENY_FILTER_FIELDS,
+      searchPaths: DENY_SEARCH_PATHS,
+      request,
+      cursorOf: (row) => row.key,
+    }),
+    readAtMs,
+  }
+}
+
+/** The reads the page sent, as the view each asked for. */
+const views = () =>
+  fetched.map((input) => new URL(input, 'https://console.aglyn.com').searchParams.get('view'))
 
 /** Render and wait for the mount read to land. */
 async function open() {
@@ -166,9 +226,15 @@ const releaseButtons = () =>
   screen.getAllByRole('button', { name: 'Release' }) as HTMLButtonElement[]
 
 describe('AGL-1700 · the list enumerates itself', () => {
-  it('reads the whole deny list on arrival, with no query and no media read', async () => {
+  it('reads the deny list on arrival — its facts and its first page, no media read', async () => {
     await open()
-    expect(fetched).toEqual(['/api/admin/media-quarantine'])
+    expect(views().sort()).toEqual(['list', 'summary'])
+    expect(
+      fetched.every((input) =>
+        new URL(input, 'https://console.aglyn.com').pathname === '/api/admin/media-quarantine',
+      ),
+    ).toBe(true)
+    expect(fetched.some((input) => input.includes('mediaId'))).toBe(false)
     expect(posted).toEqual([])
   })
 
@@ -198,14 +264,21 @@ describe('AGL-1700 · the list enumerates itself', () => {
     expect(order[2]).toContain(SHA_KEY)
   })
 
-  it('searches every entry from the grid toolbar, not just the page on screen', async () => {
+  it('sends the search to the route, which answers it over every entry', async () => {
     await open()
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: LEGACY_KEY } })
-    await waitFor(() => {
-      const grid = screen.getByRole('grid', { name: 'The whole deny list' })
-      expect(grid.textContent).toContain(LEGACY_KEY)
-      expect(grid.textContent).not.toContain(SHA_KEY)
-    })
+    // The grid's quick filter and the list's own search each settle first.
+    await waitFor(
+      () => {
+        const grid = screen.getByRole('grid', { name: 'The whole deny list' })
+        expect(grid.textContent).toContain(LEGACY_KEY)
+        expect(grid.textContent).not.toContain(SHA_KEY)
+      },
+      { timeout: 3000 },
+    )
+    const last = new URL(fetched[fetched.length - 1], 'https://console.aglyn.com')
+    expect(last.searchParams.get('view')).toBe('list')
+    expect(last.searchParams.get('search')).toBe(LEGACY_KEY)
   })
 
   it('says so plainly when nothing is taken down', async () => {
@@ -234,9 +307,10 @@ describe('AGL-1700 · a row is a key, not a file', () => {
 
   it('re-reads the list after a release rather than mutating it locally', async () => {
     await open()
+    const before = views()
     fireEvent.click(releaseButtons()[0])
-    await waitFor(() => expect(fetched.length).toBeGreaterThan(1))
-    expect(fetched[fetched.length - 1]).toBe('/api/admin/media-quarantine')
+    await waitFor(() => expect(views().length).toBeGreaterThanOrEqual(before.length + 2))
+    expect(views().slice(before.length).sort()).toEqual(['list', 'summary'])
   })
 
   it('shouts when the server read-back still shows the entry set', async () => {

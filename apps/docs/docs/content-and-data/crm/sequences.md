@@ -258,9 +258,15 @@ before each send, with the domain named. Take a domain off with its
 **Remove** button; both changes are written to your organization's activity.
 Domains of public mailbox providers are never added automatically.
 
-The listed domains are a table. Its toolbar's **Filters** narrows them by
-**Why** they are listed, the domain or the bounce detail, and **Search** finds
-a domain or its detail by any part of it. Both look at every listed domain; see
+The listed domains are a table, alphabetical, a page at a time. Its toolbar's
+**Filters** narrows them by **Why** they are listed (pick one or several), the
+whole **Domain**, or the day it was **Added** (on, before or after a date — the
+list is then newest added first). **Search** finds a domain by the start of any
+part of it — `acme`, `acme.com` or `mail.acme` all find `mail.acme.com` — or by a
+word of its detail, such as the gateway a bounce named. Every filter and the
+search are answered by the database across all your listed domains, not only the
+page on screen; a combination it cannot answer at once is named above the table
+instead of being applied to some rows. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Sequences {#sequences}
@@ -270,14 +276,17 @@ one rep. **Sequences → All sequences** lists each one with its mailbox, its st
 and how many people it has enrolled, and how many of them are still active,
 replied, bounced or opted out.
 
-The table's toolbar filters the list. **Filters** narrows it by **Status**
-(pick one or several), name or mailbox, and **Search** matches any word of a
-sequence's name or mailbox. Both look at every sequence the list read — the
-200 newest, which for nearly every organization is all of them, and a note under
-the table says when there are older ones — not only the page on screen, and each
-filter in force shows as a chip above the table;
-remove a chip to drop its filter. The **Filters** panel edits one filter at a
-time, and filters on different columns add up; see
+The list is newest first, a page at a time. The table's toolbar filters it.
+**Filters** narrows it by **Status** or **Mailbox** (pick one or several), by the
+name (a word in it, or the whole name), or by the day it was **Created** (on,
+before or after a date). **Search** finds a sequence by the start of any word
+of its name. Every filter and the search are answered by the database across
+all your sequences, not only the page on screen, and each filter in force shows
+as a chip above the table; remove a chip to drop its filter. The **Filters**
+panel edits one filter at a time, and filters on different columns add up. A
+combination the database cannot answer at once — a name word together with a
+search, for example — is named above the table rather than applied to some
+rows. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ### Build a sequence {#build-a-sequence}
@@ -507,11 +516,16 @@ marked **Lead** until the lead converts. For each one you can:
   do-not-contact list, which every sequence checks before every send, and
   stops them in every other sequence too.
 
-The tab's toolbar filters the people in it. **Filters** narrows them by
-**Status**, **Enrolled as** (contact or lead), name, email or stop reason, and
-**Search** matches any word of a name, address, step or stop reason. The
-filters look at the enrollments read so far, 200 at a time; on a sequence with
-more than that, the table says so, and paging forward reads the next 200. See
+The tab lists the people newest enrolled first, a page at a time, and its
+toolbar filters them. **Filters** narrows them by **Status**, **Enrolled as**
+(contact or lead) and **Stop reason** (pick one or several), by the whole
+**Email** address, or by the day they were **Enrolled** (on, before or after a
+date). **Search** finds a person by the start of any word of their name or of
+their address — `casey`, `morgan` or `example.com` all find
+casey.morgan@example.com. Every filter and the search are answered by the
+database across everyone in the sequence, not only the page on screen; a
+combination it cannot answer at once is named above the table instead of being
+applied to some rows. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 On a sequence that counts link clicks, the **Clicks** column shows how many

@@ -30,6 +30,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
 import { renderEffectiveSystemEmail } from '../../../_lib/render-system-email'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -129,18 +130,14 @@ async function handler(request: Request): Promise<Response> {
     // real cost; platform-scoped because it is Aglyn's, not a customer's.
     if (result.sent) await meterPlatformEmail()
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'systemEmail.test',
-        target: `systemEmailTemplates/${templateKey}`,
-        before: null,
-        after: { to, sent: result.sent },
-        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'systemEmail.test',
+      target: `systemEmailTemplates/${templateKey}`,
+      before: null,
+      after: { to, sent: result.sent },
+      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+    })
 
     if (result.sent) {
       return Response.json(

@@ -24,6 +24,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { resolveEffectivePlan } from '@aglyn/aglyn/app-utils/plan-entitlements'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 const MAX_ORGS_PER_BROADCAST = 200
 
@@ -145,7 +146,7 @@ async function handler(request: Request): Promise<Response> {
     //
     // `plan` and `link` join them for the same reason: the audience and the
     // destination are as much a part of the act as the words.
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: decoded.uid,
       action: 'broadcast.send',
       target: plan ? `orgs?plan=${plan}` : 'orgs/*',

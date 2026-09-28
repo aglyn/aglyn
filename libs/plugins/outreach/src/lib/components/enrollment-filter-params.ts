@@ -31,11 +31,24 @@ import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filt
  * stay the page's own, as they always were.
  */
 
-/** The enrollments table's "Clicked" filter answer for the people who did. */
-export const OUTREACH_CLICKED_FILTER_VALUE = 'yes'
+/**
+ * The enrollments table's "Clicked" filter answers: the stored `clicked`
+ * flag it asks Firestore about (AGL-3321), as the boolean clause writes it.
+ */
+export const OUTREACH_CLICKED_FILTER_VALUE = 'true'
+export const OUTREACH_UNCLICKED_FILTER_VALUE = 'false'
 
 export const OUTREACH_CLICKED_PARAM = 'clicked'
 export const OUTREACH_LINK_PARAM = 'link'
+/** What `?clicked=` says in a link a person keeps: a word, not the clause's boolean. */
+export const OUTREACH_CLICKED_PARAM_VALUE = 'yes'
+
+/*
+ * The "Link followed" clause asks `isAnyOf` over the destinations stored on
+ * the enrollment — one array clause — and a clause's `isAnyOf` value is a
+ * comma list, so a destination with a comma in it cannot be carried as one.
+ */
+const oneLink = (value: string) => Boolean(value) && !value.includes(',')
 
 /** The enrollment fields whose clause the URL holds. */
 export const OUTREACH_URL_FILTER_FIELDS: ReadonlySet<string> = new Set(['clicked', 'link'])
@@ -45,18 +58,18 @@ export function outreachEnrollmentUrlClauses(
   params: Pick<URLSearchParams, 'get'> | null | undefined,
 ): ListFilterClause[] {
   const clauses: ListFilterClause[] = []
-  if (params?.get(OUTREACH_CLICKED_PARAM) === OUTREACH_CLICKED_FILTER_VALUE) {
+  if (params?.get(OUTREACH_CLICKED_PARAM) === OUTREACH_CLICKED_PARAM_VALUE) {
     clauses.push({ field: 'clicked', op: 'equals', value: OUTREACH_CLICKED_FILTER_VALUE })
   }
-  const link = params?.get(OUTREACH_LINK_PARAM)?.trim()
-  if (link) clauses.push({ field: 'link', op: 'equals', value: link })
+  const link = params?.get(OUTREACH_LINK_PARAM)?.trim() ?? ''
+  if (oneLink(link)) clauses.push({ field: 'link', op: 'isAnyOf', value: link })
   return clauses
 }
 
 /**
  * The query string for a set of clauses, keeping every parameter it does
- * not own. A clause the URL cannot hold — `link` with any operator but
- * `equals` — stays the page's own.
+ * not own. A clause the URL cannot hold — `link` naming more than one
+ * destination — stays the page's own.
  */
 export function outreachEnrollmentFilterSearch(
   clauses: readonly ListFilterClause[],
@@ -66,10 +79,10 @@ export function outreachEnrollmentFilterSearch(
   params.delete(OUTREACH_CLICKED_PARAM)
   params.delete(OUTREACH_LINK_PARAM)
   for (const clause of clauses) {
-    if (clause.field === 'clicked' && clause.op === 'equals' && clause.value === OUTREACH_CLICKED_FILTER_VALUE) {
-      params.set(OUTREACH_CLICKED_PARAM, OUTREACH_CLICKED_FILTER_VALUE)
+    if (outreachClauseLivesInUrl(clause) && clause.field === 'clicked') {
+      params.set(OUTREACH_CLICKED_PARAM, OUTREACH_CLICKED_PARAM_VALUE)
     }
-    if (clause.field === 'link' && clause.op === 'equals' && clause.value) {
+    if (outreachClauseLivesInUrl(clause) && clause.field === 'link') {
       params.set(OUTREACH_LINK_PARAM, clause.value)
     }
   }
@@ -78,7 +91,11 @@ export function outreachEnrollmentFilterSearch(
 
 /** Whether the URL can hold this clause, or it stays the page's own. */
 export function outreachClauseLivesInUrl(clause: ListFilterClause): boolean {
-  return OUTREACH_URL_FILTER_FIELDS.has(clause.field) && clause.op === 'equals'
+  if (clause.field === 'clicked') {
+    return clause.op === 'equals' && clause.value === OUTREACH_CLICKED_FILTER_VALUE
+  }
+  if (clause.field === 'link') return clause.op === 'isAnyOf' && oneLink(clause.value)
+  return false
 }
 
 /** The Enrollments tab narrowed to the people who clicked, or who followed one destination. */
@@ -89,7 +106,7 @@ export function outreachEnrollmentsFilterHref(
   const params = new URLSearchParams(
     'link' in filter
       ? { [OUTREACH_LINK_PARAM]: filter.link }
-      : { [OUTREACH_CLICKED_PARAM]: OUTREACH_CLICKED_FILTER_VALUE },
+      : { [OUTREACH_CLICKED_PARAM]: OUTREACH_CLICKED_PARAM_VALUE },
   )
   return `${enrollmentsPath}?${params.toString()}`
 }

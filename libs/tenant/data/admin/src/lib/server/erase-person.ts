@@ -30,6 +30,7 @@ import { eraseEmailDeliveriesForAddresses } from './email-delivery-log'
 import { suppressEmailForHostErasure } from './email-suppression'
 import firebaseAdmin from './firebase-admin'
 import { listMemberDocIds } from './list-members'
+import { addAdminAudit } from './admin-audit-write'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
 
@@ -245,6 +246,33 @@ export async function erasePerson(
     billingAddress: FieldValue.delete(),
     customerErasedAtMs: now,
   }
+  /*
+   * The address also lives in what the orders list queries by (AGL-3321):
+   * its lower-cased key, its search prefixes, and the quick search's token
+   * array, which holds those prefixes beside the order number's and the item
+   * names'. The first two go; the prefixes are taken back out of the third.
+   * A prefix the number or an item name shares with the address goes with
+   * it — a search for that prefix misses this order until the orders
+   * backfill restamps it — and nothing left on the order answers to the
+   * address.
+   */
+  const erasedOrderFor = (data: Record<string, unknown> | undefined) => {
+    const addressTokens = new Set(
+      Array.isArray(data?.customerEmailTokens) ? data.customerEmailTokens : [],
+    )
+    return {
+      ...erasedOrder,
+      customerEmailLower: null,
+      customerEmailTokens: [],
+      ...(Array.isArray(data?.searchTokens)
+        ? {
+            searchTokens: data.searchTokens.filter(
+              (token: unknown) => !addressTokens.has(token),
+            ),
+          }
+        : {}),
+    }
+  }
   const erasedBooking = {
     email: null,
     name: FieldValue.delete(),
@@ -282,7 +310,7 @@ export async function erasePerson(
     } catch (error) {
       console.error(`erasePerson: legacy lead delete failed for ${hostId}`, error)
     }
-    counts.orders += await updateWhere(db, hostRef.collection('orders'), 'customerEmail', email, erasedOrder)
+    counts.orders += await updateWhere(db, hostRef.collection('orders'), 'customerEmail', email, erasedOrderFor)
     counts.bookings += await updateWhere(db, hostRef.collection('bookings'), 'email', email, erasedBooking)
   }
 
@@ -309,16 +337,14 @@ export async function erasePerson(
     console.error('erasePerson: delivery log sweep failed', error)
   }
 
-  await db
-    .collection('adminAudit')
-    .add({
-      actorUid: 'system:erase-person',
-      action: 'person.erased',
-      target: `orgs/${options.orgId}/people/${key}`,
-      before: null,
-      after: counts,
-      at: FieldValue.serverTimestamp(),
-    })
+  await addAdminAudit(db, {
+    actorUid: 'system:erase-person',
+    action: 'person.erased',
+    target: `orgs/${options.orgId}/people/${key}`,
+    before: null,
+    after: counts,
+    at: FieldValue.serverTimestamp(),
+  })
     .catch(() => undefined)
 
   return { ok: true, ...counts }
@@ -363,7 +389,7 @@ async function updateWhere(
   collection: any,
   field: string,
   value: string,
-  patch: Record<string, unknown>,
+  patch: Record<string, unknown> | ((data: Record<string, unknown> | undefined) => Record<string, unknown>),
 ): Promise<number> {
   let changed = 0
   try {
@@ -371,7 +397,9 @@ async function updateWhere(
       const page = await collection.where(field, '==', value).limit(PAGE).get()
       if (page.empty) break
       const batch = db.batch()
-      page.docs.forEach((doc: any) => batch.update(doc.ref, patch))
+      page.docs.forEach((doc: any) =>
+        batch.update(doc.ref, typeof patch === 'function' ? patch(doc.data()) : patch),
+      )
       await batch.commit()
       changed += page.size
       if (page.size < PAGE) break

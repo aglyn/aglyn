@@ -89,7 +89,10 @@ import {
   type Firestore,
   type Query,
 } from 'firebase/firestore'
-import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import {
+  listFilterDay,
+  type ListFilterRequest,
+} from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
   lacksSortField,
   planKeyedSegment,
@@ -104,6 +107,7 @@ import {
   ENTRY_PUBLISH_SORT_FIELD,
   entryPublishSortStamp,
 } from '@aglyn/aglyn/app-utils/collection-entry-date'
+import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/content-query-fields'
 import { IMPORTABLE_FIELDS } from '../app/api/_lib/site-export'
 import { entryPublishSortPatch } from '../components/content/content-scope.context'
 import {
@@ -111,8 +115,9 @@ import {
   ENTRY_LIST_SORT_FIELDS,
   ENTRY_STATUS_OPTIONS,
   entryListBase,
-  entryListEqualityFields,
-  entryListStoredSort,
+  entryListRangedQuery,
+  planEntryList,
+  type EntryListView,
 } from '../components/content/entry-list-query'
 import { ENTRY_LIST_FILTER_FIELDS } from '../utils/list-filters'
 
@@ -137,12 +142,14 @@ const entryRef = (id: string) =>
 /**
  * `/api/hosts/resources` creating an entry: the allow-listed fields the
  * editor sent, a server-decided `status: 'draft'`, both stamps and the
- * creator. No field is validated for presence, so a create may omit `title`.
+ * creator, and the title's search tokens. No field is validated for presence,
+ * so a create may omit `title`.
  */
 const create = (id: string, data: Record<string, unknown>, at: number) =>
   setDoc(entryRef(id), {
     slug: id,
     ...data,
+    ...entryTitleSearchFields(data['title']),
     status: 'draft',
     createdAt: day(at),
     updatedAt: day(at),
@@ -204,6 +211,7 @@ const restore = (id: string, exported: Record<string, unknown>) => {
   return setDoc(entryRef(id), {
     ...clean,
     ...(publishSortAt ? { [ENTRY_PUBLISH_SORT_FIELD]: publishSortAt } : {}),
+    ...entryTitleSearchFields(clean['title']),
     updatedAt: serverTimestamp(),
   })
 }
@@ -217,7 +225,7 @@ const FIXTURE: Array<[string, () => Promise<unknown>]> = [
   [
     'p-aurora',
     async () => {
-      await create('p-aurora', { title: 'Aurora release', categoryId: 'releases' }, 1)
+      await create('p-aurora', { title: 'Aurora release', categoryId: 'releases', authorId: 'author-ana' }, 1)
       await publish('p-aurora', 20)
     },
   ],
@@ -231,7 +239,7 @@ const FIXTURE: Array<[string, () => Promise<unknown>]> = [
   [
     'p-cobalt',
     async () => {
-      await create('p-cobalt', { title: 'cobalt guide', categoryId: 'guides' }, 3)
+      await create('p-cobalt', { title: 'cobalt guide', categoryId: 'guides', authorId: 'author-ana' }, 3)
       await publish('p-cobalt', 18)
     },
   ],
@@ -259,7 +267,7 @@ const FIXTURE: Array<[string, () => Promise<unknown>]> = [
   // Drafts that were never published: no `publishedAt` at all.
   [
     'd-garnet',
-    () => create('d-garnet', { title: 'Garnet draft', categoryId: 'guides' }, 7),
+    () => create('d-garnet', { title: 'Garnet draft', categoryId: 'guides', authorId: 'author-ben' }, 7),
   ],
   ['d-harbor', () => create('d-harbor', { title: 'Harbor draft' }, 8)],
   // Published, then pulled: unpublishing deleted the date.
@@ -376,6 +384,17 @@ const rowsOf = async (built: Query): Promise<Row[]> =>
     $id: snapshot.id,
   }))
 
+/**
+ * The query the content scope reads for one sort and filter (AGL-3321): the
+ * plan's predicates as the walk's base, and the STORED order it walks —
+ * which a narrowed list may have moved onto one of its declared orders.
+ */
+const viewOf = (
+  columnSort: CollectionSort,
+  filter: ListFilterRequest | null,
+): EntryListView =>
+  planEntryList({ clauses: filter ? [filter] : [], search: [], sort: columnSort })
+
 /** One page, planned exactly as `useSortedPagedCollection` plans it. */
 async function readPage(
   columnSort: CollectionSort,
@@ -383,11 +402,12 @@ async function readPage(
   page: number,
   pageSize: number,
 ) {
-  const base = entryListBase(db, HOST_ID, COLLECTION_ID, filter, columnSort)
+  const view = viewOf(columnSort, filter)
+  const base = entryListBase(db, HOST_ID, COLLECTION_ID, view)
   // The walk orders on the stored field, as the content scope hands it to
   // `useSortedPagedCollection` (AGL-3323).
-  const sort = entryListStoredSort(columnSort)
-  const equalityFields = entryListEqualityFields(filter)
+  const sort = view.order
+  const equalityFields = view.equalityFields
   const keyedIsTotal = sortFieldIsTotal(sort, equalityFields)
   const { keyedLimit } = planKeyedSegment({
     page,
@@ -431,6 +451,30 @@ async function readPage(
   }
 }
 
+/**
+ * One page of a RANGED view, read as the content scope reads it: through
+ * `usePagedCollection`, one ordered query of every page so far plus a probe
+ * row — no second segment, because every entry a range matches carries the
+ * field it orders on.
+ */
+async function readRangedPage(
+  columnSort: CollectionSort,
+  filter: ListFilterRequest | null,
+  page: number,
+  pageSize: number,
+) {
+  const view = viewOf(columnSort, filter)
+  const upTo = (page + 1) * pageSize
+  const rows = await rowsOf(
+    entryListRangedQuery(db, HOST_ID, COLLECTION_ID, view, upTo + 1),
+  )
+  return {
+    settled: true,
+    rows: rows.slice(page * pageSize, upTo),
+    hasMore: rows.length > upTo,
+  }
+}
+
 /** Every page of a view, as a reader pages it. */
 async function walk(
   sort: CollectionSort,
@@ -438,6 +482,14 @@ async function walk(
   pageSize: number,
 ): Promise<Row[][]> {
   const pages: Row[][] = []
+  if (viewOf(sort, filter).ranged) {
+    for (let page = 0; page < IDS.length + 2; page += 1) {
+      const plan = await readRangedPage(sort, filter, page, pageSize)
+      pages.push(plan.rows)
+      if (!plan.hasMore) return pages
+    }
+    throw new Error('the ranged walk never reached a last page')
+  }
   for (let page = 0; page < IDS.length + 2; page += 1) {
     const { plan } = await readPage(sort, filter, page, pageSize)
     expect(plan.settled).toBe(true)
@@ -466,35 +518,71 @@ const SORTS: CollectionSort[] = ENTRY_LIST_SORT_FIELDS.flatMap((field) => [
   { field, direction: 'desc' as const },
 ])
 
-const categoriesInFixture = () =>
-  [...new Set([...stored.values()].map((data) => data['categoryId']))].filter(
+const valuesInFixture = (field: string) =>
+  [...new Set([...stored.values()].map((data) => data[field]))].filter(
     (value): value is string => typeof value === 'string',
   )
 
-/** Every filter the table can send: none, each status, each category. */
+/**
+ * Every filter the table can send, one clause at a time: none; each status,
+ * category and author; a word of the title; and each date field from both
+ * sides. The declared fields are pinned, so a field added to the panel has to
+ * be added to this walk too.
+ */
 const filters = (): Array<ListFilterRequest | null> => {
   const declared = ENTRY_LIST_FILTER_FIELDS.map((field) => field.column)
-  expect(declared).toEqual(['status', 'categoryId'])
+  expect(declared).toEqual([
+    'title',
+    'status',
+    'categoryId',
+    'authorId',
+    'publishedAt',
+    'updatedAt',
+  ])
+  const equals = (field: string, value: string): ListFilterRequest => ({
+    field,
+    op: 'equals',
+    value,
+  })
   return [
     null,
-    ...ENTRY_STATUS_OPTIONS.map((option) => ({
-      field: 'status',
-      op: 'equals',
-      value: option.value,
-    })),
-    ...categoriesInFixture().map((value) => ({
-      field: 'categoryId',
-      op: 'equals',
-      value,
-    })),
+    { field: 'title', op: 'contains', value: 'release' },
+    { field: 'title', op: 'contains', value: 'guide' },
+    ...ENTRY_STATUS_OPTIONS.map((option) => equals('status', option.value)),
+    ...valuesInFixture('categoryId').map((value) => equals('categoryId', value)),
+    ...valuesInFixture('authorId').map((value) => equals('authorId', value)),
+    { field: 'publishedAt', op: 'onOrAfter', value: '2026-01-18' },
+    { field: 'publishedAt', op: 'before', value: '2026-01-17' },
+    { field: 'updatedAt', op: 'onOrAfter', value: '2026-01-05' },
+    { field: 'updatedAt', op: 'before', value: '2026-01-06' },
   ]
 }
 
-/** Who a filter must reach, read off the stored documents rather than a query. */
-const membersOf = (filter: ListFilterRequest | null): string[] =>
-  IDS.filter(
-    (id) => !filter || stored.get(id)?.[filter.field] === filter.value,
-  ).sort()
+/**
+ * Who a filter must reach, read off the stored documents rather than a query:
+ * the field the declaration names, matched the way the clause reads.
+ */
+const membersOf = (filter: ListFilterRequest | null): string[] => {
+  if (!filter) return [...IDS].sort()
+  const field = ENTRY_LIST_FILTER_FIELDS.find((f) => f.column === filter.field)
+  if (!field) throw new Error(`no declared field ${filter.field}`)
+  const matches = (data: DocumentData | undefined): boolean => {
+    if (!data) return false
+    if (filter.op === 'contains') {
+      const word = String(filter.value).toLowerCase()
+      const tokens = data[field.tokensPath ?? '']
+      return Array.isArray(tokens) && tokens.includes(word)
+    }
+    if (filter.op === 'equals') return data[field.path] === filter.value
+    const stamp = data[field.path]
+    if (!(stamp instanceof Timestamp)) return false
+    const start = listFilterDay(String(filter.value)).getTime()
+    if (filter.op === 'onOrAfter') return stamp.toMillis() >= start
+    if (filter.op === 'before') return stamp.toMillis() < start
+    throw new Error(`no reading for ${filter.op}`)
+  }
+  return IDS.filter((id) => matches(stored.get(id))).sort()
+}
 
 describeEmulated('the entries table under every sort and filter (emulator)', () => {
   it('THE CONTROL: a plain field sort really does hide entries here', async () => {
@@ -537,7 +625,13 @@ describeEmulated('the entries table under every sort and filter (emulator)', () 
     for (const filter of filters()) {
       const expected = membersOf(filter)
       expect(expected.length).toBeGreaterThan(0)
+      expect(expected.length).toBeLessThan(filter ? IDS.length : IDS.length + 1)
       for (const sort of SORTS) {
+        // One clause is always something the query holds, under any sort.
+        expect({ filter, refused: viewOf(sort, filter).plan.refused }).toEqual({
+          filter,
+          refused: [],
+        })
         for (const pageSize of [1, 3, 10]) {
           const pages = await walk(sort, filter, pageSize)
           const seen = pages.flat().map((row) => row.$id)
@@ -564,11 +658,12 @@ describeEmulated('the entries table under every sort and filter (emulator)', () 
     for (const filter of filters()) {
       for (const columnSort of SORTS) {
         const rows = (await walk(columnSort, filter, 3)).flat()
-        const sort = entryListStoredSort(columnSort)
+        const view = viewOf(columnSort, filter)
+        const sort = view.order
         const split = rows.findIndex((row) => lacksSortField(row, sort.field))
         const keyed = split === -1 ? rows : rows.slice(0, split)
         const rest = split === -1 ? [] : rows.slice(split)
-        const pinned = sortFieldIsTotal(sort, entryListEqualityFields(filter))
+        const pinned = sortFieldIsTotal(sort, view.equalityFields)
 
         // Nothing that lacks the value comes before something that has it.
         expect(rest.every((row) => lacksSortField(row, sort.field))).toBe(true)

@@ -385,6 +385,8 @@ describe('the click route', () => {
     expect(answer.status).toBe(302)
     expect(answer.headers.get('Location')).toBe(TARGET)
     expect((docs.get(ENROLLMENT_PATH) as Data)['engagement']).toMatchObject({ clicks: 0, machineClicks: 1 })
+    // A scanner's fetch is not the person clicking (AGL-3332).
+    expect((docs.get(ENROLLMENT_PATH) as Data)['clicked']).not.toBe(true)
     expect((docs.get(SEQUENCE_PATH) as Data)['stats']).toMatchObject({ machineClicks: 1 })
     expect((docs.get(SEQUENCE_PATH) as Data)['stats']).not.toHaveProperty('clicks')
     expect(docs.has(ROLLUP_PATH)).toBe(false)
@@ -485,13 +487,16 @@ describe('the click route: one person’s history (AGL-3332)', () => {
     })
     await call(visit(token()))
     expect(historyRows()).toHaveLength(1)
-    // The two earlier clicks stay a total: nothing is written for them.
+    // The two earlier clicks stay a total: nothing is written for them. The
+    // destination they are known by joins the list before the new one
+    // replaces it as the last, so the "Link followed" filter still finds them.
     expect((docs.get(ENROLLMENT_PATH) as Data)['engagement']).toMatchObject({
       clicks: 3,
       firstClickAtMs: SENT_AT + 60_000,
-      links: ['https://aglyn.com/pricing'],
+      links: ['https://calendar.example.com/book', 'https://aglyn.com/pricing'],
       loggedClicks: 1,
     })
+    expect((docs.get(ENROLLMENT_PATH) as Data)['clicked']).toBe(true)
   })
 
   it('stops itemizing at the history’s limit and keeps counting', async () => {

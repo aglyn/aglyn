@@ -509,6 +509,41 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     )
   }, [collectionDraft, products])
 
+  /**
+   * Which products a smart collection holds is stored on the products
+   * (`collectionIds`, AGL-3321), so a save or a delete re-stamps them —
+   * bounded passes through the commerce route until it says it is done.
+   * A failure is reported, not thrown: the collection itself saved.
+   */
+  const restampMembership = useCallback(
+    async (collectionId: string) => {
+      try {
+        let after: string | undefined
+        for (let pass = 0; pass < 100; pass += 1) {
+          const response = await authorizedFetch(
+            user,
+            '/api/commerce/collection-membership',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ hostId, collectionId, ...(after ? { after } : {}) }),
+            },
+          )
+          const result = await response.json().catch(() => ({}))
+          if (!response.ok) throw new Error(result?.error ?? 'Membership update failed')
+          if (result.done || !result.after) return
+          after = result.after
+        }
+      } catch (error: any) {
+        enqueueSnackbar(
+          `${error?.message ?? 'Membership update failed'} — the storefront may list this collection's old products until it is saved again.`,
+          { variant: 'warning' },
+        )
+      }
+    },
+    [user, hostId, enqueueSnackbar],
+  )
+
   const handleCollectionSave = useCallback(async () => {
     if (!collectionDraft?.name.trim() || collectionError) return
     const { id: draftId, ...data } = collectionDraft
@@ -535,6 +570,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
      * while losing the protection.
      */
     let verdict: Awaited<ReturnType<typeof writeGuardedBySeed>>
+    let savedId = ''
     try {
       verdict = await writeGuardedBySeed(
         {
@@ -566,6 +602,7 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
           if (!response.ok) {
             throw new Error(result?.error ?? 'Collection save failed')
           }
+          savedId = String(draftId ?? result?.id ?? '')
         },
       )
     } catch (error: any) {
@@ -583,7 +620,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
     }
     setCollectionDraft(null)
     enqueueSnackbar('Collection saved', { variant: 'success', persist: false })
+    if (savedId) await restampMembership(savedId)
   }, [
+    restampMembership,
     collectionDraft,
     collectionError,
     draftSlug,
@@ -646,8 +685,9 @@ export function CatalogOrganizationCard(props: CatalogOrganizationCardProps) {
         })
       }
       enqueueSnackbar('Collection deleted', { variant: 'success', persist: false })
+      await restampMembership(row.$id)
     },
-    [confirm, user, hostId, enqueueSnackbar],
+    [confirm, user, hostId, enqueueSnackbar, restampMembership],
   )
 
   /**

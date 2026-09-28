@@ -61,6 +61,7 @@
 
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getFirestore, type Firestore } from 'firebase-admin/firestore'
+import { mediaFilterKeys } from '@aglyn/aglyn/app-utils/media-metadata'
 
 const EMULATED = Boolean(process.env.FIRESTORE_EMULATOR_HOST)
 
@@ -312,8 +313,18 @@ describeEmulated('a DAM delete leaves a restorable tombstone (AGL-1467)', () => 
     // Field for field. A restore that drops `visibleTo`, `cdnPath` or
     // `variants` has produced a different asset with the same id — and the
     // first two decide who can see it and whether it is served at all.
+    // The only additions are the library's filter keys, re-derived from the
+    // stored fields so a file deleted before they existed can be found
+    // (AGL-3327); every stored field wins over them.
     const media = await scopeRef.collection('media').doc(MEDIA_ID).get()
-    expect(media.data()).toEqual(MEDIA_DOC)
+    const restored = media.data() ?? {}
+    for (const [key, value] of Object.entries(MEDIA_DOC)) {
+      expect({ key, value: restored[key] }).toEqual({ key, value })
+    }
+    expect(restored).toEqual({
+      ...mediaFilterKeys(MEDIA_DOC as Parameters<typeof mediaFilterKeys>[0]),
+      ...MEDIA_DOC,
+    })
 
     expect(await counters()).toEqual({ bytes: 10_000, count: 3 })
     expect(bucket.isLive(OBJECT_PATH)).toBe(true)

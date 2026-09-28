@@ -56,6 +56,10 @@ import {
   preflightStaffOnlyChrome,
 } from './lib/staff-only-chrome.mjs'
 import { optimizePng } from './lib/optimize-png.mjs'
+import { productListFields } from '../scripts/lib/seed-demo.mjs'
+import { orderListFieldsOf } from '../scripts/backfill-orders-list-fields.mjs'
+import { listingQueryFieldsPatch } from '../scripts/lib/listing-query-fields.mjs'
+import { datasetFilterFields } from '../scripts/lib/record-filter-keys.mjs'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const IMG_ROOT = join(repoRoot, 'apps/docs/static/img/guides')
@@ -128,20 +132,21 @@ async function seedGuideFixtures() {
   // the Form element's "Write to dataset" matches; field ids are the
   // stable record keys.
   const survey = orgRef.collection('datasets').doc('seed-guide-survey')
+  const surveyModel = {
+    fields: {
+      satisfaction: { name: 'Satisfaction', type: 'int32' },
+      visit: { name: 'Visit', type: 'text' },
+      topics: { name: 'Topics', type: 'text' },
+      comments: { name: 'Comments', type: 'text' },
+    },
+    order: ['satisfaction', 'visit', 'topics', 'comments'],
+  }
   await put(survey, {
     name: 'Survey responses',
     displayName: 'Survey responses',
     singularName: 'Survey response',
     fields: ['satisfaction', 'visit', 'topics', 'comments'],
-    model: {
-      fields: {
-        satisfaction: { name: 'Satisfaction', type: 'int32' },
-        visit: { name: 'Visit', type: 'text' },
-        topics: { name: 'Topics', type: 'text' },
-        comments: { name: 'Comments', type: 'text' },
-      },
-      order: ['satisfaction', 'visit', 'topics', 'comments'],
-    },
+    model: surveyModel,
     createdAt: now,
   })
   // Converge on re-runs: drop records left by previous walk-throughs so
@@ -163,8 +168,11 @@ async function seedGuideFixtures() {
     [4, 'First time', 'Products, Pricing', 'Found you through the market.'],
   ]
   for (const [index, [satisfaction, visit, topics, comments]] of surveyRows.entries()) {
+    const values = { satisfaction, visit, topics, comments }
     await put(survey.collection('records').doc(`seed-guide-${index}`), {
-      values: { satisfaction, visit, topics, comments },
+      values,
+      // The filter fields every record writer stamps (AGL-3321).
+      ...datasetFilterFields(surveyModel, values),
       order: index,
       createdAt: now,
     })
@@ -475,6 +483,8 @@ async function seedGuideFixtures() {
   for (const { id, doc } of products) {
     await put(hostRef.collection('products').doc(id), {
       ...doc,
+      // The products table lists what carries these (AGL-3321).
+      ...productListFields(doc),
       createdAtMs: Date.now(),
     })
   }
@@ -576,7 +586,8 @@ async function seedGuideFixtures() {
     },
   ]
   for (const { id, doc } of orders) {
-    await put(hostRef.collection('orders').doc(id), doc)
+    // With the fields the orders list queries by (AGL-3321).
+    await put(hostRef.collection('orders').doc(id), { ...doc, ...orderListFieldsOf(doc, id) })
   }
 
   await put(hostRef.collection('subscriptions').doc('seed-guide-sub-1'), {
@@ -707,7 +718,7 @@ async function seedGuideFixtures() {
 
   const listing = async (id, data, version) => {
     const ref = firestore.collection('marketplaceListings').doc(id)
-    await put(ref, {
+    const fields = {
       profileId: orgId,
       priceUsd: 0,
       latestVersion: 1,
@@ -715,7 +726,9 @@ async function seedGuideFixtures() {
       deletedAt: null,
       createdAt: now,
       ...data,
-    })
+    }
+    // What browse queries by (AGL-3321), as every listing writer stamps it.
+    await put(ref, { ...fields, ...listingQueryFieldsPatch(fields) })
     await put(ref.collection('versions').doc('1'), version)
   }
 

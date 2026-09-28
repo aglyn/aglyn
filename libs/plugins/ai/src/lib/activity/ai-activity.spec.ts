@@ -112,11 +112,18 @@ const HOST = 'host-1'
 const PERSON = { uid: 'uid-1', email: 'ada@example.test' }
 const NOBODY = { uid: null, email: null }
 
-/** Rows in one log, in write order. */
-const rowsIn = (prefix: string) =>
+/** Rows in one log as stored, in write order. */
+const storedIn = (prefix: string) =>
   [...store.entries()]
     .filter(([path]) => path.startsWith(`${prefix}/`))
     .map(([, row]) => row)
+/**
+ * Rows in one log, in write order, without the search keys the activity
+ * writers stamp on every row (AGL-3321). Those are asserted once, below,
+ * rather than restated in every case.
+ */
+const rowsIn = (prefix: string) =>
+  storedIn(prefix).map(({ searchTokens: _searchTokens, ...row }) => row)
 const orgRows = () => rowsIn(`orgs/${ORG}/activity`)
 const hostRows = () => rowsIn(`hosts/${HOST}/activity`)
 
@@ -136,6 +143,19 @@ describe('every code a writer stores has a label the viewers can render', () => 
   it('the catalog and the label map name the same actions', () => {
     for (const action of Object.values(AI_ACTIVITY_ACTIONS)) {
       expect(AI_ACTIVITY_ACTION_LABELS[action]).toEqual(expect.any(String))
+    }
+  })
+})
+
+describe('every row carries the search keys its feed is searched by (AGL-3321)', () => {
+  it('stamps searchTokens from the actor and the target, in both logs', async () => {
+    await logAiJobOutput(ORG, PERSON, {
+      jobId: 'job-1',
+      hostId: HOST,
+      resource: { type: 'screen', id: 'screen-1', name: 'Home', versionId: 'v-1' },
+    })
+    for (const row of [...storedIn(`orgs/${ORG}/activity`), ...storedIn(`hosts/${HOST}/activity`)]) {
+      expect(row['searchTokens']).toEqual(expect.arrayContaining(['ada', 'home']))
     }
   })
 })

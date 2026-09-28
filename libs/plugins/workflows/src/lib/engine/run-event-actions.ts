@@ -75,12 +75,14 @@ import {
   resolveOrgIdForHost,
 } from '@aglyn/tenant-data-admin'
 import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dataset-live-pages'
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 // The leaf, not the barrel: this library's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
+import { runSummaryFields } from '../model/run-history'
 import {
   advanceFlowEnrollment,
   claimFlowEnrollment,
@@ -780,7 +782,13 @@ async function runServerStep(
             ),
             updatedAt: FieldValue.serverTimestamp(),
           },
-          { merge: true },
+          // `mergeFields`, not `merge: true`: a merge would fold the new
+          // `filterValues` map into the stored one key by key, and a value
+          // cleared here would go on answering its old equality. Each named
+          // field is replaced whole; `merged` already holds every value.
+          {
+            mergeFields: ['values', 'referencedIds', 'filterKeys', 'filterValues', 'updatedAt'],
+          },
         )
       } else {
         // The APPEND leg of update-or-append, and the only one of the two
@@ -1268,7 +1276,10 @@ export async function executeAction(
       // run-history table could not otherwise fill.
       result: stepErrors.length ? 'failed' : 'succeeded',
       trigger: event,
-      summary: (outcomes.length ? outcomes.join(' · ') : 'Ran').slice(0, 300),
+      // The summary and its search tokens, written together (AGL-3321).
+      ...runSummaryFields(
+        (outcomes.length ? outcomes.join(' · ') : 'Ran').slice(0, 300),
+      ),
       target: {
         // An org automation's run is filed under its own type, so the site's
         // run history can tell it from a site action sharing the feed.
@@ -1276,6 +1287,8 @@ export async function executeAction(
         id: actionId,
         name: action.name ?? '',
       },
+      // The site log's search finds a run by its action's name (AGL-3321).
+      searchTokens: activitySearchTokens({ target: { name: action.name } }),
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
@@ -1561,12 +1574,13 @@ async function recordSkippedRun(
       action: `${kind === 'orgAutomation' ? 'Org automation' : 'Action'} skipped on ${event}`,
       result: 'skipped',
       trigger: event,
-      summary: reason.slice(0, 300),
+      ...runSummaryFields(reason.slice(0, 300)),
       target: {
         type: kind === 'orgAutomation' ? ORG_AUTOMATION_RUN_TARGET : 'workflow',
         id: actionId,
         name: action.name ?? '',
       },
+      searchTokens: activitySearchTokens({ target: { name: action.name } }),
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)
@@ -1914,7 +1928,7 @@ export async function stopFlowEnrollment(
       action: `Flow stopped mid-wait: ${reason}`.slice(0, 300),
       result: 'skipped',
       trigger: enrollment.event,
-      summary: reason.slice(0, 300),
+      ...runSummaryFields(reason.slice(0, 300)),
       target: {
         type:
           enrollment.automation === 'org'
@@ -1923,6 +1937,7 @@ export async function stopFlowEnrollment(
         id: enrollment.actionId,
         name: enrollment.actionName ?? '',
       },
+      searchTokens: activitySearchTokens({ target: { name: enrollment.actionName } }),
       createdAt: FieldValue.serverTimestamp(),
     })
     .catch(() => undefined)

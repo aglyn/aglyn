@@ -53,6 +53,10 @@
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import { normalizeOutreachDomain, outreachEmailDomain } from '../engine/do-not-contact-domain'
 import {
+  OUTREACH_DOMAIN_SEARCH_TOKENS,
+  outreachDomainSearchTokens,
+} from '../model/do-not-contact-domain-list-query'
+import {
   OUTREACH_COLLECTIONS,
   OUTREACH_DO_NOT_CONTACT_REASONS,
   OUTREACH_DO_NOT_CONTACT_SOURCES,
@@ -347,7 +351,12 @@ export async function addOutreachDoNotContactDomain(
   const entry: OutreachDoNotContactDomainEntry = { domain, ...entryFields(input) }
   const ref = outreachDoNotContactDomainCollection(firestore, input.orgId).doc(domain)
   try {
-    await ref.create(entry)
+    // With what the domains list searches it by (AGL-3321): an entry is
+    // created once and never edited, so this is the one write that stamps it.
+    await ref.create({
+      ...entry,
+      [OUTREACH_DOMAIN_SEARCH_TOKENS]: outreachDomainSearchTokens(entry),
+    })
     return { domain, created: true, entry }
   } catch (error) {
     if ((error as { code?: unknown })?.code !== ALREADY_EXISTS) throw error

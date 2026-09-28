@@ -253,12 +253,13 @@ describe('a sequence: each person opens their own page (AGL-3332)', () => {
     mockSequence = { status: 'ready', data: sequence('active') }
     mockSearch = 'clicked=yes&link=https%3A%2F%2Faglyn.com%2Fpricing'
     renderDetail({ tab: 'enrollments' })
+    // The table's own clauses on its query: the stored flag, and the destinations as one array clause.
     expect(mockTableProps['clauses']).toEqual([
-      { field: 'clicked', op: 'equals', value: 'yes' },
-      { field: 'link', op: 'equals', value: 'https://aglyn.com/pricing' },
+      { field: 'clicked', op: 'equals', value: 'true' },
+      { field: 'link', op: 'isAnyOf', value: 'https://aglyn.com/pricing' },
     ])
     // The "Clicked" chip removed: the URL keeps the destination and drops the rest.
-    act(() => mockTableProps['onClausesChange']([{ field: 'link', op: 'equals', value: 'https://aglyn.com/pricing' }]))
+    act(() => mockTableProps['onClausesChange']([{ field: 'link', op: 'isAnyOf', value: 'https://aglyn.com/pricing' }]))
     expect(mockReplace).toHaveBeenCalledWith(
       '/acme/outreach/sequences/seq-1/enrollments?link=https%3A%2F%2Faglyn.com%2Fpricing',
       { scroll: false },

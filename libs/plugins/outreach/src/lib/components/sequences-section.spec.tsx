@@ -17,9 +17,14 @@
 
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import type { ListQueryRequest } from '@aglyn/shared-ui-jsx/const/list-query-plan'
 import type { OutreachMailbox, OutreachSequence } from '../model/outreach.types'
 import { OutreachSequencesSection } from './sequences-section'
-import type { OutreachLoad, OutreachSequenceCounts } from './use-outreach-data'
+import type {
+  OutreachListPage,
+  OutreachLoadStatus,
+  OutreachSequenceCounts,
+} from './use-outreach-data'
 
 /**
  * The Sequences section (AGL-2980): the list in each state it can be in —
@@ -29,7 +34,31 @@ import type { OutreachLoad, OutreachSequenceCounts } from './use-outreach-data'
  * to the props they were handed, and have specs of their own.
  */
 
-let mockSequences: OutreachLoad<OutreachSequence[]>
+let mockSequences: OutreachListPage<OutreachSequence>
+/** Every request the list made of its query, newest last. */
+let mockRequests: ListQueryRequest[]
+const page = (
+  status: OutreachLoadStatus,
+  rows: OutreachSequence[] = [],
+  extra: Partial<OutreachListPage<OutreachSequence>> = {},
+): OutreachListPage<OutreachSequence> => ({
+  status,
+  rows,
+  hasMore: false,
+  page: 0,
+  setPage: jest.fn(),
+  pageSize: 10,
+  setPageSize: jest.fn(),
+  plan: {
+    filters: [],
+    orderBy: { path: 'createdAtMs', direction: 'desc' },
+    served: [],
+    searched: null,
+    refused: [],
+    notices: [],
+  },
+  ...extra,
+})
 let mockCounts: Record<string, OutreachSequenceCounts>
 const mockPush = jest.fn()
 const mockMailboxes: { status: 'ready'; mailboxes: OutreachMailbox[] } = {
@@ -44,7 +73,10 @@ const mockMailboxes: { status: 'ready'; mailboxes: OutreachMailbox[] } = {
 }
 
 jest.mock('./use-outreach-data', () => ({
-  useOutreachSequences: () => mockSequences,
+  useOutreachSequenceList: (_orgId: string, request: ListQueryRequest) => {
+    mockRequests.push(request)
+    return mockSequences
+  },
   useOutreachSequenceCounts: () => mockCounts,
 }))
 jest.mock('./use-outreach-mailboxes', () => ({
@@ -136,13 +168,14 @@ const renderSection = (subpath: string[] = []) =>
 
 beforeEach(() => {
   jest.clearAllMocks()
-  mockSequences = { status: 'ready', data: [] }
+  mockSequences = page('ready')
+  mockRequests = []
   mockCounts = {}
 })
 
 describe('the sequence list (AGL-2980)', () => {
   it('shows progress while the sequences load', () => {
-    mockSequences = { status: 'loading', data: [] }
+    mockSequences = page('loading')
     renderSection()
     expect(screen.getByRole('status').textContent).toContain(
       'Loading sequences',
@@ -150,7 +183,7 @@ describe('the sequence list (AGL-2980)', () => {
   })
 
   it('says the sequences could not be loaded, and says a refusal as information', () => {
-    mockSequences = { status: 'error', data: [] }
+    mockSequences = page('error')
     const { unmount } = renderSection()
     expect(
       screen.getByText(
@@ -158,7 +191,7 @@ describe('the sequence list (AGL-2980)', () => {
       ),
     ).toBeTruthy()
     unmount()
-    mockSequences = { status: 'refused', data: [] }
+    mockSequences = page('refused')
     renderSection()
     expect(
       screen.getByText(
@@ -177,13 +210,10 @@ describe('the sequence list (AGL-2980)', () => {
   })
 
   it('lists each sequence with its mailbox, status and counts, and opens one on a click', () => {
-    mockSequences = {
-      status: 'ready',
-      data: [
-        sequence('seq-1', 'Second locations', 'active'),
-        sequence('seq-2', 'Win-back', 'draft', 'mbx-gone'),
-      ],
-    }
+    mockSequences = page('ready', [
+      sequence('seq-1', 'Second locations', 'active'),
+      sequence('seq-2', 'Win-back', 'draft', 'mbx-gone'),
+    ])
     mockCounts = {
       'seq-1': { enrolled: 12, active: 7, replied: 3, bounced: 1, optedOut: 1 },
     }
@@ -210,23 +240,62 @@ describe('the sequence list (AGL-2980)', () => {
   })
 })
 
-describe('the sequence list filters through the grid (AGL-3317)', () => {
-  it('searches every sequence it read, not only the page on screen', async () => {
-    mockSequences = {
-      status: 'ready',
-      data: Array.from({ length: 12 }, (_unused, at) =>
-        sequence(`seq-${at}`, at === 11 ? 'Renewal nudge' : `Outbound ${at}`, 'active'),
-      ),
-    }
+describe('the sequence list asks its query, not its loaded rows (AGL-3321)', () => {
+  it('puts the search word on the query and renders the page the query answers', async () => {
+    mockSequences = page(
+      'ready',
+      Array.from({ length: 10 }, (_unused, at) => sequence(`seq-${at}`, `Outbound ${at}`, 'active')),
+      { hasMore: true },
+    )
     renderSection()
-    const grid = screen.getByRole('grid', { name: 'Sequences' })
-    // Page one holds ten; the twelfth is past it.
-    expect(grid.textContent).not.toContain('Renewal nudge')
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'renewal' } })
-    await waitFor(() => {
-      expect(screen.getByRole('grid', { name: 'Sequences' }).textContent).toContain('Renewal nudge')
-      expect(screen.getByRole('grid', { name: 'Sequences' }).textContent).not.toContain('Outbound 1')
+    await waitFor(() => expect(mockRequests.at(-1)?.search).toEqual(['renewal']))
+    // Nothing is matched in the browser: the page on screen is the query's.
+    expect(screen.getByRole('grid', { name: 'Sequences' }).textContent).toContain('Outbound 1')
+  })
+
+  it('offers the mailbox as the org’s mailboxes and asks by id', () => {
+    mockSequences = page('ready', [sequence('seq-1', 'Second locations', 'active')])
+    renderSection()
+    expect(mockRequests.at(-1)).toEqual({ clauses: [], search: [] })
+  })
+
+  it('says what the query could not take, beside the list', () => {
+    mockSequences = page('ready', [sequence('seq-1', 'Second locations', 'active')], {
+      plan: {
+        filters: [],
+        orderBy: { path: 'createdAtMs', direction: 'desc' },
+        served: [],
+        searched: null,
+        refused: [
+          {
+            clause: { field: 'mailbox', op: 'isAnyOf', value: 'mbx-1' },
+            reason: 'too many values at once (the limit is 30)',
+          },
+        ],
+        notices: ['Search matches one word at a time: showing results for "second".'],
+      },
     })
+    renderSection()
+    expect(
+      screen.getByText('Mailbox is any of avery@example.com is not applied: too many values at once (the limit is 30).'),
+    ).toBeTruthy()
+    expect(screen.getByText(/one word at a time/)).toBeTruthy()
+  })
+
+  it('pages by the query, and says a filter matched nothing rather than that there are none', () => {
+    const setPage = jest.fn()
+    mockSequences = page('ready', [sequence('seq-1', 'Second locations', 'active')], {
+      hasMore: true,
+      setPage,
+    })
+    const { unmount } = renderSection()
+    fireEvent.click(screen.getByRole('button', { name: /next page/i }))
+    expect(setPage).toHaveBeenCalledWith(1)
+    unmount()
+    mockSequences = page('ready', [])
+    renderSection()
+    expect(screen.getByText('No sequences yet')).toBeTruthy()
   })
 })
 
@@ -258,27 +327,5 @@ describe('the pages below the section (AGL-2980)', () => {
     expect(
       screen.getByRole('article', { name: 'Enrollment detail' }).textContent,
     ).toMatch(/ seq-1:seq-1_c-1$/)
-  })
-})
-
-describe('the sequence list says when it stops at its cap (AGL-3321)', () => {
-  it('says so when the read found older sequences than it lists', () => {
-    mockSequences = {
-      status: 'ready',
-      data: [sequence('seq-1', 'Second locations', 'active')],
-      truncated: true,
-    } as OutreachLoad<OutreachSequence[]>
-    renderSection()
-    expect(screen.getByText(/Showing the 1 newest sequences/)).toBeTruthy()
-  })
-
-  it('says nothing when every sequence was read', () => {
-    mockSequences = {
-      status: 'ready',
-      data: [sequence('seq-1', 'Second locations', 'active')],
-      truncated: false,
-    } as OutreachLoad<OutreachSequence[]>
-    renderSection()
-    expect(screen.queryByText(/newest sequences/)).toBeNull()
   })
 })

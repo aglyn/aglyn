@@ -45,19 +45,14 @@ import { useContactFieldDefinitions } from '../hooks/use-contact-field-definitio
 import { customFieldColumns } from './contact-custom-columns'
 import { useCrmViewGrid } from '../hooks/use-crm-view-grid'
 import { CRM_LIST_SLOTS, CrmColumnOrderProvider } from './crm-column-menu'
-import { useOrgLeads } from '../hooks/use-org-leads'
+import { useCrmFoldsScope, useCrmListQuery } from '../hooks/use-crm-list-query'
 import CrmViewsControl from './crm-views-control'
 import { CrmListActions, CrmListToolbar } from './crm-list-toolbar'
 import RowActionsMenu from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
+import ListQueryNotices from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { useFirestore } from '@aglyn/tenant-feature-instance'
 import {
-  useFirestore,
-  useFirestoreCollection,
-} from '@aglyn/tenant-feature-instance'
-import {
-  Alert,
   Box,
   Button,
   Dialog,
@@ -71,15 +66,10 @@ import {
 } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import {
-  collection,
   deleteField,
   doc,
-  limit,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc,
-  where,
 } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -88,15 +78,18 @@ import { crmRoutes } from '../model/crm-routes'
 import {
   LEAD_EMAIL_FILTER_OPTIONS,
   LEAD_FILTER_CODECS,
+  LEAD_LIST_DECLARATION,
   LEAD_LIST_FILTER_FIELDS,
   LEAD_LIST_FILTER_HEADERS,
   LEAD_SOURCE_FILTER_NONE,
   LEAD_STATUS_FILTER_OPTIONS,
   leadClausesForGrid,
+  LEAD_PREFIX_SEARCH,
+  leadClauseImpliesScope,
   leadClausesToStore,
-  leadMatchesClauses,
-  leadMatchesSearch,
+  leadQueryClause,
 } from '../model/lead-filters'
+import { crmAskClauses, crmQueryRefusals } from '../model/crm-list-query'
 import {
   type ListFilterOption,
   listFilterGridColumns,
@@ -124,30 +117,6 @@ import LeadsBulkBar from './leads-bulk-bar'
 import OrgLeadSurfacesNote from './org-lead-surfaces-note'
 
 /**
- * How many leads the section reads: the newest by last seen, plus one probe
- * row so "there are more" is a fact rather than a guess at the boundary.
- *
- * A CEILING and a client-side filter rather than a paged status query, and
- * the reason is the lead documents themselves. Every lead the capture door
- * writes carries NO `status` — the field exists only once somebody in the
- * CRM has touched the lead — and Firestore cannot select documents by a
- * field's absence: `where('status','in',[…])`, `!=` and `not-in` all skip a
- * document without the field. A server-side "open leads" query would
- * therefore hide every lead nobody has worked yet, which is the entire
- * population the section exists to show on the day it ships. So the query
- * is the one order every lead can satisfy (`lastSeenAtMs`, stamped on every
- * capture), and the status filter narrows the loaded window — said out loud
- * beneath the table whenever the window is not the whole collection.
- *
- * The window is then PAGED in memory under the shared footer, the way the
- * workspace pickers page a slice of a window they cannot re-key: the rows
- * are already in the snapshot, so turning a page costs nothing, and the
- * footer's count is exact because it counts the filtered window rather than
- * a collection nobody has measured.
- */
-const LEADS_WINDOW = 200
-
-/**
  * One row of the list. `$id` keys the grid and `leadId` names the document,
  * and they are the same value at both levels (AGL-3275).
  *
@@ -170,7 +139,8 @@ type LeadRow = Record<string, unknown> &
  * it is real. Reads `orgs/{orgId}/leads` narrowed by `visibleTo` to the sites
  * this viewer may see (AGL-3275) — the same collection and the same clause at
  * both levels, which is what lets ONE listener serve a section that used to
- * open one per site.
+ * open one per site — and pages it by a query that carries every filter and
+ * the search word (AGL-3321; see `leadQueryClause`).
  *
  * Under a site the clause names that site; at the ORGANIZATION level an
  * org-wide member reads without one, since the rules short-circuit on
@@ -195,55 +165,19 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
 
   /*
    * Under a site: the ORG collection, narrowed to what this site may see
-   * (AGL-3275). It read `hosts/{hostId}/leads` until the silo moved, and
-   * leaving it there would have shown a site its pre-migration rows and
-   * nothing captured since — then nothing at all, once AGL-3276 emptied the
-   * path it was reading.
+   * (AGL-3275) by `visibleTo array-contains-any` over the site's own tokens.
+   * At the ORGANIZATION level an org-wide member reads with no scope clause,
+   * which is what `null` asks for.
    */
-  const site = useFirestoreCollection<
-    Record<string, unknown> & CrmLeadFields & { $id: string }
-  >(
-    () =>
-      hostId && orgId
-        ? query(
-            collection(firestore, 'orgs', orgId, 'leads'),
-            where('visibleTo', 'array-contains-any', scopeTokensForHost(hostId)),
-            orderBy('lastSeenAtMs', 'desc'),
-            limit(LEADS_WINDOW + 1),
-          )
-        : null,
-    [firestore, hostId, orgId],
-    { idField: '$id' },
+  const scopeTokens = useMemo(
+    () => (hostId ? scopeTokensForHost(hostId) : null),
+    [hostId],
   )
-  // At the organization level: every site's window, merged.
-  const orgHostIds = useMemo(
-    () => (hostId ? [] : (mount?.hosts ?? []).map((host) => host.id)),
-    [hostId, mount?.hosts],
+  const dataRoot = useMemo(
+    () => (orgId ? (['orgs', orgId] as const) : null),
+    [orgId],
   )
-  /*
-   * ONE LISTENER (AGL-3275), where this used to fan out across the org's
-   * sites and merge. At the organization level an org-wide member reads with
-   * no scope clause, which is what `visibleTo: null` asks for.
-   */
-  const orgLeads = useOrgLeads({
-    orgId,
-    visibleTo: null,
-    windowSize: LEADS_WINDOW,
-  })
-  const leadDocs = useMemo<LeadRow[]>(
-    () =>
-      hostId
-        ? site.data.map((row) => ({ ...row, leadId: row.$id }))
-        : orgLeads.data,
-    [hostId, site.data, orgLeads.data],
-  )
-  const status = hostId
-    ? site.status
-    : mount?.hostsReady && !orgHostIds.length
-      ? 'success'
-      : orgLeads.status
-  const truncated = hostId ? leadDocs.length > LEADS_WINDOW : orgLeads.truncated
-  const window = useMemo(() => leadDocs.slice(0, LEADS_WINDOW), [leadDocs])
+  const foldsScope = useCrmFoldsScope(orgId, scopeTokens)
 
   /*
    * What the list is narrowed by is the saved VIEW'S (AGL-2617), and the
@@ -315,33 +249,50 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     }
   }, [clauses, campaigns.options, leadSourceList.picklist, roster.options])
   /*
-   * Every clause and the search narrow the whole loaded WINDOW here, before
-   * the footer's count and the page slice (AGL-3246). The grid holds one
-   * page of it, so a filter or a quick search the grid ran itself would
-   * answer "no match" for a lead on page three.
+   * Every clause and the search word on ONE query (AGL-3321): each stored
+   * clause asked through the field its writer keeps (`leadQueryClause`),
+   * paged by that query, and what one query cannot hold refused by name
+   * above the list — never matched over the rows a page happened to load.
    */
-  const searchKey = gridFilter.searchWords.join(' ')
-  const rows = useMemo(
+  const asked = useMemo(
     () =>
-      window.filter(
-        (lead) =>
-          leadMatchesClauses(lead, clauses) &&
-          leadMatchesSearch(lead, searchKey),
+      crmAskClauses(clauses, (clause) =>
+        leadQueryClause(clause, { scopeTokens, foldsScope }),
       ),
-    [window, clauses, searchKey],
+    [clauses, scopeTokens, foldsScope],
   )
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  // A new filter or search term starts on page one: page three of the open
-  // leads is not a page of the unqualified ones, and an out-of-range page
-  // renders empty.
-  useEffect(() => {
-    setPage(0)
-  }, [views.state.filters, searchKey])
-  const pageRows = useMemo(
-    () => rows.slice(page * pageSize, (page + 1) * pageSize),
-    [rows, page, pageSize],
+  const searchKey = gridFilter.searchWords.join(' ')
+  const paged = useCrmListQuery<Record<string, unknown> & CrmLeadFields & { $id: string }>({
+    scope: dataRoot,
+    collection: 'leads',
+    visibleTo: scopeTokens,
+    foldsScope,
+    declaration: LEAD_LIST_DECLARATION,
+    clauses: asked.clauses,
+    search: gridFilter.searchWords,
+    impliesScope: leadClauseImpliesScope,
+    prefixSearch: LEAD_PREFIX_SEARCH,
+  })
+  const status = paged.status
+  const rows = useMemo<LeadRow[]>(
+    () => paged.rows.map((row) => ({ ...row, leadId: row.$id })),
+    [paged.rows],
   )
+  const refused = useMemo(
+    () =>
+      crmQueryRefusals(paged.plan, asked, {
+        fields: LEAD_LIST_FILTER_FIELDS,
+        headers: LEAD_LIST_FILTER_HEADERS,
+        options: filterOptions,
+      }),
+    [paged.plan, asked, filterOptions],
+  )
+  /** The list as it opens — Open leads, nothing typed — whose emptiness is news. */
+  const opening =
+    !searchKey.trim() &&
+    clauses.length === 1 &&
+    clauses[0].field === 'status' &&
+    clauses[0].value === 'open'
 
   /*
    * The ticked rows, for the bulk bar (AGL-2662). Cleared when the filter or
@@ -352,7 +303,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   useEffect(
     () => setSelectedIds([]),
-    [views.state.filters, searchKey],
+    [views.state.filters, searchKey, paged.page],
   )
   // How the file names the owner and, at the org level, the site.
   const csvOptions: LeadCsvOptions = useMemo(
@@ -362,8 +313,7 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
     }),
     [roster.emailFor, hostId, mount],
   )
-  // The listed window — every row the filter and the search admit, not just
-  // the page.
+  // The page on screen; Export all on the bulk bar takes the whole list.
   const handleExport = useCallback(() => {
     downloadTextFile('leads.csv', 'text/csv', leadsCsv(rows, csvOptions))
   }, [rows, csvOptions])
@@ -801,76 +751,59 @@ export function CrmLeadsSection(props: ConsolePluginPageProps) {
               marksServed={false}
             />
           </CrmListToolbar>
-          {status === 'success' && window.length === 0 ? (
-            <EmptyStateComponent
-              label={'No leads yet'}
-              description={
-                'Bookings and lead-routed forms on your site become leads on their own — or add one with New lead, or bring a list in with Import CSV.'
+          <ListQueryNotices refused={refused} notices={paged.plan.notices} />
+          <LeadsBulkBar
+            rows={rows}
+            selected={selectedIds}
+            onSelectedChange={setSelectedIds}
+            roster={roster}
+            csv={csvOptions}
+            orgId={orgId}
+            hostId={hostId}
+            org={org as Record<string, unknown> | undefined}
+          />
+          <CrmColumnOrderProvider value={grid.columnOrder}>
+            <ListTable
+              rows={rows}
+              columns={grid.columns}
+              slots={CRM_LIST_SLOTS}
+              selectable={{
+                selected: selectedIds,
+                onChange: setSelectedIds,
+              }}
+              loading={status === 'loading'}
+              onOpen={(_id, row: LeadRow) => router.push(routes.lead(row.leadId))}
+              // Columns are the view's, controlled (AGL-2617). The query
+              // orders the list — newest seen first — so the grid sorts
+              // nothing itself: a sort over one page would reorder that page.
+              columnVisibilityModel={grid.columnVisibilityModel}
+              onColumnVisibilityModelChange={grid.onColumnVisibilityModelChange}
+              sortingMode="server"
+              disableColumnSorting
+              // The panel and the search are the grid's; the query answers
+              // both (AGL-3321).
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              noRowsLabel={opening ? 'No open leads' : 'No leads match these filters'}
+              noRowsDescription={
+                opening
+                  ? 'Bookings and lead-routed forms on your site become leads on their own — or add one with New lead, or bring a list in with Import CSV.'
+                  : undefined
               }
+              // Paged by the footer below, so the grid must not also slice.
+              hideFooter
             />
-          ) : (
-            <>
-              <LeadsBulkBar
-                rows={rows}
-                selected={selectedIds}
-                onSelectedChange={setSelectedIds}
-                roster={roster}
-                csv={csvOptions}
-                orgId={orgId}
-                hostId={hostId}
-                org={org as Record<string, unknown> | undefined}
-              />
-              <CrmColumnOrderProvider value={grid.columnOrder}>
-                <ListTable
-                  rows={pageRows}
-                  columns={grid.columns}
-                  slots={CRM_LIST_SLOTS}
-                  selectable={{
-                    selected: selectedIds,
-                    onChange: setSelectedIds,
-                  }}
-                  loading={status === 'loading'}
-                  onOpen={(_id, row: LeadRow) =>
-                    router.push(
-                      routes.lead(row.leadId),
-                    )
-                  }
-                  // Columns and sort are the view's, controlled (AGL-2617).
-                  columnVisibilityModel={grid.columnVisibilityModel}
-                  onColumnVisibilityModelChange={
-                    grid.onColumnVisibilityModelChange
-                  }
-                  sortModel={grid.sortModel}
-                  onSortModelChange={grid.onSortModelChange}
-                  // The panel and the search are the grid's; the section
-                  // answers both over the whole window (AGL-3313).
-                  filterMode="server"
-                  filterModel={gridFilter.filterModel}
-                  onFilterModelChange={gridFilter.onFilterModelChange}
-                  quickFilter
-                  noRowsLabel={`No leads match among the ${window.length.toLocaleString()} most recently seen`}
-                  // Paged by the footer below, so the grid must not also slice.
-                  hideFooter
-                />
-              </CrmColumnOrderProvider>
-              <ListPagination
-                page={page}
-                pageSize={pageSize}
-                rowCount={pageRows.length}
-                count={rows.length}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-              />
-            </>
-          )}
-          {truncated ? (
-            <Alert severity="info">
-              {`Showing the ${LEADS_WINDOW.toLocaleString()} most recently seen ` +
-                'leads. The filters and the search narrow these ' +
-                `${LEADS_WINDOW.toLocaleString()} only; older leads are still ` +
-                'listed in the Inbox and reached by campaign audiences.'}
-            </Alert>
-          ) : null}
+          </CrmColumnOrderProvider>
+          <ListPagination
+            page={paged.page}
+            pageSize={paged.pageSize}
+            rowCount={rows.length}
+            hasMore={paged.hasMore}
+            onPageChange={paged.setPage}
+            onPageSizeChange={paged.setPageSize}
+          />
         </Stack>
       </CardDisplay>
       <NewLeadDrawer

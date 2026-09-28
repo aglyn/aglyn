@@ -28,25 +28,87 @@ import {
   type PooledUserRecord,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
-import { matchListFilter } from '@aglyn/shared-ui-jsx/const/list-filter'
-import { readListFilter } from '../../../../utils/server/list-filter'
+import {
+  type ListFilterRequest,
+  listFilterDay,
+  listFilterOperators,
+  matchListFilter,
+} from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { readStaffListQuery } from '../../../../utils/server/staff-list-query'
 import { USER_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
 
 /**
- * How many accounts a filtered request may read before it stops and says so.
+ * How many accounts a filtered request may read. Past it the directory is
+ * not read whole, and a match over part of it would answer "no such account"
+ * for everyone past the bound — so the filters are REFUSED by name instead,
+ * and the reader is pointed at the exact lookups, which have no bound.
  *
  * Firebase Auth cannot filter, so anything but an exact email or uid is
  * answered by reading accounts and matching them. That is an expensive read,
- * so it happens only when a request CARRIES a filter — never on a mount — and
- * it stops at a bound rather than walking a directory of unknown size.
+ * so it happens only when a request CARRIES a filter — never on a mount.
  */
 const FILTER_SCAN_CAP = 2000
 
 /**
- * How many matches come back. A staff filter is used to FIND an account, not
- * to browse thousands, and an unbounded response is a page nobody can render.
+ * How many matches one response carries. More are paged, never dropped: the
+ * next page is the same complete match, read again from the offset in its
+ * cursor (`match:<offset>`).
  */
-const FILTER_MATCH_CAP = 200
+const FILTER_PAGE = 200
+
+/** The cursor prefix of a page of matches, as against an Auth page token. */
+const MATCH_CURSOR = 'match:'
+
+/** Operators that carry no value. */
+const VALUELESS = ['isEmpty', 'isNotEmpty']
+
+/**
+ * The clauses this list can answer, and the rest refused by name — a field
+ * it does not declare, an operator that field does not offer, a value that
+ * is not one yet. A refused clause is not applied at all; it is never read
+ * as "matches everything" under a chip that says it narrowed the list.
+ */
+function readUserListClauses(clauses: readonly ListFilterRequest[]): {
+  served: ListFilterRequest[]
+  refused: ListQueryRefusal[]
+} {
+  const served: ListFilterRequest[] = []
+  const refused: ListQueryRefusal[] = []
+  for (const clause of clauses) {
+    const field = USER_LIST_FILTER_FIELDS.find((entry) => entry.column === clause.field)
+    if (!field) {
+      refused.push({ clause, reason: 'this list does not filter by that' })
+      continue
+    }
+    if (!listFilterOperators(field).includes(clause.op)) {
+      refused.push({
+        clause,
+        reason: `${clause.op} is not something this list can ask of ${field.column}`,
+      })
+      continue
+    }
+    const raw = (clause.value ?? '').trim()
+    if (field.kind === 'boolean' && raw !== 'true' && raw !== 'false') {
+      refused.push({ clause, reason: 'pick true or false' })
+      continue
+    }
+    if (!VALUELESS.includes(clause.op) && !raw) {
+      refused.push({ clause, reason: 'no value yet' })
+      continue
+    }
+    if (
+      field.kind === 'date' &&
+      !VALUELESS.includes(clause.op) &&
+      Number.isNaN(listFilterDay(raw).getTime())
+    ) {
+      refused.push({ clause, reason: 'pick a date' })
+      continue
+    }
+    served.push(clause)
+  }
+  return { served, refused }
+}
 
 /**
  * Staff user listing (AGL-204). Replaces the pre-AGL-42 handler that
@@ -118,98 +180,107 @@ async function handler(request: Request): Promise<Response> {
       }, { status: 200 })
     }
     /*
-     * The column filter, answered ACROSS THE POOLS (AGL-2501).
+     * THE FILTERS AND THE SEARCH, ANSWERED OVER THE WHOLE DIRECTORY (AGL-2501,
+     * AGL-3321).
      *
-     * The staff list paged 200 accounts at a time and filtered the rows it
-     * had — so it answered "no such account" for everyone past the current
-     * page, on the list whose whole job is that nobody is missing.
-     *
-     * Firebase Auth has no predicate to push this into. What it does have is
-     * three O(1) lookups, and an exact email or uid is routed to one of them
-     * rather than to a walk. Everything else reads the pools and matches in
+     * Firebase Auth is the list's source, and it has no predicate to push a
+     * filter into — no Firestore query serves this list, so it is the staff
+     * console's exception to the list-query standard. What Auth does have is
+     * two O(1) lookups, and an exact email or uid is routed to one of them
+     * rather than to a walk. Everything else reads EVERY pool and matches in
      * memory, which is why this list can offer a mid-string `contains` and a
      * `doesNotContain` that a Firestore-backed list cannot.
-     */
-    /*
-     * The toolbar's quick search, answered across the POOLS.
      *
-     * It matched email, display name or uid within the loaded page, which on
-     * a 200-account page meant it stopped at 200 accounts. A complete email
-     * is routed to the O(1) lookup first — that is the common case and it
-     * needs no walk at all — and anything else falls through to the same
-     * bounded scan a column filter uses.
+     * Every clause the Filters panel holds and the search apply together, as
+     * one AND, over that complete read — never over a page of it. A clause
+     * this list cannot answer is refused by name (`readUserListClauses`).
+     * Past `FILTER_SCAN_CAP` the read would not be complete, so every clause
+     * and the search are refused rather than answered from part of the
+     * directory, and the list stays the unfiltered walk under the notice.
+     * More matches than a page are paged (`match:<offset>`), never cut.
      */
-    const search =
-      typeof query.search === 'string' ? query.search.trim() : ''
-    if (search) {
-      if (/^[^@\s]+@[^@\s]+$/.test(search)) {
-        const found = await findUserByEmailAcrossPools(search)
-        if (found) {
-          return Response.json({
-            users: [serialize(found)],
-            nextPageToken: null,
-          }, { status: 200 })
-        }
-      }
-      const scan = await scanUsersAcrossPools(FILTER_SCAN_CAP)
-      const term = search.toLowerCase()
-      const matched = collapseCrossPoolUidRows(scan.users)
-        .map(serialize)
-        .filter((row) =>
-          [row.email, row.displayName, row.uid]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase()
-            .includes(term),
-        )
-      return Response.json({
-        users: matched.slice(0, FILTER_MATCH_CAP),
-        nextPageToken: null,
-        tenantsIncluded: true,
-        tenantTruncated: scan.tenantTruncated,
-        scanTruncated: scan.truncated,
-        matchTruncated: matched.length > FILTER_MATCH_CAP,
-        matchCount: matched.length,
-      }, { status: 200 })
+    const listRequest = readStaffListQuery(query)
+    if (!listRequest) {
+      return Response.json({ error: 'Unreadable filters' }, { status: 400 })
     }
-    const filter = readListFilter(query)
-    if (filter) {
-      const exact = filter.op === 'equals' ? filter.value.trim() : ''
-      if (exact && (filter.field === 'email' || filter.field === 'uid')) {
-        const found =
-          filter.field === 'email'
-            ? await findUserByEmailAcrossPools(exact)
-            : await findUserByUidAcrossPools(exact)
+    const { served, refused } = readUserListClauses(listRequest.clauses)
+    const search = listRequest.search.join(' ')
+    const term = search.toLowerCase()
+    const matches = (row: ReturnType<typeof serialize>) =>
+      served.every((clause) => matchListFilter(row, USER_LIST_FILTER_FIELDS, clause)) &&
+      (!term ||
+        [row.email, row.displayName, row.uid]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(term))
+    const token =
+      typeof query.nextPageToken === 'string' ? query.nextPageToken : undefined
+    if (served.length || term) {
+      /*
+       * An exact email or uid is a lookup, not a walk: the one account it can
+       * be, and then every other clause and the search over that account. A
+       * complete address typed in the search box takes the same lookup, and
+       * falls through to the walk when it finds nobody — an address held only
+       * where the lookup missed must still be searched for.
+       */
+      const exact = served.find(
+        (clause) =>
+          clause.op === 'equals' && (clause.field === 'email' || clause.field === 'uid'),
+      )
+      const address = !exact && /^[^@\s]+@[^@\s]+$/.test(search) ? search : ''
+      const looked = exact
+        ? exact.field === 'email'
+          ? await findUserByEmailAcrossPools(exact.value.trim())
+          : await findUserByUidAcrossPools(exact.value.trim())
+        : address
+          ? await findUserByEmailAcrossPools(address)
+          : null
+      if (exact || looked) {
+        const rows = looked ? [serialize(looked)] : []
         return Response.json({
-          users: found ? [serialize(found)] : [],
+          users: exact ? rows.filter(matches) : rows.filter((row) =>
+            served.every((clause) => matchListFilter(row, USER_LIST_FILTER_FIELDS, clause)),
+          ),
           nextPageToken: null,
+          refused,
+          notices: [],
         }, { status: 200 })
       }
       const scan = await scanUsersAcrossPools(FILTER_SCAN_CAP)
-      const matched = collapseCrossPoolUidRows(scan.users)
-        .map(serialize)
-        .filter((row) => matchListFilter(row, USER_LIST_FILTER_FIELDS, filter))
-      return Response.json({
-        users: matched.slice(0, FILTER_MATCH_CAP),
-        nextPageToken: null,
-        tenantsIncluded: true,
-        tenantTruncated: scan.tenantTruncated,
-        /*
-         * Never let a partial answer read as a complete one. `scanTruncated`
-         * says the directory outran the cap; `matchTruncated` says the filter
-         * matched more than one response can carry. A staff list that stopped
-         * early and reported "no matches" is the failure this whole change is
-         * about.
-         */
-        scanTruncated: scan.truncated,
-        matchTruncated: matched.length > FILTER_MATCH_CAP,
-        matchCount: matched.length,
-      }, { status: 200 })
+      if (!scan.truncated && !scan.tenantTruncated.length) {
+        const matched = collapseCrossPoolUidRows(scan.users).map(serialize).filter(matches)
+        const offset = token?.startsWith(MATCH_CURSOR)
+          ? Math.max(0, Math.floor(Number(token.slice(MATCH_CURSOR.length))) || 0)
+          : 0
+        const next = offset + FILTER_PAGE
+        return Response.json({
+          users: matched.slice(offset, next),
+          nextPageToken: next < matched.length ? `${MATCH_CURSOR}${next}` : null,
+          tenantsIncluded: true,
+          tenantTruncated: [],
+          refused,
+          notices: [],
+        }, { status: 200 })
+      }
+      /*
+       * The directory outran the bound, or an SSO pool did: a match over what
+       * was read would answer "none" for accounts it never saw. Refused, by
+       * name, and the list below is the unfiltered walk it says it is.
+       */
+      const reason = scan.truncated
+        ? `the directory holds more than ${FILTER_SCAN_CAP.toLocaleString('en-US')} accounts, ` +
+          'more than this list can search at once — find an account by its exact email or uid'
+        : `SSO ${scan.tenantTruncated.length === 1 ? 'tenant' : 'tenants'} ` +
+          `${scan.tenantTruncated.join(', ')} ${scan.tenantTruncated.length === 1 ? 'holds' : 'hold'} ` +
+          'more accounts than this list can search at once — find an account by its exact email or uid'
+      refused.push(
+        ...served.map((clause) => ({ clause, reason })),
+        ...(term ? [{ clause: 'search' as const, reason }] : []),
+      )
     }
-    const pageToken =
-      typeof query.nextPageToken === 'string'
-        ? query.nextPageToken
-        : undefined
+    // A match cursor does not name a place in the walk; it starts it over.
+    const pageToken = token?.startsWith(MATCH_CURSOR) ? undefined : token
     const page = await listUsersAcrossPools(200, pageToken)
     // One row per human (AGL-2005). `listUsersAcrossPools` stays the honest
     // primitive and returns every auth record; the collapse happens here, at
@@ -223,6 +294,8 @@ async function handler(request: Request): Promise<Response> {
       // Never silently truncate: a tenant whose pool outgrew the cap is named
       // so the page can say so rather than quietly dropping the tail.
       tenantTruncated: page.tenantTruncated,
+      refused,
+      notices: [],
     }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours

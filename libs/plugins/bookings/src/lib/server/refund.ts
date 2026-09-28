@@ -22,6 +22,7 @@ import { type PluginApiHandler } from '@aglyn/aglyn/server'
 // reversal that never happened green.
 import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
 import { createHash } from 'crypto'
+import { apiIdempotencyExpiry } from '@aglyn/aglyn/app-utils/api-idempotency'
 
 /**
  * Refund a paid booking (AGL-2315), full or partial, site-admin only.
@@ -163,7 +164,19 @@ export const bookingRefundHandler: PluginApiHandler = async (req, res) => {
           .json(priorResponse)
       }
       try {
-        await claimRef.create({ status: 'pending', startedAtMs: Date.now() })
+        // The claim's shape is every claim's (`claimApiIdempotency`): its
+        // kind, scope and org name it on the staff claims list, `createdAtMs`
+        // ages it there, and `expiresAt` lets the TTL policy reap it — a
+        // claim stranded by a killed process otherwise holds its key forever.
+        await claimRef.create({
+          kind: 'booking-refund',
+          scopeId: hostId,
+          orgId: String(hostSnapshot.get('orgId') ?? '') || null,
+          bookingId,
+          status: 'pending',
+          createdAtMs: Date.now(),
+          expiresAt: apiIdempotencyExpiry(),
+        })
       } catch {
         // Another attempt with this key is in flight.
         return res

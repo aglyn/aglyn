@@ -264,6 +264,9 @@ export function AiProductsHubCard(props: ConsoleProductsHubZoneProps) {
             <ListTable
               rows={pickerRows}
               columns={pickerColumns}
+              // A picker over the rows the hub hands its zone, not a list to
+              // search: a filter here would narrow only those rows (AGL-3321).
+              disableColumnFilter
               quickFilter={false}
               selectable={{ selected: picked, onChange: setPicked }}
             />

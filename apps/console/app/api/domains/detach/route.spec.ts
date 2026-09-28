@@ -50,6 +50,7 @@ const mockHostSet = jest.fn(async (..._args: unknown[]) => undefined)
 const mockLogHostActivity = jest.fn(async (..._args: unknown[]) => undefined)
 /** Lazy so the hoisted mock factory never touches a const in its TDZ. */
 const mockHostData = jest.fn()
+const mockSyncHostProjection = jest.fn(async (..._args: unknown[]) => undefined)
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
@@ -86,6 +87,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // every assertion below, and its own catch answers 500, which reads exactly
   // like the detach itself regressing.
   logHostActivity: (...args: unknown[]) => mockLogHostActivity(...args),
+  // CAPTURED (AGL-3321): the members' site rows drop the released domain.
+  syncHostProjectionForMembers: (...args: unknown[]) => mockSyncHostProjection(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -122,6 +125,7 @@ beforeEach(() => {
     memberRoles: { 'u-1': 'admin' },
     cname: 'shop.example.com',
     subdomain: 'shop',
+    orgId: 'org-1',
   })
   mockAttachProjectDomain.mockImplementation(async (domain: string) => ({
     outcome: 'attached',
@@ -163,6 +167,8 @@ describe('the platform subdomain serves again once the domain is gone (AGL-1273)
       {},
       'tenant',
     )
+    // The members' site rows re-derive without the domain (AGL-3321).
+    expect(mockSyncHostProjection).toHaveBeenCalledWith('org-1', 'host-1')
   })
 
   it('does not invent an entry for a subdomain that never had one', async () => {

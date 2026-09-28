@@ -82,7 +82,8 @@ import {
   worstDeliveryStatus,
 } from '@aglyn/shared-util-email'
 import { eraseCampaignAttributionsForPersonKey } from './campaign-attribution-store'
-import { emailSuppressionKey } from './email-suppression'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
+import { emailSearchTokens, emailSuppressionKey } from './email-suppression'
 import firebaseAdmin from './firebase-admin'
 
 const defaultFirestore = () => firebaseAdmin.app().firestore()
@@ -100,6 +101,42 @@ export const EMAIL_DELIVERY_READ_LIMIT = 50
  * document without bound; the first few tell a staffer what they need.
  */
 export const EMAIL_DELIVERY_MAX_LINKS = 10
+
+/**
+ * The field a message's search tokens are stored in (AGL-3321): the staff
+ * account page's delivery table searches it with `array-contains` on one
+ * typed word, and its Message filter's "contains" reads it too.
+ */
+export const EMAIL_DELIVERY_SEARCH_FIELD = 'searchTokens'
+
+/** The most tokens one message stores; a long subject loses reach past it. */
+export const EMAIL_DELIVERY_SEARCH_TOKEN_LIMIT = 200
+
+/**
+ * A message's search tokens: its recipient the way a suppression's address
+ * is tokenized (`emailSearchTokens` — the whole address, its domain and each
+ * piece of it), then the word prefixes of its subject and of its sender tag.
+ * In that order, deduplicated, capped.
+ *
+ * Every writer stamps it from the message's merged state, so a subject that
+ * arrives on a later event than the first still becomes searchable, and
+ * `tools/scripts/backfill-email-delivery-search.mjs` stamps the messages
+ * written before the field. Both are held to
+ * `tools/scripts/lib/email-search-tokens.fixtures.json`.
+ */
+export function emailDeliverySearchTokens(message: {
+  to?: unknown
+  subject?: unknown
+  context?: unknown
+}): string[] {
+  const text = (value: unknown) => (typeof value === 'string' ? value : '')
+  const tokens = new Set<string>([
+    ...emailSearchTokens(text(message.to)),
+    ...nameSearchTokens(text(message.subject)),
+    ...nameSearchTokens(text(message.context)),
+  ])
+  return [...tokens].slice(0, EMAIL_DELIVERY_SEARCH_TOKEN_LIMIT)
+}
 
 /** One message as the staff view reads it. */
 export interface EmailDeliveryRecord {
@@ -238,6 +275,13 @@ export async function recordEmailDeliveryEvent(
         update.campaignId = event.tags.campaignId
       if (event.bounceType) update.bounceType = event.bounceType
       if (event.detail) update.detail = event.detail
+      // Searchable by what the message now says, merged — the subject may
+      // arrive on a later event than the first (AGL-3321).
+      update[EMAIL_DELIVERY_SEARCH_FIELD] = emailDeliverySearchTokens({
+        to: event.to,
+        subject: existing.subject || event.subject,
+        context: existing.context || event.context,
+      })
 
       if (event.type === 'opened') update.openCount = FieldValue.increment(1)
       if (event.type === 'clicked') {
@@ -339,6 +383,11 @@ export async function recordEmailDeliverySnapshot(
       if (!existing.timestamps?.sent) {
         update.timestamps = { sent: snapshot.sentAt }
       }
+      update[EMAIL_DELIVERY_SEARCH_FIELD] = emailDeliverySearchTokens({
+        to: snapshot.to,
+        subject: existing.subject || snapshot.subject,
+        context: existing.context,
+      })
 
       transaction.set(ref, update, { merge: true })
     })
@@ -959,7 +1008,7 @@ export async function readEmailDeliveries(
  * second copy would be a second answer to "what does an absent `openCount`
  * mean", and the two would drift the first time a field is added.
  */
-function deliveryRecordFrom(doc: any): EmailDeliveryRecord {
+export function deliveryRecordFrom(doc: any): EmailDeliveryRecord {
   const data = doc.data() ?? {}
   return {
     messageId: String(data.messageId ?? doc.id),

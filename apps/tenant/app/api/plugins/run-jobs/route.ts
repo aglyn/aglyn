@@ -40,6 +40,10 @@ import { serverPluginLoader } from '../../../../utils/server-plugin-loader'
 // plugin manifest to load them, so the runner route is where they enter the
 // registry — `ensureAll` below only reaches plugin `/server` entries.
 import '../../../../utils/publish-schedule-job'
+// Its content-entry twin (AGL-3340), imported for the same reason. Without it
+// a scheduled post publishes only when some render happens to reach it, and
+// the pages that list it wait out their own windows.
+import '../../../../utils/entry-schedule-job'
 // The second core job, imported for the same reason and subject to the same
 // hazard: nothing else references this module, so dropping the import is a
 // silent way to stop re-checking whether a verified sending domain still

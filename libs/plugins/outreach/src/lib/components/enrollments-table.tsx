@@ -18,6 +18,9 @@
 
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import {
   ListRowActions,
@@ -27,13 +30,10 @@ import {
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import { hiddenFilterVisibility, type ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
-  filterListRows,
-  inMemoryListField,
   listFilterGridColumns,
   type ListFilterClause,
   type ListFilterOption,
 } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import {
   Card,
@@ -46,20 +46,25 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
-import { type MouseEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type MouseEvent, type ReactNode, useMemo } from 'react'
 import {
   outreachClickCountLabel,
   outreachClickSummary,
   type OutreachClickSummary,
 } from '../model/enrollment-engagement'
 import {
+  OUTREACH_ENROLLMENT_CLICK_FIELDS,
+  OUTREACH_ENROLLMENT_LIST_QUERY,
+} from '../model/enrollment-list-query'
+import {
   OUTREACH_ENROLLMENT_STATUSES,
+  OUTREACH_STOP_REASONS,
   OUTREACH_TASK_KIND_LABELS,
   type OutreachEnrollment,
   type OutreachSequenceStep,
 } from '../model/outreach.types'
 import { useOutreachEnrollmentActions } from './enrollment-actions'
-import { OUTREACH_CLICKED_FILTER_VALUE } from './enrollment-filter-params'
+import { OUTREACH_CLICKED_FILTER_VALUE, OUTREACH_UNCLICKED_FILTER_VALUE } from './enrollment-filter-params'
 import {
   formatOutreachTime,
   OUTREACH_ENROLLMENT_STATUS_LABELS,
@@ -69,10 +74,13 @@ import {
   OutreachLoadProblem,
 } from './outreach-ui'
 import type { OutreachApi } from './use-outreach-api'
-import type { OutreachEnrollmentsLoad } from './use-outreach-data'
+import { useOutreachEnrollmentList } from './use-outreach-data'
 
 export interface OutreachEnrollmentsTableProps {
-  enrollments: OutreachEnrollmentsLoad
+  /** The organization, whose enrollments the table asks for. */
+  orgId: string
+  /** The sequence whose people these are: every page is narrowed to it. */
+  sequenceId: string
   steps: readonly OutreachSequenceStep[]
   /**
    * Whether this sequence counts link clicks (AGL-3239). The Clicks column
@@ -147,33 +155,28 @@ export function outreachStepIsCurated(
 }
 
 /*
- * What the enrollments grid's Filters panel offers (AGL-3317). Status and
- * whether the person is a lead are picked; the name, the address and the
- * stop reason are typed. `target` and `email` are no column of their own,
- * so they are hidden columns the panel can still reach.
+ * What the enrollments grid's Filters panel offers (AGL-3317), each field on
+ * the table's Firestore query (AGL-3321, `OUTREACH_ENROLLMENT_LIST_QUERY`).
+ * Status, whether the person is a lead and the stop reason are picked; the
+ * address is typed whole. `target` and `email` are no column of their own,
+ * so they are hidden columns the panel can still reach; the search box
+ * reads the person's name and address.
  *
- * A sequence that counts clicks adds two more (AGL-3332): whether the person
- * clicked, and a destination they followed — each of their destinations
- * matched whole, never by a piece of its address, so "followed /pricing"
- * does not also list the people who followed "/pricing/enterprise".
+ * A sequence that counts clicks adds two more (AGL-3332), on the same query:
+ * whether the person clicked, and a destination they followed — matched
+ * whole against the destinations stored on the enrollment, never by a piece
+ * of its address, so "followed /pricing" does not also list the people who
+ * followed "/pricing/enterprise".
  */
-const BASE_FILTER_FIELDS: ListFilterField[] = [
-  inMemoryListField('status', 'select'),
-  inMemoryListField('target', 'select'),
-  inMemoryListField('contactName', 'text'),
-  inMemoryListField('email', 'text'),
-  inMemoryListField('stopReason', 'text'),
-]
-const CLICK_FILTER_FIELDS: ListFilterField[] = [
-  inMemoryListField('clicked', 'select'),
-  { ...inMemoryListField('link', 'select'), tokensPath: 'link', verbatimTokens: true },
-]
+const BASE_FILTER_FIELDS = OUTREACH_ENROLLMENT_LIST_QUERY.fields.filter(
+  (field) => !(OUTREACH_ENROLLMENT_CLICK_FIELDS as readonly string[]).includes(field.column),
+)
 const ENROLLMENT_FILTER_HEADERS: Readonly<Record<string, string>> = {
   status: 'Status',
   target: 'Enrolled as',
-  contactName: 'Name',
-  email: 'Email',
   stopReason: 'Stop reason',
+  email: 'Email',
+  enrolled: 'Enrolled',
   clicked: 'Clicked',
   link: 'Link followed',
 }
@@ -186,22 +189,24 @@ const BASE_FILTER_OPTIONS: Record<string, readonly ListFilterOption[]> = {
     { value: 'contact', label: 'Contact' },
     { value: 'lead', label: 'Lead' },
   ],
+  stopReason: OUTREACH_STOP_REASONS.map((reason) => ({
+    value: reason,
+    label: OUTREACH_STOP_REASON_LABELS[reason],
+  })),
 }
 const CLICKED_OPTIONS: readonly ListFilterOption[] = [
   { value: OUTREACH_CLICKED_FILTER_VALUE, label: 'Yes' },
-  { value: 'no', label: 'No' },
+  { value: OUTREACH_UNCLICKED_FILTER_VALUE, label: 'No' },
 ]
-/** What the quick search reads on an enrollment row. */
-const ENROLLMENT_SEARCH_FIELDS = ['contactName', 'email', 'step', 'stopReason'] as const
 /** Columns a reader can show from the column chooser, off until they do (AGL-3332). */
 const CLICK_DETAIL_COLUMNS = ['linksFollowed', 'lastClick', 'scannerClicks'] as const
 
 /** The table's grammar, with the click fields when the sequence counts clicks. */
-function filterFieldsFor(trackClicks: boolean): ListFilterField[] {
-  return trackClicks ? [...BASE_FILTER_FIELDS, ...CLICK_FILTER_FIELDS] : BASE_FILTER_FIELDS
+function filterFieldsFor(trackClicks: boolean): readonly ListFilterField[] {
+  return trackClicks ? OUTREACH_ENROLLMENT_LIST_QUERY.fields : BASE_FILTER_FIELDS
 }
 
-/** What the panel, the chips and `filterListRows` read off one enrollment. */
+/** What the grid's cells and its export read off one enrollment. */
 function filterRow(
   enrollment: OutreachEnrollment,
   steps: readonly OutreachSequenceStep[],
@@ -215,7 +220,7 @@ function filterRow(
     email: enrollment.email,
     step: outreachCurrentStepLabel(enrollment, steps),
     stopReason: outreachStopLabel(enrollment),
-    clicked: clicks.clicks > 0 ? OUTREACH_CLICKED_FILTER_VALUE : 'no',
+    clicked: clicks.clicks > 0 ? OUTREACH_CLICKED_FILTER_VALUE : OUTREACH_UNCLICKED_FILTER_VALUE,
     link: clicks.followed,
   }
 }
@@ -385,28 +390,33 @@ const plainClick = (event: MouseEvent) =>
  * behind it is a click away rather than cut off at the column's edge.
  */
 export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
-  const { enrollments, steps, timeZone, api, onOpen, hrefFor } = props
+  const { steps, timeZone, api, onOpen, hrefFor } = props
   const trackClicks = props.trackClicks === true
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('md'))
   const actions = useOutreachEnrollmentActions({ api, steps })
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
   const fields = useMemo(() => filterFieldsFor(trackClicks), [trackClicks])
   const gridFilter = useListGridFilter({
-    selectFields: ['status', 'target', 'clicked', 'link'],
+    selectFields: ['status', 'target', 'stopReason', 'clicked', 'link'],
     ...(props.clauses !== undefined
       ? { clauses: props.clauses, onChange: props.onClausesChange }
       : {}),
   })
-  const filtering = gridFilter.clauses.length > 0 || gridFilter.searchWords.length > 0
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
   /*
-   * The rows the grid is handed, every clause and the search answered over
-   * the enrollments read so far — a window that grows as the reader pages
-   * past it, so a filter reaches further the further they go.
+   * One page of the sequence's enrollments, newest enrolled first, with
+   * every clause and the search word on the query (AGL-3321): a filter
+   * reaches the enrollment on page forty as surely as the one on page one,
+   * and nothing is matched over the rows that happen to be loaded. The
+   * click filters (AGL-3332) are on it too, answered by the `clicked` flag
+   * and the destinations the click route stores on each enrollment.
    */
-  const searchKey = gridFilter.searchWords.join(' ')
-  const loadedData = enrollments.data
+  const enrollments = useOutreachEnrollmentList(props.orgId, props.sequenceId, {
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+  })
+  const loadedData = enrollments.rows
   const summaries = useMemo(
     () =>
       new Map(
@@ -416,21 +426,6 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
   )
   const clicksOf = (enrollment: OutreachEnrollment) =>
     summaries.get(enrollment.id) ?? outreachClickSummary(enrollment.engagement)
-  const matching = useMemo(
-    () =>
-      filterListRows(
-        loadedData.map((enrollment) => filterRow(enrollment, steps, clicksOf(enrollment))),
-        fields,
-        gridFilter.clauses,
-        { paths: ENROLLMENT_SEARCH_FIELDS, words: gridFilter.searchWords },
-      ).map((row) => row.enrollment),
-    // `searchKey` stands for the words, which are a new array each render;
-    // `summaries` for `clicksOf`, which reads nothing else.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loadedData, summaries, steps, fields, gridFilter.clauses, searchKey],
-  )
-  // A narrowed list starts again at its first page.
-  useEffect(() => setPage(0), [gridFilter.clauses, searchKey])
 
   /*
    * The destinations the "Link followed" filter offers: the sequence's own
@@ -466,21 +461,37 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
    * A person who followed this destination before each click was recorded
    * on its own, and another link after it, is known by their LAST link only
    * — so a "Link followed" filter says it may miss them rather than
-   * implying the list is whole.
+   * implying the list is whole. Which people those are is exactly what the
+   * query cannot see, so the caveat stands whenever the filter does.
    */
   const linkFilterMayMiss =
-    trackClicks &&
-    gridFilter.clauses.some((clause) => clause.field === 'link') &&
-    [...summaries.values()].some((summary) => summary.linkCount === null)
+    trackClicks && gridFilter.clauses.some((clause) => clause.field === 'link')
 
-  if (enrollments.status === 'loading')
+  const chips = (
+    <ListFilterChips
+      fields={fields}
+      headers={ENROLLMENT_FILTER_HEADERS}
+      clauses={gridFilter.clauses}
+      onChange={gridFilter.setClauses}
+      options={filterOptions}
+    />
+  )
+  if (enrollments.status === 'loading' && !filtering)
     return <OutreachLoading label="Loading enrollments…" />
   if (enrollments.status === 'error' || enrollments.status === 'refused') {
     return (
-      <OutreachLoadProblem status={enrollments.status} what="enrollments" />
+      <Stack spacing={1.5}>
+        {chips}
+        <OutreachLoadProblem status={enrollments.status} what="enrollments" />
+      </Stack>
     )
   }
-  if (!enrollments.data.length) {
+  if (
+    enrollments.status === 'ready' &&
+    !enrollments.rows.length &&
+    !filtering &&
+    enrollments.page === 0
+  ) {
     return (
       <Card variant="outlined">
         <EmptyStateComponent
@@ -536,30 +547,19 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
     </Stack>
   )
 
-  const loaded = matching
-  const pageRows = loaded.slice(page * pageSize, (page + 1) * pageSize)
-  const lastLoadedPage = Math.max(0, Math.ceil(loaded.length / pageSize) - 1)
-  /** Past the rows read so far, the next page reads another window first. */
-  const turnTo = (next: number) => {
-    if ((next + 1) * pageSize > loaded.length && enrollments.hasMore)
-      enrollments.showMore()
-    setPage(next)
-  }
+  const pageRows = enrollments.rows
 
   return (
     <Stack spacing={1.5}>
-      <ListFilterChips
-        fields={fields}
-        headers={ENROLLMENT_FILTER_HEADERS}
-        clauses={gridFilter.clauses}
-        onChange={gridFilter.setClauses}
-        options={filterOptions}
+      {chips}
+      <ListQueryNotices
+        refused={listQueryRefusals(enrollments.plan.refused, {
+          fields,
+          headers: ENROLLMENT_FILTER_HEADERS,
+          options: filterOptions,
+        })}
+        notices={enrollments.plan.notices}
       />
-      {filtering && enrollments.hasMore ? (
-        <Typography variant="caption" color="text.secondary">
-          {`Filtering the ${enrollments.data.length} enrollments read so far — the next page reads more.`}
-        </Typography>
-      ) : null}
       {linkFilterMayMiss ? (
         <Typography variant="caption" color="text.secondary">
           Clicks made before each one was recorded on its own kept only the person’s last link, so
@@ -627,6 +627,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
             ENROLLMENT_FILTER_HEADERS,
           )}
           initialState={{ columns: { columnVisibilityModel: hiddenColumns } }}
+          loading={enrollments.status === 'loading'}
           rows={pageRows.map((enrollment) => {
             const clicks = clicksOf(enrollment)
             return {
@@ -653,25 +654,27 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
               : undefined
           }
           /*
-           * The panel and the search are the grid's; the table answers them
-           * over the enrollments it read (AGL-3317).
+           * The panel and the search are the grid's; every clause and the
+           * search word are on the table's query (AGL-3321). The grid
+           * neither filters nor sorts the page it is handed: the query's
+           * one order, newest enrolled first, is the table's.
            */
           filterMode="server"
           filterModel={gridFilter.filterModel}
           onFilterModelChange={gridFilter.onFilterModelChange}
           quickFilter
+          disableColumnSorting
           noRowsLabel="No enrollments match these filters"
           hideFooter
         />
       )}
       <ListPagination
-        page={page}
-        pageSize={pageSize}
+        page={enrollments.page}
+        pageSize={enrollments.pageSize}
         rowCount={pageRows.length}
-        count={enrollments.hasMore ? undefined : loaded.length}
-        hasMore={enrollments.hasMore || page < lastLoadedPage}
-        onPageChange={turnTo}
-        onPageSizeChange={setPageSize}
+        hasMore={enrollments.hasMore}
+        onPageChange={enrollments.setPage}
+        onPageSizeChange={enrollments.setPageSize}
       />
       {actions.dialogs}
     </Stack>

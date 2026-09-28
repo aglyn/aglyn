@@ -2237,9 +2237,9 @@ export interface ScheduledJob {
 /**
  * THE INVENTORY.
  *
- * Seven GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
- * the weekly jobs, the month-boundary usage-email sweep and the hourly CRM
- * task reminders, for which an hour of drift is nothing — and the rows
+ * Six GitHub Actions schedules (`.github/workflows/scheduled-crons.yml`) —
+ * the weekly jobs and the month-boundary usage-email sweep, for which hours
+ * of drift cost nothing — and the rows
  * driven by Cloud Scheduler out of
  * `cloud/functions/src/index.ts`: `pluginJobsBeat` and `consoleAiJobsBeat`
  * (every minute), the routes the `consoleFastCrons` job carries every
@@ -2377,14 +2377,14 @@ export const SCHEDULED_JOBS: readonly ScheduledJob[] = [
   {
     id: 'crm-task-reminders',
     label: 'CRM task reminders',
-    // Hourly, all month (AGL-2659). The grace is `usage-email`'s, for the
-    // reason that row gives about this runner: GitHub's dispatch is
-    // best-effort, and a reminder stays owed on the task until a run
-    // handles it, so a dropped hour costs lateness rather than silence.
+    // Hourly, all month (AGL-2659), on Cloud Scheduler since GitHub delivered
+    // the hourly entry about once every six hours and left reminders that
+    // late. Ninety minutes is the dailies' grace: one missed fire plus half
+    // an hour, and ten times the 540s a run may take.
     cron: '0 * * * *',
-    runner: 'github-actions',
+    runner: 'cloud-scheduler',
     target: '/api/crm/task-reminders',
-    graceMinutes: 360,
+    graceMinutes: 90,
     drives:
       'Sends each CRM task’s reminder at its own time — a console notification and an email to the assignee (AGL-2659). If it stops, every reminder a person set in the task drawer is silently late, and nothing but the morning digest says a task was due.',
   },

@@ -35,6 +35,14 @@
 import { getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
+import { withCrmListFields } from '../scripts/lib/org-record-list-fields.mjs'
+import { productListFields } from '../scripts/lib/seed-demo.mjs'
+import { orderListFieldsOf } from '../scripts/backfill-orders-list-fields.mjs'
+
+/** A product with the fields the products lists query by (AGL-3321). */
+const withProductListFields = (product) => ({ ...product, ...productListFields(product) })
+// The Inbox list's search keys, as the submit route stamps them (AGL-3321).
+import { messageSearchFields } from '../scripts/lib/message-search.mjs'
 
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -63,7 +71,8 @@ if (!getApps().length) initializeApp({ projectId })
 const firestore = getFirestore()
 
 const put = async (ref, data) => {
-  await ref.set(data, { merge: true })
+  // A CRM record carries the fields its list queries (AGL-3321).
+  await ref.set(withCrmListFields(ref, data), { merge: true })
   console.log(`  ${ref.path}`)
 }
 
@@ -234,12 +243,15 @@ await put(
 // docs page is trying to draw.
 console.log('Orders (A13):')
 const hostOrdersRef = firestore.collection('hosts').doc(hostId).collection('orders')
+// Each with the fields the orders list queries by (AGL-3321), as a sold one has.
+const putOrder = (id, order) =>
+  put(hostOrdersRef.doc(id), { ...order, ...orderListFieldsOf(order, id) })
 const orderAt = (days) => ({
   createdAtMs: daysAgo(days).toMillis(),
   createdAt: daysAgo(days),
 })
 
-await put(hostOrdersRef.doc('docs-order-chargeback'), {
+await putOrder('docs-order-chargeback', {
   number: 1042,
   status: 'refunded',
   channel: 'online',
@@ -284,7 +296,7 @@ await put(hostOrdersRef.doc('docs-order-chargeback'), {
 // Ordinary neighbours. With zero orders the card renders its empty-state
 // invitation and neither the filter row nor the table exists at all, so the
 // Disputes filter in callout ③ has to have a list to sit above.
-await put(hostOrdersRef.doc('docs-order-paid'), {
+await putOrder('docs-order-paid', {
   number: 1043,
   status: 'paid',
   channel: 'online',
@@ -308,7 +320,7 @@ await put(hostOrdersRef.doc('docs-order-paid'), {
   },
   ...orderAt(5),
 })
-await put(hostOrdersRef.doc('docs-order-fulfilled'), {
+await putOrder('docs-order-fulfilled', {
   number: 1044,
   status: 'fulfilled',
   channel: 'pos',
@@ -412,7 +424,7 @@ await put(
 // refusal the shot is about sits BEHIND a valid draft, not in place of it.
 await put(
   firestore.collection('hosts').doc(freeHostId).collection('products').doc('docs-free-loaf'),
-  {
+  withProductListFields({
     name: 'Sourdough loaf',
     slug: 'sourdough-loaf',
     description: 'Naturally leavened, baked daily.',
@@ -422,7 +434,7 @@ await put(
     priceUsd: 9,
     inventory: 24,
     createdAtMs: now.toMillis(),
-  },
+  }),
 )
 
 // ── The staff-only guard's subject (AGL-3319) ─────────────────────────────
@@ -551,6 +563,7 @@ for (const [id, hoursAgo, read, fields] of submissions) {
     formName: 'Contact us',
     path: '/contact',
     fields,
+    ...messageSearchFields(fields),
     read,
     createdAt: Timestamp.fromMillis(now.toMillis() - hoursAgo * 60 * 60 * 1000),
   })
@@ -590,7 +603,8 @@ for (const name of ['contacts', 'leads', 'companies', 'crmActivities', 'crmTasks
   let moved = 0
   for (const doc of snapshot.docs) {
     const data = doc.data()
-    const next = reserve(data)
+    // The addresses moved, and with them what the CRM lists search (AGL-3321).
+    const next = withCrmListFields(doc.ref, reserve(data))
     if (JSON.stringify(next) !== JSON.stringify(data)) {
       await doc.ref.set(next)
       moved += 1

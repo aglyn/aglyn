@@ -42,6 +42,7 @@ import {
   resolveUsageBudget,
 } from '@aglyn/aglyn/app-utils/usage-budget'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — self-serve billing surface, same posture as
 // billing/storage-overage and billing/addons. AGL-1501 keeps billing-locked
@@ -301,21 +302,19 @@ async function handler(request: Request): Promise<Response> {
       },
       'usageAlerts.budget': FieldValue.delete(),
     })
-    await firestore
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        actorEmail: decoded.email ?? null,
-        action: 'billing.usageBudget.set',
-        target: `orgs/${orgId}`,
-        before: {
-          budgetSet: current.budgetSet,
-          amountUsd: current.amountUsd,
-          thresholdPcts: current.thresholdPcts,
-        },
-        after: { budgetSet: true, amountUsd: requested, thresholdPcts },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firestore, {
+      actorUid: decoded.uid,
+      actorEmail: decoded.email ?? null,
+      action: 'billing.usageBudget.set',
+      target: `orgs/${orgId}`,
+      before: {
+        budgetSet: current.budgetSet,
+        amountUsd: current.amountUsd,
+        thresholdPcts: current.thresholdPcts,
+      },
+      after: { budgetSet: true, amountUsd: requested, thresholdPcts },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     return Response.json(

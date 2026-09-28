@@ -115,6 +115,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore, Timestamp } from 'firebase-admin/firestore'
+// The activity search's token builder (AGL-3321): a row written here is
+// found by the same search as one a live writer stamped.
+import { activitySearchTokens } from './lib/activity-search-tokens.mjs'
 
 // Load admin creds from the repo's local env files so this script is
 // self-contained. Already-set process.env wins.
@@ -416,6 +419,8 @@ for (const hostDoc of hostSnap.docs) {
             }
           : {}),
       }
+      // `set()` replaces the row, so the search tokens are part of it.
+      entry.searchTokens = activitySearchTokens(entry)
       await write(ref, entry)
 
       entriesPlanned += 1

@@ -70,6 +70,7 @@ import {
   readTaxablePurchases,
   taxablePurchasesTarget,
 } from '../../../../utils/server/taxable-purchases-store'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 async function handler(request: Request): Promise<Response> {
   const { method, body, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -152,20 +153,16 @@ async function handler(request: Request): Promise<Response> {
       await document.delete()
       // Back to `not computed`, which is where an unentered period starts and
       // the only honest state for a figure nobody stands behind any more.
-      await firebaseAdmin
-        .app()
-        .firestore()
-        .collection('adminAudit')
-        .add({
-          actorUid: decoded.uid,
-          action: 'taxablePurchases.clear',
-          target: taxablePurchasesTarget(period),
-          period,
-          before: taxablePurchasesAuditShape(before),
-          after: taxablePurchasesAuditShape(null),
-          note,
-          at: FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firebaseAdmin.app().firestore(), {
+        actorUid: decoded.uid,
+        action: 'taxablePurchases.clear',
+        target: taxablePurchasesTarget(period),
+        period,
+        before: taxablePurchasesAuditShape(before),
+        after: taxablePurchasesAuditShape(null),
+        note,
+        at: FieldValue.serverTimestamp(),
+      })
       return Response.json({ ok: true, period, entry: null }, { status: 200 })
     }
 
@@ -193,20 +190,16 @@ async function handler(request: Request): Promise<Response> {
       { merge: false },
     )
     const after = await readTaxablePurchases(period)
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'taxablePurchases.update',
-        target: taxablePurchasesTarget(period),
-        period,
-        before: taxablePurchasesAuditShape(before),
-        after: taxablePurchasesAuditShape(after),
-        note: proposal.value.note,
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'taxablePurchases.update',
+      target: taxablePurchasesTarget(period),
+      period,
+      before: taxablePurchasesAuditShape(before),
+      after: taxablePurchasesAuditShape(after),
+      note: proposal.value.note,
+      at: FieldValue.serverTimestamp(),
+    })
 
     return Response.json({ ok: true, period, entry: after }, { status: 200 })
   } catch (error) {

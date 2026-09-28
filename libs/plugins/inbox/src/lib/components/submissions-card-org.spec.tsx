@@ -37,14 +37,17 @@ import {
 import { deleteDoc, updateDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import type { ConsolePluginOrgMount } from '@aglyn/aglyn'
+import { messageSearchFields } from '@aglyn/aglyn/app-utils/message-search'
 import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import SubmissionsCard from './submissions-card.component'
 
 /** Every query the card built: what it reads, and its predicates. */
 let queries: Array<{ source: string; predicates: string[] }>
-/** Rows the paged reader hands back. */
+/** The submissions Firestore holds, answered through the list-query double. */
 let rows: Array<Record<string, unknown>>
+/** The list query the card opened last: its collection and its plan. */
+let mockListQuery: { source: string; plan: any } | null = null
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
@@ -53,20 +56,26 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     status: 'success',
     fromCache: false,
   }),
-  usePagedCollection: (factory: (pageLimit: number) => unknown) => {
-    factory(11)
-    return {
-      rows,
-      hasMore: false,
-      page: 0,
-      setPage: jest.fn(),
-      pageSize: 10,
-      setPageSize: jest.fn(),
-      status: 'success',
-      fromCache: false,
-    }
-  },
 }))
+
+// The list's query (AGL-3321), answered by the shared double: the real plan,
+// every predicate applied as Firestore would.
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const actual = jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...actual,
+    useListQuery: (options: { collection: { __source: string } | null }) => {
+      const result = useListQueryDouble(() => (options.collection ? rows : []), options)
+      if (options.collection) {
+        mockListQuery = { source: options.collection.__source, plan: result.plan }
+      }
+      return result
+    },
+  }
+})
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
@@ -158,6 +167,8 @@ const ORG_MOUNT: ConsolePluginOrgMount = {
   hostsPath: '/acme/hosts',
 }
 
+let minutesAgo = 0
+/** A submission as the submit route writes one, each older than the last. */
 const row = (
   id: string,
   hostId: string,
@@ -170,6 +181,8 @@ const row = (
   formName: 'Contact',
   read: false,
   fields: { email },
+  ...messageSearchFields({ email }),
+  createdAt: { seconds: 1_800_000_000 - (minutesAgo += 1) * 60 },
   ...extra,
 })
 
@@ -178,6 +191,8 @@ beforeEach(() => {
   resetPluginServicesForTests()
   queries = []
   rows = []
+  mockListQuery = null
+  minutesAgo = 0
 })
 
 const renderOrgCard = () =>
@@ -189,12 +204,21 @@ const rowOf = (text: string) =>
 describe('the organization’s Submissions card', () => {
   it('reads every site with ONE collection-group query, filtered on the org, newest first', () => {
     renderOrgCard()
-    expect(queries).toEqual([
-      {
-        source: 'group:formSubmissions',
-        predicates: ['where:orgId == org-1', 'orderBy:createdAt desc'],
-      },
+    expect(mockListQuery?.source).toBe('group:formSubmissions')
+    expect(mockListQuery?.plan.filters).toEqual([{ path: 'orgId', op: '==', value: 'org-1' }])
+    expect(mockListQuery?.plan.orderBy).toEqual({ path: 'createdAt', direction: 'desc' })
+  })
+
+  it('keeps the org clause under the search, on the same query', async () => {
+    rows = [row('s1', 'site-a', 'ada@example.com'), row('s2', 'site-b', 'bo@example.com')]
+    renderOrgCard()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'bo' } })
+    await waitFor(() => expect(within(grid()).queryByText('email: ada@example.com')).toBeNull())
+    expect(mockListQuery?.plan.filters).toEqual([
+      { path: 'orgId', op: '==', value: 'org-1' },
+      { path: 'searchTokens', op: 'array-contains', value: 'bo' },
     ])
+    expect(rowOf('bo@example.com')).toBeTruthy()
   })
 
   it('reads no form catalog: forms are one site’s, and picking a site is how to get one', () => {
@@ -295,17 +319,10 @@ describe('the organization’s Submissions card', () => {
 describe('THE CONTROL: under a site it is the site’s inbox', () => {
   it('reads that site’s own collection and its form catalog, with no org clause', () => {
     render(<SubmissionsCard hostId="site-a" />)
-    expect(queries).toEqual(
-      expect.arrayContaining([
-        {
-          source: 'hosts/site-a/formSubmissions',
-          predicates: ['orderBy:createdAt desc'],
-        },
-        { source: 'hosts/site-a/forms', predicates: ['orderBy:__name__ asc'] },
-      ]),
-    )
-    expect(queries.some((entry) => entry.source.startsWith('group:'))).toBe(
-      false,
-    )
+    expect(mockListQuery?.source).toBe('hosts/site-a/formSubmissions')
+    expect(mockListQuery?.plan.filters).toEqual([])
+    expect(queries).toEqual([
+      { source: 'hosts/site-a/forms', predicates: ['orderBy:__name__ asc'] },
+    ])
   })
 })

@@ -33,6 +33,7 @@
 
 import { cert, getApps, initializeApp } from 'firebase-admin/app'
 import { FieldValue, Timestamp, getFirestore } from 'firebase-admin/firestore'
+import { nameSearchTokens } from './lib/name-search-tokens.mjs'
 
 const args = process.argv.slice(2)
 const hostArgIndex = args.indexOf('--host')
@@ -296,6 +297,8 @@ const entries = [
 for (const entry of entries) {
   await put(changelog.collection('entries').doc(`cl-${entry.slug}`), {
     title: entry.title,
+    // The words the console's entries table searches by (AGL-3321).
+    titleTokens: nameSearchTokens(entry.title),
     slug: entry.slug,
     excerpt: entry.excerpt,
     body: entry.body,

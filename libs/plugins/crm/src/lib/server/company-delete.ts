@@ -63,7 +63,7 @@ import {
   isOrgWideMember,
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
-import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, restampCrmListFields } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   COMPANY_DETACH_LIMIT,
@@ -149,6 +149,13 @@ export const crmCompanyDeleteHandler: PluginApiHandler = async (req, res) => {
         )
       }
       await batch.commit()
+      // The company is what the Contacts list filters by (AGL-3321).
+      await restampCrmListFields(
+        firestore,
+        writer.orgId,
+        'contacts',
+        linked.map((snapshot) => snapshot.id),
+      )
     }
     if (!moreRemain) await companyRef.delete()
 

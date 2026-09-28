@@ -22,6 +22,10 @@ import {
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
 import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
@@ -40,14 +44,14 @@ import type { GridColDef } from '@mui/x-data-grid'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
 import { TABLE_ROW_HEIGHT } from '../constants/shared'
-import useStaffListPagination from '../hooks/use-staff-list-pagination'
+import useStaffListQuery from '../hooks/use-staff-list-query'
 import {
   SUPPRESSION_FILTER_FIELDS,
   SUPPRESSION_FILTER_HEADERS,
   SUPPRESSION_FILTER_OPTIONS,
   SUPPRESSION_REASON_LABELS,
+  SUPPRESSION_SEARCH_HINT,
   SUPPRESSION_SELECT_FIELDS,
-  suppressionClauseStandsAlongside,
 } from '../utils/email-suppression-filters'
 import StaffListPaginationControls from './staff-list-pagination.component'
 
@@ -74,9 +78,6 @@ const day = (seconds: number | undefined): string =>
 function onDate(row: PlatformSuppression): string {
   return day(row.createdAt?.seconds ?? row.suppressedAt?.seconds)
 }
-
-/** The one filter the route serves beside a search: a range over its sort. */
-const SEARCH_ALONGSIDE = 'suppressedAt'
 
 /** Columns the table draws; the other filter fields reach the panel hidden. */
 const VISIBLE_COLUMNS = ['email', 'reason', 'context', 'status', 'createdAt']
@@ -124,35 +125,26 @@ export default function StaffEmailSuppressionsCard() {
 
   /*
    * The Filters panel and the search, SERVED by the route (AGL-3321): every
-   * clause is a predicate beneath the list's cursor, so each page the footer
-   * turns is a page of the narrowed list. Status and Last reported stand
-   * beside anything; Reason, Learned from and Site ID are one at a time,
-   * because each pair would need an index of its own. See
+   * clause and the search word are predicates on one Firestore query, beneath
+   * the list's cursor, so each page the footer turns is a page of the
+   * narrowed list. Any combination stands together; what one query cannot
+   * hold is named above the list and not applied. See
    * `utils/email-suppression-filters.ts`.
-   *
-   * The search wins over the filters: with a search in force only the Last
-   * reported range travels beside it, the other clauses wait, and an Alert
-   * says so — the route answers the two together with no index.
    */
-  const gridFilter = useListGridFilter({
-    selectFields: SUPPRESSION_SELECT_FIELDS,
-    single: true,
-    keepAlongside: suppressionClauseStandsAlongside,
-  })
-  const searchKey = gridFilter.searchWords.join(' ').trim()
-  /** The debounced search the route was last asked, one query per settled term. */
-  const [search, setSearch] = useState('')
-  useEffect(() => {
-    const timer = setTimeout(() => setSearch(searchKey), 300)
-    return () => clearTimeout(timer)
-  }, [searchKey])
-  const sent = search
-    ? gridFilter.clauses.filter((clause) => clause.field === SEARCH_ALONGSIDE)
-    : gridFilter.clauses
-  const setAside = sent.length < gridFilter.clauses.length
-  const filtersKey = JSON.stringify(sent.map(({ field, op, value }) => ({ field, op, value })))
-  const filtering = gridFilter.clauses.length > 0 || Boolean(searchKey)
+  const gridFilter = useListGridFilter({ selectFields: SUPPRESSION_SELECT_FIELDS })
 
+  // Held at an error rather than an empty list. "Nothing is suppressed" is a
+  // confident wrong answer in the reassuring direction, and this card exists
+  // to explain mail that is not arriving.
+  const onError = useCallback(
+    (reason: unknown) =>
+      setError(
+        reason instanceof Error && reason.message
+          ? reason.message
+          : 'Could not read the suppression list',
+      ),
+    [],
+  )
   /*
    * THE CONSOLE'S ONE CURSOR WALK, not a second one that resembles it.
    *
@@ -162,52 +154,19 @@ export default function StaffEmailSuppressionsCard() {
    * with nothing on screen to say so. That is the exact defect this list
    * exists to explain, and it would be a poor screen that reproduced it.
    *
-   * A new filter or search is a new walk: `fetchPage` changes with them, and
-   * the walk restarts at its first page.
+   * A new filter or search is a new walk that starts at its first page.
    */
-  const fetchPage = useCallback(
-    async (cursor: string | null, _pageIndex: number, pageSize: number) => {
-      const params = new URLSearchParams({ limit: String(pageSize) })
-      if (cursor) params.set('cursor', cursor)
-      if (filtersKey !== '[]') params.set('filters', filtersKey)
-      if (search) params.set('search', search)
-      const response = await authorizedFetch(
-        user,
-        `/api/admin/emails/suppressions?${params.toString()}`,
-      )
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        const message = payload?.error ?? 'Could not read the suppression list'
-        setError(message)
-        throw new Error(message)
-      }
-      setError(null)
-      return {
-        rows: (payload?.entries ?? []) as PlatformSuppression[],
-        nextCursor: payload?.nextCursor ?? null,
-        hasMore: Boolean(payload?.hasMore),
-      }
-    },
-    [user, filtersKey, search],
-  )
-  // Held at an error rather than an empty list. "Nothing is suppressed" is a
-  // confident wrong answer in the reassuring direction, and this card exists
-  // to explain mail that is not arriving.
-  const onError = useCallback(
-    (reason: unknown) =>
-      setError((current) =>
-        current ??
-        (reason instanceof Error && reason.message
-          ? reason.message
-          : 'Could not read the suppression list'),
-      ),
-    [],
-  )
-  const pagination = useStaffListPagination<PlatformSuppression>({
-    fetchPage,
+  const pagination = useStaffListQuery<PlatformSuppression>({
+    endpoint: '/api/admin/emails/suppressions',
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
     onError,
   })
   const entries = pagination.rows
+  const filtering = pagination.filtering
+  useEffect(() => {
+    if (!pagination.failed) setError(null)
+  }, [pagination.failed, pagination.rows])
 
   const release = useCallback(
     async (email: string) => {
@@ -416,12 +375,18 @@ export default function StaffEmailSuppressionsCard() {
           clauses={gridFilter.clauses}
           onChange={gridFilter.setClauses}
         />
-        {setAside ? (
-          <Alert severity="info">
-            {'The search is in force, so only Last reported applies beside ' +
-              'it — the other filters are set aside. Clear the search to ' +
-              'filter by them.'}
-          </Alert>
+        <ListQueryNotices
+          refused={listQueryRefusals(pagination.refused, {
+            fields: SUPPRESSION_FILTER_FIELDS,
+            headers: SUPPRESSION_FILTER_HEADERS,
+            options: SUPPRESSION_FILTER_OPTIONS,
+          })}
+          notices={pagination.notices}
+        />
+        {gridFilter.searchWords.join('').trim() ? (
+          <Typography variant="caption" color="text.secondary">
+            {SUPPRESSION_SEARCH_HINT}
+          </Typography>
         ) : null}
         {error ? (
           <Alert severity="warning">{error}</Alert>

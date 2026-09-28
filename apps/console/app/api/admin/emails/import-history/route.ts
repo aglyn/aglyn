@@ -24,6 +24,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { importEmailDeliveryHistory } from '@aglyn/tenant-data-admin/server/email-delivery-log'
 import { invalidIdTokenResponse } from '../../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * IMPORTS ALREADY-SENT MAIL INTO THE DELIVERY LOG.
@@ -112,17 +113,13 @@ async function handler(request: Request): Promise<Response> {
       maxPages: Number.isFinite(maxPages) ? maxPages : undefined,
     })
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'email.history-imported',
-        target: 'emailDeliveries',
-        note: `${result.recorded} of ${result.scanned} across ${result.pages} page(s)`,
-        at: new Date(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'email.history-imported',
+      target: 'emailDeliveries',
+      note: `${result.recorded} of ${result.scanned} across ${result.pages} page(s)`,
+      at: new Date(),
+    })
       .catch(() => undefined)
 
     return Response.json(result, { status: 200 })

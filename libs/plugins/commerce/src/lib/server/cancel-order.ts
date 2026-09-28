@@ -269,7 +269,8 @@ export const cancelOrderHandler: PluginApiHandler = async (req, res) => {
         // but a variants array.
         transaction.update(hostRef.collection('products').doc(productId), {
           variants,
-          inventory: CommerceModel.productInventory({ variants }),
+          // The total and the storefront's In stock verdict (AGL-3321).
+          ...CommerceModel.productStockFields({ ...product, variants }),
           updatedAtMs: atMs,
         })
         for (const line of productLines) {

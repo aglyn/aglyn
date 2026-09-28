@@ -31,12 +31,13 @@ import {
   CRM_COLLECTIONS,
   CRM_MEDIA_IDS_MAX,
   createResourceUid,
+  crmNewRecordListFields,
   normalizeAddress,
   normalizeCompanyDomain,
   normalizeCrmMediaIds,
   normalizePhone,
 } from '@aglyn/aglyn/server'
-import { apiJson, ApiErrors } from '@aglyn/tenant-data-admin'
+import { apiJson, ApiErrors, restampCrmListFieldsAt } from '@aglyn/tenant-data-admin'
 import { Timestamp } from 'firebase-admin/firestore'
 import { type ApiV1Context, requireScope } from '../api-v1'
 import {
@@ -284,7 +285,7 @@ async function createCompany(
       return bandFull
     }
     const id = createResourceUid()
-    await collection.doc(id).create({
+    const record: Record<string, unknown> = {
       // `nameLower`/`nameTokens` travel with the name: the console's company
       // list searches the collection, not the page it fetched.
       ...nameSearchFields(name ?? ''),
@@ -295,7 +296,9 @@ async function createCompany(
         ? { custom: createPayload(customValues) }
         : {}),
       ...crmCreateStamp(ctx, site.siteId),
-    })
+    }
+    // What the console's Companies list searches and filters by (AGL-3321).
+    await collection.doc(id).create({ ...record, ...crmNewRecordListFields('companies', record) })
     const view = companyView(await collection.doc(id).get())
     // Stored as 200 so a replay is distinguishable from the fresh 201.
     await claim.record(200, view)
@@ -343,6 +346,8 @@ async function updateCompany(
   // An empty body is a no-op answered with the current company.
   if (Object.keys(update).length > 0) {
     await ref.update({ ...update, updatedAt: Timestamp.now() })
+    // What the console's Companies list searches (AGL-3321).
+    await restampCrmListFieldsAt(ref, 'companies')
   }
   return apiJson(companyView(await ref.get()), { headers: ctx.headers })
 }

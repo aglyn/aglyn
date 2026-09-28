@@ -37,6 +37,7 @@ import {
   type OrgOverrideReasonCode,
   type OrgPlan,
 } from '@aglyn/aglyn'
+import { withAdminAuditIndex } from '@aglyn/aglyn/app-utils/admin-audit-index'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
@@ -628,15 +629,17 @@ const StaffOrgActions = ({
         { merge: true },
       )
       // `doc(collection(...))` is the client-side auto-id `addDoc` would have
-      // generated; a batch needs the reference up front.
-      batch.set(doc(collection(firestore, 'adminAudit')), {
+      // generated; a batch needs the reference up front. Stamped like every
+      // server write (`withAdminAuditIndex`), so the audit page's Action
+      // group filter and search find the row.
+      batch.set(doc(collection(firestore, 'adminAudit')), withAdminAuditIndex({
         actorUid: (user as any)?.uid ?? 'unknown',
         action: requesting ? 'org.erasureRequested' : 'org.erasureCanceled',
         target: `orgs/${org.$id}`,
         before: { erasureRequested: !requesting },
         after: { erasureRequested: requesting },
         at: Timestamp.now(),
-      })
+      }))
       await batch.commit()
     } catch (error) {
       console.error(error)

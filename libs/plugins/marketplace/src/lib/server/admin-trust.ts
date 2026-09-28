@@ -24,6 +24,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '@aglyn/tenant-data-admin/server/id-token-refusal'
 import { FieldValue } from 'firebase-admin/firestore'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * Staff trust-signing for realm plugins (AGL-420), served at
@@ -156,17 +157,13 @@ async function handler(request: Request): Promise<Response> {
       )
     }
 
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: `plugins.trust.${action}`,
-        target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
-        after: action === 'grant' ? { trust: 'realm' } : { trust: null },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: `plugins.trust.${action}`,
+      target: `marketplaceListings/${listingId}/pluginVersions/${version}`,
+      after: action === 'grant' ? { trust: 'realm' } : { trust: null },
+      at: FieldValue.serverTimestamp(),
+    })
 
     return Response.json({ ok: true, action, listingId, version }, { status: 200 })
   } catch (error) {

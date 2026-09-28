@@ -99,8 +99,9 @@ the element picker:
 The Product grid carries a toggle per storefront catalog control, so a bare
 strip on the home page and a full shop page are the same block:
 
-- **Search box** — a debounced search field above the grid; matches product
-  names, descriptions, and tags.
+- **Search box** — a debounced search field above the grid; matches the start
+  of a word in a product's name ("cof" finds "Acme Coffee"), using the first
+  word typed.
 - **Category chips** — one chip per product category (plus **All**), built
   from the categories you manage in the Products hub. Visitors tap to filter.
 - **Sort select** — newest, name, price low→high, price high→low,
@@ -108,15 +109,23 @@ strip on the home page and a full shop page are the same block:
 - **Type filter** — physical / digital / services chips, useful for mixed
   catalogs.
 - **Price filter** — a two-thumb price range slider, automatically bounded
-  by the lowest and highest prices among the products currently showing
-  (variant-priced products count by their "From" price). Visitors drag
-  either end to narrow the range.
+  by the lowest and highest prices among the products the other controls
+  match (variant-priced products count by their "From" price). Visitors drag
+  either end to narrow the range. While a range is set the grid is in price
+  order — high to low if that is the sort chosen, low to high otherwise — and
+  says so above the products.
+- **Filters** — tag chips and an **In stock** chip, which hides products a
+  card would mark sold out.
 - **Page size** — products per page with a **Load more** button; leave blank
   to load once (**Max items** still caps the grid either way).
 
-Everything resolves server-side through the catalog API — searching and
-filtering stay fast on large catalogs, and the browser never downloads the
-whole catalog. The **Shop catalog** preset inserts the grid with search,
+Everything resolves server-side through the catalog API, across the whole
+catalog rather than the products already showing — searching and filtering
+stay fast on large catalogs, and the browser never downloads the whole
+catalog. The search, a category and a tag each look a word up in a list, and
+only one of those can apply at a time: tapping a category or tag chip clears
+the search, and searching a grid pinned to a category searches the whole
+catalog and says, above the products, that the category is set aside. The **Shop catalog** preset inserts the grid with search,
 categories, sort, and paging already on.
 
 ### Category pages

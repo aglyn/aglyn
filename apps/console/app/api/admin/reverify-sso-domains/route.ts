@@ -89,6 +89,7 @@ import {
   summariseSsoDrift,
   type SsoDomainDriftEntry,
 } from '../../../../utils/server/sso-domain-drift'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /** A ceiling on time and DNS traffic, not on truth. */
 const MAX_DOMAINS = 500
@@ -295,28 +296,26 @@ async function handler(request: Request): Promise<Response> {
         context: 'sso-domain-drift',
       })
 
-      await firestore
-        .collection('adminAudit')
-        .add({
-          actorUid: 'system:cron',
-          action: 'sso.domain.driftDetected',
-          target: `sso-domains:${summary.drifted.length}`,
-          after: {
-            drifted: summary.drifted.map((entry) => ({
-              orgId: entry.orgId,
-              domain: entry.domain,
-              consecutiveFailures: entry.consecutiveFailures,
-              daysFailing: entry.daysFailing,
-              records: entry.records,
-            })),
-            // Stated in the audit row too: this job revoked nothing. A future
-            // reader finding a lockout near this timestamp should not have to
-            // guess whether this was the cause.
-            revoked: false,
-            staffEmailed: staffMail.sent,
-          },
-          at: FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firestore, {
+        actorUid: 'system:cron',
+        action: 'sso.domain.driftDetected',
+        target: `sso-domains:${summary.drifted.length}`,
+        after: {
+          drifted: summary.drifted.map((entry) => ({
+            orgId: entry.orgId,
+            domain: entry.domain,
+            consecutiveFailures: entry.consecutiveFailures,
+            daysFailing: entry.daysFailing,
+            records: entry.records,
+          })),
+          // Stated in the audit row too: this job revoked nothing. A future
+          // reader finding a lockout near this timestamp should not have to
+          // guess whether this was the cause.
+          revoked: false,
+          staffEmailed: staffMail.sent,
+        },
+        at: FieldValue.serverTimestamp(),
+      })
         .catch(() => undefined)
     }
 

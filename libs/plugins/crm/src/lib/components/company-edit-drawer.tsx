@@ -23,6 +23,7 @@ import {
   CRM_COLLECTIONS,
   CRM_RECORDS_BAND_FULL_MESSAGE,
   type CrmCompany,
+  crmNewRecordListFields,
   pluginDocsHelp,
   crmMemberPickerLabel,
 } from '@aglyn/aglyn'
@@ -72,6 +73,7 @@ import {
 } from '../model/crm-custom-draft'
 import { CrmCustomFieldControl } from './crm-custom-field-control'
 import { CrmSitePicker } from './crm-site-picker'
+import { CRM_CLIENT_SEARCH_FIELDS, crmClientListFields } from '../model/crm-list-query'
 
 export interface CompanyEditDrawerProps {
   open: boolean
@@ -244,13 +246,26 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
             fromCache: seed?.fromCache ?? false,
           },
           async () => {
+            const cleared = Object.fromEntries(
+              result.cleared.map((field) => [field, deleteField()]),
+            )
+            // The stored record the list fields are computed from: the row
+            // without the id the listener stamped on it.
+            const { $id: _rowId, ...stored } = company
+            const searchFields = crmClientListFields(
+              'companies',
+              stored,
+              { ...result.set, ...cleared },
+              CRM_CLIENT_SEARCH_FIELDS,
+            )
             await updateDoc(ref, {
               ...result.set,
               // A blank optional field is a DELETE on an edit, or the old
               // domain would stay stored and keep matching people by email.
-              ...Object.fromEntries(
-                result.cleared.map((field) => [field, deleteField()]),
-              ),
+              ...cleared,
+              // The name and domain are what the Companies list searches
+              // (AGL-3321), from the listener's row with the edit over it.
+              ...searchFields,
               // The custom keys that changed, merged into the stored map.
               ...crmCustomDraftWrites(storedCustom, custom),
               updatedAt: serverTimestamp(),
@@ -271,6 +286,11 @@ export function CompanyEditDrawer(props: CompanyEditDrawerProps) {
           {
             ...result.set,
             ...(customDocument ? { custom: customDocument } : {}),
+            // What the Companies list searches and filters by (AGL-3321).
+            ...crmNewRecordListFields('companies', {
+              ...result.set,
+              visibleTo: [...createTokens],
+            }),
             /*
              * The scope every CRM creator stamps: the whole org when the org
              * shares by default, and otherwise the sites that present as one

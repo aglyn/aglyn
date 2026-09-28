@@ -32,6 +32,8 @@
  * faithfully enough to pass.
  *=========================================*/
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import {
   EMAIL_CAMPAIGN_ENGAGEMENT_MAX_CAMPAIGNS,
   readCampaignEngagement,
@@ -279,5 +281,71 @@ describe('a read that could not run', () => {
     expect(page.lookupFailed).toBe(false)
     expect(page.rows[0].to).toBe('reader@acme.test')
     expect(page.rows[0].clickedLinks).toEqual(['https://acme.test/spring'])
+  })
+})
+
+/*
+ * EVERY SHAPE THIS READER ASKS HAS ITS INDEX (AGL-3321).
+ *
+ * The Recipients table's Engagement filter is served by this query and
+ * nothing else, over the whole delivery log a cursor page at a time. Each of
+ * its three shapes is a COLLECTION_GROUP composite — the site, the messages
+ * (`in` is equalities), then the orders, the range's field first — and
+ * production refuses the read without it, which the table shows as a failed
+ * read rather than as nobody having opened. So each shape is taken from the
+ * query the reader actually builds, not restated, and held to the index file.
+ */
+describe('each engagement shape has its collection-group index', () => {
+  const INDEXES: {
+    indexes: Array<{
+      collectionGroup: string
+      queryScope: string
+      fields: Array<{ fieldPath: string; order?: string; arrayConfig?: string }>
+    }>
+  } = JSON.parse(
+    readFileSync(
+      join(__dirname, '../../../../../../../cloud/firebase-firestore.indexes.json'),
+      'utf8',
+    ),
+  )
+  const declared = new Set(
+    INDEXES.indexes
+      .filter(
+        (index) => index.collectionGroup === 'messages' && index.queryScope === 'COLLECTION_GROUP',
+      )
+      .map((index) =>
+        index.fields.map((field) => `${field.fieldPath}:${field.order ?? field.arrayConfig}`).join(','),
+      ),
+  )
+
+  /** The composite a recorded query needs: its equalities, then its orders. */
+  const shapeOf = (query: RecordedQuery) =>
+    [
+      ...query.where
+        .filter(([, op]) => op === '==' || op === 'in')
+        .map(([field]) => `${field}:ASCENDING`),
+      ...query.orderBy.map(
+        ([field, direction]) => `${field}:${direction === 'desc' ? 'DESCENDING' : 'ASCENDING'}`,
+      ),
+    ].join(',')
+
+  it.each(['all', 'opened', 'clicked'] as const)('the %s shape is declared', async (filter) => {
+    const firestore = fakeFirestore()
+    await readCampaignEngagement({ hostId: 'site1', campaignIds: ['msg_1'], filter, firestore })
+    expect(declared).toContain(shapeOf(firestore.recorded[0]))
+  })
+
+  it('CONTROL: the file was read, and a range leads its own order', async () => {
+    const firestore = fakeFirestore()
+    await readCampaignEngagement({
+      hostId: 'site1',
+      campaignIds: ['msg_1'],
+      filter: 'opened',
+      firestore,
+    })
+    expect(shapeOf(firestore.recorded[0])).toBe(
+      'hostId:ASCENDING,campaignId:ASCENDING,openCount:DESCENDING,firstSeenAtMs:DESCENDING',
+    )
+    expect(declared.size).toBeGreaterThanOrEqual(3)
   })
 })

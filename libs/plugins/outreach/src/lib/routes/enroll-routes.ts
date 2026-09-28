@@ -34,9 +34,11 @@ import type { PluginRecordTimelineWriter } from '@aglyn/aglyn/plugin-manager/plu
 import type { PluginTextGenerator } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { PluginWebApiHandler } from '@aglyn/aglyn/server'
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+import { restampCrmListFieldsAt } from '@aglyn/tenant-data-admin/server/crm-records'
 import { FieldValue } from 'firebase-admin/firestore'
 import { outreachCuratedEntry, outreachEnrolledEntry } from '../engine/enrollment-activity'
 import { buildOutreachEnrollment, planOutreachFirstDue } from '../engine/enrollment-state'
+import { outreachEnrollmentSearchTokens } from '../enrollment/enrollment-search'
 import type { OutreachGateLookups } from '../engine/gates'
 import {
   decideOutreachEnrollment,
@@ -360,6 +362,9 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         const field =
           candidate.target === 'lead' ? CAMPAIGN_MEMBERSHIP_FIELD : contactCampaignFieldPath(contactGroupId)
         await ref.update({ [field]: FieldValue.arrayUnion(...campaignIds), updatedAt: FieldValue.serverTimestamp() })
+        // A lead's campaigns are what the Leads list's Campaign filter reads
+        // under a site (AGL-3321): restamped from the lead as it now stands.
+        if (candidate.target === 'lead') await restampCrmListFieldsAt(ref, 'leads')
       }
     } catch (error) {
       console.error('[outreach] the enrolled person could not join the sequence’s campaigns', error)
@@ -672,6 +677,12 @@ export function createOutreachEnrollRoutes(deps: OutreachEnrollRouteDeps): Outre
         // The person's own copies of steps (AGL-3324) ride with the
         // enrollment from its first write: nothing sends between.
         if (Object.keys(stepOverrides).length) enrollment.stepOverrides = stepOverrides
+        // What the enrollments table searches the person by (AGL-3321),
+        // from the name and address this document captures for good.
+        enrollment.searchTokens = outreachEnrollmentSearchTokens(enrollment)
+        // Nobody has clicked yet (AGL-3332): stored, because the "Clicked: No"
+        // filter is a query, and a query cannot find a field's absence.
+        enrollment.clicked = false
         try {
           await enrollments.doc(id).create(enrollment)
         } catch (error) {

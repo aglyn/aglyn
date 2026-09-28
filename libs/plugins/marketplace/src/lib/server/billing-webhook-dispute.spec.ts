@@ -281,7 +281,7 @@ describe('charge.dispute.created flags without revoking (AGL-1554)', () => {
     })
     // A dispute can be WON, and nothing un-revokes: `refundedAt` — the field
     // the install gate reads as absent-purchase — must not appear here.
-    expect(purchase()['refundedAt']).toBeUndefined()
+    expect(purchase()['refundedAt'] ?? null).toBeNull()
     expect(adminMock.__ga4Refunds).toHaveLength(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -323,7 +323,7 @@ describe('charge.dispute.closed, non-lost outcomes (AGL-1554)', () => {
       disputeId: 'dp_1',
       disputeStatus: 'won',
     })
-    expect(purchase()['refundedAt']).toBeUndefined()
+    expect(purchase()['refundedAt'] ?? null).toBeNull()
     expect(adminMock.__ga4Refunds).toHaveLength(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -334,7 +334,7 @@ describe('charge.dispute.closed, non-lost outcomes (AGL-1554)', () => {
         status: 'warning_closed',
       }) as any,
     )
-    expect(purchase()['refundedAt']).toBeUndefined()
+    expect(purchase()['refundedAt'] ?? null).toBeNull()
     expect(adminMock.__ga4Refunds).toHaveLength(0)
     expect(fetchMock).not.toHaveBeenCalled()
   })

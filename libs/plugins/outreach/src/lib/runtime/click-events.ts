@@ -142,6 +142,19 @@ export async function recordOutreachClick(
     const key = campaignLinkKey(url)
     // A row for this visit, while the person's history has room for one.
     const logged = held.loggedClicks + held.loggedMachineClicks < OUTREACH_ENROLLMENT_HISTORY_MAX
+    /*
+     * The destinations known to have been followed. A click from before the
+     * per-click history (AGL-3332) is known only by `lastClickUrl`, which the
+     * next click replaces — so it joins the list first, or the person would
+     * stop being found by the "Link followed" filter for the link they did
+     * follow.
+     */
+    const known =
+      held.lastClickUrl &&
+      !held.links.includes(held.lastClickUrl) &&
+      held.links.length < OUTREACH_ENGAGEMENT_LINKS_MAX
+        ? [...held.links, held.lastClickUrl]
+        : held.links
     const engagement: OutreachEnrollmentEngagement = judgement.human
       ? {
           clicks: held.clicks + 1,
@@ -150,9 +163,9 @@ export async function recordOutreachClick(
           lastClickUrl: key ?? held.lastClickUrl,
           machineClicks: held.machineClicks,
           links:
-            key && !held.links.includes(key) && held.links.length < OUTREACH_ENGAGEMENT_LINKS_MAX
-              ? [...held.links, key]
-              : held.links,
+            key && !known.includes(key) && known.length < OUTREACH_ENGAGEMENT_LINKS_MAX
+              ? [...known, key]
+              : known,
           loggedClicks: held.loggedClicks + (logged ? 1 : 0),
           loggedMachineClicks: held.loggedMachineClicks,
         }
@@ -167,7 +180,8 @@ export async function recordOutreachClick(
      * happened to this enrollment", and a scanner's fetch of a link is not
      * that. The engagement carries its own timestamps for what a click is.
      */
-    transaction.update(ref, { engagement })
+    // A person's click is what the "Clicked" filter asks about (AGL-3332); a scanner's is not.
+    transaction.update(ref, judgement.human ? { engagement, clicked: true } : { engagement })
     /*
      * The row is written in the same transaction as the count it itemizes,
      * so `loggedClicks` is exactly the number of rows: the detail view says

@@ -215,8 +215,13 @@ function mentionsAggregate(text: string): boolean {
   return AGGREGATE_WORD.test(text) || AGGREGATE_IDENT.test(text)
 }
 
-/** Reading the plan field in any of the shapes used in this repo. */
-const READS_PLAN = /\.plan\b|\['plan'\]|\bplan:\s/
+/**
+ * Reading the plan field in any of the shapes used in this repo. A LIST QUERY
+ * plan (`useListQuery(...).plan.refused`, AGL-3321) is not the billing plan, so
+ * `.plan` followed by one of that plan's own fields is not a read of it.
+ */
+const READS_PLAN =
+  /\.plan\b(?!\.(?:refused|notices|filters|orderBy|served)\b)|\['plan'\]|\bplan:\s/
 
 /** The sanctioned way to turn plan state into money. */
 const USES_HELPERS = /isBillingSubscription|orgMonthlyRevenueUsd/

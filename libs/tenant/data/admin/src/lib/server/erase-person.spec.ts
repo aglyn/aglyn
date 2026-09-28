@@ -183,6 +183,11 @@ function seedWorkspace() {
     customerName: 'Jane Doe',
     shippingAddress: { line1: '1 Main St', phone: '+15125550107' },
     totals: { totalCents: 4200 },
+    // What the orders list queries by (AGL-3321): the address's key and
+    // prefixes, and the quick search's array holding them beside the item's.
+    customerEmailLower: EMAIL,
+    customerEmailTokens: ['j', 'ja', 'jane'],
+    searchTokens: ['#1', '1', 'j', 'ja', 'jane', 'm', 'mu', 'mug'],
   })
   docs.set('hosts/h2/orders/o2', { customerEmail: 'someone@else.com', customerName: 'Other' })
   docs.set('hosts/h2/bookings/b1', { email: EMAIL, name: 'Jane', phone: '+15125550107', serviceId: 's1' })
@@ -266,6 +271,10 @@ describe('erasePerson', () => {
     expect(order).not.toHaveProperty('shippingAddress')
     // The financial record survives.
     expect(order?.totals).toEqual({ totalCents: 4200 })
+    // The list's search no longer answers to the address; the order's own
+    // number and item still find it.
+    expect(order).toMatchObject({ customerEmailLower: null, customerEmailTokens: [] })
+    expect(order?.searchTokens).toEqual(['#1', '1', 'm', 'mu', 'mug'])
     expect(docs.get('hosts/h2/orders/o2')?.customerEmail).toBe('someone@else.com')
     const booking = docs.get('hosts/h2/bookings/b1')
     expect(booking).toMatchObject({ email: null, serviceId: 's1', customerErasedAtMs: 777 })

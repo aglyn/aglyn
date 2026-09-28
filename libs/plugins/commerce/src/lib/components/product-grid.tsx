@@ -17,6 +17,11 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { mdiMagnify, mdiViewGridOutline } from '@aglyn/shared-data-mdi'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Card from '@mui/material/Card'
@@ -33,6 +38,11 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react'
 import { BUNDLE_ID } from '../constants/bundle-common'
+import {
+  STOREFRONT_CATALOG_DECLARATION,
+  STOREFRONT_CATALOG_HEADERS,
+  STOREFRONT_CATALOG_OPTIONS,
+} from '../constants/storefront-catalog-query'
 import { generatePresetId } from '../utils/generate-preset-id'
 
 // Component ids are persisted in screen documents; never rename.
@@ -99,6 +109,16 @@ interface CatalogPriceBounds {
 }
 
 /**
+ * A control the catalog query could not apply, and why (AGL-3321): the
+ * plan's refusal as the handler returns it, named here by
+ * `listQueryRefusals` in the words of this grid's controls.
+ */
+interface CatalogRefusal {
+  clause: ListFilterClause | 'search'
+  reason: string
+}
+
+/**
  * This grid's first page, resolved server-side by the commerce site-page
  * enricher (AGL-659). Same shape the catalog endpoint returns, because both
  * go through `queryPublicCatalog`.
@@ -107,7 +127,9 @@ interface CatalogSeed {
   items?: CatalogItem[]
   categories?: CatalogCategory[]
   priceBounds?: CatalogPriceBounds
-  nextOffset?: number
+  nextCursor?: string
+  refused?: CatalogRefusal[]
+  notices?: string[]
 }
 
 const SAMPLE_ITEMS: CatalogItem[] = [
@@ -162,6 +184,11 @@ function priceLabel(item: CatalogItem): string {
  * optional debounced search, category chips, type chips, a sort
  * select, and Load more paging — all resolved server-side by the
  * catalog handler so large catalogs stay cheap.
+ *
+ * Nothing is narrowed here (AGL-3321): every control is a parameter of the
+ * catalog query, and the rows shown are the rows it returned. A control the
+ * query could not combine with another comes back in `refused` and is said
+ * above the grid, rather than applied to the cards that happen to be loaded.
  */
 const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
   (props, ref) => {
@@ -205,11 +232,13 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
       seed?.items ?? null,
     )
     const [sort, setSort] = useState(sortProp)
+    // The In stock chip, asked of the catalog (`inStock=1`), never matched
+    // over the cards on screen (AGL-3321).
     const [inStockOnly, setInStockOnly] = useState(false)
     const [activeTag, setActiveTag] = useState('')
     // Catalog UX state (AGL-561): the search box debounces into
     // `query`; a chip pick overrides any pinned category ('*' = All);
-    // paging appends via `nextOffset` from the catalog handler.
+    // paging appends via the handler's `nextCursor` (AGL-3321).
     const [searchInput, setSearchInput] = useState('')
     const [query, setQuery] = useState('')
     const [activeCategoryId, setActiveCategoryId] = useState('')
@@ -226,9 +255,12 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     )
     const [priceInput, setPriceInput] = useState<number[] | null>(null)
     const [priceFilter, setPriceFilter] = useState<number[] | null>(null)
-    const [nextOffset, setNextOffset] = useState<number | null>(
-      seed?.nextOffset ?? null,
+    const [nextCursor, setNextCursor] = useState<string | null>(
+      seed?.nextCursor ?? null,
     )
+    // What the query could not apply, said above the grid (AGL-3321).
+    const [refused, setRefused] = useState<CatalogRefusal[]>(seed?.refused ?? [])
+    const [notices, setNotices] = useState<string[]>(seed?.notices ?? [])
     const [loadingMore, setLoadingMore] = useState(false)
     const fetchSeq = useRef(0)
     const collectionSlug =
@@ -253,7 +285,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     }, [priceInput])
 
     const loadPage = useCallback(
-      async (offset: number): Promise<void> => {
+      async (after?: string): Promise<void> => {
         if (!hostId) return
         const seq = ++fetchSeq.current
         const params = new URLSearchParams({ hostId })
@@ -269,9 +301,12 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
         } else if (!activeCategoryId && source === 'category' && categorySlug) {
           params.set('category', categorySlug)
         }
-        if (source === 'tag' && tag) params.set('tag', tag)
+        // A tag chip overrides a pinned tag, as a category chip does.
+        const effectiveTag = activeTag || (source === 'tag' ? tag ?? '' : '')
+        if (effectiveTag) params.set('tag', effectiveTag)
         if (query) params.set('q', query)
         if (activeType) params.set('type', activeType)
+        if (inStockOnly) params.set('inStock', '1')
         // Slider dollars → API cents (AGL-564).
         if (priceFilter) {
           params.set('minPriceCents', String(priceFilter[0] * 100))
@@ -280,8 +315,8 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
         if (sort) params.set('sort', sort)
         const limit = pageLimit || maxItems
         if (limit) params.set('limit', String(limit))
-        if (offset) params.set('offset', String(offset))
-        if ((showCategories || showPriceFilter) && offset === 0) {
+        if (after) params.set('after', after)
+        if ((showCategories || showPriceFilter) && !after) {
           params.set('facets', '1')
         }
         try {
@@ -292,11 +327,15 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
           if (seq !== fetchSeq.current) return
           const pageItems: CatalogItem[] = payload?.items ?? []
           setItems((prev) =>
-            offset && prev ? [...prev, ...pageItems] : pageItems,
+            after && prev ? [...prev, ...pageItems] : pageItems,
           )
-          setNextOffset(
-            typeof payload?.nextOffset === 'number' ? payload.nextOffset : null,
+          setNextCursor(
+            typeof payload?.nextCursor === 'string' ? payload.nextCursor : null,
           )
+          if (!after) {
+            setRefused(Array.isArray(payload?.refused) ? payload.refused : [])
+            setNotices(Array.isArray(payload?.notices) ? payload.notices : [])
+          }
           if (Array.isArray(payload?.categories)) {
             setCategories(payload.categories)
           }
@@ -309,8 +348,8 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
           }
         } catch {
           if (seq !== fetchSeq.current) return
-          if (!offset) setItems([])
-          setNextOffset(null)
+          if (!after) setItems([])
+          setNextCursor(null)
         }
       },
       [
@@ -324,7 +363,9 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
         maxItems,
         query,
         activeCategoryId,
+        activeTag,
         activeType,
+        inStockOnly,
         priceFilter,
         pageLimit,
         pinnedCategoryId,
@@ -343,7 +384,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
         seededRef.current = false
         return
       }
-      void loadPage(0)
+      void loadPage()
       // Invalidate any in-flight request on dep change or unmount.
       return () => {
         fetchSeq.current++
@@ -360,20 +401,18 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
         md: `repeat(${desktopColumns}, 1fr)`,
       },
     }
-    let visible = hostId ? items : SAMPLE_ITEMS
-    if (visible && showFilters) {
-      if (inStockOnly) visible = visible.filter((item) => !item.soldOut)
-      if (activeTag) {
-        visible = visible.filter((item) =>
-          (item.tags ?? []).includes(activeTag),
-        )
-      }
-    }
+    // The rows the query returned, as returned (AGL-3321).
+    const visible = hostId ? items : SAMPLE_ITEMS
+    // Tag chips: the tags on the cards showing, as CHOICES — picking one asks
+    // the catalog for that tag, never narrows these cards. The picked one
+    // stays offered whatever the page it brought back carries.
     const facetTags = showFilters
-      ? [...new Set((items ?? []).flatMap((item) => item.tags ?? []))].slice(
-          0,
-          12,
-        )
+      ? [
+          ...new Set([
+            ...(activeTag ? [activeTag] : []),
+            ...(items ?? []).flatMap((item) => item.tags ?? []),
+          ]),
+        ].slice(0, 12)
       : []
 
     if (hostId && items === null) {
@@ -454,7 +493,16 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                   size="small"
                   variant={selectedCategoryId ? 'outlined' : 'filled'}
                   color={selectedCategoryId ? 'default' : 'primary'}
-                  onClick={() => setActiveCategoryId('*')}
+                  onClick={() => {
+                    // One array clause per query (AGL-3321): a chip asked
+                    // for while searching would be refused, so picking one
+                    // clears the search — and a tag chip — rather than
+                    // leaving a chip that does nothing.
+                    setSearchInput('')
+                    setQuery('')
+                    setActiveTag('')
+                    setActiveCategoryId('*')
+                  }}
                 />
                 {chipCategories.map((category) => (
                   <Chip
@@ -469,13 +517,16 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
                         ? 'secondary'
                         : 'default'
                     }
-                    onClick={() =>
+                    onClick={() => {
+                      setSearchInput('')
+                      setQuery('')
+                      setActiveTag('')
                       setActiveCategoryId((prev) =>
                         (prev || pinnedCategoryId) === category.id
                           ? '*'
                           : category.id,
                       )
-                    }
+                    }}
                   />
                 ))}
               </>
@@ -587,22 +638,27 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     const emptyState = (
       <Box sx={{ p: 3, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          {query || activeType || selectedCategoryId || priceFilter
+          {query ||
+          activeType ||
+          selectedCategoryId ||
+          activeTag ||
+          inStockOnly ||
+          priceFilter
             ? 'No products match — try clearing a filter.'
             : emptyText || 'No products here yet — check back soon.'}
         </Typography>
       </Box>
     )
     const loadMore =
-      hostId && pageLimit && nextOffset != null ? (
+      hostId && pageLimit && nextCursor != null ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
           <Button
             variant="outlined"
             disabled={loadingMore}
             onClick={async () => {
-              if (nextOffset == null || loadingMore) return
+              if (nextCursor == null || loadingMore) return
               setLoadingMore(true)
-              await loadPage(nextOffset)
+              await loadPage(nextCursor)
               setLoadingMore(false)
             }}
           >
@@ -670,10 +726,30 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
     )
 
     const body = visible && visible.length === 0 ? emptyState : grid
+    const unapplied =
+      hostId && (refused.length || notices.length) ? (
+        <Box sx={{ mb: 2 }}>
+          <ListQueryNotices
+            refused={listQueryRefusals(refused, {
+              fields: STOREFRONT_CATALOG_DECLARATION.fields,
+              headers: STOREFRONT_CATALOG_HEADERS,
+              options: {
+                ...STOREFRONT_CATALOG_OPTIONS,
+                category: categories.map((category) => ({
+                  value: category.id,
+                  label: category.name,
+                })),
+              },
+            })}
+            notices={notices}
+          />
+        </Box>
+      ) : null
     if (!showFilters) {
       return (
         <Box ref={ref} {...rest}>
           {controls}
+          {unapplied}
           {body}
           {loadMore}
         </Box>
@@ -705,9 +781,13 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
               size="small"
               variant={activeTag === facetTag ? 'filled' : 'outlined'}
               color={activeTag === facetTag ? 'primary' : 'default'}
-              onClick={() =>
+              onClick={() => {
+                // The same one-array-clause rule as the category chips.
+                setSearchInput('')
+                setQuery('')
+                setActiveCategoryId((prev) => (prev && prev !== '*' ? '' : prev))
                 setActiveTag((prev) => (prev === facetTag ? '' : facetTag))
-              }
+              }}
             />
           ))}
           <Box sx={{ flex: 1 }} />
@@ -732,6 +812,7 @@ const ProductGrid = forwardRef<HTMLDivElement, ProductGridProps>(
             }
           />
         </Box>
+        {unapplied}
         {body}
         {loadMore}
       </Box>
@@ -838,8 +919,8 @@ export const schema: Aglyn.ComponentSchema<ProductGridProps> = {
       name: 'showSearch',
       label: 'Search box',
       description:
-        'Visitor search box above the grid — matches product names, ' +
-        'descriptions, and tags (server-side).',
+        'Visitor search box above the grid — matches words at the start of ' +
+        'product names across the whole catalog (server-side).',
       component: Aglyn.FieldComponentType.CHECKBOX,
     },
     {

@@ -26,15 +26,13 @@ import {
   ListTable,
   type ListTableProps,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import {
-  filterListRows,
-  inMemoryListField,
-  listFilterGridColumns,
-} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import {
-  Alert,
   Button,
   Card,
   CardContent,
@@ -44,12 +42,13 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   OUTREACH_SEQUENCE_STATUSES,
   type OutreachMailbox,
   type OutreachSequence,
 } from '../model/outreach.types'
+import { OUTREACH_SEQUENCE_LIST_QUERY } from '../model/sequence-list-query'
 import {
   OUTREACH_SEQUENCE_STATUS_LABELS,
   OutreachLink,
@@ -68,7 +67,7 @@ import { useOutreachApi } from './use-outreach-api'
 import {
   type OutreachSequenceCounts,
   useOutreachSequenceCounts,
-  useOutreachSequences,
+  useOutreachSequenceList,
 } from './use-outreach-data'
 import { useOutreachMailboxes } from './use-outreach-mailboxes'
 import { useOutreachComplianceSettings } from './use-outreach-settings'
@@ -179,32 +178,42 @@ const COUNT_COLUMNS: ReadonlyArray<[keyof OutreachSequenceCounts, string]> = [
 ]
 
 /*
- * What the sequences grid's Filters panel offers (AGL-3317). The list holds
- * every sequence it read, so each clause and the quick search are answered
- * over that whole set before it is paged, never over the page on screen.
+ * What the sequences grid's Filters panel offers (AGL-3317), each field on
+ * the list's Firestore query (AGL-3321, `OUTREACH_SEQUENCE_LIST_QUERY`).
  */
-const SEQUENCE_FILTER_FIELDS = [
-  inMemoryListField('name', 'text'),
-  inMemoryListField('mailbox', 'text'),
-  inMemoryListField('status', 'select'),
-]
+const SEQUENCE_FILTER_FIELDS = OUTREACH_SEQUENCE_LIST_QUERY.fields
 const SEQUENCE_FILTER_HEADERS: Readonly<Record<string, string>> = {
   name: 'Name',
   mailbox: 'Mailbox',
   status: 'Status',
+  created: 'Created',
 }
-const SEQUENCE_FILTER_OPTIONS = {
-  status: OUTREACH_SEQUENCE_STATUSES.map((status) => ({
-    value: status,
-    label: OUTREACH_SEQUENCE_STATUS_LABELS[status],
-  })),
-}
-/** What the quick search reads on a sequence row. */
-const SEQUENCE_SEARCH_FIELDS = ['name', 'mailbox'] as const
+/** `created` is no column of its own: a filter-only column, never shown. */
+const SEQUENCE_HIDDEN_COLUMNS = hiddenFilterVisibility(SEQUENCE_FILTER_FIELDS, [
+  'name',
+  'mailbox',
+  'status',
+])
+const SEQUENCE_STATUS_OPTIONS = OUTREACH_SEQUENCE_STATUSES.map((status) => ({
+  value: status,
+  label: OUTREACH_SEQUENCE_STATUS_LABELS[status],
+}))
+
+/** How a mailbox reads in the list: the address it sends as. */
+const mailboxName = (mailbox: OutreachMailbox) => mailbox.sendAs || mailbox.email
 
 /**
  * Every sequence: its mailbox, its status, and how many people it enrolled
  * and where they stand — a table on wider screens, cards on a phone.
+ *
+ * ## Asked of Firestore, a page at a time
+ *
+ * The Filters panel and the search box are the grid's; the clauses and the
+ * words go onto ONE query over the organization's sequences, newest first,
+ * and each page is a page of that query's matches (AGL-3321). A clause the
+ * query cannot hold beside the others is not applied, and the notice above
+ * the list says which and why — never answered over the sequences that
+ * happen to be loaded.
  */
 export function OutreachSequenceList(props: {
   orgId: string
@@ -215,46 +224,34 @@ export function OutreachSequenceList(props: {
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('md'))
   const navigate = useOutreachNavigate()
-  const sequences = useOutreachSequences(orgId)
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(TABLE_PAGE_SIZE_DEFAULT)
-  const gridFilter = useListGridFilter({ selectFields: ['status'] })
+  const gridFilter = useListGridFilter({ selectFields: ['status', 'mailbox'] })
+  const sequences = useOutreachSequenceList(orgId, {
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+  })
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  const filterOptions = useMemo(
+    () => ({
+      status: SEQUENCE_STATUS_OPTIONS,
+      mailbox: props.mailboxes.map((mailbox) => ({
+        value: mailbox.id,
+        label: mailboxName(mailbox),
+      })),
+    }),
+    [props.mailboxes],
+  )
   const mailboxLabel = (sequence: OutreachSequence) => {
     const mailbox = props.mailboxes.find(
       (entry) => entry.id === sequence.mailboxId,
     )
     return mailbox
-      ? mailbox.sendAs || mailbox.email
+      ? mailboxName(mailbox)
       : sequence.mailboxId
         ? 'Mailbox removed'
         : 'No mailbox yet'
   }
-  /*
-   * Filtered BEFORE the page is cut: the list read every sequence (under
-   * `OUTREACH_SEQUENCES_LIMIT`), so a clause or a search word answers over
-   * all of them, and the footer counts the matches.
-   */
-  const searchKey = gridFilter.searchWords.join(' ')
-  const matching = useMemo(
-    () =>
-      filterListRows(
-        sequences.data.map((sequence) => ({
-          sequence,
-          name: sequence.name || 'Untitled',
-          mailbox: mailboxLabel(sequence),
-          status: sequence.status,
-        })),
-        SEQUENCE_FILTER_FIELDS,
-        gridFilter.clauses,
-        { paths: SEQUENCE_SEARCH_FIELDS, words: gridFilter.searchWords },
-      ).map((row) => row.sequence),
-    // `searchKey` stands for the words, which are a new array each render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sequences.data, props.mailboxes, gridFilter.clauses, searchKey],
-  )
-  // A narrowed list starts again at its first page.
-  useEffect(() => setPage(0), [gridFilter.clauses, searchKey])
-  const pageRows = matching.slice(page * pageSize, (page + 1) * pageSize)
+  const pageRows = sequences.rows
   // Counted for the page on screen only: five aggregations a sequence.
   const counts = useOutreachSequenceCounts(
     orgId,
@@ -262,12 +259,12 @@ export function OutreachSequenceList(props: {
   )
   const footer = (
     <ListPagination
-      page={page}
-      pageSize={pageSize}
+      page={sequences.page}
+      pageSize={sequences.pageSize}
       rowCount={pageRows.length}
-      count={matching.length}
-      onPageChange={setPage}
-      onPageSizeChange={setPageSize}
+      hasMore={sequences.hasMore}
+      onPageChange={sequences.setPage}
+      onPageSizeChange={sequences.setPageSize}
     />
   )
   const newHref = `${sectionPath}/${OUTREACH_NEW_SEQUENCE_SEGMENT}`
@@ -289,33 +286,42 @@ export function OutreachSequenceList(props: {
     key: keyof OutreachSequenceCounts,
   ) => (counts[sequence.id] ? String(counts[sequence.id][key]) : '—')
 
-  /*
-   * The read stops at `OUTREACH_SEQUENCES_LIMIT`, newest first, and probes one
-   * past it, so this shows only when older sequences really exist.
-   */
-  const truncatedNotice = sequences.truncated ? (
-    <Alert severity="info">
-      {`Showing the ${sequences.data.length.toLocaleString()} newest sequences. ` +
-        'The filters and the search narrow these only; older sequences are ' +
-        'not listed here.'}
-    </Alert>
-  ) : null
-
   const chips = (
     <ListFilterChips
       fields={SEQUENCE_FILTER_FIELDS}
       headers={SEQUENCE_FILTER_HEADERS}
       clauses={gridFilter.clauses}
       onChange={gridFilter.setClauses}
-      options={SEQUENCE_FILTER_OPTIONS}
+      options={filterOptions}
     />
   )
+  const notices = (
+    <ListQueryNotices
+      refused={listQueryRefusals(sequences.plan.refused, {
+        fields: SEQUENCE_FILTER_FIELDS,
+        headers: SEQUENCE_FILTER_HEADERS,
+        options: filterOptions,
+      })}
+      notices={sequences.plan.notices}
+    />
+  )
+  /** Nothing stored at all — not a filter that matched nothing. */
+  const none =
+    sequences.status === 'ready' &&
+    !pageRows.length &&
+    !filtering &&
+    sequences.page === 0
   let body
-  if (sequences.status === 'loading')
+  if (sequences.status === 'loading' && !filtering)
     body = <OutreachLoading label="Loading sequences…" />
   else if (sequences.status === 'error' || sequences.status === 'refused') {
-    body = <OutreachLoadProblem status={sequences.status} what="sequences" />
-  } else if (!sequences.data.length) {
+    body = (
+      <Stack spacing={1}>
+        {chips}
+        <OutreachLoadProblem status={sequences.status} what="sequences" />
+      </Stack>
+    )
+  } else if (none) {
     body = (
       <Card variant="outlined">
         <EmptyStateComponent
@@ -329,53 +335,61 @@ export function OutreachSequenceList(props: {
     body = (
       <Stack spacing={1}>
         {chips}
-        <Stack
-          spacing={1}
-          component="ul"
-          sx={{ listStyle: 'none', p: 0, m: 0 }}
-          aria-label="Sequences"
-        >
-          {pageRows.map((sequence) => (
-            <Card key={sequence.id} variant="outlined" component="li">
-              <CardContent>
-                <Stack spacing={1}>
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    sx={{
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <OutreachLink href={`${sectionPath}/${sequence.id}`}>
-                      {sequence.name || 'Untitled'}
-                    </OutreachLink>
-                    <OutreachSequenceStatusChip status={sequence.status} />
+        {notices}
+        {pageRows.length ? (
+          <Stack
+            spacing={1}
+            component="ul"
+            sx={{ listStyle: 'none', p: 0, m: 0 }}
+            aria-label="Sequences"
+          >
+            {pageRows.map((sequence) => (
+              <Card key={sequence.id} variant="outlined" component="li">
+                <CardContent>
+                  <Stack spacing={1}>
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      sx={{
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <OutreachLink href={`${sectionPath}/${sequence.id}`}>
+                        {sequence.name || 'Untitled'}
+                      </OutreachLink>
+                      <OutreachSequenceStatusChip status={sequence.status} />
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary">
+                      {mailboxLabel(sequence)}
+                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={0.5}
+                      sx={{ flexWrap: 'wrap', rowGap: 0.5 }}
+                    >
+                      {COUNT_COLUMNS.map(([key, label]) => (
+                        <Chip
+                          key={key}
+                          size="small"
+                          variant="outlined"
+                          label={`${label} ${count(sequence, key)}`}
+                        />
+                      ))}
+                    </Stack>
                   </Stack>
-                  <Typography variant="body2" color="text.secondary">
-                    {mailboxLabel(sequence)}
-                  </Typography>
-                  <Stack
-                    direction="row"
-                    spacing={0.5}
-                    sx={{ flexWrap: 'wrap', rowGap: 0.5 }}
-                  >
-                    {COUNT_COLUMNS.map(([key, label]) => (
-                      <Chip
-                        key={key}
-                        size="small"
-                        variant="outlined"
-                        label={`${label} ${count(sequence, key)}`}
-                      />
-                    ))}
-                  </Stack>
-                </Stack>
-              </CardContent>
-            </Card>
-          ))}
-        </Stack>
+                </CardContent>
+              </Card>
+            ))}
+          </Stack>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            {sequences.status === 'loading'
+              ? 'Loading sequences…'
+              : 'No sequences match these filters'}
+          </Typography>
+        )}
         {footer}
-        {truncatedNotice}
       </Stack>
     )
   } else {
@@ -397,13 +411,15 @@ export function OutreachSequenceList(props: {
         align: 'right' as const,
         headerAlign: 'right' as const,
       })),
-    ], SEQUENCE_FILTER_FIELDS, SEQUENCE_FILTER_OPTIONS, SEQUENCE_FILTER_HEADERS)
+    ], SEQUENCE_FILTER_FIELDS, filterOptions, SEQUENCE_FILTER_HEADERS)
     body = (
       <Stack spacing={1}>
         {chips}
+        {notices}
         <ListTable
           aria-label="Sequences"
           columns={columns}
+          initialState={{ columns: { columnVisibilityModel: SEQUENCE_HIDDEN_COLUMNS } }}
           rows={pageRows.map((sequence) => ({
             $id: sequence.id,
             name: sequence.name || 'Untitled',
@@ -414,19 +430,22 @@ export function OutreachSequenceList(props: {
             ),
           }))}
           onOpen={(id) => navigate(`${sectionPath}/${id}`)}
+          loading={sequences.status === 'loading'}
           /*
-           * The panel and the search are the grid's; the list answers them
-           * over every sequence it read (AGL-3317).
+           * The panel and the search are the grid's; every clause and the
+           * search word are on the list's query (AGL-3321), and the grid
+           * neither filters nor sorts the page it is handed: the query's
+           * one order, newest first, is the list's.
            */
           filterMode="server"
           filterModel={gridFilter.filterModel}
           onFilterModelChange={gridFilter.onFilterModelChange}
           quickFilter
+          disableColumnSorting
           noRowsLabel="No sequences match these filters"
           hideFooter
         />
         {footer}
-        {truncatedNotice}
       </Stack>
     )
   }
@@ -436,10 +455,7 @@ export function OutreachSequenceList(props: {
       header="Sequences"
       help={pluginDocsHelp('sequences', { anchor: '#sequences' })}
       HeaderProps={{
-        action:
-          sequences.status === 'ready' && sequences.data.length
-            ? newButton
-            : undefined,
+        action: none || sequences.status === 'loading' ? undefined : newButton,
       }}
       contentGutterX
       contentGutterY

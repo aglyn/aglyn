@@ -271,6 +271,10 @@ jest.mock('../../../../../tenant/runtime/src/lib/assign-contact-owner', () => ({
   notifyRecordAssigned: (...args: unknown[]) => (mockNotifyRecordAssigned as any)(...args),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
+  restampCrmListFieldsAt: async () => 'current',
+  restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
+  restampCrmListFields: async () => ({ restamped: 0, current: 0, missing: 0 }),
   // `data.manage` is the permission catalog's answer (AGL-2843), read off the
   // membership the resolver double just answered, so a case states it once.
   resolveOrgMembership: async (uid: string, orgId: string) =>

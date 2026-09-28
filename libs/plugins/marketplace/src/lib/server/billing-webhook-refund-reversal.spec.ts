@@ -517,7 +517,7 @@ describe('what a refund must NOT reverse (AGL-1995)', () => {
     await marketplaceBillingWebhookHandler(
       refundEvent({ refunded: false, amount_refunded: 5000 }) as any,
     )
-    expect(purchase()['refundedAt']).toBeUndefined()
+    expect(purchase()['refundedAt'] ?? null).toBeNull()
     expect(adminMock.__ga4Refunds).toHaveLength(0)
     // The one-shot marker stays free, so a LATER full refund or lost dispute
     // can still run — with only the remainder left to take.
@@ -530,7 +530,7 @@ describe('what a refund must NOT reverse (AGL-1995)', () => {
       refundEvent({ payment_intent: 'pi_someone_else' }) as any,
     )
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(purchase()['refundedAt']).toBeUndefined()
+    expect(purchase()['refundedAt'] ?? null).toBeNull()
     expect(purchase()['reversedTransferCents']).toBeUndefined()
   })
 

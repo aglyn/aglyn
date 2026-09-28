@@ -234,6 +234,12 @@ await step(tally, page, 'Unqualify closes a lead with its reason', async () => {
 
 await step(tally, page, 'the Inbox opens a lead in the CRM', async () => {
   await page.goto(hostUrl('/inbox/contacts'), { waitUntil: 'domcontentloaded', timeout: TIMEOUT_MS })
+  // Members and leads are two lists on one toggle (AGL-3321); the section
+  // opens on Members.
+  await page
+    .getByRole('group', { name: 'Which people to list' })
+    .getByRole('button', { name: 'Leads', exact: true })
+    .click({ timeout: TIMEOUT_MS })
   // The Inbox cell reads address and name together.
   await page.getByText(owen.email).first().waitFor({ timeout: TIMEOUT_MS })
   await rowAction(page, owen.email, 'Open in CRM')

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { checkEntitlement, createResourceUid } from '@aglyn/aglyn/server'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
@@ -22,6 +23,7 @@ import { resolveOrgPermissions } from '@aglyn/tenant-runtime/org-permissions'
 import { marketplacePriceRefusal, sanitizeDatasetSchema } from '../model'
 import { resolvePublisherProfile } from './publisher-profile'
 import { publishPreconditionRefusal } from './publish-preconditions'
+import { refreshListingQueryFields } from './listing-query-fields'
 
 /**
  * Publishes an org dataset's SCHEMA to the marketplace (AGL-657).
@@ -176,6 +178,9 @@ export const publishDatasetSchemaHandler: PluginApiHandler = async (
         artifactType: 'datasetSchema',
         sourceDatasetId: datasetId,
         displayName: displayName.trim(),
+        // The keys a listing is searched by (AGL-3321): the template gallery's
+        // marketplace shelf asks `nameTokens` on its query.
+        ...displayNameSearchFields(displayName.trim()),
         ...(description.trim() && { description: description.trim() }),
         ...(category.trim() && { category: category.trim() }),
         priceUsd,
@@ -191,6 +196,8 @@ export const publishDatasetSchemaHandler: PluginApiHandler = async (
       },
       { merge: true },
     )
+    // The lists this listing appears in query by fields derived from it (AGL-3321).
+    await refreshListingQueryFields(listingRef)
     await listingRef
       .collection('versions')
       .doc(String(version))

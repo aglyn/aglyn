@@ -36,32 +36,50 @@ import type {
   ConsoleProductImportZoneProps,
   ConsoleProductsHubZoneProps,
 } from '@aglyn/aglyn/plugin-manager/feature-plugins'
+import { productSearchFields } from '../../model/commerce'
 
 const ORG_PLAN = { org: { $id: 'org-1', plan: 'pro' }, ready: true }
 const FIRESTORE = {}
 const mockCreateResource = jest.fn()
+/** As the writers store a product: live, with the keys the table orders by. */
+const stored = (product: { name: string; variants: never[] } & Record<string, unknown>) => ({
+  ...product,
+  ...productSearchFields({ name: product.name, variants: product.variants }),
+  deletedAt: null,
+})
 const mockCollections: Record<string, Array<Record<string, unknown>>> = {
   products: [
-    {
+    stored({
       $id: 'lamp',
       name: 'Desk lamp',
       slug: 'desk-lamp',
       status: 'active',
       type: 'physical',
-      variants: [{ id: 'v1', priceUsd: 40, inventory: null }],
-    },
-    {
+      variants: [{ id: 'v1', priceUsd: 40, inventory: null }] as never[],
+    }),
+    stored({
       $id: 'candle',
       name: 'Wild mint soy candle',
       slug: 'wild-mint-soy-candle',
       status: 'archived',
       type: 'physical',
-      variants: [{ id: 'default' }],
-    },
+      variants: [{ id: 'default' }] as never[],
+    }),
   ],
   locations: [],
   licenseKeys: [],
 }
+
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    useListQuery: (options: unknown) =>
+      useListQueryDouble(() => mockCollections['products'], options),
+  }
+})
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useConsoleHostRoute: () => ({ base: null, orgSlug: null, subdomain: null }),
@@ -91,6 +109,8 @@ jest.mock('firebase/firestore', () => ({
   limit: (value: number) => value,
   doc: () => ({}),
   getCountFromServer: async () => ({ data: () => ({ count: 2 }) }),
+  // The slug ledger asks the store which slugs are held (AGL-3321): none.
+  getDocs: async () => ({ docs: [] }),
   addDoc: jest.fn().mockResolvedValue(undefined),
   getDoc: jest.fn().mockResolvedValue({ get: () => undefined }),
   setDoc: jest.fn().mockResolvedValue(undefined),

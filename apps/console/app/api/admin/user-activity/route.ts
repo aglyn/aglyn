@@ -23,7 +23,11 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { readActorActivity } from '../../../../utils/server/actor-activity'
-import { readListFilter } from '../../../../utils/server/list-filter'
+import {
+  auditLogSearchWords,
+  readAuditLogFilters,
+} from '../../../../utils/server/audit-log-filter'
+import { ACTIVITY_LIST_FILTER_FIELDS } from '../../../../utils/list-filters'
 
 // lockdown-423: exempt — read-only, writes nothing, and it is the record of
 // what someone did. A lockdown is often the reason staff are reading it.
@@ -40,6 +44,10 @@ import { readListFilter } from '../../../../utils/server/list-filter'
  * Staff only, and Admin-SDK by necessity: this is a collection-group read
  * across every site and org on the platform, which is not a query any client
  * should be able to run and which no security rule grants.
+ *
+ * `filters` (a JSON list of `{ field, op, value }`) and `search` go onto the
+ * query with `actorId` (AGL-3321); what the plan refused comes back as
+ * `refused`, unapplied, for the page to say so.
  */
 async function handler(request: Request): Promise<Response> {
   const { query, headers: rawHeaders } = await pluginRequestFromWeb(request)
@@ -61,12 +69,14 @@ async function handler(request: Request): Promise<Response> {
     }
     const uid = String(query['uid'] ?? '').trim()
     if (!uid) return Response.json({ error: 'Missing uid' }, { status: 400 })
+    const clauses = readAuditLogFilters(query, ACTIVITY_LIST_FILTER_FIELDS)
+    if (!clauses) return Response.json({ error: 'Unreadable filters' }, { status: 400 })
     const page = await readActorActivity({
       actorId: uid,
       pageSize: Number(query['pageSize'] ?? 25),
       cursor: String(query['cursor'] ?? '') || null,
-      // The column filter, answered by the query rather than by the page.
-      filter: readListFilter(query),
+      clauses,
+      search: auditLogSearchWords(query['search']),
     })
     return Response.json(page, { status: 200 })
   } catch (error) {

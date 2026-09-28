@@ -26,6 +26,7 @@ import {
   isImpersonationSession,
   lockdownRefusal,
   logHostActivity,
+  syncHostProjectionForMembers,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -175,6 +176,13 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
+    // The Sites list's rows of this site drop the domain from their search
+    // and read "no custom domain" again (AGL-3321, `membershipRow`).
+    // Best-effort, as the rename's re-sync is.
+    {
+      const orgId = String(hostSnapshot.get('orgId') ?? '')
+      if (orgId) await syncHostProjectionForMembers(orgId, hostId).catch(() => undefined)
+    }
 
     /*==========================================
      * THE EVENT IS `cname` LEAVING THE DOCUMENT (AGL-118), which is the

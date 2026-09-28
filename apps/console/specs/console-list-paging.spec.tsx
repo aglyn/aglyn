@@ -48,6 +48,7 @@
  * both the bug and the fix.
  */
 
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
@@ -59,6 +60,8 @@ const LEGACY_CAP = 100
 interface SeededDoc {
   $id: string
   displayName?: string
+  /** The list's search keys, as every writer stamps them (AGL-3321). */
+  nameTokens?: string[]
   deletedAt?: unknown
   /** Where it is used (AGL-3287); absent is a page component. */
   kind?: string
@@ -79,6 +82,7 @@ const seedComponents = (): SeededDoc[] =>
     if (id !== NAMELESS_ID) {
       doc.displayName = `Component ${String(TOTAL - 1 - index).padStart(3, '0')}`
     }
+    Object.assign(doc, displayNameSearchFields(doc.displayName))
     if (id === DELETED_ID) doc.deletedAt = { seconds: 1 }
     return doc
   })
@@ -115,6 +119,24 @@ function mockFirestoreInstance() {
 function mockEvaluateQuery(request: any, docs: SeededDoc[]): SeededDoc[] {
   // RULE 1: with no explicit order, results arrive in document-id order.
   let rows = [...docs].sort((a, b) => (a.$id < b.$id ? -1 : 1))
+  // RULE 0: every `where` is the QUERY's (AGL-3321) — a list's filters and
+  // its search narrow what Firestore returns, not what the page shows.
+  for (const clause of request.constraints.filter((entry: any) => entry.type === 'where')) {
+    const read = (row: any) => (clause.field === '__name__' ? row.$id : row[clause.field])
+    rows = rows.filter((row) => {
+      const held = read(row)
+      switch (clause.op) {
+        case '==':
+          return held === clause.value
+        case 'in':
+          return clause.value.includes(held)
+        case 'array-contains':
+          return Array.isArray(held) && held.includes(clause.value)
+        default:
+          throw new Error(`the model does not answer ${clause.op}`)
+      }
+    })
+  }
   const clauses = request.constraints.filter(
     (clause: any) => clause.type === 'orderBy',
   )
@@ -395,16 +417,16 @@ describe('the components list says where each one is used (AGL-3287)', () => {
   })
 })
 
-describe('the components list searches past the page on screen (AGL-3317)', () => {
+describe('the components list searches past the page on screen (AGL-3317, AGL-3321)', () => {
   it('finds a component three pages in, from the grid’s own search box', async () => {
     render(<HostComponentsCard hostId="host-1" />)
     await waitFor(() => expect(visibleNames().length).toBeGreaterThan(0))
     // Positive control: the target is not on the first page.
     expect(visibleNames()).not.toContain(nameOf(35))
-    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'cmp-035' } })
-    // The first word widens the window, and the match is found in it.
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '084' } })
+    // The word is on the QUERY: one page is read, and it is the match.
     await waitFor(() => expect(visibleNames()).toEqual([nameOf(35)]))
-    expect(Math.max(...mockLimitsAsked)).toBeGreaterThan(TABLE_PAGE_SIZE_DEFAULT + 1)
+    expect(Math.max(...mockLimitsAsked)).toBe(TABLE_PAGE_SIZE_DEFAULT + 1)
   })
 })
 
