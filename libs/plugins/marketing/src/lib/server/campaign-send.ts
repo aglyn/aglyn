@@ -737,6 +737,8 @@ async function loadEmailTemplate(hostId: string, screenId: string) {
   )
   return {
     nodes,
+    // The design as saved, for which bands it draws itself (AGL-3372).
+    storedNodes: stored,
     products,
     subject: String(screenSnapshot.get('emailSubject') ?? ''),
     preheader: String(screenSnapshot.get('emailPreheader') ?? ''),

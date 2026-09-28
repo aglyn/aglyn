@@ -484,10 +484,9 @@ The **Styles** tab has nothing to change on a block in an email. Mail apps only 
 element's own settings, so change a block's look with its settings in the **Attributes**
 tab. If the block has [properties](#properties), fill them in there too, just like on a page.
 
-### Emails you haven't designed {#emails-you-have-not-designed}
+### Your header and footer in every email {#emails-you-have-not-designed}
 
-Every email your site sends to its customers goes out branded, whether or not you have
-designed it:
+Every email your site sends to its customers goes out with your site's header and footer:
 
 - **Header:** your site's logo (or its name when you haven't set a logo), linking to your
   site. An SVG logo is shown as your site's name instead, because Gmail and Outlook can't
@@ -495,8 +494,13 @@ designed it:
 - **Footer:** why the reader is getting the email, your support email address, and your
   business name and postal address.
 
-These come from your site's settings. Once you design an email, it goes out exactly as you
-built it, so add your **Header** and **Footer** blocks to it.
+These come from your site's settings, and they're added to emails you design too. If your
+design has its own **Header** or **Footer** (from the element drawer, or a block started
+from one), that part isn't added a second time: an email with your own Header gets only
+the footer, and one with your own Footer gets only the header.
+
+If an email places one of your own email blocks that didn't start from a **Header** or
+**Footer**, neither is added, since the block may already be one.
 
 ### Your theme's colors {#email-theme-colors}
 

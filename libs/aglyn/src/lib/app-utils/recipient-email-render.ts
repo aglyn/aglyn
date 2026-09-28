@@ -64,6 +64,7 @@ import {
   renderFramedTextEmail,
   renderTextEmailHtml,
 } from '@aglyn/shared-util-email/text-email-html'
+import { chromeForDesign } from '@aglyn/shared-util-email/email-design-chrome'
 /*
  * The LEAF app-util, not `@aglyn/aglyn/server`: this module is pure and is
  * imported by client components, so a server entry point here would pull the
@@ -86,6 +87,12 @@ export interface DesignedEmailTemplate {
   preheader?: string
   /** The template's own subject, used when the campaign names none. */
   subject?: string
+  /**
+   * The design as saved, its reusable blocks still placements, when `nodes`
+   * has them grafted in: an unmarked placed block keeps the site's chrome off
+   * the design (AGL-3372). Absent reads `nodes` itself.
+   */
+  storedNodes?: Record<string, unknown>
 }
 
 /**
@@ -174,11 +181,11 @@ export interface RecipientEmailRenderInput {
   unsubscribeUrl?: string
   /**
    * The site's header, footer and theme (AGL-3370). The header and footer
-   * are drawn around a TYPED message; a design is the merchant's, placed
-   * header and footer included, and is sent as they built it. The theme
-   * applies to both: a design's picked colors are palette tokens only the
-   * site's theme resolves. Absent sends the typed message in the unbranded
-   * card and drops a design's tokens, as the composer's own checks do.
+   * are drawn around a typed message, and around a design less any band the
+   * design draws itself (AGL-3372). The theme applies to both: a design's
+   * picked colors are palette tokens only the site's theme resolves. Absent
+   * sends the typed message in the unbranded card and drops a design's
+   * tokens, as the composer's own checks do.
    */
   frame?: {
     chrome: EmailChrome
@@ -352,8 +359,17 @@ export function renderRecipientEmail(
     // origin the renderer drops it.
     mediaOrigin: siteBase || undefined,
     mediaHostId: hostId,
-    // The site's theme resolves the colors the merchant picked (AGL-3370).
+    // The site's theme resolves the colors the merchant picked (AGL-3370),
+    // and its chrome frames the design, less the bands it draws (AGL-3372).
     ...input.frame?.theme,
+    ...(() => {
+      const chrome = chromeForDesign({
+        stored: content.template.storedNodes ?? content.template.nodes,
+        composed: content.template.nodes,
+        chrome: input.frame?.chrome,
+      })
+      return chrome ? { chrome } : {}
+    })(),
     merge: {
       'contact.email': recipient.email,
       'contact.name': name,

@@ -25,7 +25,11 @@ import {
   type EmailRenderOptions,
   type EmailTheme,
 } from './email-render'
+import { chromeForDesign } from './email-design-chrome'
 import { buildDefaultEmailNodeMap } from './system-email-catalog'
+
+/** A chrome as an optional field, absent when there is none. */
+const withChrome = (chrome: EmailChrome | undefined) => (chrome ? { chrome } : {})
 import {
   getTenantEmail,
   isTenantEmailEditable,
@@ -91,11 +95,11 @@ export interface LoadHostEmailOptions {
   /** See {@link HostEmailComposer} — required, deliberately. */
   compose: HostEmailComposer
   /**
-   * The site's header and footer (AGL-3370), drawn around the built-in copy.
-   * Never around a design the site owner published: that one is theirs,
-   * placed header and footer included, and goes out as they built it. Built
-   * by the caller because it is read off the site document, which this
-   * `scope:shared` module has no brand vocabulary for.
+   * The site's header and footer (AGL-3370), drawn around the built-in copy
+   * and around a design the owner published, less any band that design draws
+   * itself (AGL-3372, {@link chromeForDesign}). Built by the caller because
+   * it is read off the site document, which this `scope:shared` module has
+   * no brand vocabulary for.
    */
   chrome?: EmailChrome
   /**
@@ -130,7 +134,7 @@ export interface LoadedHostEmail {
    * (AGL-3370).
    */
   source: 'designed' | 'default'
-  /** The site's header and footer, on the built-in copy only. */
+  /** The site's header and footer, less the bands a design draws itself. */
   chrome?: EmailChrome
   /** The site's theme, on every copy. */
   theme?: EmailTheme
@@ -249,6 +253,11 @@ export async function loadHostEmail(
       origin,
       source: 'designed',
       ...(options.theme ? { theme: options.theme } : {}),
+      // The site's chrome too (AGL-3372), less whatever band the owner's
+      // design draws itself.
+      ...withChrome(
+        chromeForDesign({ stored, composed: nodes, chrome: options.chrome }),
+      ),
       subjectTemplate:
         String(templateSnapshot.get('subject') ?? '') ||
         entry.defaultSubject ||

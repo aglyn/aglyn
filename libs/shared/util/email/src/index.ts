@@ -67,3 +67,4 @@ export * from './lib/hosted-page-screen'
 // author picked resolves in mail. Built without MUI; `shared-ui-theme`'s
 // parity spec holds it equal to the theme.
 export * from './lib/email-palette'
+export * from './lib/email-design-chrome'
