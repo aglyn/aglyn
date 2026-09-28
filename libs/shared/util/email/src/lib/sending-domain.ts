@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { SendingWorkspace } from './outbound-screen-gate'
+
 /**
  * CUSTOM SENDING DOMAINS — policy half.
  *
@@ -1051,6 +1053,17 @@ export type SendingIdentityRefusalCode =
    * lands on their own name, and how they spend it is theirs to decide.
    */
   | 'shared-identity-no-unsubscribe'
+  /**
+   * The site or its workspace is under a FULL lockdown — a staff suspension
+   * for abuse, fraud, billing or a takedown (AGL-3356).
+   *
+   * Refused whatever the identity would otherwise have been, because a
+   * suspended workspace sending mail is exactly what the suspension exists
+   * to stop: the incident behind this code was a locked workspace whose
+   * event-triggered workflow could still mail on its behalf. Not the
+   * merchant's to fix, and not a DNS state — `domain` is null.
+   */
+  | 'workspace-suspended'
 
 export interface SendingIdentityRefusal {
   code: SendingIdentityRefusalCode
@@ -1094,6 +1107,15 @@ export interface SendingIdentityVerdict {
   summary: string
   /** Null on success. Both keys always present — `strictNullChecks` is off. */
   refusal: SendingIdentityRefusal | null
+  /**
+   * The workspace this identity was resolved for, stamped by
+   * `hostSendingIdentity` from the documents it already read (AGL-3356).
+   * `sendEmail` hands it to the outbound phishing screen, which is how one
+   * check covers every tenant sender without any of them passing anything.
+   * Absent on a platform identity and on any resolution that did not start
+   * from a host.
+   */
+  workspace?: SendingWorkspace | null
 }
 
 /**

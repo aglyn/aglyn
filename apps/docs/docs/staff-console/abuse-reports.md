@@ -75,6 +75,176 @@ A repeat also never re-opens a report. Once you have moved a row to `actioned`
 or `dismissed`, the reporter filing again bumps `reportCount` and leaves your
 decision where you put it.
 
+## Held outbound email and pages {#held-outbound-email}
+
+The queue has a second source that is not a person: the phishing screen. It
+reads every workspace's outbound email and published pages with one brand list
+and one set of rules. When it finds a signal that holds, it **holds** the email
+or page and files a row here. The row has category `phishing`, severity urgent,
+reference `HS-…` and source `outbound-screen`. Staff get the same urgent
+notification an intake phishing report raises, once per row.
+
+### What the screen looks at {#what-is-screened}
+
+| Surface | Where it is screened | What a hold does |
+| -- | -- | -- |
+| Campaigns | Before the campaign is claimed | The campaign is parked as a scheduled send that no processor run reaches. |
+| Workflow, action and org-automation email steps | Before the step sends | The run fails with "held for staff review" and the reference. A step after a wait stays queued. |
+| Every other email a site sends (CRM one-off mail, inbox replies, newsletters, member posts, cart and restock reminders, receipts, booking mail, marketplace plugins) | At the send itself (`sendEmail`) | That one email is not sent, and its sender reports `held-for-review`. |
+| Outreach sequences (connected mailboxes) | Before the step is claimed | The enrollment is paused with the reason. A member resumes it once the row is released. |
+| Published pages | When the page is put together for a visitor | The page serves the last version it served clean, or nothing if it has none. |
+
+Pages are screened when they are served rather than when Publish is clicked.
+Publishing is a pointer move made from the browser in several places, and an
+author can edit a live version in place. Every one of those paths reaches a
+visitor through the same composition step, and that is where the screen reads
+the page: the screen, its layout, the components placed on it and its forms.
+
+### What holds, in two tiers {#tiers}
+
+**Strong signals hold for every workspace, however old:**
+
+- **A lookalike link, embed or reply address.** A host that wears a brand's name
+  without being the brand's domain, such as `poshmark.id63835663.shop`,
+  `paypal-secure.com`, `booking.com.guest-review.top` or `paypa1.com`.
+- **A credential field on a page.** A field the page's author defined that asks
+  for a password, a card number or a one-time code. Aglyn's own member sign-in,
+  account and checkout elements are not affected, because they collect those
+  details themselves.
+
+**Soft signals hold only for a workspace less than 14 days old:**
+
+- **A brand in the sender name** that is not the workspace's own, such as mail
+  sent as "PayPal Support".
+- **Brand, lure and elsewhere, together.** The email names a brand, asks the
+  reader to act on an account ("verify your account", "has finally sold",
+  "feedback regarding your property"), and links to a domain that is not the
+  brand's, the workspace's own, or a common social or maps link.
+- **A brand's call to action on a page.** One element names a brand and asks
+  the reader to sign in, verify, confirm or open a document, and the page links
+  to somewhere that is not the brand's or the workspace's.
+
+Soft signals never hold email a customer is owed by their own action: receipts,
+gift cards and order notices, booking confirmations and reminders, and password
+resets. A lookalike link in one of those still holds.
+
+A brand mentioned on its own never holds. The brand list and its real domains
+live in `libs/shared/util/email/src/lib/outbound-phishing-screen.ts`. Add a brand
+there when it has been seen impersonated, not because it is large.
+
+### Deciding a row {#deciding-a-held-row}
+
+**Closing the row is the decision.** Both outcomes need the usual note, and both
+write the audit row:
+
+| You set the row to | Effect |
+| -- | -- |
+| `dismissed` (false positive) | **Released.** A campaign goes back on the clock and sends on the next processor run. An automation sends from its next event, and a queued step sends on its next beat. Other email from the site that carries the same signals sends. A page serves its held version once the site's cache is dropped, which the decision does itself. |
+| `actioned` | **Rejected.** A campaign is canceled. Email carrying the same content or signals is refused. A page stays unserved. |
+| `reviewing` | Still held. |
+
+A campaign or automation release covers **exactly the content that was held**.
+If the merchant edits it, the screen checks it again and a new row may appear.
+Other email and pages are keyed on the site and the signals that held, because
+their words change with every recipient or render. A rejection does not lock the
+workspace. If the content is phishing, lock the org at
+[Lockdown](./lockdown.md) as well, which stops every outbound path.
+
+### Names and domains {#names-and-domains}
+
+- **Subdomains.** Creating or renaming a site to a brand's name or a lookalike
+  of one (`poshmark`, `paypal-secure`, `appleid`) is refused for every
+  workspace, as is a brand's word joined to an account word (`booking-review`,
+  `apple-support`). Names that merely contain a common word, such as
+  `apple-pie-co` or `tanyas-booking`, are allowed.
+- **Custom domains.** Attaching a custom domain that is a brand lookalike is
+  not refused. It files an urgent `phishing` row here for staff to decide. The
+  site's pages are still screened as they are served.
+- **Sending domains.** A custom sending domain that is a brand lookalike
+  (`paypa1.com`) files the same urgent row when it is added and again when it
+  verifies. Email from it is held for every workspace, because the screen reads
+  the `From:` address the way it reads a link.
+- **Form submissions.** The public form endpoint drops any submitted field
+  named for a password, card number or one-time code. This covers pages the
+  screen never reads, such as a marketplace plugin's frame.
+- **Marketplace plugins.** A sandboxed plugin frame cannot post a native form:
+  its sandbox has no `allow-forms` and its CSP sets `form-action 'none'`. At
+  review, the bundle verifier's **No password, card or one-time-code inputs**
+  row flags a bundle that builds such an input. It is a question for the
+  reviewer, not a refusal, because a real plugin can own a sign-in. Ask what
+  the input is for and confirm the plugin sends it only to the origins its
+  manifest declares.
+
+## Stripe fraud signals {#stripe-fraud-signals}
+
+The billing webhook files a third kind of row. The source is
+`stripe-fraud-signal`, the category is `phishing`, the severity is urgent and
+the reference is `PF-…`. It files one row for each of these Stripe events:
+
+| Event | Filed when |
+| -- | -- |
+| `radar.early_fraud_warning.created` | When the charge bills a workspace, or when it paid no one we can name. The card issuer reports the charge as likely fraud. It is not a chargeback yet, and refunding now can prevent one. |
+| `review.opened` | Same as above. Radar put the payment into review, and it stays there until someone closes the review in Stripe. |
+| `charge.dispute.created` | Only when the charge bills a workspace subscription. |
+
+A signal on a site's own sale (a storefront order, a booking, a membership or
+a marketplace purchase paid to a seller's connected account) is not filed
+here. It belongs to the merchant: the plugin puts it on the order or booking
+and notifies the site's managers. Staff hear about those only as a pattern;
+see [Seller fraud pattern](#seller-fraud-pattern).
+
+The row names the workspace, the charge and the amount. When the charge can be
+read from Stripe, it also shows what the card's own checks said: CVC, postal
+code, issuing country, 3DS and Radar risk level. It links to the workspace's
+**Subscription** card on the staff org page, and staff are notified once for
+each signal. A redelivery only increases the count.
+
+**Nothing is refunded or canceled automatically.** You decide:
+
+- Refund on the charge in Stripe.
+- Cancel billing on the Subscription card ([Lockdown](./lockdown.md#cancel-billing)).
+- Lock the workspace if it is fraud.
+- Close the review or answer the dispute in Stripe.
+
+Then close the row with a note saying what you did.
+
+The live webhook endpoint must be subscribed to the two new events. Run
+`node tools/scripts/setup-stripe.mjs`, which only adds missing events, or enable
+them on the endpoint in the Stripe dashboard. Until then, `/api/health/billing`
+reports the endpoint as missing required events.
+
+## Seller fraud pattern {#seller-fraud-pattern}
+
+A merchant who takes stolen cards through their own storefront leaves a
+pattern: several different sales on one connected account draw an issuer fraud
+warning or a chargeback within days. The billing webhook keeps every such
+signal for each connected account, and files one row when
+
+**3 different charges** on the same connected account draw an early fraud
+warning or a dispute **within 7 days**.
+
+The source is `stripe-seller-fraud-pattern`, the category is `phishing`, the
+severity is urgent and the reference is `PF-…`. Staff are notified once. A
+warning and a dispute on the same charge count as one charge. Radar reviews are
+listed but never counted. Once filed, the account is not filed again for 7
+days, so a burst is one row.
+
+A legitimate small shop sees one or two of these a month at most, so a single
+warning or dispute never reaches this queue. The merchant handles it.
+
+The row names the connected account, the charges, and the workspaces and sites
+they were for, with links to the workspace and to the account in the Stripe
+Dashboard. **Nothing is refunded, canceled or paused.** If the seller is the
+fraudster:
+
+- Lock the workspace at [Lockdown](./lockdown.md). A locked site's checkout,
+  bookings and memberships stop taking payments.
+- Pause the connected account's payouts in the Stripe Dashboard
+  (**Connect → Accounts → the account → Payouts**). Aglyn does not create
+  payouts, so Stripe pays out on the account's schedule until you do.
+
+Then close the row with a note saying what you did.
+
 ## Triage by severity {#triage-by-severity}
 
 Every category carries a severity. It is not a mood — it says how fast a human
@@ -212,7 +382,8 @@ the first page holds the deadlines closest to passing.
 The menus offer only what the query can hold. A filter that reaches the queue
 some other way and cannot be applied is not applied at all: a notice above the
 list names it and says why, in the form *"Status starts with act is not applied:
-…"*, rather than narrowing some rows and not others.
+…"*, rather than narrowing some rows and not others. See
+[Filter and search a list](../getting-started/console-tour.md#filter-and-search).
 
 The banners at the top count the **whole queue**, whatever page you are on: open
 reports in an urgent category, counter-notices not yet forwarded, and

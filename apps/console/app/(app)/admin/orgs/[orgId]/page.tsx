@@ -87,6 +87,7 @@ import { CONTENT_MAX_WIDTH } from '../../../../../constants/shared'
 import StaffHostFormCountersChips from '../../../../../components/staff-host-form-counters.component'
 import StaffOrgActions from '../../../../../components/staff-org-actions.component'
 import StaffOrgRefundCard from '../../../../../components/staff-org-refund-card.component'
+import StaffOrgSubscriptionCard from '../../../../../components/staff-org-subscription-card.component'
 import { useImpersonationReason } from '../../../../../components/staff-impersonation-dialog.component'
 import StaffOrgUsageTable, {
   type StaffOrgUsageMonth,
@@ -1739,6 +1740,21 @@ const AdminOrgDetail: NextPageWithLayout<Record<string, never>> = () => {
                     <StaffOrgRefundCard
                       orgId={orgId}
                       onRefunded={() => setBillingNonce((nonce) => nonce + 1)}
+                    />
+                  ),
+                },
+                {
+                  children: (
+                    // Cancelling billing (AGL-3359), beside the refund it is
+                    // NOT: a cancellation never returns money, and the card
+                    // says so before the dialog does.
+                    <StaffOrgSubscriptionCard
+                      orgId={orgId}
+                      orgSlug={org?.slug ?? null}
+                      onCanceled={() => {
+                        setBillingNonce((nonce) => nonce + 1)
+                        setOrgNonce((nonce) => nonce + 1)
+                      }}
                     />
                   ),
                 },

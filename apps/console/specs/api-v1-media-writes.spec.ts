@@ -254,6 +254,9 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/scope-tokens'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/screen-route'),
+  // The REAL reader of a file's own details (AGL-3339): the create stores
+  // whatever the bytes say.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/media-embedded-metadata'),
   createResourceUid: () => `med_${++mockUidSeq}`,
   readImageDimensions: () => ({ width: 800, height: 600 }),
   effectiveDatasetModel: () => ({ fields: [] }),
@@ -300,6 +303,7 @@ jest.mock('firebase-admin/firestore', () => {
 })
 
 import { readFileSync } from 'node:fs'
+import { crc32 } from 'node:zlib'
 import { join } from 'node:path'
 import { GET, POST } from '../app/api/v1/[[...route]]/route'
 import { resolveOrgEntitlements } from '@aglyn/aglyn/app-utils/plan-entitlements'
@@ -426,6 +430,100 @@ describe('POST /v1/media (AGL-2463)', () => {
       { params: Promise.resolve({ route: ['media'] }) },
     )
     expect(response.status).toBe(200)
+  })
+})
+
+/** A real PNG carrying a `tEXt` title, base64 — what an integrator sends. */
+const titledPngBase64 = (title: string) => {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data])
+    const length = Buffer.alloc(4)
+    length.writeUInt32BE(data.length)
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(body))
+    return Buffer.concat([length, body, crc])
+  }
+  // A genuine 1×1 PNG — the shared fixture is a header and filler, which
+  // has no chunks to add one beside.
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGA' +
+      'hKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  )
+  const iend = png.length - 12
+  return Buffer.concat([
+    png.subarray(0, iend),
+    chunk('tEXt', Buffer.from(`Title\0${title}`, 'latin1')),
+    png.subarray(iend),
+  ]).toString('base64')
+}
+
+describe('a file’s own details, over the API (AGL-3339)', () => {
+  const list = async () =>
+    (
+      await GET(
+        new Request('https://app.aglyn.com/api/v1/media', {
+          headers: { authorization: 'Bearer k' },
+        }),
+        { params: Promise.resolve({ route: ['media'] }) },
+      )
+    ).json()
+
+  it('reads them at upload and publishes them on the created object', async () => {
+    const response = await upload({
+      fileName: 'harbor.png',
+      contentType: 'image/png',
+      data: titledPngBase64('Harbor at dusk'),
+    })
+    const body = await response.json()
+    expect(response.status).toBe(201)
+    const stored = mockDocs.get(`${ORG_MEDIA}/${body.id}`)?.embeddedMetadata as
+      | { contentSha256?: string }
+      | undefined
+    expect(stored?.contentSha256).toBe(
+      mockDocs.get(`${ORG_MEDIA}/${body.id}`)?.contentSha256,
+    )
+    expect(body.embeddedMetadata).toEqual({
+      format: 'png',
+      truncated: false,
+      fields: [
+        {
+          key: 'title',
+          label: 'Title',
+          group: 'description',
+          value: 'Harbor at dusk',
+          values: null,
+        },
+      ],
+    })
+    expect(body.customMetadata).toEqual({})
+  })
+
+  it('publishes custom fields, and never a stray non-text value', async () => {
+    mockDocs.set(`${ORG_MEDIA}/m1`, {
+      fileName: 'a.png',
+      customMetadata: { campaign: 'spring', broken: { nested: true } },
+    })
+    const { data } = await list()
+    expect(data[0].customMetadata).toEqual({ campaign: 'spring' })
+  })
+
+  it('answers null for details read from bytes the asset no longer holds', async () => {
+    mockDocs.set(`${ORG_MEDIA}/m1`, {
+      fileName: 'a.png',
+      contentSha256: 'sha-of-the-replacement',
+      embeddedMetadata: {
+        version: 1,
+        format: 'png',
+        writable: true,
+        contentSha256: 'sha-of-the-original',
+        fields: [
+          { key: 'title', label: 'Title', group: 'description', value: 'Old', sources: ['png'], editable: true },
+        ],
+      },
+    })
+    const { data } = await list()
+    expect(data[0].embeddedMetadata).toBeNull()
   })
 })
 

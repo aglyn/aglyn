@@ -72,6 +72,11 @@ import {
   backfillMeteredItem,
   meteredBackfillDecision,
 } from '../../../../utils/server/metered-backfill'
+import { refreshScheduleTargetPhase } from '../../../../utils/server/billing-schedule'
+import {
+  heldUpdateApplied,
+  stripeCallWithKey,
+} from '../../../../utils/server/immediate-charge'
 import { platformInvoiceRevenue } from '../../../../utils/server/platform-revenue'
 import { describeStripePaymentMethod } from '../../_lib/stripe-payment-method'
 // The annual-mix metric's only input (AGL-1640) — three-state on purpose, and
@@ -95,6 +100,16 @@ import {
   livemodeDecision,
 } from '../../../../utils/server/stripe-livemode'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+// The leaf, not the barrel: the webhook's specs substitute the barrel, and
+// the row a fraud signal files must be the real one under them (AGL-3356).
+import {
+  type PaymentFraudCardChecks,
+  type PaymentFraudSignal,
+  type PaymentFraudSignalKind,
+  readStripeChargeForSignal,
+  recordPaymentFraudSignal,
+  recordSellerFraudSignal,
+} from '@aglyn/tenant-data-admin/server/payment-fraud-signal'
 
 // lockdown-423: exempt — Stripe server callback, no user caller — and the very path a lapsed
 // org PAYS through; a 423 here would block the recovery it needs.
@@ -245,6 +260,97 @@ async function recordOrphanedSubscription(entry: {
     at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
   })
     .catch(() => undefined)
+}
+
+/**
+ * The workspace, amount and card checks behind a fraud signal's charge
+ * (AGL-3356).
+ *
+ * A subscription invoice's `platformRevenue` row first — the same ownership
+ * test the dispute branch uses, by payment intent and then by charge — and
+ * then one READ of the charge from Stripe for the card's own checks, whose
+ * customer resolves a charge no row names through the `stripeCustomers`
+ * index. Never throws: a signal whose subject cannot be read is still filed,
+ * saying so.
+ */
+async function fraudSignalSubject(
+  firestore: FirebaseFirestore.Firestore,
+  input: {
+    chargeId: string
+    paymentIntentId: string
+    /**
+     * `event.account` when the Connect destination delivered the event
+     * (AGL-3360): the seller, if a charge ever lived on its account.
+     */
+    connectAccount: string | null
+  },
+): Promise<{
+  orgId: string | null
+  amountCents: number | null
+  currency: string | null
+  checks: PaymentFraudCardChecks | null
+  /**
+   * The connected account the charge paid — a site's own sale (AGL-3360).
+   * Null for a charge that paid only the platform.
+   */
+  sellerAccountId: string | null
+}> {
+  let orgId: string | null = null
+  let amountCents: number | null = null
+  try {
+    const revenue = firestore.collection('platformRevenue')
+    for (const [field, value] of [
+      ['paymentIntentId', input.paymentIntentId],
+      ['chargeId', input.chargeId],
+    ] as const) {
+      if (orgId || !value) continue
+      const found = (await revenue.where(field, '==', value).limit(1).get())
+        .docs[0]
+      if (found) {
+        orgId = String(found.get('orgId') ?? '') || null
+        const gross = Number(found.get('grossCents'))
+        amountCents = Number.isFinite(gross) ? gross : null
+      }
+    }
+  } catch {
+    // The row lookup is a courtesy; the charge read below can still answer.
+  }
+  const charge = await readStripeChargeForSignal(input.chargeId, {
+    secretKey: process.env.STRIPE_SECRET_KEY,
+  })
+  if (!orgId && charge?.customerId) {
+    orgId = await findOrgIdByStripeCustomer(charge.customerId).catch(() => null)
+  }
+  return {
+    orgId,
+    amountCents: amountCents ?? charge?.amountCents ?? null,
+    currency: charge?.currency ?? null,
+    checks: charge?.checks ?? null,
+    sellerAccountId: charge?.sellerAccountId ?? input.connectAccount ?? null,
+  }
+}
+
+/**
+ * The workspaces owning `hostIds` (AGL-3360), read off the host documents,
+ * which carry `orgId` (AGL-233). A courtesy for the seller-pattern row's
+ * prose, so it never throws.
+ */
+async function orgIdsForHosts(
+  firestore: FirebaseFirestore.Firestore,
+  hostIds: readonly string[],
+): Promise<string[]> {
+  const orgIds: string[] = []
+  for (const hostId of hostIds) {
+    try {
+      const orgId = String(
+        (await firestore.collection('hosts').doc(hostId).get()).get('orgId') ?? '',
+      )
+      if (orgId && !orgIds.includes(orgId)) orgIds.push(orgId)
+    } catch {
+      // The row still names the account and the site.
+    }
+  }
+  return orgIds
 }
 
 /**
@@ -1083,6 +1189,47 @@ async function handler(request: Request): Promise<Response> {
           }
         }
 
+        // A HELD change that just applied must reach the pending downgrade
+        // (AGL-3358).
+        //
+        // An add-on increase is sent with `pending_if_incomplete`, and when
+        // the charge needs the customer's bank the add-ons route answers before
+        // anything has changed — so it cannot refresh a pending downgrade's
+        // snapshotted item list the way it does for an increase paid on the
+        // spot (AGL-2150). The change applies here instead, minutes or hours
+        // later, and without this the schedule's target phase still carries
+        // the OLD quantity: the customer pays for the seats and loses them at
+        // the period end when the phase flips (measured in test mode — phase
+        // 1 kept quantity 1 after a held 1 → 4 increase was paid).
+        //
+        // Same helper the synchronous path uses, fed the subscription's items
+        // as they are NOW. Best-effort like the Stripe writes around it: a
+        // throw would 500 the delivery and re-run every mirror above, and the
+        // failure is logged loudly because its consequence is deferred.
+        const heldScheduleId =
+          typeof object?.schedule === 'string'
+            ? object.schedule
+            : object?.schedule?.id
+        if (
+          !canceled &&
+          heldScheduleId &&
+          process.env.STRIPE_SECRET_KEY &&
+          heldUpdateApplied(object, event?.data?.previous_attributes)
+        ) {
+          try {
+            await refreshScheduleTargetPhase({
+              stripe: stripeCallWithKey(process.env.STRIPE_SECRET_KEY),
+              scheduleId: String(heldScheduleId),
+              items,
+            })
+          } catch (error) {
+            console.error(
+              '[billing/webhook] pending plan change NOT refreshed after a held update applied — its item list is stale and will drop the purchase at the period end',
+              { orgId, subscriptionId: object?.id, scheduleId: heldScheduleId, error },
+            )
+          }
+        }
+
         // Stamp the workspace onto the CUSTOMER (AGL-941).
         //
         // The subscription has carried `metadata.orgId` since AGL-445, but the
@@ -1908,6 +2055,97 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    /*==========================================
+     * STRIPE'S FRAUD SIGNALS (AGL-3356, AGL-3360).
+     *
+     * An issuer's early fraud warning, a Radar review and a dispute each say
+     * a card may not be its holder's. The 9/26 fraud paid for Pro on exactly
+     * such a card. WHOSE card decides where the signal goes:
+     *
+     * - A WORKSPACE's own charge (its subscription, its AI overage): an
+     *   urgent row in the abuse queue naming the workspace, the charge and
+     *   the amount, linking the org's Subscription card, staff notified once
+     *   — `recordPaymentFraudSignal`.
+     * - A SITE's own sale — a destination charge to the seller's connected
+     *   account (storefront, booking, membership, marketplace): the plugin
+     *   that sold it puts the signal on its own record and tells the site's
+     *   managers (dispatch below), and the seller's ledger counts it. Staff
+     *   hear only when that ledger shows the seller-fraud PATTERN —
+     *   `recordSellerFraudSignal` — never per signal: a shopper's stolen card
+     *   is the merchant's to handle.
+     * - A charge that is neither: filed as before, saying so, because a
+     *   warning or review nobody owns is still worth a look. A dispute that
+     *   is neither is left to the platform-fault branch below.
+     *
+     * NOTHING IS REFUNDED OR CANCELED HERE. Merchants and staff decide.
+     *=========================================*/
+    let sellerFraudSignal: {
+      signal: PaymentFraudSignal
+      sellerAccountId: string
+    } | null = null
+    if (
+      type === 'radar.early_fraud_warning.created' ||
+      type === 'review.opened' ||
+      type === 'charge.dispute.created'
+    ) {
+      dispatchEntered = true // AGL-2157
+      routeHandled = true // AGL-1954
+      const kind: PaymentFraudSignalKind =
+        type === 'radar.early_fraud_warning.created'
+          ? 'early-fraud-warning'
+          : type === 'review.opened'
+            ? 'radar-review'
+            : 'dispute'
+      const refOf = (value: unknown) =>
+        typeof value === 'string'
+          ? value
+          : String((value as { id?: unknown } | null)?.id ?? '')
+      const chargeId = refOf(object?.charge)
+      const paymentIntentId = refOf(object?.payment_intent)
+      const connectAccount =
+        typeof event?.account === 'string' && event.account ? event.account : null
+      const subject = await fraudSignalSubject(observed(), {
+        chargeId,
+        paymentIntentId,
+        connectAccount,
+      })
+      const orgId = subject.orgId
+      const disputeAmount = Number(object?.amount)
+      const signal: PaymentFraudSignal = {
+        kind,
+        stripeObjectId: String(object?.id ?? event?.id ?? ''),
+        chargeId: chargeId || null,
+        paymentIntentId: paymentIntentId || null,
+        orgId,
+        // The dispute names its own amount; the other two do not.
+        amountCents:
+          kind === 'dispute' && Number.isFinite(disputeAmount)
+            ? disputeAmount
+            : subject.amountCents,
+        currency: String(object?.currency ?? subject.currency ?? 'usd'),
+        detail: String(
+          object?.fraud_type ?? object?.reason ?? object?.opened_reason ?? '',
+        ),
+        checks: subject.checks,
+        livemode: event?.livemode === true,
+      }
+      if (subject.sellerAccountId) {
+        // Counted after dispatch, once the plugins have said whose sale it
+        // was.
+        sellerFraudSignal = { signal, sellerAccountId: subject.sellerAccountId }
+      }
+      if (orgId || (!subject.sellerAccountId && kind !== 'dispute')) {
+        await recordPaymentFraudSignal(signal, {
+          firestore: observed(),
+          notify: notifyStaff,
+        })
+      } else if (!subject.sellerAccountId) {
+        // Neither a workspace's charge nor a seller's; the platform-fault
+        // branch below reports it if no plugin claims it. Said out loud.
+        ledger.skip('dispute-is-not-a-workspace-charge')
+      }
+    }
+
     // Plugin-owned sections (AGL-418): commerce orders/carts/drafts/
     // reservations/subscriptions, booking payments, and marketplace
     // purchases now live in their plugins and register through
@@ -1926,6 +2164,21 @@ async function handler(request: Request): Promise<Response> {
       event,
       requestHost: headers['host'],
     })
+
+    // THE SELLER'S LEDGER (AGL-3360), after dispatch so the plugins that
+    // recognised the sale have named its site. The merchant has been told on
+    // its own record by now; staff hear only if this crosses the pattern.
+    if (sellerFraudSignal) {
+      const hostIds = dispatch?.hostIds ?? []
+      await recordSellerFraudSignal(
+        {
+          ...sellerFraudSignal,
+          hostIds,
+          orgIds: await orgIdsForHosts(observed(), hostIds),
+        },
+        { firestore: observed(), notify: notifyStaff },
+      )
+    }
 
     // THE PLATFORM-FAULT BRANCH (AGL-2429). A dispute that matched no
     // `platformRevenue` row AND that no plugin recognised is money moving

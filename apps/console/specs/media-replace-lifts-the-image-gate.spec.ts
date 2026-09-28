@@ -49,6 +49,7 @@
  */
 
 import { createHash } from 'crypto'
+import { crc32 } from 'zlib'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { Readable } from 'stream'
@@ -59,7 +60,12 @@ const mockVerifyIdToken = jest.fn()
 
 /** Every Storage operation the route performed, in order. */
 const mockOps: {
-  saved: Array<{ path: string; bytes: Buffer; contentType?: string }>
+  saved: Array<{
+    path: string
+    bytes: Buffer
+    contentType?: string
+    metadata?: Record<string, unknown>
+  }>
   deleted: string[]
   moved: Array<{ from: string; to: string }>
   signed: string[]
@@ -159,8 +165,16 @@ const mockStorageFile = (path: string) => ({
     return [whole.subarray(options.start, end + 1)]
   },
   createReadStream: () => Readable.from([mockState.stagedBytes]),
-  save: (bytes: Buffer, options?: { contentType?: string }) => {
-    mockOps.saved.push({ path, bytes, contentType: options?.contentType })
+  save: (
+    bytes: Buffer,
+    options?: { contentType?: string; metadata?: Record<string, unknown> },
+  ) => {
+    mockOps.saved.push({
+      path,
+      bytes,
+      contentType: options?.contentType,
+      metadata: options?.metadata,
+    })
     return Promise.resolve()
   },
   delete: () => {
@@ -242,6 +256,10 @@ jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/media-metadata'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/upload-inspection'),
   ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/plan-entitlements'),
+  // The REAL reader of what a file carries inside itself (AGL-3339): what a
+  // replace stores is whatever the new bytes say, and a stub would say what
+  // the stub says.
+  ...jest.requireActual('../../../libs/aglyn/src/lib/app-utils/media-embedded-metadata'),
   readImageDimensions: () => ({ width: 800, height: 600 }),
   pluginRequestFromWeb: async (request: Request) => ({
     method: request.method,
@@ -580,6 +598,122 @@ describe('the signed leg, because a 7 MB PDF cannot ride a JSON body', () => {
     expect(savedDoc()['contentSha256']).toBe(
       createHash('sha256').update(new Uint8Array(PDF)).digest('hex'),
     )
+  })
+})
+
+/** A real PNG carrying a `tEXt` title, for the reader to find. */
+const titledPng = (title: string) => {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data])
+    const length = Buffer.alloc(4)
+    length.writeUInt32BE(data.length)
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(body))
+    return Buffer.concat([length, body, crc])
+  }
+  // Everything up to IEND, then the title, then PNG's own IEND.
+  const iend = PNG.length - 12
+  return Buffer.concat([
+    PNG.subarray(0, iend),
+    chunk('tEXt', Buffer.from(`Title\0${title}`, 'latin1')),
+    PNG.subarray(iend),
+  ])
+}
+
+/** A record read from the bytes being replaced. */
+const previousRecord = {
+  version: 1,
+  format: 'png',
+  writable: true,
+  contentSha256: 'sha-of-the-old-file',
+  fields: [
+    { key: 'title', label: 'Title', group: 'description', value: 'Old harbor', sources: ['png'], editable: true },
+    { key: 'description', label: 'Description', group: 'description', value: 'Taken before the refit', sources: ['png'], editable: true },
+  ],
+}
+
+const storedFields = () =>
+  (savedDoc()['embeddedMetadata'] as { fields: Array<{ key: string; value?: string }> })
+    .fields
+
+describe('a replaced file is described by its own details (AGL-3339)', () => {
+  beforeEach(() => {
+    mockState.existing = {
+      contentType: 'image/png',
+      visibleTo: ['org'],
+      embeddedMetadata: previousRecord,
+      customMetadata: { campaign: 'spring', owner: 'brand team' },
+    }
+  })
+
+  it('reads the new file, and nothing of the old record survives', async () => {
+    const next = titledPng('New harbor')
+    expect((await replace(next, 'image/png')).status).toBe(200)
+    const record = savedDoc()['embeddedMetadata'] as Record<string, unknown>
+    expect(record['format']).toBe('png')
+    expect(record['contentSha256']).toBe(
+      createHash('sha256').update(new Uint8Array(next)).digest('hex'),
+    )
+    // Changed, and dropped: the new file has a title and no description.
+    expect(storedFields()).toEqual([
+      expect.objectContaining({ key: 'title', value: 'New harbor' }),
+    ])
+  })
+
+  it('stores an empty record for a file that carries nothing, not the old one', async () => {
+    expect((await replace(PNG, 'image/png')).status).toBe(200)
+    expect(storedFields()).toEqual([])
+  })
+
+  it('reads the new file on the signed leg too, through ranged reads', async () => {
+    const next = titledPng('Staged harbor')
+    mockState.stagedBytes = next
+    mockState.stagedMetadata = {
+      contentType: 'image/png',
+      size: next.length,
+      md5Hash: Buffer.from('0123456789abcdef0123', 'hex').toString('base64'),
+    }
+    expect((await call(replacePatch, 'PATCH', {})).status).toBe(200)
+    expect(storedFields()).toEqual([
+      expect.objectContaining({ key: 'title', value: 'Staged harbor' }),
+    ])
+  })
+
+  it('clears the record for a family with no reader rather than keep it', async () => {
+    mockState.existing = {
+      contentType: 'application/zip',
+      visibleTo: ['org'],
+      embeddedMetadata: { ...previousRecord, format: 'ooxml' },
+    }
+    const zip = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(32, 1)])
+    expect((await replace(zip, 'application/zip')).status).toBe(200)
+    expect(savedDoc()['embeddedMetadata']).toEqual({ __delete: true })
+  })
+
+  it('keeps the asset’s custom fields on the new Storage object, both legs', async () => {
+    await replace(titledPng('x'), 'image/png')
+    expect(mockOps.saved[0]?.metadata?.['metadata']).toEqual({
+      campaign: 'spring',
+      owner: 'brand team',
+      firebaseStorageDownloadTokens: expect.any(String),
+    })
+
+    jest.clearAllMocks()
+    mockOps.metadata = []
+    const staged = titledPng('y')
+    mockState.stagedBytes = staged
+    mockState.stagedMetadata = {
+      contentType: 'image/png',
+      size: staged.length,
+      md5Hash: Buffer.from('0123456789abcdef0123', 'hex').toString('base64'),
+    }
+    await call(replacePatch, 'PATCH', {})
+    const master = mockOps.metadata.find((op) => op.path === MOCK_MASTER)
+    expect(master?.value['metadata']).toEqual({
+      campaign: 'spring',
+      owner: 'brand team',
+      firebaseStorageDownloadTokens: expect.any(String),
+    })
   })
 })
 

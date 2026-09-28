@@ -46,6 +46,8 @@ let mockContactUpserts: Record<string, any>[] = []
 let mockLeads: Record<string, any>[] = []
 /** What the lead writer answers: stored, or refused/failed. */
 let mockLeadStored = true
+/** Whether the stored lead is new to the form's source (AGL-3330). */
+let mockSourceAdded = true
 
 jest.mock('firebase-admin/firestore', () => ({
   __esModule: true,
@@ -146,6 +148,16 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   addHostLead: async (options: Record<string, any>) => {
     mockLeads.push(options)
     return mockLeadStored
+  },
+  // What the CRM's form door asks (AGL-3330): whether the lead was stored,
+  // and whether this form's source was new on it — the form counts people.
+  addHostLeadOutcome: async (options: Record<string, any>) => {
+    mockLeads.push(options)
+    return {
+      stored: mockLeadStored,
+      created: mockLeadStored && mockSourceAdded,
+      sourceAdded: mockLeadStored && mockSourceAdded,
+    }
   },
   visitorWriteRefusal: async () => null,
 }))
@@ -249,6 +261,7 @@ beforeEach(() => {
   mockContactUpserts = []
   mockLeads = []
   mockLeadStored = true
+  mockSourceAdded = true
 })
 
 describe('a submission is stamped with the form it was sent to', () => {
@@ -592,6 +605,24 @@ describe('a submission counts itself onto the form it names', () => {
     expect(statsPatch()?.['stats.submissions']).toEqual({ __increment: 1 })
   })
 
+  it('counts NO second lead for a person this form already filed', async () => {
+    // The lead count is PEOPLE (AGL-3330) — what a recount of the leads'
+    // `sources` finds. A returning visitor's capture updates the lead it
+    // filed the first time, so it moves Submissions and not Leads.
+    mockSourceAdded = false
+    await submit({ formId: 'form-1' })
+    expect(mockLeads).toHaveLength(1)
+    expect(statsPatch()).not.toHaveProperty('stats.leads')
+    expect(statsPatch()?.['stats.submissions']).toEqual({ __increment: 1 })
+  })
+
+  it('stamps the last submission with the instant the submission was taken', async () => {
+    await submit({ formId: 'form-1' })
+    const at = statsPatch()?.['stats.lastSubmissionAtMs']
+    expect(typeof at).toBe('number')
+    expect(Math.abs(Date.now() - at)).toBeLessThan(60_000)
+  })
+
   it('counts NO lead when the form does not route to leads', async () => {
     mockStore[`hosts/${HOST_ID}/forms/form-1`] = { displayName: 'Contact' }
     await submit({ formId: 'form-1' })
@@ -604,5 +635,39 @@ describe('a submission counts itself onto the form it names', () => {
     await submit({ formId: 'form-1', fields: { q1: 'blue' } })
     expect(mockLeads).toEqual([])
     expect(statsPatch()).not.toHaveProperty('stats.leads')
+  })
+})
+
+describe('a credential is never stored, whatever page posted it (AGL-3356)', () => {
+  it('drops a password, card or one-time-code field and keeps the rest', async () => {
+    const response = await submit({
+      fields: {
+        email: 'visitor@example.com',
+        password: 'hunter2',
+        card_number: '4242424242424242',
+        cvv: '123',
+        otp: '000111',
+        message: 'hello',
+      },
+    })
+    expect(response.status).toBe(200)
+    expect(written()?.['fields']).toEqual({ email: 'visitor@example.com', message: 'hello' })
+  })
+
+  it('refuses a submission that carried nothing BUT credentials', async () => {
+    const response = await submit({ fields: { password: 'hunter2', cardNumber: '4242' } })
+    expect(response.status).toBe(400)
+    expect(written()).toBeUndefined()
+  })
+
+  it('keeps ordinary codes a merchant does ask for', async () => {
+    await submit({
+      fields: { email: 'visitor@example.com', promo_code: 'SPRING', zip: '78701' },
+    })
+    expect(written()?.['fields']).toEqual({
+      email: 'visitor@example.com',
+      promo_code: 'SPRING',
+      zip: '78701',
+    })
   })
 })

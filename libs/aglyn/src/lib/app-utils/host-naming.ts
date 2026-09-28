@@ -22,6 +22,10 @@
  * taken-name suggestions.
  */
 
+// The leaf, not the barrel: the brand list and lookalike logic every
+// phishing surface reads (AGL-3356), and nothing else of the email library.
+import { brandForSubdomainLabel } from '@aglyn/shared-util-email/outbound-phishing-screen'
+
 /** 3–30 chars, lowercase alphanumeric + dashes, no leading dash. */
 export const SUBDOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]{2,29}$/
 
@@ -107,12 +111,24 @@ export function consoleLabelUnder(
   return label && !label.includes('.') ? label : null
 }
 
-/** True when the subdomain is reserved or contains a blocked fragment. */
+/**
+ * True when the subdomain is reserved, contains a blocked fragment, or wears
+ * a brand a phishing kit impersonates (AGL-3356).
+ *
+ * The brand check is the phishing screen's own ({@link brandForSubdomainLabel}):
+ * a brand's name or a lookalike of it (`poshmark`, `paypal-secure`,
+ * `paypa1`, `appleid`), or a brand's word joined to an account word
+ * (`booking-review`, `apple-support`). Refused for every workspace at create
+ * and at rename, since a brand's name on our apex is a disguise that
+ * outlives every later screen — while a real business's name that merely
+ * contains a common word (`tanyas-booking`, `apple-pie-co`) is not.
+ */
 export function isBlockedSubdomain(subdomain: string): boolean {
   const normalized = subdomain.toLowerCase()
   if (RESERVED_SUBDOMAINS.has(normalized)) return true
   const collapsed = normalized.replace(/[^a-z0-9]/g, '')
-  return BLOCKED_FRAGMENTS.some((fragment) => collapsed.includes(fragment))
+  if (BLOCKED_FRAGMENTS.some((fragment) => collapsed.includes(fragment))) return true
+  return brandForSubdomainLabel(normalized) !== null
 }
 
 /**

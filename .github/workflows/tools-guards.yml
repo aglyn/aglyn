@@ -311,14 +311,19 @@ jobs:
       - run: npm run test:media-counter
 
       # AGL-3321, AGL-3327, AGL-3330. The script-side restatements of the list
-      # search keys, the media library's filter keys and the Forms list's
-      # fields, held to the same JSON
+      # search keys, the media library's filter keys, the Forms list's
+      # fields and the site artifacts' list keys (a live screen's stored
+      # `deletedAt: null` among them), held to the same JSON
       # fixtures the library's jest specs assert. A backfill that stamped a
       # key the query spells differently would write documents no filter or
       # search can find, and only these runs see the script half.
       - run: npm run test:name-search-tokens
       - run: npm run test:media-filter-keys
       - run: npm run test:site-form-list-fields
+      - run: npm run test:artifacts-list-keys
+      # AGL-3330. The form counter recount's script twin, held to the same
+      # fixtures the library's recount is.
+      - run: npm run test:site-form-stats-recount
 
       # AGL-1734. The demo org has to be several visibly different businesses:
       # the 30-minute demo spends its largest block switching between sites in

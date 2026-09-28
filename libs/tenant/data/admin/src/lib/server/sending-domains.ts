@@ -91,9 +91,16 @@ import {
   type SendingIdentityVerdict,
   type SendingVerification,
 } from '@aglyn/shared-util-email'
+import { lockdownMode } from '@aglyn/aglyn/server'
 import firebaseAdmin from './firebase-admin'
 import { lookupCaa, lookupMx, lookupTxt } from './dns-probe'
 import { getOrgForHost } from './organizations'
+import { getSiteLockdown } from './tenant-write-lockdown'
+// Also INSTALLS the outbound phishing screen's review store on `sendEmail`
+// (AGL-3356): every sender whose identity comes from `hostSendingIdentity`
+// has therefore installed the gate the workspace stamped below is read by.
+import { sendingWorkspaceFor } from './outbound-send-review'
+import { flagLookalikeDomain } from './hosted-page-review'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -194,6 +201,10 @@ export async function requestSendingDomain(options: {
     createdAtMs: Date.now(),
   }
   await ref.set(record, { merge: true })
+  // A domain that wears a brand (`paypa1.com`) goes to staff in the abuse
+  // queue the moment it is claimed — flagged, not refused (AGL-3362). Mail
+  // from it is held at the send seam whatever staff decide. Never throws.
+  await flagLookalikeDomain({ kind: 'sending', hostId: null, orgId: options.orgId, domain })
   return { record, error: null, status: 201 }
 }
 
@@ -598,6 +609,13 @@ export async function verifySendingDomain(
     { merge: true },
   )
 
+  // Again on verification, the moment it can actually send (AGL-3362): a
+  // claim added before this check existed is caught here. One row per
+  // domain, so this counts rather than re-alerts.
+  if (verified) {
+    await flagLookalikeDomain({ kind: 'sending', hostId: null, orgId, domain })
+  }
+
   return {
     record: readSendingDomainRecord(await ref.get()),
     missing: verdict.missing,
@@ -833,7 +851,40 @@ export async function hostSendingIdentity(
     .catch(() => null)
   const owner = await getOrgForHost(id).catch(() => null)
 
-  const verdict = await resolveHostSendingIdentity({
+  /*
+   * A SUSPENDED SITE SENDS NOTHING (AGL-3356).
+   *
+   * This is the door every tenant sender but the campaign core uses, so it
+   * is where one check covers them all — workflow and automation steps, the
+   * CRM's one-off mail, inbox replies, member posts, receipts, reminders.
+   * Refusing here rather than at each caller is the same argument this
+   * function's own docblock makes about identities: nineteen call sites
+   * asked to remember produce a twentieth that does not, and the incident
+   * behind this was exactly that — a locked workspace whose workflow could
+   * still mail for it.
+   *
+   * FULL locks only. A read-only lock is a maintenance window whose point
+   * is that the site keeps serving and earning, and a receipt for an order
+   * taken before it began must still arrive. Staff suspensions for abuse,
+   * fraud and billing are full locks, which is the case this closes.
+   *
+   * The documents read above are handed to the verdict, so the check costs
+   * the TTL-cached platform read and nothing else. It inherits the
+   * verdict's fail-open posture and its takedown ratchet.
+   */
+  const lock = await getSiteLockdown(id, Date.now(), {
+    org: (owner?.org as Record<string, unknown> | undefined) ?? null,
+    host: snapshot?.exists
+      ? ((snapshot.data() as Record<string, unknown>) ?? null)
+      : null,
+  })
+  if (lock && lockdownMode(lock) === 'full') {
+    const suspended = suspendedSendingIdentity(lock.scope)
+    cache?.set(id, suspended)
+    return suspended
+  }
+
+  const resolved = await resolveHostSendingIdentity({
     orgId: owner?.orgId ?? null,
     selectedDomain: snapshot?.get('sendingDomain') ?? '',
     selectedLocalPart: snapshot?.get('sendingLocalPart') ?? '',
@@ -841,8 +892,58 @@ export async function hostSendingIdentity(
     poolMember: snapshot?.get('sendingPoolMember') ?? '',
   })
 
+  /*
+   * THE WORKSPACE, STAMPED FOR THE PHISHING SCREEN (AGL-3356).
+   *
+   * `sendEmail` screens every tenant message whose identity carries this,
+   * so stamping it here is what puts CRM mail, inbox replies, newsletters,
+   * member posts, sweeps, flow steps and receipts behind one screen without
+   * any of them passing anything. Built from the two documents read above:
+   * the screen costs no read of its own.
+   */
+  const verdict: SendingIdentityVerdict = {
+    ...resolved,
+    workspace: sendingWorkspaceFor({
+      hostId: id,
+      orgId: owner?.orgId ?? null,
+      org: (owner?.org as Record<string, unknown> | undefined) ?? null,
+      host: snapshot?.exists
+        ? ((snapshot.data() as Record<string, unknown>) ?? null)
+        : null,
+    }),
+  }
+
   cache?.set(id, verdict)
   return verdict
+}
+
+/**
+ * The verdict a suspended site's mail gets: a refusal, whatever identity the
+ * site would otherwise have sent on. `sendEmail` reads it and answers
+ * `suspended` without calling the provider.
+ */
+export function suspendedSendingIdentity(
+  scope: string | null | undefined,
+): SendingIdentityVerdict {
+  const what =
+    scope === 'platform'
+      ? 'Sending is paused platform-wide'
+      : scope === 'org'
+        ? 'This workspace is suspended'
+        : 'This site is suspended'
+  const message = `${what}, so no email is sent on its behalf until the suspension is lifted.`
+  return {
+    from: null,
+    source: null,
+    domain: null,
+    summary: message,
+    refusal: {
+      code: 'workspace-suspended',
+      domain: null,
+      message,
+      missing: [],
+    },
+  }
 }
 
 /** The record keys a surface highlights as outstanding. */

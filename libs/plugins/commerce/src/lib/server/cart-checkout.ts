@@ -22,6 +22,7 @@ import { checkoutRecoveryState } from '../model/checkout-recovery'
 import { claimAttempt, deriveStripeObjectKey } from '@aglyn/aglyn/server'
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { readCartId } from './cart-cookie'
 import { resolveManualTaxRateId } from './manual-tax-rate'
 import {
@@ -191,7 +192,11 @@ export const cartCheckoutHandler: PluginApiHandler = async (req, res) => {
     // one-time in `payment` mode (recurring products subscribe through the
     // PDP's direct checkout, AGL-303) — so the buyer-chosen billing field
     // (AGL-545) does not apply here.
-    const params = new URLSearchParams({ mode: 'payment' })
+    const params = new URLSearchParams({
+      mode: 'payment',
+      // 3-D Secure, from the one seam every card payment shares (AGL-3360).
+      ...checkoutSessionCardAuthenticationParams('payment'),
+    })
     cart.lines.forEach((line, index) => {
       const product = productsById.get(line.productId)
       if (!product || product.deletedAt || product.status !== 'active') {

@@ -30,6 +30,7 @@ import {
   DEAL_LIST_PIPELINE_BASE_INDEX,
   DEAL_PREFIX_SEARCH,
 } from '../constants/deal-filters'
+import { CRM_FIELD_LIST_QUERY } from '../constants/field-list-query'
 import { CRM_LIST_BASE_INDEX } from './crm-list-query'
 import { LEAD_LIST_DECLARATION, leadIndexShapes } from './lead-filters'
 import { TASK_LIST_DECLARATION, TASK_LIST_VIEW_BASE_INDEX } from './task-views'
@@ -103,4 +104,13 @@ describe('the CRM lists’ composites', () => {
       expect(missingListQueryIndexes(INDEX_FILE, entry.collection, needed)).toEqual([])
     },
   )
+})
+
+describe('the Fields table (AGL-3335)', () => {
+  it('needs no composite: its clauses are equalities under the document-id order', () => {
+    // Firestore merges the single-field indexes it keeps on its own for
+    // equalities and one array clause under `__name__`, so the tab, the
+    // type, the Required flag and the search spend nothing from the budget.
+    expect(listQueryIndexes(CRM_FIELD_LIST_QUERY, [{ path: 'object' }])).toEqual([])
+  })
 })

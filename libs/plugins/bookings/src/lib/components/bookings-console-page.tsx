@@ -19,6 +19,7 @@
 import { checkQuota, crmContactByEmailHref, pluginDocsHelp } from '@aglyn/aglyn'
 import { BOOKINGS_BOOKER_PARAM, normalizeContactEmail } from '@aglyn/aglyn'
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
+import { describePaymentRisk, type PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import { type ConsolePluginPageProps } from '@aglyn/aglyn'
 import { type HostBookingService, isBookingReminderDue } from '../model'
 import { AppLink, CardDisplay, HelpTip, useConfirmationContext } from '@aglyn/shared-ui-jsx'
@@ -27,6 +28,7 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -35,6 +37,7 @@ import {
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -96,6 +99,17 @@ interface ServiceDraft {
   /** The service's two CRM switches (AGL-2660) — see `HostBookingService`. */
   crmMeetingActivity: boolean
   crmFollowUpTask: boolean
+}
+
+/** A fraud warning, review or chargeback on the booking's payment (AGL-3360). */
+function PaymentRiskChip({ risk }: { risk: PaymentRisk | undefined }) {
+  const described = describePaymentRisk(risk)
+  if (!described) return null
+  return (
+    <Tooltip title={described.detail}>
+      <Chip label={described.label} size="small" color="warning" />
+    </Tooltip>
+  )
 }
 
 /**
@@ -600,6 +614,7 @@ export function BookingsConsolePage(props: ConsolePluginPageProps) {
                     }`}
                   </Typography>
                 </Stack>
+                <PaymentRiskChip risk={booking.paymentRisk} />
                 {siteContext && booking.email ? (
                   <Button
                     component={AppLink as any}

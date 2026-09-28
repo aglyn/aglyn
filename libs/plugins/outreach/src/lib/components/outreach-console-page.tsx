@@ -73,8 +73,18 @@ export function OutreachConsolePage(props: ConsolePluginPageProps) {
    */
   if (!section || !sections?.length || !basePath) return null
 
+  /*
+   * A page below the sequence list — one sequence, its enrollments, one
+   * person's history, a new sequence — takes the whole row, with the rail
+   * as a strip above it (AGL-3332). Beside the rail, the enrollments table
+   * was squeezed into three quarters of the page while the column under
+   * the three section tabs stood empty, and its cells were cut off. The
+   * section lists keep the rail beside them.
+   */
+  const wide = section === 'sequences' && (props.segments ?? []).length > 1
+
   return (
-    <HubSections sections={sections}>
+    <HubSections sections={sections} wide={wide}>
       {sectionBody(section as OutreachConsoleSectionId, props)}
     </HubSections>
   )

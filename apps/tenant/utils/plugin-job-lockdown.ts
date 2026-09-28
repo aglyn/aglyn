@@ -44,8 +44,10 @@
  */
 
 import { registerPluginJobHostLockdown } from '@aglyn/aglyn/server'
-import { getSiteLockdown } from '@aglyn/tenant-data-admin'
+// `siteLockdownJobGate` is `getSiteLockdown(hostId) !== null`, defined once
+// in the admin lib so the console's manual cron doors ask the identical
+// question without a registration of their own (AGL-3356).
+import { siteLockdownJobGate } from '@aglyn/tenant-data-admin'
 
-registerPluginJobHostLockdown(
-  async (hostId: string) => (await getSiteLockdown(hostId)) !== null,
-)
+const gate = siteLockdownJobGate()
+registerPluginJobHostLockdown((hostId: string) => gate.isLocked(hostId))

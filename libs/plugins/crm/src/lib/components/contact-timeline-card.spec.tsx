@@ -38,7 +38,7 @@ import {
   CRM_ACTIVITIES_PER_RECORD_CEILING,
   CRM_ACTIVITY_LOG_FULL_MESSAGE,
 } from '@aglyn/aglyn'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { addDoc } from 'firebase/firestore'
 import type { ReactNode } from 'react'
 import { ContactTimelineCard } from './contact-timeline-card'
@@ -105,12 +105,15 @@ const contact = {
   visibleTo: ['host:host-1', 'host:host-2'],
 }
 
+/** What the activity listener holds; a test swaps in a longer log. */
+let mockActivityRows: Array<Record<string, unknown>> = activityRows
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   useOrgDataScope: () => ({ scope: ['orgs', 'org-1'], orgId: 'org-1', ready: true }),
   usePagedCollection: () => ({
-    data: activityRows,
-    rows: activityRows,
+    data: mockActivityRows,
+    rows: mockActivityRows,
     hasMore: false,
     page: 0,
     pageSize: 100,
@@ -194,17 +197,20 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   ),
   CardDisplay: ({
     header,
+    HeaderProps,
     actions,
     children,
   }: {
     header: ReactNode
-    actions: ReactNode
+    HeaderProps?: { action?: ReactNode }
+    actions?: ReactNode
     children: ReactNode
   }) => (
     <section>
       <h2>{header}</h2>
-      {actions}
+      <div data-testid="card-header">{HeaderProps?.action}</div>
       {children}
+      {actions ? <div data-testid="card-foot">{actions}</div> : null}
     </section>
   ),
   MdiIcon: () => null,
@@ -221,7 +227,10 @@ beforeEach(() => {
   jest.clearAllMocks()
   campaignState = { status: 'success', lookupFailed: false }
   campaignHookCalls.length = 0
+  mockActivityRows = activityRows
 })
+
+const header = () => within(screen.getByTestId('card-header'))
 
 const renderCard = () =>
   render(
@@ -251,7 +260,7 @@ describe('ContactTimelineCard on a plan without the CRM suite', () => {
         suiteLocked
       />,
     )
-    const log = screen.getByRole('button', { name: 'Log activity' }) as HTMLButtonElement
+    const log = header().getByRole('button', { name: 'Log activity' }) as HTMLButtonElement
     expect(log.disabled).toBe(true)
     fireEvent.click(log)
     expect(screen.queryByLabelText('What happened')).toBeNull()
@@ -295,6 +304,49 @@ describe('ContactTimelineCard (AGL-2600)', () => {
     expect(screen.getByText(/Grace Hopper/)).toBeTruthy()
   })
 
+  it('carries Log activity and Expand all in its header, and no foot of buttons', () => {
+    renderCard()
+    expect(header().getByRole('button', { name: 'Log activity' })).toBeTruthy()
+    expect(header().getByRole('button', { name: 'Expand all' })).toBeTruthy()
+    expect(screen.queryByTestId('card-foot')).toBeNull()
+  })
+
+  it('pages the stream ten at a time, newest first', () => {
+    mockActivityRows = Array.from({ length: 12 }, (_, index) => ({
+      ...activityRows[1],
+      $id: `act-n${index}`,
+      body: `Note number ${index}`,
+      atMs: 100_000 - index,
+    }))
+    renderCard()
+    // Twelve notes, three captured entries and two campaigns: seventeen.
+    expect(screen.getAllByTestId('timeline-entry')).toHaveLength(10)
+    expect(screen.getByText('Note number 0')).toBeTruthy()
+    expect(screen.queryByText('Placed order #12')).toBeNull()
+    expect(screen.getByText('1–10 of 17')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Go to next page' }))
+    expect(screen.getAllByTestId('timeline-entry')).toHaveLength(7)
+    expect(screen.queryByText('Note number 0')).toBeNull()
+    expect(screen.getByText('Placed order #12')).toBeTruthy()
+  })
+
+  it('collapses a long note to its first line and opens it to the whole of it', () => {
+    mockActivityRows = [
+      {
+        ...activityRows[1],
+        $id: 'act-long',
+        body: 'Met at the trade show\nWants a quote for forty seats\nCall back in March',
+      },
+    ]
+    renderCard()
+    expect(screen.getByText('Met at the trade show')).toBeTruthy()
+    expect(screen.queryByText(/Call back in March/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Met at the trade show' }))
+    expect(screen.getByText(/Call back in March/)).toBeTruthy()
+    // The metadata never left the row.
+    expect(screen.getByText(/Ada Admin/)).toBeTruthy()
+  })
+
   it("reads THIS holder's facet alone — another holder's booking never surfaces", () => {
     renderCard()
     expect(screen.queryByText('Other client booking')).toBeNull()
@@ -324,7 +376,7 @@ describe('ContactTimelineCard (AGL-2600)', () => {
 
   it('logs a new activity against the contact with the full scope stamp', async () => {
     renderCard()
-    fireEvent.click(screen.getByRole('button', { name: 'Log activity' }))
+    fireEvent.click(header().getByRole('button', { name: 'Log activity' }))
     fireEvent.change(screen.getByLabelText('What happened'), {
       target: { value: 'Agreed to a trial' },
     })
@@ -356,7 +408,7 @@ describe('ContactTimelineCard (AGL-2600)', () => {
     mockLogged = CRM_ACTIVITIES_PER_RECORD_CEILING
     try {
       renderCard()
-      fireEvent.click(screen.getByRole('button', { name: 'Log activity' }))
+      fireEvent.click(header().getByRole('button', { name: 'Log activity' }))
       fireEvent.change(screen.getByLabelText('What happened'), {
         target: { value: 'One too many' },
       })

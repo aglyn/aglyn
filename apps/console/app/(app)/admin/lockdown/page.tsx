@@ -29,7 +29,9 @@ import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
   Alert,
   Button,
+  Checkbox,
   Chip,
+  FormControlLabel,
   MenuItem,
   Stack,
   TextField,
@@ -48,6 +50,7 @@ import { useIsStaff } from '../../../../hooks/use-is-staff'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { lockdownCancelsBillingByDefault } from '../../../../constants/subscription-cancel'
 
 /** Mirrors the route's server-side type-to-confirm — both must be typed. */
 const PLATFORM_CONFIRM_PHRASE = 'LOCK PLATFORM'
@@ -229,6 +232,83 @@ const READ_ONLY_SCOPES = new Set(['platform', 'org', 'host'])
 const timeOf = (ms: number) => new Date(ms).toLocaleTimeString()
 
 /**
+ * The billing steps a lock reported (AGL-3359), as log lines of their own.
+ *
+ * Separate lines, never folded into the lock's: a lock that landed and a
+ * cancel that did not are two facts, and the log must show the first as
+ * verified and the second as NOT CONFIRMED rather than blur them into one.
+ */
+function billingLogLines(
+  payload: Record<string, any>,
+): Array<{ text: string; confirmed: boolean }> {
+  const cancelLine = (
+    cancel: Record<string, any> | undefined,
+    label: string,
+  ): { text: string; confirmed: boolean } | null => {
+    if (!cancel) return null
+    const problems = [
+      ...((cancel['lookupErrors'] as string[]) ?? []),
+      ...((cancel['subscriptions'] as Array<Record<string, any>>) ?? [])
+        .filter((step) => !step['confirmed'])
+        .map((step) => `${step['id']}: ${step['error'] ?? step['outcome']}`),
+    ]
+    const found = ((cancel['subscriptions'] as unknown[]) ?? []).length
+    return cancel['confirmed'] === true
+      ? {
+          text: found
+            ? `Cancelled billing for ${label} — ${cancel['changed'] ?? 0} of ${found} subscription(s) changed, no refund`
+            : `Billing for ${label}: nothing was billing`,
+          confirmed: true,
+        }
+      : {
+          text: `Billing cancel for ${label} NOT confirmed — the lock stands. ${problems.join('; ')}`,
+          confirmed: false,
+        }
+  }
+  const lines: Array<{ text: string; confirmed: boolean } | null> = []
+  if (payload['subscriptionCancel']) {
+    lines.push(
+      cancelLine(
+        payload['subscriptionCancel'],
+        `workspace ${payload['subscriptionCancel']['orgId'] ?? ''}`.trim(),
+      ),
+    )
+  }
+  const owned = payload['ownedWorkspaces'] as Record<string, any> | undefined
+  if (owned) {
+    if (owned['error']) {
+      lines.push({ text: String(owned['error']), confirmed: false })
+    }
+    const workspaces = (owned['workspaces'] as Array<Record<string, any>>) ?? []
+    if (!owned['error'] && workspaces.length === 0) {
+      lines.push({
+        text: 'This account owns no workspaces — nothing else to lock or cancel',
+        confirmed: true,
+      })
+    }
+    for (const workspace of workspaces) {
+      const label = `owned workspace ${workspace['slug'] ?? workspace['orgId']}`
+      lines.push({
+        text: workspace['lockError']
+          ? `Locking ${label} failed: ${workspace['lockError']}`
+          : workspace['alreadyLocked']
+            ? `${label} was already locked — left as it was`
+            : `Locked ${label}`,
+        confirmed: workspace['confirmed'] === true,
+      })
+      lines.push(cancelLine(workspace['subscriptionCancel'], label))
+    }
+    if (owned['truncated']) {
+      lines.push({
+        text: 'This account owns more workspaces than one lock handles — lock the rest by org id',
+        confirmed: false,
+      })
+    }
+  }
+  return lines.filter(Boolean) as Array<{ text: string; confirmed: boolean }>
+}
+
+/**
  * THE PANIC BUTTON (AGL-1501): platform/org/host/user lockdown controls.
  * Reads are open to all staff; locking and lifting require the super role
  * (enforced server-side by /api/admin/lockdown, which is the only writer —
@@ -294,6 +374,24 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
   const [targetId, setTargetId] = useState('')
   const [mode, setMode] = useState('full')
   const [reason, setReason] = useState('manual')
+  /**
+   * Stop the workspace's billing too (AGL-3359). Follows the reason: on for
+   * `security`, off for everything else — a billing, maintenance or manual
+   * lock must never end a subscription unless someone ticks the box.
+   * Changing the reason resets it to that default.
+   */
+  const [cancelBilling, setCancelBilling] = useState(
+    lockdownCancelsBillingByDefault('manual'),
+  )
+  /** User scope: lock and cancel the workspaces the account owns. */
+  const [lockOwned, setLockOwned] = useState(
+    lockdownCancelsBillingByDefault('manual'),
+  )
+  const changeReason = (next: string) => {
+    setReason(next)
+    setCancelBilling(lockdownCancelsBillingByDefault(next))
+    setLockOwned(lockdownCancelsBillingByDefault(next))
+  }
   const [message, setMessage] = useState('')
   const [until, setUntil] = useState('')
   // AGL-1621. Defaults to the fail-OPEN class for the same reason the
@@ -431,9 +529,23 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
         const what = `${body['action'] === 'lock' ? 'Locked' : 'Unlocked'} ${body['scope']}${
           body['targetId'] ? ` ${body['targetId']}` : ''
         }`
+        // The billing steps (AGL-3359) land as lines of their own, above the
+        // lock they followed, each with its own verified/NOT CONFIRMED chip.
+        const billing = billingLogLines(payload)
+        const atMs = Date.now()
         setLog((entries) =>
-          [{ atMs: Date.now(), text: what, confirmed }, ...entries].slice(0, 25),
+          [
+            ...billing.map((line) => ({ atMs, ...line })).reverse(),
+            { atMs, text: what, confirmed },
+            ...entries,
+          ].slice(0, 25),
         )
+        if (billing.some((line) => !line.confirmed)) {
+          enqueueSnackbar(
+            'The lock is in place, but a billing step did NOT confirm — read "Actions taken in this session".',
+            { variant: 'error', allowDuplicate: true },
+          )
+        }
         enqueueSnackbar(
           confirmed
             ? `${what} — verified on the server (audited)`
@@ -917,7 +1029,7 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                   {mode !== 'read-only'
                     ? enforcementField(enforcement, setEnforcement)
                     : null}
-                  {reasonField(reason, setReason)}
+                  {reasonField(reason, changeReason)}
                   <TextField
                     size="small"
                     label="Customer-facing message (optional)"
@@ -934,6 +1046,51 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                     slotProps={{ inputLabel: { shrink: true } }}
                   />
                 </Stack>
+                {/* Billing (AGL-3359). A lock never touched Stripe, so a
+                    locked fraudster's subscription kept renewing on a card
+                    that was probably stolen. These run AFTER the lock lands
+                    and report on their own line; a failed cancel never
+                    undoes the lock. */}
+                {scope === 'org' ? (
+                  <Stack spacing={0.5}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={cancelBilling}
+                          onChange={(event) =>
+                            setCancelBilling(event.target.checked)
+                          }
+                        />
+                      }
+                      label="Also cancel its subscription now (no refund)"
+                    />
+                    <Typography variant="caption" color="text.secondary">
+                      {
+                        'On by default for security locks only. Cancels every subscription the workspace has in Stripe, immediately, with no final invoice, no proration and no refund. Unlocking never recreates a subscription — the customer would have to subscribe again.'
+                      }
+                    </Typography>
+                  </Stack>
+                ) : null}
+                {scope === 'user' ? (
+                  <Stack spacing={0.5}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={lockOwned}
+                          onChange={(event) => setLockOwned(event.target.checked)}
+                        />
+                      }
+                      label="Also lock and cancel workspaces this user solely owns"
+                    />
+                    <Typography variant="caption" color="text.secondary">
+                      {
+                        'On by default for security locks only. Every workspace this account owns (the owner seat is single; workspaces they only belong to are untouched) is locked with the same reason and its subscriptions cancelled now, no refund. Unlocking the account does not unlock those workspaces and never recreates a subscription.'
+                      }
+                    </Typography>
+                  </Stack>
+                ) : null}
                 <Stack direction="row" spacing={1}>
                   <Button
                     variant="contained"
@@ -956,6 +1113,15 @@ const AdminLockdown: NextPageWithLayout<Record<string, never>> = () => {
                           reason,
                           message: message || undefined,
                           untilMs: untilMsOf(until),
+                          // Sent only on the scope that has it, and only as
+                          // an explicit boolean: the route never infers a
+                          // cancellation from a reason.
+                          ...(scope === 'org'
+                            ? { cancelSubscription: cancelBilling }
+                            : {}),
+                          ...(scope === 'user'
+                            ? { lockOwnedWorkspaces: lockOwned }
+                            : {}),
                         },
                         // The id STAYS. Clearing it used to disable both
                         // buttons the moment a lock landed, so the obvious

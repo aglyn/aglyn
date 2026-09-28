@@ -101,12 +101,13 @@ searches by the start of a deal's title, and a notice says so. When a
 combination cannot be answered by one query, the table does not
 apply that filter, and a notice above it names the filter and says why; see
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
-The board has no filters.
+A column header sorts only the rows of the page on screen; the pages keep
+the table's own order. The board has no filters.
 
 The table's rows have checkboxes: tick some and a [bulk bar](./bulk-actions.md#deals)
 appears above it to set their stage, set their owner, mark them lost with one
-reason, export them or delete them. **Export CSV** above the table
-downloads the deals on screen as `deals.csv` — title, pipeline and stage by
+reason, export them or delete them. **Export CSV** in the card's header, shown
+with the table, downloads the deals on screen as `deals.csv` — title, pipeline and stage by
 name, the amount in major units beside its currency, the owner by email
 address, the expected close date, status, the contact and the company, when
 it closed, the lost reason and notes; the bar's **Export CSV** writes the same
@@ -114,7 +115,7 @@ file over the selection.
 
 ## Import from CSV
 
-**Import CSV** beside the table's status filter takes a spreadsheet of deals —
+**Import CSV** in the card's header takes a spreadsheet of deals —
 an export from another CRM, a forecast sheet — and files each row as a new
 deal. A deal has no key the way a contact has an address, so nothing is
 merged: importing a file twice files it twice. Importing needs the same

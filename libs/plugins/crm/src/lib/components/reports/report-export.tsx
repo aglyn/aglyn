@@ -19,7 +19,7 @@
 import { csvDocument } from '@aglyn/aglyn'
 import { mdiDownloadOutline } from '@aglyn/shared-data-mdi'
 import { MdiIcon } from '@aglyn/shared-ui-jsx'
-import { Button, Stack, Typography } from '@mui/material'
+import { Button } from '@mui/material'
 import { downloadTextFile } from '../../model/contacts-csv'
 
 export interface ReportExportProps {
@@ -35,50 +35,32 @@ export interface ReportExportProps {
   rows: () => ReadonlyArray<ReadonlyArray<unknown>>
   /** Nothing to write yet — the window is still reading, or came back empty. */
   disabled?: boolean
-  /**
-   * What the table is grouped from, when that is not everything — the
-   * card's own truncation notice, drawn beside the button so the file and
-   * its limits are read together.
-   */
-  caption?: string
 }
 
 /**
- * Export CSV for one report table (AGL-2624).
+ * Export CSV for one report table (AGL-2624), in its card's header.
  *
  * Client-side, from the window the card has already loaded: a report table
  * is at most a thousand grouped rows, and the file is those rows exactly as
  * drawn — the same names, the same counts, the same order — so a reader can
  * check the export against the screen. It is NOT a fresh read, so when the
- * card's window was full the caption beside the button says so, the way
- * the card says so beneath the table; an export that quietly wrote a sample
- * as if it were the whole would be the one thing the on-screen caption
- * exists to prevent.
+ * card's window was full the card says so in a caption beneath the table;
+ * an export that quietly wrote a sample as if it were the whole would be
+ * the one thing that caption exists to prevent.
  */
 export function ReportExport(props: ReportExportProps) {
-  const { filename, columns, rows, disabled = false, caption } = props
+  const { filename, columns, rows, disabled = false } = props
   return (
-    <Stack
-      direction="row"
-      spacing={1.5}
-      sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
+    <Button
+      size="small"
+      startIcon={<MdiIcon path={mdiDownloadOutline.path} size={0.8} />}
+      disabled={disabled}
+      onClick={() =>
+        downloadTextFile(filename, 'text/csv', csvDocument(columns, rows()))
+      }
     >
-      <Button
-        size="small"
-        startIcon={<MdiIcon path={mdiDownloadOutline.path} size={0.8} />}
-        disabled={disabled}
-        onClick={() =>
-          downloadTextFile(filename, 'text/csv', csvDocument(columns, rows()))
-        }
-      >
-        {'Export CSV'}
-      </Button>
-      {caption ? (
-        <Typography variant="caption" color="text.secondary">
-          {caption}
-        </Typography>
-      ) : null}
-    </Stack>
+      {'Export CSV'}
+    </Button>
   )
 }
 ReportExport.displayName = 'ReportExport'

@@ -28,9 +28,15 @@ import {
   getOrgForHost,
   hostSendingIdentity,
   meterHostEmail,
+  notifyHostManagers,
   renderHostEmailWithTokens,
   sendGa4Purchase,
 } from '@aglyn/tenant-data-admin'
+import { paymentRiskEventFrom } from '@aglyn/aglyn/app-utils/payment-risk'
+import {
+  recordPaymentRiskOnRecord,
+  settlePaymentRiskDisputeOnRecord,
+} from '@aglyn/tenant-data-admin/server/payment-risk-record'
 import { captureHostContact } from '@aglyn/tenant-runtime'
 import {
   bookingPlatformNetCents,
@@ -45,10 +51,91 @@ import { fileBookingOnCrm } from './booking-crm'
  * payment confirms the pendingPayment hold — relocated verbatim from the
  * console route; registered via registerBookingsConsoleApi.
  */
+/** gRPC `Status.FAILED_PRECONDITION` — Firestore's "this query needs an index". */
+const GRPC_FAILED_PRECONDITION = 9
+
+/**
+ * The booking a charge paid for, found by the `paymentIntentId` the paid
+ * handler below records (AGL-2315), or null. A missing collection-group
+ * index is logged and answered null rather than thrown: no redelivery can
+ * fix it, and the dispute then reaches staff through the route's
+ * unattributed-dispute alert instead of vanishing.
+ */
+async function findBookingForPayment(
+  paymentIntentId: string,
+): Promise<FirebaseFirestore.QueryDocumentSnapshot | null> {
+  if (!paymentIntentId) return null
+  const matches = await firebaseAdmin
+    .app()
+    .firestore()
+    .collectionGroup('bookings')
+    .where('paymentIntentId', '==', paymentIntentId)
+    .limit(2)
+    .get()
+    .catch((error: { code?: number }) => {
+      if (error?.code !== GRPC_FAILED_PRECONDITION) throw error
+      console.error(
+        'Booking payment lookup needs the collection-group index on ' +
+          'bookings.paymentIntentId (AGL-3360)',
+        error,
+      )
+      return null
+    })
+  // One payment intent pays one booking; two is corrupt data, and stamping
+  // an arbitrary one would tell the wrong merchant.
+  return matches && matches.docs.length === 1 ? matches.docs[0] : null
+}
+
 export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
   type,
   object,
 }) => {
+    // Fraud signals on a paid booking (AGL-3360): an issuer's early fraud
+    // warning, a Radar review, or a dispute. Booking deposits never heard
+    // about any of them, so the merchant learned of a chargeback from Stripe
+    // alone. The signal now lands on the BOOKING, through the shared
+    // `paymentRisk` shape every plugin stamps, and the site's managers are
+    // told once. Nothing is refunded or canceled: the merchant decides.
+    const risk = paymentRiskEventFrom(type, object)
+    if (risk) {
+      const booking = await findBookingForPayment(risk.paymentIntentId)
+      if (!booking) return
+      const hostId = String(booking.ref.parent.parent?.id ?? '')
+      await recordPaymentRiskOnRecord(
+        {
+          ref: booking.ref,
+          signal: risk.signal,
+          hostId,
+          subjectLabel: `Booking ${String(booking.get('serviceName') ?? booking.id)}`,
+          link: `/${hostId}/bookings`,
+          notificationType: 'content.booking',
+        },
+        { firestore: firebaseAdmin.app().firestore(), notify: notifyHostManagers },
+      )
+      return { claimed: true, hostId }
+    }
+    // A dispute's outcome, on the signal `created` stamped. Claimed only when
+    // it was NOT lost: a lost booking dispute takes money back that nothing
+    // here reverses or records, which is exactly what the route's
+    // unattributed-dispute alert is for, so staff still hear about it.
+    if (type === 'charge.dispute.closed') {
+      const paymentIntentId =
+        typeof object?.payment_intent === 'string'
+          ? object.payment_intent
+          : String(object?.payment_intent?.id ?? '')
+      const booking = await findBookingForPayment(paymentIntentId)
+      if (!booking) return
+      const outcome = String(object?.status ?? '')
+      await settlePaymentRiskDisputeOnRecord(
+        booking.ref,
+        String(object?.id ?? ''),
+        outcome,
+        { firestore: firebaseAdmin.app().firestore() },
+      )
+      return outcome === 'lost'
+        ? undefined
+        : { claimed: true, hostId: String(booking.ref.parent.parent?.id ?? '') }
+    }
     // Paid bookings (AGL-170): payment confirms the pendingPayment hold.
     if (
       type === 'checkout.session.completed' &&
@@ -402,6 +489,9 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             sendingIdentity: await hostSendingIdentity(String(hostId)),
             audience: 'tenant',
             context: 'paid booking confirmation',
+            // Owed to the recipient by their own booking: the phishing
+            // screen's soft rules never hold it (AGL-3356).
+            owedFor: 'booking',
           })
           // Cost meter (AGL-1438), matching the free-booking path.
           // Transactional: the guest has already paid.

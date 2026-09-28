@@ -354,7 +354,7 @@ export interface HostLeadInput {
  * `SITE_MEMBERS_MAX_PER_HOST` (which governs an action a visitor DID take) is
  * enforced with a 429 in the sign-up handler and this is not.
  */
-export async function addHostLead(options: {
+export async function addHostLeadOutcome(options: {
   hostRef: FirebaseFirestore.DocumentReference
   hostId: string
   lead: HostLeadInput
@@ -377,7 +377,7 @@ export async function addHostLead(options: {
    * nothing, which is how a lead that no campaign caused stays uncredited.
    */
   touch?: ResolvedCampaignTouch | null
-}): Promise<boolean> {
+}): Promise<HostLeadOutcome> {
   const { hostRef, hostId, lead } = options
   const maxPerHost = options.ceiling ?? LEADS_MAX_PER_HOST
   try {
@@ -421,11 +421,13 @@ export async function addHostLead(options: {
       ...(lead.name ? { name: lead.name } : {}),
     }
     let created = false
+    let sourceAdded = false
     const refused = await firestore.runTransaction(async (tx) => {
       // Reset per attempt: a contended transaction re-runs its body, and a
       // flag left standing from an aborted attempt would credit a campaign
       // with a person who turned out to exist already.
       created = false
+      sourceAdded = false
       // ALL READS BEFORE THE WRITE, which Firestore requires.
       const existing = await tx.get(leadRef)
       /*
@@ -507,6 +509,16 @@ export async function addHostLead(options: {
           : now
       created = !existing.exists
       /*
+       * Whether this capture puts its surface on the person for the FIRST
+       * time: a new lead, or one first met through another door. A form
+       * counts its leads by this (AGL-3330) — the people it filed, which is
+       * what a recount of `sources` finds — so a returning visitor's second
+       * submission moves no form's lead count.
+       */
+      const storedSources = (existing.data() ?? {})['sources']
+      sourceAdded =
+        created || !(Array.isArray(storedSources) && storedSources.includes(lead.source))
+      /*
        * THE FIELDS THE LEADS LIST QUERIES (AGL-3321), from the lead as it
        * will stand: what the transaction read, the address and name this
        * capture brings and the scope it widens. A new lead is written
@@ -581,7 +593,7 @@ export async function addHostLead(options: {
         kind: 'leads',
         ceiling: maxPerHost,
       })
-      return false
+      return NOT_STORED
     }
     /*
      * ATTRIBUTED ON CREATION ONLY.
@@ -606,12 +618,34 @@ export async function addHostLead(options: {
         convertedAtMs: now,
       })
     }
-    return true
+    return { stored: true, created, sourceAdded }
   } catch (error) {
     // Same posture the three original call sites had (`.catch(() => undefined)`
     // / `.catch(console.error)`): a lead that failed to store must not fail
     // the sign-up or the booking that produced it.
     console.error('lead write failed', error)
-    return false
+    return NOT_STORED
   }
+}
+
+/** What {@link addHostLeadOutcome} did with one capture. */
+export interface HostLeadOutcome {
+  /** Whether the lead was written — false when refused or failed. */
+  stored: boolean
+  /** Whether it was a new person. */
+  created: boolean
+  /** Whether this capture's `source` was new on the lead — see the write. */
+  sourceAdded: boolean
+}
+
+const NOT_STORED: HostLeadOutcome = { stored: false, created: false, sourceAdded: false }
+
+/**
+ * {@link addHostLeadOutcome}, answering only whether the lead was stored —
+ * the question every door but a form's asks.
+ */
+export async function addHostLead(
+  options: Parameters<typeof addHostLeadOutcome>[0],
+): Promise<boolean> {
+  return (await addHostLeadOutcome(options)).stored
 }

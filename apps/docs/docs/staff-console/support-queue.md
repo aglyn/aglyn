@@ -17,7 +17,7 @@ all organizations at once.
 
 ## Triage
 
-The list is filtered to **open** by default, with **closed** and **all** chips beside
+The list is filtered to **Open** by default, with **Closed** and **All** chips beside
 it and a count of what's still open. The filter applies to **every** organization's
 tickets, not only the ones on screen, and the open count in the header is the whole
 queue's. Tickets come newest update first, a page at a time, with the page controls

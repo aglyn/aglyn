@@ -67,6 +67,15 @@ describe('the plugin frame owns its own sandbox (AGL-2484)', () => {
     expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer')
   })
 
+  it('grants no native form posts, so a plugin cannot post a field to a page it chooses (AGL-3362)', () => {
+    // The frame's sandbox withholds `allow-forms` and the plugin origin's CSP
+    // says `form-action 'none'` (`tools/plugin-loader/origin/api/load.csp.test.mjs`).
+    // Plugins talk to the host by postMessage and to their declared origins
+    // by fetch, so neither costs a legitimate plugin anything.
+    const frame = renderFrame({ sandbox: 'allow-scripts allow-same-origin allow-forms' })
+    expect(frame.getAttribute('sandbox')?.split(/\s+/)).not.toContain('allow-forms')
+  })
+
   it('ignores a caller-supplied `sandbox`', () => {
     const frame = renderFrame({
       sandbox: 'allow-scripts allow-same-origin allow-top-navigation allow-popups',

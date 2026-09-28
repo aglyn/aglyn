@@ -106,15 +106,31 @@ export interface PluginActivityRegistration {
 const registrations = new Map<string, PluginActivityRegistration>()
 
 /**
+ * The most codes one group may hold. A group's chip asks `action is any of`
+ * its codes, which the feeds' queries serve as one Firestore `in` — capped at
+ * thirty values — so a larger group would be a chip the list always refuses.
+ */
+export const PLUGIN_ACTIVITY_GROUP_MAX_ACTIONS = 30
+
+/**
  * Idempotent per plugin — re-registration replaces that plugin's catalog. A
  * code already declared by a DIFFERENT plugin is refused for the whole
- * registration: two owners for one code would give the row two labels.
+ * registration: two owners for one code would give the row two labels. A
+ * group of more than `PLUGIN_ACTIVITY_GROUP_MAX_ACTIONS` codes is refused
+ * too, since its chip could never be applied.
  */
 export function registerPluginActivityActions(
   registration: PluginActivityRegistration,
 ): void {
   const pluginId = registration.pluginId.trim()
   if (!pluginId) throw new Error('plugin activity actions need a pluginId')
+  if (registration.actions.length > PLUGIN_ACTIVITY_GROUP_MAX_ACTIONS) {
+    throw new Error(
+      `activity group "${registration.group.id}" declares ` +
+        `${registration.actions.length} actions; its filter chip can ask for at most ` +
+        `${PLUGIN_ACTIVITY_GROUP_MAX_ACTIONS}, refused "${pluginId}"`,
+    )
+  }
   for (const action of registration.actions) {
     const owner = ownerOfActivityAction(action.key)
     if (owner && owner !== pluginId) {

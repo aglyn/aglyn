@@ -93,9 +93,16 @@ export function planGiftCard(path, data) {
     return { action: 'skip', reason: 'not a site gift card' }
   }
   const tokens = giftCardSearchTokens(segments[3], data?.recipientEmail)
-  return sameTokens(data?.searchTokens, tokens)
-    ? { action: 'current' }
-    : { action: 'update', write: { searchTokens: tokens } }
+  const write = {}
+  if (!sameTokens(data?.searchTokens, tokens)) write.searchTokens = tokens
+  // `createdAtMs` is the Gift cards list's order, so a card without it never
+  // lists. A card seeded before the writers stamped it still carries its
+  // `createdAt`, which is the same moment.
+  const createdAtMs = data?.createdAt?.toMillis?.()
+  if (typeof data?.createdAtMs !== 'number' && Number.isFinite(createdAtMs)) {
+    write.createdAtMs = createdAtMs
+  }
+  return Object.keys(write).length ? { action: 'update', write } : { action: 'current' }
 }
 
 async function run(args) {
@@ -174,6 +181,17 @@ function runSelfTest() {
     { action: 'current' },
   )
   check('reads the code from the document id', planGiftCard(path, {}).write?.searchTokens.includes('gc-00ff'), true)
+  const createdAt = { toMillis: () => 1_750_000_000_000 }
+  check(
+    'dates a card with no createdAtMs from its createdAt',
+    planGiftCard(path, { recipientEmail: 'jane@example.com', searchTokens: tokens, createdAt }),
+    { action: 'update', write: { createdAtMs: 1_750_000_000_000 } },
+  )
+  check(
+    'keeps a createdAtMs the card already has',
+    planGiftCard(path, { recipientEmail: 'jane@example.com', searchTokens: tokens, createdAt, createdAtMs: 5 }),
+    { action: 'current' },
+  )
   check('leaves another collection named giftCards alone', planGiftCard('orgs/o1/giftCards/x', {}), {
     action: 'skip',
     reason: 'not a site gift card',
@@ -197,8 +215,9 @@ if (invoked) {
   const args = parseDeployArgs({
     command: 'backfill-gift-card-search-tokens',
     summary:
-      'Stamp `searchTokens` (code and recipient address prefixes) onto gift cards that ' +
-      'predate them, so the console search finds them. Writes to the live project with --apply.',
+      'Stamp `searchTokens` (code and recipient address prefixes), and a missing `createdAtMs` ' +
+      'from `createdAt`, onto gift cards that predate them, so the console lists and finds them. ' +
+      'Writes to the live project with --apply.',
     effect: { gerund: 'writing', past: 'WRITTEN', failure: 'could not run' },
     flags: [
       { flag: '--apply', key: 'apply', describe: 'Write. Without it, a dry run.' },

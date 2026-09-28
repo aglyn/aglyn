@@ -20,10 +20,11 @@ import {
   readMediaEmbeddedMetadata,
   type EmbeddedByteReader,
 } from '@aglyn/aglyn/server'
-import {
-  MEDIA_EMBEDDED_METADATA_VERSION,
-  type MediaEmbeddedMetadata,
-} from '@aglyn/aglyn/app-utils/media-embedded-fields'
+import type { MediaEmbeddedMetadata } from '@aglyn/aglyn/app-utils/media-embedded-fields'
+
+// The check every reader of a stored record makes — the drawer, this route
+// family and the customer API — lives beside the record's shape.
+export { embeddedMetadataIsCurrent } from '@aglyn/aglyn/app-utils/media-embedded-fields'
 
 /** The slice of a GCS `File` the reader needs — and all a spec must fake. */
 export interface RangedObject {
@@ -98,20 +99,4 @@ export async function embeddedMetadataAtIngress(options: {
   } finally {
     clearTimeout(timer)
   }
-}
-
-/**
- * Whether a stored record still describes the asset's bytes. Stale when the
- * reader has changed shape since, or when the bytes were replaced by a path
- * that did not re-read them — both are answered by reading the file again.
- */
-export function embeddedMetadataIsCurrent(
-  stored: unknown,
-  contentSha256: unknown,
-): stored is MediaEmbeddedMetadata {
-  if (!stored || typeof stored !== 'object') return false
-  const record = stored as Partial<MediaEmbeddedMetadata>
-  if (record.version !== MEDIA_EMBEDDED_METADATA_VERSION) return false
-  if (!Array.isArray(record.fields)) return false
-  return typeof contentSha256 !== 'string' || record.contentSha256 === contentSha256
 }

@@ -125,6 +125,11 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     mockLeads.push(options)
     return true
   },
+  // The CRM's form door asks for the outcome, to count the lead (AGL-3330).
+  addHostLeadOutcome: async (options: Record<string, any>) => {
+    mockLeads.push(options)
+    return { stored: true, created: true, sourceAdded: true }
+  },
   visitorWriteRefusal: async () => null,
 }))
 

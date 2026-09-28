@@ -47,8 +47,9 @@ uploads are paused on every plan for now — see [Upload](#upload).
 - **Filter, search and sort** through the same toolbar as every other list in the
   console, in either of two views — see [Filter and search](#filter-and-search) and
   [Grid and List views](#views) below.
-- **Search finds a file by any word of its name** — `banner` finds `hero-banner_2x.png`,
-  because a file name's words are split at dashes, dots and underscores as well as spaces.
+- **Search finds a file by the start of any word of its name** — `banner` finds
+  `hero-banner_2x.png`, because a file name's words are split at dashes, dots and
+  underscores as well as spaces.
   Results come from the whole library, however large, and **✕** (or **Esc**) clears the box.
 - Capture and edit **metadata** in a detail drawer — file name, alt text, description,
   [tags](#tags), and your own [custom key/value metadata](#custom-metadata) (mirrored onto
@@ -125,18 +126,19 @@ screen: a file that matches is found however far down the library it is, and
 
 **What you can filter by** — every field is one the library stores for each file:
 
-- **Type:** Images, Video, PDF, or Other documents (ZIP, Word, Excel, PowerPoint,
-  CSV, text, Markdown and JSON).
+- **Type:** *is* or *is any of* Images, Video, PDF, or Other documents (ZIP, Word,
+  Excel, PowerPoint, CSV, text, Markdown and JSON).
 - **Tags:** is, or is any of, the [tags](#tags) the library has shown you.
-- **Uploaded:** a day, after or before one, or on or after or before one.
-- **Size (MB):** over, at least, under, or at most a size in megabytes.
-- **Uploaded by:** a teammate, or **API key** for a file an integration uploaded over
-  the [API](/api/resources/media).
+- **Uploaded:** *is* a day, *is after*, *is on or after*, *is before* or *is on or
+  before* one.
+- **Size (MB):** `>`, `>=`, `<` or `<=` a size in megabytes.
+- **Uploaded by:** *is* or *is any of* — a teammate, or **API key** for a file an
+  integration uploaded over the [API](/api/resources/media).
 - **Alt text:** **Missing** or **Set**. **Alt text is Missing** is the quick way to find
   the images a screen reader cannot describe yet.
-- **Orientation:** landscape, portrait or square, from the dimensions measured when the
-  file was uploaded — an image's own, or a video's frame.
-- **Name:** starts with.
+- **Orientation:** *is* or *is any of* Landscape, Portrait or Square, from the dimensions
+  measured when the file was uploaded — an image's own, or a video's frame.
+- **Name:** *starts with*.
 
 **Folders** stay in the rail, and so do the breadcrumbs: open a folder to see what is
 in it, and tick **Include subfolders** beside the breadcrumbs to see every file in the
@@ -155,10 +157,15 @@ guess — it names the filter it set aside and why, above the files:
 
 - **One range at a time.** **Uploaded**, **Size (MB)** and **Name starts with** each
   look up a range, and one range can apply at a time. A range also orders the files by
-  what it ranges over — an **Uploaded** filter sorts them by date, **Size** by size —
-  and the library says when it has changed the order you picked.
+  what it ranges over — an **Uploaded** filter sorts them by date, **Size** largest
+  first, **Name** by name — and the library says when it has changed the order you
+  picked. For a collaborator limited to some sites, a search is itself a name range, so
+  an **Uploaded** or **Size** filter gives way to it.
 - **Tags beside search.** A **Tags** filter and a search cannot be looked up together:
   clear one to use the other.
+- **At most 30 choices at once.** The values picked in every *is any of*, multiplied
+  together — and by the folders searched when **Include subfolders** is on — can come
+  to at most 30.
 - **Tags for a collaborator limited to some sites** is not offered: the lookup that
   shows them only the files they may see is the one of that kind a search can make.
 
@@ -174,14 +181,18 @@ remembers the view you chose — on every library you open and on every device y
 sign in on.
 
 - **Grid** shows thumbnails, with the current folder's subfolders as cards before
-  the files. The **Sort** control beside the toolbar orders them Newest, Oldest,
-  Name or Largest.
-- **List** is a table: a thumbnail, the name, type, size, dimensions (and a video's
-  length), tags, folder, upload date and who uploaded it. Click **Name**, **Size**
-  or **Uploaded** to sort, tick rows to select them for the bulk actions, click a
+  the files (not while a search is typed). The **Sort** control beside the toolbar
+  orders them Newest, Oldest, Name or Largest. The toolbar has **Filters** and
+  **Search**, but no **Columns** or **Export** — those belong to the table.
+- **List** is a table of files only — folders stay in the rail and the breadcrumbs: a
+  thumbnail, the name, type, size, dimensions (and a video's length), tags, folder,
+  upload date and who uploaded it, and an **Actions** menu (⋮) with the card's own
+  actions. Three headers sort, each only the way the library can look it up:
+  **Name** A to Z, **Size** largest first, and **Uploaded** newest or oldest first;
+  the other headers don't sort. Tick rows to select them for the bulk actions, click a
   row to open its details, and drag a row by its name onto a folder in the rail to
-  move it. The toolbar's **Columns** hides columns and **Export** downloads the
-  table.
+  move it. The toolbar's **Columns** hides columns, and **Export** downloads the rows
+  the table has loaded — press **Load more** first to include more.
 
 ![The media library's List view: a table of files with a thumbnail, name, type, size, dimensions, tags, folder, upload date and uploader, under the Columns, Filters, Export and Search toolbar](/img/media/media-list-view.png)
 
@@ -238,7 +249,9 @@ near the bottom of the **Details** drawer, shows them next to what Aglyn itself 
 
 The first time you open a file that was uploaded before this existed, Aglyn reads the
 file and keeps what it found, so the next visit is instant. New uploads are read as they
-arrive.
+arrive, and so is a replacement: **Replace file** reads the new file, so **File info**
+shows its details — a changed caption with its new wording, and nothing the new file
+no longer carries.
 
 **What is read:**
 
@@ -391,7 +404,8 @@ link you copied stays correct when you:
 - **Replace the file** — every screen, layout, and content entry that embeds it serves
   the new file immediately, with no re-linking. A replaced video also drops the poster
   frame and any encoded versions of the old footage, so nothing left over is served
-  under the new file's link.
+  under the new file's link. The file's [details](#file-info) are read from the new
+  file, and your [custom fields](#custom-metadata) stay with the asset.
 - **Move it between folders** — organizing your library never breaks a live page.
 
 So replacing a logo across a whole site is one upload, not a hunt for every reference.
@@ -648,8 +662,10 @@ rather than replacing an earlier one.
 
 ### Over the API
 
-Media is **read-only** over the REST API: file names, sizes, dimensions, tags, folders,
-and both URL forms. See [the Media API resource](/api/resources/media), including
+The REST API lists and reads media — file names, sizes, dimensions, tags, folders, both
+URL forms, your [custom fields](#custom-metadata) and the [details inside each
+file](#file-info) — and uploads new files. The same fields come back through Aglyn's MCP
+server. See [the Media API resource](/api/resources/media), including
 [what it does not return](/api/resources/media#no-variants).
 
 ## Components

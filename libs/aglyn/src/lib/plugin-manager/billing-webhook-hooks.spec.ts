@@ -67,6 +67,7 @@ describe('runBillingWebhookHandlers claim fold (AGL-2429)', () => {
     })
     return expect(runBillingWebhookHandlers(EVENT)).resolves.toEqual({
       claimed: false,
+      hostIds: [],
     })
   })
 
@@ -81,8 +82,22 @@ describe('runBillingWebhookHandlers claim fold (AGL-2429)', () => {
       }
       await expect(runBillingWebhookHandlers(EVENT)).resolves.toEqual({
         claimed: true,
+        hostIds: [],
       })
     }
+  })
+
+  it('collects the sites claiming handlers name, once each (AGL-3360)', async () => {
+    const { registerBillingWebhookHandler, runBillingWebhookHandlers } =
+      freshHooks()
+    registerBillingWebhookHandler(async () => ({ claimed: true, hostId: 'h1' }))
+    registerBillingWebhookHandler(async () => undefined)
+    registerBillingWebhookHandler(async () => ({ claimed: true, hostId: 'h2' }))
+    registerBillingWebhookHandler(async () => ({ claimed: true, hostId: 'h1' }))
+    await expect(runBillingWebhookHandlers(EVENT)).resolves.toEqual({
+      claimed: true,
+      hostIds: ['h1', 'h2'],
+    })
   })
 
   it('runs EVERY handler even after one has claimed', async () => {
@@ -116,6 +131,7 @@ describe('runBillingWebhookHandlers claim fold (AGL-2429)', () => {
 
     await expect(runBillingWebhookHandlers(EVENT)).resolves.toEqual({
       claimed: false,
+      hostIds: [],
     })
   })
 

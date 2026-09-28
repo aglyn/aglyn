@@ -16,7 +16,6 @@
  */
 
 import { checkEntitlement,
-  pluginJobHostGate,
   type PluginJobHostGate,
   registerPluginConfigSchema,
   registerPluginJob,
@@ -24,6 +23,11 @@ import { checkEntitlement,
   resolveTransactionFeeCents,
   sanitizeAuthorHtml,
 } from '@aglyn/aglyn/server'
+// The leaf, not the barrel: the console's `x-cron-secret` door asks the
+// site's lockdown directly (AGL-3356) — core's registry has no resolver in
+// the console process — and a spec that substitutes the barrel must still
+// reach the real verdict.
+import { siteLockdownJobGate } from '@aglyn/tenant-data-admin/server/tenant-write-lockdown'
 import { type BookedInterval, BOOKING_MAX_DAYS_AHEAD, computeOpenSlots, type HostBookingService, isBookingReminderDue, isSlotOpen, REMINDER_WINDOW_END_HOURS, REMINDER_WINDOW_START_HOURS } from './model'
 import {
   registerBillingWebhookHandler,
@@ -112,6 +116,7 @@ import {
   hostSendingIdentity,
 } from '@aglyn/tenant-data-admin'
 import { connectLinkageIsReady } from '@aglyn/tenant-data-admin/server/stripe-account-mode'
+import { checkoutSessionCardAuthenticationParams } from '@aglyn/tenant-data-admin/server/stripe-card-authentication'
 import { emitHostEvent } from '@aglyn/tenant-runtime'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
 import {
@@ -618,6 +623,8 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
       // wiring.
       const params = new URLSearchParams({
         mode: 'payment',
+        // 3-D Secure, from the one seam every card payment shares (AGL-3360).
+        ...checkoutSessionCardAuthenticationParams('payment'),
         'line_items[0][quantity]': '1',
         'line_items[0][price_data][currency]': 'usd',
         'line_items[0][price_data][unit_amount]': String(
@@ -782,6 +789,9 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         sendingIdentity: await hostSendingIdentity(hostId),
         audience: 'tenant',
         context: 'booking confirmation',
+        // Owed to the recipient by their own booking: the phishing
+        // screen's soft rules never hold it (AGL-3356).
+        owedFor: 'booking',
       })
       // Cost meter (AGL-1438). Transactional: counted, never capped — a
       // confirmation the customer never receives reads to them as a booking
@@ -964,6 +974,9 @@ export async function scanBookingReminders(
       sendingIdentity: await hostSendingIdentity(hostId, identityByHost),
       audience: 'tenant',
       context: 'booking reminder',
+      // Owed to the recipient by their own booking: the phishing
+      // screen's soft rules never hold it (AGL-3356).
+      owedFor: 'booking',
     })
     if (result.sent) {
       // Cost meter (AGL-1438). Transactional: a reminder a quota refused is
@@ -1039,7 +1052,7 @@ const remindersHandler: PluginApiHandler = async (req, res) => {
   }
   try {
     // The manual door asks the same question the beat does (AGL-2495).
-    return res.status(200).json(await scanBookingReminders(pluginJobHostGate()))
+    return res.status(200).json(await scanBookingReminders(siteLockdownJobGate()))
   } catch (error) {
     console.error(error)
     return res.status(500).json({ error: 'Reminders failed' })

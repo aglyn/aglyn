@@ -35,6 +35,10 @@ import {
 // The leaf, not the barrel: the dispatcher's specs substitute the barrel,
 // and a route's own registration must still be read where it was made.
 import { isPluginRecipientLinkRoute } from '@aglyn/aglyn/app-utils/api-plugins'
+import {
+  conflictingHostIdResponse,
+  pluginApiRequestHost,
+} from '@aglyn/aglyn/app-utils/plugin-api-request-host'
 import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
 import { serverPluginLoader as loader } from '../../../utils/server-plugin-loader'
 
@@ -76,8 +80,8 @@ async function dispatch(
   if (foreignOrigin) return foreignOrigin
 
   // Per-request org gate: resolve the owning plugin from the path prefix
-  // and the target host from the request (query `hostId`, else JSON body —
-  // read off a clone so the handler still gets the untouched stream).
+  // and the target host from the query AND the body, read the way the
+  // handler will read them (`pluginApiRequestHost`, AGL-3360).
   // Exact ownership recorded at registration time; the manifest prefix map
   // is only the fallback for paths registered outside the loader.
   const pluginId =
@@ -88,16 +92,15 @@ async function dispatch(
   // resolutions of "which site is this" is one too many).
   let hostId = ''
   if (pluginId) {
-    const url = new URL(request.url)
-    hostId = url.searchParams.get('hostId') ?? ''
-    if (!hostId && request.method !== 'GET' && request.method !== 'HEAD') {
-      try {
-        const body = (await request.clone().json()) as { hostId?: unknown }
-        hostId = String(body?.hostId ?? '')
-      } catch {
-        // Non-JSON body — fall through to handler self-gating.
-      }
-    }
+    // THE SITE GATED MUST BE THE SITE CHARGED (AGL-3360). This read took
+    // `?hostId=` over the body and parsed JSON only, while every storefront,
+    // booking and reservation handler reads `body.hostId` — urlencoded
+    // included. So a suspended site's checkout, posted with an open site in
+    // the query or as a form, met no lockdown at all. Both readings now
+    // agree, and a request naming two sites is refused.
+    const named = await pluginApiRequestHost(request)
+    if (named.conflict) return conflictingHostIdResponse()
+    hostId = named.hostId
     // A link mailed to a recipient — an unsubscribe — answers whether or not
     // its plugin is on or released for the workspace now (AGL-2981): an
     // opt-out outlives a rollout. It skips the gates below and nothing else;

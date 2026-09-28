@@ -46,7 +46,7 @@ import {
   type OutreachTaskStep,
 } from '../model/outreach.types'
 import { readOutreachComplianceSettingsDoc } from '../storage/compliance-settings-store'
-import { recordOutreachGatewayOutcome } from '../storage/domain-intel-store'
+import { outreachMailboxSendingDomain, recordOutreachGatewayOutcome } from '../storage/domain-intel-store'
 import {
   outreachEnrollmentLink,
   outreachEnrollmentPerson,
@@ -61,6 +61,7 @@ import { sendComposedOutreachEmail } from '../transport/send-message'
 import { creditOutreachFirstSend } from './campaign-credit'
 import { newOutreachLinkId, outreachStoredLink, type OutreachStoredLink } from './click-link'
 import { applyOutreachEvent } from './enrollment-events'
+import { outreachSiteHeld } from './host-suspension'
 import { outreachSendDigest, withRecentSend } from './mailbox-health-store'
 import { noteOutreachMailboxReconnectRequired } from './mailbox-notices'
 import type { OutreachRuntimeDeps } from './runtime-deps'
@@ -317,6 +318,10 @@ async function runMailbox(
     byHost.set(enrollment.hostId, [...(byHost.get(enrollment.hostId) ?? []), enrollment])
   }
   const siteNames = new Map<string, string>()
+  const siteDocs = new Map<string, Record<string, unknown> | null>()
+  // Sites under a staff suspension (AGL-3356): their people are held, not
+  // stamped, so the step sends on the first run after the lift.
+  const heldSites = new Set<string>()
   for (const [hostId, enrollments] of byHost) {
     const consentGroup = consentGroupForHost(org, hostId)
     const contactGroupId = consentGroup.groupId
@@ -334,7 +339,12 @@ async function runMailbox(
         hostId,
         consentHostIds: consentGroup.hostIds,
         consentAwaitsConfirmation: consentGroup.awaitsConfirmation,
-        gateway: { resolveMx: deps.resolveMx, nowMs },
+        gateway: {
+          resolveMx: deps.resolveMx,
+          resolveAddress: deps.resolveAddress,
+          nowMs,
+          sendingDomain: outreachMailboxSendingDomain(mailbox),
+        },
         people: enrollments.map((enrollment) => {
           const person = outreachEnrollmentPerson(enrollment)
           return {
@@ -350,6 +360,10 @@ async function runMailbox(
     for (const person of candidatesRead) people.set(person.personId, person)
     for (const [personId, answer] of lookupsRead) lookups.set(personId, answer)
     siteNames.set(hostId, host.exists ? String(host.get('name') ?? '') : '')
+    siteDocs.set(hostId, host.exists ? ((host.data() as Record<string, unknown>) ?? null) : null)
+    if (host.exists && outreachSiteHeld(host.data() as Record<string, unknown>, nowMs)) {
+      heldSites.add(hostId)
+    }
   }
 
   for (const candidate of selection.emails) {
@@ -358,6 +372,10 @@ async function runMailbox(
       continue
     }
     const enrollment = candidate.enrollment as OutreachEnrollment
+    if (heldSites.has(enrollment.hostId)) {
+      report.held += 1
+      continue
+    }
     const personId = outreachEnrollmentPerson(enrollment).id
     await runEmailStep(deps, firestore, run, {
       enrollment,
@@ -365,6 +383,7 @@ async function runMailbox(
       person: people.get(personId) ?? null,
       lookups: lookups.get(personId) ?? null,
       siteName: siteNames.get(enrollment.hostId) ?? '',
+      site: siteDocs.get(enrollment.hostId) ?? null,
     })
   }
 }
@@ -690,6 +709,8 @@ async function runEmailStep(
     person: OutreachEnrollCandidate | null
     lookups: OutreachGateLookups | null
     siteName: string
+    /** The site's document, for the phishing screen (AGL-3356). */
+    site?: Record<string, unknown> | null
   },
 ): Promise<void> {
   const { enrollment, sequence, person } = input
@@ -868,6 +889,26 @@ async function runEmailStep(
   }
 
   /*
+   * THE PHISHING SCREEN (AGL-3356): the same one every tenant message
+   * passes, asked of the email as composed and before anything is claimed,
+   * stored or sent. A hold pauses this enrollment with the reason; staff
+   * decide it in the abuse queue, and a member resumes it once released.
+   */
+  if (deps.screenMessage) {
+    const held = await deps.screenMessage({
+      orgId: run.orgId,
+      org: run.org,
+      hostId: enrollment.hostId,
+      host: input.site ?? null,
+      subject: composed.email.subject,
+      text: composed.email.text,
+      fromName: mailbox.displayName ?? null,
+      fromAddress: sender.address,
+    })
+    if (held) return stop({ type: 'pause', atMs: nowMs, byUid: null, detail: held }, 'failed')
+  }
+
+  /*
    * The short links' documents, before anything is claimed or sent: a link
    * in an email that already left must resolve on the first click. A write
    * that fails holds the send for the next run, which mints new ones — an
@@ -966,7 +1007,7 @@ async function runEmailStep(
   const recipientDomain = outreachEmailDomain(enrollment.email)
   if (standing && recipientDomain) {
     await recordOutreachGatewayOutcome(firestore, run.orgId, {
-      domain: recipientDomain,
+      sendingDomain: outreachMailboxSendingDomain(mailbox),
       gateway: standing.gateway,
       outcome: 'sent',
       atMs: record.atMs,

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { listFilterDay } from './list-filter-sentence'
 
 /**
  * ONE declaration of what a paged list can be filtered by (AGL-2501).
@@ -310,7 +311,7 @@ export function gridFilterRequests(model: {
   return (model.items ?? []).filter(gridItemUsable).map(gridItemRequest)
 }
 
-export { listFilterOperatorLabel } from './list-filter-sentence'
+export { listFilterDay, listFilterOperatorLabel } from './list-filter-sentence'
 
 const readPath = (row: unknown, path: string): unknown =>
   path
@@ -331,23 +332,6 @@ const asTime = (value: unknown): number | null => {
   return Number.isNaN(parsed) ? null : parsed
 }
 
-/**
- * The calendar day a date clause names, as a LOCAL date.
- *
- * The panel's date input holds a day, not an instant, and hands it over as
- * `YYYY-MM-DD` — which `new Date` reads as UTC midnight, the previous
- * evening anywhere west of UTC. Travelled through `toISOString`, the same
- * day arrives as `YYYY-MM-DDT00:00:00.000Z`. Either spelling is read by its
- * date parts, so "on or after Sep 17" starts on Sep 17 wherever the reader
- * is. Any other value is an instant and is read as one. The query
- * translators read a date clause through it too, so the day a query asks for
- * is the day the rows are matched by.
- */
-const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.000)?Z)?$/
-export const listFilterDay = (raw: string): Date => {
-  const day = DAY_ONLY.exec(raw)
-  return day ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])) : new Date(raw)
-}
 
 /**
  * Match ONE row against a filter, for a list that cannot push it to a query.

@@ -66,6 +66,7 @@ import { Button, Typography } from '@mui/material'
 import { useFirestore, useFirestoreDoc } from '@aglyn/tenant-feature-instance'
 import { useRouter } from 'next/navigation'
 import {
+  campaignHeldForReviewNotice,
   campaignSendDisplay,
   CAMPAIGN_SEND_CONTAINER_FIELD,
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
@@ -124,7 +125,10 @@ export function EmailComposeCard(props: EmailComposeCardProps) {
   const state = String(email?.status ?? '')
   const display = email ? campaignSendDisplay(email as never) : null
   const editable =
-    (state === 'draft' || state === 'scheduled') && display?.state !== 'sending'
+    (state === 'draft' || state === 'scheduled') &&
+    display?.state !== 'sending' &&
+    // A held send is written by nobody until staff decide (AGL-3356).
+    display?.state !== 'held'
 
   /**
    * Why this email cannot be written, in the words that say what to do next.
@@ -142,6 +146,8 @@ export function EmailComposeCard(props: EmailComposeCardProps) {
         'only be written from that site’s own Emails page.'
       : editable
       ? ''
+      : display?.state === 'held'
+        ? campaignHeldForReviewNotice(email as never)
       : display?.state === 'sending'
         ? 'This email is being sent right now, so its message can no longer ' +
           'be changed. Its page reports what it has reached so far.'

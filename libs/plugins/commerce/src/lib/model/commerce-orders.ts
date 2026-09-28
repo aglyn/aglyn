@@ -25,6 +25,7 @@
  */
 
 import { stripeIdIsTestMode } from '@aglyn/aglyn/app-utils/stripe-deployment-mode'
+import type { PaymentRisk } from '@aglyn/aglyn/app-utils/payment-risk'
 import type { ProductType } from './commerce'
 import type { StorefrontTaxMode } from './commerce-tax-decision'
 
@@ -371,6 +372,12 @@ export interface HostOrder {
   refundedLineItemIds?: number[]
   /** The card dispute against this charge, open or settled (AGL-1787). */
   dispute?: OrderDispute
+  /**
+   * Stripe's fraud signals on this order's payment (AGL-3360): an issuer's
+   * early fraud warning or a Radar review, stamped by the billing webhook
+   * through the shared `paymentRisk` shape. A dispute lives in `dispute`.
+   */
+  paymentRisk?: PaymentRisk
   /** Stock a reversal left off the shelf, awaiting the merchant (AGL-1797). */
   restockCheck?: OrderRestockCheck
   /**

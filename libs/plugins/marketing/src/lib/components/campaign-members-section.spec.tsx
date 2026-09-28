@@ -52,12 +52,18 @@
  * membership query already returns, so no new listener may appear.
  */
 
-import { render, screen, within } from '@testing-library/react'
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
+import type { ListQueryPlan } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 
-/** Every query the section built, in order, as a readable description. */
+/** Every listener the section opened, in order, as a readable description. */
 const queries: string[] = []
-/** What each query answers, keyed by its description. */
+/** What each listener answers, keyed by its description. */
 const rows = new Map<string, Array<Record<string, unknown>>>()
+/** The documents each collection holds, for the tables' queries. */
+const stored = new Map<string, Array<Record<string, unknown>>>()
+/** The plan each table's query was last built from, by collection path. */
+const plans = new Map<string, ListQueryPlan>()
 
 jest.mock('firebase/firestore', () => ({
   __esModule: true,
@@ -84,9 +90,7 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useConsoleHostRoute: () => ({ orgSlug: 'acme', subdomain: 'shop' }),
   /*
    * The listener double records the query it was handed and answers from the
-   * fixture. Recording is half the point: an implementation that read the
-   * whole collection and filtered in JavaScript would render exactly the same
-   * rows on a fixture this small, and only the query text tells them apart.
+   * fixture. Only the forms' figures window reads through it.
    */
   useFirestoreCollection: (build: () => any) => {
     const target = build()
@@ -96,22 +100,64 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   },
 }))
 
+/*
+ * Each table is its own query (AGL-3321), answered by the shared double the
+ * way Firestore would answer the plan — `deletedAt == null` matches only a
+ * document that HOLDS a null, `orderBy` drops one missing its field — over
+ * the documents the collection holds.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: (options: any) => {
+    const path = String(options.collection?.__path ?? '')
+    const result = jest
+      .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+      .useListQueryDouble(() => stored.get(path) ?? [], options)
+    plans.set(path, result.plan)
+    return result
+  },
+}))
+
 import CampaignMembersSection from './campaign-members-section'
 
 const HOST = 'host-1'
 const CAMPAIGN = 'spring-2026'
+const SCREENS = `hosts/${HOST}/screens`
+const FORMS = `hosts/${HOST}/forms`
 
-const queryKey = (collectionName: string) =>
-  [
-    `hosts/${HOST}/${collectionName}`,
-    `campaignIds array-contains ${CAMPAIGN}`,
-    'orderBy id',
-    'limit 26',
-  ].join('|')
+/** The figures window over the campaign's forms. */
+const FIGURES_KEY = [
+  FORMS,
+  `campaignIds array-contains ${CAMPAIGN}`,
+  'orderBy id',
+  'limit 26',
+].join('|')
+
+/** A screen as every writer now stores it: its name keys, not deleted. */
+const screenDoc = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
+  $id: id,
+  displayName: name,
+  versionId: 'v1',
+  campaignIds: [CAMPAIGN],
+  deletedAt: null,
+  ...displayNameSearchFields(name),
+  ...extra,
+})
+
+/** A form as every writer stores it. */
+const formDoc = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
+  $id: id,
+  displayName: name,
+  campaignIds: [CAMPAIGN],
+  retired: false,
+  ...displayNameSearchFields(name),
+  ...extra,
+})
 
 beforeEach(() => {
   queries.length = 0
   rows.clear()
+  stored.clear()
+  plans.clear()
 })
 
 const draw = (span?: { startAtMs?: number | null; endAtMs?: number | null }) =>
@@ -130,11 +176,17 @@ describe('finding the records that name this campaign', () => {
 
     // The control for property (1). An `==` here would be a query that
     // matches only single-campaign records.
-    expect(queries).toContain(queryKey('forms'))
-    expect(queries).toContain(queryKey('screens'))
-    for (const built of queries) {
-      expect(built).toContain('array-contains')
-      expect(built).not.toContain('campaignIds == ')
+    for (const path of [SCREENS, FORMS]) {
+      expect(plans.get(path)?.filters).toContainEqual({
+        path: 'campaignIds',
+        op: 'array-contains',
+        value: CAMPAIGN,
+      })
+      expect(
+        plans.get(path)?.filters.some(
+          (filter) => filter.path === 'campaignIds' && filter.op === '==',
+        ),
+      ).toBe(false)
     }
   })
 
@@ -142,16 +194,15 @@ describe('finding the records that name this campaign', () => {
     draw()
     // `orderBy` matches only documents that HAVE the field, so ordering a
     // membership list on a date would drop the members missing it.
-    for (const built of queries) expect(built).toContain('orderBy id')
+    for (const path of [SCREENS, FORMS]) {
+      expect(plans.get(path)?.orderBy).toEqual({ path: '__name__', direction: 'asc' })
+    }
+    expect(queries).toEqual([FIGURES_KEY])
   })
 
   it('lists the screens and forms it found, by name', () => {
-    rows.set(queryKey('screens'), [
-      { $id: 'landing', displayName: 'Spring landing page', versionId: 'v1' },
-    ])
-    rows.set(queryKey('forms'), [
-      { $id: 'signup', displayName: 'Newsletter signup' },
-    ])
+    stored.set(SCREENS, [screenDoc('landing', 'Spring landing page')])
+    stored.set(FORMS, [formDoc('signup', 'Newsletter signup')])
 
     draw()
 
@@ -160,12 +211,8 @@ describe('finding the records that name this campaign', () => {
   })
 
   it('lists each kind in the shared grid, which scrolls its own columns (AGL-3045)', () => {
-    rows.set(queryKey('screens'), [
-      { $id: 'landing', displayName: 'Spring landing page', versionId: 'v1' },
-    ])
-    rows.set(queryKey('forms'), [
-      { $id: 'signup', displayName: 'Newsletter signup' },
-    ])
+    stored.set(SCREENS, [screenDoc('landing', 'Spring landing page')])
+    stored.set(FORMS, [formDoc('signup', 'Newsletter signup')])
 
     const { container } = draw()
 
@@ -184,9 +231,7 @@ describe('finding the records that name this campaign', () => {
   })
 
   it('links a member to its own page', () => {
-    rows.set(queryKey('forms'), [
-      { $id: 'signup', displayName: 'Newsletter signup' },
-    ])
+    stored.set(FORMS, [formDoc('signup', 'Newsletter signup')])
 
     draw()
 
@@ -196,8 +241,8 @@ describe('finding the records that name this campaign', () => {
 
   it('keeps a screen with no saved version, and says why it has no link', () => {
     // The control for property (2).
-    rows.set(queryKey('screens'), [
-      { $id: 'draft-page', displayName: 'Unsaved landing page' },
+    stored.set(SCREENS, [
+      screenDoc('draft-page', 'Unsaved landing page', { versionId: undefined }),
     ])
 
     draw()
@@ -209,28 +254,86 @@ describe('finding the records that name this campaign', () => {
     ).toBeTruthy()
   })
 
-  it('drops a member the console has already deleted', () => {
+  it('leaves a deleted screen out ON THE QUERY, by the flag every screen stores', () => {
     /*
-     * A soft delete leaves the document and its membership in place, so the
-     * campaign's query still returns it. Listing it would offer a link to a
-     * record the reader cannot open — and it cannot be filtered in the query,
-     * because an equality on `deletedAt` matches only documents that HAVE
-     * the field, which would hide every live record instead.
+     * A soft delete leaves the document and its membership in place. The
+     * query asks `deletedAt == null`, which every screen create stamps and
+     * the backfill stamped on the older ones — so the tombstone is not a row
+     * on any page, rather than a row dropped from the one on screen.
      */
-    rows.set(queryKey('screens'), [
-      {
-        $id: 'gone',
-        displayName: 'Retired page',
-        versionId: 'v1',
-        deletedAt: 1,
-      },
-      { $id: 'landing', displayName: 'Spring landing page', versionId: 'v1' },
+    stored.set(SCREENS, [
+      screenDoc('gone', 'Retired page', { deletedAt: 1 }),
+      screenDoc('landing', 'Spring landing page'),
     ])
 
     draw()
 
+    expect(plans.get(SCREENS)?.filters).toContainEqual({
+      path: 'deletedAt',
+      op: '==',
+      value: null,
+    })
     expect(screen.getByText('Spring landing page')).toBeTruthy()
     expect(screen.queryByText('Retired page')).toBeNull()
+  })
+
+  it('keeps a retired form, which has no soft delete to filter', () => {
+    // A form is deleted outright; retired, it still holds what it collected.
+    stored.set(FORMS, [formDoc('old', 'Last year’s signup', { retired: true })])
+
+    draw()
+
+    expect(
+      plans.get(FORMS)?.filters.map((filter) => filter.path),
+    ).toEqual(['campaignIds'])
+    expect(screen.getByText('Last year’s signup')).toBeTruthy()
+  })
+
+  it('pages through every member, not a window of the first ones', () => {
+    stored.set(
+      SCREENS,
+      Array.from({ length: 30 }, (_, at) =>
+        screenDoc(`s-${String(at).padStart(2, '0')}`, `Landing ${at}`),
+      ),
+    )
+
+    draw()
+
+    expect(screen.queryByText(/More than 25 screens/)).toBeNull()
+    const [screensGrid] = screen.getAllByRole('grid')
+    expect(within(screensGrid).getByText('Landing 0')).toBeTruthy()
+    expect(within(screensGrid).queryByText('Landing 29')).toBeNull()
+  })
+
+  it('finds a member past the first page by the start of its name', async () => {
+    stored.set(SCREENS, [
+      ...Array.from({ length: 30 }, (_, at) =>
+        screenDoc(`s-${String(at).padStart(2, '0')}`, `Landing ${at}`),
+      ),
+      screenDoc('z-last', 'Zebra promo'),
+    ])
+
+    draw()
+    const [box] = screen.getAllByRole('searchbox')
+    act(() => {
+      fireEvent.change(box, { target: { value: 'zeb' } })
+    })
+
+    await waitFor(() => expect(screen.getByText('Zebra promo')).toBeTruthy())
+    // The word is a prefix range on the stored `nameLower`, beside the
+    // membership — which holds the query's one array clause.
+    const plan = plans.get(SCREENS)
+    expect(plan?.refused).toEqual([])
+    expect(plan?.filters).toEqual(
+      expect.arrayContaining([
+        { path: 'nameLower', op: '>=', value: 'zeb' },
+        expect.objectContaining({ path: 'nameLower', op: '<=' }),
+        { path: 'deletedAt', op: '==', value: null },
+      ]),
+    )
+    expect(plan?.orderBy).toEqual({ path: 'nameLower', direction: 'asc' })
+    expect(screen.getByText('Zebra promo')).toBeTruthy()
+    expect(screen.getByText(/matches the start of a name/)).toBeTruthy()
   })
 
   it('says a campaign holds nothing rather than drawing an empty table', () => {
@@ -274,9 +377,7 @@ describe('what the section refuses to claim', () => {
      * per screen — so a figure here would be a read across screens times days
      * on every open, for a paid entitlement this section does not resolve.
      */
-    rows.set(queryKey('screens'), [
-      { $id: 'landing', displayName: 'Spring landing page', versionId: 'v1' },
-    ])
+    stored.set(SCREENS, [screenDoc('landing', 'Spring landing page')])
 
     draw()
 
@@ -310,23 +411,50 @@ const FORM_WITH_HISTORY = {
   },
 }
 
+/**
+ * The forms, as both reads see them: the table's query and the figures'
+ * window hold the same documents.
+ */
+const holdForms = (forms: Array<Record<string, unknown>>) => {
+  const stamped = forms.map((form) => ({
+    retired: false,
+    ...displayNameSearchFields(form['displayName']),
+    ...form,
+  }))
+  stored.set(FORMS, stamped)
+  rows.set(FIGURES_KEY, stamped)
+}
+
 describe('what the forms in a campaign hold', () => {
-  it('reports each form’s counters without opening another listener', () => {
-    // The counters ride on documents the membership query already returned.
-    // A third query here would be a read this page did not have to make.
-    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+  it('adds up the figures from one window of their own, and no more listeners', () => {
+    // The table pages by its query; the sum is one bounded read beside it.
+    holdForms([FORM_WITH_HISTORY])
 
     draw()
 
-    expect(queries).toHaveLength(2)
+    expect(queries).toEqual([FIGURES_KEY])
     expect(screen.getByText('What these forms hold')).toBeTruthy()
+  })
+
+  it('says the figures cover the first forms when the campaign holds more', () => {
+    holdForms(
+      Array.from({ length: 26 }, (_, at) => ({
+        ...FORM_WITH_HISTORY,
+        $id: `f-${String(at).padStart(2, '0')}`,
+        displayName: `Form ${at}`,
+      })),
+    )
+
+    draw()
+
+    expect(screen.getByText(/These figures add up the first 25 forms/)).toBeTruthy()
   })
 
   it('windows the figures to a dated campaign’s months', () => {
     // The control for property (4). The lifetime 40 is the number a naive
     // sum would print, and it is the wrong one for a campaign that ran in
     // February and March.
-    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+    holdForms([FORM_WITH_HISTORY])
 
     draw({ startAtMs: Date.UTC(2026, 1, 10), endAtMs: Date.UTC(2026, 2, 20) })
 
@@ -338,7 +466,7 @@ describe('what the forms in a campaign hold', () => {
   it('says a dateless campaign’s figures are lifetime', () => {
     // The control for property (5). The number is right; unlabeled, it reads
     // as something this campaign produced.
-    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+    holdForms([FORM_WITH_HISTORY])
 
     draw()
 
@@ -348,7 +476,7 @@ describe('what the forms in a campaign hold', () => {
   })
 
   it('never lets a figure read as something the campaign caused', () => {
-    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+    holdForms([FORM_WITH_HISTORY])
 
     draw()
 
@@ -359,7 +487,7 @@ describe('what the forms in a campaign hold', () => {
 
   it('discloses a form that lends its figures to another campaign', () => {
     // The control for property (6).
-    rows.set(queryKey('forms'), [
+    holdForms([
       { ...FORM_WITH_HISTORY, campaignIds: [CAMPAIGN, 'summer-2026'] },
     ])
 
@@ -375,7 +503,7 @@ describe('what the forms in a campaign hold', () => {
      * A zero would say these forms produced no leads, which is a measurement
      * nobody took.
      */
-    rows.set(queryKey('forms'), [FORM_WITH_HISTORY])
+    holdForms([FORM_WITH_HISTORY])
 
     draw()
 
@@ -390,7 +518,7 @@ describe('what the forms in a campaign hold', () => {
      * Counting it as zero would claim its quiet months were measured; the
      * note says how many forms the total actually covers instead.
      */
-    rows.set(queryKey('forms'), [
+    holdForms([
       FORM_WITH_HISTORY,
       { $id: 'old', displayName: 'Legacy form', stats: { submissions: 500 } },
     ])

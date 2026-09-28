@@ -32,6 +32,7 @@ import {
   type CrmListCollection,
   crmContactFacetKeys,
   crmContactListFields,
+  crmFieldListFields,
   crmPhoneSearchWords,
   crmEmailStatusKey,
   crmFacetKey,
@@ -53,6 +54,7 @@ interface Fixture {
 interface Fixtures {
   records: Fixture[]
   newRecords: Fixture[]
+  fieldDefinitions: Array<Omit<Fixture, 'collection'>>
 }
 
 const fixtures: Fixtures = JSON.parse(
@@ -227,4 +229,18 @@ describe('the worked examples the backfill and the seeds share', () => {
       expect(crmNewRecordListFields(entry.collection, entry.record)).toEqual(entry.expected)
     },
   )
+})
+
+describe('a field definition, as the Fields table asks for it (AGL-3335)', () => {
+  it.each(fixtures.fieldDefinitions.map((entry, at) => [at, entry] as const))(
+    'definition fields #%i',
+    (_at, entry) => {
+      expect(crmFieldListFields(entry.record)).toEqual(entry.expected)
+    },
+  )
+
+  it('finds a key by any word of it, and by its whole spelling', () => {
+    const { searchTokens } = crmFieldListFields({ key: 'plan_interest', label: 'Plan' })
+    expect(searchTokens).toEqual(expect.arrayContaining(['plan', 'interest', 'plan_i']))
+  })
 })

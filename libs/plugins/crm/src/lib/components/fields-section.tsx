@@ -18,9 +18,12 @@
 
 import {
   CONTACT_FIELD_TYPE_LABELS,
+  CONTACT_FIELD_TYPES,
+  CONTACT_FIELDS_MAX_PER_ORG,
   type ConsolePluginPageProps,
   createResourceUid,
   CRM_COLLECTIONS,
+  crmFieldListFields,
   CRM_FIELD_OBJECT_LABELS,
   CRM_FIELD_OBJECTS,
   type CrmFieldObject,
@@ -30,6 +33,15 @@ import {
   pluginDocsHelp,
 } from '@aglyn/aglyn'
 import EmptyStateComponent from '@aglyn/shared-ui-jsx/components/empty-state.component'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import {
+  ListRowActions,
+  ListTable,
+  listActionsColumn,
+} from '@aglyn/shared-ui-jsx/components/list-table.component'
 import {
   mdiArchiveArrowUpOutline,
   mdiArchiveOutline,
@@ -44,13 +56,20 @@ import {
   SrOnly,
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
-import RowActionsMenu, {
-  type RowActionsMenuItem,
-} from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
-import { ScrollTable } from '@aglyn/shared-ui-jsx/components/scroll-table.component'
+import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
+import {
+  type ListFilterOption,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { planListQuery } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
+import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
+import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   useFirestore,
+  useFirestoreCollection,
   useUser,
   writeGuardedBySeed,
 } from '@aglyn/tenant-feature-instance'
@@ -60,27 +79,28 @@ import {
   IconButton,
   Stack,
   Tab,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Tabs,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import type { GridColDef, GridSortModel } from '@mui/x-data-grid'
 import {
   collection,
   deleteDoc,
   doc,
+  limit,
+  query,
   setDoc,
   updateDoc,
   writeBatch,
 } from 'firebase/firestore'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   type ContactFieldDefinitionDoc,
   useContactFieldDefinitions,
 } from '../hooks/use-contact-field-definitions'
 import { useCrmScope } from '../hooks/use-crm-scope'
+import { CRM_FIELD_LIST_QUERY, crmFieldListBase } from '../constants/field-list-query'
 import ContactFieldDrawer, { type ContactFieldDraft } from './contact-field-drawer'
 import { LeadSourceValuesCard } from './lead-source-values-card'
 import { recomputeAllCrmNextActivity } from '../model/next-activity-api'
@@ -115,6 +135,319 @@ const OBJECT_NOUN: Record<CrmFieldObject, string> = {
   lead: 'lead',
 }
 
+/** One definition as the list table draws it. */
+interface FieldRow {
+  $id: string
+  label: string
+  key: string
+  type: string
+  /** `true` or `false`, the value the Required filter picks. */
+  required: 'true' | 'false'
+  /** Where the stored order puts it, from zero. */
+  position: number
+  definition: ContactFieldDefinitionDoc
+}
+
+/** What the grid's Filters panel offers: the type and whether it is required, on the query. */
+const FIELD_FILTER_FIELDS = CRM_FIELD_LIST_QUERY.fields
+const FIELD_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  type: 'Type',
+  required: 'Required',
+}
+const FIELD_FILTER_OPTIONS: Readonly<Record<string, readonly ListFilterOption[]>> = {
+  type: CONTACT_FIELD_TYPES.map((type) => ({
+    value: type,
+    label: CONTACT_FIELD_TYPE_LABELS[type],
+  })),
+  required: [
+    { value: 'true', label: 'Required' },
+    { value: 'false', label: 'Optional' },
+  ],
+}
+
+/** Why the arrows are off while the list is not in its stored order. */
+export const FIELD_REORDER_LOCKED_REASON = 'Clear sorting and filters to reorder'
+
+const typeLabel = (type: unknown) =>
+  CONTACT_FIELD_TYPE_LABELS[type as keyof typeof CONTACT_FIELD_TYPE_LABELS] ?? String(type ?? '')
+
+interface FieldsTableProps {
+  /** The organization whose definitions these are; `null` reads nothing. */
+  orgId: string | null
+  /** The tab: which record the definitions describe. */
+  object: CrmFieldObject
+  /** One tab's definitions, in the stored order. */
+  definitions: readonly ContactFieldDefinitionDoc[]
+  /** A field being written; every arrow waits for it. */
+  busyId: string
+  onMove: (definition: ContactFieldDefinitionDoc, direction: -1 | 1) => void
+  rowActions: (definition: ContactFieldDefinitionDoc) => RowActionsMenuItem[]
+}
+
+/**
+ * One tab's field definitions in the console's list table (AGL-3335): the
+ * toolbar's columns, filters, export and search, sorting by Field, Key and
+ * Type, and the shared footer.
+ *
+ * ## Order is data, not a sort
+ *
+ * The stored `order` is where each field appears on every record and form,
+ * so the arrows that move it are kept, and are live only while the table
+ * shows that order: no sort, no filter and no search. Under any of them the
+ * row above a field on screen is not the field above it in the stored
+ * order, and a move would land somewhere the reader cannot see; the arrows
+ * say so rather than disappear.
+ *
+ * The panel and the search are asked of Firestore (AGL-3321): a clause or
+ * a search word reads the tab's definitions that match it
+ * (`CRM_FIELD_LIST_QUERY`), and never narrows the rows already on screen.
+ * That answer is every match, at most `CONTACT_FIELDS_MAX_PER_ORG`, so the
+ * grid sorts and pages it whole; a read that reaches the ceiling says so.
+ */
+function FieldsTable(props: FieldsTableProps) {
+  const { orgId, object, definitions, busyId, onMove, rowActions } = props
+  const firestore = useFirestore()
+  const gridFilter = useListGridFilter({ selectFields: ['type', 'required'] })
+  const [sortModel, setSortModel] = useState<GridSortModel>([])
+  const searching = gridFilter.searchWords.some((word) => word.trim() !== '')
+  const reorderLocked =
+    sortModel.length > 0 || gridFilter.clauses.length > 0 || searching
+
+  const narrowed = gridFilter.clauses.length > 0 || searching
+  const plan = useMemo(
+    () =>
+      planListQuery(
+        CRM_FIELD_LIST_QUERY,
+        {
+          clauses: gridFilter.clauses,
+          search: gridFilter.searchWords,
+          base: crmFieldListBase(object),
+        },
+        nameSearchNormalizers,
+      ),
+    // The words are a new array each render; their text is their identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [object, gridFilter.clauses, gridFilter.searchWords.join(' ')],
+  )
+  const planKey = JSON.stringify({ filters: plan.filters, orderBy: plan.orderBy })
+  /*
+   * Read only while something narrows the tab. Unnarrowed, the table is the
+   * shared definitions read every CRM surface already holds, in its stored
+   * order — the same fields, with no second read.
+   */
+  const matched = useFirestoreCollection<ContactFieldDefinitionDoc>(
+    () =>
+      narrowed && orgId
+        ? query(
+            collection(firestore, 'orgs', orgId, CRM_COLLECTIONS.contactFields),
+            ...listQueryConstraints(plan),
+            limit(CONTACT_FIELDS_MAX_PER_ORG + 1),
+          )
+        : null,
+    [firestore, orgId, narrowed, planKey],
+    { idField: '$id' },
+  )
+  const answer = useMemo(
+    () => ceilingedWindow(matched.data, CONTACT_FIELDS_MAX_PER_ORG),
+    [matched.data],
+  )
+  const positions = useMemo(
+    () => new Map(definitions.map((definition, position) => [definition.$id, position])),
+    [definitions],
+  )
+  const rows = useMemo<FieldRow[]>(() => {
+    const shown = narrowed
+      ? [...answer.rows].sort(
+          (a, b) =>
+            (positions.get(a.$id) ?? Number.MAX_SAFE_INTEGER) -
+            (positions.get(b.$id) ?? Number.MAX_SAFE_INTEGER),
+        )
+      : definitions
+    return shown.map((definition) => ({
+      $id: definition.$id,
+      label: definition.label,
+      key: definition.key,
+      type: definition.type,
+      required: definition.required ? 'true' : 'false',
+      position: positions.get(definition.$id) ?? 0,
+      definition,
+    }))
+  }, [narrowed, answer.rows, definitions, positions])
+  const refused = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: FIELD_FILTER_FIELDS,
+        headers: FIELD_FILTER_HEADERS,
+        options: FIELD_FILTER_OPTIONS,
+      }),
+    [plan.refused],
+  )
+
+  const columns = useMemo<GridColDef[]>(
+    () =>
+      listFilterGridColumns(
+        [
+          {
+            field: 'position',
+            headerName: 'Order',
+            width: 132,
+            sortable: false,
+            filterable: false,
+            hideable: false,
+            disableColumnMenu: true,
+            renderCell: ({ row }: { row: FieldRow }) => {
+              const arrows = (
+                <Stack direction="row" spacing={0} sx={{ alignItems: 'center' }}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ minWidth: 24, textAlign: 'right', mr: 0.5 }}
+                  >
+                    {row.position + 1}
+                  </Typography>
+                  <IconButton
+                    size="small"
+                    disabled={reorderLocked || row.position === 0 || Boolean(busyId)}
+                    onClick={() => onMove(row.definition, -1)}
+                  >
+                    <MdiIcon path={mdiArrowUp.path} size={0.7} />
+                    <SrOnly>{`Move ${row.label} up`}</SrOnly>
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    disabled={
+                      reorderLocked || row.position === definitions.length - 1 || Boolean(busyId)
+                    }
+                    onClick={() => onMove(row.definition, 1)}
+                  >
+                    <MdiIcon path={mdiArrowDown.path} size={0.7} />
+                    <SrOnly>{`Move ${row.label} down`}</SrOnly>
+                  </IconButton>
+                </Stack>
+              )
+              return reorderLocked ? (
+                <Tooltip title={FIELD_REORDER_LOCKED_REASON}>
+                  {/* A disabled button emits no events; the span carries the tooltip. */}
+                  <span>{arrows}</span>
+                </Tooltip>
+              ) : (
+                arrows
+              )
+            },
+          },
+          {
+            field: 'label',
+            headerName: 'Field',
+            flex: 1,
+            minWidth: 180,
+            renderCell: ({ row }: { row: FieldRow }) => (
+              <Stack
+                direction="row"
+                spacing={1}
+                sx={{ flexWrap: 'wrap', alignItems: 'center' }}
+              >
+                <Typography variant="body2">{row.label}</Typography>
+                {row.definition.retiredAt ? (
+                  <Chip size="small" variant="outlined" color="warning" label="Retired" />
+                ) : null}
+              </Stack>
+            ),
+          },
+          {
+            field: 'key',
+            headerName: 'Key',
+            flex: 1,
+            minWidth: 160,
+            renderCell: ({ row }: { row: FieldRow }) => (
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ fontFamily: 'monospace' }}
+              >
+                {row.key}
+              </Typography>
+            ),
+          },
+          {
+            field: 'type',
+            headerName: 'Type',
+            width: 170,
+            // By what the type reads as, not by its stored key.
+            sortComparator: (a: unknown, b: unknown) =>
+              typeLabel(a).localeCompare(typeLabel(b)),
+            renderCell: ({ row }: { row: FieldRow }) => (
+              <Typography variant="body2">
+                {typeLabel(row.type)}
+                {row.definition.type === 'select' && row.definition.options?.length
+                  ? ` · ${row.definition.options.length} choices`
+                  : ''}
+              </Typography>
+            ),
+          },
+          {
+            field: 'required',
+            headerName: 'Required',
+            width: 120,
+            sortable: false,
+            renderCell: ({ row }: { row: FieldRow }) => (
+              <Typography variant="body2" color="text.secondary">
+                {row.required === 'true' ? 'Yes' : '—'}
+              </Typography>
+            ),
+          },
+          listActionsColumn(
+            (row: FieldRow) => (
+              <ListRowActions label={row.label} items={rowActions(row.definition)} />
+            ),
+            { width: 72 },
+          ),
+        ],
+        FIELD_FILTER_FIELDS,
+        FIELD_FILTER_OPTIONS,
+        FIELD_FILTER_HEADERS,
+      ),
+    [reorderLocked, busyId, onMove, rowActions, definitions.length],
+  )
+
+  return (
+    <Stack spacing={1}>
+      <ListFilterChips
+        fields={FIELD_FILTER_FIELDS}
+        headers={FIELD_FILTER_HEADERS}
+        clauses={gridFilter.clauses}
+        onChange={gridFilter.setClauses}
+        options={FIELD_FILTER_OPTIONS}
+        marksServed={false}
+      />
+      <ListQueryNotices refused={refused} notices={plan.notices} />
+      {narrowed && answer.truncated ? (
+        <Typography variant="caption" color="text.secondary">
+          {`Showing the first ${CONTACT_FIELDS_MAX_PER_ORG} matching fields.`}
+        </Typography>
+      ) : null}
+      <ListTable
+        aria-label="Fields"
+        rows={rows}
+        loading={narrowed && matched.status === 'loading'}
+        columns={columns}
+        sortModel={sortModel}
+        onSortModelChange={setSortModel}
+        // Firestore narrowed the rows above; the grid only draws them.
+        filterMode="server"
+        filterModel={gridFilter.filterModel}
+        onFilterModelChange={gridFilter.onFilterModelChange}
+        quickFilter
+        noRowsLabel="No fields match these filters"
+        getRowClassName={({ row }: { row: FieldRow }) =>
+          row.definition.retiredAt ? 'field-retired' : ''
+        }
+        sx={{ '& .field-retired': { opacity: 0.6 } }}
+      />
+    </Stack>
+  )
+}
+FieldsTable.displayName = 'FieldsTable'
+
 /**
  * `/crm/fields` — the custom fields a holder keeps on a person (AGL-2601),
  * since AGL-2661 on a company and a deal too, and since AGL-3272 on a lead:
@@ -133,6 +466,8 @@ const OBJECT_NOUN: Record<CrmFieldObject, string> = {
  *    rename is a new field and a retire.
  *  - Order is a stored `order` on each document, moved with the arrows here,
  *    and every reader sorts by it — the profile card, the columns, an export.
+ *    The list table sorts, filters and searches a tab too (AGL-3335), and
+ *    the arrows wait while it does — see `FieldsTable`.
  *
  * ## What is NOT on this page
  *
@@ -256,7 +591,9 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             await updateDoc(fieldRef(editing.$id), {
               label: draft.label,
               ...(editing.type === 'select' ? { options: draft.options } : {}),
-              required: draft.required,
+              // The Fields table's query fields (AGL-3335), from the new name —
+              // and a definition written before them gains them here.
+              ...crmFieldListFields({ ...editing, label: draft.label, required: draft.required }),
               updatedAt: now,
             })
           },
@@ -287,8 +624,9 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             required: draft.required,
             order,
             retiredAt: null,
-            // Which record the field describes — the tab it was made on.
-            object,
+            // Which record the field describes — the tab it was made on —
+            // with the Fields table's query fields (AGL-3335).
+            ...crmFieldListFields({ key: draft.key, label: draft.label, required: draft.required, object }),
             hostId: createHostId,
             ...newResourceScopeFields([ORG_SCOPE_TOKEN]),
             createdAt: now,
@@ -437,41 +775,53 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
     [scope, busyId, confirm, fieldRef, enqueueSnackbar, noun],
   )
 
-  const rowActions = (definition: ContactFieldDefinitionDoc): RowActionsMenuItem[] => [
-    {
-      key: 'edit',
-      label: 'Edit field',
-      icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
-      onClick: () => openEdit(definition),
-    },
-    {
-      key: 'retire',
-      label: definition.retiredAt ? 'Restore' : 'Retire',
-      icon: (
-        <MdiIcon
-          path={definition.retiredAt ? mdiArchiveArrowUpOutline.path : mdiArchiveOutline.path}
-          size={0.8}
-        />
-      ),
-      destructive: !definition.retiredAt,
-      disabled: Boolean(busyId),
-      disabledReason: busyId ? 'Another field is being saved' : undefined,
-      onClick: () => void toggleRetired(definition),
-    },
-    ...(definition.retiredAt
-      ? [
-          {
-            key: 'delete',
-            label: 'Delete',
-            icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
-            destructive: true,
-            disabled: Boolean(busyId),
-            disabledReason: busyId ? 'Another field is being saved' : undefined,
-            onClick: () => void handleDelete(definition),
-          } satisfies RowActionsMenuItem,
-        ]
-      : []),
-  ]
+  /*
+   * Stable across renders, as the table's columns are built from them: a
+   * fresh function each render would rebuild every column on every render.
+   */
+  const rowActions = useCallback(
+    (definition: ContactFieldDefinitionDoc): RowActionsMenuItem[] => [
+      {
+        key: 'edit',
+        label: 'Edit field',
+        icon: <MdiIcon path={mdiPencilOutline.path} size={0.8} />,
+        onClick: () => openEdit(definition),
+      },
+      {
+        key: 'retire',
+        label: definition.retiredAt ? 'Restore' : 'Retire',
+        icon: (
+          <MdiIcon
+            path={definition.retiredAt ? mdiArchiveArrowUpOutline.path : mdiArchiveOutline.path}
+            size={0.8}
+          />
+        ),
+        destructive: !definition.retiredAt,
+        disabled: Boolean(busyId),
+        disabledReason: busyId ? 'Another field is being saved' : undefined,
+        onClick: () => void toggleRetired(definition),
+      },
+      ...(definition.retiredAt
+        ? [
+            {
+              key: 'delete',
+              label: 'Delete',
+              icon: <MdiIcon path={mdiDeleteOutline.path} size={0.8} />,
+              destructive: true,
+              disabled: Boolean(busyId),
+              disabledReason: busyId ? 'Another field is being saved' : undefined,
+              onClick: () => void handleDelete(definition),
+            } satisfies RowActionsMenuItem,
+          ]
+        : []),
+    ],
+    [openEdit, toggleRetired, handleDelete, busyId],
+  )
+  const onMove = useCallback(
+    (definition: ContactFieldDefinitionDoc, direction: -1 | 1) =>
+      void move(definition, direction),
+    [move],
+  )
 
   return (
     <CardDisplay
@@ -526,81 +876,19 @@ export function ContactsFieldsSection(props: ContactsFieldsSectionProps) {
             }
           />
         ) : (
-          <ScrollTable size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: 96 }}>{'Order'}</TableCell>
-                <TableCell>{'Field'}</TableCell>
-                <TableCell>{'Key'}</TableCell>
-                <TableCell>{'Type'}</TableCell>
-                <TableCell>{'Required'}</TableCell>
-                <TableCell align="right" />
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {definitions.map((definition, index) => (
-                <TableRow
-                  key={definition.$id}
-                  hover
-                  sx={definition.retiredAt ? { opacity: 0.6 } : undefined}
-                >
-                  <TableCell>
-                    <Stack direction="row" spacing={0}>
-                      <IconButton
-                        size="small"
-                        disabled={index === 0 || Boolean(busyId)}
-                        onClick={() => void move(definition, -1)}
-                      >
-                        <MdiIcon path={mdiArrowUp.path} size={0.7} />
-                        <SrOnly>{`Move ${definition.label} up`}</SrOnly>
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        disabled={index === definitions.length - 1 || Boolean(busyId)}
-                        onClick={() => void move(definition, 1)}
-                      >
-                        <MdiIcon path={mdiArrowDown.path} size={0.7} />
-                        <SrOnly>{`Move ${definition.label} down`}</SrOnly>
-                      </IconButton>
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      sx={{ flexWrap: 'wrap', alignItems: 'center' }}
-                    >
-                      <Typography variant="body2">{definition.label}</Typography>
-                      {definition.retiredAt ? (
-                        <Chip size="small" variant="outlined" color="warning" label="Retired" />
-                      ) : null}
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
-                      {definition.key}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {CONTACT_FIELD_TYPE_LABELS[definition.type] ?? definition.type}
-                      {definition.type === 'select' && definition.options?.length
-                        ? ` · ${definition.options.length} choices`
-                        : ''}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {definition.required ? 'Yes' : '—'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right" sx={{ width: 56 }}>
-                    <RowActionsMenu label={definition.label} items={rowActions(definition)} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </ScrollTable>
+          /*
+            Keyed by the tab, so a sort, a filter or a search made on one
+            record's fields does not follow the reader onto another's.
+          */
+          <FieldsTable
+            key={object}
+            orgId={orgId}
+            object={object}
+            definitions={definitions}
+            busyId={busyId}
+            onMove={onMove}
+            rowActions={rowActions}
+          />
         )}
         {definitions.length ? (
           <Typography variant="caption" color="text.secondary">

@@ -193,6 +193,13 @@ const meterHostEmail = jest.fn<Promise<undefined>, [string]>(
   async () => undefined,
 )
 
+// The manual door's site-lockdown gate (AGL-3356), answering UNLOCKED: this
+// suite is about what an unlocked pass sends. The locked half is driven in
+// `job-lockdown.spec.ts`.
+jest.mock('@aglyn/tenant-data-admin/server/tenant-write-lockdown', () => ({
+  siteLockdownJobGate: () => ({ isLocked: async () => false }),
+}))
+
 jest.mock('@aglyn/tenant-data-admin', () => ({
   /*
    * The site's own sending identity, which every tenant send now resolves.

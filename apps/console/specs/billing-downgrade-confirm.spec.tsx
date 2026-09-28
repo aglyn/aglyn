@@ -196,6 +196,22 @@ jest.mock('../hooks/use-org-hosts', () => ({ useOrgHosts: () => ({ hosts: [] }) 
 jest.mock('../hooks/use-release-flags', () => ({
   useReleaseFlag: () => ({ visible: false }),
 }))
+/**
+ * The browser Stripe double the held-upgrade cases run the bank challenge
+ * through (AGL-3358). Both methods are spies so the assertion is on WHICH one
+ * the page reaches for, as `billing-sca-handles-next-action.spec.tsx` does.
+ */
+const mockHandleNextAction = jest.fn()
+const mockConfirmPayment = jest.fn()
+jest.mock('../utils/browser-stripe', () => ({
+  __esModule: true,
+  getBrowserStripe: () =>
+    Promise.resolve({
+      handleNextAction: (...args: unknown[]) => mockHandleNextAction(...args),
+      confirmPayment: (...args: unknown[]) => mockConfirmPayment(...args),
+    }),
+  browserStripeConfigured: () => true,
+}))
 jest.mock('../utils/fetch-seat-counts', () => ({
   __esModule: true,
   default: async () => ({ managerSeats: 1, collaboratorSeats: 0 }),
@@ -260,6 +276,9 @@ beforeEach(() => {
   mockEnqueueSnackbar.mockClear()
   mockConfirm.mockClear()
   mockTrackEvent.mockClear()
+  mockHandleNextAction.mockReset()
+  mockHandleNextAction.mockResolvedValue({ paymentIntent: { status: 'succeeded' } })
+  mockConfirmPayment.mockReset()
   confirmCalls = []
   confirmAnswers = []
   subscriptionCalls = []
@@ -302,11 +321,15 @@ beforeEach(() => {
           status: 200,
           json: async () => ({
             downgrade,
-            // BOTH fields, as the route really answers since AGL-535.
-            // `prorationCents` is the cost of the change; `amountDueCents` is
-            // the whole upcoming invoice, and quoting THAT was the bug the
-            // confirm carried for a release after the preview was fixed.
+            // As the route answers since AGL-3358: `prorationCents` is the
+            // cost of the change, and an upgrade CHARGES it now —
+            // `chargedNowCents` is the tax-inclusive amount taken.
+            // `amountDueCents` is left at the old whole-renewal figure as a
+            // decoy: quoting THAT was the bug the confirm carried for a
+            // release after the preview was fixed (AGL-535).
             prorationCents: downgrade ? 0 : 4200,
+            chargesNow: !downgrade,
+            chargedNowCents: downgrade ? 0 : 4545,
             amountDueCents: downgrade ? 0 : 12900,
             currency: 'usd',
             periodEnd: PERIOD_END_ISO,
@@ -505,6 +528,78 @@ describe('a downgrade is never one-click from the billing card (AGL-1859 §2)', 
   })
 })
 
+describe('a held upgrade is not reported as a switch (AGL-3358)', () => {
+  it('runs the bank challenge through handleNextAction, then says it is confirmed', async () => {
+    confirmAnswers = [true]
+    switchAnswers = [
+      {
+        status: 200,
+        payload: {
+          ok: false,
+          paymentPending: true,
+          requiresAction: true,
+          paymentClientSecret: 'pi_upgrade_secret_123',
+          hostedInvoiceUrl: 'https://invoice.stripe.com/i/held',
+          plan: 'pro',
+          pendingPlan: 'business',
+        },
+      },
+    ]
+    await press('Upgrade')
+    await waitFor(() => expect(mockHandleNextAction).toHaveBeenCalledTimes(1))
+    expect(mockHandleNextAction).toHaveBeenCalledWith({
+      clientSecret: 'pi_upgrade_secret_123',
+    })
+    expect(mockConfirmPayment).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const said = String(mockEnqueueSnackbar.mock.calls[0][0])
+    expect(said).toMatch(/^Payment confirmed/)
+    expect(said).not.toMatch(/^Plan switched/)
+  })
+
+  it('a challenge the customer fails says nothing changed', async () => {
+    confirmAnswers = [true]
+    mockHandleNextAction.mockResolvedValue({
+      error: { message: 'We are unable to authenticate your payment method.' },
+    })
+    switchAnswers = [
+      {
+        status: 200,
+        payload: {
+          ok: false,
+          paymentPending: true,
+          requiresAction: true,
+          paymentClientSecret: 'pi_upgrade_secret_123',
+        },
+      },
+    ]
+    await press('Upgrade')
+    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const said = String(mockEnqueueSnackbar.mock.calls[0][0])
+    expect(said).toMatch(/Nothing has changed/)
+    expect(said).not.toMatch(/switched|confirmed/i)
+  })
+
+  it('a declined card says so, runs no challenge, and reports no upgrade', async () => {
+    confirmAnswers = [true]
+    switchAnswers = [
+      {
+        status: 200,
+        payload: { ok: false, paymentPending: true, declined: true },
+      },
+    ]
+    await press('Upgrade')
+    await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())
+    const said = String(mockEnqueueSnackbar.mock.calls[0][0])
+    expect(said).toMatch(/declined/)
+    expect(said).not.toMatch(/^Plan switched/)
+    expect(mockHandleNextAction).not.toHaveBeenCalled()
+    expect(
+      mockTrackEvent.mock.calls.some(([name]) => name === 'plan_upgraded'),
+    ).toBe(false)
+  })
+})
+
 describe('an upgrade is the frictionless direction (AGL-1859 §2)', () => {
   it('is reachable WITHOUT a disclosure — it is on screen already', async () => {
     render(<BillingPage />)
@@ -512,23 +607,23 @@ describe('an upgrade is the frictionless direction (AGL-1859 §2)', () => {
     expect(upgrades.length).toBeGreaterThan(0)
   })
 
-  it('quotes the PRORATION on the next invoice, and applies immediately', async () => {
+  it('quotes the CHARGE taken now, and applies once paid (AGL-3358)', async () => {
     confirmAnswers = [true]
     await press('Upgrade')
     await waitFor(() => expect(switches()).toHaveLength(1))
 
     const said = `${confirmCalls[0].title} ${confirmCalls[0].description}`
     // The asymmetry, stated in the two confirms' own words: an upgrade quotes
-    // money, a downgrade quotes a date. What changed in AGL-535 part two is
-    // WHICH money and WHEN — the proration, on the next invoice, because
-    // `create_prorations` takes nothing at the switch.
-    expect(said).toMatch(/\$42\.00 USD/)
-    expect(said).toMatch(/next invoice/)
+    // money, a downgrade quotes a date. An upgrade is charged the moment it
+    // is confirmed, so the money is the amount taken NOW — not a proration
+    // parked on the next invoice, which is what let a customer pay for Pro
+    // and use Advanced for a month before anything was billed.
+    expect(said).toMatch(/\$45\.45 USD now/)
+    expect(said).not.toMatch(/next invoice/)
     // The upcoming-invoice total must not appear: that was the overstatement.
     expect(said).not.toMatch(/129\.00/)
-    expect(said).not.toMatch(/charge today/)
     expect(said).not.toMatch(/[Nn]othing is charged today/)
-    expect(String(confirmCalls[0].confirmationText)).toBe('Switch plan')
+    expect(String(confirmCalls[0].confirmationText)).toBe('Pay and switch')
 
     // And it lands now, so the page says switched rather than moving.
     await waitFor(() => expect(mockEnqueueSnackbar).toHaveBeenCalled())

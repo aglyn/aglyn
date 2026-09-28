@@ -244,6 +244,9 @@ export const membershipRecoverHandler: PluginApiHandler = async (req, res) => {
       sendingIdentity: await hostSendingIdentity(hostId),
       audience: 'tenant',
       context: 'membership recovery',
+      // Owed to the recipient by their own account: the phishing
+      // screen's soft rules never hold it (AGL-3356).
+      owedFor: 'account',
     })
     // Cost meter (AGL-1438). Transactional, and the clearest case for why a
     // quota may not refuse one: this email is how the member gets back into

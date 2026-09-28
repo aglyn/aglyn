@@ -868,16 +868,8 @@ service cloud.firestore {
       match /outreachSequences/{sequenceId} {
         allow read: if canReadOutreach();
         allow write: if false;
-        // The sequence's per-destination click rollup (AGL-3239):
-        // `reports/links`, one document holding an aggregate the report card
-        // reads instead of reading every enrollment. Its own match, because
-        // the parent's does NOT reach a subcollection — without this the
-        // console's listener is denied, and a denied listen is billed as
-        // well as broken.
-        //
-        // Server-written like everything else here: the click route writes
-        // it through the Admin SDK, and a client that could write it could
-        // invent the numbers a rep is judging a sequence by.
+        // The click rollup (AGL-3239), `reports/links`: its own match, as the
+        // parent's does not reach a subcollection. Admin SDK writes only.
         match /reports/{reportId} {
           allow read: if canReadOutreach();
           allow write: if false;
@@ -886,6 +878,11 @@ service cloud.firestore {
       match /outreachEnrollments/{enrollmentId} {
         allow read: if canReadOutreach();
         allow write: if false;
+        // A person's clicks and actions (AGL-3332); Admin SDK writes only.
+        match /history/{entryId} {
+          allow read: if canReadOutreach();
+          allow write: if false;
+        }
       }
       // Compliance settings and the do-not-contact list (AGL-2980).
       match /outreachSettings/{settingsId} {
@@ -903,16 +900,26 @@ service cloud.firestore {
         allow write: if false;
       }
       // What the organization learned about the domains it writes to and
-      // the mail gateways in front of them (AGL-3326): MX records and a
-      // per-gateway ledger of sends, deliveries and blocks. Written by the
-      // enroll routes and the sending runtime; a client that could write
-      // them could clear the blocks that hold a send.
+      // the mail gateways in front of them, as first written (AGL-3326): MX
+      // records and a per-gateway ledger. No longer written — the platform
+      // cache and the sending-domain ledger below replaced them (AGL-3328)
+      // — and kept readable until that has shipped and the ledger's thirty
+      // days have aged out, when both blocks are retired.
       match /outreachDomainIntel/{domain} {
         allow read: if canReadOutreach();
         allow write: if false;
       }
       match /outreachGatewayStats/{gateway} {
         allow read: if canReadOutreach();
+        allow write: if false;
+      }
+      // What a mail gateway did with one of this organization's mailbox
+      // sending domains (AGL-3328): sends, deliveries and refusals by day,
+      // keyed `{sendingDomain}~{gateway}`. Written only by the sending
+      // runtime; a client that could write it could clear the refusals that
+      // hold a send into a gateway that blocked the sender.
+      match /mailGatewayLedger/{key} {
+        allow read: if isStaff() || isOrgMember();
         allow write: if false;
       }
 
@@ -2941,7 +2948,7 @@ service cloud.firestore {
           (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
             !request.resource.data.diff(resource.data).affectedKeys()
               .hasAny(['kind']) &&
-            !(('deletedAt' in resource.data) &&
+            !(resource.data.get('deletedAt', null) != null &&
               request.resource.data.diff(resource.data).affectedKeys()
                 .hasAny(['deletedAt'])) &&
             (canPublishHostContent(hostId) ||
@@ -2952,9 +2959,7 @@ service cloud.firestore {
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
         // THE WORKING DRAFT (AGL-1152), one per version, id `current`.
         //
-        // A draft is the working document: you save into it as you work and
-        // publish when you are done, and there is exactly ONE per target. The fixed document id is what enforces that: there is no
-        // second name to create.
+        // One draft per target: the fixed id `current` enforces it.
         //
         // It needs its own rule because the recursive matcher below allows
         // `create` only to staff, so an author's FIRST save of a draft — the
@@ -3133,16 +3138,19 @@ service cloud.firestore {
       match /forms/{formId} {
         allow read: if isStaff() || isHostMember(hostId);
         allow create: if isStaff();
-        // `retired` mirrors `archivedAt` for the Forms list (AGL-3330); a
-        // write touching either keeps them agreeing.
+        // AGL-3330: edits move updatedAt; retired, inCampaign are mirrors.
+        function formEdit() {
+          let d = request.resource.data;
+          let k = d.diff(resource.data).affectedKeys();
+          return d.get('updatedAt', null) != resource.data.get('updatedAt', null) &&
+            !k.hasAny(['stats']) &&
+            (!k.hasAny(['archivedAt', 'retired']) ||
+              d.get('retired', false) == (d.get('archivedAt', null) != null)) &&
+            (!k.hasAny(['campaignIds', 'inCampaign']) ||
+              d.get('inCampaign', false) == (d.get('campaignIds', []).size() > 0));
+        }
         allow update: if isStaff() ||
-          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) &&
-            !request.resource.data.diff(resource.data)
-              .affectedKeys().hasAny(['stats']) &&
-            (!request.resource.data.diff(resource.data)
-                .affectedKeys().hasAny(['archivedAt', 'retired']) ||
-              request.resource.data.get('retired', false) ==
-                (request.resource.data.get('archivedAt', null) != null)));
+          (canWriteHostContent(hostId) && !hostWritesFrozen(hostId) && formEdit());
         allow delete: if isStaff() ||
           (canPublishHostContent(hostId) && !hostWritesFrozen(hostId));
 
@@ -3427,7 +3435,7 @@ service cloud.firestore {
               'functions', 'workflows', 'services', 'redirects',
               'locations', 'products', 'components', 'registers', 'installs',
               'templates', 'collections', 'datasets', 'webhooks', 'orders',
-              'counters', 'analytics', 'screenAnalytics', 'members',
+              'counters', 'analytics', 'screenAnalytics', 'pageReviews', 'members',
               'media', 'mediaTombstones', 'formSubmissions', 'forms', 'actions',
               'authors', 'carts', 'memberPosts', 'pluginSettings',
               'checkouts', 'giftCards', 'stripeTaxRates', 'restockAlerts',
@@ -3539,7 +3547,7 @@ service cloud.firestore {
               'templates', 'collections', 'datasets', 'orders', 'registers',
               'webhooks', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
               'formSubmissions',
-              'counters', 'analytics', 'screenAnalytics', 'members',
+              'counters', 'analytics', 'screenAnalytics', 'pageReviews', 'members',
               'media', 'mediaTombstones', 'inventoryAdjustments', 'carts',
               'checkouts',
               'giftCards', 'stripeTaxRates', 'restockAlerts',
@@ -3590,7 +3598,7 @@ service cloud.firestore {
             !(subcollection in ['screens', 'layouts', 'components',
               'collections', 'datasets', 'orders', 'registers', 'webhooks',
               'counters', 'memberPosts', 'redirects', 'pluginSettings', 'forms',
-              'analytics', 'screenAnalytics', 'members', 'mediaTombstones',
+              'analytics', 'screenAnalytics', 'pageReviews', 'members', 'mediaTombstones',
               'inventoryAdjustments', 'carts', 'checkouts', 'giftCards',
               'stripeTaxRates', 'restockAlerts',
               'inventoryReconciliation', 'stockHolds', 'themeHistory',
@@ -4473,6 +4481,24 @@ service cloud.firestore {
     // Note this is NOT `hosts/{hostId}/suppressions`, which is a merchant's
     // own list of their own unsubscribes and is governed by the host rules.
     match /emailSuppressions/{emailKey} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // The platform's deliverability store (AGL-3328), written only by the
+    // server. `mailDomains/{domain}` is a recipient domain's MX answer —
+    // a fact about the world, cached once for every organization.
+    // `mailGatewayLedger/{sendingDomain}~{gateway}` is what a mail gateway
+    // did with one Resend sending domain's mail, which is what holds that
+    // domain's bulk mail after two refusals; the platform's own and the
+    // shared pool's rows are the ones a block on hurts every tenant, which
+    // is why staff read them. No client writes either: a write could clear
+    // the refusals that hold a send, or mark a domain as taking no mail.
+    match /mailDomains/{domain} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+    match /mailGatewayLedger/{key} {
       allow read: if isStaff();
       allow write: if false;
     }

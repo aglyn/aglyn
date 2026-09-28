@@ -176,8 +176,8 @@ Build a feedback survey with four fields:
 Submissions land in the inbox like any other form — a visitor who ticks two
 checkboxes submits `topics: Products, Pricing`, and the rating arrives as `4`.
 Like every form value it is stored as text, including in a bound
-[dataset](../datasets/overview.md), whose filters and sorts still compare it as a
-number.
+[dataset](../datasets/overview.md), whose `=` filter still matches it as a number when
+the field is typed as one.
 
 ## After submit
 
@@ -287,11 +287,12 @@ Every Inbox table filters and searches through its toolbar, and every filter and
 search reach **everything** the site holds, not only the page on screen: the table asks
 for the matches, newest first, and paging forward shows the next page of them.
 
-The submissions table's **Filters** narrow it by **Form** (when the site has forms),
-**Read** (read or unread), **From** (a word the sender's name or address starts with)
-and, on your organization's Inbox, **Site**. **Search** finds a word at the start of any
-word in the sender's name or address or in the message — the first 40 different words of a
-message are searchable. A form's *name* isn't searched: a form you rename would go on
+The submissions table's **Filters** narrow it by **From** (*contains* a word the
+sender's name or address starts with), **Read** (Read or Unread), and **Form** on a
+site's Inbox when the site has forms — or **Site** in its place on your organization's
+Inbox. **Search** finds a word at the start of any word in the sender's name or address
+or in the message — up to the first 40 different words of a message are searchable,
+fewer when they are long. A form's *name* isn't searched: a form you rename would go on
 being found by the name it had when each message arrived. Use **Form** instead, which
 follows the form through a rename.
 
@@ -307,8 +308,9 @@ signed up is in both, as a member and as a lead:
   filed under that form, so there is no single "form" choice — and by **Site**, any of
   the sites that captured the person.
 
-A table holds one "contains" or "any of" filter at a time, and the search counts as
-one: **From** doesn't combine with the search, nor **Source** with **Site**. When you ask
+A table holds one filter that matches words or a list at a time, and the search counts
+as one: **From** doesn't combine with the search, and on your organization's **Leads**,
+**Source** and **Site** combine neither with each other nor with the search. When you ask
 for a combination the table can't answer at once, it applies what it can and says, above
 the table, which filter it didn't apply. For a collaborator invited to particular sites,
 **Search** on a site's **Leads** matches the start of a lead's address (the first word
@@ -438,8 +440,9 @@ narrowed to source Form and this form.
   only when the popup opens. Views of the form in the besigner or in Preview are never
   counted — that would put you in your own numbers.
 - **Submissions** — everything filed under this form's id.
-- **Lead captures** — submissions this form filed to **Members & leads**. One person is
-  one lead, so someone who submits twice is two captures and one lead.
+- **Leads** — the people this form filed to **CRM → Leads** that are still there. One
+  person is one lead, so someone who submits twice is two submissions and one lead, and
+  a lead you erase stops counting.
 - **Views that became a submission**, **Started and never submitted**, and **Submissions
   that became a lead** — each printed with the population it is over, so you can see what
   is being divided by what.
@@ -476,33 +479,55 @@ were sent with rather than this form's id, so they stay in the Inbox under **All
 
 ## Find a form in the list {#find-a-form}
 
+![The site's Forms list: a table of forms with their display name, slug, submissions, leads, last submission and updated date, and an Actions column, under the Columns, Filters, Export and Search controls](/img/forms/forms-list.png)
+
 The **Forms** table filters through its toolbar by every column it shows:
 
-- **Display name**, by a word in it: *contains* "audit" finds "Multi-brand site audit".
-- **Slug**, exactly.
-- **Submissions**, as a number: equal to, over or under a number, or empty. A form that
-  hasn't had a submission shows a dash, and *is empty* finds it.
-- **Leads**, equal to a number, or empty. A form counts a lead only once it files
-  one, so a form that doesn't route to leads, or hasn't filed its first, shows a dash.
-  *Is empty* finds those forms. No form stores a zero, so **Leads** = 0 finds none.
-- **Last submission** and **Updated**, as days: on, before or after a date. **Last
-  submission** *is set* finds every form that has had a submission.
+- **Display name**, by the start of a word in it: *contains* "audit" finds "Multi-brand
+  site audit".
+- **Slug**, *equals* the whole slug.
+- **Submissions**, as a number: `=`, `!=`, `>`, `>=`, `<` or `<=` a number, *is empty* or
+  *is not empty*. A form that hasn't had a submission shows a dash, and *is empty* finds it.
+- **Leads**, `=` a number, or *is empty*. **Leads** counts the people the form filed as
+  leads that are still in **CRM → Leads**: a visitor who submits twice is one lead. A
+  form with the lead switch on shows 0 until its first lead, so **Leads** = 0 finds the
+  lead forms that haven't filed one yet. A form that has never routed to leads shows a
+  dash, and *is empty* finds it.
+- **Last submission** and **Updated**, as days: *is*, *is after*, *is on or after*, *is
+  before* or *is on or before* a date. **Last submission** *is not empty* finds every
+  form that has had a submission.
 
-Two more columns stay hidden until you show them from **Columns**, and the **Filters**
-panel offers them either way: **Status** (active or retired) and **Lead routing** (on or
-off, the switch on the form's **CRM routing** card). **Campaign** finds the forms filed
-under any of the campaigns you pick. The panel lists the site's campaigns once you open
-it.
+Three more columns stay hidden until you show them from **Columns**, and the **Filters**
+panel offers them either way: **Status** (Active or Retired), **Lead routing** (On or
+Off, the switch on the form's **CRM routing** card) and **In a campaign** (Yes or No;
+*No* finds the forms filed under no campaign). **Campaign** finds the forms filed under
+any of the campaigns you pick, up to 30. The panel lists the site's campaigns once you
+open it.
 
-**Search** finds a form by a word of its name or slug, or by its ID. It looks for one
-word, the first you type, and says so when you type more.
+**Submissions**, **Leads** and **Last submission** are recounted from what's left
+whenever a submission is deleted from the Inbox or a lead is erased, so they never count
+something you removed. Retiring or restoring a form, and taking it out of a deleted
+campaign, moves its **Updated** date.
+
+**Search** finds a form by the start of a word of its name or slug, or the start of its
+ID. It looks for one word, the first you type, and says so when you type more.
 
 Every filter and the search look through the whole catalog, not just the page on screen,
-and the pager turns through the matches. Filters on different columns add up, with one
-limit: one range at a time, meaning a number over or under, or a date before or after. A
-second range isn't applied, and the list says which one it left out. Retired forms stay out
-of the list until you ask for them: choose **Status** in the **Filters** panel and pick
-**Retired** to find one and restore it. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+and the pager turns through the matches. Filters on different columns add up, with two
+limits, because one query answers them all:
+
+- **One range at a time.** A range is any **Submissions** comparison other than `=` or
+  *is empty*, any date on **Last submission** or **Updated**, and **Last submission** *is
+  not empty*. While one is in force the list runs in that column's order — fewest
+  first for **Submissions**, newest first for a date; otherwise forms run in a fixed
+  order, by their ID.
+- **Campaign or the search, not both.** A query can match one list at a time, so
+  **Campaign** isn't applied while a search is typed.
+
+A filter that breaks either limit isn't applied, and a note above the list names it and
+says why. Retired forms stay out of the list until you ask for them: choose **Status** in
+the **Filters** panel and pick **Retired** to find one and restore it. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Duplicate a form
 

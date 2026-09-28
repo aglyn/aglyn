@@ -52,6 +52,7 @@ import {
   type CampaignStats,
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-report'
 import {
+  campaignHeldForReviewNotice,
   campaignSendDisplay,
   CAMPAIGN_SEND_CONTAINER_FIELD,
 } from '@aglyn/shared-ui-email-campaigns/model/campaign-container'
@@ -260,6 +261,14 @@ export function EmailDetail(props: EmailDetailProps) {
    * action about an email that is already going out.
    */
   const midFlight = display.state === 'sending'
+  /**
+   * Held for staff review by the phishing screen (AGL-3356). Stored as
+   * `scheduled`, so every control below that offers to send, reschedule or
+   * edit a scheduled email is withheld on it: none of them is the merchant's
+   * to use until staff decide. Canceling it stays — withdrawing an email is
+   * always theirs.
+   */
+  const held = display.state === 'held'
   /**
    * This email has not gone to anybody yet.
    *
@@ -680,7 +689,7 @@ export function EmailDetail(props: EmailDetailProps) {
       `sendAtMs` under the processor mid-campaign changes when the rest of a
       delivery happens rather than when it starts.
      */
-    ...((draft || scheduled) && !midFlight
+    ...((draft || scheduled) && !midFlight && !held
       ? [
           {
             key: 'schedule',
@@ -738,8 +747,7 @@ export function EmailDetail(props: EmailDetailProps) {
    * to un-withdraw it would be a resurrect path this model does not have —
    * and neither does one that is mid-send.
    */
-  const primaryAction =
-    (draft || scheduled) && !midFlight ? (
+  const primaryAction = held ? null : (draft || scheduled) && !midFlight ? (
       <Button
         size="small"
         variant="contained"
@@ -806,7 +814,7 @@ export function EmailDetail(props: EmailDetailProps) {
       >
         {'All messages'}
       </Button>
-      {(draft || scheduled) && !midFlight && !siteless ? (
+      {(draft || scheduled) && !midFlight && !held && !siteless ? (
         <Button
           component={AppLink as any}
           {...({ componentVariant: 'naked', nativeButton: false } as any)}
@@ -862,6 +870,9 @@ export function EmailDetail(props: EmailDetailProps) {
       {/* The page heading and the trail name the message; this card is
           then free to say what it holds rather than repeating the title. */}
       <PageHeaderRecord title={email ? subject : undefined} />
+      {held ? (
+        <Alert severity="warning">{campaignHeldForReviewNotice(email as never)}</Alert>
+      ) : null}
       {siteless ? (
         <Alert severity="info">
           {'This email does not record which site it was sent as, so it can ' +
@@ -912,7 +923,7 @@ export function EmailDetail(props: EmailDetailProps) {
                       color={
                         display.state === 'sending'
                           ? 'info'
-                          : display.state === 'stopped'
+                          : display.state === 'stopped' || held
                             ? 'warning'
                             : undefined
                       }

@@ -42,8 +42,13 @@ Open **CRM → Fields**, pick the tab for the record the field describes — **C
 - **Required on the … form** — the record's page will not save the field empty. It does
   not make a website form field required; that is set on the form itself.
 
-Fields are listed in the order they appear on a record and in the list's columns; the
-arrows on each row move a field up or down.
+Each tab is the console's list table: it pages, sorts by **Field**, **Key** or **Type**,
+filters by **Type** and **Required** from its **Filters** panel, and searches a field's
+name and key. It opens in the order fields appear on a record and in the list's columns,
+numbered under **Order**; the arrows on each row move a field up or down. The order is
+the record's, not a view of the list, so the arrows are live only while the list shows
+it — with a sort, a filter or a search in force they wait, and say **Clear sorting and
+filters to reorder**.
 
 :::note
 How many records carry a value under each field is not counted. That would read every
@@ -60,15 +65,17 @@ fields, each read by its own type.
 
 | Record | Where its fields show |
 | --- | --- |
-| **Contacts** | The **Custom fields** card on a contact's page, optional columns and filters on the contacts list, the CSV import, a form field's [destination](#save-a-form-field), and `custom` on `/v1/contacts`. |
-| **Companies** | Rows on a company's page and controls on its **Edit** form, optional columns on the companies list, the [companies CSV import](./companies.md#import-from-csv), and `custom` on `/v1/companies`. |
-| **Deals** | Rows on a deal's page and controls on its **Edit** form, optional columns on the deals table, and `custom` on `/v1/deals`. |
-| **Leads** | Controls on a lead's page beside its profile and in the **New lead** drawer, optional columns on the leads list, and `custom` on `/v1/leads`. |
+| **Contacts** | **More fields** in the **Properties** card on a contact's page, optional columns and filters on the contacts list, the CSV import, a form field's [destination](#save-a-form-field), and `custom` on `/v1/contacts`. |
+| **Companies** | **More fields** on a company's page and controls on its **Edit** form, optional columns on the companies list, the [companies CSV import](./companies.md#import-from-csv), and `custom` on `/v1/companies`. |
+| **Deals** | **More fields** in the **Properties** card on a deal's page and controls on its **Edit** form, optional columns on the deals table, and `custom` on `/v1/deals`. |
+| **Leads** | **More fields** in the **Details** card on a lead's page and in the **New lead** drawer, optional columns on the leads list, and `custom` on `/v1/leads`. |
 
 Only a **contact** field can be the destination of a website form field, because a
 submission is a fact about a person; the drawer on the other tabs says so. Company, deal
-and lead columns show values and are not filterable, for the reason the contact columns
-are not: the value lives in a map no index covers.
+and lead columns show values and are not filterable: the value lives in a map no index
+covers. A contact field is the exception — each site's record of the person carries a
+key for it that the list's query can ask — see
+[Filters on the Contacts list](./views.md#filters-on-the-contacts-list).
 
 A lead's values **stay on the lead** when it converts. A lead field and a contact field
 are two fields even when they share a key, so nothing is copied across; the converted
@@ -79,16 +86,22 @@ need nothing done to them.
 
 ## Where values show {#where-values-show}
 
-- **A contact's page** carries a **Custom fields** card with one control per field — a
-  text box, a number box, a date picker, a choice list, a checkbox or a link box. **Save**
-  writes only the fields you changed; clearing a control clears the value.
+- **A contact's page** carries its fields in the **Properties** card, under **More
+  fields** after the built-in properties, with one control per field — a text box, a
+  number box, a date picker, a choice list, a checkbox or a link box. The card's one
+  **Save**, in its header, writes the profile and only the fields you changed; clearing a
+  control clears the value. With no field defined, there is no **More fields** at all.
 - **The contacts list** offers one optional column per field. The columns show the value
-  as it reads — a date as a day, a checkbox as *Yes* or *No*, a link as a link — and are
-  not sortable or filterable.
-- **A lead's page** carries its fields under **Custom fields**, below the profile and
-  saved with it by the same **Save**. The **New lead** drawer offers the same controls,
-  so a lead can be entered complete. A converted lead's are read-only with the rest of
-  the record. The **leads list** offers one optional column per field.
+  as it reads — a date as a day, a checkbox as *Yes* or *No*, a link as a link. They do
+  not sort; each is a field in the table's **Filters** panel — see
+  [Filters on the Contacts list](./views.md#filters-on-the-contacts-list).
+- **A lead's page** carries its fields in the **Details** card, under **More fields**
+  after the profile and saved with it by the same **Save** in the card's header. The **New
+  lead** drawer offers the same controls, so a lead can be entered complete. A converted
+  lead's are read-only with the rest of the record. The **leads list** offers one
+  optional column per field.
+- **A company's page and a deal's** list their fields under **More fields**, after the
+  built-in properties; **Edit** changes them.
 - **Exports and the API** carry the values under their keys.
 
 A value belongs to the site that recorded it. Two sites in one organization that both
@@ -127,12 +140,12 @@ need mapping.
 **Lead source** is a standard lead field — Salesforce's Lead Source — and its choices are
 your organization's own. They are kept on the **Leads** tab, below the custom lead
 fields, under **Lead source values**. Every lead's page, the **New lead** drawer and every
-contact's page offer them as a select, and the leads list filters and sorts by them.
+contact's page offer them as a select, and the leads list filters by them.
 
 | Action | What it does |
 | --- | --- |
 | **Add value** | Adds a value at the end of the list. A value the list already holds, in any capitalization, is refused. |
-| **Drag**, or the arrows | Reorders the list. The order is the order every select offers, and the order the leads list sorts in. |
+| **Drag**, or the arrows | Reorders the list. The order is the order every select offers. |
 | **Sort A–Z** | Puts the whole list in alphabetical order. |
 | **Rename** | Renames the value, and every lead and contact holding it is updated to the new name in the same step, so a report grouped by lead source follows the rename. |
 | **Make default** | New leads start with this value — in the **New lead** drawer, over the API, and from a CSV row that names none. **Clear default** removes it. |

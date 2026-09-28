@@ -749,6 +749,24 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '0 6,14 * * *',
     route: '/api/admin/ai-insights-digest',
   },
+  /*
+   * HOURLY, and in this table anyway: nothing about `consoleDailyCron` is
+   * daily except the name — one function, one schedule, one route. The CRM
+   * task reminders (AGL-2659) send each task's reminder within the hour after
+   * its time, which is the promise the task drawer makes.
+   *
+   * They started on GitHub Actions on the theory that an hour of drift was
+   * inside that promise. The drift was not an hour: on 2026-09-28 the hourly
+   * entry fired at 00:12 and 06:12 and nowhere between, so reminders were up
+   * to six hours late and the row went red on `/api/health/crons`
+   * (AGL-3351). Each run only claims reminders not yet stamped
+   * `reminderSentAtMs`, so a manual dispatch beside this tick never sends one
+   * twice.
+   */
+  'crm-task-reminders': {
+    schedule: '0 * * * *',
+    route: '/api/crm/task-reminders',
+  },
 } as const
 
 /**
@@ -797,6 +815,7 @@ export const consoleUsageAlerts = consoleDailyCron('usage-alerts')
 export const consoleReapSendingDomains = consoleDailyCron('reap-sending-domains')
 export const consoleReapUnverifiedOrgs = consoleDailyCron('reap-unverified-orgs')
 export const consoleAiInsightsDigest = consoleDailyCron('ai-insights-digest')
+export const consoleCrmTaskReminders = consoleDailyCron('crm-task-reminders')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

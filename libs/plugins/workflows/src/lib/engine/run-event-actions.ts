@@ -80,9 +80,13 @@ import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 // The leaf, not the barrel: this library's specs substitute the barrel
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
+// The leaf again, for the phishing screen's hold (AGL-3356): the control
+// that stops a send must be the real one under a spec that mocks the barrel.
+import { screenOutboundSend } from '@aglyn/tenant-data-admin/server/outbound-send-review'
 import { createHmac } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from '../model/run-history'
+import { eventRunSuspension } from './site-suspension'
 import {
   advanceFlowEnrollment,
   claimFlowEnrollment,
@@ -824,10 +828,11 @@ async function runServerStep(
       // than carried on the run env because most action runs send no email
       // at all, and a document read every workflow pays for is a read on
       // the hot path for a link nine runs in ten never need.
-      const siteBase =
-        hostPublicOrigin(
-          (await hostRef.get().catch(() => null))?.data() as never,
-        ) ?? ''
+      const hostData =
+        ((await hostRef.get().catch(() => null))?.data() as
+          | Record<string, unknown>
+          | undefined) ?? null
+      const siteBase = hostPublicOrigin(hostData as never) ?? ''
       /*
        * MARKETING. The subject and body are merchant-authored and the
        * recipient comes out of the event payload — which, for the collect
@@ -904,6 +909,44 @@ async function runServerStep(
       }
       const emailSubject = String(step.subject ?? '').slice(0, 200)
       const emailText = String(step.body ?? '').slice(0, 5000)
+      /*
+       * THE PHISHING SCREEN, for a workspace in its first fortnight
+       * (AGL-3356). The incident's second message was exactly this step: a
+       * `contactCreated` workflow mailing "Poshmark Order … has finally
+       * sold" with a link to a Poshmark lookalike, once per imported contact.
+       *
+       * A hold files one review row per (automation, content) in the abuse
+       * queue and stops the message. After a wait the step DEFERS, so the
+       * enrollment sends the same step once staff release it; an immediate
+       * step has no later beat to come back on, so this run records the hold
+       * as its failure and the automation sends again from its next event
+       * once released. See `outbound-send-review.ts`.
+       */
+      const screened = await screenOutboundSend({
+        kind: run.kind,
+        path:
+          run.kind === 'orgAutomation'
+            ? `orgs/${run.orgId ?? env.orgId ?? ''}/automations/${run.id}`
+            : `hosts/${hostId}/${run.kind === 'workflow' ? 'workflows' : 'actions'}/${run.id}`,
+        hostId,
+        orgId: env.orgId,
+        org: (env.org as Record<string, unknown> | null) ?? null,
+        host: hostData,
+        subject: emailSubject,
+        bodies: [emailText],
+      })
+      if (screened.outcome === 'rejected') {
+        return failed(
+          `this email was rejected by staff review (${screened.reference})`,
+        )
+      }
+      if (screened.outcome === 'held') {
+        if (enrollmentRef) return { kind: 'deferred' }
+        return failed(
+          'this email is held for staff review because it may impersonate ' +
+            `another business (${screened.reference})`,
+        )
+      }
       const consentGroup = consentGroupForHost(
         (env.org as Record<string, unknown> | null) ?? null,
         hostId,
@@ -933,6 +976,10 @@ async function runServerStep(
         ...(emailActivity ? { tags: emailActivity.tags } : {}),
         audience: 'tenant',
         context: enrollmentRef ? 'flow step' : 'event action',
+        // A step staff released above carries its release to the send
+        // seam's screen, which would otherwise hold the same signals again.
+        releasedReviewId:
+          screened.outcome === 'send' ? (screened.releasedReviewId ?? null) : null,
         /*
          * A resumed step may take `'bulk'` where an immediate one may not,
          * and the reason is the same one the abandoned-checkout sweep gives:
@@ -979,7 +1026,10 @@ async function runServerStep(
           : refusal === 'frequency-capped'
             ? 'the recipient has already had today’s limit of email ' +
               'from this site'
-            : 'email delivery failed'
+            : refusal === 'held-for-review'
+              ? 'this email is held for staff review because it may ' +
+                'impersonate another business'
+              : 'email delivery failed'
         : null
       // Cost meter (AGL-1438). A workflow notification is transactional:
       // counted, never capped. `sent` is false when Resend refused or the
@@ -1659,6 +1709,8 @@ export async function runEventActions(
     // Plan-less orgs resolve as free (AGL-247) — gates always run. Held for
     // the rest of the run so the dataset caps below cost no second read.
     const owner = await getOrgForHost(hostId)
+    // A suspended site runs nothing (AGL-3356): see `eventRunSuspension`.
+    if (await eventRunSuspension(hostRef, owner?.org)) return alerts
     {
       const org = owner?.org
       if (!checkEntitlement(org as any, 'actions')) return alerts

@@ -40,6 +40,21 @@ describe('isBlockedSubdomain', () => {
     expect(isBlockedSubdomain('my-bakery')).toBe(false)
     expect(isBlockedSubdomain('demo-2')).toBe(false)
   })
+
+  it('blocks a brand a phishing kit wears, or a lookalike of one (AGL-3356)', () => {
+    // The incident's own subdomain, and the shapes that follow it.
+    for (const name of ['poshmark', 'paypal-secure', 'paypa1', 'booking-review', 'appleid', 'apple-support']) {
+      expect(isBlockedSubdomain(name)).toBe(true)
+    }
+    // …and no suggestion routes around it.
+    expect(suggestSubdomains('poshmark')).toEqual([])
+  })
+
+  it('allows a business whose name merely contains a common brand word', () => {
+    for (const name of ['apple-pie-co', 'tanyas-booking', 'propertyhelper', 'harbor-view-hotel']) {
+      expect(isBlockedSubdomain(name)).toBe(false)
+    }
+  })
 })
 
 describe('generateSubdomain', () => {

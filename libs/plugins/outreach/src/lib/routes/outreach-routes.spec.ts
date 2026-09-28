@@ -27,6 +27,7 @@ import type {
   PluginTextGenerator,
 } from '@aglyn/aglyn/plugin-manager/plugin-text-generation'
 import type { DecodedIdToken } from 'firebase-admin/auth'
+import { resetMailDeliverabilityMemoryForTests } from '@aglyn/tenant-data-admin/server/email-deliverability'
 import { OUTREACH_USE_PERMISSION } from '../constants/bundle-common'
 import { outreachDoNotContactKey } from '../engine/do-not-contact'
 import { outreachLocalDay } from '../mailboxes/mailbox-settings'
@@ -42,7 +43,10 @@ import {
   OUTREACH_LINK_DOMAIN_ACTIVITY,
   type OutreachTrackingHosts,
 } from './link-domain-routes'
-import { createOutreachEnrollmentActionRoute } from './enrollment-routes'
+import {
+  createOutreachEnrollmentActionRoute,
+  createOutreachEnrollmentGatewayRoute,
+} from './enrollment-routes'
 import { createOutreachPreviewRoute } from './preview-routes'
 import { OUTREACH_SEQUENCE_ACTIVITY_TARGET } from './route-deps'
 import type { OutreachRouteGateDeps } from './route-gate'
@@ -420,6 +424,9 @@ const lead = (email: string, fields: Data) => {
 
 beforeEach(() => {
   docs = new Map()
+  // The platform's MX and ledger reads are remembered per process
+  // (AGL-3328); each test starts from its own store.
+  resetMailDeliverabilityMemoryForTests()
   activity = []
   credits = []
   filed = []
@@ -984,15 +991,18 @@ describe('outreach/enroll/preview (AGL-2980)', () => {
       { exchange: 'aspmx.l.google.com', priority: 1 },
     ]
     mx['parked.example'] = null
-    // A domain looked up yesterday is read from the cache, not the resolver.
-    docs.set(org('outreachDomainIntel/cached.example'), {
+    // A domain looked up yesterday — by any workspace — is read from the
+    // platform cache (AGL-3328), not the resolver.
+    docs.set('mailDomains/cached.example', {
       domain: 'cached.example',
+      status: 'mx',
       mx: ['us-smtp-inbound-1.mimecast.com'],
       gateway: 'mimecast',
       resolvedAtMs: AT - 86_400_000,
     })
     mx['cached.example'] = null
-    // Barracuda refused this organization twice this week and delivered nothing.
+    // Barracuda refused this organization twice this week and delivered
+    // nothing, on the per-gateway ledger as first written: read through.
     const day = (offsetDays: number) => new Date(AT - offsetDays * 86_400_000).toISOString().slice(0, 10)
     docs.set(org('outreachGatewayStats/barracuda'), {
       gateway: 'barracuda',
@@ -1030,18 +1040,21 @@ describe('outreach/enroll/preview (AGL-2980)', () => {
     expect(byId['c-nomx'].blocks).toEqual([
       { code: 'no_mx', reason: 'parked.example has no MX record, so nobody@parked.example cannot receive mail.' },
     ])
-    // The lookups are cached on the org, MX and all, for the next reader.
-    expect(docs.get(org('outreachDomainIntel/lifespire.example'))).toMatchObject({
+    // The lookups are cached for the whole platform, MX and all, for the
+    // next reader in any workspace (AGL-3328).
+    expect(docs.get('mailDomains/lifespire.example')).toMatchObject({
+      status: 'mx',
       mx: ['d78608a.ess.barracudanetworks.com'],
       gateway: 'barracuda',
       resolvedAtMs: AT,
     })
-    expect(docs.get(org('outreachDomainIntel/workspace.example'))?.['mx']).toEqual([
+    expect(docs.get('mailDomains/workspace.example')?.['mx']).toEqual([
       'aspmx.l.google.com',
       'alt1.aspmx.l.google.com',
     ])
-    expect(docs.get(org('outreachDomainIntel/parked.example'))).toMatchObject({ mx: [], gateway: 'none' })
-    expect(docs.get(org('outreachDomainIntel/cached.example'))?.['resolvedAtMs']).toBe(AT - 86_400_000)
+    expect(docs.get('mailDomains/parked.example')).toMatchObject({ status: 'no_mx', mx: [], gateway: 'none' })
+    expect(docs.get('mailDomains/cached.example')?.['resolvedAtMs']).toBe(AT - 86_400_000)
+    expect(docs.has(org('outreachDomainIntel/lifespire.example'))).toBe(false)
   })
 
   it('asks for Manage data, and an active sequence', async () => {
@@ -1400,9 +1413,54 @@ describe('outreach/enrollments/action (AGL-2980)', () => {
     expect((await post(action(), REP, { enrollmentId: 'seq-1_gone', action: 'pause' })).status).toBe(404)
     expect((await post(action(), REP, { enrollmentId: 'seq-1_c-1', action: 'delete' })).status).toBe(400)
   })
+
+  it('writes each act that moved the enrollment to its history, with who and why (AGL-3332)', async () => {
+    seed('seq-1_c-1')
+    await post(action(), REP, { enrollmentId: 'seq-1_c-1', action: 'pause', detail: 'Out of office' })
+    await post(action(), OWNER, { enrollmentId: 'seq-1_c-1', action: 'resume' })
+    // A resume of an active enrollment changes nothing, and writes nothing.
+    await post(action(), OWNER, { enrollmentId: 'seq-1_c-1', action: 'resume' })
+    const history = [...docs.keys()]
+      .filter((key) => key.startsWith(`${org('outreachEnrollments/seq-1_c-1')}/history/`))
+      .map((key) => docs.get(key))
+    expect(history).toEqual([
+      { kind: 'action', atMs: AT, action: 'pause', byUid: REP, detail: 'Out of office' },
+      { kind: 'action', atMs: AT, action: 'resume', byUid: OWNER, detail: null },
+    ])
+  })
 })
 
 // ── Preview ─────────────────────────────────────────────────────────────────
+
+describe('outreach/enrollments/gateway (AGL-3332)', () => {
+  const gateway = () => createOutreachEnrollmentGatewayRoute(deps())
+
+  it('answers the gateway in front of the person’s domain, read through the platform cache', async () => {
+    mx['held.example'] = [{ exchange: 'd1.ess.barracudanetworks.com', priority: 10 }]
+    docs.set(org('outreachEnrollments/seq-1_c-1'), {
+      sequenceId: 'seq-1',
+      contactId: 'c-1',
+      email: 'keith@held.example',
+      status: 'active',
+      stopReason: null,
+    })
+    const answer = await post(gateway(), REP, { enrollmentId: 'seq-1_c-1' })
+    expect(answer.status).toBe(200)
+    expect(answer.body).toMatchObject({
+      ok: true,
+      domain: 'held.example',
+      intel: { status: 'mx', gateway: 'barracuda', mx: ['d1.ess.barracudanetworks.com'], resolvedAtMs: AT },
+      standing: { gateway: 'barracuda', blocked30: 0, delivered30: 0 },
+    })
+    // The lookup warmed the platform cache, which no member reads directly.
+    expect(docs.get('mailDomains/held.example')).toMatchObject({ gateway: 'barracuda' })
+  })
+
+  it('refuses an enrollment that is not there', async () => {
+    const answer = await post(gateway(), REP, { enrollmentId: 'seq-1_nobody' })
+    expect(answer.status).toBe(404)
+  })
+})
 
 describe('outreach/preview (AGL-2980)', () => {
   const preview = () => createOutreachPreviewRoute(deps())

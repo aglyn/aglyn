@@ -908,10 +908,10 @@ describe('finding the order the dispute is against', () => {
   it('claims a dispute it recognises, on open and on close', async () => {
     await expect(
       deliver('charge.dispute.created', disputeEvent({})),
-    ).resolves.toEqual({ claimed: true })
+    ).resolves.toEqual({ claimed: true, hostId: 'host-1' })
     await expect(
       deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
-    ).resolves.toEqual({ claimed: true })
+    ).resolves.toEqual({ claimed: true, hostId: 'host-1' })
   })
 
   /** An old charge with no payment intent cannot be joined to anything. */
@@ -1484,7 +1484,7 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     happyStripe({ transfer: { amount_reversed: TRANSFER_CENTS } })
     await expect(
       deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
-    ).resolves.toEqual({ claimed: true })
+    ).resolves.toEqual({ claimed: true, hostId: 'host-1' })
     expect(reversalPosts()).toHaveLength(0)
     expect(order().dispute.reversedTransferCents).toBe(0)
     expect(order().dispute.transferReversalId).toBeUndefined()
@@ -1502,7 +1502,7 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     })
     await expect(
       deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
-    ).resolves.toEqual({ claimed: true })
+    ).resolves.toEqual({ claimed: true, hostId: 'host-1' })
     expect(reversalPosts()).toHaveLength(0)
     expect(order().dispute.reversedTransferCents).toBe(0)
     expect(disputeEvents().at(-1).detail).toContain('no transfer on the charge')
@@ -1515,7 +1515,7 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
     })
     await expect(
       deliver('charge.dispute.closed', disputeEvent({ status: 'lost' })),
-    ).resolves.toEqual({ claimed: true })
+    ).resolves.toEqual({ claimed: true, hostId: 'host-1' })
     expect(order().dispute.reversedTransferCents).toBe(0)
     expect(order().dispute.transferReversalId).toBeUndefined()
     expect(disputeEvents().at(-1).detail).toContain('Stripe refused')
@@ -1720,5 +1720,85 @@ describe('the seller share of a lost dispute (AGL-1794)', () => {
         String(notice.title).includes('Payout adjusted'),
       ),
     ).toHaveLength(0)
+  })
+})
+
+/*
+ * Stripe's other two fraud signals on a store's sale (AGL-3360): the
+ * merchant sees an issuer's early fraud warning and a Radar review on the
+ * ORDER and in their notifications, once, and nothing is refunded.
+ */
+describe('an early fraud warning or a Radar review on an order (AGL-3360)', () => {
+  const warning = (overrides: Record<string, any> = {}) => ({
+    id: 'issfr_1',
+    object: 'radar.early_fraud_warning',
+    charge: 'ch_1',
+    payment_intent: 'pi_dispute_1',
+    fraud_type: 'unauthorized_use_of_card',
+    created: OPENED_AT_S,
+    ...overrides,
+  })
+
+  it('stamps the order, tells the site’s managers, and claims it for the site', async () => {
+    await expect(
+      deliver('radar.early_fraud_warning.created', warning()),
+    ).resolves.toEqual({ claimed: true, hostId: 'host-1' })
+
+    expect(order().paymentRisk).toMatchObject({
+      latestKind: 'early-fraud-warning',
+      signals: [
+        expect.objectContaining({
+          stripeObjectId: 'issfr_1',
+          detail: 'unauthorized_use_of_card',
+        }),
+      ],
+    })
+    expect(
+      (order().timeline as any[]).filter((entry) => entry.event === 'fraud-warning'),
+    ).toHaveLength(1)
+    expect(managerNotices).toEqual([
+      expect.objectContaining({
+        hostId: 'host-1',
+        type: 'content.order',
+        title: 'Early fraud warning on a payment',
+        link: '/host-1/orders',
+      }),
+    ])
+    expect(managerNotices[0].body).toContain('has not refunded or canceled')
+    // Nothing moved: the order is still paid, nothing reversed, no Stripe call.
+    expect(order()).toMatchObject({ status: 'paid' })
+    expect(order()).not.toHaveProperty('refundedCents')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(staffNotices).toEqual([])
+  })
+
+  it('does not re-stamp or re-notify a redelivered warning', async () => {
+    await deliver('radar.early_fraud_warning.created', warning())
+    await deliver('radar.early_fraud_warning.created', warning())
+    expect((order().paymentRisk as any).signals).toHaveLength(1)
+    expect(managerNotices).toHaveLength(1)
+  })
+
+  it('stamps a Radar review the same way, in its own words', async () => {
+    await deliver('review.opened', {
+      id: 'prv_1',
+      object: 'review',
+      charge: 'ch_1',
+      payment_intent: 'pi_dispute_1',
+      reason: 'rule',
+    })
+    expect(order().paymentRisk).toMatchObject({ latestKind: 'radar-review' })
+    expect(managerNotices[0]).toMatchObject({ title: 'A payment is held for review' })
+  })
+
+  it('leaves a warning on somebody else’s charge alone', async () => {
+    await expect(
+      deliver(
+        'radar.early_fraud_warning.created',
+        warning({ payment_intent: 'pi_not_ours' }),
+      ),
+    ).resolves.toBeUndefined()
+    expect(order()).not.toHaveProperty('paymentRisk')
+    expect(managerNotices).toEqual([])
   })
 })

@@ -423,13 +423,25 @@ describe('create-setup-intent', () => {
     // lets the issuer authenticate it NOW rather than decline the first
     // unattended renewal months later.
     expect(intent?.body?.get('usage')).toBe('off_session')
+    // 3-D Secure is REQUESTED wherever the card supports it (AGL-3356), not
+    // left to Stripe's risk model: every subscription is paid from this card,
+    // and the fraud this answers paid with one that never met 3DS.
+    expect(
+      intent?.body?.get('payment_method_options[card][request_three_d_secure]'),
+    ).toBe('any')
     // A SetupIntent, NOT a checkout session: a session renders Stripe's whole
     // checkout UI, which is the second visual language this replaced.
     expect(calls.some((call) => call.url.includes('checkout/sessions'))).toBe(
       false,
     )
-    // Nothing card-shaped is sent TO Stripe by us — Stripe collects it.
-    expect(String(intent?.body ?? '')).not.toMatch(/card|cvc|number/i)
+    // Nothing card-shaped is sent TO Stripe by us — Stripe collects it. The
+    // one `card` key allowed is the 3DS policy above, which is an instruction
+    // about authentication and carries no card data.
+    const sent = [...(intent?.body?.entries() ?? [])]
+      .filter(([key]) => key !== 'payment_method_options[card][request_three_d_secure]')
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&')
+    expect(sent).not.toMatch(/card|cvc|number/i)
 
     const payload = await response.json()
     expect(payload).toEqual({ clientSecret: 'cs_test_secret_123' })

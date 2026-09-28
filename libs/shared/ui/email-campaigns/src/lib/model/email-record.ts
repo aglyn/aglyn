@@ -48,6 +48,16 @@
 export function emailSendTimeMs(
   record: Record<string, any> | null | undefined,
 ): number {
+  // A send held for staff review is parked at a time no run reaches
+  // (AGL-3356). That is a mechanism, not a send time, and printed it reads as
+  // the year 9999 — so a held send answers "no time", like a draft, and the
+  // lists order it by when it was created.
+  if (
+    record?.['staffReview']?.['state'] === 'held' &&
+    String(record?.['status'] ?? '') === 'scheduled'
+  ) {
+    return 0
+  }
   const sentAt = record?.['sentAt'] as
     | { toMillis?: () => number; seconds?: number }
     | undefined

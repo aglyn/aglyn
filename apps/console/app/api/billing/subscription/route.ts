@@ -52,6 +52,12 @@ import {
   planDowngradeRefusal,
   readCapacityCounts,
 } from '../../../../utils/server/capacity-in-use'
+import {
+  ensureAutomaticTax,
+  immediateChargeParams,
+  pendingChargeResponse,
+  readImmediateCharge,
+} from '../../../../utils/server/immediate-charge'
 import { RETENTION_COLLECTION, RETENTION_KINDS } from '../../_lib/retention'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 
@@ -226,14 +232,18 @@ async function activeSubscription(
  * - `cancel`   → cancel_at_period_end (plan runs out at renewal)
  * - `resume`   → clears a pending cancelation
  * - `preview`  → what switching plan costs, via Stripe's upcoming-invoice
- *   preview. `prorationCents` is the cost of the change and rides the NEXT
- *   invoice (`create_prorations` bills nothing today); `amountDueCents` is
- *   that whole invoice, next period's recurring charge included.
+ *   preview of the invoice the switch would raise NOW (`always_invoice`).
+ *   `prorationCents` is the cost of the change; when it is positive the
+ *   switch charges it immediately and `chargedNowCents` is the amount taken,
+ *   tax included (AGL-3358). A credit still rides the next invoice.
  * - `switch`   → UP the ladder: updates the subscription item to the
- *   target plan's price with prorations, today (an existing subscription
- *   never goes through Checkout again); per-plan add-on items re-price to
- *   the target plan in the same update, dropping kinds it doesn't sell
- *   (AGL-528). DOWN the ladder (AGL-1862): a subscription schedule moves
+ *   target plan's price, today (an existing subscription never goes through
+ *   Checkout again); per-plan add-on items re-price to the target plan in the
+ *   same update, dropping kinds it doesn't sell (AGL-528). A switch that
+ *   costs more is invoiced and charged at once, and only APPLIES once that
+ *   invoice is paid (AGL-3358) — a declined or 3DS-pending charge leaves the
+ *   org on the plan it paid for and answers `paymentPending` with what the
+ *   page needs to finish it. DOWN the ladder (AGL-1862): a subscription schedule moves
  *   the org at the CURRENT PERIOD END — no immediate re-price, no
  *   proration credit — and mirrors `subscription.pendingDowngrade`.
  *   Switching to the current plan releases a pending downgrade ("keep my
@@ -818,7 +828,62 @@ async function handler(request: Request): Promise<Response> {
       }
     }
 
+    // What the change costs, priced by Stripe the way the switch below would
+    // raise it. ONE derivation for the preview action and for the switch's
+    // own decision to charge (AGL-3358), so the confirm can never quote a
+    // number the switch then computes differently.
+    const itemsQuery = itemChanges
+      .map((change, index) =>
+        change
+          .map(([key, value]) =>
+            `&subscription_items[${index}][${key}]=` +
+              encodeURIComponent(value))
+          .join(''))
+      .join('')
+    const priceChange = async () => {
+      const preview = await stripeRequest(
+        secretKey,
+        'GET',
+        `invoices/upcoming?customer=${encodeURIComponent(String(customerId))}` +
+          `&subscription=${encodeURIComponent(subscription.id)}` +
+          itemsQuery +
+          // The invoice an upgrade raises NOW (AGL-3358), not the renewal with
+          // the proration folded into it. `amount_due` is then the figure that
+          // leaves the card, and the proration lines are this change's alone:
+          // pending items left over from earlier changes ride the renewal and
+          // are not swept into it (measured in test mode).
+          `&subscription_proration_behavior=always_invoice` +
+          // Preview under the same tax setting the switch will apply
+          // (AGL-1537) — otherwise a taxed customer is quoted one number and
+          // charged another.
+          `&automatic_tax[enabled]=true`,
+      )
+      // What the switch COSTS: the proration lines alone, positive when the
+      // move bills the difference, negative when it issues a credit. Derived
+      // exactly as `/api/billing/addons` derives it, because both routes are
+      // previewing the same Stripe mechanic on the same subscription and the
+      // two answering differently is indistinguishable from a pricing bug.
+      const prorationLines = (preview?.lines?.data ?? []).filter(
+        (line: any) => line?.proration,
+      )
+      const prorationCents = prorationLines.reduce(
+        (sum: number, line: any) => sum + Number(line?.amount ?? 0),
+        0,
+      )
+      return { preview, prorationLines, prorationCents }
+    }
+
     if (action === 'switch') {
+      // A change that costs more is PAID FOR before it is granted (AGL-3358).
+      //
+      // Priced first, before anything on the subscription moves, so a failure
+      // here leaves the pending downgrade and the pending cancel untouched.
+      // Positive proration is the whole test: a ladder upgrade, a month→year
+      // move, an add-on re-pricing upward. A switch that nets a credit (a
+      // cheaper tier on a longer interval, say) owes nothing today and keeps
+      // the behavior it always had — credit on the next invoice.
+      const { prorationCents } = await priceChange()
+      const chargesNow = prorationCents > 0
       // An upgrade lands TODAY (the frictionless direction) — but a pending
       // downgrade schedule would re-flip the price at period end, so it is
       // released first and its mirror cleared below.
@@ -833,13 +898,23 @@ async function handler(request: Request): Promise<Response> {
       const clearedPendingCancel = subscription.cancel_at_period_end === true
       const params = new URLSearchParams({
         ...(clearedPendingCancel ? { cancel_at_period_end: 'false' } : {}),
-        proration_behavior: 'create_prorations',
-        // Stripe Tax (AGL-1537): checkout has created subscriptions with
-        // automatic tax since AGL-1133, but a subscription created BEFORE
-        // that keeps billing untaxed forever unless an update turns it on —
-        // and this route is where existing subscriptions get updated. On a
-        // subscription that already has it, this is a no-op.
-        'automatic_tax[enabled]': 'true',
+        ...(chargesNow
+          ? // Invoice and charge the difference now, and hold the change —
+            // items, metadata and the cancel clear alike — in
+            // `pending_update` until that invoice is paid. `automatic_tax` is
+            // refused alongside `pending_if_incomplete`, so it goes in a
+            // call of its own below.
+            immediateChargeParams(subscription)
+          : {
+              proration_behavior: 'create_prorations',
+              // Stripe Tax (AGL-1537): checkout has created subscriptions with
+              // automatic tax since AGL-1133, but a subscription created
+              // BEFORE that keeps billing untaxed forever unless an update
+              // turns it on — and this route is where existing subscriptions
+              // get updated. On a subscription that already has it, this is a
+              // no-op.
+              'automatic_tax[enabled]': 'true',
+            }),
         'metadata[plan]': targetPlan,
         'metadata[orgId]': orgId,
         // AGL-118, as at checkout: the uid and the act it authorized, so the
@@ -853,8 +928,16 @@ async function handler(request: Request): Promise<Response> {
           params.set(`items[${index}][${key}]`, value)
         }
       })
+      // The invoice the charge raised, on the same call that raises it.
+      if (chargesNow) params.set('expand[]', 'latest_invoice.payment_intent')
       let updated: any
       try {
+        if (chargesNow) {
+          await ensureAutomaticTax(
+            (method, path, body) => stripeRequest(secretKey, method, path, body),
+            subscription,
+          )
+        }
         updated = await stripeRequest(
           secretKey,
           'POST',
@@ -868,9 +951,47 @@ async function handler(request: Request): Promise<Response> {
         }
         throw error
       }
+      const charge = chargesNow ? readImmediateCharge(updated) : null
+      if (charge && !charge.applied) {
+        // NOTHING IS GRANTED. The charge was declined or is waiting on the
+        // customer's bank, so Stripe is holding the switch and the
+        // subscription is still on the plan that was paid for — which is
+        // exactly what the org doc keeps saying. `plan` is not written here,
+        // and the webhook cannot write it either: the live subscription's
+        // items and `metadata.plan` are unchanged until the invoice is paid.
+        //
+        // Only the released schedule is mirrored, because that release DID
+        // happen and a mirror still naming it would be a phantom (AGL-2151).
+        if (releasedSchedule) {
+          await writeOrgBilling(org.ref.id, {
+            subscription: {
+              status: updated?.status ?? subscription.status,
+              pendingDowngrade: null,
+            },
+          } as never)
+        }
+        console.warn('[billing/subscription] upgrade held until its invoice is paid', {
+          orgId,
+          subscriptionId: subscription.id,
+          currentPlan,
+          targetPlan,
+          requiresAction: charge.requiresAction,
+          declined: charge.declined,
+        })
+        return Response.json({
+          ok: false,
+          plan: currentPlan,
+          pendingPlan: targetPlan,
+          ...pendingChargeResponse(charge),
+          droppedAddons: dropped,
+          clampedAddons: clamped,
+          unrecognizedItems,
+        }, { status: 200 })
+      }
       // Mirror immediately; the webhook confirms on the next event. `plan`
       // stays on the org doc (feature gating reads it); the commercial keys go
-      // to the manager-gated billing doc (AGL-1028).
+      // to the manager-gated billing doc (AGL-1028). Reached on a charged
+      // upgrade only once Stripe has applied it, which it does only once paid.
       await org.ref.set({ plan: targetPlan }, { merge: true })
       await writeOrgBilling(org.ref.id, {
         seatAddons: addonQuantitiesFromItems(updated?.items?.data ?? []),
@@ -885,8 +1006,14 @@ async function handler(request: Request): Promise<Response> {
       return Response.json({
         ok: true,
         plan: targetPlan,
+        ...(charge
+          ? {
+              chargedNowCents: charge.amountDueCents,
+              chargeCurrency: charge.currency,
+            }
+          : {}),
         droppedAddons: dropped,
-      clampedAddons: clamped,
+        clampedAddons: clamped,
         unrecognizedItems,
         clearedPendingCancel,
       }, { status: 200 })
@@ -903,56 +1030,23 @@ async function handler(request: Request): Promise<Response> {
         // the customer already bought and phase 1 opens a clean period, so
         // the cost of the change is zero on both readings of the word.
         prorationCents: 0,
+        chargesNow: false,
+        chargedNowCents: 0,
         currency: subscription.currency ?? 'usd',
         periodEnd: periodEndIso,
         droppedAddons: dropped,
-      clampedAddons: clamped,
+        clampedAddons: clamped,
         unrecognizedItems,
         downgrade: true,
       }, { status: 200 })
     }
 
-    const itemsQuery = itemChanges
-      .map((change, index) =>
-        change
-          .map(([key, value]) =>
-            `&subscription_items[${index}][${key}]=` +
-              encodeURIComponent(value))
-          .join(''))
-      .join('')
-    const preview = await stripeRequest(
-      secretKey,
-      'GET',
-      `invoices/upcoming?customer=${encodeURIComponent(String(customerId))}` +
-        `&subscription=${encodeURIComponent(subscription.id)}` +
-        itemsQuery +
-        `&subscription_proration_behavior=create_prorations` +
-        // Preview under the same tax setting the switch will apply (AGL-1537)
-        // — otherwise a taxed customer is quoted one number and charged
-        // another.
-        `&automatic_tax[enabled]=true`,
-    )
-    // What the switch COSTS, kept apart from what the next invoice TOTALS.
-    //
-    // `create_prorations` charges nothing today. Stripe writes the proration
-    // adjustments onto the upcoming invoice, so `amount_due` is that whole
-    // invoice — the next period's recurring charge included. Presented as the
-    // price of the change it overstates an upgrade by a full billing period
-    // and dates it wrong, and it is the number a customer reads immediately
-    // before committing money.
-    //
-    // The cost of the change is the proration lines alone: positive when the
-    // move bills the difference, negative when it issues a credit. Derived
-    // exactly as `/api/billing/addons` derives it, because both routes are
-    // previewing the same Stripe mechanic on the same subscription and the
-    // two answering differently is indistinguishable from a pricing bug.
-    const prorationLines = (preview?.lines?.data ?? []).filter(
-      (line: any) => line?.proration,
-    )
-    const prorationCents = prorationLines.reduce(
-      (sum: number, line: any) => sum + Number(line?.amount ?? 0),
-      0,
-    )
+    const { preview, prorationLines, prorationCents } = await priceChange()
+    // The same test the switch applies: a positive proration is charged the
+    // moment the customer confirms, and the confirm has to say so, with the
+    // amount (AGL-3358). `amount_due` of the `always_invoice` preview is that
+    // invoice — the proration plus its tax, less any account credit.
+    const chargesNow = prorationCents > 0
     // The TAX ON THE CHANGE, and only on the change.
     //
     // `automatic_tax` was already enabled on this preview, so Stripe computed
@@ -962,10 +1056,9 @@ async function handler(request: Request): Promise<Response> {
     // final, which is the same failure the plan quote was fixed for.
     //
     // Summed from the PRORATION LINES' own `tax_amounts`, never from the
-    // invoice's `tax`: that figure covers the whole upcoming invoice
-    // including next period's recurring charge, so adding it to a proration
-    // would overstate the change by a period's tax — the proration bug again,
-    // one field over.
+    // invoice's `tax`: on a switch that changes the billing interval the
+    // invoice also carries the next period's recurring charge, and adding its
+    // tax to a proration would overstate the change by a period's tax.
     const prorationTaxCents = prorationLines.reduce(
       (sum: number, line: any) =>
         sum +
@@ -979,6 +1072,8 @@ async function handler(request: Request): Promise<Response> {
       amountDueCents: preview?.amount_due ?? 0,
       prorationCents,
       prorationTaxCents,
+      chargesNow,
+      chargedNowCents: chargesNow ? Number(preview?.amount_due ?? 0) : 0,
       // Whether Stripe finished computing it. `requires_location_inputs`
       // yields a tax of 0 that is indistinguishable from a real zero unless
       // the status travels with it.
@@ -991,9 +1086,14 @@ async function handler(request: Request): Promise<Response> {
           .find((tax: any) => tax?.taxability_reason)?.taxability_reason ??
         null,
       currency: preview?.currency ?? 'usd',
-      periodEnd: preview?.period_end
-        ? new Date(preview.period_end * 1000).toISOString()
-        : null,
+      // The renewal a credit lands on. Read off the subscription rather than
+      // the preview: an `always_invoice` preview is the invoice raised now,
+      // and its own period says nothing about when the next one is.
+      periodEnd:
+        periodEndIso ??
+        (preview?.period_end
+          ? new Date(preview.period_end * 1000).toISOString()
+          : null),
       droppedAddons: dropped,
       clampedAddons: clamped,
       unrecognizedItems,

@@ -28,6 +28,7 @@ import {
   decodeStoredNodes,
   emailStarterSendBlock,
   resolveBrandingProfile,
+  siteLockdownFromDocs,
   visibleToHost,
 } from '@aglyn/aglyn/server'
 import type { PluginRevocation } from '@aglyn/aglyn/server'
@@ -35,7 +36,11 @@ import { renderRecipientEmail } from '@aglyn/aglyn/app-utils/recipient-email-ren
 import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 import type { EmailRenderProduct } from '@aglyn/shared-util-email'
 import { assignExperimentVariant, type HostExperiment } from '../model'
-import { campaignPlacedOnHost } from '@aglyn/shared-ui-email-campaigns/model'
+import {
+  campaignHeldForReviewNotice,
+  campaignPlacedOnHost,
+  campaignSendHeldForReview,
+} from '@aglyn/shared-ui-email-campaigns/model'
 import { readPluginRecordCard } from '@aglyn/aglyn/plugin-manager/plugin-record-cards'
 import { type PluginApiHandler } from '@aglyn/aglyn/server'
 import { hostPublicOrigin } from '@aglyn/aglyn/server'
@@ -43,6 +48,7 @@ import {
   consentGroupForSite,
   orgDataCollectionForHost,
   orgDataQueryForHost,
+  filterDeliverableRecipients,
   filterSendableForHost,
   filterTopicSendable,
   firebaseAdmin,
@@ -61,6 +67,16 @@ import {
 // wholesale, and the lookup must reach the real index logic under them.
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
+/*
+ * The LEAF for the phishing screen's hold (AGL-3356), for the reason every
+ * leaf above gives: the specs that reach this file mock the barrel, and a
+ * control that holds a send must be the real one under every harness.
+ */
+import {
+  canonicalJson,
+  HELD_SEND_AT_MS,
+  screenOutboundSend,
+} from '@aglyn/tenant-data-admin/server/outbound-send-review'
 /*
  * The LEAF module for the impersonation exemption too, and for a sharper
  * version of the reason the notes below give: every spec that reaches this
@@ -314,10 +330,46 @@ export class CampaignSendDeferredError extends CampaignSendError {
     message: string,
     /** When the hourly window rolls. */
     public readonly retryAtMs: number,
+    /**
+     * `429` for a rate, `423` for a suspension (AGL-3356). The subclass is
+     * what a caller acts on; the number is only what the API answers.
+     */
+    status = 429,
   ) {
-    super(message, 429)
+    super(message, status)
   }
 }
+
+/**
+ * The phishing screen held this send for staff review (AGL-3356).
+ *
+ * A DEFERRAL to every caller that handles one, which is the point: the
+ * scheduled processor puts the row back to `scheduled` at the parked time
+ * rather than marking it failed, and the send route's claim is released —
+ * so a held email is neither lost nor mailed. `409` because the merchant's
+ * request conflicts with a review in progress, and the message says so in
+ * words they can act on.
+ */
+export class CampaignSendHeldError extends CampaignSendDeferredError {
+  constructor(public readonly reference: string) {
+    super(
+      'This email is being reviewed before it sends, because new workspaces ' +
+        'have their first emails checked for impersonation. It has been saved ' +
+        'and nothing has been sent or counted; it goes out automatically if ' +
+        `it is approved. Reference ${reference}.`,
+      HELD_SEND_AT_MS,
+      409,
+    )
+  }
+}
+
+/**
+ * How long a suspended site's scheduled campaign waits before it is asked
+ * about again (AGL-3356). An hour keeps a locked workspace's due sends from
+ * crowding the processor's read on every fifteen-minute beat, and is short
+ * enough that a lifted suspension resumes the same afternoon.
+ */
+export const CAMPAIGN_SUSPENDED_RETRY_MS = 60 * 60 * 1000
 
 export interface CampaignSendOptions {
   hostId: string
@@ -761,6 +813,14 @@ export interface CampaignSendResult {
    * never a person.
    */
   cadenceHeld?: number
+  /**
+   * Dry run only (AGL-3328): of the paced recipients, how many the
+   * deliverability check took out because their domain has no mail server,
+   * and how many because their mail gateway refused this sending domain
+   * twice in thirty days and delivered nothing.
+   */
+  noMailServer?: number
+  gatewayHeld?: number
   /** Dry run only: which sending identity this campaign would leave on. */
   identity?: string
   /**
@@ -816,6 +876,27 @@ export interface CampaignSendResult {
  * `@aglyn/shared-ui-email-campaigns`, which the campaign page reads.
  */
 const LIST_UNSUBSCRIBE_RECORD_FIELD = 'listUnsubscribe'
+
+/**
+ * The deliverability check over one batch (AGL-3328), against the domain the
+ * campaign leaves from. Fails OPEN — an unreadable check, or one this
+ * deployment did not install, keeps everyone — because the check prevents
+ * bounces and a campaign that stopped for want of it would prevent mail.
+ */
+async function checkCampaignDeliverability(
+  emails: string[],
+  identity: { domain?: string | null; from?: string | null },
+): Promise<{ deliverable: string[]; noMailServer: string[]; gatewayHeld: string[] }> {
+  const fromAddress = String(identity?.from ?? '').match(/<([^>]+)>/)?.[1] ?? String(identity?.from ?? '')
+  const sendingDomain =
+    identity?.domain || (fromAddress.includes('@') ? fromAddress.slice(fromAddress.lastIndexOf('@') + 1).trim() : null)
+  try {
+    return await filterDeliverableRecipients({ emails, sendingDomain, purpose: 'bulk' })
+  } catch (error) {
+    console.error('[campaign] deliverability check unavailable — sending to everyone', error)
+    return { deliverable: emails, noMailServer: [], gatewayHeld: [] }
+  }
+}
 
 export async function performCampaignSend(
   options: CampaignSendOptions,
@@ -915,6 +996,43 @@ export async function performCampaignSend(
       'This site is not part of an organization, so it cannot send campaigns.',
       409,
     )
+  }
+  /*
+   * A SUSPENDED SITE SENDS NO CAMPAIGN (AGL-3356).
+   *
+   * The console dispatcher refuses a locked caller, but the scheduled
+   * processor and a resumed batch arrive with no caller at all, so the
+   * suspension is asked here, off the two documents this send already holds
+   * — no read is added. The incident behind this was a workspace locked for
+   * phishing whose deferred batches were still queued to go.
+   *
+   * A deferral rather than a failure: a suspension is a pause, and lifting
+   * it must leave the campaign where it was. Thrown before anything is
+   * claimed, counted or sent, so the scheduled processor puts the row back
+   * to `scheduled` and asks again after the delay. Any active lock pauses a
+   * campaign, a read-only maintenance window included, because a campaign is
+   * the one sender that can always wait.
+   */
+  {
+    const nowMs = Date.now()
+    const lock = siteLockdownFromDocs(
+      {
+        org: orgForHost?.org as never,
+        host: hostSnapshot.data() as never,
+      },
+      nowMs,
+    )
+    if (lock) {
+      throw new CampaignSendDeferredError(
+        lock.scope === 'org'
+          ? 'This workspace is suspended, so its email is paused. Nothing ' +
+            'has been sent or counted; it resumes when the suspension is lifted.'
+          : 'This site is suspended, so its email is paused. Nothing has ' +
+            'been sent or counted; it resumes when the suspension is lifted.',
+        nowMs + CAMPAIGN_SUSPENDED_RETRY_MS,
+        423,
+      )
+    }
   }
   const sends = orgCampaignSends(firestore, orgId)
 
@@ -1788,10 +1906,26 @@ export async function performCampaignSend(
    * pace is not a stop, and the two suppression lists above have already
    * removed everybody who asked us to stop entirely.
    */
-  const sendable = await filterCadenceSendable(hostId, onTopic, {
+  const paced = await filterCadenceSendable(hostId, onTopic, {
     firestore,
     group: consentGroup,
   })
+  /*
+   * THE FIFTH FILTER: who this send would bounce off (AGL-3328).
+   *
+   * An address whose domain has no mail server is a hard bounce charged to
+   * the sending domain, and an address behind a gateway that refused this
+   * sending domain twice in thirty days is the third refusal in a row —
+   * each one making the next more likely, at that company and at every
+   * other behind the same gateway. `sendEmail` refuses both one message at
+   * a time as well; subtracting them HERE is what makes the count on screen
+   * true before Send, the reason the cadence filter above sits here too.
+   *
+   * Fails OPEN: an audience that could not be checked is mailed as it was
+   * before the check existed.
+   */
+  const deliverability = await checkCampaignDeliverability(paced, sendingIdentity)
+  const sendable = deliverability.deliverable
   /*
    * NOBODY IN THIS BATCH, BUT SOMEBODY AFTER IT.
    *
@@ -1807,16 +1941,20 @@ export async function performCampaignSend(
   if (!sendable.length && consentSplit.mailable.length <= recipients.length) {
     if (options.continuation) return finishContinuation()
     /*
-     * Which of the four filters emptied the batch, because the answer changes
+     * Which of the five filters emptied the batch, because the answer changes
      * what the merchant should do. An audience that unsubscribed is one they
      * have to rebuild; an audience holding for its own cadence is one that
      * becomes mailable on its own, and telling them it "unsubscribed" would
-     * send them looking for a problem that is not there.
+     * send them looking for a problem that is not there. An audience the
+     * deliverability check emptied has addresses that would bounce.
      */
     throw new CampaignSendError(
-      onTopic.length
-        ? 'Every recipient has asked this site for mail less often than this'
-        : 'Every recipient has unsubscribed or been suppressed',
+      paced.length
+        ? 'Every recipient would bounce: their domains have no mail server, ' +
+            'or their mail gateway refused this sender twice this month'
+        : onTopic.length
+          ? 'Every recipient has asked this site for mail less often than this'
+          : 'Every recipient has unsubscribed or been suppressed',
       400,
     )
   }
@@ -1908,7 +2046,12 @@ export async function performCampaignSend(
        * did is the netting this readout has refused everywhere else.
        */
       suppressed: recipients.length - onTopic.length,
-      cadenceHeld: onTopic.length - sendable.length,
+      cadenceHeld: onTopic.length - paced.length,
+      // Who the deliverability check took out, by why (AGL-3328): "N
+      // recipients excluded: no mail server · M behind a gateway that
+      // refused this sender".
+      noMailServer: deliverability.noMailServer.length,
+      gatewayHeld: deliverability.gatewayHeld.length,
       /*
        * What this send will NOT reach on its first pass, so the composer can
        * say "3,000 people, 500 in the first batch, the rest over the next few
@@ -2022,6 +2165,110 @@ export async function performCampaignSend(
       throw new CampaignSendError('Pick a running email experiment', 400)
     }
     experiment = { $id: experimentSnapshot.id, ...data }
+  }
+  /*
+   * THE PHISHING SCREEN, for a workspace in its first fortnight (AGL-3356).
+   *
+   * Asked once the copy is final — the design loaded, the experiment's
+   * variants known — and before anything is claimed, counted or sent, so a
+   * hold costs the workspace nothing but the wait. See
+   * `outbound-send-review.ts` for who is screened and what a hold is, and
+   * `outbound-phishing-screen.ts` for what holds.
+   *
+   * A follow-up is not screened: it mails the copy its first send already
+   * carried, which was. A continuation is: its first batch may predate the
+   * screen, and a hold there parks the rest of the audience rather than
+   * mailing it.
+   *
+   * A HOLD PARKS THE SEND, it does not drop it. The record is written as a
+   * scheduled send whose time no processor run reaches, carrying the copy
+   * `storedSendOptionsFrom` reads back, and the review row in the abuse
+   * queue names it. Staff dismissing the row releases it — the send goes
+   * back on the clock and this screen finds it released — and actioning the
+   * row cancels it.
+   */
+  if (!options.followUp) {
+    const sendRef = sends.doc(campaignId)
+    const screened = await screenOutboundSend({
+      kind: 'campaign',
+      path: sendRef.path,
+      hostId,
+      orgId,
+      org: (orgForHost?.org as Record<string, unknown> | undefined) ?? null,
+      host: (hostSnapshot.data() as Record<string, unknown> | undefined) ?? null,
+      subject,
+      fromName: options.fromName ?? null,
+      // The verified address it will leave on: a lookalike domain there
+      // holds for every workspace (AGL-3362).
+      fromAddress: sendingIdentity.from ?? null,
+      replyTo: options.replyTo ?? null,
+      preheader: options.preheader ?? null,
+      bodies: [
+        body,
+        options.plainText ?? '',
+        template ? canonicalJson(template) : '',
+        experiment ? canonicalJson(experiment.variants ?? null) : '',
+      ],
+    })
+    if (screened.outcome === 'rejected') {
+      throw new CampaignSendError(
+        'This email was reviewed and will not be sent. Contact support if ' +
+          'you believe this is a mistake.',
+        403,
+      )
+    }
+    if (screened.outcome === 'held') {
+      await sendRef.set(
+        {
+          ...campaignSendSiteStamp(hostId),
+          // A continuation's record already holds its copy and its audience;
+          // anything else is written so the release can send it as composed.
+          ...(options.continuation
+            ? {}
+            : {
+                subject,
+                ...campaignSendSearchFields(subject),
+                body,
+                audience,
+                ...(mintsRecord ? { createdAtMs: Date.now() } : {}),
+                ...(options.segmentId ? { segmentId: options.segmentId } : {}),
+                ...(options.listId ? { listId: options.listId } : {}),
+                ...(options.topicId ? { topicId: options.topicId } : {}),
+                ...(options.emails?.length
+                  ? { emails: options.emails.map(String).slice(0, 500) }
+                  : {}),
+                ...(experimentId ? { experimentId } : {}),
+                ...(options.templateScreenId
+                  ? { templateScreenId: options.templateScreenId }
+                  : {}),
+                ...(options.plainText ? { plainText: options.plainText } : {}),
+                ...(options.fromName ? { fromName: options.fromName } : {}),
+                ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+                ...(options.senderId ? { senderId: options.senderId } : {}),
+                ...(options.preheader ? { preheader: options.preheader } : {}),
+                ...(options.displayName
+                  ? { displayName: options.displayName }
+                  : {}),
+                ...(options.emailCampaignId
+                  ? { emailCampaignId: options.emailCampaignId }
+                  : mintsRecord
+                    ? { emailCampaignId: null }
+                    : {}),
+                scheduledBy: options.senderUid,
+              }),
+          status: 'scheduled',
+          sendAtMs: HELD_SEND_AT_MS,
+          staffReview: {
+            reviewId: screened.reviewId,
+            reference: screened.reference,
+            state: 'held',
+            heldAtMs: Date.now(),
+          },
+        },
+        { merge: true },
+      )
+      throw new CampaignSendHeldError(screened.reference)
+    }
   }
   /*
    * PLATFORM SEND-RATE ADMISSION CONTROL (AGL-2409).
@@ -2895,7 +3142,9 @@ export async function performCampaignSend(
             }
           : {}),
         suppressed: additive(recipients.length - onTopic.length),
-        cadenceHeld: additive(onTopic.length - sendable.length),
+        cadenceHeld: additive(onTopic.length - paced.length),
+        noMailServer: additive(deliverability.noMailServer.length),
+        gatewayHeld: additive(deliverability.gatewayHeld.length),
         /*
          * That this send's links were trackable at all.
          *
@@ -4076,6 +4325,21 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
       const rewritable = !targetSnapshot.exists ||
         targetState === 'draft' ||
         targetState === 'scheduled'
+      /*
+       * A SEND HELD FOR STAFF REVIEW IS NOT THE MERCHANT'S TO REWRITE
+       * (AGL-3356). Scheduling it would move `sendAtMs` off the parked time
+       * and put it on the clock without a decision, and a rewrite of its
+       * copy would reach staff as content they never reviewed. The name is
+       * still theirs (`update`), and so is canceling it.
+       */
+      if (
+        action !== 'update' &&
+        campaignSendHeldForReview(targetSnapshot.data() as never)
+      ) {
+        return res.status(409).json({
+          error: campaignHeldForReviewNotice(targetSnapshot.data() as never),
+        })
+      }
       if (action !== 'update' && !rewritable) {
         return res.status(409).json({
           error:
@@ -4262,6 +4526,12 @@ export const campaignSendHandler: PluginApiHandler = async (req, res) => {
         return res.status(404).json({ error: 'Unknown email' })
       }
       const sendNowState = String(sendNowSnapshot.get('status') ?? '')
+      // Held for staff review (AGL-3356): "send now" is not a release.
+      if (campaignSendHeldForReview(sendNowSnapshot.data() as never)) {
+        return res.status(409).json({
+          error: campaignHeldForReviewNotice(sendNowSnapshot.data() as never),
+        })
+      }
       /*
        * Only an email that has not gone out yet. A sent one would be mailed a
        * second time to the whole audience under the same id — which is what

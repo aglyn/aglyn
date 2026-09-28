@@ -44,6 +44,14 @@ import {
   unsubscribeHeaders,
   type MarketingSendContext,
 } from './marketing-send'
+import {
+  EMAIL_DELIVERABILITY_PREFLIGHT_TIMEOUT_MS,
+  getEmailDeliverabilityPreflight,
+  type EmailDeliverabilityPreflightVerdict,
+  type EmailSendPurpose,
+} from './email-deliverability'
+import { bareSenderAddress } from './email-delivery-events'
+import { screenTenantMessage } from './outbound-screen-gate'
 
 export const RESEND_SEND_ENDPOINT = 'https://api.resend.com/emails'
 
@@ -166,6 +174,27 @@ export interface SendEmailOptions {
    * first, and would ask the gate about one of them. Callers fan out.
    */
   marketing?: MarketingSendContext
+  /**
+   * What the RECIPIENT did that makes this message owed to them (AGL-3356):
+   * `order` — a receipt, a gift card, a shipping notice for something they
+   * bought; `booking` — a confirmation, reminder or change to something they
+   * booked; `account` — a password reset or sign-in link they asked for.
+   *
+   * The outbound phishing screen's SOFT rules never hold an owed message; a
+   * lookalike link still does, because a receipt that links to a brand's
+   * disguise is the disguise. Omitted — the default, and the one a forgotten
+   * caller gets — the message is treated as merchant-authored and every
+   * tier applies. A MARKETING message is never owed, whatever it declares.
+   */
+  owedFor?: 'order' | 'booking' | 'account'
+  /**
+   * A review row that the caller's own screen held and staff RELEASED for
+   * exactly this content — a campaign put back on the clock, an automation
+   * step whose hold was dismissed. The send seam's screen honors it only
+   * after confirming, through the installed gate, that it is a release for
+   * this site; naming a row is not a way past the screen.
+   */
+  releasedReviewId?: string | null
 }
 
 /**
@@ -295,6 +324,40 @@ export type SendEmailFailureReason =
    * after they open anything goes.
    */
   | 'unengaged'
+  /**
+   * The recipient's domain takes no mail — no MX and no address record, or
+   * an RFC 7505 null MX — so the message would only have bounced
+   * (AGL-3328). Refused for every purpose, transactional included, before
+   * the provider was called; the address is suppressed with a reason of its
+   * own. Terminal: the preflight answers the same until the domain's DNS
+   * changes, which it re-reads daily.
+   */
+  | 'undeliverable'
+  /**
+   * A BULK or cold message whose recipient sits behind a mail gateway that
+   * refused this sending domain twice in thirty days and delivered nothing
+   * (AGL-3328). Terminal for this message rather than deferrable: the hold
+   * lifts when the gateway delivers again or the refusals age out, which is
+   * not something a sweep's next beat can wait out. Mail the recipient asked
+   * for is never held.
+   */
+  | 'gateway-held'
+  /**
+   * The site or workspace this message belongs to is under a full lockdown
+   * (AGL-3356), carried in on its sending identity. Terminal for this
+   * message: a sweep that holds work across a suspension skips the host
+   * before it gets here, so a caller that reaches this refusal is one with
+   * no way to come back, and retrying would only ask the same question.
+   */
+  | 'suspended'
+  /**
+   * The outbound phishing screen held this message for staff review, or
+   * staff already rejected a message carrying the same signals from this
+   * site (AGL-3356). Nothing was attempted. Terminal for this message:
+   * `detail` names the `HS-…` reference, and once staff release the review
+   * the site's next message carrying the same signals sends.
+   */
+  | 'held-for-review'
 
 export type SendEmailResult =
   | { sent: true; id: string | null }
@@ -432,6 +495,91 @@ export function isDeferrableSendResult(
 ): boolean {
   const reason = sendFailureReason(result)
   return reason === 'rate-limited' || reason === 'frequency-capped'
+}
+
+/**
+ * Who a message is for, as the deliverability preflight reads it
+ * (AGL-3328): `bulk` for anything a control may already refuse — marketing
+ * by either of its two marks, a campaign, a resumable sweep — and
+ * `transactional` for the rest, which a gateway hold never touches.
+ *
+ * Derived from what a sender already declares, for the reason
+ * `isMarketingMessage` is: a label callers had to remember would be
+ * forgotten by the one that matters, and the permissive answer is the one a
+ * forgotten caller gets.
+ */
+export function emailSendPurpose(
+  options: Pick<SendEmailOptions, 'priority' | 'context' | 'headers'> & { marketing?: unknown },
+): EmailSendPurpose {
+  if (isMarketingMessage(options)) return 'bulk'
+  if (options.headers?.['List-Unsubscribe']) return 'bulk'
+  return isRefusablePriority(resolveSendPriority(options.context, options.priority))
+    ? 'bulk'
+    : 'transactional'
+}
+
+/** The preflight's answer, or `null` when none is installed, it failed or it ran out of time. */
+async function askDeliverabilityPreflight(
+  request: Parameters<NonNullable<ReturnType<typeof getEmailDeliverabilityPreflight>>>[0],
+  label: string,
+): Promise<EmailDeliverabilityPreflightVerdict | null> {
+  const preflight = getEmailDeliverabilityPreflight()
+  if (!preflight) return null
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      preflight(request),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => {
+          console.warn(`${label} deliverability preflight timed out — allowing`)
+          resolve(null)
+        }, EMAIL_DELIVERABILITY_PREFLIGHT_TIMEOUT_MS)
+        ;(timer as { unref?: () => void })?.unref?.()
+      }),
+    ])
+  } catch (error) {
+    // Fails OPEN, the governor's posture: an outage on the control must not
+    // become an outage on the mail.
+    console.error(`${label} deliverability preflight failed — allowing`, error)
+    return null
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/**
+ * The send seam's half of the outbound phishing screen (AGL-3356): every
+ * message a SITE sends whose identity carries the workspace
+ * `hostSendingIdentity` stamped, through {@link screenTenantMessage} — the
+ * pure screen, its tiers, and the installed review store. `null` when the
+ * message may go; fails open, as that function documents.
+ */
+export async function askOutboundScreen(
+  options: SendEmailOptions,
+  label = 'email',
+): Promise<SendEmailResult | null> {
+  const workspace = options.sendingIdentity?.workspace
+  if (options.audience !== 'tenant' || !workspace?.hostId) return null
+  const refusal = await screenTenantMessage(
+    {
+      workspace,
+      subject: options.subject,
+      fromName: options.fromName ?? null,
+      // The resolved address, never anything the caller passed: the only
+      // `From:` this message can leave on (AGL-3362).
+      fromAddress: options.sendingIdentity?.from ?? null,
+      replyTo: options.replyTo ?? null,
+      bodies: [options.text, options.html],
+      // A marketing message is never owed, whatever it declares.
+      owed: Boolean(options.owedFor) && !isMarketingMessage(options),
+      context: options.context ?? null,
+      releasedReviewId: options.releasedReviewId ?? null,
+    },
+    label,
+  )
+  if (!refusal) return null
+  console.warn(`${label} not sent — ${refusal.detail}`)
+  return { sent: false, reason: 'held-for-review', detail: refusal.detail }
 }
 
 export interface EmailConfig {
@@ -583,7 +731,12 @@ export async function sendEmail(
     console.warn(`${label} refused — ${identityRefusal.message}`)
     return {
       sent: false,
-      reason: 'unverified-domain',
+      // A suspension is not a DNS state, and the merchant reading the
+      // failure has nothing to finish — so it is named for what it is.
+      reason:
+        identityRefusal.code === 'workspace-suspended'
+          ? 'suspended'
+          : 'unverified-domain',
       detail: identityRefusal.message,
     }
   }
@@ -640,10 +793,72 @@ export async function sendEmail(
     return { sent: false, reason: 'unconfigured' }
   }
 
-  const to = normalizeRecipients(options.to)
+  let to = normalizeRecipients(options.to)
   if (!to.length) {
     console.warn(`${label} skipped — no valid recipient address`)
     return { sent: false, reason: 'no-recipient' }
+  }
+
+  /*
+   * THE OUTBOUND PHISHING SCREEN (AGL-3356).
+   *
+   * Asked for every message a SITE sends whose identity came through
+   * `hostSendingIdentity` — which stamps the workspace on it — so one check
+   * covers every tenant sender, first-party or marketplace, without any of
+   * them calling it. See `outbound-screen-gate.ts`.
+   *
+   * Ahead of the preflight and every other gate: a message that must not
+   * leave is decided before anything is spent on who receives it.
+   */
+  const screenRefusal = await askOutboundScreen(options, label)
+  if (screenRefusal) return screenRefusal
+
+  /*
+   * THE DELIVERABILITY PREFLIGHT (AGL-3328).
+   *
+   * Asked before every other gate, because its refusal is the most final: a
+   * recipient whose domain takes no mail is not a recipient this message or
+   * any other can reach, and spending the marketing gate's reads or the
+   * governor's hourly budget deciding more about them would be spending it
+   * on a bounce. A recipient behind a gateway that refused this sending
+   * domain twice is held — for bulk mail only; the purpose decides that,
+   * and the preflight is told it.
+   *
+   * A multi-recipient message drops the refused and held recipients and goes
+   * to the rest: one colleague's dead address must not stop the others'
+   * notification.
+   */
+  const sendingAddress = bareSenderAddress(from)
+  const preflight = await askDeliverabilityPreflight(
+    {
+      recipients: to.map((address) => address.toLowerCase()),
+      purpose: emailSendPurpose(options),
+      sendingDomain: sendingAddress ? sendingAddress.slice(sendingAddress.lastIndexOf('@') + 1) : null,
+      sendingSource: options.sendingIdentity?.source ?? 'platform',
+      context: options.context,
+      hostId: options.marketing?.hostId ?? null,
+    },
+    label,
+  )
+  if (preflight && (preflight.refused?.length || preflight.held?.length)) {
+    const stopped = new Set(
+      [...(preflight.refused ?? []), ...(preflight.held ?? [])].map((entry) =>
+        String(entry?.email ?? '').toLowerCase(),
+      ),
+    )
+    const remaining = to.filter((address) => !stopped.has(address.toLowerCase()))
+    if (!remaining.length) {
+      const refused = preflight.refused?.[0]
+      const held = preflight.held?.[0]
+      const detail = refused?.reason ?? held?.reason ?? 'The recipient cannot receive this message.'
+      console.warn(`${label} not sent — ${detail}`)
+      return { sent: false, reason: refused ? 'undeliverable' : 'gateway-held', detail }
+    }
+    console.warn(
+      `${label} — ${to.length - remaining.length} of ${to.length} recipients ` +
+        'dropped by the deliverability preflight',
+    )
+    to = remaining
   }
 
   /*

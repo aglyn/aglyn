@@ -275,20 +275,6 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "fileName",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folderId",
-          "order": "ASCENDING"
-        },
-        {
           "fieldPath": "sizeBytes",
           "order": "DESCENDING"
         }
@@ -318,20 +304,6 @@
         },
         {
           "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "tags",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "fileName",
           "order": "ASCENDING"
         }
       ]
@@ -399,90 +371,8 @@
           "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "fileName",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folderId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "tags",
-          "arrayConfig": "CONTAINS"
-        },
-        {
           "fieldPath": "sizeBytes",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folderId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folderId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
         }
       ]
     },
@@ -607,20 +497,6 @@
           "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "fileName",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
           "fieldPath": "sizeBytes",
           "order": "DESCENDING"
         }
@@ -675,186 +551,8 @@
           "arrayConfig": "CONTAINS"
         },
         {
-          "fieldPath": "fileName",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folderId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
           "fieldPath": "sizeBytes",
           "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folderId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folderId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folderId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "media",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "folderId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "visibleTo",
-          "arrayConfig": "CONTAINS"
-        },
-        {
-          "fieldPath": "contentType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "ASCENDING"
         }
       ]
     },
@@ -897,6 +595,34 @@
         {
           "fieldPath": "publishAt",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startsAtMs",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startsAtMs",
+          "order": "DESCENDING"
         }
       ]
     },
@@ -2989,60 +2715,6 @@
       ]
     },
     {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "released",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "reason",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "released",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "context",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "emailSuppressions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "released",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "hostId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "suppressedAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "activity",
       "queryScope": "COLLECTION",
       "fields": [
@@ -4615,6 +4287,24 @@
       ]
     },
     {
+      "collectionGroup": "screens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "campaignIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "deletedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "campaigns",
       "queryScope": "COLLECTION",
       "fields": [
@@ -4845,6 +4535,34 @@
         {
           "fieldPath": "email",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "clicked",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "outreachEnrollments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "engagement.links",
+          "arrayConfig": "CONTAINS"
         },
         {
           "fieldPath": "createdAtMs",
@@ -6243,6 +5961,48 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "inCampaign",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stats.submissions",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "inCampaign",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stats.lastSubmissionAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "inCampaign",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "campaignIds",
           "arrayConfig": "CONTAINS"
         },
@@ -6277,6 +6037,20 @@
         {
           "fieldPath": "updatedAt",
           "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "forms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "campaignIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "nameLower",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -6897,6 +6671,24 @@
     {
       "collectionGroup": "bookings",
       "fieldPath": "startsAtMs",
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "fieldPath": "paymentIntentId",
       "indexes": [
         {
           "queryScope": "COLLECTION",

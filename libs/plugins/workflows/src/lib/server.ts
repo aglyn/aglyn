@@ -34,6 +34,7 @@ import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { timingSafeEqual } from 'crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import { runSummaryFields } from './model/run-history'
+import { eventRunSuspension } from './engine/site-suspension'
 import { BUNDLE_ID as WORKFLOWS_BUNDLE_ID } from './constants/bundle-common'
 import { registerWorkflowsServerDeclarations } from './declarations.server'
 import {
@@ -153,6 +154,17 @@ const inboundHookHandler: PluginApiHandler = async (req, res) => {
     // Plan/quota gates ride the owning org's doc (AGL-238).
     const owner = await getOrgForHost(hostId)
     const org = owner?.org
+    /*
+     * A suspended site takes no inbound run (AGL-3356). The tenant
+     * dispatcher's lockdown gate reads `hostId` from the query or body, and
+     * this route carries it in the PATH, so the engine's own question is
+     * asked here. A 423 rather than a 200: the caller is an integration, and
+     * one told a run happened keeps sending.
+     */
+    const suspended = await eventRunSuspension(hostRef, org)
+    if (suspended) {
+      return res.status(423).json({ error: 'locked', scope: suspended.scope })
+    }
     if (!checkEntitlement(org as any, 'webhooks')) {
       return res
         .status(403)

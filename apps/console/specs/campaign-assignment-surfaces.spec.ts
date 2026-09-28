@@ -99,15 +99,22 @@ describe('every assignable record kind has a picker on its own page', () => {
 
   it.each(Object.entries(ASSIGNMENT_SURFACES))(
     'the %s surface writes through the shared value helper',
-    (_kind, path) => {
+    (kind, path) => {
       /*
        * `campaignMembershipValue` is what turns an empty selection into a
        * stored empty array. A surface writing the picker's raw output would
-       * work until somebody cleared the last campaign.
+       * work until somebody cleared the last campaign. A form writes it
+       * through `formCampaignFields`, which stamps the Forms list's
+       * `inCampaign` beside it (AGL-3330) — asserted to wrap the helper below.
        */
-      expect(read(path)).toContain('campaignMembershipValue')
+      expect(read(path)).toContain(kind === 'forms' ? 'formCampaignFields' : 'campaignMembershipValue')
     },
   )
+
+  it("a form's campaign fields are the shared value helper's, plus the list's flag", () => {
+    const forms = read('libs/aglyn/src/lib/app-utils/forms.ts')
+    expect(forms).toMatch(/export function formCampaignFields[\s\S]*?campaignMembershipValue\(/)
+  })
 
   it('a lead is also filed as it is created, by the same control and helper', () => {
     const source = read(LEAD_CREATE_SURFACE)

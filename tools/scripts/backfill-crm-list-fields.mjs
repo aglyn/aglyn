@@ -36,6 +36,10 @@
  *   deals       `searchTokens`, `scopedSearchTokens`, `nextTaskAtMs: null`
  *   crmTasks    `searchTokens`, `scopedSearchTokens`, `dueAtMs: null` where
  *               absent (every task view orders by it)
+ *   contactFields  the custom field DEFINITIONS the CRM › Fields table asks
+ *               for (AGL-3335): `object` (`contact` for a definition made
+ *               before companies and deals had fields), `required` as a
+ *               boolean, and `searchTokens` from its name and key
  *
  * The fields are built by `lib/org-record-list-fields.mjs`, held to the fixtures
  * the library's spec asserts, so the backfill cannot stamp a spelling the
@@ -66,9 +70,12 @@ import { readFileSync } from 'node:fs'
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { FieldPath, getFirestore } from 'firebase-admin/firestore'
 import { parseDeployArgs } from './lib/deploy-args.mjs'
-import { crmListFieldsBackfillPatch } from './lib/org-record-list-fields.mjs'
+import {
+  crmFieldListFieldsBackfillPatch,
+  crmListFieldsBackfillPatch,
+} from './lib/org-record-list-fields.mjs'
 
-const COLLECTIONS = ['leads', 'contacts', 'companies', 'deals', 'crmTasks']
+const COLLECTIONS = ['leads', 'contacts', 'companies', 'deals', 'crmTasks', 'contactFields']
 
 const args = parseDeployArgs({
   command: 'backfill-crm-list-fields',
@@ -102,7 +109,10 @@ const PAGE = 500
  * @returns {{ update: Record<string, unknown> } | { skip: 'current' }}
  */
 export function planRecord(collection, data) {
-  const update = crmListFieldsBackfillPatch(collection, data)
+  const update =
+    collection === 'contactFields'
+      ? crmFieldListFieldsBackfillPatch(data)
+      : crmListFieldsBackfillPatch(collection, data)
   return Object.keys(update).length ? { update } : { skip: 'current' }
 }
 
@@ -131,6 +141,18 @@ function selfTest() {
     }
     check(`#${at} ${collection}: a re-run is a no-op`, 'skip' in planRecord(collection, stamped))
     check(`#${at} ${collection}: updatedAt is never written`, !('updatedAt' in (plan.update ?? {})))
+  }
+  for (const [at, { record, expected }] of fixtures.fieldDefinitions.entries()) {
+    const plan = planRecord('contactFields', record)
+    check(`#${at} contactFields: a bare definition is stamped`, 'update' in plan)
+    const stamped = 'update' in plan ? { ...record, ...plan.update } : record
+    for (const [field, value] of Object.entries(expected)) {
+      check(
+        `#${at} contactFields: ${field} as the library computes it`,
+        JSON.stringify(stamped[field]) === JSON.stringify(value),
+      )
+    }
+    check(`#${at} contactFields: a re-run is a no-op`, 'skip' in planRecord('contactFields', stamped))
   }
   console.log(failed ? `self-test: ${failed} of ${total} failed` : `self-test: ${total}/${total} passed`)
   process.exit(failed ? 1 : 0)

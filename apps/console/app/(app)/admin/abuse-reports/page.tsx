@@ -127,6 +127,7 @@ import {
   Chip,
   Divider,
   LinearProgress,
+  Link,
   MenuItem,
   Stack,
   TextField,
@@ -206,6 +207,118 @@ interface AbuseReportRow {
    * never to be rendered as zero.
    */
   strikeUnknown: boolean
+  /** `outbound-screen` for a send the phishing screen held; null for intake. */
+  source: string | null
+  /** The held send, when the screen filed this row (AGL-3356). */
+  heldSend: HeldSendRow | null
+  /** A Stripe fraud signal, when the billing webhook filed this row (AGL-3356). */
+  paymentSignal: PaymentSignalRow | null
+  /** A seller's fraud pattern across its sales (AGL-3360). */
+  sellerPattern: SellerPatternRow | null
+}
+
+/**
+ * Several of one connected account's sales drew fraud warnings or disputes
+ * (AGL-3360), as `sellerPatternPayload()` hands it over. Nothing was
+ * refunded, canceled or paused.
+ */
+interface SellerPatternRow {
+  sellerAccountId: string | null
+  stripeAccountUrl: string | null
+  chargeIds: string[]
+  orgIds: string[]
+  hostIds: string[]
+  threshold: number | null
+  windowDays: number | null
+  livemode: boolean
+}
+
+/**
+ * An early fraud warning, a Radar review or a dispute on a charge, as
+ * `paymentSignalPayload()` hands it over. Nothing was refunded or canceled;
+ * the row links the org's Subscription card, where staff decide.
+ */
+interface PaymentSignalRow {
+  kind: string | null
+  stripeObjectId: string | null
+  chargeId: string | null
+  paymentIntentId: string | null
+  amountCents: number | null
+  currency: string
+  detail: string | null
+  livemode: boolean
+  subscriptionCard: string | null
+  checks: {
+    cvcCheck: string | null
+    addressPostalCodeCheck: string | null
+    cardCountry: string | null
+    riskLevel: string | null
+    threeDSecure: string | null
+  } | null
+}
+
+const PAYMENT_SIGNAL_TITLES: Record<string, string> = {
+  'early-fraud-warning': 'Stripe early fraud warning',
+  'radar-review': 'Stripe Radar review opened',
+  dispute: 'Card dispute opened',
+}
+
+/** `56.00 USD`, or a sentence saying nothing recorded the amount. */
+function paymentSignalAmount(signal: PaymentSignalRow): string {
+  return signal.amountCents === null
+    ? 'amount not recorded'
+    : `${(signal.amountCents / 100).toFixed(2)} ${signal.currency.toUpperCase()}`
+}
+
+/**
+ * A campaign or automated email the outbound phishing screen held for review
+ * (AGL-3356), as `heldSendPayload()` hands it over. Closing the row decides
+ * it: dismissed releases the send, actioned rejects it.
+ */
+interface HeldSendRow {
+  kind: string | null
+  path: string | null
+  subject: string | null
+  fromName: string | null
+  state: string
+  ageDays: number | null
+  heldAtMs: number | null
+  decidedBy: string | null
+  decidedAtMs: number | null
+  reasons: string[]
+}
+
+/** What a held send's state means, in the words the reviewer acts on. */
+function heldSendStateLine(held: HeldSendRow): string {
+  const by = held.decidedBy ? ` by ${held.decidedBy}` : ''
+  if (held.kind === 'page') {
+    if (held.state === 'released') return `Released${by} — the page serves as published.`
+    if (held.state === 'rejected') return `Rejected${by} — the page stays unserved.`
+    return 'Held — the page serves its last clean version, or nothing. Dismiss this report (with a note) to release it, or mark it Actioned to reject it. Reviewing leaves it held.'
+  }
+  if (held.state === 'released') {
+    return held.kind === 'message'
+      ? `Released${by} — the site's next email carrying these signals sends.`
+      : `Released${by} — it sends as composed.`
+  }
+  if (held.state === 'rejected') {
+    return `Rejected${by} — it will not be sent.`
+  }
+  return 'Held — nothing has been sent. Dismiss this report (with a note) to release it, or mark it Actioned to reject it. Reviewing leaves it held.'
+}
+
+/** What the phishing screen held, as the row's heading names it. */
+function heldSendKindLabel(kind: string | null): string {
+  switch (kind) {
+    case 'campaign':
+      return 'Outbound campaign'
+    case 'page':
+      return 'Published page'
+    case 'message':
+      return 'Outbound email'
+    default:
+      return 'Outbound automated email'
+  }
 }
 
 /**
@@ -1307,9 +1420,137 @@ function AdminAbuseReports() {
 
                     <Divider />
 
+                    {report.paymentSignal ? (
+                      <Alert severity="error">
+                        <Stack spacing={0.5}>
+                          <Typography variant="subtitle2">
+                            {`${
+                              PAYMENT_SIGNAL_TITLES[report.paymentSignal.kind ?? ''] ??
+                              'Stripe fraud signal'
+                            }${report.paymentSignal.livemode ? '' : ' (test mode)'}`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {`Workspace: ${report.orgId ?? 'none — not a workspace subscription charge'} · ` +
+                              `Charge: ${report.paymentSignal.chargeId ?? report.paymentSignal.paymentIntentId ?? 'not named'} · ` +
+                              `Amount: ${paymentSignalAmount(report.paymentSignal)}`}
+                          </Typography>
+                          {report.paymentSignal.detail ? (
+                            <Typography variant="body2">
+                              {`Stripe says: ${report.paymentSignal.detail}`}
+                            </Typography>
+                          ) : null}
+                          {report.paymentSignal.checks ? (
+                            <Typography variant="body2">
+                              {`Card: CVC ${report.paymentSignal.checks.cvcCheck ?? 'unknown'}, ` +
+                                `postal code ${report.paymentSignal.checks.addressPostalCodeCheck ?? 'unknown'}, ` +
+                                `issued in ${report.paymentSignal.checks.cardCountry ?? 'unknown'}, ` +
+                                `3DS ${report.paymentSignal.checks.threeDSecure ?? 'not used'}, ` +
+                                `Radar risk ${report.paymentSignal.checks.riskLevel ?? 'unknown'}`}
+                            </Typography>
+                          ) : null}
+                          <Typography variant="body2">
+                            {'Nothing has been refunded or canceled. Decide on the Subscription card, lock the workspace if it is fraud, then close this report with what you did.'}
+                          </Typography>
+                          {report.paymentSignal.subscriptionCard ? (
+                            <AppLink href={report.paymentSignal.subscriptionCard}>
+                              {'Open the workspace’s Subscription card'}
+                            </AppLink>
+                          ) : null}
+                        </Stack>
+                      </Alert>
+                    ) : null}
+
+                    {report.sellerPattern ? (
+                      <Alert severity="error">
+                        <Stack spacing={0.5}>
+                          <Typography variant="subtitle2">
+                            {`Seller fraud pattern${report.sellerPattern.livemode ? '' : ' (test mode)'}`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {`Connected account ${report.sellerPattern.sellerAccountId ?? 'unknown'}: ` +
+                              `${report.sellerPattern.chargeIds.length} different charges drew a fraud warning or a dispute` +
+                              (report.sellerPattern.windowDays
+                                ? ` within ${report.sellerPattern.windowDays} days`
+                                : '') +
+                              '.'}
+                          </Typography>
+                          <Typography variant="body2">
+                            {`Workspace(s): ${report.sellerPattern.orgIds.join(', ') || 'not resolved'} · ` +
+                              `Site(s): ${report.sellerPattern.hostIds.join(', ') || 'not resolved'}`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {'Nothing has been refunded, canceled or paused. If the seller is the fraudster, lock the workspace and pause the account’s payouts in Stripe, then close this report with what you did.'}
+                          </Typography>
+                          {report.sellerPattern.orgIds[0] ? (
+                            <AppLink
+                              href={`/admin/orgs/${encodeURIComponent(report.sellerPattern.orgIds[0])}`}
+                            >
+                              {'Open the workspace'}
+                            </AppLink>
+                          ) : null}
+                          {report.sellerPattern.stripeAccountUrl ? (
+                            <Link
+                              href={report.sellerPattern.stripeAccountUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              variant="body2"
+                            >
+                              {'Open the connected account in Stripe'}
+                            </Link>
+                          ) : null}
+                        </Stack>
+                      </Alert>
+                    ) : null}
+
+                    {report.heldSend ? (
+                      <Alert
+                        severity={
+                          report.heldSend.state === 'held' ? 'warning' : 'info'
+                        }
+                      >
+                        <Stack spacing={0.5}>
+                          <Typography variant="subtitle2">
+                            {`${heldSendKindLabel(
+                              report.heldSend.kind,
+                            )} held by the phishing screen`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {`${report.heldSend.kind === 'page' ? 'Page' : 'Subject'}: ${
+                              report.heldSend.subject ?? '—'
+                            }`}
+                            {report.heldSend.fromName
+                              ? ` · Sender name: ${report.heldSend.fromName}`
+                              : ''}
+                            {report.heldSend.ageDays !== null
+                              ? ` · Workspace age: ${report.heldSend.ageDays} day(s)`
+                              : ''}
+                          </Typography>
+                          {report.heldSend.reasons.map((reason) => (
+                            <Typography key={reason} variant="body2">
+                              {`• ${reason}`}
+                            </Typography>
+                          ))}
+                          <Typography
+                            variant="caption"
+                            sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                          >
+                            {report.heldSend.path ?? ''}
+                          </Typography>
+                          <Typography variant="body2">
+                            {heldSendStateLine(report.heldSend)}
+                          </Typography>
+                        </Stack>
+                      </Alert>
+                    ) : null}
+
                     <Stack spacing={0.5}>
                       <Typography variant="caption" color="text.secondary">
-                        {'What the reporter said'}
+                        {report.source === 'outbound-screen'
+                          ? 'What the screen recorded'
+                          : report.source === 'stripe-fraud-signal' ||
+                              report.source === 'stripe-seller-fraud-pattern'
+                            ? 'What Stripe reported'
+                            : 'What the reporter said'}
                       </Typography>
                       <Typography
                         variant="body2"
@@ -1323,7 +1564,19 @@ function AdminAbuseReports() {
                       <Typography variant="caption" color="text.secondary">
                         {'Who reported it'}
                       </Typography>
-                      {report.identityVisible ? (
+                      {report.source === 'stripe-fraud-signal' ? (
+                        <Typography variant="body2">
+                          {'Filed by the Stripe billing webhook, not a person. There is no reporter to reply to; the card holder and the workspace are the subject.'}
+                        </Typography>
+                      ) : report.source === 'stripe-seller-fraud-pattern' ? (
+                        <Typography variant="body2">
+                          {'Filed by the Stripe billing webhook from the seller’s own sales, not by a person. There is no reporter to reply to; the seller is the subject.'}
+                        </Typography>
+                      ) : report.source === 'outbound-screen' ? (
+                        <Typography variant="body2">
+                          {'Filed by the outbound phishing screen, not a person. There is no reporter to reply to; the workspace that composed the email is the subject.'}
+                        </Typography>
+                      ) : report.identityVisible ? (
                         <Typography variant="body2">
                           {report.hasReporterContact
                             ? `${report.reporterName ?? 'no name given'} — ${report.reporterEmail ?? 'no address recorded'}`

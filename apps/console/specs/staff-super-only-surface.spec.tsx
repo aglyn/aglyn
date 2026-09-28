@@ -193,6 +193,13 @@ const GATED_SURFACES: Record<string, { ui: string[]; via: RegExp }> = {
     ],
     via: /useSuperStaffGate|SuperStaffOnly/,
   },
+  // Staff subscription cancellation (AGL-3359). Reading the subscriptions is
+  // staff-wide; cancelling is `super`, the lockdown bar, and the card header's
+  // action is wrapped in the super gate.
+  'billing/cancel-subscription/route.ts': {
+    ui: ['components/staff-org-subscription-card.component.tsx'],
+    via: /SuperStaffOnly/,
+  },
   'org-override/route.ts': {
     ui: ['components/staff-org-actions.component.tsx'],
     via: /StaffRoleOnly/,

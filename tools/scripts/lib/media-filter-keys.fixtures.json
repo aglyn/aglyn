@@ -212,6 +212,267 @@
         "hasAlt": false,
         "orientation": null
       }
+    },
+    {
+      "media": {
+        "fileName": "IMG_2041.jpg",
+        "contentType": "image/jpeg",
+        "width": 4000,
+        "height": 3000,
+        "contentSha256": "a1",
+        "embeddedMetadata": {
+          "version": 1,
+          "format": "jpeg",
+          "contentSha256": "a1",
+          "fields": [
+            {
+              "key": "title",
+              "label": "Title",
+              "group": "description",
+              "value": "Harbor at dawn"
+            },
+            {
+              "key": "keywords",
+              "label": "Keywords",
+              "group": "description",
+              "values": [
+                "boats",
+                "fog"
+              ]
+            },
+            {
+              "key": "gpsLatitude",
+              "label": "Latitude",
+              "group": "location",
+              "value": "41.2"
+            }
+          ]
+        }
+      },
+      "keys": {
+        "kind": "image",
+        "nameLower": "img_2041.jpg",
+        "nameTokens": [
+          "i",
+          "im",
+          "img",
+          "2",
+          "20",
+          "204",
+          "2041",
+          "j",
+          "jp",
+          "jpg",
+          "h",
+          "ha",
+          "har",
+          "harb",
+          "harbo",
+          "harbor",
+          "a",
+          "at",
+          "d",
+          "da",
+          "daw",
+          "dawn",
+          "b",
+          "bo",
+          "boa",
+          "boat",
+          "boats",
+          "f",
+          "fo",
+          "fog"
+        ],
+        "hasAlt": false,
+        "orientation": "landscape"
+      }
+    },
+    {
+      "media": {
+        "fileName": "IMG_2042.jpg",
+        "contentType": "image/jpeg",
+        "contentSha256": "b2",
+        "embeddedMetadata": {
+          "version": 1,
+          "format": "jpeg",
+          "contentSha256": "a1",
+          "fields": [
+            {
+              "key": "title",
+              "label": "Title",
+              "group": "description",
+              "value": "Old file title"
+            }
+          ]
+        }
+      },
+      "keys": {
+        "kind": "image",
+        "nameLower": "img_2042.jpg",
+        "nameTokens": [
+          "i",
+          "im",
+          "img",
+          "2",
+          "20",
+          "204",
+          "2042",
+          "j",
+          "jp",
+          "jpg"
+        ],
+        "hasAlt": false,
+        "orientation": null
+      }
+    },
+    {
+      "media": {
+        "fileName": "quarterly-report.pdf",
+        "contentType": "application/pdf",
+        "contentSha256": "c3",
+        "embeddedMetadata": {
+          "version": 1,
+          "format": "jpeg",
+          "contentSha256": "c3",
+          "fields": [
+            {
+              "key": "description",
+              "label": "Description",
+              "group": "description",
+              "value": "aamno bhmno comno dvmno ecmno fjmno gqmno hxmno iemno jlmno ksmno lzmno mgmno nnmno oumno pbmno qimno rpmno swmno tdmno ukmno vrmno wymno xfmno ymmno ztmno aamno bhmno comno dvmno ecmno fjmno gqmno hxmno iemno jlmno ksmno lzmno mgmno nnmno oumno pbmno qimno rpmno swmno tdmno ukmno vrmno wymno xfmno ymmno ztmno aamno bhmno comno dvmno ecmno fjmno gqmno hxmno"
+            }
+          ]
+        }
+      },
+      "keys": {
+        "kind": "pdf",
+        "nameLower": "quarterly-report.pdf",
+        "nameTokens": [
+          "q",
+          "qu",
+          "qua",
+          "quar",
+          "quart",
+          "quarte",
+          "quarter",
+          "quarterl",
+          "quarterly",
+          "r",
+          "re",
+          "rep",
+          "repo",
+          "repor",
+          "report",
+          "p",
+          "pd",
+          "pdf",
+          "a",
+          "aa",
+          "aam",
+          "aamn",
+          "aamno",
+          "b",
+          "bh",
+          "bhm",
+          "bhmn",
+          "bhmno",
+          "c",
+          "co",
+          "com",
+          "comn",
+          "comno",
+          "d",
+          "dv",
+          "dvm",
+          "dvmn",
+          "dvmno",
+          "e",
+          "ec",
+          "ecm",
+          "ecmn",
+          "ecmno",
+          "f",
+          "fj",
+          "fjm",
+          "fjmn",
+          "fjmno",
+          "g",
+          "gq",
+          "gqm",
+          "gqmn",
+          "gqmno",
+          "h",
+          "hx",
+          "hxm",
+          "hxmn",
+          "hxmno",
+          "i",
+          "ie",
+          "iem",
+          "iemn",
+          "iemno",
+          "j",
+          "jl",
+          "jlm",
+          "jlmn",
+          "jlmno",
+          "k",
+          "ks",
+          "ksm",
+          "ksmn",
+          "ksmno",
+          "l",
+          "lz",
+          "lzm",
+          "lzmn",
+          "lzmno",
+          "m",
+          "mg",
+          "mgm",
+          "mgmn",
+          "mgmno",
+          "n",
+          "nn",
+          "nnm",
+          "nnmn",
+          "nnmno",
+          "o",
+          "ou",
+          "oum",
+          "oumn",
+          "oumno",
+          "pb",
+          "pbm",
+          "pbmn",
+          "pbmno",
+          "qi",
+          "qim",
+          "qimn",
+          "qimno",
+          "rp",
+          "rpm",
+          "rpmn",
+          "rpmno",
+          "s",
+          "sw",
+          "swm",
+          "swmn",
+          "swmno",
+          "t",
+          "td",
+          "tdm",
+          "tdmn",
+          "tdmno",
+          "u",
+          "uk",
+          "ukm",
+          "ukmn",
+          "ukmno"
+        ],
+        "hasAlt": false,
+        "orientation": null
+      }
     }
   ]
 }

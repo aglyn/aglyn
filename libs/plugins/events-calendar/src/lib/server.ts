@@ -34,6 +34,9 @@ import {
 import { firebaseAdmin, getOrgForHost } from '@aglyn/tenant-data-admin'
 import { dispatchHostAutomation } from '@aglyn/tenant-runtime'
 
+/** How many events one listing returns. */
+const EVENTS_LIST_LIMIT = 50
+
 /**
  * Public event listing (AGL-145): published events for the Event List canvas
  * element. Drafts never leave the server; the paid `eventCalendar` add-on
@@ -63,19 +66,29 @@ const eventsListHandler: PluginApiHandler = async (req, res) => {
       }
     }
 
+    /*
+     * Only published events, ON THE QUERY, so the fifty it returns are fifty
+     * a visitor may see rather than fifty by start time with the drafts then
+     * dropped. `status` is written by every save (the console's one event
+     * writer), and the delete writes `status: 'deleted'` beside `deletedAt`,
+     * so `== 'published'` is both "published" and "not deleted". Served by
+     * the `events (status, startsAtMs)` composites, one per direction, in
+     * `cloud/firebase-firestore.indexes.json`.
+     */
     const nowMs = Date.now()
+    const published = hostRef
+      .collection('events')
+      .where('status', '==', 'published')
     const eventsQuery =
       mode === 'past'
-        ? hostRef
-            .collection('events')
+        ? published
             .where('startsAtMs', '<', nowMs)
             .orderBy('startsAtMs', 'desc')
-            .limit(50)
-        : hostRef
-            .collection('events')
+            .limit(EVENTS_LIST_LIMIT)
+        : published
             .where('startsAtMs', '>=', nowMs)
             .orderBy('startsAtMs', 'asc')
-            .limit(50)
+            .limit(EVENTS_LIST_LIMIT)
     // The site's own identity, for absolutizing the cover below (AGL-1351).
     // The host doc is already in hand — this costs no read.
     const host = {
@@ -86,9 +99,9 @@ const eventsListHandler: PluginApiHandler = async (req, res) => {
 
     const snapshot = await eventsQuery.get()
     const events = snapshot.docs
-      .filter(
-        (doc) => doc.get('status') === 'published' && !doc.get('deletedAt'),
-      )
+      // An event deleted before its delete also wrote `status` still reads
+      // `published`; its `deletedAt` keeps it off the page.
+      .filter((doc) => !doc.get('deletedAt'))
       .map((doc) => ({
         $id: doc.id,
         title: doc.get('title') ?? '',

@@ -43,6 +43,8 @@ import { recordContactRefund } from './contact-refund'
 // specs in this library mock `@aglyn/tenant-data-admin` wholesale, and a
 // permissive stub would turn a reversal that never happened green.
 import { reverseEmailAttributedRevenue } from '@aglyn/tenant-data-admin/server/email-revenue-attribution'
+import { paymentRiskEventFrom } from '@aglyn/aglyn/app-utils/payment-risk'
+import { recordPaymentRiskOnRecord } from '@aglyn/tenant-data-admin/server/payment-risk-record'
 import { mintDownloadToken, tokenSigningSecret } from './download'
 import { alertLowStockCrossing } from './low-stock'
 import { decrementVariantStock } from './reserve-stock'
@@ -3160,6 +3162,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               sendingIdentity: await hostSendingIdentity(String(hostId)),
               audience: 'tenant',
               context: 'reservation confirmation',
+              // Owed to the recipient by their own booking: the phishing
+              // screen's soft rules never hold it (AGL-3356).
+              owedFor: 'booking',
             })
             // Cost meter (AGL-1438). Transactional: the guest has paid, and a
             // confirmation a quota refused reads as a failed reservation.
@@ -3502,6 +3507,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             sendingIdentity: await hostSendingIdentity(String(hostId)),
             audience: 'tenant',
             context: 'cart receipt',
+            // Owed to the recipient by their own order: the phishing
+            // screen's soft rules never hold it (AGL-3356).
+            owedFor: 'order',
           })
           // Cost meter (AGL-1438). Transactional: a dropped receipt looks to
           // the buyer like an order that did not go through.
@@ -3800,6 +3808,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 sendingIdentity: await hostSendingIdentity(String(hostId)),
                 audience: 'tenant',
                 context: 'gift card',
+                // Owed to the recipient by their own order: the phishing
+                // screen's soft rules never hold it (AGL-3356).
+                owedFor: 'order',
               })
               // Cost meter (AGL-1438). Transactional: this email IS the
               // purchased goods.
@@ -4465,6 +4476,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 sendingIdentity: await hostSendingIdentity(String(hostId)),
                 audience: 'tenant',
                 context: 'dropship supplier notice',
+                // Owed to the recipient by their own order: the phishing
+                // screen's soft rules never hold it (AGL-3356).
+                owedFor: 'order',
               })
               // Cost meter (AGL-1438). Transactional: without it the order is
               // never fulfilled.
@@ -4584,6 +4598,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               sendingIdentity: await hostSendingIdentity(String(hostId)),
               audience: 'tenant',
               context: 'receipt',
+              // Owed to the recipient by their own order: the phishing
+              // screen's soft rules never hold it (AGL-3356).
+              owedFor: 'order',
             })
             // Cost meter (AGL-1438). Transactional, as the cart receipt above.
             await meterHostEmail(String(hostId))
@@ -4637,6 +4654,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 sendingIdentity: await hostSendingIdentity(String(hostId)),
                 audience: 'tenant',
                 context: 'seller order notice',
+                // Owed to the recipient by their own order: the phishing
+                // screen's soft rules never hold it (AGL-3356).
+                owedFor: 'order',
               })
               // Cost meter (AGL-1438). Transactional: the seller learns about
               // the order here.
@@ -4646,6 +4666,51 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
       }
     }
+
+  // Fraud signals on a store's sale (AGL-3360): an issuer's early fraud
+  // warning and a Radar review. The merchant decides what to do for their
+  // own customer, so the signal lands on the ORDER — a timeline line and the
+  // shared `paymentRisk` chip — and the site's managers are told once.
+  // Nothing is refunded or canceled. Found by the same payment-intent join a
+  // dispute uses; a signal on anything else is not commerce's and stays
+  // silent here (the platform route and the other plugins answer it).
+  // Disputes keep their own branch below, which has always told the
+  // merchant; both report the site so the seller's fraud ledger can name it.
+  const risk = paymentRiskEventFrom(type, object)
+  if (risk && risk.signal.kind !== 'dispute') {
+    const lookup: DisputeLookup = risk.paymentIntentId
+      ? await findOrderForDispute(risk.paymentIntentId)
+      : { kind: 'not-ours' }
+    if (lookup.kind !== 'order') return
+    const snapshot = lookup.snapshot
+    const hostId = String(snapshot.ref.parent.parent?.id ?? '')
+    const order = CommerceModel.liftLegacyOrder((snapshot.data() ?? {}) as never)
+    await recordPaymentRiskOnRecord(
+      {
+        ref: snapshot.ref,
+        signal: risk.signal,
+        hostId,
+        subjectLabel: `Order ${CommerceModel.formatOrderNumber(order, snapshot.id)}`,
+        link: `/${hostId}/orders`,
+        notificationType: 'content.order',
+        extraUpdate: (data) => ({
+          timeline: CommerceModel.appendOrderEvent(
+            CommerceModel.liftLegacyOrder(data as never),
+            risk.signal.kind === 'early-fraud-warning'
+              ? 'fraud-warning'
+              : 'payment-review',
+            risk.signal.kind === 'early-fraud-warning'
+              ? 'The card issuer reported this payment as possibly fraudulent' +
+                  (risk.signal.detail ? ` (${risk.signal.detail.replace(/_/g, ' ')})` : '')
+              : 'Stripe Radar is holding this payment for review',
+            risk.signal.atMs,
+          ),
+        }),
+      },
+      { firestore: firebaseAdmin.app().firestore(), notify: notifyHostManagers },
+    )
+    return { claimed: true, hostId }
+  }
 
   // Card disputes against a merchant's store (AGL-1787).
   //
@@ -4812,6 +4877,10 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
         }
       }
     }
-    return { claimed }
+    return {
+      claimed,
+      // The site, for the seller's fraud ledger (AGL-3360).
+      ...(snapshot ? { hostId: String(snapshot.ref.parent.parent?.id ?? '') } : {}),
+    }
   }
 }

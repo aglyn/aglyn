@@ -36,6 +36,7 @@
  * `nextDueAtMs` has to be compared in.
  */
 
+import type { OutreachClickMachineReason } from '../engine/click-tracking'
 import type { OutreachGatewayDayCounts, OutreachMailGateway } from '../engine/mail-gateway'
 
 /**
@@ -76,18 +77,19 @@ export const OUTREACH_COLLECTIONS = {
    */
   doNotContactDomains: 'outreachDoNotContactDomains',
   /**
-   * `orgs/{orgId}/outreachDomainIntel/{domain}` — what the organization has
-   * learned about a recipient domain (AGL-3326): its MX records, the mail
-   * gateway they name, and what that gateway did with the organization's
-   * mail. Written by the enroll routes and the sending runtime, read by
-   * the gates before every enrollment and every send.
+   * `orgs/{orgId}/outreachDomainIntel/{domain}` — a recipient domain's MX
+   * as this organization first cached it (AGL-3326). Neither read nor
+   * written any more: the platform-wide `mailDomains` cache replaced it
+   * (AGL-3328), and it is retired with its rule once that has shipped.
    */
   domainIntel: 'outreachDomainIntel',
   /**
    * `orgs/{orgId}/outreachGatewayStats/{gateway}` — the organization's
-   * ledger per mail gateway (AGL-3326): sends, deliveries and blocks, in
-   * total and by UTC day, which is what holds a send into a gateway that
-   * refused the sender twice.
+   * ledger per mail gateway as first written (AGL-3326), with no sending
+   * domain. READ THROUGH, never written: its last thirty days are summed
+   * into the sending-domain ledger's standing
+   * (`orgs/{orgId}/mailGatewayLedger`, AGL-3328) until they age out, and it
+   * is retired with its rule after that.
    */
   gatewayStats: 'outreachGatewayStats',
   /**
@@ -545,7 +547,85 @@ export interface OutreachEnrollmentEngagement {
   lastClickUrl: string | null
   /** Clicks on this person's links that were a machine's. */
   machineClicks: number
+  /**
+   * Every distinct destination this person followed since the per-click
+   * history began (AGL-3332), as `campaignLinkKey` reduces it, oldest first
+   * and at most {@link OUTREACH_ENGAGEMENT_LINKS_MAX}. What the table counts
+   * as "links" and filters "followed this link" by, without a read of the
+   * history. A click from before the history kept only `lastClickUrl`.
+   */
+  links?: string[]
+  /**
+   * How many of `clicks` and `machineClicks` have a row of their own in the
+   * enrollment's history (AGL-3332). The rest were counted as totals only —
+   * before the history began, or past {@link OUTREACH_ENROLLMENT_HISTORY_MAX}.
+   */
+  loggedClicks?: number
+  loggedMachineClicks?: number
 }
+
+/**
+ * The most distinct destinations {@link OutreachEnrollmentEngagement.links}
+ * holds. The enrollment is what the enrollments table listens to, so the
+ * list is bounded; a sequence's emails carry a link or two each, and nobody
+ * follows twenty different ones.
+ */
+export const OUTREACH_ENGAGEMENT_LINKS_MAX = 20
+
+/*==========================================
+ * ONE PERSON'S HISTORY (AGL-3332).
+ *
+ * `orgs/{orgId}/outreachEnrollments/{id}/history/{entryId}`: a row for each
+ * visit to a tracking link in this person's emails — which link, from which
+ * step, when, and whether a person or a scanner made it — and for each
+ * pause, resume, stop and do-not-contact a member applied. The enrollment
+ * keeps totals; this keeps the events, and is read only when somebody opens
+ * the person, so the table's listener never carries it.
+ *
+ * Server-written, read-only to members, and erased with the enrollment.
+ *==========================================*/
+
+/** The history's subcollection under an enrollment. */
+export const OUTREACH_ENROLLMENT_HISTORY = 'history'
+
+/**
+ * The most rows one enrollment's history holds. Past it a click is still
+ * counted on the engagement, and the detail view says how many went
+ * unlisted — a scanner fetching the same links for a month must not grow a
+ * person's history without end.
+ */
+export const OUTREACH_ENROLLMENT_HISTORY_MAX = 500
+
+/** A member's act on one enrollment, as its history records it. */
+export type OutreachHistoryAction = 'pause' | 'resume' | 'stop' | 'do_not_contact'
+
+/** One visit to a tracking link. */
+export interface OutreachClickHistoryEntry {
+  id: string
+  kind: 'click'
+  atMs: number
+  /** The destination as `campaignLinkKey` reduces it — the link rollup's key; `null` when unreadable. */
+  url: string | null
+  /** The step whose email carried the link. */
+  stepIndex: number
+  /** Whether it counts: a person's click, not a scanner's. */
+  human: boolean
+  /** Why it was read as a scanner's; `null` for a person's. */
+  machineReason: OutreachClickMachineReason | null
+}
+
+/** One member's act on the enrollment. */
+export interface OutreachActionHistoryEntry {
+  id: string
+  kind: 'action'
+  atMs: number
+  action: OutreachHistoryAction
+  byUid: string
+  /** The reason the member typed, if any. */
+  detail: string | null
+}
+
+export type OutreachEnrollmentHistoryEntry = OutreachClickHistoryEntry | OutreachActionHistoryEntry
 
 /** An ordered set of steps sent from one mailbox (`orgs/{orgId}/outreachSequences/{id}`). */
 export interface OutreachSequence extends OutreachTimestamps {
@@ -838,6 +918,12 @@ export interface OutreachEnrollment extends OutreachTimestamps {
    */
   engagement?: OutreachEnrollmentEngagement
   /**
+   * Whether the person clicked a link (AGL-3332): what the enrollments
+   * table's "Clicked" filter asks Firestore. `false` from enrollment, set
+   * by the click route on a person's click, never a scanner's.
+   */
+  clicked?: boolean
+  /**
    * The sequence's campaigns as they stood when the person was enrolled
    * (AGL-3254): what every outcome of this enrollment is credited to. A
    * campaign the sequence joins later does not claim the people already
@@ -875,29 +961,12 @@ export interface OutreachGatewayHold {
   releasedAtMs: number | null
 }
 
-/**
- * What the organization knows about one recipient domain
- * (`orgs/{orgId}/outreachDomainIntel/{domain}`, AGL-3326).
- */
-export interface OutreachDomainIntel {
-  domain: string
-  /** The MX exchanges, lowest preference first; empty for a domain with none. */
-  mx: string[]
-  gateway: OutreachMailGateway
-  /** When the MX was last looked up; trusted for `OUTREACH_DOMAIN_INTEL_TTL_MS`. */
-  resolvedAtMs: number
-  /** What this organization's mail met at the domain, in total. */
-  sent: number
-  delivered: number
-  blocked: number
-  lastBlockedAtMs: number | null
-  updatedAtMs: number
-}
 
 /**
- * The organization's ledger for one mail gateway
- * (`orgs/{orgId}/outreachGatewayStats/{gateway}`, AGL-3326): totals, and
- * the same counts by UTC day for the windows the hold and the chip read.
+ * The organization's ledger for one mail gateway as first written
+ * (`orgs/{orgId}/outreachGatewayStats/{gateway}`, AGL-3326): totals, and the
+ * same counts by UTC day. Read through, never written — see
+ * `OUTREACH_COLLECTIONS.gatewayStats`.
  */
 export interface OutreachGatewayStats {
   gateway: OutreachMailGateway

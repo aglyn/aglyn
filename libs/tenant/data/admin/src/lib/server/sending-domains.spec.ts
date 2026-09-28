@@ -94,6 +94,14 @@ jest.mock('./dns-probe', () => ({
   lookupMx: (host: string) => lookupMx(host),
 }))
 
+// The lookalike flag (AGL-3362) is proven against its own store in
+// `hosted-page-review.spec.ts`; here, that a claim and a verification ask it.
+const mockFlagLookalikeDomain = jest.fn(async (..._args: unknown[]) => 'clean')
+jest.mock('./hosted-page-review', () => ({
+  __esModule: true,
+  flagLookalikeDomain: (...args: unknown[]) => mockFlagLookalikeDomain(...args),
+}))
+
 import {
   getSendingDomain,
   listSendingDomains,
@@ -589,5 +597,28 @@ describe('readDmarcPolicy', () => {
     lookupTxt.mockResolvedValue({ answered: false, records: [] })
 
     expect(await readDmarcPolicy(DOMAIN)).toBeNull()
+  })
+})
+
+describe('a lookalike sending domain goes to staff (AGL-3362)', () => {
+  it('is handed to the lookalike flag when it is claimed, and again when it verifies', async () => {
+    mockFlagLookalikeDomain.mockClear()
+    await seedIssued()
+    expect(mockFlagLookalikeDomain).toHaveBeenCalledWith({
+      kind: 'sending',
+      hostId: null,
+      orgId: ORG,
+      domain: DOMAIN,
+    })
+    dnsAllPublished()
+    await verifySendingDomain(ORG, DOMAIN)
+    expect(mockFlagLookalikeDomain).toHaveBeenCalledTimes(2)
+  })
+
+  it('is not asked again for a re-request of a claim that exists', async () => {
+    await requestSendingDomain({ orgId: ORG, domain: DOMAIN })
+    mockFlagLookalikeDomain.mockClear()
+    await requestSendingDomain({ orgId: ORG, domain: DOMAIN })
+    expect(mockFlagLookalikeDomain).not.toHaveBeenCalled()
   })
 })

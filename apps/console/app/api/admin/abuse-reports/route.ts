@@ -103,11 +103,16 @@
 import * as Aglyn from '@aglyn/aglyn/server'
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  decideHeldOutboundSend,
   emailUnverifiedResponse,
   firebaseAdmin,
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import {
+  describePhishingScreenSignals,
+  type PhishingScreenSignal,
+} from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { FieldValue } from 'firebase-admin/firestore'
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 import {
@@ -123,6 +128,7 @@ import {
   readStaffListQuery,
   runStaffListQuery,
 } from '../../../../utils/server/staff-list-query'
+import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
 
 export const dynamic = 'force-dynamic'
 
@@ -241,6 +247,97 @@ function rowPayload(
     resolution: asString(data['resolution']),
     resolvedBy: asString(data['resolvedByEmail']),
     resolvedAtMs: asMillis(data['resolvedAt']),
+    /**
+     * Who filed the row: `outbound-screen` for a send the phishing screen
+     * held (AGL-3356), absent for the public intake.
+     */
+    source: asString(data['source']),
+    heldSend: heldSendPayload(data['heldSend']),
+    paymentSignal: paymentSignalPayload(data['paymentSignal']),
+    sellerPattern: sellerPatternPayload(data['sellerPattern']),
+  }
+}
+
+/**
+ * A seller's fraud pattern, shaped for the page (AGL-3360): the connected
+ * account whose sales drew several fraud warnings or disputes, the charges,
+ * the workspaces and sites they were for, and its Stripe Dashboard page.
+ */
+function sellerPatternPayload(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const pattern = value as Record<string, unknown>
+  const strings = (list: unknown) =>
+    Array.isArray(list) ? list.map((item) => String(item)).filter(Boolean) : []
+  const threshold = Number(pattern['threshold'])
+  const windowDays = Number(pattern['windowDays'])
+  return {
+    sellerAccountId: asString(pattern['sellerAccountId']),
+    stripeAccountUrl: asString(pattern['stripeAccountUrl']),
+    chargeIds: strings(pattern['chargeIds']),
+    orgIds: strings(pattern['orgIds']),
+    hostIds: strings(pattern['hostIds']),
+    threshold: Number.isFinite(threshold) ? threshold : null,
+    windowDays: Number.isFinite(windowDays) ? windowDays : null,
+    livemode: pattern['livemode'] === true,
+  }
+}
+
+/**
+ * A Stripe fraud signal, shaped for the page (AGL-3356): which signal, the
+ * charge and amount, what the card's checks said, and the org page's
+ * Subscription card to act on. Staff-internal ids only; nothing a reporter
+ * wrote.
+ */
+function paymentSignalPayload(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const signal = value as Record<string, unknown>
+  const checks = (signal['checks'] ?? null) as Record<string, unknown> | null
+  const amount = Number(signal['amountCents'])
+  return {
+    kind: asString(signal['kind']),
+    stripeObjectId: asString(signal['stripeObjectId']),
+    chargeId: asString(signal['chargeId']),
+    paymentIntentId: asString(signal['paymentIntentId']),
+    amountCents:
+      signal['amountCents'] === null || !Number.isFinite(amount) ? null : amount,
+    currency: asString(signal['currency']) ?? 'usd',
+    detail: asString(signal['detail']),
+    livemode: signal['livemode'] === true,
+    subscriptionCard: asString(signal['subscriptionCard']),
+    checks: checks
+      ? {
+          cvcCheck: asString(checks['cvcCheck']),
+          addressPostalCodeCheck: asString(checks['addressPostalCodeCheck']),
+          cardCountry: asString(checks['cardCountry']),
+          riskLevel: asString(checks['riskLevel']),
+          threeDSecure: asString(checks['threeDSecure']),
+        }
+      : null,
+  }
+}
+
+/**
+ * A held outbound send, shaped for the page (AGL-3356): what was held, why,
+ * and where the decision stands. The workspace's own words are shown as
+ * text; the flagged host rides in `url`, which the page never links.
+ */
+function heldSendPayload(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const held = value as Record<string, unknown>
+  const signals = Array.isArray(held['signals'])
+    ? (held['signals'] as PhishingScreenSignal[])
+    : []
+  return {
+    kind: asString(held['kind']),
+    path: asString(held['path']),
+    subject: asString(held['subject']),
+    fromName: asString(held['fromName']),
+    state: asString(held['state']) ?? 'held',
+    ageDays: typeof held['ageDays'] === 'number' ? (held['ageDays'] as number) : null,
+    heldAtMs: asMillis(held['heldAtMs']),
+    decidedBy: asString(held['decidedByEmail']),
+    decidedAtMs: asMillis(held['decidedAtMs']),
+    reasons: describePhishingScreenSignals(signals),
   }
 }
 
@@ -1074,6 +1171,47 @@ async function handler(request: Request): Promise<Response> {
     )
 
     /**
+     * A HELD SEND IS DECIDED BY CLOSING ITS ROW (AGL-3356).
+     *
+     * The phishing screen files a held campaign, email or published page
+     * here as a `phishing` row carrying `heldSend`. Closing it is the decision, so the
+     * queue needs no second pair of buttons and the decision cannot happen
+     * without the note and the audit row every close already demands:
+     * `dismissed` — a false positive — RELEASES the send, and `actioned`
+     * REJECTS it. Moving it anywhere else leaves it held.
+     *
+     * After the status write, so a decision is never applied to a row whose
+     * status did not move; before the audit row, so the audit says what it
+     * did to the send.
+     */
+    const heldSendDecision =
+      closing && before.get('heldSend')
+        ? await decideHeldOutboundSend({
+            reviewId: id,
+            decision: status === 'dismissed' ? 'release' : 'reject',
+            actorUid: decoded.uid,
+            actorEmail: decoded.email ? String(decoded.email) : null,
+            firestore,
+          })
+        : null
+
+    /*
+     * A held PAGE is served from the site's cache for up to an hour, and a
+     * release is only real once visitors can see it — so the decision drops
+     * the whole site's cache, the lockdown path's own drop. A rejection drops
+     * it too, so a stale copy of the held version cannot outlive the verdict.
+     */
+    const heldHostId = asString(before.get('hostId'))
+    if (
+      heldSendDecision &&
+      heldSendDecision !== 'not-held' &&
+      (before.get('heldSend') as { kind?: string } | undefined)?.kind === 'page' &&
+      heldHostId
+    ) {
+      await revalidateEntireHost(firestore, heldHostId)
+    }
+
+    /**
      * The strike moves in the same act as the decision that caused it.
      *
      * After the report write and before the audit row, so the audit row can
@@ -1111,6 +1249,7 @@ async function handler(request: Request): Promise<Response> {
         // side effect of a status change.
         strike: strikeEffect,
         ...(strikeEffect ? { strikesStanding: strikesAfter } : {}),
+        ...(heldSendDecision ? { heldSend: heldSendDecision } : {}),
       },
       // The recorded answer to the threshold gate, when one was demanded.
       // This is the artefact that shows the policy was applied rather than
@@ -1137,6 +1276,8 @@ async function handler(request: Request): Promise<Response> {
           canSeeIdentity,
         ),
         strike: strikeEffect,
+        // What closing the row did to the send it held (AGL-3356), or null.
+        heldSend: heldSendDecision,
         // Recomputed from the ledger rather than adjusted arithmetically, so
         // the number the page shows after an action is one the database
         // actually holds.

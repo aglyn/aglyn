@@ -52,7 +52,8 @@ at a time, with the usual footer to pick how many rows a page holds and to turn 
 next page.
 
 Beside **Show**, the **Filters** panel narrows a view by **Kind** (call, email,
-meeting, to-do), **Priority** (low, normal, high) and **Assignee**, and
+meeting, to-do), **Priority** (low, normal, high) and **Assignee** — each **is** one or
+**is any of** several — and
 **Search** finds a task by a word of its title. The view, the filters and the search
 are all answered by the list's query, so they reach every task in the view, page by
 page, and add up with each other. The search matches whole words from their start —
@@ -102,14 +103,14 @@ them, set their due date, export them or delete them. Completing and assigning g
 through the server exactly as the row's checkbox and the drawer do, so every completion
 fires its event and every new assignee is told.
 
-**Export CSV** beside the view control downloads the view on screen as `tasks.csv`:
+**Export CSV** in the card's header downloads the page on screen as `tasks.csv`:
 title, kind, priority, status, the due date and the completion as timestamps, the
 assignee by email address, the contact, company and deal by name, and notes. The bar's
 **Export CSV** writes the same file over the selection.
 
 ### Import from CSV
 
-**Import CSV** beside the view control takes a spreadsheet of tasks — a
+**Import CSV** in the card's header takes a spreadsheet of tasks — a
 hand-off list, another tool's export — and files each row as a new task. A
 task has no key, so nothing is merged: importing a file twice files it twice.
 Importing needs the same **Manage data** permission as creating a task, and

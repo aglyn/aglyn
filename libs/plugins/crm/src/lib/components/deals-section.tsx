@@ -480,6 +480,17 @@ export function DealsSection(props: ConsolePluginPageProps) {
           // The record actions, top right and never clipped (AGL-3311).
           action: (
             <CrmListActions>
+              <DealImportButton hostId={hostId} />
+              {/* The file is the table's rows, so it is offered with the table. */}
+              {view === 'table' ? (
+                <Button
+                  size="small"
+                  onClick={handleExport}
+                  disabled={!paged.rows.length}
+                >
+                  {'Export CSV'}
+                </Button>
+              ) : null}
               <Button
                 size="small"
                 startIcon={<MdiIcon path={mdiCogOutline.path} size={0.8} />}
@@ -622,11 +633,6 @@ export function DealsSection(props: ConsolePluginPageProps) {
                   options={DEAL_FILTER_OPTIONS}
                   marksServed={false}
                 />
-                <Stack sx={{ flex: 1 }} />
-                <DealImportButton hostId={hostId} />
-                <Button size="small" onClick={handleExport} disabled={!paged.rows.length}>
-                  {'Export CSV'}
-                </Button>
               </CrmListToolbar>
               <ListQueryNotices refused={refused} notices={paged.plan.notices} />
                 <>

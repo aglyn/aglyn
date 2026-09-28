@@ -1,7 +1,7 @@
 {
   "name": "aglyn",
   "description": "",
-  "version": "1.0.0-beta.200",
+  "version": "1.0.0-beta.201",
   "license": "Apache-2.0",
   "homepage": "https://aglyn.com",
   "repository": "github:aglyn/aglyn",
@@ -166,6 +166,8 @@
     "test:media-counter": "node --test tools/scripts/lib/media-counter.test.mjs",
     "test:media-filter-keys": "node --test tools/scripts/lib/media-filter-keys.test.mjs && node tools/scripts/backfill-media-filter-keys.mjs --self-test",
     "test:site-form-list-fields": "node --test tools/scripts/lib/site-form-list-fields.test.mjs && node tools/scripts/backfill-form-list-fields.mjs --self-test",
+    "test:site-form-stats-recount": "node --test tools/scripts/lib/site-form-stats-recount.test.mjs && node tools/scripts/recount-form-stats.mjs --self-test",
+    "test:artifacts-list-keys": "node tools/scripts/backfill-artifacts-list-keys.mjs --self-test",
     "test:firewall-posture": "node --test tools/scripts/lib/firewall-posture.test.mjs",
     "test:probe-headers": "node --test tools/scripts/lib/probe-headers.test.mjs",
     "test:env-isolation": "node tools/deploy/verify-env-isolation.mjs --self-test",

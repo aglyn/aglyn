@@ -23,7 +23,8 @@
  */
 
 import { MEDIA_ALT_MAX_LENGTH } from './media-alt'
-import { nameSearchKey, nameSearchToken, nameSearchTokens } from './name-search'
+import { embeddedMetadataIsCurrent, mediaEmbeddedSearchText } from './media-embedded-fields'
+import { NAME_TOKEN_LIMIT, nameSearchKey, nameSearchToken, nameSearchTokens } from './name-search'
 
 export * from './media-alt'
 
@@ -120,7 +121,11 @@ export interface MediaFilterKeys {
    * array filter.
    */
   nameLower: string
-  /** Word-prefix tokens of the file name's words, for search. */
+  /**
+   * Word-prefix tokens of the file name's words, then of the details read
+   * from inside the file (AGL-3339), for search — at most
+   * `NAME_TOKEN_LIMIT`, the name's first.
+   */
   nameTokens: string[]
   /** Whether alt text is written — "missing" is a value a query can find. */
   hasAlt: boolean
@@ -136,6 +141,31 @@ export interface MediaFilterSource {
   width?: unknown
   height?: unknown
   video?: unknown
+  /** The details read from inside the file (AGL-3339), searched after its name. */
+  embeddedMetadata?: unknown
+  /** The bytes' digest, which says whether `embeddedMetadata` describes them. */
+  contentSha256?: unknown
+}
+
+/**
+ * What a library search finds a file by (AGL-3339): every word prefix of its
+ * name, then of the details read from inside it — a title, keywords, who
+ * made it, where — inside the one `NAME_TOKEN_LIMIT` a document keeps, so a
+ * long caption never crowds out the name. Details that describe other bytes
+ * than the file's (`embeddedMetadataIsCurrent`) add nothing.
+ */
+export function mediaNameTokens(
+  fileName: unknown,
+  embeddedMetadata?: unknown,
+  contentSha256?: unknown,
+): string[] {
+  const tokens = new Set(nameSearchTokens(mediaNameWords(fileName)))
+  if (!embeddedMetadataIsCurrent(embeddedMetadata, contentSha256)) return [...tokens]
+  for (const token of nameSearchTokens(mediaNameWords(mediaEmbeddedSearchText(embeddedMetadata)))) {
+    if (tokens.size >= NAME_TOKEN_LIMIT) break
+    tokens.add(token)
+  }
+  return [...tokens]
 }
 
 /**
@@ -153,7 +183,7 @@ export function mediaFilterKeys(media: MediaFilterSource): MediaFilterKeys {
   return {
     kind: mediaKindOf(media.contentType),
     nameLower: nameSearchKey(fileName),
-    nameTokens: nameSearchTokens(mediaNameWords(fileName)),
+    nameTokens: mediaNameTokens(fileName, media.embeddedMetadata, media.contentSha256),
     hasAlt: String(media.alt ?? '').trim().length > 0,
     orientation: mediaOrientationOf(media),
   }
