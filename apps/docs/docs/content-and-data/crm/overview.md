@@ -296,6 +296,7 @@ and the review before any change counts how many people it affects.
 - [The contact record](./contact-record.md) · [Leads](./leads.md) · [Companies](./companies.md) · [Deals pipeline](./deals.md) · [Tasks & follow-ups](./tasks.md) · [Reports](./reports.md) · [Custom fields](./custom-fields.md)
 - [Forms & lead capture](../forms/overview.md)
 - [Email campaigns](../../marketing-and-automation/email-campaigns/overview.md)
+- [Deliverability checks](../../marketing-and-automation/email-campaigns/deliverability-checks.md): which addresses would bounce, and why mail to one is not sent
 - [Automations for the CRM](./automations.md)
 - [CRM by AI](../../ai/crm-by-ai.md): summaries, next steps, email drafts and column matching
 - [REST API — contacts](/api/resources/contacts), [companies](/api/resources/companies), [pipelines](/api/resources/pipelines), [deals](/api/resources/deals), [tasks](/api/resources/tasks) and [activities](/api/resources/activities)

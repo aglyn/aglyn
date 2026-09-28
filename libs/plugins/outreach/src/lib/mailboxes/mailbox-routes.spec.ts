@@ -246,6 +246,7 @@ let configured: boolean
 let rateAllowed: boolean
 let activity: Array<{ orgId: string; action: string; target: { id: string } }>
 let aliasCalls: Array<{ orgId: string; uid: string; addresses: readonly string[] }>
+let readinessCalls: Array<{ fromDomain: string; dkimSelector: string; spfInclude: string; fresh: boolean }>
 
 const members: Record<
   string,
@@ -297,6 +298,15 @@ function deps(): OutreachMailboxRouteDeps {
     confirmAliasesByProvider: async (_firestore, input) => {
       aliasCalls.push(input)
       return { ok: true, confirmed: ['sales@rep.example.com'] }
+    },
+    readSenderReadiness: async (expectation, options) => {
+      readinessCalls.push({
+        fromDomain: expectation.fromDomain,
+        dkimSelector: expectation.dkimSelector,
+        spfInclude: expectation.spfInclude,
+        fresh: options.fresh === true,
+      })
+      return { overall: 'pass', fromDomain: expectation.fromDomain } as never
     },
   }
 }
@@ -368,6 +378,7 @@ beforeEach(() => {
   rateAllowed = true
   activity = []
   aliasCalls = []
+  readinessCalls = []
   googleCalls = []
   consentNonce = ''
   google = {
@@ -876,5 +887,48 @@ describe('disconnect (AGL-2978)', () => {
     const mailbox = await connectMailbox()
     expect((await run('disconnect', post('outreach/mailboxes/disconnect', { orgId: ORG, mailboxId: mailbox.id }, 'token-teammate'))).body.reason).toBe('not-your-mailbox')
     expect((await run('disconnect', post('outreach/mailboxes/disconnect', { orgId: ORG, mailboxId: mailbox.id }, 'token-admin'))).status).toBe(200)
+  })
+})
+
+describe('sender readiness (AGL-3328)', () => {
+  it('reads the domain the mailbox sends as, through Google’s SPF include and selector', async () => {
+    const mailbox = await connectMailbox()
+    const read = await run('readiness', post('outreach/mailboxes/readiness', { orgId: ORG, mailboxId: mailbox.id }))
+    expect(read.status).toBe(200)
+    expect(read.body).toEqual({
+      ok: true,
+      sendAs: 'avery@rep.example.com',
+      readiness: { overall: 'pass', fromDomain: 'rep.example.com' },
+    })
+    expect(readinessCalls).toEqual([
+      { fromDomain: 'rep.example.com', dkimSelector: 'google', spfInclude: '_spf.google.com', fresh: false },
+    ])
+  })
+
+  it('asks fresh when told to, and lets any member read a teammate’s mailbox', async () => {
+    const mailbox = await connectMailbox()
+    const read = await run(
+      'readiness',
+      post('outreach/mailboxes/readiness', { orgId: ORG, mailboxId: mailbox.id, fresh: true }, 'token-teammate'),
+    )
+    expect(read.status).toBe(200)
+    expect(readinessCalls.at(-1)?.fresh).toBe(true)
+  })
+
+  it('has nothing to read for a consumer Gmail address', async () => {
+    const mailbox = await connectMailbox()
+    docs.set(mailboxPath(mailbox.id), { ...docs.get(mailboxPath(mailbox.id)), sendAs: 'avery@gmail.com' })
+    const read = await run('readiness', post('outreach/mailboxes/readiness', { orgId: ORG, mailboxId: mailbox.id }))
+    expect(read.body).toEqual({ ok: true, sendAs: 'avery@gmail.com', readiness: null })
+    expect(readinessCalls).toEqual([])
+  })
+
+  it('refuses an outsider and a mailbox that is not there', async () => {
+    const mailbox = await connectMailbox()
+    expect(
+      (await run('readiness', post('outreach/mailboxes/readiness', { orgId: ORG, mailboxId: mailbox.id }, 'token-outsider'))).status,
+    ).toBe(403)
+    expect((await run('readiness', post('outreach/mailboxes/readiness', { orgId: ORG, mailboxId: 'gone' }))).status).toBe(404)
+    expect(readinessCalls).toEqual([])
   })
 })

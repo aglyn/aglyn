@@ -46,7 +46,9 @@ const state: {
   plan: string
   domains: Record<string, Record<string, unknown>>
   verifyResult: Record<string, unknown>
-} = { role: 'admin', plan: 'pro', domains: {}, verifyResult: {} }
+  /** Every readiness read: the expectation's From domain and selector, and whether it was fresh. */
+  readiness: Array<{ fromDomain: string; dkimSelector: string; envelopeDomain: string; fresh: boolean }>
+} = { role: 'admin', plan: 'pro', domains: {}, verifyResult: {}, readiness: [] }
 
 jest.mock('@aglyn/aglyn/server', () => ({
   ...jest.requireActual('@aglyn/aglyn/server'),
@@ -118,6 +120,18 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
     return { record, error: null, status: 201 }
   },
   verifySendingDomain: async () => state.verifyResult,
+  readSenderReadiness: async (
+    expectation: { fromDomain: string; dkimSelector: string; envelopeDomain: string },
+    options: { fresh?: boolean } = {},
+  ) => {
+    state.readiness.push({
+      fromDomain: expectation.fromDomain,
+      dkimSelector: expectation.dkimSelector,
+      envelopeDomain: expectation.envelopeDomain,
+      fresh: options.fresh === true,
+    })
+    return { overall: 'pass', fromDomain: expectation.fromDomain }
+  },
 }))
 
 import { GET, POST, DELETE } from '../app/api/email/sending-domains/route'
@@ -136,6 +150,7 @@ beforeEach(() => {
   state.plan = 'pro'
   state.domains = {}
   state.verifyResult = {}
+  state.readiness = []
 })
 
 describe('the records are shown, not guessed at', () => {
@@ -175,6 +190,27 @@ describe('the records are shown, not guessed at', () => {
     expect(payload.domains[0].records).toHaveLength(3)
   })
 
+  it('reads sender readiness for an issued domain, on its envelope and selector (AGL-3328)', async () => {
+    await post({ orgId: 'org-1', domain: 'acme.com' })
+    state.readiness = []
+
+    const payload = await (await get('orgId=org-1')).json()
+
+    expect(payload.domains[0].readiness).toEqual({ overall: 'pass', fromDomain: 'acme.com' })
+    expect(state.readiness).toEqual([
+      { fromDomain: 'acme.com', dkimSelector: 'aglyn-org1', envelopeDomain: 'send.acme.com', fresh: false },
+    ])
+  })
+
+  it('has no readiness to show before a key is issued', async () => {
+    state.domains['acme.com'] = { domain: 'acme.com', status: 'requested', dkimSelector: 'aglyn-org1' }
+
+    const payload = await (await get('orgId=org-1')).json()
+
+    expect(payload.domains[0].readiness).toBeNull()
+    expect(state.readiness).toEqual([])
+  })
+
   it('refuses a malformed domain with the reason', async () => {
     const response = await post({ orgId: 'org-1', domain: 'nope' })
 
@@ -196,6 +232,10 @@ describe('verification', () => {
 
     expect(payload.verified).toBe(true)
     expect(payload.status).toBe('verified')
+    // Check DNS reads the zone as it is now, not a remembered answer.
+    expect(state.readiness).toEqual([
+      { fromDomain: 'acme.com', dkimSelector: 'aglyn-org1', envelopeDomain: 'send.acme.com', fresh: true },
+    ])
   })
 
   it('names what is missing when the records are not live', async () => {

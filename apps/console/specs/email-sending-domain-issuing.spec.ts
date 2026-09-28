@@ -106,6 +106,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   lockdownRefusal: async () => null,
   listSendingDomains: async () => [],
   readDmarcPolicy: async () => null,
+  readSenderReadiness: async () => null,
   releaseSendingDomain: async () => undefined,
   requestSendingDomain: async () => ({
     record: requestedRecord(),

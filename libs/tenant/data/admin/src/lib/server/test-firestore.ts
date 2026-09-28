@@ -138,6 +138,7 @@ export function fakeFirestore(
         }),
         // Ordering and limits are not what these specs are about; the queue
         // read just needs to return everything it stored.
+        where: () => api,
         orderBy: () => api,
         limit: () => api,
         get: async () => ({

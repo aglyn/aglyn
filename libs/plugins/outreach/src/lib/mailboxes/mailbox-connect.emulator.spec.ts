@@ -143,6 +143,9 @@ describeEmulated('a mailbox connect against Firestore (AGL-2978)', () => {
     consumeRateLimit: async () => ({ allowed: true }),
     logOrgActivity: async () => undefined,
     confirmAliasesByProvider: confirmMemberEmailAliasesByProvider,
+    readSenderReadiness: async () => {
+      throw new Error('unscripted readiness read')
+    },
   })
 
   const post = (path: string, body: unknown) =>

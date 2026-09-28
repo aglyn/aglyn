@@ -23,6 +23,7 @@ import {
   listSendingDomains,
   lockdownRefusal,
   readDmarcPolicy,
+  readSenderReadiness,
   readTrackingCaaNeed,
   releaseSendingDomain,
   requestSendingDomain,
@@ -31,8 +32,10 @@ import {
 import {
   dmarcRecommendation,
   formatSendingRecord,
+  resendSenderExpectation,
   sendingDnsRecords,
   sendingTrackingCertAuthority,
+  type SenderReadiness,
   type SendingDnsRecord,
 } from '@aglyn/shared-util-email'
 import { issueSendingDomainRecords } from '../../../../utils/server/issue-sending-domain'
@@ -72,6 +75,28 @@ async function recordsFor(
   )
   if (need === 'must-add') return records
   return records.filter((entry) => entry.purpose !== 'tracking-caa')
+}
+
+/**
+ * Whether receivers will believe mail from this domain (AGL-3328): SPF on
+ * the envelope subdomain, the issued DKIM key and the customer's DMARC, and
+ * whether DMARC passes on a mechanism aligned with the From domain.
+ *
+ * Beside the records table rather than in it: the table says what to
+ * publish and the verifier decides whether the domain may send, while this
+ * reads the same zone for how a receiver will judge it. Nothing to judge
+ * before a key is issued, so a `requested` domain has none. Remembered
+ * briefly per process; `fresh` is the Check DNS press, which should see the
+ * zone as it is now.
+ */
+async function readinessFor(
+  record: { domain: string; dkimSelector?: string | null; status?: string },
+  fresh = false,
+): Promise<SenderReadiness | null> {
+  if (record.status === 'requested') return null
+  const expectation = resendSenderExpectation(record)
+  if (!expectation) return null
+  return readSenderReadiness(expectation, { fresh }).catch(() => null)
 }
 
 /**
@@ -202,6 +227,7 @@ async function handler(request: Request): Promise<Response> {
             lines: records.map(formatSendingRecord),
             dmarc: await readDmarcPolicy(record.domain),
             dmarcSuggestion: dmarcRecommendation(record.domain),
+            readiness: await readinessFor(record),
           }
         }),
       ),
@@ -248,6 +274,7 @@ async function handler(request: Request): Promise<Response> {
       missing: result.missing,
       records: result.record ? await recordsFor(result.record) : [],
       dmarc: await readDmarcPolicy(domain),
+      readiness: result.record ? await readinessFor(result.record, true) : null,
     })
   }
 
