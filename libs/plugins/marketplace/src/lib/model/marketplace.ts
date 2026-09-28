@@ -255,6 +255,13 @@ export interface MarketplaceListing {
   browseAudience?: string[]
   browseTokens?: string[]
   takenDown?: boolean
+  /**
+   * The publishing workspace is locked (AGL-3365): the listing is out of
+   * browse, search and its page until the lift clears it. Written only by
+   * the lockdown's marketplace participant, which clears exactly the
+   * listings it stamped; server-owned.
+   */
+  workspaceLockedAt?: unknown
 }
 
 /**

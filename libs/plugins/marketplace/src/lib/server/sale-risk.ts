@@ -41,6 +41,10 @@
 import { createHash } from 'crypto'
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
 import { normalizeOrgLockdown } from '@aglyn/aglyn/app-utils/lockdown'
+import {
+  LOCKDOWN_BILLING_PAUSES_COLLECTION,
+  lockdownPayoutPauseRecordId,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-lockdown'
 import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
 import { orgAgeDays } from '@aglyn/tenant-data-admin/server/org-age'
 import {
@@ -143,13 +147,23 @@ export async function applyPublisherPayoutPolicy(input: {
   ageDays: number | null
   stripeKey: string | undefined
   nowMs?: number
-}): Promise<'applied' | 'current' | 'skipped' | 'failed'> {
+}): Promise<'applied' | 'current' | 'held-by-lock' | 'skipped' | 'failed'> {
   try {
     if (!input.stripeKey || !input.publisherOrgId) return 'skipped'
     const profileRef = input.firestore.collection('publisherProfiles').doc(input.publisherOrgId)
     const profile = await profileRef.get()
     const accountId = String(profile.get('stripeAccountId') ?? '')
     if (!accountId) return 'skipped'
+    // A workspace lock holds this account's payouts (AGL-3364/3365): its
+    // schedule is manual and the lock saved the one to restore. Moving it
+    // now would either undo the pause or leave the lift restoring a delay
+    // this record no longer describes, so it waits. The next sale after the
+    // lift sets it right.
+    const lockHold = await input.firestore
+      .collection(LOCKDOWN_BILLING_PAUSES_COLLECTION)
+      .doc(lockdownPayoutPauseRecordId(accountId))
+      .get()
+    if (lockHold.exists) return 'held-by-lock'
     const desired = publisherPayoutDelayDays(input.ageDays)
     const stored = profile.get('payoutDelayDays') as number | null | undefined
     if (stored === desired) return 'current'

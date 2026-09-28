@@ -46,6 +46,10 @@ import {
 } from '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import {
+  registerOrgLockdownParticipant,
+  registerPayoutAccountSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-lockdown'
+import {
   installStripeDouble,
   subscription,
   type StripeDouble,
@@ -471,5 +475,150 @@ describe('what a pause must not do', () => {
     expect(body.payoutsPause).toBeUndefined()
     expect(sourceAsked).toEqual([])
     expect(stripe.calls).toEqual([])
+  })
+})
+
+describe('every connected account the workspace is paid through (AGL-3365)', () => {
+  beforeEach(() => {
+    // A stand-in for the marketplace's source: the publisher account a
+    // plugin pays the workspace through, beside the storefront account.
+    registerPayoutAccountSource(
+      {
+        listPayoutAccounts: async ({ orgId }) =>
+          orgId === 'org-shop'
+            ? [{ accountId: 'acct_publisher', label: 'marketplace publisher' }]
+            : [],
+      },
+      { pluginId: 'marketplace' },
+    )
+    // A young publisher: its payouts already wait 14 days.
+    stripe.accounts.set('acct_publisher', {
+      id: 'acct_publisher',
+      type: 'express',
+      settings: { payouts: { schedule: { interval: 'daily', delay_days: 14 } } },
+    } as any)
+  })
+
+  it('pauses the storefront AND the publisher account, each on its own record', async () => {
+    const { body } = await lock()
+    expect(body.payoutsPause).toMatchObject({
+      accountId: 'acct_seller',
+      label: 'storefront',
+      outcome: 'paused',
+      confirmed: true,
+    })
+    expect(body.payoutsPauseOthers).toEqual([
+      expect.objectContaining({
+        accountId: 'acct_publisher',
+        label: 'marketplace publisher',
+        outcome: 'paused',
+        confirmed: true,
+        schedule: { interval: 'daily', delay_days: 14 },
+      }),
+    ])
+    for (const id of ['acct_seller', 'acct_publisher']) {
+      expect(stripe.accounts.get(id)!.settings.payouts.schedule.interval).toBe('manual')
+    }
+    expect(mockStore['lockdownBillingPauses/payout_acct_publisher']).toMatchObject({
+      kind: 'payouts',
+      label: 'marketplace publisher',
+      holders: ['org:org-shop'],
+      previousSchedule: { interval: 'daily', delay_days: 14 },
+    })
+    expect(
+      mockAuditRows.filter((row) => row['action'] === 'lockdown.payouts-pause'),
+    ).toHaveLength(2)
+  })
+
+  it('the lift puts each account back to exactly its own saved schedule', async () => {
+    await lock()
+    const { body } = await unlock()
+    expect(body.payoutsRestore).toMatchObject({
+      accountId: 'acct_seller',
+      outcome: 'restored',
+      confirmed: true,
+    })
+    expect(body.payoutsRestoreOthers).toEqual([
+      expect.objectContaining({ accountId: 'acct_publisher', outcome: 'restored', confirmed: true }),
+    ])
+    expect(stripe.accounts.get('acct_seller')!.settings.payouts.schedule).toEqual({
+      interval: 'weekly',
+      weekly_anchor: 'friday',
+      delay_days: 7,
+    })
+    // The young publisher's delay comes back with it, not the default.
+    expect(stripe.accounts.get('acct_publisher')!.settings.payouts.schedule).toEqual({
+      interval: 'daily',
+      delay_days: 14,
+    })
+    expect(
+      Object.keys(mockStore).filter((path) => path.startsWith('lockdownBillingPauses/')),
+    ).toEqual([])
+  })
+
+  it("a SITE lock pauses that site's storefront only, never the workspace's publisher account", async () => {
+    const { body } = await post({
+      action: 'lock',
+      scope: 'host',
+      targetId: 'host-a',
+      reason: 'security',
+      pausePayouts: true,
+    })
+    expect(body.payoutsPause).toMatchObject({ accountId: 'acct_seller', outcome: 'paused' })
+    expect(body.payoutsPauseOthers).toBeUndefined()
+    expect(stripe.accounts.get('acct_publisher')!.settings.payouts.schedule.interval).toBe(
+      'daily',
+    )
+  })
+})
+
+describe("the plugins' part in a workspace lock (AGL-3365)", () => {
+  it('tells every participant on the lock and on the lift, whatever the reason', async () => {
+    const told: Array<{ orgId: string; locked: boolean; reason: string | null }> = []
+    registerOrgLockdownParticipant(
+      {
+        onOrgLockChange: async (input) => {
+          told.push(input)
+          return {
+            summary: `${input.locked ? 'Hid' : 'Restored'} 2 listing(s)`,
+            confirmed: true,
+          }
+        },
+      },
+      { pluginId: 'marketplace' },
+    )
+    const locked = await post({
+      action: 'lock',
+      scope: 'org',
+      targetId: 'org-shop',
+      reason: 'billing',
+    })
+    expect(locked.body.orgLockParticipants).toEqual([
+      { pluginId: 'marketplace', summary: 'Hid 2 listing(s)', confirmed: true },
+    ])
+    const lifted = await unlock()
+    expect(lifted.body.orgLockParticipants).toEqual([
+      { pluginId: 'marketplace', summary: 'Restored 2 listing(s)', confirmed: true },
+    ])
+    expect(told).toEqual([
+      { orgId: 'org-shop', locked: true, reason: 'billing' },
+      { orgId: 'org-shop', locked: false, reason: null },
+    ])
+  })
+
+  it('a participant that throws is an unconfirmed line beside a lock that stands', async () => {
+    registerOrgLockdownParticipant(
+      {
+        onOrgLockChange: async () => {
+          throw new Error('listings unreachable')
+        },
+      },
+      { pluginId: 'marketplace' },
+    )
+    const { body } = await lock({ pauseRenewals: false, pausePayouts: false })
+    expect(body.verified.locked).toBe(true)
+    expect(body.orgLockParticipants).toEqual([
+      expect.objectContaining({ pluginId: 'marketplace', confirmed: false }),
+    ])
   })
 })

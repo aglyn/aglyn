@@ -2018,10 +2018,11 @@ async function handler(request: Request): Promise<Response> {
         // But one shape here is genuinely ours and gets no owner anywhere:
         // an invoice paid before AGL-2120 stored no `chargeId` /
         // `paymentIntentId` and can never be matched however plainly it is a
-        // subscription charge, and a chargeback against a paid BOOKING is
-        // claimed by no handler at all (the bookings plugin subscribes no
-        // `charge.dispute.*`). Those used to leave nothing but a log line
-        // that no alerting reads.
+        // subscription charge, and a LOST chargeback against a paid BOOKING
+        // is left unclaimed whenever the merchant's share could not be pulled
+        // back (the bookings plugin claims it once the transfer reversal
+        // lands, AGL-3363). Those used to leave nothing but a log line that
+        // no alerting reads.
         //
         // So the decision is DEFERRED rather than made here: the plugins now
         // report whether they recognised the event (AGL-2429), and the

@@ -1857,3 +1857,86 @@ describe('the gift cards a questioned payment bought (AGL-3363)', () => {
     })
   })
 })
+
+/*
+ * A refund made in the Stripe Dashboard (AGL-3363). `charge.refunded` reached
+ * commerce and did nothing, so a gift card whose purchase staff refunded
+ * outside the console stayed spendable. It now follows the in-console rules;
+ * a console refund's own event (already counted in `refundedCents`) and a
+ * redelivery change nothing.
+ */
+describe('a refund made outside the console (AGL-3363)', () => {
+  const card = (code: string) => docs.get(`hosts/host-1/giftCards/${code}`) ?? {}
+  const refunded = (amountRefunded: number, full = false) => ({
+    id: 'ch_1',
+    object: 'charge',
+    payment_intent: 'pi_dispute_1',
+    amount: 8000,
+    amount_refunded: amountRefunded,
+    refunded: full,
+  })
+
+  beforeEach(() => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...docs.get('hosts/host-1/orders/order-1'),
+      lineItems: [
+        { productId: 'gift-50', name: 'Gift card', quantity: 1, unitAmountCents: 5000 },
+        { productId: 'mug', name: 'Mug', quantity: 1, unitAmountCents: 3000 },
+      ],
+    })
+    docs.set('hosts/host-1/giftCards/GC-DASH', {
+      orderId: 'order-1',
+      productId: 'gift-50',
+      balanceCents: 5000,
+    })
+  })
+
+  it('a full refund voids the cards and is written on the order', async () => {
+    await expect(deliver('charge.refunded', refunded(8000, true))).resolves.toEqual({
+      claimed: true,
+      hostId: 'host-1',
+    })
+    expect(card('GC-DASH')).toMatchObject({ balanceCents: 0, voidedReason: 'refund' })
+    expect(order().externalRefundedCents).toBe(8000)
+  })
+
+  it('a partial refund equal to the gift-card line voids that line’s card', async () => {
+    await deliver('charge.refunded', refunded(5000))
+    expect(card('GC-DASH')).toMatchObject({ balanceCents: 0, voidedReason: 'refund' })
+  })
+
+  it('a partial refund equal to the mug leaves the card alone (false-positive guard)', async () => {
+    await deliver('charge.refunded', refunded(3000))
+    expect(card('GC-DASH')).toMatchObject({ balanceCents: 5000 })
+    expect(Number(card('GC-DASH')['frozenAtMs']) > 0).toBe(false)
+  })
+
+  it('an unmatched partial refund freezes the cards and asks the managers to review', async () => {
+    await deliver('charge.refunded', refunded(1234))
+    expect(card('GC-DASH')).toMatchObject({ balanceCents: 5000, frozenReason: 'refund-review' })
+    expect(managerNotices.some((notice) => /on hold/.test(String(notice.title)))).toBe(true)
+  })
+
+  it('a console refund’s own event, already counted on the order, changes nothing', async () => {
+    docs.set('hosts/host-1/orders/order-1', {
+      ...docs.get('hosts/host-1/orders/order-1'),
+      refundedCents: 5000,
+    })
+    await deliver('charge.refunded', refunded(5000))
+    expect(card('GC-DASH')).toMatchObject({ balanceCents: 5000 })
+    expect(order()).not.toHaveProperty('externalRefundedCents')
+  })
+
+  it('a redelivery counts the Dashboard refund once', async () => {
+    await deliver('charge.refunded', refunded(1234))
+    await deliver('charge.refunded', refunded(1234))
+    expect(order().externalRefundedCents).toBe(1234)
+    expect(managerNotices.filter((notice) => /on hold/.test(String(notice.title)))).toHaveLength(1)
+  })
+
+  it('a refund on a charge that is no order’s is left alone', async () => {
+    await expect(
+      deliver('charge.refunded', { ...refunded(1000), payment_intent: 'pi_other' }),
+    ).resolves.toBeUndefined()
+  })
+})
