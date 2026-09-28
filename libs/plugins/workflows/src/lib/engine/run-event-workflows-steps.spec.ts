@@ -253,6 +253,20 @@ jest.mock('@aglyn/shared-util-email', () => ({
     !result || result.sent ? null : 'failed',
 }))
 
+/*
+ * The phishing screen's hold (AGL-3356), answered by a double so the cases
+ * below decide the verdict; the screen and its review queue are proven in
+ * `tenant-data-admin`. Every other case gets `send`, which is what this
+ * fixture's org — no creation date, an established workspace — gets.
+ */
+const mockScreenOutboundSend = jest.fn(async (_request: unknown): Promise<unknown> => ({
+  outcome: 'send',
+}))
+jest.mock('@aglyn/tenant-data-admin/server/outbound-send-review', () => ({
+  __esModule: true,
+  screenOutboundSend: (request: unknown) => mockScreenOutboundSend(request),
+}))
+
 import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { contactFacetPath } from '@aglyn/aglyn/app-utils/contacts'
 import { resumeFlowEnrollment, runEventActions } from './run-event-actions'
@@ -574,6 +588,63 @@ describe('a suspended site', () => {
     })
 
     expect(sentMessages).toHaveLength(1)
+  })
+})
+
+describe('the phishing screen on a sendEmail step (AGL-3356)', () => {
+  afterEach(() => {
+    mockScreenOutboundSend.mockReset()
+    mockScreenOutboundSend.mockImplementation(async () => ({ outcome: 'send' }))
+  })
+
+  const POSHMARK = [
+    {
+      type: 'sendEmail',
+      subject: 'Poshmark Order',
+      body: 'One of the items from your Seller Account has finally sold. https://poshmark.id63835663.shop/o',
+    },
+  ]
+
+  it('asks the screen about the step’s own copy, as the workflow it is', async () => {
+    seedWorkflow(POSHMARK)
+    await runEventWorkflows(HOST_ID, 'formSubmission', SUBMISSION)
+    expect(mockScreenOutboundSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'workflow',
+        path: `${hostPath}/workflows/wf-intake`,
+        hostId: HOST_ID,
+        subject: 'Poshmark Order',
+        bodies: [POSHMARK[0].body],
+      }),
+    )
+  })
+
+  it('holds the message: nothing sent, and the run says why', async () => {
+    seedWorkflow(POSHMARK)
+    mockScreenOutboundSend.mockImplementation(async () => ({
+      outcome: 'held',
+      reviewId: 'r'.repeat(40),
+      reference: 'HS-RRRRRRRRRR',
+      contentHash: 'h',
+    }))
+    await runEventWorkflows(HOST_ID, 'formSubmission', SUBMISSION)
+    expect(sentMessages).toEqual([])
+    expect(history()[0]).toMatchObject({ result: 'failed' })
+    expect(String(history()[0]?.['action'])).toContain('held for staff review')
+    expect(String(history()[0]?.['action'])).toContain('HS-RRRRRRRRRR')
+  })
+
+  it('refuses a message staff rejected', async () => {
+    seedWorkflow(POSHMARK)
+    mockScreenOutboundSend.mockImplementation(async () => ({
+      outcome: 'rejected',
+      reviewId: 'r'.repeat(40),
+      reference: 'HS-RRRRRRRRRR',
+      contentHash: 'h',
+    }))
+    await runEventWorkflows(HOST_ID, 'formSubmission', SUBMISSION)
+    expect(sentMessages).toEqual([])
+    expect(String(history()[0]?.['action'])).toContain('rejected by staff review')
   })
 })
 

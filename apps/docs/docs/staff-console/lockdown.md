@@ -40,6 +40,17 @@ A lockdown is enforced **server-side at the chokepoints**, not hidden in the UI:
   immediately — cached pages are also evicted at lock time.
 - **APIs** — org-scoped API routes refuse with `423 { "error": "locked", "reason": … }`,
   so an API consumer sees *suspended*, not a mystery 403.
+- **Outbound email** — a full org, site or platform lock stops the mail a
+  workspace sends. The site's sending identity refuses, so `sendEmail` answers
+  `suspended` for workflow and automation steps, CRM one-off mail, inbox
+  replies, member posts, receipts and reminders. Event runs (workflows, actions,
+  inbound webhooks, which answer `423`) do not start at all. Campaigns, including
+  scheduled sends and batches already in progress, are **deferred**, not failed,
+  and outreach sequences for the site are held. So lifting the lock resumes
+  them. A read-only lock pauses campaigns and sequences. The engine and the
+  sending identity let it through, because an order paid before the window
+  began still owes its receipt. The doors that raise events still apply their
+  own read-only refusals (see below).
 
 ## Reasons and the notice
 

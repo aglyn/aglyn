@@ -64,6 +64,16 @@ import {
 import { findContactByEmail } from '@aglyn/tenant-data-admin/server/contact-email-index'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 /*
+ * The LEAF for the phishing screen's hold (AGL-3356), for the reason every
+ * leaf above gives: the specs that reach this file mock the barrel, and a
+ * control that holds a send must be the real one under every harness.
+ */
+import {
+  canonicalJson,
+  HELD_SEND_AT_MS,
+  screenOutboundSend,
+} from '@aglyn/tenant-data-admin/server/outbound-send-review'
+/*
  * The LEAF module for the impersonation exemption too, and for a sharper
  * version of the reason the notes below give: every spec that reaches this
  * file mocks the `@aglyn/tenant-data-admin` barrel, and a factory that
@@ -323,6 +333,29 @@ export class CampaignSendDeferredError extends CampaignSendError {
     status = 429,
   ) {
     super(message, status)
+  }
+}
+
+/**
+ * The phishing screen held this send for staff review (AGL-3356).
+ *
+ * A DEFERRAL to every caller that handles one, which is the point: the
+ * scheduled processor puts the row back to `scheduled` at the parked time
+ * rather than marking it failed, and the send route's claim is released —
+ * so a held email is neither lost nor mailed. `409` because the merchant's
+ * request conflicts with a review in progress, and the message says so in
+ * words they can act on.
+ */
+export class CampaignSendHeldError extends CampaignSendDeferredError {
+  constructor(public readonly reference: string) {
+    super(
+      'This email is being reviewed before it sends, because new workspaces ' +
+        'have their first emails checked for impersonation. It has been saved ' +
+        'and nothing has been sent or counted; it goes out automatically if ' +
+        `it is approved. Reference ${reference}.`,
+      HELD_SEND_AT_MS,
+      409,
+    )
   }
 }
 
@@ -2128,6 +2161,107 @@ export async function performCampaignSend(
       throw new CampaignSendError('Pick a running email experiment', 400)
     }
     experiment = { $id: experimentSnapshot.id, ...data }
+  }
+  /*
+   * THE PHISHING SCREEN, for a workspace in its first fortnight (AGL-3356).
+   *
+   * Asked once the copy is final — the design loaded, the experiment's
+   * variants known — and before anything is claimed, counted or sent, so a
+   * hold costs the workspace nothing but the wait. See
+   * `outbound-send-review.ts` for who is screened and what a hold is, and
+   * `outbound-phishing-screen.ts` for what holds.
+   *
+   * A follow-up is not screened: it mails the copy its first send already
+   * carried, which was. A continuation is: its first batch may predate the
+   * screen, and a hold there parks the rest of the audience rather than
+   * mailing it.
+   *
+   * A HOLD PARKS THE SEND, it does not drop it. The record is written as a
+   * scheduled send whose time no processor run reaches, carrying the copy
+   * `storedSendOptionsFrom` reads back, and the review row in the abuse
+   * queue names it. Staff dismissing the row releases it — the send goes
+   * back on the clock and this screen finds it released — and actioning the
+   * row cancels it.
+   */
+  if (!options.followUp) {
+    const sendRef = sends.doc(campaignId)
+    const screened = await screenOutboundSend({
+      kind: 'campaign',
+      path: sendRef.path,
+      hostId,
+      orgId,
+      org: (orgForHost?.org as Record<string, unknown> | undefined) ?? null,
+      host: (hostSnapshot.data() as Record<string, unknown> | undefined) ?? null,
+      subject,
+      fromName: options.fromName ?? null,
+      replyTo: options.replyTo ?? null,
+      preheader: options.preheader ?? null,
+      bodies: [
+        body,
+        options.plainText ?? '',
+        template ? canonicalJson(template) : '',
+        experiment ? canonicalJson(experiment.variants ?? null) : '',
+      ],
+    })
+    if (screened.outcome === 'rejected') {
+      throw new CampaignSendError(
+        'This email was reviewed and will not be sent. Contact support if ' +
+          'you believe this is a mistake.',
+        403,
+      )
+    }
+    if (screened.outcome === 'held') {
+      await sendRef.set(
+        {
+          ...campaignSendSiteStamp(hostId),
+          // A continuation's record already holds its copy and its audience;
+          // anything else is written so the release can send it as composed.
+          ...(options.continuation
+            ? {}
+            : {
+                subject,
+                ...campaignSendSearchFields(subject),
+                body,
+                audience,
+                ...(mintsRecord ? { createdAtMs: Date.now() } : {}),
+                ...(options.segmentId ? { segmentId: options.segmentId } : {}),
+                ...(options.listId ? { listId: options.listId } : {}),
+                ...(options.topicId ? { topicId: options.topicId } : {}),
+                ...(options.emails?.length
+                  ? { emails: options.emails.map(String).slice(0, 500) }
+                  : {}),
+                ...(experimentId ? { experimentId } : {}),
+                ...(options.templateScreenId
+                  ? { templateScreenId: options.templateScreenId }
+                  : {}),
+                ...(options.plainText ? { plainText: options.plainText } : {}),
+                ...(options.fromName ? { fromName: options.fromName } : {}),
+                ...(options.replyTo ? { replyTo: options.replyTo } : {}),
+                ...(options.senderId ? { senderId: options.senderId } : {}),
+                ...(options.preheader ? { preheader: options.preheader } : {}),
+                ...(options.displayName
+                  ? { displayName: options.displayName }
+                  : {}),
+                ...(options.emailCampaignId
+                  ? { emailCampaignId: options.emailCampaignId }
+                  : mintsRecord
+                    ? { emailCampaignId: null }
+                    : {}),
+                scheduledBy: options.senderUid,
+              }),
+          status: 'scheduled',
+          sendAtMs: HELD_SEND_AT_MS,
+          staffReview: {
+            reviewId: screened.reviewId,
+            reference: screened.reference,
+            state: 'held',
+            heldAtMs: Date.now(),
+          },
+        },
+        { merge: true },
+      )
+      throw new CampaignSendHeldError(screened.reference)
+    }
   }
   /*
    * PLATFORM SEND-RATE ADMISSION CONTROL (AGL-2409).
