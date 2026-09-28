@@ -502,11 +502,13 @@ export function ListingReadme({ readme }: { readme: string }) {
  * zero state this exists to show.
  */
 export function listingIsMissing(
-  listing: { $id?: string; deletedAt?: unknown } | undefined,
+  listing: { $id?: string; deletedAt?: unknown; workspaceLockedAt?: unknown } | undefined,
   status: 'loading' | 'success' | 'error',
 ): boolean {
   if (status === 'loading') return false
-  return !listing?.$id || isListingDeleted(listing)
+  // A locked publisher's listing reads as unavailable (AGL-3365) until the
+  // lift — the zero state's words already cover it without naming the lock.
+  return !listing?.$id || isListingDeleted(listing) || Boolean(listing.workspaceLockedAt)
 }
 
 export interface MarketplaceListingContentProps {

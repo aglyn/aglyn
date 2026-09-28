@@ -16,7 +16,10 @@
  */
 
 import { PLATFORM_BRAND_NAME } from '@aglyn/aglyn/app-utils/platform-brand'
-import { STAFF_CANCELLATION_COMMENT_MARKER } from '../../../../constants/subscription-cancel'
+import {
+  STAFF_CANCELLATION_COMMENT_MARKER,
+  staffCancellationActor,
+} from '../../../../constants/subscription-cancel'
 
 /**
  * WHICH SUBSCRIPTION EVENTS REACH THE WORKSPACE ACTIVITY LOG, AND WHOSE NAME
@@ -115,6 +118,11 @@ export interface SubscriptionActivityEntry {
    * never looked up, so it is the address that acted, not today's.
    */
   actorEmail: string | null
+  /**
+   * The staff uid a staff cancellation names, or null. Never the actor: the
+   * workspace did not act, and only a staff reader is shown who did.
+   */
+  staffActorId: string | null
   /** The plan the entry is ABOUT — the one left, on a cancellation. */
   plan: string
 }
@@ -188,6 +196,7 @@ export function subscriptionActivityEntry(
               : 'Subscription canceled',
       actorUid,
       actorEmail,
+      staffActorId: staffEndedIt ? staffCancellationActor(cancellationComment) : null,
       // The plan being LEFT. `next` is `'free'` on every cancellation, so
       // naming it would make each of these entries say the same nothing.
       plan: previous,
@@ -201,6 +210,7 @@ export function subscriptionActivityEntry(
         : `Changed the plan from ${previous} to ${next}`,
     actorUid,
     actorEmail,
+    staffActorId: null,
     plan: next,
   }
 }

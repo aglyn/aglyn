@@ -3253,6 +3253,18 @@ export const RETIRED_ENTITLEMENT_KEYS: ReadonlySet<string> = new Set([
   'totalSiteSizeMb',
 ])
 
+/** Each seat band as `[included, max]`: the max purchases may reach. */
+const SEAT_BANDS = [
+  ['managersPerOrg', 'maxManagersPerOrg'],
+  ['membersPerHost', 'maxMembersPerHost'],
+  ['datasetsPerOrg', 'maxDatasetsPerOrg'],
+] as const satisfies ReadonlyArray<
+  readonly [
+    keyof Omit<ResolvedOrgEntitlements, 'features'>,
+    keyof Omit<ResolvedOrgEntitlements, 'features'>,
+  ]
+>
+
 /**
  * The numeric entitlements that are PRICES rather than caps (AGL-3049): the
  * platform's percentage of a storefront or marketplace sale.
@@ -3396,6 +3408,15 @@ function resolveCappedOrgEntitlements(
       overrides.maxDatasetsPerOrg == null
     ) {
       merged.maxDatasetsPerOrg = legacyMaxDatasets
+    }
+    // A seat band's max never sits below its included count. The max is the
+    // ceiling PURCHASES stop at, and `checkSeatQuota` clamps the limit to it —
+    // so a staff override of Team seats to 2 on Free (max 1) resolved back to
+    // 1 everywhere: the members card, the invite gate and the acceptance
+    // transaction all refused the second manager the override granted. An
+    // override of the included count is a grant; the band moves with it.
+    for (const [included, max] of SEAT_BANDS) {
+      merged[max] = Math.max(merged[max], merged[included])
     }
     resolved = {
       ...merged,

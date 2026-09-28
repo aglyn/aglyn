@@ -125,3 +125,13 @@ export function lockdownPausesSiteMoneyByDefault(reason: unknown): boolean {
  * this prefix is how the webhook tells the workspace feed which one it was.
  */
 export const STAFF_CANCELLATION_COMMENT_MARKER = 'staff cancellation via'
+
+/**
+ * The staff uid a staff cancellation's comment names — `(actor <uid>; …)`,
+ * as `cancellationComment` writes it — or null when it names none. The
+ * workspace feed carries it so a staff reader can see WHICH of us acted;
+ * the route strips it for everyone else.
+ */
+export function staffCancellationActor(comment: string | null | undefined): string | null {
+  return /\(actor ([^;)\s]+)/.exec(comment ?? '')?.[1] ?? null
+}

@@ -1212,6 +1212,30 @@ it.
   Standard account the result says **not controllable — pause them in the
   Stripe Dashboard**. That is not a failure of the lock. Pause the payouts by
   hand in the Dashboard: **Connect → Accounts → the account → Payouts**.
+- **A workspace lock pauses every account the workspace is paid through.**
+  Besides the storefront account, a plugin can declare other connected
+  accounts it pays the workspace through. The marketplace declares the
+  publisher's payout account. Each account gets its own record, its own saved
+  schedule and its own line in the result (`storefront`,
+  `marketplace publisher`). A site lock pauses only the storefront account,
+  because a workspace's marketplace payouts do not belong to one site.
+- **A new publisher's payout delay waits for the lock.** A publisher in its
+  first 30 days has its payouts held 14 days. That hold is never changed while
+  a lock holds the account. The lift restores the delay the lock saved, and the
+  publisher's next sale moves it on from there.
+
+### What a workspace lock does to its marketplace listings {#lock-listings}
+
+A workspace lock of **any** reason takes the workspace's marketplace listings
+out of browse and search, and their pages read as unavailable. Anything
+already installed from them keeps working. A new sale is refused under any
+lock, and a new install or update is refused under a `security` lock. The
+result shows one line, for example `marketplace: Hid 4 marketplace
+listing(s) of 4`.
+
+The lock marks each listing without changing its own state, so the lift
+restores exactly what was visible before. A listing the publisher had
+unpublished or made private, or one staff had taken down, stays that way.
 
 ### What the lift restores {#pause-site-money-lift}
 

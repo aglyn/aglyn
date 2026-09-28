@@ -16,6 +16,7 @@
  */
 
 import { firebaseAdmin } from '@aglyn/tenant-data-admin'
+import { findUserByUidAcrossPools } from '@aglyn/tenant-data-admin/server/auth-pools'
 import { nameSearchNormalizers } from '@aglyn/aglyn/app-utils/name-search'
 import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
 import {
@@ -74,6 +75,8 @@ export interface ActorActivityEntry {
   /** The acting uid, `'api'` for a key, or null when no person acted. */
   actorId?: string | null
   actorEmail?: string | null
+  /** The staff member behind an entry the workspace did not perform. */
+  staffActorId?: string
   /** The API key that wrote the entry, when an integration did (AGL-2632). */
   apiKeyName?: string
   createdAt: { seconds: number } | null
@@ -150,6 +153,9 @@ function flattenEntry(
     target: (data['target'] as Record<string, unknown> | null) ?? null,
     actorId: typeof data['actorId'] === 'string' ? data['actorId'] : null,
     actorEmail: typeof data['actorEmail'] === 'string' ? data['actorEmail'] : null,
+    ...(typeof data['staffActorId'] === 'string'
+      ? { staffActorId: data['staffActorId'] }
+      : {}),
     ...(typeof data['apiKeyName'] === 'string' ? { apiKeyName: data['apiKeyName'] } : {}),
     createdAt: seconds === null ? null : { seconds },
   }
@@ -424,7 +430,15 @@ export async function readOrgWideActivity(
         query: applyListQuery(
           firestore.collection(collection).doc(id).collection('activity'),
           plan,
-        ).select('action', 'target', 'actorId', 'actorEmail', 'apiKeyName', 'createdAt'),
+        ).select(
+          'action',
+          'target',
+          'actorId',
+          'actorEmail',
+          'staffActorId',
+          'apiKeyName',
+          'createdAt',
+        ),
       },
     ]
   })
@@ -504,21 +518,24 @@ export async function readOrgWideActivity(
 const GET_USERS_BATCH = 100
 
 /**
- * The page's entries, each one a person wrote without an address given the
- * address that uid holds now, as `actorEmailNow`.
+ * The page's entries with every actor a reader can narrow down (AGL-3369):
  *
- * A writer that holds a uid and no address — the billing webhook, before it
- * carried the address stamped at the console act — left rows the feed could
- * only call "a member", which names nobody. The uid is the durable identity,
- * so it is resolved here, on read, and the snapshot field is left alone: the
- * reader can tell an address recorded at the time from one looked up since.
+ * - `actorEmailNow`: the address a uid holds now, for an entry that recorded
+ *   a uid and no address — the billing webhook, before it carried the
+ *   address stamped at the console act. The snapshot field is left alone,
+ *   so a reader can tell an address recorded then from one looked up since.
+ * - `staffActorEmail`: for a STAFF reader, the address of the staff member
+ *   behind an entry the workspace did not perform. Everyone else gets the
+ *   entry with `staffActorId` removed — which of us acted is not the
+ *   customer's record.
  *
  * Never throws. An account that no longer exists, or an Auth read that
  * fails, leaves the entry as it was and the presenter names the uid.
  */
 export async function withResolvedActors<T extends object>(
   entries: T[],
-): Promise<Array<T & { actorEmailNow?: string }>> {
+  options: { staff: boolean },
+): Promise<Array<T & { actorEmailNow?: string; staffActorEmail?: string }>> {
   // Read defensively: the org feed's own branch hands over stored data.
   const unaddressedUid = (entry: T): string | null => {
     const { actorId, actorEmail } = entry as { actorId?: unknown; actorEmail?: unknown }
@@ -526,11 +543,40 @@ export async function withResolvedActors<T extends object>(
     const uid = typeof actorId === 'string' ? actorId.trim() : ''
     return uid && uid !== 'api' && !uid.startsWith('system:') ? uid : null
   }
-  const uids = [
-    ...new Set(entries.map(unaddressedUid).filter((uid): uid is string => Boolean(uid))),
-  ]
-  if (!uids.length) return entries
+  const staffUid = (entry: T): string | null => {
+    const { staffActorId } = entry as { staffActorId?: unknown }
+    return options.staff && typeof staffActorId === 'string' && staffActorId
+      ? staffActorId
+      : null
+  }
+  const emails = await resolveAccountEmails([
+    ...entries.map(unaddressedUid),
+    ...entries.map(staffUid),
+  ])
+  return entries.map((entry) => {
+    const shown = { ...entry } as T & { staffActorId?: unknown }
+    if (!options.staff) delete shown.staffActorId
+    const now = emails.get(unaddressedUid(entry) ?? '')
+    const staffEmail = emails.get(staffUid(entry) ?? '')
+    return {
+      ...shown,
+      ...(now ? { actorEmailNow: now } : {}),
+      ...(staffEmail ? { staffActorEmail: staffEmail } : {}),
+    }
+  })
+}
+
+/**
+ * The current address of each account, by uid, from Admin Auth. Missing
+ * accounts and a failed lookup are simply absent from the answer.
+ */
+export async function resolveAccountEmails(
+  candidates: ReadonlyArray<string | null>,
+): Promise<Map<string, string>> {
+  const uids = [...new Set(candidates.filter((uid): uid is string => Boolean(uid)))]
   const emails = new Map<string, string>()
+  if (!uids.length) return emails
+  const missing: string[] = []
   try {
     const auth = firebaseAdmin.app().auth()
     for (let start = 0; start < uids.length; start += GET_USERS_BATCH) {
@@ -541,9 +587,19 @@ export async function withResolvedActors<T extends object>(
   } catch (error) {
     console.error('activity actor lookup failed', error)
   }
-  return entries.map((entry) => {
-    const uid = unaddressedUid(entry)
-    const now = uid ? emails.get(uid) : undefined
-    return now ? { ...entry, actorEmailNow: now } : entry
-  })
+  // The batch read sees the project pool only; an SSO member lives in their
+  // organization's tenant pool (AGL-1122), so whoever it did not name is
+  // looked up across pools, one at a time — a page holds few.
+  for (const uid of uids) if (!emails.has(uid)) missing.push(uid)
+  await Promise.all(
+    missing.map(async (uid) => {
+      try {
+        const email = (await findUserByUidAcrossPools(uid))?.record.email
+        if (email) emails.set(uid, email)
+      } catch {
+        // Left unnamed; the presenter shows the uid.
+      }
+    }),
+  )
+  return emails
 }

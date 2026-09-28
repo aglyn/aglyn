@@ -101,6 +101,7 @@ export function isListingBrowsable(listing: {
   reviewStatus?: string
   hiddenAt?: unknown
   visibility?: string
+  workspaceLockedAt?: unknown
 }): boolean {
   // Staff takedown applies to EVERY artifact type (AGL-658). Pre-publication
   // review is plugin-only — plugins execute code, so they earn the wait —
@@ -108,6 +109,12 @@ export function isListingBrowsable(listing: {
   // removable too, and before this it simply was not: the early return
   // below meant anything non-plugin was permanently browsable.
   if (listing.hiddenAt) return false
+  // The publishing workspace is locked (AGL-3365), for any reason: its
+  // listings leave browse, search and their pages until the lift. Its own
+  // field rather than `hiddenAt`, which is staff's takedown and also stops
+  // already-installed plugins from loading — a lock over an unpaid bill must
+  // not break a buyer's site, and the lift must not undo a takedown.
+  if (listing.workspaceLockedAt) return false
   // Private listings never reach the marketplace (AGL-968).
   if (isPrivateListing(listing)) return false
   if (listingArtifactType(listing) !== 'plugin') return true

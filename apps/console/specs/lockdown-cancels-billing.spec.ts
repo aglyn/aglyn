@@ -425,7 +425,14 @@ describe('user lock with lockOwnedWorkspaces', () => {
     // The workspace they merely belong to is somebody else's business.
     expect(stripe.subscriptions.get('sub_joined')!.status).toBe('active')
     expect(mockStore['orgs/org-joined']['suspendedAt']).toBeUndefined()
-    expect(mockOwnerQueries).toEqual(['orgs.ownerUid==user-fraud'])
+    // Owned workspaces are found by the owner seat alone. The marketplace
+    // then reads each LOCKED workspace's listings (AGL-3365) — never the
+    // joined one's.
+    expect(mockOwnerQueries).toEqual([
+      'orgs.ownerUid==user-fraud',
+      'marketplaceListings.profileId==org-fraud',
+      'marketplaceListings.profileId==org-second',
+    ])
   })
 
   it('audits the account lock, each workspace lock and each cancel', async () => {

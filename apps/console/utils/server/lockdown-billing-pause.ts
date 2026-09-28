@@ -56,12 +56,21 @@
  *=========================================*/
 
 import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import {
+  LOCKDOWN_BILLING_PAUSES_COLLECTION,
+  lockdownPayoutPauseRecordId,
+  type PayoutAccountSource,
+} from '@aglyn/aglyn/plugin-manager/plugin-org-lockdown'
 import type { RecurringChargeSource } from '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import { isTerminalSubscriptionStatus, stripe } from './org-subscription-cancel'
 
-/** Admin-SDK only; the default-deny rules never open it. */
-export const LOCKDOWN_BILLING_PAUSES_COLLECTION = 'lockdownBillingPauses'
+/**
+ * Admin-SDK only; the default-deny rules never open it. Named in core
+ * (AGL-3365) so a plugin that manages a payout schedule can see a lock
+ * holding the account and leave it alone.
+ */
+export { LOCKDOWN_BILLING_PAUSES_COLLECTION }
 
 /** What a Stripe pause writes, and what a read-back must show. */
 export const PAUSE_COLLECTION_BEHAVIOR = 'void'
@@ -85,6 +94,13 @@ export interface LockdownBillingTarget {
   hostIds: string[]
   /** The owner's connected account (`profiles/{ownerUid}.stripeAccountId`). */
   accountId: string | null
+  /**
+   * EVERY connected account the lock pauses (AGL-3365): the storefront
+   * account above first, then each account a plugin pays the workspace
+   * through (`core.payout-account-sources` — the marketplace's publisher
+   * account), each once.
+   */
+  accounts: Array<{ accountId: string; label: string }>
   lookupErrors: string[]
 }
 
@@ -98,6 +114,12 @@ export async function resolveLockdownBillingTarget(
   firestore: Firestore,
   scope: LockdownPauseScope,
   targetId: string,
+  /**
+   * The plugins' payout-account sources (AGL-3365). Asked for a WORKSPACE
+   * lock only: a site lock stops that site's storefront, and a workspace's
+   * marketplace payouts are not one site's.
+   */
+  payoutSources: ReadonlyArray<{ pluginId: string; source: PayoutAccountSource }> = [],
 ): Promise<LockdownBillingTarget> {
   const lookupErrors: string[] = []
   let orgId: string | null = scope === 'org' ? targetId : null
@@ -141,7 +163,23 @@ export async function resolveLockdownBillingTarget(
       lookupErrors.push(`Finding the seller's payout account failed: ${messageOf(error)}`)
     }
   }
-  return { orgId, hostIds, accountId, lookupErrors }
+  const accounts: Array<{ accountId: string; label: string }> = accountId
+    ? [{ accountId, label: 'storefront' }]
+    : []
+  if (scope === 'org' && orgId) {
+    for (const { pluginId, source } of payoutSources) {
+      try {
+        for (const account of await source.listPayoutAccounts({ orgId })) {
+          if (account.accountId && !accounts.some((entry) => entry.accountId === account.accountId)) {
+            accounts.push({ accountId: account.accountId, label: account.label || pluginId })
+          }
+        }
+      } catch (error) {
+        lookupErrors.push(`${pluginId}: finding its payout accounts failed: ${messageOf(error)}`)
+      }
+    }
+  }
+  return { orgId, hostIds, accountId, accounts, lookupErrors }
 }
 
 /*------------------------------------------
@@ -192,7 +230,7 @@ const stripeError = (reply: { status: number; body: any }) =>
   reply.body?.error?.message ?? `HTTP ${reply.status}`
 
 const subscriptionRecordId = (subscriptionId: string) => `sub_${subscriptionId}`
-const payoutRecordId = (accountId: string) => `payout_${accountId}`
+const payoutRecordId = lockdownPayoutPauseRecordId
 
 /** Pause every live subscription the locked sites sell. */
 export async function pauseMembershipRenewals(options: {
@@ -439,6 +477,8 @@ export type PayoutResumeOutcome = 'restored' | 'still-held' | 'failed'
 export interface PayoutsResult<Outcome> {
   attempted: true
   accountId: string | null
+  /** Which account it is to staff: `storefront`, `marketplace publisher` (AGL-3365). */
+  label?: string
   outcome: Outcome | 'nothing-held'
   /** The schedule saved at the lock, or restored at the lift. */
   schedule: PayoutSchedule | null
@@ -484,6 +524,8 @@ export async function pauseSellerPayouts(options: {
   scope: LockdownPauseScope
   targetId: string
   accountId: string | null
+  /** Which account it is to staff (AGL-3365). */
+  label?: string
   secretKey: string | undefined
   actorUid: string
 }): Promise<PayoutsResult<PayoutPauseOutcome>> {
@@ -496,6 +538,7 @@ export async function pauseSellerPayouts(options: {
   ): PayoutsResult<PayoutPauseOutcome> => ({
     attempted: true,
     accountId,
+    ...(options.label ? { label: options.label } : {}),
     outcome,
     schedule: extra.schedule ?? null,
     error: extra.error ?? null,
@@ -533,6 +576,7 @@ export async function pauseSellerPayouts(options: {
     await recordRef.set({
       kind: 'payouts',
       accountId,
+      ...(options.label ? { label: options.label } : {}),
       holders: [holder],
       previousSchedule: previous,
       pausedAtMs: Date.now(),
@@ -559,33 +603,51 @@ export async function pauseSellerPayouts(options: {
   }
 }
 
-/** Restore exactly the schedule the lock saved, once no lock holds it. */
-export async function restoreSellerPayouts(options: {
+/**
+ * Pause every connected account the lock reaches (AGL-3365), each on its own
+ * record with its own saved schedule, so the lift puts each back exactly. A
+ * lock that finds no account reports the storefront's `no-account`, as it
+ * always has.
+ */
+export async function pauseAllSellerPayouts(options: {
   firestore: Firestore
   scope: LockdownPauseScope
   targetId: string
+  accounts: ReadonlyArray<{ accountId: string; label: string }>
   secretKey: string | undefined
-}): Promise<PayoutsResult<PayoutResumeOutcome>> {
-  const { firestore, secretKey } = options
-  const holder = lockdownHolderKey(options.scope, options.targetId)
-  let records: FirebaseFirestore.QueryDocumentSnapshot[]
-  try {
-    records = await heldRecords(firestore, holder, 'payouts')
-  } catch (error) {
-    return {
-      attempted: true,
-      accountId: null,
-      outcome: 'failed',
-      schedule: null,
-      error: `Reading what the lock paused failed: ${messageOf(error)}`,
-      confirmed: false,
-    }
+  actorUid: string
+}): Promise<Array<PayoutsResult<PayoutPauseOutcome>>> {
+  if (!options.accounts.length) {
+    return [await pauseSellerPayouts({ ...options, accountId: null })]
   }
-  const record = records[0]
-  if (!record) {
-    return { attempted: true, accountId: null, outcome: 'nothing-held', schedule: null, error: null, confirmed: true }
+  const results: Array<PayoutsResult<PayoutPauseOutcome>> = []
+  for (const account of options.accounts) {
+    results.push(
+      await pauseSellerPayouts({
+        firestore: options.firestore,
+        scope: options.scope,
+        targetId: options.targetId,
+        accountId: account.accountId,
+        label: account.label,
+        secretKey: options.secretKey,
+        actorUid: options.actorUid,
+      }),
+    )
   }
+  return results
+}
+
+/**
+ * Restore exactly the schedule the lock saved for ONE record, once no lock
+ * holds it.
+ */
+async function restorePayoutRecord(
+  record: FirebaseFirestore.QueryDocumentSnapshot,
+  holder: string,
+  secretKey: string | undefined,
+): Promise<PayoutsResult<PayoutResumeOutcome>> {
   const accountId = String(record.get('accountId') ?? '')
+  const label = String(record.get('label') ?? '') || undefined
   const previous = record.get('previousSchedule') as PayoutSchedule
   const others = ((record.get('holders') as string[] | undefined) ?? []).filter(
     (entry) => entry !== holder,
@@ -597,6 +659,7 @@ export async function restoreSellerPayouts(options: {
   ): PayoutsResult<PayoutResumeOutcome> => ({
     attempted: true,
     accountId,
+    ...(label ? { label } : {}),
     outcome,
     schedule: previous ?? null,
     error,
@@ -621,12 +684,54 @@ export async function restoreSellerPayouts(options: {
     const confirmed =
       reread.ok &&
       restored?.interval === previous.interval &&
+      (previous.delay_days === undefined ||
+        previous.interval === 'manual' ||
+        restored?.delay_days === previous.delay_days) &&
       (previous.weekly_anchor === undefined || restored?.weekly_anchor === previous.weekly_anchor) &&
       (previous.monthly_anchor === undefined || restored?.monthly_anchor === previous.monthly_anchor)
     return result('restored', confirmed, confirmed ? null : 'Read-back does not match the saved schedule.')
   } catch (error) {
     return result('failed', false, messageOf(error))
   }
+}
+
+/**
+ * Restore every payout schedule THIS lock saved — one record per connected
+ * account (AGL-3365), each to exactly what it was. An empty list when the
+ * lock paused none.
+ */
+export async function restoreSellerPayouts(options: {
+  firestore: Firestore
+  scope: LockdownPauseScope
+  targetId: string
+  secretKey: string | undefined
+}): Promise<Array<PayoutsResult<PayoutResumeOutcome>>> {
+  const { firestore, secretKey } = options
+  const holder = lockdownHolderKey(options.scope, options.targetId)
+  let records: FirebaseFirestore.QueryDocumentSnapshot[]
+  try {
+    records = await heldRecords(firestore, holder, 'payouts')
+  } catch (error) {
+    return [
+      {
+        attempted: true,
+        accountId: null,
+        outcome: 'failed',
+        schedule: null,
+        error: `Reading what the lock paused failed: ${messageOf(error)}`,
+        confirmed: false,
+      },
+    ]
+  }
+  // The storefront account first, as the lock listed it.
+  records.sort((left, right) =>
+    (left.get('label') === 'storefront' ? 0 : 1) - (right.get('label') === 'storefront' ? 0 : 1),
+  )
+  const results: Array<PayoutsResult<PayoutResumeOutcome>> = []
+  for (const record of records) {
+    results.push(await restorePayoutRecord(record, holder, secretKey))
+  }
+  return results
 }
 
 /*------------------------------------------

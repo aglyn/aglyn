@@ -91,3 +91,26 @@ describe('a column made a select keeps what it drew (AGL-3321)', () => {
     expect(custom.renderCell).toBe(own)
   })
 })
+
+describe('a Yes/No field with no column of its own is still offered (AGL-3332)', () => {
+  const fields: readonly ListFilterField[] = [
+    { column: 'status', kind: 'exact', path: 'status', operators: ['equals'] },
+    { column: 'clicked', kind: 'boolean', path: 'clicked', operators: ['equals'] },
+  ]
+  const yesNo = [
+    { value: 'true', label: 'Yes' },
+    { value: 'false', label: 'No' },
+  ]
+
+  it('adds it as a hidden, filterable select over its choices', () => {
+    const columns = listFilterGridColumns([{ field: 'status' }], fields, { clicked: yesNo })
+    const clicked = columns.find((column) => column.field === 'clicked')
+    expect(clicked).toMatchObject({ type: 'singleSelect', filterable: true, hideable: false })
+    expect(clicked?.filterOperators?.map((operator) => operator.value)).toEqual(['is'])
+  })
+
+  it('still leaves out a hidden field the grid cannot filter and that has no choices', () => {
+    const columns = listFilterGridColumns([{ field: 'status' }], fields)
+    expect(columns.map((column) => column.field)).toEqual(['status'])
+  })
+})

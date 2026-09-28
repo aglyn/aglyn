@@ -1272,6 +1272,13 @@ export async function logOrgActivity(
   actor: { uid: string | null; email?: string | null },
   action: string,
   target: OrgActivityTarget,
+  /**
+   * `staffActorId`: the staff member behind an entry the workspace did not
+   * perform (a staff cancellation, AGL-3369). Kept apart from `actorId` so
+   * the filterable actor stays honest; `/api/orgs/activity` shows it to
+   * staff only.
+   */
+  options?: { staffActorId?: string | null },
 ): Promise<void> {
   await firestore()
     .collection('orgs')
@@ -1280,6 +1287,7 @@ export async function logOrgActivity(
     .add({
       actorId: actor.uid ?? null,
       actorEmail: actor.email ?? null,
+      ...(options?.staffActorId ? { staffActorId: options.staffActorId } : {}),
       action,
       target: {
         type: target.type,
