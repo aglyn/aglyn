@@ -77,10 +77,13 @@ export function carriedAiAddonSentence(
  * the page and then a confirmation dialog overstating the charge by a full
  * billing period, in the dialog where they commit.
  *
- * The timing was wrong too, and independently. `proration_behavior:
- * create_prorations` charges NOTHING at the moment of the switch — Stripe
- * writes the adjustment onto the upcoming invoice — so "charge today" was
- * false whatever the number beside it.
+ * ## When the money moves (AGL-3358)
+ *
+ * A switch that costs more is invoiced and charged the moment the customer
+ * confirms it, and the plan changes only once that payment goes through. So
+ * a positive proration is quoted as a charge NOW, with the amount Stripe will
+ * take — `chargedNowCents`, the `always_invoice` preview's `amount_due`, tax
+ * included. A credit still lands on the next invoice, and says so.
  *
  * ## Why a missing proration prints no figure at all
  *
@@ -98,6 +101,10 @@ export interface ProrationPreview {
   taxReason?: string | null
   /** The proration lines alone, signed. The cost of the change. */
   prorationCents?: number
+  /** The switch charges the change as soon as it is confirmed. */
+  chargesNow?: boolean
+  /** What that charge takes from the card, tax included. */
+  chargedNowCents?: number
   /**
    * The WHOLE upcoming invoice, next period's recurring charge included.
    *
@@ -116,7 +123,9 @@ export function prorationQuote(
   const currency = String(preview.currency ?? 'usd').toUpperCase()
   const cents = preview.prorationCents
   if (typeof cents !== 'number') {
-    return `The change is prorated for the rest of this period and billed on your next invoice on ${effective}.`
+    return preview.chargesNow
+      ? "You'll be charged the prorated difference for the rest of this period as soon as you confirm, and your plan changes once the payment goes through."
+      : `The change is prorated for the rest of this period and billed on your next invoice on ${effective}.`
   }
   const amount = (Math.abs(cents) / 100).toFixed(2)
   // The TAX on the change, said out loud.
@@ -138,8 +147,29 @@ export function prorationQuote(
     : (preview.prorationTaxCents ?? 0) > 0
       ? ` Plus $${taxAmount} ${currency} tax.`
       : ` ${tax.sentence}`
+  if (cents > 0) {
+    // Charged NOW. The figure is what leaves the card — the proration plus
+    // its tax, less any account credit — so the tax is said as part of it
+    // rather than added on top of it.
+    const charged =
+      typeof preview.chargedNowCents === 'number'
+        ? preview.chargedNowCents
+        : cents + (preview.prorationTaxCents ?? 0)
+    const chargedAmount = (Math.max(charged, 0) / 100).toFixed(2)
+    const chargedTaxClause = !tax.totalIsFinal
+      ? ` ${tax.sentence}`
+      : (preview.prorationTaxCents ?? 0) > 0
+        ? ` That includes $${taxAmount} ${currency} tax.`
+        : ` ${tax.sentence}`
+    return (
+      `You'll be charged $${chargedAmount} ${currency} now for the rest of ` +
+      'this period, and your plan changes as soon as the payment goes ' +
+      'through.' +
+      chargedTaxClause
+    )
+  }
   return (
-    (cents >= 0
+    (cents === 0
       ? `Prorated for the rest of this period: $${amount} ${currency}, billed on your next invoice on ${effective}.`
       : `Unused time credits $${amount} ${currency} back on your next invoice on ${effective}.`) + taxClause
   )

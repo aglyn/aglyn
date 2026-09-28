@@ -222,8 +222,10 @@ describe('a plan switch enables automatic tax (AGL-1537)', () => {
     // The query is hand-assembled, so assert on the decoded parameter.
     const query = new URL(String(capturedPreviewUrl)).searchParams
     expect(query.get('automatic_tax[enabled]')).toBe('true')
+    // The invoice an upgrade raises NOW (AGL-3358), so the quote and the
+    // charge are the same invoice.
     expect(query.get('subscription_proration_behavior')).toBe(
-      'create_prorations',
+      'always_invoice',
     )
   })
 
