@@ -605,9 +605,10 @@ monthly invoice as a usage line. See
   invoice with its date, status, and amount. Each row links to the **Stripe-hosted
   invoice** (View), a **PDF download** of the invoice, and the payment **Receipt** once
   it's paid — everything you need for expense reports and bookkeeping. Older invoices
-  load on demand. **Filters** in the table's toolbar narrows it by **Status** (one of
-  Open, Paid, Uncollectible or Void), by **Invoice** number (the whole number), or by
-  **Date** (on, after, or before a day), and **Search** finds a whole invoice number or a
+  load on demand. **Filters** in the table's toolbar narrows it by **Status** (**is**
+  one of Open, Paid, Uncollectible or Void), by **Invoice** number (**equals** the whole
+  number), or by **Date** (**is**, **is after**, **is on or after**, **is before** or **is
+  on or before** a day), and **Search** finds a whole invoice number or a
   Stripe invoice ID (`in_…`). Filters and search are asked of Stripe itself, so they
   reach your whole billing history, not only the invoices on screen. The Invoice filter
   and the search both look up a number, so with the filter set the search is named above

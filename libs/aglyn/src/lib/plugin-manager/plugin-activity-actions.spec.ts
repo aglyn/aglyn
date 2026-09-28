@@ -27,6 +27,7 @@ import {
   resetPluginActivityActionsForTests,
   isPluginActivityTargetType,
   pluginActivityTargetNoun,
+  PLUGIN_ACTIVITY_GROUP_MAX_ACTIONS,
 } from './plugin-activity-actions'
 
 const AI = {
@@ -95,6 +96,22 @@ describe('registerPluginActivityActions', () => {
     expect(() =>
       registerPluginActivityActions({ ...BACKUPS, pluginId: ' ' }),
     ).toThrow(/need a pluginId/)
+  })
+
+  it('refuses a group whose chip could never be applied: more than thirty codes', () => {
+    const codes = (count: number) =>
+      Array.from({ length: count }, (_unused, at) => ({
+        key: `backup.step.${at}`,
+        label: `Backup step ${at}`,
+        scope: 'host' as const,
+      }))
+    registerPluginActivityActions({ ...BACKUPS, actions: codes(PLUGIN_ACTIVITY_GROUP_MAX_ACTIONS) })
+    expect(listPluginActivityFilters()[0].actions).toHaveLength(30)
+    expect(() => registerPluginActivityActions({ ...BACKUPS, actions: codes(31) })).toThrow(
+      /activity group "backups" declares 31 actions; .* at most 30, refused "acme-backups"/,
+    )
+    // The refused registration left the accepted one in place.
+    expect(listPluginActivityFilters()[0].actions).toHaveLength(30)
   })
 
   it('reset forgets everything', () => {

@@ -412,9 +412,12 @@ generic package glyph.
 the whole name), **Used in** (page or email), ID, or the date it was last updated, and
 **Search** finds a component by the start of any word of its name. Every filter and the
 search word are part of the list's query, so they look through every component on the
-site, not only the page on screen. Each filter in force shows as a chip above the table.
-A combination that cannot be asked at once — a name "contains" filter beside a search, or
-a second date range — is left out, and the table says which one and why. See
+site, not only the page on screen. The table lists components by ID and its column
+headers do not re-sort it; an **Updated** filter lists the matches most recently updated
+first. Each filter in force shows as a chip above the table. A combination that cannot be
+asked at once — a name "contains" filter beside a search, or an ID "starts with" beside an
+**Updated** filter (one range at a time) — is left out, and the table says which one and
+why. See
 [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 ## Duplicate

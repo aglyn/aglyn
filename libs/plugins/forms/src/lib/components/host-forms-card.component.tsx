@@ -742,6 +742,9 @@ export function HostFormsCard(props: HostFormsCardProps) {
           loading={status === 'loading'}
           // Paged by the footer below, so the grid must not also slice.
           hideFooter
+          // The rows keep the query's order; a header sort would order only
+          // the page on screen and read as the whole list's.
+          disableColumnSorting
         />
         <ListPagination
           page={page}

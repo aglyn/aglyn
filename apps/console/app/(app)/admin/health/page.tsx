@@ -682,8 +682,10 @@ const AdminHealth: NextPageWithLayout<Record<string, never>> = () => {
                         onFilterModelChange={gridFilter.onFilterModelChange}
                         quickFilter
                         // The route answers one page at a time; the footer
-                        // below walks the pages.
+                        // below walks the pages, and a header sort would
+                        // order only one.
                         hideFooter
+                        disableColumnSorting
                         noRowsLabel="No violations match these filters"
                       />
                       <StaffListPaginationControls pagination={cspList} />

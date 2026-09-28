@@ -85,8 +85,9 @@ have one", not "search could not see it".
 
 - **Orders and bookings** are not searchable. They are found on their own
   pages, which have their own filters.
-- **Media** has its own, richer search on the Media page, including wildcards
-  and searching by tag or custom field. See
+- **Media** has its own search and filters on the Media page: search by the
+  start of a word in a file name, and filter by type, tags, upload date and
+  more. See
   [the media library](../content-and-data/media/overview.md).
 - **Other workspaces.** Search only ever covers the workspace named in the
   page address you are on.

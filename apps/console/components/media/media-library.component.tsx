@@ -3796,12 +3796,13 @@ export function MediaLibraryComponent(props: MediaLibraryComponentProps) {
   /**
    * What both views' grids share: the columns, the filter model, the search
    * (AGL-3327). The chips over the files show every clause in force; the
-   * toolbar's Filters panel adds them and its search is the library search,
-   * which a library limited to some sites does not offer — its query's one
-   * array filter is the scope clause. In the List view the toolbar is the
-   * table's own; in the Grid view it is the same grid with its body
-   * collapsed, beside the Sort control a card grid needs because it has no
-   * column headers to click.
+   * toolbar's Filters panel adds them and its search is the library search.
+   * In a library limited to some sites that search is a name range beside
+   * the scope clause, which holds the query's one array filter
+   * (`mediaScopedSearchClause`), and the library says so. In the List view
+   * the toolbar is the table's own; in the Grid view it is the same grid
+   * with its body collapsed, beside the Sort control a card grid needs
+   * because it has no column headers to click.
    */
   const gridToolbarProps = useMemo(
     () => ({

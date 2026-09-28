@@ -342,7 +342,7 @@ function SitesCards(props: SitesCardsProps) {
         search={{
           words: searchWords,
           onChange: setSearchWords,
-          placeholder: 'Search sites by name or domain',
+          placeholder: 'Search by name, slug or domain',
         }}
       />
       <ListFilterChips
