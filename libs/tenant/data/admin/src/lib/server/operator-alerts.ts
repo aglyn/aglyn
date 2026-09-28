@@ -31,6 +31,7 @@ import {
   getOperatorAlert,
   registerOperatorAlerts,
 } from '@aglyn/aglyn/plugin-manager/operator-alerts'
+import { createResourceUid } from '@aglyn/aglyn/app-utils/create-resource-uid'
 import { isEmailConfigured, type SendEmailResult } from '@aglyn/shared-util-email'
 import firebaseAdmin from './firebase-admin'
 
@@ -554,7 +555,8 @@ async function queueOperatorAlertForDigest(alert: RenderedOperatorAlert): Promis
   try {
     await firestore()
       .collection(OPERATOR_ALERT_DIGEST_COLLECTION)
-      .add({ ...alert, atMs: Date.now() })
+      .doc(createResourceUid())
+      .set({ ...alert, atMs: Date.now() })
   } catch (error) {
     // The queue is the only record the digest will have; with it gone, the
     // alert goes now rather than never.
@@ -578,6 +580,11 @@ export interface OperatorDigestResult {
 
 function dayKey(now: number): string {
   return new Date(now).toISOString().slice(0, 10)
+}
+
+/** The state document that claims one UTC day's digest. */
+export function operatorDigestMarkerId(now: number): string {
+  return `digest-${dayKey(now)}`
 }
 
 /** The digest's body: one paragraph per alert, newest last. */
@@ -613,7 +620,7 @@ export async function sendOperatorAlertDigest(
     const collection = firestore().collection(OPERATOR_ALERT_DIGEST_COLLECTION)
     const marker = firestore()
       .collection(OPERATOR_ALERT_STATE_COLLECTION)
-      .doc(`digest-${dayKey(now)}`)
+      .doc(operatorDigestMarkerId(now))
     if (!options.force && (await marker.get()).exists) {
       return { sent: false, reason: 'already-sent', count: 0 }
     }
