@@ -33,6 +33,8 @@ import { sendOrgMemberNotice } from '@aglyn/tenant-data-admin/server/org-member-
 import { logOrgActivity } from '@aglyn/tenant-data-admin/server/organizations'
 import { filterEnabledPluginsByReleaseFlags } from '@aglyn/tenant-data-admin/server/release-flags'
 import { resolveTrackingLinkOrigin } from '@aglyn/tenant-data-admin/server/tracking-hosts'
+import { sendingWorkspaceFor } from '@aglyn/tenant-data-admin/server/outbound-send-review'
+import { screenTenantMessage } from '@aglyn/shared-util-email/outbound-screen-gate'
 import { stampRecordEmailState } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { OUTREACH_PLUGIN_ID } from '../constants/bundle-common'
 import { composeOutreachMailboxNotice } from '../engine/mailbox-notice'
@@ -148,6 +150,22 @@ export function platformOutreachRuntimeDeps(): OutreachRuntimeDeps {
     // static import of it across the plugin and the console.
     clickLinkOrigin({ orgId, senderAddress }) {
       return resolveTrackingLinkOrigin(firestore(), orgId, senderAddress)
+    },
+    // The one phishing screen every tenant message passes (AGL-3356). The
+    // review module's import installs its store, so a hold files the same
+    // abuse-queue row a held newsletter or campaign does.
+    async screenMessage({ orgId, org, hostId, host, subject, text, fromName }) {
+      const refusal = await screenTenantMessage(
+        {
+          workspace: sendingWorkspaceFor({ hostId, orgId, org, host }),
+          subject,
+          fromName,
+          bodies: [text],
+          context: 'outreach sequence',
+        },
+        'outreach email',
+      )
+      return refusal?.detail ?? null
     },
   }
 }

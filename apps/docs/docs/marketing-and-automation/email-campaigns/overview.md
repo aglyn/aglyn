@@ -601,10 +601,13 @@ The statuses a scheduled campaign moves through are **Scheduled** â†’ sending â†
 
 ### Held for review {#held-for-review}
 
-In a workspace's first two weeks, each campaign is checked before it sends for
-signs that it impersonates another business. Examples are a link to a lookalike
-of a well-known brand's domain, or a sender name that uses a brand that isn't
-yours. Most emails are never held.
+Every email your sites send, campaigns included, is checked for signs that it
+impersonates another business. A link to a lookalike of a well-known brand's
+domain is held in any workspace. In a workspace's first two weeks, an email is
+also held for a sender name that uses a brand that isn't yours, or for naming a
+brand and asking readers to act on an account elsewhere. Receipts, booking
+confirmations and password resets are only ever held for a lookalike link.
+Published pages are checked the same way. Most emails and pages are never held.
 
 If an email is held, nothing is sent or counted, and it shows a **Held for
 review** chip in the Emails list and on its page. While it is held you can't

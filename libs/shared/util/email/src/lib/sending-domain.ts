@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { SendingWorkspace } from './outbound-screen-gate'
+
 /**
  * CUSTOM SENDING DOMAINS — policy half.
  *
@@ -1105,6 +1107,15 @@ export interface SendingIdentityVerdict {
   summary: string
   /** Null on success. Both keys always present — `strictNullChecks` is off. */
   refusal: SendingIdentityRefusal | null
+  /**
+   * The workspace this identity was resolved for, stamped by
+   * `hostSendingIdentity` from the documents it already read (AGL-3356).
+   * `sendEmail` hands it to the outbound phishing screen, which is how one
+   * check covers every tenant sender without any of them passing anything.
+   * Absent on a platform identity and on any resolution that did not start
+   * from a host.
+   */
+  workspace?: SendingWorkspace | null
 }
 
 /**

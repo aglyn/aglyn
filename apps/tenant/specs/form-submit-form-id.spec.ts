@@ -637,3 +637,37 @@ describe('a submission counts itself onto the form it names', () => {
     expect(statsPatch()).not.toHaveProperty('stats.leads')
   })
 })
+
+describe('a credential is never stored, whatever page posted it (AGL-3356)', () => {
+  it('drops a password, card or one-time-code field and keeps the rest', async () => {
+    const response = await submit({
+      fields: {
+        email: 'visitor@example.com',
+        password: 'hunter2',
+        card_number: '4242424242424242',
+        cvv: '123',
+        otp: '000111',
+        message: 'hello',
+      },
+    })
+    expect(response.status).toBe(200)
+    expect(written()?.['fields']).toEqual({ email: 'visitor@example.com', message: 'hello' })
+  })
+
+  it('refuses a submission that carried nothing BUT credentials', async () => {
+    const response = await submit({ fields: { password: 'hunter2', cardNumber: '4242' } })
+    expect(response.status).toBe(400)
+    expect(written()).toBeUndefined()
+  })
+
+  it('keeps ordinary codes a merchant does ask for', async () => {
+    await submit({
+      fields: { email: 'visitor@example.com', promo_code: 'SPRING', zip: '78701' },
+    })
+    expect(written()?.['fields']).toEqual({
+      email: 'visitor@example.com',
+      promo_code: 'SPRING',
+      zip: '78701',
+    })
+  })
+})

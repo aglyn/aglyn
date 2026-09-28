@@ -51,6 +51,7 @@ import {
   type EmailSendPurpose,
 } from './email-deliverability'
 import { bareSenderAddress } from './email-delivery-events'
+import { screenTenantMessage } from './outbound-screen-gate'
 
 export const RESEND_SEND_ENDPOINT = 'https://api.resend.com/emails'
 
@@ -173,6 +174,27 @@ export interface SendEmailOptions {
    * first, and would ask the gate about one of them. Callers fan out.
    */
   marketing?: MarketingSendContext
+  /**
+   * What the RECIPIENT did that makes this message owed to them (AGL-3356):
+   * `order` — a receipt, a gift card, a shipping notice for something they
+   * bought; `booking` — a confirmation, reminder or change to something they
+   * booked; `account` — a password reset or sign-in link they asked for.
+   *
+   * The outbound phishing screen's SOFT rules never hold an owed message; a
+   * lookalike link still does, because a receipt that links to a brand's
+   * disguise is the disguise. Omitted — the default, and the one a forgotten
+   * caller gets — the message is treated as merchant-authored and every
+   * tier applies. A MARKETING message is never owed, whatever it declares.
+   */
+  owedFor?: 'order' | 'booking' | 'account'
+  /**
+   * A review row that the caller's own screen held and staff RELEASED for
+   * exactly this content — a campaign put back on the clock, an automation
+   * step whose hold was dismissed. The send seam's screen honors it only
+   * after confirming, through the installed gate, that it is a release for
+   * this site; naming a row is not a way past the screen.
+   */
+  releasedReviewId?: string | null
 }
 
 /**
@@ -328,6 +350,14 @@ export type SendEmailFailureReason =
    * no way to come back, and retrying would only ask the same question.
    */
   | 'suspended'
+  /**
+   * The outbound phishing screen held this message for staff review, or
+   * staff already rejected a message carrying the same signals from this
+   * site (AGL-3356). Nothing was attempted. Terminal for this message:
+   * `detail` names the `HS-…` reference, and once staff release the review
+   * the site's next message carrying the same signals sends.
+   */
+  | 'held-for-review'
 
 export type SendEmailResult =
   | { sent: true; id: string | null }
@@ -515,6 +545,38 @@ async function askDeliverabilityPreflight(
   } finally {
     if (timer) clearTimeout(timer)
   }
+}
+
+/**
+ * The send seam's half of the outbound phishing screen (AGL-3356): every
+ * message a SITE sends whose identity carries the workspace
+ * `hostSendingIdentity` stamped, through {@link screenTenantMessage} — the
+ * pure screen, its tiers, and the installed review store. `null` when the
+ * message may go; fails open, as that function documents.
+ */
+export async function askOutboundScreen(
+  options: SendEmailOptions,
+  label = 'email',
+): Promise<SendEmailResult | null> {
+  const workspace = options.sendingIdentity?.workspace
+  if (options.audience !== 'tenant' || !workspace?.hostId) return null
+  const refusal = await screenTenantMessage(
+    {
+      workspace,
+      subject: options.subject,
+      fromName: options.fromName ?? null,
+      replyTo: options.replyTo ?? null,
+      bodies: [options.text, options.html],
+      // A marketing message is never owed, whatever it declares.
+      owed: Boolean(options.owedFor) && !isMarketingMessage(options),
+      context: options.context ?? null,
+      releasedReviewId: options.releasedReviewId ?? null,
+    },
+    label,
+  )
+  if (!refusal) return null
+  console.warn(`${label} not sent — ${refusal.detail}`)
+  return { sent: false, reason: 'held-for-review', detail: refusal.detail }
 }
 
 export interface EmailConfig {
@@ -733,6 +795,20 @@ export async function sendEmail(
     console.warn(`${label} skipped — no valid recipient address`)
     return { sent: false, reason: 'no-recipient' }
   }
+
+  /*
+   * THE OUTBOUND PHISHING SCREEN (AGL-3356).
+   *
+   * Asked for every message a SITE sends whose identity came through
+   * `hostSendingIdentity` — which stamps the workspace on it — so one check
+   * covers every tenant sender, first-party or marketplace, without any of
+   * them calling it. See `outbound-screen-gate.ts`.
+   *
+   * Ahead of the preflight and every other gate: a message that must not
+   * leave is decided before anything is spent on who receives it.
+   */
+  const screenRefusal = await askOutboundScreen(options, label)
+  if (screenRefusal) return screenRefusal
 
   /*
    * THE DELIVERABILITY PREFLIGHT (AGL-3328).

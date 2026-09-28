@@ -206,4 +206,21 @@ export interface OutreachRuntimeDeps {
    * Absent means no deployment-level hosts at all.
    */
   clickLinkOrigin?(input: { orgId: string; senderAddress: string }): Promise<string | null>
+  /**
+   * The platform's outbound phishing screen (AGL-3356), asked for each
+   * composed email before anything is claimed or sent — the same screen,
+   * tiers and staff review every other tenant message passes, reached here
+   * because a connected mailbox is a transport `sendEmail` never sees. The
+   * sentence a member reads when the email is held or rejected, or `null`
+   * when it may go. Absent means unscreened.
+   */
+  screenMessage?(input: {
+    orgId: string
+    org: Record<string, unknown>
+    hostId: string
+    host: Record<string, unknown> | null
+    subject: string
+    text: string
+    fromName: string | null
+  }): Promise<string | null>
 }

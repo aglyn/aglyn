@@ -38,6 +38,11 @@
  */
 
 const mockDecideHeldOutboundSend = jest.fn(async (..._args: unknown[]) => 'released')
+const mockRevalidateEntireHost = jest.fn(async (..._args: unknown[]) => ({ attempted: true }))
+jest.mock('../utils/server/tenant-revalidate', () => ({
+  __esModule: true,
+  revalidateEntireHost: (...args: unknown[]) => mockRevalidateEntireHost(...args),
+}))
 const mockVerifyIdToken = jest.fn()
 
 const state: {
@@ -730,6 +735,28 @@ describe('a send the phishing screen held (AGL-3356)', () => {
     asSuper()
     await post({ id: REPORT_ID, status: 'dismissed', resolution: 'Not phishing.' })
     expect(mockDecideHeldOutboundSend).not.toHaveBeenCalled()
+  })
+
+  it('drops the site’s cache when it decides a held PAGE, and only then', async () => {
+    asSuper()
+    mockRevalidateEntireHost.mockClear()
+    await post({ id: HELD_ID, status: 'dismissed', resolution: 'Their own promo.' })
+    // A held email has no cached page to drop.
+    expect(mockRevalidateEntireHost).not.toHaveBeenCalled()
+
+    const PAGE_ID = 'd'.repeat(40)
+    state.reports[PAGE_ID] = {
+      ...state.reports[HELD_ID],
+      reference: 'HS-DDDDDDDDDD',
+      url: 'https://harborview.aglyn.app/reviewfile',
+      heldSend: {
+        ...(state.reports[HELD_ID].heldSend as Record<string, unknown>),
+        kind: 'page',
+        path: 'hosts/host-evil/screens/screen-1',
+      },
+    }
+    await post({ id: PAGE_ID, status: 'dismissed', resolution: 'A real partner page.' })
+    expect(mockRevalidateEntireHost).toHaveBeenCalledWith(expect.anything(), 'host-evil')
   })
 })
 

@@ -75,51 +75,94 @@ A repeat also never re-opens a report. Once you have moved a row to `actioned`
 or `dismissed`, the reporter filing again bumps `reportCount` and leaves your
 decision where you put it.
 
-## Held outbound email {#held-outbound-email}
+## Held outbound email and pages {#held-outbound-email}
 
-The queue has a second source that is not a person. Campaigns and automated
-emails (workflow, action and org-automation `sendEmail` steps) from a workspace
-**less than 14 days old** pass an outbound phishing screen before they send.
-When the screen finds a strong signal it **holds** the send and files a row here:
-category `phishing`, severity urgent, reference `HS-…`, source
-`outbound-screen`. Staff get the same urgent notification an intake phishing
-report raises, once per held message.
+The queue has a second source that is not a person: the phishing screen. It
+reads every workspace's outbound email and published pages with one brand list
+and one set of rules. When it finds a signal that holds, it **holds** the email
+or page and files a row here. The row has category `phishing`, severity urgent,
+reference `HS-…` and source `outbound-screen`. Staff get the same urgent
+notification an intake phishing report raises, once per row.
 
-The screen holds on three shapes only, each one a legitimate merchant almost
-never produces:
+### What the screen looks at {#what-is-screened}
 
-- **A lookalike link or reply address** — a host that wears a brand's name
-  without being the brand's domain: `poshmark.id63835663.shop`,
-  `paypal-secure.com`, `booking.com.guest-review.top`, `paypa1.com`.
-- **A brand in the sender name** that is not the workspace's own name, such as
-  mail sent as "PayPal Support".
-- **Brand, lure and elsewhere, together** — the copy names a brand, asks the
+| Surface | Where it is screened | What a hold does |
+| -- | -- | -- |
+| Campaigns | Before the campaign is claimed | The campaign is parked as a scheduled send that no processor run reaches. |
+| Workflow, action and org-automation email steps | Before the step sends | The run fails with "held for staff review" and the reference. A step after a wait stays queued. |
+| Every other email a site sends (CRM one-off mail, inbox replies, newsletters, member posts, cart and restock reminders, receipts, booking mail, marketplace plugins) | At the send itself (`sendEmail`) | That one email is not sent, and its sender reports `held-for-review`. |
+| Outreach sequences (connected mailboxes) | Before the step is claimed | The enrollment is paused with the reason. A member resumes it once the row is released. |
+| Published pages | When the page is put together for a visitor | The page serves the last version it served clean, or nothing if it has none. |
+
+Pages are screened when they are served rather than when Publish is clicked.
+Publishing is a pointer move made from the browser in several places, and an
+author can edit a live version in place. Every one of those paths reaches a
+visitor through the same composition step, and that is where the screen reads
+the page: the screen, its layout, the components placed on it and its forms.
+
+### What holds, in two tiers {#tiers}
+
+**Strong signals hold for every workspace, however old:**
+
+- **A lookalike link, embed or reply address.** A host that wears a brand's name
+  without being the brand's domain, such as `poshmark.id63835663.shop`,
+  `paypal-secure.com`, `booking.com.guest-review.top` or `paypa1.com`.
+- **A credential field on a page.** A field the page's author defined that asks
+  for a password, a card number or a one-time code. Aglyn's own member sign-in,
+  account and checkout elements are not affected, because they collect those
+  details themselves.
+
+**Soft signals hold only for a workspace less than 14 days old:**
+
+- **A brand in the sender name** that is not the workspace's own, such as mail
+  sent as "PayPal Support".
+- **Brand, lure and elsewhere, together.** The email names a brand, asks the
   reader to act on an account ("verify your account", "has finally sold",
-  "feedback regarding your property"), and links to a domain that is neither the
-  brand's, the workspace's own, nor a common social or maps link.
+  "feedback regarding your property"), and links to a domain that is not the
+  brand's, the workspace's own, or a common social or maps link.
+- **A brand's call to action on a page.** One element names a brand and asks
+  the reader to sign in, verify, confirm or open a document, and the page links
+  to somewhere that is not the brand's or the workspace's.
+
+Soft signals never hold email a customer is owed by their own action: receipts,
+gift cards and order notices, booking confirmations and reminders, and password
+resets. A lookalike link in one of those still holds.
 
 A brand mentioned on its own never holds. The brand list and its real domains
 live in `libs/shared/util/email/src/lib/outbound-phishing-screen.ts`. Add a brand
 there when it has been seen impersonated, not because it is large.
 
-**Nothing is sent while a row is held, and nothing is dropped.** A held campaign
-is saved as a scheduled send that no processor run reaches. A held automated
-step fails that run with "held for staff review" and the reference. A step that
-runs after a wait stays queued instead.
+### Deciding a row {#deciding-a-held-row}
 
-**Closing the row is the decision.** Both need the usual note, and both write
-the audit row:
+**Closing the row is the decision.** Both outcomes need the usual note, and both
+write the audit row:
 
-| You set the row to | The send |
+| You set the row to | Effect |
 | -- | -- |
-| `dismissed` (false positive) | **Released.** A campaign goes back on the clock and sends on the next processor run. An automation sends from its next event, and a queued step after a wait sends on its next beat. |
-| `actioned` | **Rejected.** A campaign is canceled. The automation's email is refused whenever it would send the same content. |
+| `dismissed` (false positive) | **Released.** A campaign goes back on the clock and sends on the next processor run. An automation sends from its next event, and a queued step sends on its next beat. Other email from the site that carries the same signals sends. A page serves its held version once the site's cache is dropped, which the decision does itself. |
+| `actioned` | **Rejected.** A campaign is canceled. Email carrying the same content or signals is refused. A page stays unserved. |
 | `reviewing` | Still held. |
 
-A release covers **exactly the content that was held**. If the merchant edits the
-email, the screen checks it again and a new row may appear. A rejection does not
-lock the workspace. If the content is phishing, lock the org at
+A campaign or automation release covers **exactly the content that was held**.
+If the merchant edits it, the screen checks it again and a new row may appear.
+Other email and pages are keyed on the site and the signals that held, because
+their words change with every recipient or render. A rejection does not lock the
+workspace. If the content is phishing, lock the org at
 [Lockdown](./lockdown.md) as well, which stops every outbound path.
+
+### Names and domains {#names-and-domains}
+
+- **Subdomains.** Creating or renaming a site to a brand's name or a lookalike
+  of one (`poshmark`, `paypal-secure`, `appleid`) is refused for every
+  workspace, as is a brand's word joined to an account word (`booking-review`,
+  `apple-support`). Names that merely contain a common word, such as
+  `apple-pie-co` or `tanyas-booking`, are allowed.
+- **Custom domains.** Attaching a custom domain that is a brand lookalike is
+  not refused. It files an urgent `phishing` row here for staff to decide. The
+  site's pages are still screened as they are served.
+- **Form submissions.** The public form endpoint drops any submitted field
+  named for a password, card number or one-time code. This covers pages the
+  screen never reads, such as a marketplace plugin's frame.
 
 ## Stripe fraud signals {#stripe-fraud-signals}
 

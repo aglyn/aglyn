@@ -786,6 +786,9 @@ export const bookHandler: PluginApiHandler = async (req, res) => {
         sendingIdentity: await hostSendingIdentity(hostId),
         audience: 'tenant',
         context: 'booking confirmation',
+        // Owed to the recipient by their own booking: the phishing
+        // screen's soft rules never hold it (AGL-3356).
+        owedFor: 'booking',
       })
       // Cost meter (AGL-1438). Transactional: counted, never capped — a
       // confirmation the customer never receives reads to them as a booking
@@ -968,6 +971,9 @@ export async function scanBookingReminders(
       sendingIdentity: await hostSendingIdentity(hostId, identityByHost),
       audience: 'tenant',
       context: 'booking reminder',
+      // Owed to the recipient by their own booking: the phishing
+      // screen's soft rules never hold it (AGL-3356).
+      owedFor: 'booking',
     })
     if (result.sent) {
       // Cost meter (AGL-1438). Transactional: a reminder a quota refused is

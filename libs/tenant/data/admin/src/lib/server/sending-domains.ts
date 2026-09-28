@@ -96,6 +96,10 @@ import firebaseAdmin from './firebase-admin'
 import { lookupCaa, lookupMx, lookupTxt } from './dns-probe'
 import { getOrgForHost } from './organizations'
 import { getSiteLockdown } from './tenant-write-lockdown'
+// Also INSTALLS the outbound phishing screen's review store on `sendEmail`
+// (AGL-3356): every sender whose identity comes from `hostSendingIdentity`
+// has therefore installed the gate the workspace stamped below is read by.
+import { sendingWorkspaceFor } from './outbound-send-review'
 
 const firestore = () => firebaseAdmin.app().firestore()
 
@@ -868,13 +872,34 @@ export async function hostSendingIdentity(
     return suspended
   }
 
-  const verdict = await resolveHostSendingIdentity({
+  const resolved = await resolveHostSendingIdentity({
     orgId: owner?.orgId ?? null,
     selectedDomain: snapshot?.get('sendingDomain') ?? '',
     selectedLocalPart: snapshot?.get('sendingLocalPart') ?? '',
     hostId: id,
     poolMember: snapshot?.get('sendingPoolMember') ?? '',
   })
+
+  /*
+   * THE WORKSPACE, STAMPED FOR THE PHISHING SCREEN (AGL-3356).
+   *
+   * `sendEmail` screens every tenant message whose identity carries this,
+   * so stamping it here is what puts CRM mail, inbox replies, newsletters,
+   * member posts, sweeps, flow steps and receipts behind one screen without
+   * any of them passing anything. Built from the two documents read above:
+   * the screen costs no read of its own.
+   */
+  const verdict: SendingIdentityVerdict = {
+    ...resolved,
+    workspace: sendingWorkspaceFor({
+      hostId: id,
+      orgId: owner?.orgId ?? null,
+      org: (owner?.org as Record<string, unknown> | undefined) ?? null,
+      host: snapshot?.exists
+        ? ((snapshot.data() as Record<string, unknown>) ?? null)
+        : null,
+    }),
+  }
 
   cache?.set(id, verdict)
   return verdict

@@ -38,6 +38,7 @@ import { announceDatasetRecordChange } from '@aglyn/tenant-data-admin/server/dat
 // and the verification must be the real one under them.
 import { verifyFormDatasetBinding } from '@aglyn/tenant-data-admin/server/form-dataset-binding-token'
 import { FieldValue } from 'firebase-admin/firestore'
+import { isCredentialFieldName } from '@aglyn/shared-util-email/hosted-page-screen'
 import { incrementFormStats } from '../../../../utils/increment-form-stats'
 import {
   NO_CLIENT_ADDRESS_BUCKET,
@@ -406,9 +407,24 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
+    /*
+     * NO CREDENTIALS, whatever the page asked for (AGL-3356).
+     *
+     * A published page that asks for a password, a card number or a
+     * one-time code in a field of its own is held by the page review before
+     * a visitor sees it. This endpoint is the one path that does not pass a
+     * publish: it takes whatever names a request carries, so a page the
+     * review never read — a marketplace plugin's frame, a hand-built request
+     * — could still post one here. Such a field is dropped, never stored,
+     * never forwarded to a workflow or a contact.
+     */
     const sanitizedFields: Record<string, string> = {}
     for (const [key, value] of Object.entries(fields)) {
+      if (isCredentialFieldName(String(key))) continue
       sanitizedFields[String(key).slice(0, 64)] = String(value).slice(0, 2000)
+    }
+    if (!Object.keys(sanitizedFields).length) {
+      return json({ error: 'Invalid submission' }, 400)
     }
 
     /*

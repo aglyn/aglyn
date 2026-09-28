@@ -93,6 +93,8 @@ export * from './lib/server/lockdown'
 export * from './lib/server/token-revocation'
 export * from './lib/server/tenant-write-lockdown'
 export * from './lib/server/outbound-send-review'
+// The same review for a published page, read where it is composed (AGL-3356).
+export * from './lib/server/hosted-page-review'
 export * from './lib/server/host-email-tokens'
 export * from './lib/server/notifications'
 export * from './lib/server/org-billing'

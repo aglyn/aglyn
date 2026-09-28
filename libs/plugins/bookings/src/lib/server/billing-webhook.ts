@@ -402,6 +402,9 @@ export const bookingsBillingWebhookHandler: BillingWebhookHandler = async ({
             sendingIdentity: await hostSendingIdentity(String(hostId)),
             audience: 'tenant',
             context: 'paid booking confirmation',
+            // Owed to the recipient by their own booking: the phishing
+            // screen's soft rules never hold it (AGL-3356).
+            owedFor: 'booking',
           })
           // Cost meter (AGL-1438), matching the free-booking path.
           // Transactional: the guest has already paid.

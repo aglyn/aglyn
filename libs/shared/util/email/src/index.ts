@@ -57,3 +57,9 @@ export * from './lib/email-deliverability'
 // The outbound phishing screen a young workspace's campaigns and automated
 // email pass (AGL-3356). Pure; the hold it leads to is `tenant-data-admin`'s.
 export * from './lib/outbound-phishing-screen'
+// The send seam's gate for that screen — the store a hold writes is injected
+// by `@aglyn/tenant-data-admin`, like the governor's.
+export * from './lib/outbound-screen-gate'
+// The same screen read over a published page (AGL-3356): lookalike links and
+// embeds, author-defined credential fields, a brand's call to action.
+export * from './lib/hosted-page-screen'
