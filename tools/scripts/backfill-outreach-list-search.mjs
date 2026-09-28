@@ -284,9 +284,9 @@ function selfTest() {
         ...casey,
         target: 'lead',
         searchTokens: enrollmentSearchTokens(casey),
-        engagement: { clicks: 2, lastClickUrl: 'https://aglyn.com/pricing' },
+        engagement: { clicks: 2, lastClickUrl: 'https://shop.example/pricing' },
       },
-      { update: { clicked: true, 'engagement.links': ['https://aglyn.com/pricing'] } },
+      { update: { clicked: true, 'engagement.links': ['https://shop.example/pricing'] } },
     ],
     [
       'an enrollment only a scanner clicked',
