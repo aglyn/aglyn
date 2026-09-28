@@ -251,16 +251,16 @@ A public checkout is where a card tester learns which stolen cards still work:
 a script opens payment after payment, from one address or from many, against
 one shop or across many. Every visitor payment door on a published site (buy
 now, cart checkout, reservation deposit, booking deposit) is held to three
-counters:
+counters. The numbers live in `card-payment-velocity.ts` and are not repeated
+here:
 
-- **One address on one site:** 10 payments opened in 10 minutes, or 5 when the
-  workspace is under 14 days old. The next is refused with "Too many payment
-  attempts".
-- **One address across every site:** 30 in 10 minutes, then refused.
-- **One site, every address together:** 150 in 10 minutes. This one **refuses
-  nothing**, because a site-wide refusal would let any stranger switch a
-  merchant's checkout off and a busy launch looks the same. Crossing it files
-  one row per site per day.
+- **One address on one site.** Past it, the shopper is told to wait a few
+  minutes. A young workspace's site has a tighter limit.
+- **One address across every site.** Past it, the same refusal.
+- **One site, every address together.** This one **refuses nothing**, because
+  a site-wide refusal would let any stranger switch a merchant's checkout off,
+  and a busy launch looks the same. Crossing it files one row per site per
+  day.
 
 The row's source is `payment-velocity`, the category is `phishing`, the
 severity is urgent and the reference is `PV-…`. Staff are notified once a day

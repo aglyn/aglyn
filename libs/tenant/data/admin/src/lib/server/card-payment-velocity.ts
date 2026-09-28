@@ -46,7 +46,7 @@ import {
 } from '@aglyn/aglyn/app-utils/request-ip'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
-import { notifyStaff } from './notifications'
+import { notifyHostManagers, notifyStaff } from './notifications'
 import { consumeRateLimit } from './rate-limit-store'
 
 export interface CardPaymentVelocityOptions {
@@ -65,6 +65,8 @@ export interface CardPaymentVelocityOptions {
   firestore?: unknown
   /** Injectable for tests; defaults to `notifyStaff`. */
   notify?: typeof notifyStaff
+  /** Injectable for tests; defaults to `notifyHostManagers`. */
+  notifyManagers?: typeof notifyHostManagers
 }
 
 function clientIp(request: CardPaymentVelocityOptions['request']): string {
@@ -99,6 +101,52 @@ export function cardPaymentAlarmReviewId(hostId: string, day: string): string {
 }
 
 /**
+ * Tell staff and the site's managers, once per site per day, that its payment
+ * doors crossed the card-testing alarm (AGL-3363). The one notifier for this
+ * kind of signal, so a shared risk-notice seam can take it over whole.
+ *
+ * The merchant's sentence names the outcome and what to do, never the rule
+ * or its numbers: a merchant who is the card tester must not learn how to
+ * pace under it. Never throws.
+ */
+export async function notifyCardTestingVelocity(
+  input: { hostId: string; orgId: string | null; reference: string },
+  deps: {
+    notifyStaff: typeof notifyStaff
+    notifyManagers: typeof notifyHostManagers
+  },
+): Promise<void> {
+  await Promise.all([
+    deps
+      .notifyStaff({
+        type: 'system.abuseReportUrgent',
+        title: `Card-testing velocity — site ${input.hostId}`,
+        body:
+          'An unusual number of card payments opened on one site' +
+          (input.orgId ? ` (workspace ${input.orgId})` : '') +
+          '. Nothing has been refused site-wide or refunded. Check the site and its ' +
+          'recent orders; if it is card testing, lock the workspace and pause the ' +
+          `connected account's payouts. Reference ${input.reference}.`,
+        link: '/admin/abuse-reports',
+      })
+      .catch(() => undefined),
+    deps
+      .notifyManagers(input.hostId, {
+        type: 'content.order',
+        title: 'Unusual checkout activity on your site',
+        body:
+          'Your checkout saw an unusual burst of payment attempts, which can be ' +
+          'someone testing stolen cards. Checkout is still open; repeated attempts ' +
+          'from one source are being slowed. Review recent orders before you ' +
+          'fulfill them, and refund any you do not recognize. If this was a launch ' +
+          `or sale, no action is needed. Questions: contact support with reference ${input.reference}.`,
+        link: `/${input.hostId}/orders`,
+      })
+      .catch(() => undefined),
+  ])
+}
+
+/**
  * File (or count) the day's alarm row for a site whose payment doors crossed
  * the site counter, and tell staff the first time. Never throws: an alarm
  * that fails must not turn a shopper's checkout into a 500.
@@ -111,6 +159,7 @@ export async function recordCardPaymentAlarm(input: {
   nowMs: number
   firestore: any
   notify: typeof notifyStaff
+  notifyManagers: typeof notifyHostManagers
 }): Promise<{ reviewId: string; first: boolean } | null> {
   try {
     const day = cardPaymentAlarmDay(input.nowMs)
@@ -159,17 +208,10 @@ export async function recordCardPaymentAlarm(input: {
       { merge: true },
     )
     if (first) {
-      await input
-        .notify({
-          type: 'system.abuseReportUrgent',
-          title: `Card-testing velocity — site ${input.hostId}`,
-          body:
-            `More than ${window.limit} card payments opened on one site in ${minutes} minutes` +
-            (input.orgId ? ` (workspace ${input.orgId})` : '') +
-            `. Nothing has been refused site-wide or refunded. Reference ${reference}.`,
-          link: '/admin/abuse-reports',
-        })
-        .catch(() => undefined)
+      await notifyCardTestingVelocity(
+        { hostId: input.hostId, orgId: input.orgId, reference },
+        { notifyStaff: input.notify, notifyManagers: input.notifyManagers },
+      )
     }
     return { reviewId, first }
   } catch (error) {
@@ -231,6 +273,7 @@ export async function cardPaymentVelocityRefusal(
       nowMs,
       firestore,
       notify: options.notify ?? notifyStaff,
+      notifyManagers: options.notifyManagers ?? notifyHostManagers,
     })
   }
 

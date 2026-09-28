@@ -72,7 +72,13 @@ beforeEach(() => {
 
 async function open(
   firestore: ReturnType<typeof fakeFirestore>,
-  input: { hostId: string; ip: string; young?: boolean; notify?: jest.Mock },
+  input: {
+    hostId: string
+    ip: string
+    young?: boolean
+    notify?: jest.Mock
+    notifyManagers?: jest.Mock
+  },
 ) {
   return cardPaymentVelocityRefusal({
     path: 'commerce/checkout',
@@ -83,6 +89,7 @@ async function open(
     nowMs: NOW,
     firestore,
     notify: input.notify ?? jest.fn(async () => undefined),
+    notifyManagers: input.notifyManagers ?? jest.fn(async () => undefined),
   })
 }
 
@@ -134,11 +141,12 @@ describe('cardPaymentVelocityRefusal', () => {
   it('never refuses a busy site, and files ONE staff row when it crosses the site window', async () => {
     const firestore = fakeFirestore()
     const notify = jest.fn(async () => undefined)
+    const notifyManagers = jest.fn(async () => undefined)
     const { limit } = CARD_PAYMENT_VELOCITY.perSite
     // Every shopper a distinct address, each opening checkout once.
     for (let shopper = 0; shopper < limit + 20; shopper += 1) {
       const ip = `10.${Math.floor(shopper / 250)}.${shopper % 250}.1`
-      expect(await open(firestore, { hostId: 'busy', ip, notify })).toBeNull()
+      expect(await open(firestore, { hostId: 'busy', ip, notify, notifyManagers })).toBeNull()
     }
     const rowId = cardPaymentAlarmReviewId('busy', new Date(NOW).toISOString().slice(0, 10))
     const row = firestore.docs.get(`abuseReports/${rowId}`)
@@ -148,6 +156,15 @@ describe('cardPaymentVelocityRefusal', () => {
     expect(row?.['hostId']).toBe('busy')
     expect(row?.['orgId']).toBe('org-1')
     expect(notify).toHaveBeenCalledTimes(1)
+    // The merchant is told too, once, and never the rule or its numbers.
+    expect(notifyManagers).toHaveBeenCalledTimes(1)
+    const [hostId, payload] = notifyManagers.mock.calls[0] as unknown as [
+      string,
+      { title: string; body: string },
+    ]
+    expect(hostId).toBe('busy')
+    const told = `${payload.title} ${payload.body}`.replace(/PV-[0-9A-F]+/, '')
+    expect(told).not.toMatch(/\d/)
   })
 
   it('files nothing for a site under its window', async () => {

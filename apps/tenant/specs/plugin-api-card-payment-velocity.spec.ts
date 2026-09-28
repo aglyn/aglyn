@@ -80,6 +80,7 @@ jest.mock('./../../../libs/tenant/data/admin/src/lib/server/firebase-admin', () 
 jest.mock('./../../../libs/tenant/data/admin/src/lib/server/notifications', () => ({
   __esModule: true,
   notifyStaff: jest.fn(async () => undefined),
+  notifyHostManagers: jest.fn(async () => undefined),
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => {
