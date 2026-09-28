@@ -1047,6 +1047,76 @@ If you need the counters frozen as well — a reconciliation of the analytics
 documents themselves — use a **full** lock on that site. "Read-only, but also
 stop the meter" is not a mode we offer.
 
+## Owner notices: every lock emails the people it locked {#owner-notices}
+
+Every lock and every lift at the org, host, domain and user scopes — and a
+feature lock placed for one workspace — emails the people it affects, from the
+platform's own sender. That sender is the point: a full lock stops the
+workspace sending anything, and it signs its members out, so our mail is the
+only thing that can still reach them.
+
+| Lock | Who is emailed |
+| --- | --- |
+| Org | The workspace's owners and admins. |
+| Host, custom domain | The owning workspace's owners and admins, and the site's managers. |
+| User | The person, at their sign-in address. With **Also lock and cancel workspaces this user solely owns**, each of those workspaces gets its own workspace notice too. |
+| Feature (one workspace) | The workspace's owners and admins. |
+| Platform, platform-wide feature | Nobody: it names no workspace. |
+
+The email carries, and only carries:
+
+- the lock's **customer-facing message** — the same words the lock serves on
+  its notice page (your message, or the per-reason default beneath it);
+- **what it affects**: the sites, whether everyone was signed out, a canceled
+  subscription, paused renewals and payouts;
+- **how to appeal**: reply, or write to the support address with the reference.
+
+It never says why. Anything you want recorded about the reason belongs in the
+audit row, not the message.
+
+A lift sends the matching "restored" notice to the same people, saying what
+happens now (renewals resumed, payouts restored, a canceled subscription stays
+canceled).
+
+### Email the owners {#email-the-owners}
+
+The checkbox is on for every reason and resets to on when you change the
+reason. Untick it only for a legal hold. Either way, the outcome is its own
+line in **Actions taken in this session** — `Emailed … the workspace-locked
+notice — 2 of 2` (verified), `NOT sent — Staff chose not to email the owners`
+(verified, because that is what was asked), or `FAILED` / `NOT sent — nobody
+to email` (NOT CONFIRMED). A lock never skips its email silently.
+
+### Resend owner notice {#resend-owner-notice}
+
+For locks that already stand — placed before owner notices existed, or whose
+email failed — the **Resend owner notice** card sends the lock email the lock
+would have sent, with its stored message. Super role only, audited as
+`lockdown.resend-notice`.
+
+- Enter one `scope:id` per line (`org`, `host`, `domain` or `user`), or press
+  **Add the target above**.
+- Each distinct person gets ONE email listing everything locked for them: a
+  user lock and the workspace that user owns are one email.
+- A (lock, person) pair already sent is reported as "already sent at …" and
+  not emailed again, unless you tick **Send again**. A lock that was lifted
+  and placed again is a new lock, and is sent afresh.
+
+```bash
+# The same action outside the console (super role).
+curl -X POST "$CONSOLE/api/admin/lockdown" \
+  -H "Authorization: Bearer $ID_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"action":"resend-notice","sendAgain":false,
+       "targets":[{"scope":"user","targetId":"UID"},{"scope":"org","targetId":"ORG_ID"}]}'
+# → { ok, confirmed,
+#     targets:    [{ scope, targetId, locked, recipients, error }],
+#     recipients: [{ uid, email, lockKeys, outcome: 'sent'|'already-sent'|'failed',
+#                    sentLockKeys, alreadySentAtMs, error }] }
+```
+
+`confirmed` is true only when every target was locked and every person was
+either emailed now or had been already.
+
 ## Stopping billing: cancel the subscription {#cancel-billing}
 
 A lock does not touch Stripe. A locked workspace keeps its subscription, and

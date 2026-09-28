@@ -767,6 +767,16 @@ const CONSOLE_DAILY_CRONS = {
     schedule: '0 * * * *',
     route: '/api/crm/task-reminders',
   },
+  /*
+   * Hourly, at quarter past (AGL-3368): a workspace that crossed its hourly
+   * allowance of risk notices gets ONE summary of the rest when its hour
+   * closes. The next notice sends it too, but an attack that simply stops
+   * sends no next notice, and the summary must still arrive.
+   */
+  'risk-notice-digests': {
+    schedule: '15 * * * *',
+    route: '/api/risk-notices/digests',
+  },
 } as const
 
 /**
@@ -816,6 +826,7 @@ export const consoleReapSendingDomains = consoleDailyCron('reap-sending-domains'
 export const consoleReapUnverifiedOrgs = consoleDailyCron('reap-unverified-orgs')
 export const consoleAiInsightsDigest = consoleDailyCron('ai-insights-digest')
 export const consoleCrmTaskReminders = consoleDailyCron('crm-task-reminders')
+export const consoleRiskNoticeDigests = consoleDailyCron('risk-notice-digests')
 
 /*==============================================================
  * THE SIGNUPS LOCK, AT ACCOUNT CREATION (AGL-1531)

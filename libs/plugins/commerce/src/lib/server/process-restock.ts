@@ -27,21 +27,22 @@ import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
 import {
   isDeferrableSendResult,
   isEmailConfigured,
-  loadHostEmail,
-  renderLoadedHostEmail,
   sendEmail,
-  type LoadedHostEmail,
 } from '@aglyn/shared-util-email'
 import {
   type PluginApiHandler,
   type PluginJobHostGate,
 } from '@aglyn/aglyn/server'
-import { composeHostComponentNodes } from '@aglyn/aglyn/app-utils/load-referenced-components'
 // The leaf, not the barrel: the console's `x-cron-secret` door asks the
 // site's lockdown directly (AGL-3356) — core's registry has no resolver in
 // the console process — and a spec that substitutes the barrel must still
 // reach the real verdict.
 import { siteLockdownJobGate } from '@aglyn/tenant-data-admin/server/tenant-write-lockdown'
+import {
+  loadHostEmailWithTokens,
+  renderLoadedHostEmailWithTokens,
+  type LoadedHostEmailWithTokens,
+} from '@aglyn/tenant-data-admin/server/host-email-tokens'
 
 export interface RestockScanResult {
   scanned: number
@@ -74,7 +75,7 @@ export async function scanRestockAlerts(
   let sent = 0
   const productCache = new Map<string, CommerceModel.HostProduct | null>()
   // Resolve each host's designed template once per run (AGL-770).
-  const templateCache = new Map<string, LoadedHostEmail | null>()
+  const templateCache = new Map<string, LoadedHostEmailWithTokens | null>()
   // White-label brand per host (White-Label Phase 3): resolved once per host
   // from the owning org doc through the one shared resolver.
   const brandingByHost = new Map<string, Aglyn.ResolvedBrandingProfile>()
@@ -159,11 +160,9 @@ export async function scanRestockAlerts(
     const productUrl = `/products/${product.slug}`
     let loaded = templateCache.get(hostRef.id)
     if (loaded === undefined) {
-      loaded = await loadHostEmail(firestore, hostRef.id, 'back-in-stock', {
-        // The site's header and footer blocks, grafted once per site for the
-        // whole sweep (AGL-3287).
-        compose: composeHostComponentNodes,
-      })
+      loaded = await // The template, or the built-in copy in the site's header and
+        // footer, once per site for the whole batch (AGL-3287, AGL-3370).
+        loadHostEmailWithTokens(firestore, hostRef.id, 'back-in-stock')
       templateCache.set(hostRef.id, loaded)
       const owner = await getOrgForHost(hostRef.id).catch(() => null)
       brandingByHost.set(
@@ -191,13 +190,12 @@ export async function scanRestockAlerts(
       )
     }
     const designed = loaded
-      ? renderLoadedHostEmail(
+      ? renderLoadedHostEmailWithTokens(
           loaded,
           {
             'product.name': String(product.name ?? ''),
             'product.url': productUrl,
           },
-          Aglyn.sanitizeAuthorHtml,
         )
       : null
     /*

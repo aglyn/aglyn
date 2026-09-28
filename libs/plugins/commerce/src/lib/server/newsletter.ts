@@ -37,6 +37,7 @@ import {
   siteRequiresDoubleOptIn,
 } from '@aglyn/tenant-data-admin'
 import recordCapturedContact from '@aglyn/aglyn/plugin-manager/record-captured-contact'
+import { renderHostEmailWithTokens } from '@aglyn/tenant-data-admin/server/host-email-tokens'
 import { buildConfirmUrl } from '@aglyn/tenant-data-admin/server/email-unsubscribe-link'
 import { sendEmail } from '@aglyn/shared-util-email'
 import { isDocumentId } from '@aglyn/tenant-data-admin/server/document-id'
@@ -184,13 +185,24 @@ async function requestConfirmation(options: {
       return true
     }
     const stream = topic?.name ?? 'our newsletter'
+    // The `newsletter-confirmation` site email (AGL-3370): the site's design,
+    // or the built-in copy in its header and footer.
+    const designed = await renderHostEmailWithTokens(
+      firebaseAdmin.app().firestore(),
+      options.hostId,
+      'newsletter-confirmation',
+      { 'stream.name': stream, confirmUrl: url },
+      siteBase ? { origin: siteBase } : {},
+    ).catch(() => null)
     const result = await sendEmail({
       to: options.email,
-      subject: `Confirm your subscription`,
+      subject: designed?.subject || `Confirm your subscription`,
       text:
+        designed?.text ||
         `Please confirm that you want to receive ${stream} at this ` +
-        `address:\n\n${url}\n\nThe link works for three days. If you did ` +
-        'not sign up, ignore this message — nothing will be sent.',
+          `address:\n\n${url}\n\nThe link works for three days. If you did ` +
+          'not sign up, ignore this message — nothing will be sent.',
+      ...(designed?.html ? { html: designed.html } : {}),
       sendingIdentity: await hostSendingIdentity(options.hostId),
       audience: 'tenant',
       context: 'newsletter confirmation',

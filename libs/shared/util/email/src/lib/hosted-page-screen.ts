@@ -53,6 +53,7 @@
 import {
   isWorkspaceOwnBrand,
   linkHostsIn,
+  isBrandsOwnDomain,
   lookalikeBrandForHost,
   PHISHING_LURE_PATTERNS,
   PHISHING_SCREEN_BRANDS,
@@ -285,7 +286,9 @@ export function screenHostedPage(input: HostedPageScreenInput): HostedPageScreen
   const linkHosts = linkHostsIn(pageText)
   for (const host of linkHosts) {
     const brand = lookalikeBrandForHost(host)
-    if (brand) signals.push({ code: 'lookalike-link', brand: brand.id, host })
+    if (brand && !isBrandsOwnDomain(brand, ownRegistrables)) {
+      signals.push({ code: 'lookalike-link', brand: brand.id, host })
+    }
   }
 
   // 2. A credential field the page's author defined.

@@ -46,8 +46,8 @@ import {
 } from '@aglyn/aglyn/app-utils/request-ip'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
-import { notifyHostManagers, notifyStaff } from './notifications'
 import { consumeRateLimit } from './rate-limit-store'
+import { notifyRiskEvent, type RiskEventInput } from './risk-notice'
 
 export interface CardPaymentVelocityOptions {
   /** Dispatcher path, for the staff row. */
@@ -63,10 +63,8 @@ export interface CardPaymentVelocityOptions {
   nowMs?: number
   /** Injectable for tests; defaults to the Admin SDK's Firestore. */
   firestore?: unknown
-  /** Injectable for tests; defaults to `notifyStaff`. */
-  notify?: typeof notifyStaff
-  /** Injectable for tests; defaults to `notifyHostManagers`. */
-  notifyManagers?: typeof notifyHostManagers
+  /** Injectable for tests; defaults to `notifyRiskEvent` (AGL-3368). */
+  notifyRisk?: (input: RiskEventInput) => Promise<unknown>
 }
 
 function clientIp(request: CardPaymentVelocityOptions['request']): string {
@@ -101,49 +99,27 @@ export function cardPaymentAlarmReviewId(hostId: string, day: string): string {
 }
 
 /**
- * Tell staff and the site's managers, once per site per day, that its payment
- * doors crossed the card-testing alarm (AGL-3363). The one notifier for this
- * kind of signal, so a shared risk-notice seam can take it over whole.
- *
- * The merchant's sentence names the outcome and what to do, never the rule
- * or its numbers: a merchant who is the card tester must not learn how to
- * pace under it. Never throws.
+ * Tell staff and the site's managers and the workspace's owners that a site
+ * crossed the card-payment window (AGL-3363), through the risk notice seam
+ * (AGL-3368): the owners read the catalog's `card-testing` words — what was
+ * seen and what to do, never the window or its numbers; staff get the row.
+ * Never throws.
  */
 export async function notifyCardTestingVelocity(
-  input: { hostId: string; orgId: string | null; reference: string },
-  deps: {
-    notifyStaff: typeof notifyStaff
-    notifyManagers: typeof notifyHostManagers
-  },
+  input: { hostId: string; orgId: string | null; reference: string; reviewId?: string | null },
+  deps: { notifyRisk: (input: RiskEventInput) => Promise<unknown> },
 ): Promise<void> {
-  await Promise.all([
-    deps
-      .notifyStaff({
-        type: 'system.abuseReportUrgent',
-        title: `Card-testing velocity — site ${input.hostId}`,
-        body:
-          'An unusual number of card payments opened on one site' +
-          (input.orgId ? ` (workspace ${input.orgId})` : '') +
-          '. Nothing has been refused site-wide or refunded. Check the site and its ' +
-          'recent orders; if it is card testing, lock the workspace and pause the ' +
-          `connected account's payouts. Reference ${input.reference}.`,
-        link: '/admin/abuse-reports',
-      })
-      .catch(() => undefined),
-    deps
-      .notifyManagers(input.hostId, {
-        type: 'content.order',
-        title: 'Unusual checkout activity on your site',
-        body:
-          'Your checkout saw an unusual burst of payment attempts, which can be ' +
-          'someone testing stolen cards. Checkout is still open; repeated attempts ' +
-          'from one source are being slowed. Review recent orders before you ' +
-          'fulfill them, and refund any you do not recognize. If this was a launch ' +
-          `or sale, no action is needed. Questions: contact support with reference ${input.reference}.`,
-        link: `/${input.hostId}/orders`,
-      })
-      .catch(() => undefined),
-  ])
+  await deps
+    .notifyRisk({
+      kind: 'card-testing',
+      orgId: input.orgId,
+      hostId: input.hostId,
+      reviewId: input.reviewId ?? null,
+      reference: input.reference,
+      item: { label: 'your site', path: `/${input.hostId}/products/orders` },
+      staffEvidence: 'An unusual number of card payments opened on one site.',
+    })
+    .catch(() => undefined)
 }
 
 /**
@@ -158,8 +134,7 @@ export async function recordCardPaymentAlarm(input: {
   young: boolean
   nowMs: number
   firestore: any
-  notify: typeof notifyStaff
-  notifyManagers: typeof notifyHostManagers
+  notifyRisk: (input: RiskEventInput) => Promise<unknown>
 }): Promise<{ reviewId: string; first: boolean } | null> {
   try {
     const day = cardPaymentAlarmDay(input.nowMs)
@@ -209,8 +184,8 @@ export async function recordCardPaymentAlarm(input: {
     )
     if (first) {
       await notifyCardTestingVelocity(
-        { hostId: input.hostId, orgId: input.orgId, reference },
-        { notifyStaff: input.notify, notifyManagers: input.notifyManagers },
+        { hostId: input.hostId, orgId: input.orgId, reference, reviewId },
+        { notifyRisk: input.notifyRisk },
       )
     }
     return { reviewId, first }
@@ -272,8 +247,7 @@ export async function cardPaymentVelocityRefusal(
       young: options.young === true,
       nowMs,
       firestore,
-      notify: options.notify ?? notifyStaff,
-      notifyManagers: options.notifyManagers ?? notifyHostManagers,
+      notifyRisk: options.notifyRisk ?? notifyRiskEvent,
     })
   }
 

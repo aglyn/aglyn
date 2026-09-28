@@ -28,15 +28,29 @@ import { signalsThatHold } from './outbound-phishing-screen'
  */
 
 /** A composed page: a map of nodes, the shape `composeScreenNodes` returns. */
-function page(...nodes: Array<{ componentId: string; props?: Record<string, unknown> }>) {
+function page(
+  ...nodes: Array<{ componentId: string; props?: Record<string, unknown> }>
+) {
   return Object.fromEntries(
-    nodes.map((node, index) => [`n${index}`, { $id: `n${index}`, ...node, props: node.props ?? {} }]),
+    nodes.map((node, index) => [
+      `n${index}`,
+      { $id: `n${index}`, ...node, props: node.props ?? {} },
+    ]),
   )
 }
 
-const text = (children: string) => ({ componentId: 'muiTypography', props: { children } })
-const button = (children: string, href: string) => ({ componentId: 'muiButton', props: { children, href } })
-const field = (props: Record<string, unknown>) => ({ componentId: 'formField', props })
+const text = (children: string) => ({
+  componentId: 'muiTypography',
+  props: { children },
+})
+const button = (children: string, href: string) => ({
+  componentId: 'muiButton',
+  props: { children, href },
+})
+const field = (props: Record<string, unknown>) => ({
+  componentId: 'formField',
+  props,
+})
 
 const HOTEL = {
   ownNames: ['Harbor View Hotel', 'harborview'],
@@ -55,17 +69,31 @@ describe('what holds on a page', () => {
       ),
     })
     expect(verdict.signals).toEqual([
-      { code: 'lookalike-link', brand: 'poshmark', host: 'poshmark.id63835663.shop' },
+      {
+        code: 'lookalike-link',
+        brand: 'poshmark',
+        host: 'poshmark.id63835663.shop',
+      },
     ])
   })
 
   it('an EMBED or a protocol-relative source on a lookalike', () => {
-    expect(codes(page({ componentId: 'videoEmbed', props: { url: 'https://paypa1.com/frame' } }))).toEqual([
-      'lookalike-link',
-    ])
-    expect(codes(page({ componentId: 'image', props: { src: '//booking.com.guest-review.top/logo.png' } }))).toEqual([
-      'lookalike-link',
-    ])
+    expect(
+      codes(
+        page({
+          componentId: 'videoEmbed',
+          props: { url: 'https://paypa1.com/frame' },
+        }),
+      ),
+    ).toEqual(['lookalike-link'])
+    expect(
+      codes(
+        page({
+          componentId: 'image',
+          props: { src: '//booking.com.guest-review.top/logo.png' },
+        }),
+      ),
+    ).toEqual(['lookalike-link'])
   })
 
   it('a password, card or one-time-code field the author defined', () => {
@@ -74,7 +102,10 @@ describe('what holds on a page', () => {
         field({ fieldName: 'email', label: 'Email', fieldType: 'email' }),
         field({ fieldName: 'pw', label: 'Password', fieldType: 'text' }),
         field({ fieldName: 'cc', label: 'Card number' }),
-        field({ fieldName: 'code', label: 'Enter the verification code we texted you' }),
+        field({
+          fieldName: 'code',
+          label: 'Enter the verification code we texted you',
+        }),
       ),
     })
     expect(verdict.signals).toEqual([
@@ -85,22 +116,35 @@ describe('what holds on a page', () => {
   })
 
   it('a field typed or autocompleted as a credential, whatever its label', () => {
-    expect(codes(page(field({ fieldName: 'a', label: 'Secret', type: 'password' })))).toEqual(['credential-field'])
-    expect(codes(page(field({ fieldName: 'b', label: 'Number', autoComplete: 'cc-number' })))).toEqual([
-      'credential-field',
-    ])
+    expect(
+      codes(page(field({ fieldName: 'a', label: 'Secret', type: 'password' }))),
+    ).toEqual(['credential-field'])
+    expect(
+      codes(
+        page(
+          field({ fieldName: 'b', label: 'Number', autoComplete: 'cc-number' }),
+        ),
+      ),
+    ).toEqual(['credential-field'])
   })
 
   it('a credential input in the author’s own HTML', () => {
     expect(
-      codes(page({ componentId: 'custom-html', props: { html: '<form><input type="password" name="p"></form>' } })),
+      codes(
+        page({
+          componentId: 'custom-html',
+          props: { html: '<form><input type="password" name="p"></form>' },
+        }),
+      ),
     ).toEqual(['credential-field'])
   })
 
   it('a brand’s sign-in call to action, in one element, on a page that links away — the /reviewfile lure', () => {
     const verdict = screenHostedPage({
       nodes: page(
-        text('DocuSign: a document has been shared with you. Review file to continue.'),
+        text(
+          'DocuSign: a document has been shared with you. Review file to continue.',
+        ),
         button('Open', 'https://files-share.example.top/view'),
       ),
       ...HOTEL,
@@ -120,10 +164,17 @@ describe('what does not hold (false-positive guards)', () => {
       codes(
         page(
           text('Find us on Booking.com and read what our guests say.'),
-          button('Book on Booking.com', 'https://www.booking.com/hotel/us/harbor-view.html'),
+          button(
+            'Book on Booking.com',
+            'https://www.booking.com/hotel/us/harbor-view.html',
+          ),
           button('Sign in', '/members/signin'),
           field({ fieldName: 'email', label: 'Email', fieldType: 'email' }),
-          field({ fieldName: 'message', label: 'Message', fieldType: 'textarea' }),
+          field({
+            fieldName: 'message',
+            label: 'Message',
+            fieldType: 'textarea',
+          }),
           button('Directions', 'https://maps.example.com/harbor'),
         ),
         HOTEL,
@@ -138,7 +189,10 @@ describe('what does not hold (false-positive guards)', () => {
           text('Apple Pie Co — sign in to order our apple pies for pickup.'),
           button('Order', 'https://orders.example.net/applepieco'),
         ),
-        { ownNames: ['Apple Pie Co', 'apple-pie-co'], ownDomains: ['apple-pie-co.aglyn.app'] },
+        {
+          ownNames: ['Apple Pie Co', 'apple-pie-co'],
+          ownDomains: ['apple-pie-co.aglyn.app'],
+        },
       ),
     ).toEqual([])
   })
@@ -147,7 +201,9 @@ describe('what does not hold (false-positive guards)', () => {
     expect(
       codes(
         page(
-          text('Please review your property listing and send us any feedback regarding your property.'),
+          text(
+            'Please review your property listing and send us any feedback regarding your property.',
+          ),
           field({ fieldName: 'name', label: 'Your name' }),
           field({ fieldName: 'notes', label: 'Changes to the listing' }),
           button('MLS listing', 'https://mls.example.org/listing/12'),
@@ -162,7 +218,10 @@ describe('what does not hold (false-positive guards)', () => {
       codes(
         page(
           text('Members: sign in to see your classes.'),
-          { componentId: 'member-signin', props: { title: 'Sign in', buttonLabel: 'Sign in' } },
+          {
+            componentId: 'member-signin',
+            props: { title: 'Sign in', buttonLabel: 'Sign in' },
+          },
           { componentId: 'cart', props: { checkoutLabel: 'Pay now' } },
         ),
         HOTEL,
@@ -197,17 +256,82 @@ describe('what does not hold (false-positive guards)', () => {
 })
 
 describe('isCredentialFieldName (the form endpoint)', () => {
-  it.each(['password', 'Password', 'passwd', 'pass', 'card_number', 'cardNumber', 'cc-number', 'cvv', 'cvc', 'otp', 'one-time-code', 'verification_code'])(
-    '%s is a credential',
-    (name) => {
-      expect(isCredentialFieldName(name)).toBe(true)
+  it.each([
+    'password',
+    'Password',
+    'passwd',
+    'pass',
+    'card_number',
+    'cardNumber',
+    'cc-number',
+    'cvv',
+    'cvc',
+    'otp',
+    'one-time-code',
+    'verification_code',
+  ])('%s is a credential', (name) => {
+    expect(isCredentialFieldName(name)).toBe(true)
+  })
+
+  it.each([
+    'email',
+    'name',
+    'message',
+    'promo_code',
+    'zip',
+    'company',
+    'phone',
+    'passenger',
+    'spin',
+  ])('%s is not', (name) => {
+    expect(isCredentialFieldName(name)).toBe(false)
+  })
+})
+
+describe('media embeds and a workspace’s own brand (2026-09-28 aglyn.com outage)', () => {
+  const page = (href: string) => ({
+    a: { componentId: 'muiTypography', props: { children: 'Watch the film' } },
+    b: { componentId: 'muiButton', props: { children: 'Play', href } },
+  })
+
+  it.each([
+    'https://harborview.wistia.com/medias/abc123',
+    'https://fast.wistia.net/embed/iframe/abc123',
+    'https://www.youtube.com/embed/xyz',
+    'https://youtu.be/xyz',
+    'https://player.vimeo.com/video/123',
+    'https://www.loom.com/share/abc',
+    'https://player.vimeo.com/video/paypal-promo',
+  ])('never flags a video link or embed: %s', (href) => {
+    expect(screenHostedPage({ nodes: page(href) }).signals).toEqual([])
+  })
+
+  it.each([
+    'https://aglyn.wistia.com/medias/abc123',
+    'https://aglyn.zendesk.com/hc',
+  ])(
+    'never flags a brand’s own site linking to its own account elsewhere: %s',
+    (href) => {
+      const verdict = screenHostedPage({
+        nodes: page(href),
+        ownNames: ['Aglyn'],
+        ownDomains: ['aglyn.com'],
+      })
+      expect(verdict.signals).toEqual([])
     },
   )
 
-  it.each(['email', 'name', 'message', 'promo_code', 'zip', 'company', 'phone', 'passenger', 'spin'])(
-    '%s is not',
-    (name) => {
-      expect(isCredentialFieldName(name)).toBe(false)
-    },
-  )
+  it('still flags a lookalike when the workspace only CALLS itself the brand', () => {
+    const verdict = screenHostedPage({
+      nodes: page('https://poshmark.id63835663.shop/o/1'),
+      ownNames: ['Poshmark'],
+      ownDomains: ['poshmark.aglyn.app'],
+    })
+    expect(verdict.signals).toEqual([
+      expect.objectContaining({
+        code: 'lookalike-link',
+        host: 'poshmark.id63835663.shop',
+      }),
+    ])
+  })
 })

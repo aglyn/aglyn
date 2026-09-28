@@ -61,6 +61,7 @@ const SAMPLE_SUPPORT_URL: string =
 // page's chunks for one brand constant.
 import { BRAND } from '@aglyn/shared-data-enums/aglyn'
 import { EMAIL_NODE_ROOT_ID } from './email-render'
+import { RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES } from './risk-notice-emails'
 
 /**
  * Who actually puts the message on the wire.
@@ -1316,7 +1317,9 @@ const BASE_SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
  * footer it is.
  */
 export const SYSTEM_EMAIL_TEMPLATES: readonly SystemEmailTemplateDefinition[] =
-  BASE_SYSTEM_EMAIL_TEMPLATES.map((entry) => ({
+  // The risk notices (AGL-3368) are generated from their own catalog, one key
+  // per kind, so they live in `risk-notice-emails.ts` beside it.
+  [...BASE_SYSTEM_EMAIL_TEMPLATES, ...RISK_NOTICE_SYSTEM_EMAIL_TEMPLATES].map((entry) => ({
     ...entry,
     mergeTokens: [...entry.mergeTokens, ...BRAND_MERGE_TOKENS],
   }))

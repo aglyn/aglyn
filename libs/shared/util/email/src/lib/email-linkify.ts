@@ -62,7 +62,11 @@ const BARE_URL = /https?:\/\/[^\s<>"]+/g
  * end in one and a wrapping "(see https://…/a_(b))" is the rarer case.
  * Anything the count says is unbalanced belongs to the prose.
  */
-export function linkifyEscapedText(escaped: string): string {
+export function linkifyEscapedText(
+  escaped: string,
+  /** The link color: the theme's accent text shade, when the sender has a theme. */
+  color = '#1a73e8',
+): string {
   return escaped.replace(BARE_URL, (match) => {
     let url = match.replace(URL_TRAILING_PUNCTUATION, '')
     // `)` and `]` alike: a token's value dropped into "[{{brand.supportUrl}}]"
@@ -77,7 +81,7 @@ export function linkifyEscapedText(escaped: string): string {
     const trailer = match.slice(url.length)
     return (
       `<a href="${url}" target="_blank" ` +
-      `style="color:#1a73e8;text-decoration:underline;word-break:break-word;">` +
+      `style="color:${color};text-decoration:underline;word-break:break-word;">` +
       `${url}</a>${trailer}`
     )
   })

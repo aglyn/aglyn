@@ -51,6 +51,7 @@ import {
 } from '@aglyn/shared-util-http/safe-url-scheme'
 
 import { linkifyEscapedText } from './email-linkify'
+import { resolveEmailColor, type EmailPalette } from './email-palette'
 import { resolveEmailMediaSrc } from './email-media-src'
 
 export interface EmailRenderProduct {
@@ -144,6 +145,24 @@ export interface EmailRenderOptions {
    * {@link EmailChrome}. Absent draws neither.
    */
   chrome?: EmailChrome
+  /**
+   * The theme the email is sent under (AGL-3370): the console brand for the
+   * platform's own mail, a white-label org's color over it, or the site's
+   * theme for a site's mail. See {@link buildEmailPalette}.
+   *
+   * It does two things. A color an author picked in the Besigner is stored as
+   * a palette token (`primary.main`), which a mail client cannot resolve, so
+   * every color prop is resolved against this before it is written. And
+   * what nobody picked (a button's fill and label, a link) takes the theme's
+   * accent rather than a color of the renderer's own. Absent keeps the
+   * renderer's neutral defaults and drops an unresolvable token.
+   */
+  palette?: EmailPalette
+  /**
+   * A button's corner radius in px: the theme's `shape.borderRadius`, which
+   * the Besigner canvas draws the button with. Absent is MUI's default, 4.
+   */
+  buttonRadius?: number
 }
 
 /**
@@ -196,6 +215,13 @@ export interface EmailChrome {
   header?: EmailChromeHeader
   footer?: EmailChromeFooter
 }
+
+/**
+ * The theme an email is drawn in (AGL-3370): its palette, which resolves
+ * every color an author picked and colors what they did not, and its button
+ * radius. Spread into {@link EmailRenderOptions}.
+ */
+export type EmailTheme = Pick<EmailRenderOptions, 'palette' | 'buttonRadius'>
 
 export interface RenderedEmail {
   html: string
@@ -277,7 +303,30 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     mediaHostId,
     brandLogoUrl,
     chrome,
+    palette,
+    buttonRadius,
   } = options
+  const radius =
+    Number.isFinite(buttonRadius) && Number(buttonRadius) >= 0
+      ? Math.min(Number(buttonRadius), 48)
+      : 4
+
+  /**
+   * A stored color, resolved: a palette token against the theme, a literal
+   * as written, anything else to the fallback. The only way a color prop
+   * reaches the markup, so nothing unresolvable or unsafe is ever written
+   * into a style attribute.
+   */
+  const colorOf = (value: unknown, fallback: string): string =>
+    resolveEmailColor(value, palette) ?? fallback
+  /** The theme's accent, for what the author left unset. */
+  const accent = {
+    fill: colorOf('primary.main', '#1a73e8'),
+    label: colorOf('primary.contrastText', '#ffffff'),
+    // The accent AS TEXT: `primary.dark` is the theme's AA-checked text
+    // shade, where the fill color itself may be too pale to read as a link.
+    link: colorOf('primary.dark', '#1a73e8'),
+  }
 
   const textParts: string[] = []
   const sub = (value: unknown): string =>
@@ -389,7 +438,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
     const props = node.props ?? {}
     switch (node.componentId) {
       case 'emailSection': {
-        const background = props.backgroundColor || '#ffffff'
+        const background = colorOf(props.backgroundColor, '#ffffff')
         const padding = Number.isFinite(Number(props.padding))
           ? Number(props.padding)
           : 24
@@ -421,11 +470,11 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         if (!text.trim()) return ''
         textParts.push(text)
         const style = TEXT_STYLES[props.variant as string] ?? TEXT_STYLES['body']
-        const color = props.color || '#1a1a1a'
+        const color = colorOf(props.color, '#1a1a1a')
         const align = props.align || 'left'
         return row(
           `<div style="font-family:${FONT};${style};color:${color};text-align:${align};">` +
-            linkifyEscapedText(escapeEmailHtml(text)).replace(/\n/g, '<br />') +
+            linkifyEscapedText(escapeEmailHtml(text), accent.link).replace(/\n/g, '<br />') +
             `</div>`,
           'padding:4px 0;',
         )
@@ -469,14 +518,14 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         // does — a text/plain body is inert, but it is still delivered mail
         // and a refused URL does not belong in it either.
         const href = linkHref(props.href ?? '#') ?? '#'
-        const background = props.backgroundColor || '#1a73e8'
-        const color = props.color || '#ffffff'
+        const background = colorOf(props.backgroundColor, accent.fill)
+        const color = colorOf(props.color, accent.label)
         const align = props.align || 'center'
         textParts.push(`${label}: ${href}`)
         // Bulletproof-ish button: padded anchor, table-aligned.
         return row(
           `<a href="${escapeEmailHtml(href)}" target="_blank" ` +
-            `style="display:inline-block;padding:12px 28px;border-radius:6px;` +
+            `style="display:inline-block;padding:12px 28px;border-radius:${radius}px;` +
             `background-color:${background};color:${color};font-family:${FONT};` +
             `font-size:15px;font-weight:600;text-decoration:none;">` +
             escapeEmailHtml(label) +
@@ -485,7 +534,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
         )
       }
       case 'emailDivider': {
-        const color = props.color || '#e0e0e0'
+        const color = colorOf(props.color, '#e0e0e0')
         return row(
           `<div style="border-top:1px solid ${color};font-size:0;line-height:0;">&nbsp;</div>`,
           'padding:12px 0;',
@@ -523,7 +572,7 @@ export function renderEmailHtml(options: EmailRenderOptions): RenderedEmail {
           ? `<img src="${escapeEmailHtml(productImage)}" alt="${escapeEmailHtml(product.name)}" width="280" style="max-width:100%;height:auto;border:0;border-radius:6px;" /><br />`
           : ''
         const button = productUrl
-          ? `<a href="${escapeEmailHtml(productUrl)}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 24px;border-radius:6px;background-color:#1a73e8;color:#ffffff;font-family:${FONT};font-size:14px;font-weight:600;text-decoration:none;">${escapeEmailHtml(label)}</a>`
+          ? `<a href="${escapeEmailHtml(productUrl)}" target="_blank" style="display:inline-block;margin-top:8px;padding:10px 24px;border-radius:${radius}px;background-color:${accent.fill};color:${accent.label};font-family:${FONT};font-size:14px;font-weight:600;text-decoration:none;">${escapeEmailHtml(label)}</a>`
           : ''
         return row(
           `<div style="border:1px solid #e0e0e0;border-radius:8px;padding:16px;text-align:center;font-family:${FONT};">` +

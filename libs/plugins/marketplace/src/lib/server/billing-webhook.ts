@@ -30,7 +30,7 @@ import { paymentRiskEventFrom } from '@aglyn/aglyn/app-utils/payment-risk'
 import { recordPaymentRiskOnRecord } from '@aglyn/tenant-data-admin/server/payment-risk-record'
 import {
   firebaseAdmin,
-  notifyStaff,
+  notifyRiskEvent,
   sendGa4Purchase,
   sendGa4Refund,
   clearConnectPayoutFailure,
@@ -935,9 +935,10 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
   // `paymentRisk` field an order or booking carries), and the claim names the
   // PUBLISHER's workspace, so the platform route counts it on the seller's
   // ledger against the org that was paid — never the buyer's workspace,
-  // whose card it may have been. Nobody is notified per signal: the
-  // publisher cannot refund a charge the platform is merchant of record for,
-  // and staff hear through the seller pattern and the sale-risk row.
+  // whose card it may have been. The publisher's owners are told, as a shop
+  // is told about its own sale (AGL-3368), in the words for a sale they
+  // cannot refund themselves — the platform is merchant of record — and
+  // staff hear through the seller pattern and the sale-risk row.
   // Disputes keep their own section below, which claims them the same way.
   if (type === 'radar.early_fraud_warning.created' || type === 'review.opened') {
     const risk = paymentRiskEventFrom(type, object)
@@ -950,18 +951,23 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
       .get()
     if (purchases.empty) return
     const purchase = purchases.docs[0]
+    const sellerOrgId = String(purchase.get('sellerOrgId') ?? '')
     await recordPaymentRiskOnRecord(
       {
         ref: purchase.ref,
         signal: risk.signal,
         hostId: '',
-        subjectLabel: 'Marketplace sale',
-        link: '/admin/abuse-reports',
+        orgId: sellerOrgId || null,
+        noticeKind: 'marketplace-sale-warning',
+        subjectLabel: 'a recent marketplace sale',
+        amount: Number.isFinite(Number(purchase.get('amountCents')))
+          ? `$${(Number(purchase.get('amountCents')) / 100).toFixed(2)}`
+          : null,
+        link: '/org/marketplace/payouts',
         notificationType: 'marketplace.review',
       },
-      { firestore, notify: async () => undefined },
+      { firestore, notifyRisk: notifyRiskEvent },
     )
-    const sellerOrgId = String(purchase.get('sellerOrgId') ?? '')
     return { claimed: true, ...(sellerOrgId ? { orgId: sellerOrgId } : {}) }
   }
 
@@ -1190,7 +1196,7 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
               paymentIntentId: String(object?.payment_intent ?? ''),
               livemode: event?.livemode === true,
             },
-            { stripeKey: process.env.STRIPE_SECRET_KEY, notify: notifyStaff },
+            { stripeKey: process.env.STRIPE_SECRET_KEY, notifyRisk: notifyRiskEvent },
           ).catch(() => undefined),
         )
       }

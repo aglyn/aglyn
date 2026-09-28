@@ -258,6 +258,10 @@ on:
           # is stamped on the task, so a second run reaches only what the
           # first one did not.
           - /api/crm/task-reminders
+          # Risk notice digests (AGL-3368). A GET reports how many workspaces'
+          # hours have closed; a POST sends their summaries. Safe by hand: a
+          # sent digest empties its ledger.
+          - /api/risk-notices/digests
           # The AI jobs beat (AGL-3026): one sweep of the queued AI generation
           # steps, the same as the every-minute `consoleAiJobsBeat` tick. POST
           # only. Safe to run by hand at any time — each step is claimed under

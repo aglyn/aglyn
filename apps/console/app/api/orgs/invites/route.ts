@@ -334,7 +334,11 @@ async function handler(request: Request): Promise<Response> {
           'invite.role': role,
           signInUrl: origin,
         },
-        { brandLogoUrl: branding.emailLogoUrl, brandHomeUrl: branding.homeUrl },
+        {
+              brandLogoUrl: branding.emailLogoUrl,
+              brandHomeUrl: branding.homeUrl,
+              brandPrimaryColor: branding.primaryColor,
+            },
       )
       const result = await sendEmail({
         to: email,
