@@ -495,6 +495,8 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
           // not it counts them now.
           trackClicks={sequence.settings.trackClicks || sequence.stats?.clickTracked === true}
           timeZone={mailbox?.timezone ?? null}
+          mailbox={props.mailboxes.status === 'ready' ? mailbox : undefined}
+          sequence={sequence}
           api={api}
           enrollAction={sequence.status === 'active' ? enrollButton : undefined}
           onOpen={(enrollment) => navigate(enrollmentHref(enrollment))}

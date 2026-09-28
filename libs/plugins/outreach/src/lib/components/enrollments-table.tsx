@@ -61,10 +61,19 @@ import {
   OUTREACH_STOP_REASONS,
   OUTREACH_TASK_KIND_LABELS,
   type OutreachEnrollment,
+  type OutreachMailbox,
+  type OutreachSequence,
   type OutreachSequenceStep,
 } from '../model/outreach.types'
+import { outreachNextSendState, type OutreachNextSendState } from '../engine/next-send'
 import { useOutreachEnrollmentActions } from './enrollment-actions'
 import { OUTREACH_CLICKED_FILTER_VALUE, OUTREACH_UNCLICKED_FILTER_VALUE } from './enrollment-filter-params'
+import {
+  OutreachNextSend,
+  outreachNextSendDetail,
+  outreachNextSendLabel,
+  useOutreachNowMs,
+} from './next-send'
 import {
   formatOutreachTime,
   OUTREACH_ENROLLMENT_STATUS_LABELS,
@@ -91,6 +100,13 @@ export interface OutreachEnrollmentsTableProps {
   trackClicks?: boolean
   /** The mailbox's IANA zone, which next sends are read in; `null` for the reader's own. */
   timeZone: string | null
+  /**
+   * The sequence's mailbox, whose pacing a due enrollment waits on
+   * (AGL-3366): `undefined` while the mailboxes load, `null` when it has none.
+   */
+  mailbox?: OutreachMailbox | null
+  /** The sequence, whose status and window a due enrollment waits on too. */
+  sequence?: Pick<OutreachSequence, 'status' | 'steps' | 'settings'> | null
   api: OutreachApi
   /** Shown in the empty state when the sequence takes people. */
   enrollAction?: ReactNode
@@ -263,6 +279,7 @@ function StopReasonCell(props: { enrollment: OutreachEnrollment }) {
 function columns(
   rowActions: (enrollment: OutreachEnrollment) => ReactNode,
   trackClicks: boolean,
+  timeZone: string | null,
 ): NonNullable<ListTableProps['columns']> {
   return [
     {
@@ -321,7 +338,17 @@ function columns(
         </Stack>
       ),
     },
-    { field: 'nextSend', headerName: 'Next send', width: 170, sortable: false },
+    {
+      field: 'nextSend',
+      headerName: 'Next send',
+      width: 190,
+      sortable: false,
+      renderCell: ({ row }: { row: { nextSendState: OutreachNextSendState } }) => (
+        <Stack sx={{ justifyContent: 'center', height: '100%' }}>
+          <OutreachNextSend state={row.nextSendState} timeZone={timeZone} />
+        </Stack>
+      ),
+    },
     {
       field: 'lastActivity',
       headerName: 'Last activity',
@@ -392,6 +419,7 @@ const plainClick = (event: MouseEvent) =>
 export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
   const { steps, timeZone, api, onOpen, hrefFor } = props
   const trackClicks = props.trackClicks === true
+  const nowMs = useOutreachNowMs()
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('md'))
   const actions = useOutreachEnrollmentActions({ api, steps })
@@ -509,10 +537,19 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
       items={actions.menuItems(enrollment)}
     />
   )
-  const nextSend = (enrollment: OutreachEnrollment) =>
-    enrollment.status === 'active' || enrollment.status === 'paused'
-      ? formatOutreachTime(enrollment.nextDueAtMs, timeZone)
-      : '—'
+  /*
+   * A next send whose time has come says it is queued, and why, rather than
+   * showing a time already past (AGL-3366): the mailbox sends its share of
+   * the day each run, follow-ups first, so a first email can wait its turn
+   * for an hour or more without anything having failed.
+   */
+  const nextSendState = (enrollment: OutreachEnrollment) =>
+    outreachNextSendState({
+      enrollment,
+      sequence: props.sequence ?? null,
+      mailbox: props.mailbox,
+      nowMs,
+    })
   const personName = (enrollment: OutreachEnrollment) => {
     const name = enrollment.contactName || enrollment.email
     if (!hrefFor) return <Typography variant="body2">{name}</Typography>
@@ -598,9 +635,17 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
                         <Chip size="small" variant="outlined" color="success" label="Curated" />
                       ) : null}
                     </Stack>
-                    <Typography variant="body2" color="text.secondary">
-                      {`Next send: ${nextSend(enrollment)} · Last activity: ${formatOutreachTime(lastActivityMs(enrollment), timeZone)}`}
-                    </Typography>
+                    <Stack
+                      direction="row"
+                      spacing={0.5}
+                      sx={{ alignItems: 'baseline', flexWrap: 'wrap', color: 'text.secondary' }}
+                    >
+                      <Typography variant="body2">Next send:</Typography>
+                      <OutreachNextSend state={nextSendState(enrollment)} timeZone={timeZone} />
+                      <Typography variant="body2">
+                        {`· Last activity: ${formatOutreachTime(lastActivityMs(enrollment), timeZone)}`}
+                      </Typography>
+                    </Stack>
                     {trackClicks && clicks.clicks ? (
                       <Typography variant="body2" color="text.secondary">
                         {`Clicks: ${outreachClickCountLabel(clicks)}`}
@@ -621,7 +666,7 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
         <ListTable
           aria-label="Enrollments"
           columns={listFilterGridColumns(
-            columns(rowActions, trackClicks),
+            columns(rowActions, trackClicks, timeZone),
             fields,
             filterOptions,
             ENROLLMENT_FILTER_HEADERS,
@@ -630,10 +675,15 @@ export function OutreachEnrollmentsTable(props: OutreachEnrollmentsTableProps) {
           loading={enrollments.status === 'loading'}
           rows={pageRows.map((enrollment) => {
             const clicks = clicksOf(enrollment)
+            const next = nextSendState(enrollment)
             return {
               $id: enrollment.id,
               ...filterRow(enrollment, steps, clicks),
-              nextSend: nextSend(enrollment),
+              nextSendState: next,
+              // What the export writes: the label, and for a queued send, why.
+              nextSend: [outreachNextSendLabel(next, timeZone), outreachNextSendDetail(next, timeZone)]
+                .filter(Boolean)
+                .join(' — '),
               lastActivity: formatOutreachTime(
                 lastActivityMs(enrollment),
                 timeZone,

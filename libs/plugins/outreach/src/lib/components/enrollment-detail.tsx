@@ -69,6 +69,7 @@ import {
 } from '@mui/material'
 import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import { OUTREACH_MAIL_GATEWAY_LABELS } from '../engine/mail-gateway'
+import { outreachNextSendState } from '../engine/next-send'
 import { outreachClickSummary } from '../model/enrollment-engagement'
 import {
   outreachEnrollmentFigures,
@@ -98,6 +99,7 @@ import {
   OutreachLoading,
   OutreachLoadProblem,
 } from './outreach-ui'
+import { outreachNextSendDetail, outreachNextSendLabel, useOutreachNowMs } from './next-send'
 import { OutreachFigure } from './sequence-report-card'
 import { useOutreachApi } from './use-outreach-api'
 import { useOutreachSequence } from './use-outreach-data'
@@ -548,6 +550,7 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
   const gateway = useOutreachEnrollmentGateway(api, enrollmentId)
   const roster = useOrgMemberOptions(orgId, { enabled: true })
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const nowMs = useOutreachNowMs()
   const enrollment = loaded.data
   const sequence = loadedSequence.data
   const campaigns = useOrgCampaigns(orgId, {
@@ -647,9 +650,17 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
   const dash = (value: number) => (value ? value.toLocaleString() : '—')
   const notTracked = !trackClicks && !figures.clicks && !figures.scannerClicks ? 'Not tracked' : undefined
   const thread = enrollment.gmailThreadId ?? enrollment.gmailThreadIds.at(-1) ?? null
+  const nextSend = outreachNextSendState({
+    enrollment,
+    sequence,
+    mailbox: props.mailboxes.status === 'ready' ? mailbox : undefined,
+    nowMs,
+  })
   const nothingYet =
     enrollment.status === 'active' && enrollment.nextDueAtMs
-      ? `Nothing yet — step ${enrollment.stepIndex + 1} sends ${time(enrollment.nextDueAtMs)}.`
+      ? nextSend.kind === 'queued'
+        ? `Nothing yet — step ${enrollment.stepIndex + 1} is due and queued to send.`
+        : `Nothing yet — step ${enrollment.stepIndex + 1} sends ${time(enrollment.nextDueAtMs)}.`
       : 'Nothing yet.'
 
   return (
@@ -709,7 +720,22 @@ export function OutreachEnrollmentDetail(props: OutreachEnrollmentDetailProps) {
               <Chip size="small" variant="outlined" color="success" label="Curated" />
             ) : null}
             {open && enrollment.nextDueAtMs ? (
-              <Chip size="small" variant="outlined" label={`Next send ${time(enrollment.nextDueAtMs)}`} />
+              nextSend.kind === 'queued' ? (
+                <Tooltip describeChild title={outreachNextSendDetail(nextSend, timeZone)}>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color={
+                      nextSend.reason === 'mailbox_not_sending' || nextSend.reason === 'sequence_not_active'
+                        ? 'warning'
+                        : 'default'
+                    }
+                    label={`Next send ${outreachNextSendLabel(nextSend, timeZone)}`}
+                  />
+                </Tooltip>
+              ) : (
+                <Chip size="small" variant="outlined" label={`Next send ${time(enrollment.nextDueAtMs)}`} />
+              )
             ) : null}
           </Stack>
           {held ? (
