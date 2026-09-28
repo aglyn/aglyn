@@ -41,7 +41,7 @@
 import { createHash } from 'crypto'
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
 import { normalizeOrgLockdown } from '@aglyn/aglyn/app-utils/lockdown'
-import { firebaseAdmin, notifyOrgAdmins } from '@aglyn/tenant-data-admin'
+import { firebaseAdmin, notifyRiskEvent, type RiskEventInput } from '@aglyn/tenant-data-admin'
 import { orgAgeDays } from '@aglyn/tenant-data-admin/server/org-age'
 import {
   describeSaleRiskSignals,
@@ -194,66 +194,54 @@ async function cardFingerprintOf(
   return result.ok && typeof fingerprint === 'string' && fingerprint ? fingerprint : null
 }
 
-/** Tell staff a sale was flagged (AGL-3365), once per row. Never throws. */
-export async function notifyStaffOfSaleRisk(
-  notify: (payload: {
-    type: 'system.abuseReportUrgent'
-    title: string
-    body: string
-    link: string
-  }) => Promise<void>,
-  flagged: { reference: string; signals: readonly SaleRiskSignal[] },
-): Promise<void> {
-  await notify({
-    type: 'system.abuseReportUrgent',
-    title: 'Marketplace sale flagged — possible self-dealing or card fraud',
-    body:
-      `${describeSaleRiskSignals(flagged.signals).join(' ')} Nothing has been refunded or ` +
-      `paused. Review the sale and the publisher. Reference ${flagged.reference}.`,
-    link: '/admin/abuse-reports',
-  }).catch(() => undefined)
-}
-
 /**
- * Tell the publisher's owners and admins a sale is under review (AGL-3365).
- * The outcome and the way forward only — never which shape flagged it, which
- * would teach the actor it describes how to avoid it. Never throws.
+ * Tell staff and the publisher's owners and admins that a sale was flagged
+ * (AGL-3365), once per row, through the risk notice seam (AGL-3368). Staff
+ * get the shapes that flagged it and the row; the publisher gets the
+ * catalog's `marketplace-sale-review` words — the outcome and the way to
+ * talk to us, never which shape flagged it, which would teach the actor it
+ * describes how to avoid it. Never throws.
  */
-export async function notifyPublisherSaleUnderReview(
-  publisherOrgId: string,
-  flagged: { reference: string },
+export async function notifySaleRisk(
+  notifyRisk: (input: RiskEventInput) => Promise<unknown>,
+  flagged: {
+    publisherOrgId: string
+    reviewId: string
+    reference: string
+    signals: readonly SaleRiskSignal[]
+    amountCents: number
+    paymentIntentId: string
+    livemode: boolean
+  },
 ): Promise<void> {
-  await notifyOrgAdmins(publisherOrgId, {
-    type: 'marketplace.review',
-    title: 'A marketplace sale is under review',
-    body:
-      'One of your recent marketplace sales is being reviewed by our team, and its payout may ' +
-      'take longer than usual. You do not need to do anything. To ask about it, contact ' +
-      `support with reference ${flagged.reference}.`,
-    link: '/manage/marketplace',
+  await notifyRisk({
+    kind: 'marketplace-sale-review',
+    orgId: flagged.publisherOrgId,
+    reviewId: flagged.reviewId,
+    reference: flagged.reference,
+    item: { label: 'a recent marketplace sale', path: '/org/marketplace/payouts' },
+    amount: `$${(flagged.amountCents / 100).toFixed(2)}`,
+    stripeUrl: flagged.paymentIntentId
+      ? `https://dashboard.stripe.com/${flagged.livemode ? '' : 'test/'}payments/${encodeURIComponent(flagged.paymentIntentId)}`
+      : null,
+    staffEvidence: describeSaleRiskSignals(flagged.signals).join(' '),
   }).catch(() => undefined)
 }
 
 /**
  * Tell the publisher's owners and admins their payout timing changed
- * (AGL-3365) — when a hold starts, and when it ends. Never the rule that set
- * it. Never throws.
+ * (AGL-3365) — when a hold starts, and when it ends — through the risk
+ * notice seam (AGL-3368). Never the rule that set it. Never throws.
  */
 export async function notifyPublisherPayoutSchedule(
   publisherOrgId: string,
   held: boolean,
+  notifyRisk: (input: RiskEventInput) => Promise<unknown> = notifyRiskEvent,
 ): Promise<void> {
-  await notifyOrgAdmins(publisherOrgId, {
-    type: 'marketplace.review',
-    title: held
-      ? 'Your marketplace payouts are on an extended schedule'
-      : 'Your marketplace payouts are back on the standard schedule',
-    body: held
-      ? 'Payouts to new publishers are held for a period before they reach your bank. Your ' +
-        'sales are recorded as usual and pay out automatically when the period ends. To ask ' +
-        'about it, contact support.'
-      : 'Your marketplace sales now pay out on your payout account’s standard schedule.',
-    link: '/manage/marketplace',
+  await notifyRisk({
+    kind: held ? 'publisher-payouts-held' : 'publisher-payouts-standard',
+    orgId: publisherOrgId,
+    item: { label: 'your marketplace payouts', path: '/org/marketplace/payouts' },
   }).catch(() => undefined)
 }
 
@@ -280,12 +268,7 @@ export async function screenMarketplaceSale(
   deps: {
     firestore?: FirebaseFirestore.Firestore
     stripeKey?: string
-    notify: (payload: {
-      type: 'system.abuseReportUrgent'
-      title: string
-      body: string
-      link: string
-    }) => Promise<void>
+    notifyRisk: (input: RiskEventInput) => Promise<unknown>
     nowMs?: number
   },
 ): Promise<{ signals: SaleRiskSignal[]; filed: string | null }> {
@@ -400,8 +383,15 @@ export async function screenMarketplaceSale(
       { merge: true },
     )
     if (first) {
-      await notifyStaffOfSaleRisk(deps.notify, { reference, signals })
-      await notifyPublisherSaleUnderReview(input.sellerOrgId, { reference })
+      await notifySaleRisk(deps.notifyRisk, {
+        publisherOrgId: input.sellerOrgId,
+        reviewId,
+        reference,
+        signals,
+        amountCents: input.amountCents,
+        paymentIntentId: input.paymentIntentId,
+        livemode: input.livemode,
+      })
     }
     return { signals, filed: reference }
   } catch (error) {

@@ -302,6 +302,9 @@ export function heldSendItem(input: {
       return { label: `the automated email "${subject}"`, path: `/${input.hostId}/automation` }
     case 'page':
       return { label: `the page ${subject}`, path: null }
+    case 'listing':
+      // The publisher's own Listings section of the Marketplace hub.
+      return { label: `the marketplace submission "${subject}"`, path: '/org/marketplace/listings' }
     default:
       return {
         label: input.context
@@ -387,7 +390,12 @@ export async function fileOutboundHold(
     // The owners learn what was held and how to ask for a review; staff get
     // the alert with the evidence and a link to this row. One seam, once.
     await notifyRiskEvent({
-      kind: filing.heldSend.kind === 'page' ? 'page-held' : 'email-held',
+      kind:
+        filing.heldSend.kind === 'page'
+          ? 'page-held'
+          : filing.heldSend.kind === 'listing'
+            ? 'listing-held'
+            : 'email-held',
       orgId: filing.heldSend.orgId,
       hostId: filing.heldSend.hostId,
       reviewId: filing.reviewId,

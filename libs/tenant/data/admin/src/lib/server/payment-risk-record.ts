@@ -61,8 +61,19 @@ export const PAYMENT_RISK_NOTICE_KINDS: Record<PaymentRiskSignalKind, RiskEventK
 export interface RecordPaymentRiskInput {
   ref: FirebaseFirestore.DocumentReference
   signal: PaymentRiskSignal
-  /** The site whose managers are told. Empty tells nobody. */
+  /** The site whose managers are told. Empty tells only `orgId`'s owners. */
   hostId: string
+  /**
+   * The workspace told when the record belongs to no site — a marketplace
+   * sale's publisher. Resolved from the site otherwise.
+   */
+  orgId?: string | null
+  /**
+   * The notice to send, when the record's owner cannot act the way a shop
+   * does on its own sale (a marketplace publisher cannot refund a charge the
+   * platform is merchant of record for). Defaults by signal kind.
+   */
+  noticeKind?: RiskEventKind
   /** What the record is, as the merchant calls it: `Order 1042`, `Booking`. */
   subjectLabel: string
   /**
@@ -114,12 +125,12 @@ export async function recordPaymentRiskOnRecord(
     })
     return true
   })
-  if (written && input.hostId) {
+  if (written && (input.hostId || input.orgId)) {
     await deps
       .notifyRisk({
-        kind: PAYMENT_RISK_NOTICE_KINDS[input.signal.kind],
-        orgId: null,
-        hostId: input.hostId,
+        kind: input.noticeKind ?? PAYMENT_RISK_NOTICE_KINDS[input.signal.kind],
+        orgId: input.orgId ?? null,
+        hostId: input.hostId || null,
         item: { label: input.subjectLabel, path: input.link },
         occurredAtMs: input.signal.atMs,
         amount: input.amount ?? null,

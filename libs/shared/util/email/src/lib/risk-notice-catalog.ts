@@ -68,6 +68,11 @@ export const RISK_EVENT_KINDS = [
   'page-held',
   'page-released',
   'page-rejected',
+  // A marketplace submission (a listing, a publisher profile) held before
+  // it was listed.
+  'listing-held',
+  'listing-released',
+  'listing-rejected',
   // A custom site domain or sending domain flagged for a look.
   'domain-flagged',
   'domain-cleared',
@@ -80,6 +85,12 @@ export const RISK_EVENT_KINDS = [
   'sale-dispute',
   // Several of a seller's sales drew fraud reports: staff are reviewing.
   'seller-review',
+  // A marketplace sale a publisher received is under review, a card signal
+  // arrived on one, and a new publisher's payouts wait (or stop waiting).
+  'marketplace-sale-review',
+  'marketplace-sale-warning',
+  'publisher-payouts-held',
+  'publisher-payouts-standard',
   // A review with no held item of its own (a payment, a seller review)
   // closed: cleared, or upheld.
   'review-cleared',
@@ -120,6 +131,7 @@ export const RISK_OWNER_ACTION_IDS = [
   'update-payment-method',
   'view-billing',
   'view-holds',
+  'view-marketplace-sales',
   'contact-support',
 ] as const
 export type RiskOwnerActionId = (typeof RISK_OWNER_ACTION_IDS)[number]
@@ -198,6 +210,11 @@ export const RISK_OWNER_ACTIONS: Record<RiskOwnerActionId, RiskActionDefinition>
     label: 'View billing',
     hint: 'Opens your plan and subscription.',
     href: '/org/billing',
+  },
+  'view-marketplace-sales': {
+    label: 'View marketplace payouts',
+    hint: 'Opens your marketplace payouts, where each sale and when it pays out are listed.',
+    href: '/org/marketplace/payouts',
   },
   'view-holds': {
     label: 'View holds and reviews',
@@ -523,6 +540,89 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
       actions: ['staff-open-row', 'staff-lock-site', 'staff-view-workspace'],
     },
   },
+  'listing-held': {
+    kind: 'listing-held',
+    severity: 'warning',
+    emailOwners: true,
+    alertStaff: true,
+    neverDigest: false,
+    reviewable: true,
+    closesWith: { released: 'listing-released', rejected: 'listing-rejected' },
+    includeSiteManagers: false,
+    helpAnchor: 'listing-held',
+    owner: {
+      title: 'A marketplace submission is on hold for review',
+      summary:
+        'Our automated safety review held {{item.label}} from {{workspace.name}} on {{occurredAt}} before it was listed.',
+      meaning: 'Nothing was published. Buyers cannot see or install it while it waits.',
+      steps: [
+        'Check its name, description, links and any fields it asks people to fill in.',
+        'If you change it, the new submission is checked on its own.',
+        ASK_FOR_REVIEW,
+        REVIEW_TIME,
+      ],
+      actions: ['request-review', 'view-details', 'contact-support'],
+    },
+    staff: {
+      title: 'Marketplace submission held for review — possible phishing',
+      summary:
+        '{{item.label}} from publisher workspace {{workspace.name}} was held on {{occurredAt}}. {{staff.evidence}} Reference {{reference}}.',
+      actions: [
+        'staff-open-row',
+        'staff-release',
+        'staff-reject',
+        'staff-lock-workspace',
+        'staff-view-workspace',
+      ],
+    },
+  },
+  'listing-released': {
+    kind: 'listing-released',
+    severity: 'info',
+    emailOwners: true,
+    alertStaff: false,
+    neverDigest: false,
+    reviewable: false,
+    includeSiteManagers: false,
+    helpAnchor: 'listing-held',
+    owner: {
+      title: 'Your marketplace submission was released',
+      summary: 'Our review team released {{item.label}} on {{occurredAt}}.',
+      meaning: 'It was not published automatically.',
+      steps: ['Submit it again; it will go through this time.'],
+      actions: ['view-details'],
+    },
+    staff: {
+      title: 'Held marketplace submission released',
+      summary: '{{item.label}} from {{workspace.name}} was released. Reference {{reference}}.',
+      actions: ['staff-open-row', 'staff-view-workspace'],
+    },
+  },
+  'listing-rejected': {
+    kind: 'listing-rejected',
+    severity: 'warning',
+    emailOwners: true,
+    alertStaff: false,
+    neverDigest: false,
+    reviewable: true,
+    includeSiteManagers: false,
+    helpAnchor: 'listing-held',
+    owner: {
+      title: 'A marketplace submission will not be listed',
+      summary: 'After review, {{item.label}} was not approved on {{occurredAt}}.',
+      meaning: 'It will not be published in its current form. Submitting the same content again is held again.',
+      steps: [
+        'Read the marketplace listing rules before you submit something similar.',
+        'If you think the decision is wrong, choose Request a review and explain what it is for.',
+      ],
+      actions: ['request-review', 'contact-support'],
+    },
+    staff: {
+      title: 'Held marketplace submission rejected',
+      summary: '{{item.label}} from {{workspace.name}} was rejected. Reference {{reference}}.',
+      actions: ['staff-open-row', 'staff-lock-workspace', 'staff-view-workspace'],
+    },
+  },
   'domain-flagged': {
     kind: 'domain-flagged',
     severity: 'warning',
@@ -761,6 +861,114 @@ export const RISK_NOTICE_CATALOG: Readonly<Record<RiskEventKind, RiskNoticeDefin
         'staff-release',
         'staff-reject',
       ],
+    },
+  },
+  'marketplace-sale-review': {
+    kind: 'marketplace-sale-review',
+    severity: 'warning',
+    emailOwners: true,
+    alertStaff: true,
+    neverDigest: false,
+    reviewable: true,
+    closesWith: { released: 'review-cleared', rejected: 'review-upheld' },
+    includeSiteManagers: false,
+    helpAnchor: 'marketplace-sale-review',
+    owner: {
+      title: 'A marketplace sale is under review',
+      summary: 'On {{occurredAt}}, our team opened a routine review of {{item.label}} ({{amount}}).',
+      meaning:
+        'The sale is recorded as usual, and its payout may take longer than normal. Nothing has been refunded.',
+      steps: [
+        'Nothing is needed from you.',
+        'To tell us about the buyer or the sale, choose Request a review.',
+        REVIEW_TIME,
+      ],
+      actions: ['request-review', 'view-marketplace-sales', 'contact-support'],
+    },
+    staff: {
+      title: 'Marketplace sale flagged — possible self-dealing or card fraud',
+      summary:
+        '{{item.label}} ({{amount}}) paid publisher workspace {{workspace.name}}. {{staff.evidence}} Nothing has been refunded or paused. Reference {{reference}}.',
+      actions: [
+        'staff-open-row',
+        'staff-open-stripe',
+        'staff-lock-workspace',
+        'staff-view-workspace',
+        'staff-release',
+        'staff-reject',
+      ],
+    },
+  },
+  'marketplace-sale-warning': {
+    kind: 'marketplace-sale-warning',
+    severity: 'warning',
+    emailOwners: true,
+    alertStaff: false,
+    neverDigest: false,
+    reviewable: false,
+    includeSiteManagers: false,
+    helpAnchor: 'marketplace-sale-review',
+    owner: {
+      title: 'A marketplace sale may be reversed',
+      summary:
+        'On {{occurredAt}}, the payment for {{item.label}} was reported as possibly not made by the cardholder, or held for a fraud check.',
+      meaning:
+        'This payment may be reversed by the cardholder\'s bank. If it is, your share of it is taken back from your payouts. Nothing has been refunded yet.',
+      steps: [
+        'Nothing is needed from you: the marketplace handles the payment with the buyer\'s bank.',
+        'If you know the buyer, contact support; it can help us answer the bank.',
+      ],
+      actions: ['view-marketplace-sales', 'contact-support'],
+    },
+    staff: {
+      title: 'Card signal on a marketplace sale',
+      summary: '{{item.label}} paid publisher workspace {{workspace.name}}. {{staff.evidence}}',
+      actions: ['staff-open-stripe', 'staff-view-workspace'],
+    },
+  },
+  'publisher-payouts-held': {
+    kind: 'publisher-payouts-held',
+    severity: 'info',
+    emailOwners: true,
+    alertStaff: false,
+    neverDigest: true,
+    reviewable: false,
+    includeSiteManagers: false,
+    helpAnchor: 'marketplace-payouts',
+    owner: {
+      title: 'Your marketplace payouts are on an extended schedule',
+      summary: 'On {{occurredAt}}, payouts for {{workspace.name}}\'s marketplace sales moved to an extended schedule.',
+      meaning:
+        'Payouts to new publishers wait for a period before they reach your bank. Your sales are recorded as usual and pay out automatically when the period ends.',
+      steps: ['Nothing to do. You will get a notice when payouts return to the standard schedule.'],
+      actions: ['view-marketplace-sales', 'contact-support'],
+    },
+    staff: {
+      title: 'Publisher payouts on the extended schedule',
+      summary: 'Publisher workspace {{workspace.name}} payouts moved to the extended schedule.',
+      actions: ['staff-view-workspace'],
+    },
+  },
+  'publisher-payouts-standard': {
+    kind: 'publisher-payouts-standard',
+    severity: 'info',
+    emailOwners: true,
+    alertStaff: false,
+    neverDigest: true,
+    reviewable: false,
+    includeSiteManagers: false,
+    helpAnchor: 'marketplace-payouts',
+    owner: {
+      title: 'Your marketplace payouts are back on the standard schedule',
+      summary: 'On {{occurredAt}}, payouts for {{workspace.name}}\'s marketplace sales returned to the standard schedule.',
+      meaning: 'Your sales now pay out on your payout account\'s standard schedule.',
+      steps: ['Nothing to do.'],
+      actions: ['view-marketplace-sales'],
+    },
+    staff: {
+      title: 'Publisher payouts back on the standard schedule',
+      summary: 'Publisher workspace {{workspace.name}} payouts returned to the standard schedule.',
+      actions: ['staff-view-workspace'],
     },
   },
   'review-cleared': {
@@ -1333,11 +1541,14 @@ export function riskKindForAbuseRow(row: {
   switch (row.source) {
     case 'outbound-screen':
       if (row.heldSend?.kind === 'page') return 'page-held'
+      if (row.heldSend?.kind === 'listing') return 'listing-held'
       return row.heldSend ? 'email-held' : 'domain-flagged'
     case 'stripe-fraud-signal':
       return 'billing-payment-flagged'
     case 'stripe-seller-fraud-pattern':
       return 'seller-review'
+    case 'marketplace-sale-risk':
+      return 'marketplace-sale-review'
     default:
       return null
   }
