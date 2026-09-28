@@ -270,6 +270,8 @@ const applyToScratchHost = async (hostId, plan) => {
       versionId,
       slug: page.slug,
       publishedAt: Timestamp.now(),
+      // Stored, as every screen create stamps it (AGL-3321).
+      deletedAt: null,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     })

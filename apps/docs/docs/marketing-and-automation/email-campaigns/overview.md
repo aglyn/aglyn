@@ -178,7 +178,16 @@ same signup form are usually re-run for the next push. Clearing every campaign t
 record out of all of them; nothing else about it changes.
 
 The campaign's own page then lists the screens and forms assigned to it, so you can see
-the association from either end, and — under **What its sequences produced** — counts
+the association from either end. Each is its own table, a page at a time, and a deleted
+screen is never one of its rows. **Search** above each table matches the start of a
+screen's or form's name (`spr` finds *Spring landing page*), and while it applies the table
+is in name order; the tables have no **Filters** panel. The search is answered by the
+table's query, so a match on a later page is found. **What these forms hold** adds up the
+counters of up to 25 of the campaign's forms and says so when it holds more; the table
+beside it lists every one. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+
+Under **What its sequences produced**, the page also counts
 what the sequences in it did: people **enrolled**, the first email **sent** to each,
 **replies**, **meetings** booked from a link in a sequence email, and enrolled leads
 **converted** into contacts. Each figure counts the people who reached that stage, so

@@ -485,6 +485,8 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
       displayName: 'Welcome email',
       // The keys the email templates list finds it by (AGL-3321).
       ...displayNameSearchFields('Welcome email'),
+      // Stored, not absent: a campaign's screens list asks `deletedAt == null`.
+      deletedAt: null,
       kind: 'email',
       versionId: EMAIL_VERSION_ID,
       emailSubject: marketing.email.subject,
@@ -556,6 +558,7 @@ export async function seedBrand({ firestore, hostRef, brand, log, prune = true }
       displayName: 'Home',
       // The keys the screen switcher and lists find it by (AGL-835, AGL-3321).
       ...displayNameSearchFields('Home'),
+      deletedAt: null,
       slug: SCREEN_ROOT_PATH,
       versionId: HOME_VERSION_ID,
       publishedAt: now,

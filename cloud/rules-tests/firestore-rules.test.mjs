@@ -3280,6 +3280,11 @@ describe('hosts', () => {
         await setDoc(doc(db, 'hosts', HOST, 'screens', 'deleted-1'), {
           displayName: 'Old', deletedAt: new Date('2026-01-01'),
         })
+        // A screen as every create now stores it (AGL-3321): the null a
+        // campaign's screens list asks `deletedAt == null` for.
+        await setDoc(doc(db, 'hosts', HOST, 'screens', 'live-1'), {
+          displayName: 'Landing', slug: 'landing', versionId: 'v1', deletedAt: null,
+        })
       })
     }
 
@@ -3464,6 +3469,15 @@ describe('hosts', () => {
           deletedAt: null,
         }),
       )
+      // Nor back to the stored null a live screen holds (AGL-3321).
+      await mustDeny(
+        'screens/deleted-1 { deletedAt: null } over a time',
+        setDoc(
+          doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'),
+          { deletedAt: null },
+          { merge: true },
+        ),
+      )
       await mustDeny(
         'screens/deleted-1 { deletedAt: <a different time> }',
         updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'), {
@@ -3496,6 +3510,15 @@ describe('hosts', () => {
         'screens/deleted-1 rename',
         updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'deleted-1'), {
           displayName: 'Old (archived)',
+        }),
+      )
+      // A screen that STORES `deletedAt: null` is live, and its null is what
+      // the delete overwrites (AGL-3321) — refused, it would leave every
+      // screen created since the flag undeletable from the console.
+      await mustAllow(
+        'screens/live-1 soft delete over a stored null',
+        updateDoc(doc(authed(EDITOR), 'hosts', HOST, 'screens', 'live-1'), {
+          deletedAt: new Date(),
         }),
       )
       // And hard delete is untouched — /api/resources/erase aside, the rules

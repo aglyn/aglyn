@@ -880,6 +880,9 @@ await put(homeScreen, {
   displayName: 'Home',
   // The keys the screen lists find a screen by (AGL-835, AGL-3321).
   ...displayNameSearchFields('Home'),
+  // A live screen STORES its null: a campaign's screens list asks
+  // `deletedAt == null`, which cannot match an absent field (AGL-3321).
+  deletedAt: null,
   slug: 'home',
   versionId: 'seed-home-v1',
   createdAt: now,
@@ -960,6 +963,7 @@ const scopedScreen = hostRef.collection('screens').doc('seed-scoped')
 await put(scopedScreen, {
   displayName: 'Scoped',
   ...displayNameSearchFields('Scoped'),
+  deletedAt: null,
   slug: 'scoped',
   versionId: 'seed-scoped-v1',
   createdAt: now,
@@ -1017,6 +1021,7 @@ const surveyScreen = hostRef.collection('screens').doc('seed-guide-survey-screen
 await put(surveyScreen, {
   displayName: 'Survey',
   ...displayNameSearchFields('Survey'),
+  deletedAt: null,
   slug: 'survey',
   versionId: 'seed-guide-survey-screen-v1',
   createdAt: now,
@@ -1095,6 +1100,7 @@ const emailScreen = hostRef.collection('screens').doc('seed-email-welcome')
 await put(emailScreen, {
   displayName: 'Welcome email',
   ...displayNameSearchFields('Welcome email'),
+  deletedAt: null,
   kind: 'email',
   versionId: 'seed-email-v1',
   emailSubject: 'Welcome to the bakery, {{contact.firstName}}',
