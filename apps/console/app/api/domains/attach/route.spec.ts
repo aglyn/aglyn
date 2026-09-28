@@ -57,6 +57,7 @@ const mockVerifyIdToken = jest.fn()
 const mockCheckEntitlement = jest.fn()
 const mockProjectDomainStatus = jest.fn()
 const mockSyncHostProjection = jest.fn(async (..._args: unknown[]) => undefined)
+const mockFlagLookalike = jest.fn(async (..._args: unknown[]) => 'clean')
 const fetchMock = jest.fn()
 
 /** Applies a `set(..., { merge: true })` the way Firestore does, deletes included. */
@@ -198,6 +199,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   // CAPTURED (AGL-3321): the members' site rows follow the new domain, for
   // the Sites cards' search and Custom domain filter.
   syncHostProjectionForMembers: (...args: unknown[]) => mockSyncHostProjection(...args),
+  // CAPTURED (AGL-3356): a claimed domain is handed to the phishing screen's
+  // lookalike check, which files a staff row for a brand's disguise.
+  flagLookalikeCustomDomain: (...args: unknown[]) => mockFlagLookalike(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -683,6 +687,27 @@ describe('the claim covers every name Vercel holds (AGL-1430)', () => {
       redirect: 'example.com',
       redirectStatusCode: 307,
     })
+  })
+
+  it('hands every claimed domain to the lookalike check, and attaches it either way (AGL-3356)', async () => {
+    // Flagged for staff, not refused: the check decides, the attach proceeds.
+    seedHost('mine', { subdomain: 'mine', orgId: 'org-1' })
+    mockFlagLookalike.mockClear()
+    mockFlagLookalike.mockResolvedValueOnce('flagged')
+    mockProjectDomainStatus.mockResolvedValue({
+      state: 'serving',
+      domain: 'paypal-secure.com',
+      verification: [],
+      conflicts: [],
+    })
+    const response = await POST(post({ hostId: 'mine', domain: 'paypal-secure.com' }))
+    expect(response.status).toBe(200)
+    expect(mockFlagLookalike).toHaveBeenCalledWith({
+      hostId: 'mine',
+      orgId: 'org-1',
+      domain: 'paypal-secure.com',
+    })
+    expect(docs.get('hosts/mine')?.['cname']).toBe('paypal-secure.com')
   })
 
   it('accepts a multi-label public suffix domain — acme.co.uk is a real domain', async () => {

@@ -976,6 +976,10 @@ async function runServerStep(
         ...(emailActivity ? { tags: emailActivity.tags } : {}),
         audience: 'tenant',
         context: enrollmentRef ? 'flow step' : 'event action',
+        // A step staff released above carries its release to the send
+        // seam's screen, which would otherwise hold the same signals again.
+        releasedReviewId:
+          screened.outcome === 'send' ? (screened.releasedReviewId ?? null) : null,
         /*
          * A resumed step may take `'bulk'` where an immediate one may not,
          * and the reason is the same one the abandoned-checkout sweep gives:
@@ -1022,7 +1026,10 @@ async function runServerStep(
           : refusal === 'frequency-capped'
             ? 'the recipient has already had today’s limit of email ' +
               'from this site'
-            : 'email delivery failed'
+            : refusal === 'held-for-review'
+              ? 'this email is held for staff review because it may ' +
+                'impersonate another business'
+              : 'email delivery failed'
         : null
       // Cost meter (AGL-1438). A workflow notification is transactional:
       // counted, never capped. `sent` is false when Resend refused or the

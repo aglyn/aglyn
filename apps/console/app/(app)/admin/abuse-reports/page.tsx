@@ -290,13 +290,35 @@ interface HeldSendRow {
 
 /** What a held send's state means, in the words the reviewer acts on. */
 function heldSendStateLine(held: HeldSendRow): string {
+  const by = held.decidedBy ? ` by ${held.decidedBy}` : ''
+  if (held.kind === 'page') {
+    if (held.state === 'released') return `Released${by} — the page serves as published.`
+    if (held.state === 'rejected') return `Rejected${by} — the page stays unserved.`
+    return 'Held — the page serves its last clean version, or nothing. Dismiss this report (with a note) to release it, or mark it Actioned to reject it. Reviewing leaves it held.'
+  }
   if (held.state === 'released') {
-    return `Released${held.decidedBy ? ` by ${held.decidedBy}` : ''} — it sends as composed.`
+    return held.kind === 'message'
+      ? `Released${by} — the site's next email carrying these signals sends.`
+      : `Released${by} — it sends as composed.`
   }
   if (held.state === 'rejected') {
-    return `Rejected${held.decidedBy ? ` by ${held.decidedBy}` : ''} — it will not be sent.`
+    return `Rejected${by} — it will not be sent.`
   }
   return 'Held — nothing has been sent. Dismiss this report (with a note) to release it, or mark it Actioned to reject it. Reviewing leaves it held.'
+}
+
+/** What the phishing screen held, as the row's heading names it. */
+function heldSendKindLabel(kind: string | null): string {
+  switch (kind) {
+    case 'campaign':
+      return 'Outbound campaign'
+    case 'page':
+      return 'Published page'
+    case 'message':
+      return 'Outbound email'
+    default:
+      return 'Outbound automated email'
+  }
 }
 
 /**
@@ -1488,14 +1510,14 @@ function AdminAbuseReports() {
                       >
                         <Stack spacing={0.5}>
                           <Typography variant="subtitle2">
-                            {`Outbound ${
-                              report.heldSend.kind === 'campaign'
-                                ? 'campaign'
-                                : 'automated email'
-                            } held by the phishing screen`}
+                            {`${heldSendKindLabel(
+                              report.heldSend.kind,
+                            )} held by the phishing screen`}
                           </Typography>
                           <Typography variant="body2">
-                            {`Subject: ${report.heldSend.subject ?? '—'}`}
+                            {`${report.heldSend.kind === 'page' ? 'Page' : 'Subject'}: ${
+                              report.heldSend.subject ?? '—'
+                            }`}
                             {report.heldSend.fromName
                               ? ` · Sender name: ${report.heldSend.fromName}`
                               : ''}

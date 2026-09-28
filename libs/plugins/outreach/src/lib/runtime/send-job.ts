@@ -318,6 +318,7 @@ async function runMailbox(
     byHost.set(enrollment.hostId, [...(byHost.get(enrollment.hostId) ?? []), enrollment])
   }
   const siteNames = new Map<string, string>()
+  const siteDocs = new Map<string, Record<string, unknown> | null>()
   // Sites under a staff suspension (AGL-3356): their people are held, not
   // stamped, so the step sends on the first run after the lift.
   const heldSites = new Set<string>()
@@ -359,6 +360,7 @@ async function runMailbox(
     for (const person of candidatesRead) people.set(person.personId, person)
     for (const [personId, answer] of lookupsRead) lookups.set(personId, answer)
     siteNames.set(hostId, host.exists ? String(host.get('name') ?? '') : '')
+    siteDocs.set(hostId, host.exists ? ((host.data() as Record<string, unknown>) ?? null) : null)
     if (host.exists && outreachSiteHeld(host.data() as Record<string, unknown>, nowMs)) {
       heldSites.add(hostId)
     }
@@ -381,6 +383,7 @@ async function runMailbox(
       person: people.get(personId) ?? null,
       lookups: lookups.get(personId) ?? null,
       siteName: siteNames.get(enrollment.hostId) ?? '',
+      site: siteDocs.get(enrollment.hostId) ?? null,
     })
   }
 }
@@ -706,6 +709,8 @@ async function runEmailStep(
     person: OutreachEnrollCandidate | null
     lookups: OutreachGateLookups | null
     siteName: string
+    /** The site's document, for the phishing screen (AGL-3356). */
+    site?: Record<string, unknown> | null
   },
 ): Promise<void> {
   const { enrollment, sequence, person } = input
@@ -881,6 +886,25 @@ async function runEmailStep(
       },
       'failed',
     )
+  }
+
+  /*
+   * THE PHISHING SCREEN (AGL-3356): the same one every tenant message
+   * passes, asked of the email as composed and before anything is claimed,
+   * stored or sent. A hold pauses this enrollment with the reason; staff
+   * decide it in the abuse queue, and a member resumes it once released.
+   */
+  if (deps.screenMessage) {
+    const held = await deps.screenMessage({
+      orgId: run.orgId,
+      org: run.org,
+      hostId: enrollment.hostId,
+      host: input.site ?? null,
+      subject: composed.email.subject,
+      text: composed.email.text,
+      fromName: mailbox.displayName ?? null,
+    })
+    if (held) return stop({ type: 'pause', atMs: nowMs, byUid: null, detail: held }, 'failed')
   }
 
   /*

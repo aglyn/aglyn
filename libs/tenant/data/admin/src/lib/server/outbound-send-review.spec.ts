@@ -87,12 +87,17 @@ jest.mock('./notifications', () => ({
   notifyStaff: (payload: unknown) => mockNotifyStaff(payload),
 }))
 
+import type { SendingWorkspace } from '@aglyn/shared-util-email/outbound-screen-gate'
 import {
   decideHeldOutboundSend,
   HELD_SEND_AT_MS,
   heldOutboundReviewId,
   isYoungWorkspace,
+  resetOutboundSeamMemoForTests,
   screenOutboundSend,
+  screenSeamMessage,
+  seamReviewId,
+  sendingWorkspaceFor,
   type OutboundScreenRequest,
 } from './outbound-send-review'
 
@@ -140,12 +145,34 @@ describe('who is screened', () => {
     expect(isYoungWorkspace(null, NOW)).toBe(false)
   })
 
-  it('sends an established workspace’s mail without screening it', async () => {
+  it('holds an established workspace’s lookalike link — the strong tier is for everyone', async () => {
     const answer = await screenOutboundSend(
-      request({ org: { name: 'Acme', createdAt: NOW - 90 * DAY } }),
+      request({ org: { name: 'Acme', createdAt: NOW - 400 * DAY } }),
+    )
+    expect(answer).toMatchObject({ outcome: 'held' })
+    expect(reviewRow()?.['heldSend']).toMatchObject({ ageDays: 400 })
+  })
+
+  it('sends an established workspace’s mail that only the soft rules would hold', async () => {
+    const answer = await screenOutboundSend(
+      request({
+        org: { name: 'Acme', createdAt: NOW - 90 * DAY },
+        subject: 'Your PayPal account is limited',
+        bodies: ['Verify your account at https://acme-help.example.top/verify'],
+      }),
     )
     expect(answer).toEqual({ outcome: 'send' })
     expect(store.size).toBe(0)
+  })
+
+  it('holds the same soft-rule mail from a young workspace', async () => {
+    const answer = await screenOutboundSend(
+      request({
+        subject: 'Your PayPal account is limited',
+        bodies: ['Verify your account at https://acme-help.example.top/verify'],
+      }),
+    )
+    expect(answer).toMatchObject({ outcome: 'held' })
   })
 
   it('sends a young workspace’s clean mail', async () => {
@@ -207,7 +234,11 @@ describe('the staff decision', () => {
     await expect(
       decideHeldOutboundSend({ reviewId, decision: 'release', actorUid: 'staff-1', actorEmail: null }),
     ).resolves.toBe('released')
-    await expect(screenOutboundSend(request())).resolves.toEqual({ outcome: 'send' })
+    // The release is named, so the send seam can honor it too.
+    await expect(screenOutboundSend(request())).resolves.toEqual({
+      outcome: 'send',
+      releasedReviewId: reviewId,
+    })
 
     // Different words are a different review: screened afresh, held again.
     const edited = await screenOutboundSend(
@@ -285,5 +316,115 @@ describe('the staff decision', () => {
         actorEmail: null,
       }),
     ).resolves.toBe('not-held')
+  })
+})
+
+describe('the send seam’s gate (every other tenant message)', () => {
+  const workspace = (overrides: Partial<SendingWorkspace> = {}): SendingWorkspace => ({
+    hostId: 'host-1',
+    orgId: 'org-1',
+    ageDays: 400,
+    ownNames: ['Acme'],
+    ownDomains: ['acme.example.com'],
+    ...overrides,
+  })
+  const lookalike = [
+    { code: 'lookalike-link' as const, brand: 'poshmark', host: 'poshmark.id63835663.shop' },
+  ]
+
+  beforeEach(() => resetOutboundSeamMemoForTests())
+
+  it('files one `message` row per site and signal set, counted per message, alerted once', async () => {
+    const ask = (subject: string) =>
+      screenSeamMessage({
+        workspace: workspace(),
+        signals: lookalike,
+        subject,
+        fromName: 'Acme',
+        context: 'crm email',
+        releasedReviewId: null,
+      })
+    await expect(ask('Hi Dana')).resolves.toMatchObject({ outcome: 'held' })
+    const id = seamReviewId('host-1', lookalike)
+    expect(store.get(`abuseReports/${id}`)).toMatchObject({
+      category: 'phishing',
+      severity: 'urgent',
+      hostId: 'host-1',
+      heldContext: 'crm email',
+      reportedHostname: 'poshmark.id63835663.shop',
+      heldSend: { kind: 'message', state: 'held', path: 'hosts/host-1' },
+    })
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+
+    // A newsletter's next recipient: the process already knows, so no write.
+    await expect(ask('Hi Sam')).resolves.toMatchObject({ outcome: 'held' })
+    expect(store.get(`abuseReports/${id}`)?.['reportCount']).toBe(1)
+
+    // Another process, another recipient's words, the same signals: one row.
+    resetOutboundSeamMemoForTests()
+    await ask('Hi Lee')
+    expect(store.get(`abuseReports/${id}`)?.['reportCount']).toBe(2)
+    expect(mockNotifyStaff).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends once staff release the row, and never once they reject it', async () => {
+    const ask = () =>
+      screenSeamMessage({
+        workspace: workspace(),
+        signals: lookalike,
+        subject: 'Hi',
+        fromName: null,
+        context: null,
+        releasedReviewId: null,
+      })
+    await ask()
+    const reviewId = seamReviewId('host-1', lookalike)
+    await decideHeldOutboundSend({ reviewId, decision: 'release', actorUid: 's', actorEmail: null })
+    resetOutboundSeamMemoForTests()
+    await expect(ask()).resolves.toEqual({ outcome: 'send' })
+
+    await decideHeldOutboundSend({ reviewId, decision: 'reject', actorUid: 's', actorEmail: null })
+    resetOutboundSeamMemoForTests()
+    await expect(ask()).resolves.toMatchObject({ outcome: 'rejected' })
+  })
+
+  it('honors a campaign or step release only when it is this site’s release', async () => {
+    const held = (await screenOutboundSend(request())) as { reviewId: string }
+    await decideHeldOutboundSend({
+      reviewId: held.reviewId,
+      decision: 'release',
+      actorUid: 's',
+      actorEmail: null,
+    })
+    const ask = (hostId: string) =>
+      screenSeamMessage({
+        workspace: workspace({ hostId }),
+        signals: lookalike,
+        subject: 'x',
+        fromName: null,
+        context: null,
+        releasedReviewId: held.reviewId,
+      })
+    await expect(ask('host-1')).resolves.toEqual({ outcome: 'send' })
+    // Another site naming that row gets no pass from it.
+    await expect(ask('host-2')).resolves.toMatchObject({ outcome: 'held' })
+  })
+
+  it('stamps what hostSendingIdentity knows about the workspace', () => {
+    expect(
+      sendingWorkspaceFor({
+        hostId: 'host-1',
+        orgId: 'org-1',
+        org: { name: 'Acme', createdAt: NOW - 3 * DAY },
+        host: { name: 'Acme Store', subdomain: 'acme', cname: 'shop.acme.com' },
+        nowMs: NOW,
+      }),
+    ).toEqual({
+      hostId: 'host-1',
+      orgId: 'org-1',
+      ageDays: 3,
+      ownNames: ['Acme', 'Acme Store', 'acme'],
+      ownDomains: [expect.stringMatching(/^acme\./), 'shop.acme.com'],
+    })
   })
 })

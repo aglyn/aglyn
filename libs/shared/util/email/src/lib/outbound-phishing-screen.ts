@@ -307,6 +307,18 @@ export type PhishingScreenSignal =
   | { code: 'lookalike-link'; brand: string; host: string }
   | { code: 'brand-sender'; brand: string; fromName: string }
   | { code: 'brand-lure-link'; brand: string; lure: string; host: string }
+  /**
+   * A published page asks for a password, a card number or a one-time code
+   * in a field that is not one of the platform's own sign-in or checkout
+   * elements (`hosted-page-screen.ts`). Strong.
+   */
+  | { code: 'credential-field'; field: 'password' | 'card' | 'otp'; label: string }
+  /**
+   * A published page names a brand that is not the workspace's beside a
+   * sign-in, verify or payment call to action (`hosted-page-screen.ts`).
+   * Soft.
+   */
+  | { code: 'brand-action-page'; brand: string; action: string }
 
 export interface PhishingScreenInput {
   subject?: string | null
@@ -511,6 +523,24 @@ function isOwnBrand(
   return [...ownRegistrables].some((registrable) => isOfficialDomain(brand, registrable))
 }
 
+/*
+ * The same judgements, for the other surfaces that read content with this
+ * screen's data (`hosted-page-screen.ts`). Exported under these names rather
+ * than copied, so a page and an email can never disagree about what a
+ * brand's own domain is or whose brand a name is.
+ */
+
+/** `squash`: lowercased alphanumerics, the form own-name matching reads. */
+export const squashScreenText = squash
+/** Is this brand the workspace's own, by name (squashed) or by a domain it holds? */
+export const isWorkspaceOwnBrand = isOwnBrand
+/** Is this registrable domain one of any listed brand's own? */
+export const isAnyOfficialBrandDomain = isAnyOfficialDomain
+/** Is this registrable domain a social, maps or review link merchants ordinarily carry? */
+export function isCommonLinkDomain(registrable: string): boolean {
+  return COMMON_LINK_DOMAINS.has(registrable)
+}
+
 /**
  * Screen one outbound message. See the module header for what holds and why.
  */
@@ -592,7 +622,7 @@ export function describePhishingScreenSignals(
   signals: readonly PhishingScreenSignal[],
 ): string[] {
   return signals.map((signal) => {
-    const brand = phishingScreenBrandLabel(signal.brand)
+    const brand = 'brand' in signal ? phishingScreenBrandLabel(signal.brand) : ''
     switch (signal.code) {
       case 'lookalike-link':
         return `Links to ${signal.host}, which wears the ${brand} name but is not ${brand}'s domain.`
@@ -600,8 +630,133 @@ export function describePhishingScreenSignals(
         return `Sends as "${signal.fromName}", naming ${brand}, which is not this workspace.`
       case 'brand-lure-link':
         return `Names ${brand}, asks the reader to act ("${signal.lure}"), and links to ${signal.host}.`
+      case 'credential-field':
+        return `Asks for a ${
+          signal.field === 'card' ? 'card number' : signal.field === 'otp' ? 'one-time code' : 'password'
+        } in its own field ("${signal.label}"), outside the platform's sign-in and checkout elements.`
+      case 'brand-action-page':
+        return `Names ${brand} beside a call to action ("${signal.action}"), and this workspace is not ${brand}.`
       default:
         return 'Phishing signal.'
     }
   })
+}
+
+/*==========================================
+ * RISK TIERS: who a signal holds for (AGL-3356, widened to every surface).
+ *
+ * The screen above finds signals; this decides which of them hold, the same
+ * way on every surface that asks — an email at the send seam, a campaign
+ * before it is claimed, a page at publish, a subdomain at creation.
+ *
+ * - STRONG: a lookalike host. A link to `poshmark.id63835663.shop` or
+ *   `paypa1.com` is a disguise whoever wears it and however old the
+ *   workspace is, so it holds for EVERY workspace, on every message and
+ *   page, transactional mail included. A merchant has no ordinary reason to
+ *   link to a host shaped like somebody else's brand.
+ * - SOFT: a brand in the sender name, the three-part lure, a brand's name
+ *   beside a sign-in or payment call to action on a page. Each is shaped
+ *   like phishing but also like a clumsy legitimate message, so they hold
+ *   only for a workspace in its first {@link OUTBOUND_REVIEW_YOUNG_DAYS}
+ *   days — the incident's window — and NEVER for mail the recipient's own
+ *   act made owed ({@link OutboundScreenPolicy.owed}).
+ *
+ * A credential-harvest page (a password, card or one-time-code field that
+ * is not one of the platform's own sign-in or checkout elements) is STRONG:
+ * see `hosted-page-screen.ts`.
+ *=========================================*/
+
+/** A workspace younger than this many days has the soft rules applied. */
+export const OUTBOUND_REVIEW_YOUNG_DAYS = 14
+
+/** Which tier a signal belongs to. */
+export type PhishingSignalTier = 'strong' | 'soft'
+
+/** The signal codes that hold for every workspace. */
+export const STRONG_PHISHING_SIGNAL_CODES: ReadonlySet<string> = new Set([
+  'lookalike-link',
+  'credential-field',
+])
+
+export function phishingSignalTier(signal: { code: string }): PhishingSignalTier {
+  return STRONG_PHISHING_SIGNAL_CODES.has(signal?.code) ? 'strong' : 'soft'
+}
+
+/** Is a workspace of this age (days, `null` = unreadable) screened by the soft rules? */
+export function isYoungWorkspaceAge(ageDays: number | null | undefined): boolean {
+  return typeof ageDays === 'number' && Number.isFinite(ageDays) && ageDays < OUTBOUND_REVIEW_YOUNG_DAYS
+}
+
+export interface OutboundScreenPolicy {
+  /**
+   * The workspace's age in days, or `null` when its creation date cannot be
+   * read — an org that predates the field, which is an EXISTING customer and
+   * is not young.
+   */
+  ageDays: number | null
+  /**
+   * The recipient's own act made this message owed: a receipt for their
+   * order, a confirmation of their booking, a reset of their password. The
+   * soft rules never hold it. The lookalike rule still does — a receipt that
+   * links to a Poshmark lookalike is the disguise, not the receipt.
+   */
+  owed?: boolean
+}
+
+/** The signals that HOLD under the tiers, for this workspace and message. */
+export function signalsThatHold<T extends { code: string }>(
+  signals: readonly T[],
+  policy: OutboundScreenPolicy,
+): T[] {
+  const soft = isYoungWorkspaceAge(policy.ageDays) && !policy.owed
+  return signals.filter((signal) => phishingSignalTier(signal) === 'strong' || soft)
+}
+
+/**
+ * The same brand, lookalike and tier logic applied to a HOST NAME a workspace
+ * asks for — a subdomain on the tenant apex, or a custom domain it attaches.
+ *
+ * Words a brand's impersonator hyphen-joins to its name. A subdomain that
+ * joins a brand's word to one of these (`booking-review`, `apple-support`,
+ * `amazon-account`) is the incident's shape even where the brand's word is
+ * an ordinary one — which the lookalike rule alone deliberately lets pass,
+ * so a salon can be `tanyas-booking` and a bakery `apple-pie-co`.
+ */
+export const BRAND_IMPERSONATION_WORDS: ReadonlySet<string> = new Set([
+  'account', 'accounts', 'auth', 'billing', 'help', 'helpdesk', 'id', 'login',
+  'logon', 'order', 'orders', 'pay', 'payment', 'payments', 'refund', 'resolution',
+  'review', 'reviews', 'secure', 'security', 'seller', 'service', 'signin',
+  'support', 'update', 'verify', 'verification', 'wallet',
+])
+
+/**
+ * The brand a requested subdomain label wears, or null.
+ *
+ * Refused for EVERY workspace, at creation and at rename — the tier is
+ * strong, because nothing is lost by asking a real bakery to pick
+ * `apple-pie-co` instead of `apple-support`, and a brand's name on our apex
+ * is a disguise that outlives every later screen. Two shapes:
+ *
+ * 1. the label is a lookalike host label ({@link lookalikeBrandForHost} on
+ *    `<label>.<apex>`): `poshmark`, `paypal-secure`, `paypa1`, `appleid`;
+ * 2. a brand's word hyphen-joined to an impersonation word
+ *    ({@link BRAND_IMPERSONATION_WORDS}): `booking-review`, `apple-support`.
+ */
+export function brandForSubdomainLabel(
+  label: string,
+  apex = 'example.invalid',
+): PhishingScreenBrand | null {
+  const normalized = String(label ?? '').trim().toLowerCase()
+  if (!normalized) return null
+  const byHost = lookalikeBrandForHost(`${normalized}.${apex}`)
+  if (byHost) return byHost
+  const parts = foldLeet(normalized).split('-').filter(Boolean)
+  if (parts.length < 2 || !parts.some((part) => BRAND_IMPERSONATION_WORDS.has(part))) {
+    return null
+  }
+  for (const brand of PHISHING_SCREEN_BRANDS) {
+    const words = [brand.id, ...brand.hostTokens].filter((word) => !word.includes('-'))
+    if (parts.some((part) => words.includes(part))) return brand
+  }
+  return null
 }

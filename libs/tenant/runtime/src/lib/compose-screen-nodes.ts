@@ -22,6 +22,11 @@ import {
   applyMediaAssetFacts,
   mediaAssetRefs,
 } from '@aglyn/aglyn/app-utils/media-asset-facts'
+import {
+  recordServedPageVersion,
+  reviewHostedPage,
+  servedPageVersion,
+} from '@aglyn/tenant-data-admin/server/hosted-page-review'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
@@ -763,6 +768,12 @@ export async function composeScreenNodes(options: {
   timeZone?: string
   /** The social card the head shares this page as (AGL-2850). */
   socialImages?: ComposeSocialImages
+  /**
+   * Internal: `false` when this compose IS the fallback to a held page's
+   * last clean version, so a fallback that holds too serves nothing rather
+   * than falling back again.
+   */
+  pageReviewFallback?: boolean
 }): Promise<Record<string, any> | null> {
   const { hostId, screenId, screen } = options
 
@@ -857,7 +868,43 @@ export async function composeScreenNodes(options: {
   const versionRes = await versionPromise
   if (versionRes.error || !versionRes.version) return null
 
-  return composed
+  /*
+   * THE PAGE PHISHING REVIEW (AGL-3356).
+   *
+   * Every way a page goes live — a toolbar publish, a versions-panel
+   * publish, a scheduled publish, a component or form promoted under it, an
+   * experiment variant, an edit to the live version in place — meets here,
+   * with the page exactly as a visitor will receive it. So this is where a
+   * page that links to a brand's lookalike, asks for a password or a card
+   * in a field of its own, or (for a new workspace) dresses a brand's
+   * sign-in is held rather than served. See `hosted-page-review.ts`.
+   *
+   * A held version serves the last version this page served clean, screened
+   * again, or nothing.
+   */
+  const nodes = await composed
+  const review = await reviewHostedPage({
+    hostId,
+    screenId,
+    versionId,
+    nodes,
+  })
+  if (review.outcome === 'serve') {
+    // Only the PUBLISHED version is the page's last clean one; a variant or
+    // a pinned version is not what the page serves.
+    if (nodes && !options.versionId) {
+      await recordServedPageVersion(hostId, screenId, versionId)
+    }
+    return nodes
+  }
+  if (options.pageReviewFallback === false) return null
+  const previous = await servedPageVersion(hostId, screenId)
+  if (!previous || previous === versionId) return null
+  return composeScreenNodes({
+    ...options,
+    versionId: previous,
+    pageReviewFallback: false,
+  })
 }
 
 export default composeScreenNodes

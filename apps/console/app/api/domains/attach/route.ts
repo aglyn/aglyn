@@ -22,6 +22,7 @@ import {
   domainStateServes,
   emailUnverifiedResponse,
   firebaseAdmin,
+  flagLookalikeCustomDomain,
   getOrgForHost,
   isImpersonationSession,
   lockdownRefusal,
@@ -169,6 +170,9 @@ async function handler(request: Request): Promise<Response> {
     {
       const orgId = String(hostSnapshot.get('orgId') ?? '')
       if (orgId) await syncHostProjectionForMembers(orgId, hostId).catch(() => undefined)
+      // A domain that wears a brand (`paypal-secure.com`) goes to staff in
+      // the abuse queue — flagged, not refused (AGL-3356). Never throws.
+      await flagLookalikeCustomDomain({ hostId, orgId: orgId || null, domain })
     }
 
     // Ask the provider whether this deployment can register a name at all,

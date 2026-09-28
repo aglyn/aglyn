@@ -16,11 +16,15 @@
  */
 
 import {
+  brandForSubdomainLabel,
   describePhishingScreenSignals,
   linkHostsIn,
   lookalikeBrandForHost,
+  OUTBOUND_REVIEW_YOUNG_DAYS,
+  phishingSignalTier,
   registrableDomain,
   screenOutboundEmail,
+  signalsThatHold,
 } from './outbound-phishing-screen'
 
 /**
@@ -262,5 +266,74 @@ describe('registrableDomain', () => {
   it('keeps a two-label suffix whole', () => {
     expect(registrableDomain('a.b.evil.co.uk')).toBe('evil.co.uk')
     expect(registrableDomain('poshmark.id63835663.shop')).toBe('id63835663.shop')
+  })
+})
+
+describe('the tiers (every surface)', () => {
+  const lookalike = { code: 'lookalike-link', brand: 'poshmark', host: 'poshmark.id63835663.shop' }
+  const credential = { code: 'credential-field', field: 'password', label: 'Password' }
+  const sender = { code: 'brand-sender', brand: 'paypal', fromName: 'PayPal' }
+  const lure = { code: 'brand-lure-link', brand: 'booking', lure: 'guest complaint', host: 'x.top' }
+  const page = { code: 'brand-action-page', brand: 'docusign', action: 'Review file' }
+
+  it('a lookalike and a credential field hold for every workspace, of any age', () => {
+    for (const ageDays of [0, 13, 14, 400, null]) {
+      expect(signalsThatHold([lookalike, credential, sender], { ageDays })).toEqual(
+        ageDays !== null && ageDays < OUTBOUND_REVIEW_YOUNG_DAYS
+          ? [lookalike, credential, sender]
+          : [lookalike, credential],
+      )
+    }
+  })
+
+  it('the soft rules hold only for a workspace in its first fortnight', () => {
+    expect(signalsThatHold([sender, lure, page], { ageDays: 13 })).toHaveLength(3)
+    expect(signalsThatHold([sender, lure, page], { ageDays: 14 })).toEqual([])
+    // Unreadable creation date: an existing customer.
+    expect(signalsThatHold([sender, lure, page], { ageDays: null })).toEqual([])
+  })
+
+  it('the soft rules never hold mail the recipient is owed; a lookalike still does', () => {
+    expect(signalsThatHold([sender, lure, lookalike], { ageDays: 1, owed: true })).toEqual([lookalike])
+  })
+
+  it('names the tier of every signal code', () => {
+    expect(phishingSignalTier(lookalike)).toBe('strong')
+    expect(phishingSignalTier(credential)).toBe('strong')
+    expect(phishingSignalTier(sender)).toBe('soft')
+    expect(phishingSignalTier(lure)).toBe('soft')
+    expect(phishingSignalTier(page)).toBe('soft')
+  })
+})
+
+describe('a subdomain that wears a brand', () => {
+  it.each([
+    ['poshmark', 'poshmark'],
+    ['paypal-secure', 'paypal'],
+    ['secure-paypal', 'paypal'],
+    ['paypa1', 'paypal'],
+    ['booking-review', 'booking'],
+    ['booking-com', 'booking'],
+    ['appleid', 'apple'],
+    ['apple-support', 'apple'],
+    ['amazon-account', 'amazon'],
+    ['docusign-files', 'docusign'],
+    ['wellsfargo', 'wellsfargo'],
+    ['poshmark-2', 'poshmark'],
+  ])('%s is refused as %s', (label, brand) => {
+    expect(brandForSubdomainLabel(label)?.id).toBe(brand)
+  })
+
+  it.each([
+    'apple-pie-co',
+    'tanyas-booking',
+    'booking',
+    'harborview',
+    'propertyhelper',
+    'amazonia-tours',
+    'dhlfan',
+    'my-id-photos',
+  ])('%s is an ordinary name', (label) => {
+    expect(brandForSubdomainLabel(label)).toBeNull()
   })
 })

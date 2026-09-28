@@ -180,6 +180,9 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
         sendingIdentity: await hostSendingIdentity(hostId),
         audience: 'tenant',
         context: 'membership admin recovery',
+        // Owed to the recipient by their own account: the phishing
+        // screen's soft rules never hold it (AGL-3356).
+        owedFor: 'account',
       })
       if (!result.sent) {
         return res.status(502).json({
@@ -232,6 +235,9 @@ export const membershipAdminPasswordHandler: PluginApiHandler = async (
         sendingIdentity: await hostSendingIdentity(hostId),
         audience: 'tenant',
         context: 'membership admin password change',
+        // Owed to the recipient by their own account: the phishing
+        // screen's soft rules never hold it (AGL-3356).
+        owedFor: 'account',
       })
       notified = result.sent
       // Cost meter (AGL-1438). Transactional: a security notice.

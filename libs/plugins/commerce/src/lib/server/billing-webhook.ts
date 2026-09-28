@@ -3162,6 +3162,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               sendingIdentity: await hostSendingIdentity(String(hostId)),
               audience: 'tenant',
               context: 'reservation confirmation',
+              // Owed to the recipient by their own booking: the phishing
+              // screen's soft rules never hold it (AGL-3356).
+              owedFor: 'booking',
             })
             // Cost meter (AGL-1438). Transactional: the guest has paid, and a
             // confirmation a quota refused reads as a failed reservation.
@@ -3504,6 +3507,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
             sendingIdentity: await hostSendingIdentity(String(hostId)),
             audience: 'tenant',
             context: 'cart receipt',
+            // Owed to the recipient by their own order: the phishing
+            // screen's soft rules never hold it (AGL-3356).
+            owedFor: 'order',
           })
           // Cost meter (AGL-1438). Transactional: a dropped receipt looks to
           // the buyer like an order that did not go through.
@@ -3802,6 +3808,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 sendingIdentity: await hostSendingIdentity(String(hostId)),
                 audience: 'tenant',
                 context: 'gift card',
+                // Owed to the recipient by their own order: the phishing
+                // screen's soft rules never hold it (AGL-3356).
+                owedFor: 'order',
               })
               // Cost meter (AGL-1438). Transactional: this email IS the
               // purchased goods.
@@ -4467,6 +4476,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 sendingIdentity: await hostSendingIdentity(String(hostId)),
                 audience: 'tenant',
                 context: 'dropship supplier notice',
+                // Owed to the recipient by their own order: the phishing
+                // screen's soft rules never hold it (AGL-3356).
+                owedFor: 'order',
               })
               // Cost meter (AGL-1438). Transactional: without it the order is
               // never fulfilled.
@@ -4586,6 +4598,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
               sendingIdentity: await hostSendingIdentity(String(hostId)),
               audience: 'tenant',
               context: 'receipt',
+              // Owed to the recipient by their own order: the phishing
+              // screen's soft rules never hold it (AGL-3356).
+              owedFor: 'order',
             })
             // Cost meter (AGL-1438). Transactional, as the cart receipt above.
             await meterHostEmail(String(hostId))
@@ -4639,6 +4654,9 @@ export const commerceBillingWebhookHandler: BillingWebhookHandler = async ({
                 sendingIdentity: await hostSendingIdentity(String(hostId)),
                 audience: 'tenant',
                 context: 'seller order notice',
+                // Owed to the recipient by their own order: the phishing
+                // screen's soft rules never hold it (AGL-3356).
+                owedFor: 'order',
               })
               // Cost meter (AGL-1438). Transactional: the seller learns about
               // the order here.

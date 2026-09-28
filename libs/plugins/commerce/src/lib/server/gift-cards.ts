@@ -189,6 +189,9 @@ export const giftCardsHandler: PluginApiHandler = async (req, res) => {
         sendingIdentity: await hostSendingIdentity(hostId),
         audience: 'tenant',
         context: 'gift card',
+        // Owed to the recipient by their own order: the phishing
+        // screen's soft rules never hold it (AGL-3356).
+        owedFor: 'order',
       })
         .then(() => true)
         .catch(() => false)

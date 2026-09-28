@@ -128,6 +128,7 @@ import {
   readStaffListQuery,
   runStaffListQuery,
 } from '../../../../utils/server/staff-list-query'
+import { revalidateEntireHost } from '../../../../utils/server/tenant-revalidate'
 
 export const dynamic = 'force-dynamic'
 
@@ -1172,8 +1173,8 @@ async function handler(request: Request): Promise<Response> {
     /**
      * A HELD SEND IS DECIDED BY CLOSING ITS ROW (AGL-3356).
      *
-     * The phishing screen files a held campaign or automated email here as a
-     * `phishing` row carrying `heldSend`. Closing it is the decision, so the
+     * The phishing screen files a held campaign, email or published page
+     * here as a `phishing` row carrying `heldSend`. Closing it is the decision, so the
      * queue needs no second pair of buttons and the decision cannot happen
      * without the note and the audit row every close already demands:
      * `dismissed` — a false positive — RELEASES the send, and `actioned`
@@ -1193,6 +1194,22 @@ async function handler(request: Request): Promise<Response> {
             firestore,
           })
         : null
+
+    /*
+     * A held PAGE is served from the site's cache for up to an hour, and a
+     * release is only real once visitors can see it — so the decision drops
+     * the whole site's cache, the lockdown path's own drop. A rejection drops
+     * it too, so a stale copy of the held version cannot outlive the verdict.
+     */
+    const heldHostId = asString(before.get('hostId'))
+    if (
+      heldSendDecision &&
+      heldSendDecision !== 'not-held' &&
+      (before.get('heldSend') as { kind?: string } | undefined)?.kind === 'page' &&
+      heldHostId
+    ) {
+      await revalidateEntireHost(firestore, heldHostId)
+    }
 
     /**
      * The strike moves in the same act as the decision that caused it.
