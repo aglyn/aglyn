@@ -22,7 +22,7 @@ import {
   entryPublishSortStamp,
 } from '@aglyn/aglyn/app-utils/collection-entry-date'
 import { useConfirmationContext } from '@aglyn/shared-ui-jsx'
-import type { ListFilterRequest } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type { ListFilterClause } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Timestamp } from '@aglyn/shared-util-timestamp'
 import {
@@ -58,6 +58,7 @@ import {
 } from 'react'
 import {
   useFirestore,
+  usePagedCollection,
   useSortedPagedCollection,
   useUser,
   type CollectionSort,
@@ -68,9 +69,9 @@ import revalidateLivePages, {
 import {
   ENTRY_LIST_DEFAULT_SORT,
   entryListBase,
-  entryListEqualityFields,
-  entryListFilterKey,
-  entryListStoredSort,
+  entryListRangedQuery,
+  planEntryList,
+  type EntryListView,
 } from './entry-list-query'
 import { useHostId, useHostSubdomain } from '../host-id-provider'
 import { buildRoute, Route } from '../../constants/route-links'
@@ -226,6 +227,10 @@ export const collectionKey = (item: any): string =>
 /** Sentinel option that opens the Manage categories dialog (AGL-582). */
 export const MANAGE_CATEGORIES_VALUE = '__manage__'
 
+/** No clauses and no search words, as stable references. */
+const NO_CLAUSES: ListFilterClause[] = []
+const NO_WORDS: string[] = []
+
 export interface ContentScope {
   hostId: string
   orgSlug: string
@@ -253,12 +258,23 @@ export interface ContentScope {
   setEntryPage: (page: number) => void
   entriesPerPage: number
   setEntriesPerPage: (pageSize: number) => void
-  /** The column the entries are sorted by; opens on published, newest first. */
+  /**
+   * The column sort the grid ASKED for; opens on published, newest first. A
+   * narrowed list may be read in another order — `entryView.columnSort` is
+   * the one the rows come in.
+   */
   entrySort: CollectionSort
   setEntrySort: (sort: CollectionSort) => void
-  /** The one filter narrowing the entries, or `null`. */
-  entryFilter: ListFilterRequest | null
-  setEntryFilter: (filter: ListFilterRequest | null) => void
+  /** Every clause narrowing the entries — all of them on the query. */
+  entryClauses: readonly ListFilterClause[]
+  setEntryClauses: (clauses: ListFilterClause[]) => void
+  /** The quick search's words — its first word is on the query. */
+  entrySearch: readonly string[]
+  setEntrySearch: (words: string[]) => void
+  /** Clears every clause and the search. */
+  clearEntryFilters: () => void
+  /** The query the entries are read with, its refusals and its notices. */
+  entryView: EntryListView
   categories: Aglyn.CollectionCategory[]
   authors: Aglyn.ContentAuthorRecord[]
   screenOptions: any[]
@@ -628,36 +644,77 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
   /* ── the entries of the selected collection ────────────────────────── */
 
   /**
-   * How the table is sorted and filtered (AGL-2853).
+   * How the table is sorted, filtered and searched (AGL-2853, AGL-3321).
    *
    * Held HERE rather than on the page, because they are the query's inputs:
-   * the window below is built from them, and a sort that lived on the page
-   * could only reorder the ten rows already read. Held in the provider above
-   * both routes, so opening an entry and coming back returns to the same view.
+   * the window below is built from them, and a sort or a filter that lived on
+   * the page could only reorder or narrow the ten rows already read. Held in
+   * the provider above both routes, so opening an entry and coming back
+   * returns to the same view.
    *
-   * The filter belongs to ONE collection. A category id means nothing in the
-   * next collection's taxonomy, so a filter set on one is not carried into
-   * another — the state remembers which collection it was set on, and reads as
-   * no filter anywhere else.
+   * The clauses and the search belong to ONE collection. A category id means
+   * nothing in the next collection's taxonomy, so a filter set on one is not
+   * carried into another — the state remembers which collection it was set
+   * on, and reads as nothing anywhere else.
    */
   const [entrySort, setEntrySort] = useState<CollectionSort>(
     ENTRY_LIST_DEFAULT_SORT,
   )
-  const [entryFilterState, setEntryFilterState] = useState<{
+  const [entryNarrowing, setEntryNarrowing] = useState<{
     collectionId: string | undefined
-    filter: ListFilterRequest | null
-  }>({ collectionId: undefined, filter: null })
-  const entryFilter =
-    entryFilterState.collectionId === selected?.$id
-      ? entryFilterState.filter
-      : null
+    clauses: ListFilterClause[]
+    search: string[]
+  }>({ collectionId: undefined, clauses: [], search: [] })
   const selectedCollectionId = selected?.$id
-  const setEntryFilter = useCallback(
-    (filter: ListFilterRequest | null) =>
-      setEntryFilterState({ collectionId: selectedCollectionId, filter }),
+  const narrowingHere = entryNarrowing.collectionId === selectedCollectionId
+  const entryClauses = narrowingHere ? entryNarrowing.clauses : NO_CLAUSES
+  const entrySearch = narrowingHere ? entryNarrowing.search : NO_WORDS
+  const setEntryClauses = useCallback(
+    (clauses: ListFilterClause[]) =>
+      setEntryNarrowing((previous) => ({
+        collectionId: selectedCollectionId,
+        clauses,
+        search:
+          previous.collectionId === selectedCollectionId ? previous.search : [],
+      })),
     [selectedCollectionId],
   )
-  const entryFilterKey = entryListFilterKey(entryFilter)
+  const setEntrySearch = useCallback(
+    (search: string[]) =>
+      setEntryNarrowing((previous) => ({
+        collectionId: selectedCollectionId,
+        clauses:
+          previous.collectionId === selectedCollectionId
+            ? previous.clauses
+            : [],
+        search,
+      })),
+    [selectedCollectionId],
+  )
+  const clearEntryFilters = useCallback(
+    () =>
+      setEntryNarrowing({
+        collectionId: selectedCollectionId,
+        clauses: [],
+        search: [],
+      }),
+    [selectedCollectionId],
+  )
+
+  /**
+   * The query, planned once for both reads below and for the page: every
+   * clause and the search word on it, the order it is read in, and what the
+   * reader is told about anything it could not take (AGL-3321).
+   */
+  const entryView = useMemo(
+    () =>
+      planEntryList({
+        clauses: entryClauses,
+        search: entrySearch,
+        sort: entrySort,
+      }),
+    [entryClauses, entrySearch, entrySort],
+  )
 
   /**
    * ONE PAGE of the collection's entries, sorted — the window IS the query.
@@ -680,19 +737,64 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
    * one sequence, under every sort and every filter. See
    * `sorted-collection-window.ts` for the walk and its cost.
    *
+   * The plan's predicates are the walk's BASE: both segments read the same
+   * filtered collection, so a filter or a search narrows the scan with it.
+   *
+   * ## A range is read by one ordered query
+   *
+   * A date filter is a range, and a range leads the order and matches only
+   * entries that carry its field — there is no second segment to walk, and a
+   * name-ordered scan under a range is not a query Firestore will run. So a
+   * ranged view reads through `usePagedCollection` instead: the same window,
+   * one page and a probe row. Only one of the two reads is ever open; the
+   * other is handed no query.
+   *
    * ## The page is handed on in the order it was read
    *
    * Re-sorting a slice in the browser tells the lie an unordered cap does:
    * rows would run in one order within a page and another across pages. The
    * order is the query's, and so is every page of it.
    */
+  const entriesRanged = entryView.ranged
+  const walkedEntries = useSortedPagedCollection<any>(
+    () =>
+      entriesRanged
+        ? null
+        : entryListBase(
+            firestore,
+            hostId,
+            selected?.$id ?? '-none-',
+            entryView,
+          ),
+    entryView.order,
+    [firestore, hostId, selected?.$id, entryView.key],
+    {
+      idField: '$id',
+      pageSize: TABLE_PAGE_SIZE_DEFAULT,
+      equalityFields: entryView.equalityFields,
+    },
+  )
+  const rangedEntries = usePagedCollection<any>(
+    (pageLimit) =>
+      entriesRanged
+        ? entryListRangedQuery(
+            firestore,
+            hostId,
+            selected?.$id ?? '-none-',
+            entryView,
+            pageLimit,
+          )
+        : null,
+    [firestore, hostId, selected?.$id, entryView.key],
+    { idField: '$id', pageSize: TABLE_PAGE_SIZE_DEFAULT },
+  )
+  const entriesWindow = entriesRanged ? rangedEntries : walkedEntries
   const {
     rows: entries,
     hasMore: entriesHasMore,
     page: entryPage,
     setPage: setEntryPage,
     pageSize: entriesPerPage,
-    setPageSize: setEntriesPerPage,
     /**
      * The health of the window itself. The entry editor guards its save
      * against the ENTRY's own read rather than this one — a page of ten says
@@ -700,22 +802,19 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
      */
     status: entriesStatus,
     fromCache: entriesFromCache,
-  } = useSortedPagedCollection<any>(
-    () =>
-      entryListBase(
-        firestore,
-        hostId,
-        selected?.$id ?? '-none-',
-        entryFilter,
-        entrySort,
-      ),
-    entryListStoredSort(entrySort),
-    [firestore, hostId, selected?.$id, entryFilterKey],
-    {
-      idField: '$id',
-      pageSize: TABLE_PAGE_SIZE_DEFAULT,
-      equalityFields: entryListEqualityFields(entryFilter),
+  } = entriesWindow
+  /*
+   * One page size for both reads, so a reader who asked for fifty rows keeps
+   * fifty when a date filter moves the list onto the other read.
+   */
+  const setWalkedPageSize = walkedEntries.setPageSize
+  const setRangedPageSize = rangedEntries.setPageSize
+  const setEntriesPerPage = useCallback(
+    (pageSize: number) => {
+      setWalkedPageSize(pageSize)
+      setRangedPageSize(pageSize)
     },
+    [setWalkedPageSize, setRangedPageSize],
   )
 
   // Category taxonomy (AGL-582): rows on the COLLECTION doc, each a stable
@@ -1219,8 +1318,12 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       setEntriesPerPage,
       entrySort,
       setEntrySort,
-      entryFilter,
-      setEntryFilter,
+      entryClauses,
+      setEntryClauses,
+      entrySearch,
+      setEntrySearch,
+      clearEntryFilters,
+      entryView,
       categories,
       authors,
       screenOptions,
@@ -1256,8 +1359,12 @@ export function ContentScopeProvider({ children }: { children: ReactNode }) {
       entriesPerPage,
       setEntriesPerPage,
       entrySort,
-      entryFilter,
-      setEntryFilter,
+      entryClauses,
+      setEntryClauses,
+      entrySearch,
+      setEntrySearch,
+      clearEntryFilters,
+      entryView,
       categories,
       authors,
       screenOptions,

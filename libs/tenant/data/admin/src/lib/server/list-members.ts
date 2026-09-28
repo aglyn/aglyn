@@ -51,7 +51,26 @@ import {
   type ConsentGroup,
 } from '@aglyn/aglyn/server'
 import { consentGroupForGrant } from '@aglyn/aglyn/app-utils/consent-groups'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { createHash, createHmac } from 'node:crypto'
+import { emailSearchTokens } from './email-suppression'
+
+/**
+ * What a list's membership table searches a member by (AGL-3321): the word
+ * prefixes of their name and of their address (`emailSearchTokens`), one
+ * array, so one `array-contains` finds "dana" in either.
+ *
+ * Mirrored by `tools/scripts/backfill-email-list-filters.mjs`, which stamps
+ * the rows written before the field; the two are held to the same fixtures
+ * (`tools/scripts/lib/email-search-tokens.fixtures.json`, which the
+ * script-side twin in `tools/scripts/lib/email-search-tokens.mjs` answers too).
+ */
+export function listMemberSearchTokens(
+  email: string | null | undefined,
+  name: string | null | undefined,
+): string[] {
+  return [...new Set([...emailSearchTokens(email), ...nameSearchTokens(name)])]
+}
 
 /**
  * The two ids this collection was written under before `personKey`.
@@ -327,12 +346,29 @@ export async function enrollListMember(
       ? { basis: 'contact-opt-in', atMs: Date.now() }
       : null)
 
+  /*
+   * The name the row will hold after this write — the caller's, else the one
+   * it already carries — because the search tokens are the address's and
+   * that name's, and a re-enrollment without a name keeps the stored one.
+   */
+  const name = input.name || (existing?.get('name') as string | undefined) || null
   await target.set(
     {
       email,
       ...(input.name ? { name: input.name } : {}),
+      searchTokens: listMemberSearchTokens(email, name),
       source: input.source,
-      ...(input.via ? { via: input.via } : {}),
+      /*
+       * `via` is on every row, so the table's How filter can ask for it
+       * (AGL-3321): the caller's, else `manual` on a row that has none — what
+       * an absent `via` has always meant. A caller that says nothing never
+       * moves a stored one.
+       */
+      ...(input.via
+        ? { via: input.via }
+        : existing?.get('via')
+          ? {}
+          : { via: 'manual' }),
       /*
        * Written only when the caller has a basis, and never unwritten.
        *

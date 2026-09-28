@@ -29,6 +29,7 @@ import {
   type CrmTask,
   crmEmailDeliveryTags,
   crmScopeTokens,
+  crmTaskListFields,
   crmTaskReminderAfterEdit,
   normalizeContactEmail,
   parseCrmMemberRef,
@@ -42,6 +43,7 @@ import {
   newCrmActivityRef,
   orgDataQueryForHost,
   recomputeCrmNextTaskAt,
+  restampCrmListFieldsAt,
   writeCrmEmailActivity,
 } from '@aglyn/tenant-data-admin'
 // The leaf, not the barrel: this library's specs substitute the barrel
@@ -241,6 +243,8 @@ export async function runCrmActionStep(
       [contactFacetPath(group.groupId, 'lifecycleStage')]: step.lifecycleStage,
       updatedAt: FieldValue.serverTimestamp(),
     })
+    // The stage is what the Contacts list filters by (AGL-3321).
+    await restampCrmListFieldsAt(contact.ref, 'contacts')
     return {
       detail: label,
       emit: {
@@ -266,6 +270,8 @@ export async function runCrmActionStep(
       [contactFacetPath(group.groupId, 'tags')]: FieldValue.arrayUnion(tag),
       updatedAt: FieldValue.serverTimestamp(),
     })
+    // The tags are what the Contacts list filters by (AGL-3321).
+    await restampCrmListFieldsAt(contact.ref, 'contacts')
     return { detail: tag }
   }
 
@@ -374,7 +380,8 @@ export async function runCrmActionStep(
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }
-    await orgRef.collection(CRM_COLLECTIONS.tasks).add(task)
+    // What the Tasks list searches by (AGL-3321), beside the task.
+    await orgRef.collection(CRM_COLLECTIONS.tasks).add({ ...task, ...crmTaskListFields(task) })
     // The contact and company the task names carry `nextTaskAtMs` (AGL-2661);
     // a figure that could not move is the Fields section's recompute's.
     await recomputeCrmNextTaskAt(firebaseAdmin.app().firestore(), env.orgId, [links]).catch((error: unknown) => {

@@ -37,6 +37,9 @@ register you're on at the top of the panel (skipped automatically when you
 have only one):
 
 - **Product grid** — tap to add; products with variants show quick chips.
+  The grid shows your first 500 active products by name; typing in the
+  search box finds a product by the start of a word in its name across the
+  whole catalog.
 - **Barcode scanners** — any keyboard-wedge scanner works: it types the
   code into the search box and presses Enter, which adds the exact
   SKU/barcode match. No drivers or pairing needed.

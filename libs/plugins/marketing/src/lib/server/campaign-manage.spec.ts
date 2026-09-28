@@ -281,6 +281,7 @@ jest.mock('@aglyn/tenant-data-admin/server/firebase-admin', () => ({
 }))
 
 import type { PluginApiResponse } from '@aglyn/aglyn/server'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import {
   campaignListRows,
   CAMPAIGN_SEND_CONTAINER_FIELD,
@@ -463,9 +464,10 @@ describe('deleting a campaign', () => {
     expect(after.sentAt).toEqual(before.sentAt)
     expect(after.topicId).toBe(before.topicId)
     expect(after.createdAtMs).toBe(before.createdAtMs)
-    // The one field that goes, and it is REMOVED rather than emptied: the
-    // detail page's `where` clause matches absence, not `''`.
-    expect(CAMPAIGN_SEND_CONTAINER_FIELD in after).toBe(false)
+    // The one field that changes: stored `null`, the one shape of "in no
+    // campaign", which the lists ask for as `== null` (AGL-3321) — neither
+    // an empty string nor a missing field would answer that query.
+    expect(after[CAMPAIGN_SEND_CONTAINER_FIELD]).toBeNull()
   })
 
   /*
@@ -1081,6 +1083,8 @@ describe('action: duplicate (AGL-2936)', () => {
       templateScreenId: 'scr-1',
       topicId: 'news',
       [CAMPAIGN_SEND_CONTAINER_FIELD]: CAMPAIGN,
+      // The lists' search keys, from the copied subject (AGL-3321).
+      subjectTokens: nameSearchTokens('Spring sale'),
       displayName: 'Summer blast',
       status: 'draft',
       draftedBy: 'uid-1',

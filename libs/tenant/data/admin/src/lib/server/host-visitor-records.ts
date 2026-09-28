@@ -49,7 +49,7 @@ import {
   resolveOrgIdForHost,
   scopedToHost,
 } from './organizations'
-import { crmReadTokens, crmScopeTokens } from '@aglyn/aglyn/server'
+import { crmLeadListFields, crmReadTokens, crmScopeTokens } from '@aglyn/aglyn/server'
 import type { ConsentGroup, ScopeToken } from '@aglyn/aglyn/server'
 // The module path rather than the barrel, as `upsert-contact.ts` does: a spec
 // that substitutes the barrel keeps the real rule for which group a grant is.
@@ -506,11 +506,27 @@ export async function addHostLead(options: {
           ? prior.basisAtMs
           : now
       created = !existing.exists
+      /*
+       * THE FIELDS THE LEADS LIST QUERIES (AGL-3321), from the lead as it
+       * will stand: what the transaction read, the address and name this
+       * capture brings and the scope it widens. A new lead is written
+       * `status: 'new'`, so the Open view's `status in [new, working]`
+       * finds a lead nobody has touched — an absent field matches no query.
+       */
+      const stored = existing.data() ?? {}
+      const storedScope = Array.isArray(stored['visibleTo']) ? (stored['visibleTo'] as unknown[]) : []
+      const listFields = crmLeadListFields({
+        ...stored,
+        email: lead.email,
+        ...(lead.name ? { name: lead.name } : {}),
+        visibleTo: [...new Set([...storedScope, ...scope])],
+      })
       tx.set(
         leadRef,
         {
           email: lead.email,
           ...seen,
+          ...listFields,
           /*
            * WIDENED BY THE CAPTURE, NEVER BY THE LOOKUP (AGL-3275).
            *

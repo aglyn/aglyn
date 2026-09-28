@@ -84,10 +84,21 @@
  * for it, and Firestore denies what nothing matches, so the Admin SDK is the
  * only path in. The staff read-back is `/api/admin/csp-reports` on the
  * console.
+ *
+ * ## The search tokens
+ *
+ * The staff table's search reads `searchTokens` with `array-contains`
+ * (AGL-3321), so every write stamps it, through {@link cspSearchTokens}. It
+ * is derived from the counter's KEY — origin, directive, app — which is the
+ * document id and never changes, so the array is the same on every write to
+ * one document and a merge cannot leave it describing something else.
+ * `tools/scripts/backfill-csp-search-tokens.mjs` stamps the counters written
+ * before it, held to `csp-search-tokens.fixtures.json` beside it.
  */
 
 import { FieldValue } from 'firebase-admin/firestore'
 import type { CspViolation } from '@aglyn/aglyn/app-utils/csp-report'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { isDocumentId } from './document-id'
 
 /** Top-level collection of counter documents. Server-only; no rules match. */
@@ -190,6 +201,31 @@ export function cspBlockedOrigin(blockedUri: string): string {
   } catch {
     return sanitizePart(blockedUri, 40)
   }
+}
+
+/** The written field the staff CSP table's search reads. */
+export const CSP_SEARCH_TOKENS_PATH = 'searchTokens'
+
+/**
+ * The search tokens one counter carries: the word prefixes of its blocked
+ * origin, its directive and its app — each whole, and each run of letters
+ * and digits in it — so `googletagmanager`, `cdn.example.com`, `inline`,
+ * `script`, `elem` and `tenant` all find the counters they name. The
+ * lower-casing and the prefixes are `nameSearchTokens`, the normalizer the
+ * list query asks with. Not the sampled site and path: they change with every
+ * report, and a merge would leave tokens for a site the row no longer shows.
+ */
+export function cspSearchTokens(key: {
+  origin?: unknown
+  directive?: unknown
+  app?: unknown
+}): string[] {
+  const words = [key.origin, key.directive, key.app]
+    .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+    .filter(Boolean)
+    .flatMap((value) => [value, ...value.split(/[^a-z0-9]+/)])
+    .filter(Boolean)
+  return nameSearchTokens(words.join(' '))
 }
 
 /** UTC day bucket, `YYYY-MM-DD`. */
@@ -306,6 +342,11 @@ export async function recordCspViolations(
               origin,
               disposition: sanitizePart(violation.disposition || 'report', 16),
               count: FieldValue.increment(n),
+              [CSP_SEARCH_TOKENS_PATH]: cspSearchTokens({
+                origin,
+                directive,
+                app: options.app,
+              }),
               lastSeenMs: now,
               // Samples, not keys: enough to find the surface, no power to
               // mint documents. Already clamped by the parser; clamped again

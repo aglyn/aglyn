@@ -86,10 +86,15 @@ reverse the column they come last among the dated entries. Click the **Title**,
 **Status**, **Updated** or **Published** header to sort by that column, and again to
 reverse it. Entries with nothing in the sorted column, such as a draft with no published
 date, follow the rest in either direction rather than dropping out. **Filters** in the
-table's toolbar narrows the list to one **Status** or one **Category** across the whole
-collection, not only the page you're on, and the filter in force shows as a chip above the
-table. One filter applies at a time, so a new one replaces the last, and the entries
-table has no search box. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
+table's toolbar narrows the list by **Title** (a word of it), **Status**, **Category**,
+**Author**, or the **Published** or **Updated** date, and **Search** finds an entry by
+the start of any word of its title. Every filter and the search word are part of the
+list's query, so they look through the whole collection, not only the page you're on,
+and each filter in force shows as a chip above the table. While the list is filtered or
+searched it sorts by Published or Updated, and a date filter sorts by the date it
+filters; a note above the table says when the order moved. A combination that cannot be
+asked at once — a Title filter beside a search, or two date ranges — is left out, and
+the table says which one and why. See [Filter and search a list](../../getting-started/console-tour.md#filter-and-search).
 
 Each entry carries, besides the title, excerpt, cover image, and markdown body:
 
@@ -114,9 +119,9 @@ and a **Publication** panel at the bottom of the entry's own page.
 - **Publish** / **Unpublish** — takes the entry live, or pulls it back, immediately.
 - **Schedule…** — pick a **Publish at** time in the **future** (the past is refused).
   The status chip reads **Scheduled** with the local time, and the entry goes live
-  once that time passes — applied on the next site refresh, so there's no manual
-  step and its status flips to published on its own. A scheduled entry joins the
-  sitemap and RSS feed at the same moment.
+  within a minute or so of that time. There's no manual step: its status flips to
+  published on its own, and the listing, its category pages, any page that shows the
+  collection, the sitemap and the RSS feed all refresh together.
 - **Edit published date…** — sets the date the entry *claims* it was published, and
   it must be in the **past**. This is what search engines read as the article's
   publication date, so it's the control to use when you've imported an archive and
@@ -143,10 +148,11 @@ them, and pick one per entry.
 
 <!-- screenshot: content/authors-tab.png per SCREENSHOT_PLAN.md -->
 
-The Authors table's toolbar filters it: **Filters** narrows it by name or **Type**
-(Person or Organization), and **Search** matches any word of an author's name, job
-title, or page address. Both look at every author on the site, not only the page on
-screen.
+The Authors table's toolbar filters it: **Filters** narrows it by name (a word of it, or
+the whole name) or **Type** (Person or Organization), and **Search** finds an author by
+the start of any word of their name. Both are part of the table's query, so they look at
+every author on the site, not only the page on screen, and the table lists authors by
+name.
 
 Each author is either a **Person** or an **Organization**, and the choice is a real
 one — they are different `schema.org` types with different fields, so the editor shows

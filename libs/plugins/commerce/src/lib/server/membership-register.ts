@@ -16,7 +16,7 @@
  */
 
 import type { PluginApiHandler } from '@aglyn/aglyn/server'
-import { memberNameSearchFields } from './member-name-search'
+import { memberNameSearchFields, memberSearchTokens } from './member-name-search'
 import {
   checkVisitorRecordCeiling,
   HOST_TOKENS,
@@ -136,6 +136,8 @@ export const membershipRegisterHandler: PluginApiHandler = async (req, res) => {
       tx.create(memberRef, {
         email,
         ...(displayName ? memberNameSearchFields(displayName) : {}),
+        // The Site users list's search: the name and the address (AGL-3321).
+        searchTokens: memberSearchTokens(displayName, email),
         /*
          * Stored `false`, not left out: the console's Status filter asks
          * `suspended == false` for the active members, and a query cannot

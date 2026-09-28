@@ -18,6 +18,9 @@
 
 import * as Aglyn from '@aglyn/aglyn'
 import { lockdownRefusalText, parseLockdownRefusal } from '@aglyn/aglyn'
+// The leaf module, not the barrel: the entry specs mock the barrel as a closed
+// world, and a search key derivation is nothing they have reason to stage.
+import { entryTitleSearchFields } from '@aglyn/aglyn/app-utils/content-query-fields'
 import {
   ICON_VARIANT_DATE_TIME,
   ICON_VARIANT_PRIMARY_KEY,
@@ -632,6 +635,9 @@ export function EntryDetailPage() {
           ),
           {
             title,
+            // The words the entries table searches by (AGL-3321), from the
+            // title this write stores.
+            ...entryTitleSearchFields(title),
             // The AUTHORED slug (AGL-2498), not `slugify(title)`. That
             // derivation is what silently moved a published post's address
             // whenever its headline was edited.

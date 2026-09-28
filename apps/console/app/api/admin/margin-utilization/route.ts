@@ -32,6 +32,12 @@ import {
   ASSIST_PROVIDER_COST_FIELD,
   assistProviderCostUsd,
 } from '@aglyn/aglyn/app-utils/assist-credits'
+import type { ListQueryRefusal } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  readStaffListQuery,
+  runStaffListQuery,
+} from '../../../../utils/server/staff-list-query'
+import { ORG_MARGIN_QUERY } from '../../../../utils/org-list-query'
 
 /**
  * REALISED BAND UTILIZATION, PER ORGANIZATION.
@@ -61,6 +67,18 @@ import {
  * organizations it covers. A median over a partial fleet is still useful; a
  * median over a partial fleet presented as the whole one is not.
  *
+ * ## Which organizations: on the query, never over the rows (AGL-3321)
+ *
+ * The per-organization table's Filters panel and search choose WHICH
+ * organizations the walk reads — Organization and Stored plan, the two
+ * columns stored on the org document, and the name search — and they are
+ * planned onto this query (`ORG_MARGIN_QUERY`) through the staff list wire
+ * (`utils/server/staff-list-query.ts`). What one query cannot hold comes back
+ * in `refused` and is not applied. Every figure the page folds is then over
+ * the organizations that match. Month, revenue, margin and the bands are
+ * computed from each organization's rollup AFTER the read, so no query can
+ * narrow by them and none is offered.
+ *
  * ## The read cost, stated rather than implied
  *
  * Four reads per organization, in three round trips plus one query each:
@@ -76,19 +94,18 @@ const PAGE_SIZE = 25
 /** Clamped, because a page nobody reads is still a page somebody pays for. */
 const MAX_PAGE_SIZE = 100
 
-const resolvePageSize = (raw: unknown): number => {
-  const asked = Math.floor(Number(raw))
-  if (!Number.isFinite(asked) || asked <= 0) return PAGE_SIZE
-  return Math.min(MAX_PAGE_SIZE, asked)
-}
-
 export interface MarginUtilizationResponse {
   rows: OrgMarginRow[]
   /**
-   * The document id to resume from, or null when this page reached the end of
-   * the collection. Non-null means the fold above it is INCOMPLETE.
+   * The document path to resume from, or null when this page reached the end
+   * of the organizations that match. Non-null means the fold above it is
+   * INCOMPLETE.
    */
   nextCursor: string | null
+  /** What the query could not hold, and why; none of it was applied. */
+  refused: ListQueryRefusal[]
+  /** What the query said about what it did serve. */
+  notices: string[]
   /** Organizations in this page. */
   scanned: number
   /** Firestore document reads this request billed. */
@@ -139,42 +156,41 @@ async function handler(request: Request): Promise<Response> {
     }
 
     const db = firebaseAdmin.app().firestore()
-    const orgsRef = db.collection('orgs')
-    const byId = firebaseAdmin.firestore.FieldPath.documentId()
-    const pageSize = resolvePageSize(query['pageSize'])
-    const after = String(query['after'] ?? '')
+    const listRequest = readStaffListQuery(query, {
+      defaultPageSize: PAGE_SIZE,
+      maxPageSize: MAX_PAGE_SIZE,
+    })
+    if (!listRequest) {
+      return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+    }
 
     /*
-     * The cursor is resolved to a SNAPSHOT before it is used.
-     *
-     * `startAfter(snapshot)` compares every ordering field including the
-     * `__name__` Firestore appends, so it stays exact whatever the ordering
-     * is. An unresolvable cursor restarts at the top rather than throwing —
-     * an organization deleted between two pages must not end the sweep.
+     * One page of the organizations that match, in document-id order, and one
+     * row past it: the probe that turns "there may be more" into a fact for
+     * the price of a single read. The cursor is the full path of the last
+     * organization read, resolved to a snapshot — an organization deleted
+     * between two pages restarts the walk rather than ending it.
      */
-    const afterDoc = after
-      ? await orgsRef
-          .doc(after)
-          .get()
-          .catch(() => null)
-      : null
-
-    // One row past the page: the probe that turns "there may be more" into a
-    // fact for the price of a single read.
-    const base = orgsRef.orderBy(byId)
-    const snapshot = await (
-      afterDoc?.exists ? base.startAfter(afterDoc) : base
-    )
-      .limit(pageSize + 1)
-      .get()
-    let reads = snapshot.docs.length + (afterDoc ? 1 : 0)
-
-    const truncated = snapshot.docs.length > pageSize
-    const pageDocs = truncated ? snapshot.docs.slice(0, pageSize) : snapshot.docs
+    const page = await runStaffListQuery({
+      firestore: db,
+      collection: db.collection('orgs'),
+      declaration: ORG_MARGIN_QUERY,
+      request: listRequest,
+      row: (doc) => doc,
+    })
+    const pageDocs = page.rows
+    let reads = pageDocs.length + (page.hasMore ? 1 : 0) + (listRequest.cursor ? 1 : 0)
 
     if (!pageDocs.length) {
       return Response.json(
-        { rows: [], nextCursor: null, scanned: 0, reads } satisfies MarginUtilizationResponse,
+        {
+          rows: [],
+          nextCursor: null,
+          scanned: 0,
+          reads,
+          refused: page.refused,
+          notices: page.notices,
+        } satisfies MarginUtilizationResponse,
         { status: 200 },
       )
     }
@@ -284,9 +300,11 @@ async function handler(request: Request): Promise<Response> {
     return Response.json(
       {
         rows,
-        nextCursor: truncated ? pageDocs[pageDocs.length - 1].id : null,
+        nextCursor: page.nextCursor,
         scanned: rows.length,
         reads,
+        refused: page.refused,
+        notices: page.notices,
       } satisfies MarginUtilizationResponse,
       { status: 200 },
     )

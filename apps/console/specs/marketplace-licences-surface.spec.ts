@@ -93,18 +93,20 @@ describe('the org marketplace carries a Licences section (AGL-2331)', () => {
     // The whole point. A panel that queried `buyerUid` alone would show the
     // buyer their own receipts and show a colleague nothing — reproducing, in
     // the surface, exactly the person-scoped model this issue removed.
+    // A list query since AGL-3321: the owner clause is each table's base.
     const panel = read(PANEL)
-    expect(panel).toContain("where('buyerOrgId', '==', orgId)")
-    expect(panel).toContain("where('buyerUid', '==', uid)")
+    expect(panel).toContain("licenceBase({ path: 'buyerOrgId', value: orgId }")
+    expect(panel).toContain("licenceBase({ path: 'buyerUid', value: uid }")
   })
 
   it('holds both queries at null until their key resolves', () => {
     // `marketplacePurchases` is buyer/org/seller-gated and a rules-shaped LIST
     // is evaluated against the QUERY (AGL-1440), so a sentinel key is a
     // guaranteed denial retried on the refusal cadence — not an empty list.
+    // Each table's collection is null until its key resolves (AGL-3321).
     const panel = read(PANEL)
-    expect(panel).toMatch(/orgId\s*\n?\s*\?\s*query\(/)
-    expect(panel).toMatch(/uid\s*\n?\s*\?\s*query\(/)
+    expect(panel).toMatch(/orgId && !heldLookup\.pending[^,]*\?\s*purchases\s*:\s*null/)
+    expect(panel).toMatch(/uid && !mineLookup\.pending[^,]*\?\s*purchases\s*:\s*null/)
     expect(panel).not.toContain('-anonymous-')
     expect(panel).not.toContain('-pending-')
   })

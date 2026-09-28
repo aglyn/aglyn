@@ -94,6 +94,8 @@ jest.mock('@aglyn/tenant-data-admin', () => {
   return {
     __esModule: true,
     firebaseAdmin: {
+      // The plan's translator names the document id; these reads never use it.
+      firestore: { FieldPath: { documentId: () => '__name__' } },
       app: () => ({
         firestore: () => ({
           collectionGroup: () => build({ limit: 25 }),

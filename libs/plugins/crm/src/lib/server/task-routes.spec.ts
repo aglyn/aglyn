@@ -112,6 +112,10 @@ jest.mock('@aglyn/tenant-runtime/org-permissions', () => ({
 }))
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
+  restampCrmListFieldsAt: async () => 'current',
+  restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
+  restampCrmListFields: async () => ({ restamped: 0, current: 0, missing: 0 }),
   __esModule: true,
   firebaseAdmin: {
     app: () => ({
@@ -130,6 +134,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   ).crmNextActivityLinksOf,
 }))
 
+import { crmTaskListFields } from '@aglyn/aglyn'
 import { crmTaskCompleteHandler, crmTaskSaveHandler } from './task-routes'
 
 const HOST_ID = 'site-1'
@@ -304,6 +309,8 @@ describe('crm/task-save', () => {
       createdByUid: WRITER,
       createdAt: SERVER_TIMESTAMP,
       updatedAt: SERVER_TIMESTAMP,
+      // What the Tasks list searches by (AGL-3321), from the title and scope.
+      ...crmTaskListFields({ title: 'Call back about the quote', visibleTo: ['host:site-1'] }),
     })
     // Unset optionals are ABSENT, not null — the record cards' equality
     // queries and the "my tasks" view depend on it.

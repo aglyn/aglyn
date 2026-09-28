@@ -310,6 +310,16 @@ jobs:
       # laxer double reported it green.
       - run: npm run test:media-counter
 
+      # AGL-3321, AGL-3327, AGL-3330. The script-side restatements of the list
+      # search keys, the media library's filter keys and the Forms list's
+      # fields, held to the same JSON
+      # fixtures the library's jest specs assert. A backfill that stamped a
+      # key the query spells differently would write documents no filter or
+      # search can find, and only these runs see the script half.
+      - run: npm run test:name-search-tokens
+      - run: npm run test:media-filter-keys
+      - run: npm run test:site-form-list-fields
+
       # AGL-1734. The demo org has to be several visibly different businesses:
       # the 30-minute demo spends its largest block switching between sites in
       # one org, and a switcher showing one bakery three times argues the
@@ -1281,6 +1291,18 @@ jobs:
       # wiring: a call site that goes back to scanning argv fails here, because
       # the parser being correct is worth nothing if the script does not use it.
       - run: npm run test:deploy-args
+
+      # AGL-3321. The script-side list-search keys and the `adminAudit` stamp
+      # restate library functions a plain Node script cannot import. Each is
+      # held to a fixtures JSON the library's spec asserts too, and these run
+      # the script side, so a backfill cannot write keys no query asks for.
+      - run: npm run test:name-search-tokens
+      - run: npm run test:admin-audit-index
+      - run: npm run test:email-search-tokens
+      - run: npm run test:staff-list-backfills
+      - run: npm run test:org-record-list-fields
+      - run: npm run test:outreach-list-search-backfill
+      - run: npm run test:product-collection-ids
 
       # AGL-1877. The Texas data-processing tax code (`txcd_10103001`) on
       # Aglyn's own Stripe products — the single input that decides how much

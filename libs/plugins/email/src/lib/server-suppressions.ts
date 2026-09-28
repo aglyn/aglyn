@@ -61,6 +61,7 @@ import {
   type PluginApiHandler,
 } from '@aglyn/aglyn/server'
 import {
+  emailSearchTokens,
   emailSuppressionKey,
   firebaseAdmin,
   isEmailSuppressed,
@@ -202,6 +203,8 @@ export const emailSuppressionAddHandler: PluginApiHandler = async (req, res) => 
       await ref.set(
         {
           email,
+          // What the list's search and Address filter query (AGL-3321).
+          emailTokens: emailSearchTokens(email),
           reason: MANUAL_SUPPRESSION_REASON,
           ...(note ? { note } : {}),
           // WHO recorded it. A suppression is evidence, and evidence with no

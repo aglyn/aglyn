@@ -32,6 +32,7 @@ jest.mock('firebase-admin/firestore', () => ({
   },
 }))
 
+import { crmTaskListFields } from '@aglyn/aglyn/app-utils/crm'
 import { recordCrmBooking } from './crm-booking-activity'
 
 // ---------------------------------------------------------------------------
@@ -371,6 +372,8 @@ describe('the follow-up task', () => {
       visibleTo: [`host:${HOST}`],
       createdAt: 'server-timestamp',
       updatedAt: 'server-timestamp',
+      // What the Tasks list searches by (AGL-3321), from the title and scope.
+      ...crmTaskListFields({ title: 'Follow up after Intro call', visibleTo: [`host:${HOST}`] }),
     })
   })
 

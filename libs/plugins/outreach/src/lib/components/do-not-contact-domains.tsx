@@ -20,21 +20,22 @@ import { pluginDocsHelp } from '@aglyn/aglyn'
 import { mdiTrashCanOutline } from '@aglyn/shared-data-mdi'
 import { CardDisplay, MdiIcon } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListTable,
   listActionsColumn,
   type ListTableProps,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import {
-  filterListRows,
-  inMemoryListField,
-  listFilterGridColumns,
-} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { Button, Chip, IconButton, Stack, TextField, Typography } from '@mui/material'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { normalizeOutreachDomain } from '../engine/do-not-contact-domain'
+import { OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY } from '../model/do-not-contact-domain-list-query'
 import {
   OUTREACH_DO_NOT_CONTACT_REASONS,
   type OutreachDoNotContactDomainEntry,
@@ -42,7 +43,7 @@ import {
 } from '../model/outreach.types'
 import { OutreachLoading, OutreachLoadProblem } from './outreach-ui'
 import { useOutreachApi } from './use-outreach-api'
-import { useOutreachDoNotContactDomains } from './use-outreach-data'
+import { useOutreachDoNotContactDomainList } from './use-outreach-data'
 
 export interface OutreachDoNotContactDomainsCardProps {
   /** The organization the hub is mounted under; `null` until the shell knows it. */
@@ -69,18 +70,16 @@ export const DO_NOT_CONTACT_DOMAIN_LABELS = {
 export const DO_NOT_CONTACT_DOMAIN_HINT = 'A domain, such as example.com. Every address at it is refused.'
 
 /*
- * What the domains grid's Filters panel offers (AGL-3317). The card reads
- * every listed domain, so the panel and the search answer over all of them.
+ * What the domains grid's Filters panel offers (AGL-3317), each field on the
+ * list's Firestore query (AGL-3321, `OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY`):
+ * the whole domain, why it is listed, and when it was added. The search box
+ * reads the domain, each of its labels and the words of its detail.
  */
-const DOMAIN_FILTER_FIELDS = [
-  inMemoryListField('domain', 'text'),
-  inMemoryListField('reason', 'select'),
-  inMemoryListField('detail', 'text'),
-]
+const DOMAIN_FILTER_FIELDS = OUTREACH_DO_NOT_CONTACT_DOMAIN_LIST_QUERY.fields
 const DOMAIN_FILTER_HEADERS: Readonly<Record<string, string>> = {
   domain: 'Domain',
   reason: 'Why',
-  detail: 'Detail',
+  addedAtMs: 'Added',
 }
 const DOMAIN_FILTER_OPTIONS = {
   reason: OUTREACH_DO_NOT_CONTACT_REASONS.map((reason) => ({
@@ -88,8 +87,6 @@ const DOMAIN_FILTER_OPTIONS = {
     label: OUTREACH_DO_NOT_CONTACT_REASON_LABELS[reason],
   })),
 }
-/** What the quick search reads on a domain row. */
-const DOMAIN_SEARCH_FIELDS = ['domain', 'detail'] as const
 
 function addedOn(entry: OutreachDoNotContactDomainEntry): string {
   if (!entry.addedAtMs) return ''
@@ -170,33 +167,34 @@ function domainColumns(
 export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomainsCardProps) {
   const { orgId } = props
   const api = useOutreachApi(orgId)
-  const listed = useOutreachDoNotContactDomains(orgId)
   const { enqueueSnackbar } = useSnackbar()
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const normalized = normalizeOutreachDomain(draft)
   const invalid = draft.trim() !== '' && normalized === null
   const gridFilter = useListGridFilter({ selectFields: ['reason'] })
-  const searchKey = gridFilter.searchWords.join(' ')
-  const rows = useMemo(
-    () =>
-      filterListRows(
-        listed.data.map((entry) => ({
-          $id: entry.domain,
-          domain: entry.domain,
-          reason: entry.reason,
-          added: addedOn(entry),
-          addedAtMs: entry.addedAtMs ?? 0,
-          detail: entry.detail ?? '',
-        })),
-        DOMAIN_FILTER_FIELDS,
-        gridFilter.clauses,
-        { paths: DOMAIN_SEARCH_FIELDS, words: gridFilter.searchWords },
-      ),
-    // `searchKey` stands for the words, which are a new array each render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [listed.data, gridFilter.clauses, searchKey],
-  )
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  /*
+   * One page of the domains, alphabetical, with every clause and the search
+   * word on the query (AGL-3321) — never matched over the domains that
+   * happen to be loaded.
+   */
+  const listed = useOutreachDoNotContactDomainList(orgId, {
+    clauses: gridFilter.clauses,
+    search: gridFilter.searchWords,
+  })
+  const rows = listed.rows.map((entry) => ({
+    $id: entry.domain,
+    domain: entry.domain,
+    reason: entry.reason,
+    added: addedOn(entry),
+    addedAtMs: entry.addedAtMs ?? 0,
+    detail: entry.detail ?? '',
+  }))
+  /** Nothing listed at all — not a filter that matched nothing. */
+  const none =
+    listed.status === 'ready' && !listed.rows.length && !filtering && listed.page === 0
 
   const change = async (action: 'add' | 'remove', domain: string) => {
     setBusy(domain)
@@ -258,11 +256,11 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
             {DO_NOT_CONTACT_DOMAIN_LABELS.add}
           </Button>
         </Stack>
-        {listed.status === 'loading' ? (
+        {listed.status === 'loading' && !filtering ? (
           <OutreachLoading label="Loading domains…" />
         ) : listed.status === 'error' || listed.status === 'refused' ? (
           <OutreachLoadProblem status={listed.status} what="the do-not-contact domains" />
-        ) : listed.data.length === 0 ? (
+        ) : none ? (
           <Typography variant="body2" color="text.secondary">
             No domains yet.
           </Typography>
@@ -275,19 +273,41 @@ export function OutreachDoNotContactDomainsCard(props: OutreachDoNotContactDomai
               onChange={gridFilter.setClauses}
               options={DOMAIN_FILTER_OPTIONS}
             />
+            <ListQueryNotices
+              refused={listQueryRefusals(listed.plan.refused, {
+                fields: DOMAIN_FILTER_FIELDS,
+                headers: DOMAIN_FILTER_HEADERS,
+                options: DOMAIN_FILTER_OPTIONS,
+              })}
+              notices={listed.plan.notices}
+            />
             <ListTable
               aria-label="Do not contact domains"
               columns={domainColumns(busy !== null, (domain) => void change('remove', domain))}
               rows={rows}
+              loading={listed.status === 'loading'}
               /*
-               * The panel and the search are the grid's; the card answers
-               * them over every listed domain (AGL-3317).
+               * The panel and the search are the grid's; every clause and
+               * the search word are on the list's query (AGL-3321). The grid
+               * neither filters nor sorts the page it is handed: the query's
+               * order — alphabetical, or newest added while a date applies —
+               * is the list's.
                */
               filterMode="server"
               filterModel={gridFilter.filterModel}
               onFilterModelChange={gridFilter.onFilterModelChange}
               quickFilter
+              disableColumnSorting
               noRowsLabel="No domains match these filters"
+              hideFooter
+            />
+            <ListPagination
+              page={listed.page}
+              pageSize={listed.pageSize}
+              rowCount={rows.length}
+              hasMore={listed.hasMore}
+              onPageChange={listed.setPage}
+              onPageSizeChange={listed.setPageSize}
             />
           </Stack>
         )}

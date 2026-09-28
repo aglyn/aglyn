@@ -92,6 +92,7 @@ import {
   normalizeContactEmail,
   ORG_SCOPE_TOKEN,
   readContactFacet,
+  crmNewRecordListFields,
   readMarketingBasis,
   soloConsentGroup,
 } from '@aglyn/aglyn/server'
@@ -101,6 +102,7 @@ import {
   findContactByEmail,
   logHostActivity,
   orgDataCollectionForHost,
+  restampCrmListFieldsAt,
   writeContactCompanyLink,
 } from '@aglyn/tenant-data-admin'
 import { FieldPath, FieldValue } from 'firebase-admin/firestore'
@@ -418,6 +420,8 @@ export async function convertHostLead(
       [contactFacetPath(group.groupId, 'ownerUid')]: ownerUid,
       updatedAt: FieldValue.serverTimestamp(),
     })
+    // The owner is what the Contacts list filters by (AGL-3321).
+    await restampCrmListFieldsAt(contactRef, 'contacts')
   } else if (ownerUid && pickedOwner && pickedOwner === ownerUid) {
     await notifyRecordAssigned({
       hostId,
@@ -476,7 +480,7 @@ export async function convertHostLead(
     }
     if (!companyId) {
       if (await bandFull()) return { ok: false, reason: 'band-full' }
-      const created = await orgRef.collection(CRM_COLLECTIONS.companies).add({
+      const company: Record<string, unknown> = {
         ...nameSearchFields(createCompany.name),
         ...(createCompany.domain ? { domain: createCompany.domain } : {}),
         ...(ownerUid ? { ownerUid } : {}),
@@ -485,6 +489,11 @@ export async function convertHostLead(
         createdByUid: actor.uid,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
+      }
+      const created = await orgRef.collection(CRM_COLLECTIONS.companies).add({
+        ...company,
+        // What the Companies list searches and filters by (AGL-3321).
+        ...crmNewRecordListFields('companies', company),
       })
       companyId = created.id
     }
@@ -560,7 +569,7 @@ export async function convertHostLead(
     const stage = stageForNewDeal(pipeline, deal.stageId)
     if (!stage) return { ok: false, reason: 'no-stages' }
     if (await bandFull()) return { ok: false, reason: 'band-full' }
-    const created = await orgRef.collection(CRM_COLLECTIONS.deals).add({
+    const dealRecord: Record<string, unknown> = {
       title: deal.title,
       titleLower: deal.title.toLowerCase(),
       pipelineId,
@@ -577,6 +586,11 @@ export async function convertHostLead(
       createdByUid: actor.uid,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+    }
+    const created = await orgRef.collection(CRM_COLLECTIONS.deals).add({
+      ...dealRecord,
+      // What the Deals list searches and filters by (AGL-3321).
+      ...crmNewRecordListFields('deals', dealRecord),
     })
     dealId = created.id
   }

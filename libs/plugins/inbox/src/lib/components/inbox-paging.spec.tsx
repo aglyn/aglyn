@@ -16,8 +16,7 @@
  */
 
 /**
- * The inbox pages what it can page, and refuses to page what it cannot
- * (AGL-2501).
+ * The inbox pages every list by its query (AGL-2501 → AGL-3321).
  *
  * All three of this page's reads were `limit(200)` with no `orderBy`, each
  * followed by a client sort on `createdAt`. Firestore answers an unordered
@@ -25,32 +24,25 @@
  * hundred documents arranged newest-first — believable, and missing the rows a
  * site owner opens the inbox to find.
  *
- * The two halves get different treatment, and the difference is the point of
- * this file.
- *
  * ## Submissions: a walk
  *
- * One collection, one order, nothing else reads the window. It pages by query,
- * so the read is one page deep and the whole history is reachable.
+ * One collection, one order. It pages by query, so the read is one page deep
+ * and the whole history is reachable — and every filter and search word is a
+ * predicate on that walk, so a match past the first page is found.
  *
- * ## Members and leads: ordered, ceilinged, and paged in the BROWSER
+ * ## Members and leads: two walks
  *
- * The contacts table is one list assembled from two collections, and a lead is
- * hidden when a member already exists on the same address. That dedupe is only
- * correct while both windows are whole. Paging the queries would compare a
- * page of leads against a page of members, so somebody who left their address
- * and later signed up would render as a Member on one page and again as a Lead
- * on another — one person, counted twice, in the list a site owner uses to
- * count people.
- *
- * The fixture is built to catch exactly that: five addresses appear in BOTH
- * collections, and they are placed so that the member and the lead land on
- * different pages.
+ * The contacts table used to assemble one list from two ceilinged windows and
+ * hide a lead whose address matched a member. That dedupe is only correct
+ * while both windows are whole, so it went with the windows: each collection
+ * is its own list now, chosen by a toggle, and each pages its own query.
  */
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
+import { messageSearchFields } from '@aglyn/aglyn/app-utils/message-search'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { InboxConsolePage } from './inbox-console-page'
 import { INBOX_CONSOLE_SECTIONS } from './inbox-console-sections'
 
@@ -75,7 +67,10 @@ const submissionDocs = Array.from({ length: SUBMISSIONS }, (_, index) => ({
   ...(index % 3 === 0 ? { formId: 'form-adopted' } : {}),
   formName: `Form ${String(index).padStart(2, '0')}`,
   fields: { email: `sender${String(index).padStart(2, '0')}@example.test` },
-  read: false,
+  // The search keys the submit route stamps (AGL-3321).
+  ...messageSearchFields({ email: `sender${String(index).padStart(2, '0')}@example.test` }),
+  // Every FIFTH is unread; the rest have been opened.
+  read: index % 5 !== 0,
   createdAt: { seconds: (SUBMISSIONS - index) * 86_400 },
 }))
 
@@ -85,17 +80,15 @@ const formDocs = [{ $id: 'form-adopted', displayName: 'Contact' }]
 const memberDocs = Array.from({ length: MEMBERS }, (_, index) => ({
   $id: `mem-${String(MEMBERS - 1 - index).padStart(2, '0')}`,
   email: `member${String(index).padStart(2, '0')}@example.test`,
+  displayName: `Member M${String(index).padStart(2, '0')}`,
+  // The name's words; the writer adds the address's (`memberSearchTokens`).
+  searchTokens: nameSearchTokens(`Member M${String(index).padStart(2, '0')}`),
   createdAt: { seconds: (MEMBERS - index) * 86_400 },
 }))
 
 /**
- * The first five leads share an address with the FIRST five members.
- *
- * That placement is the whole point. The members sit on page one of the
- * assembled list and those leads would sit on page three, so a dedupe applied
- * one page at a time would not see the member when it reached the lead — and
- * would render both. A dedupe over the whole window drops the lead wherever it
- * falls.
+ * The first five leads share an address with the FIRST five members: the
+ * same person, a member in one collection and a lead in the other.
  */
 const leadDocs = Array.from({ length: LEADS }, (_, index) => ({
   $id: `lead-${String(LEADS - 1 - index).padStart(2, '0')}`,
@@ -103,7 +96,7 @@ const leadDocs = Array.from({ length: LEADS }, (_, index) => ({
     index < OVERLAP
       ? `member${String(index).padStart(2, '0')}@example.test`
       : `lead${String(index).padStart(2, '0')}@example.test`,
-  source: 'signup',
+  sources: ['signup'],
   // Scoped to the site (AGL-3275): the collection is org-wide, and a lead
   // naming no scope is visible to nobody.
   visibleTo: ['host:host-1'],
@@ -169,8 +162,8 @@ const firestoreAnswer = (
 
 /** Every ceilinged read's cap, so a ceiling that stops probing is visible. */
 let mockCeilingsAsked: number[] = []
-/** Every paged query the page built, so a filter can be asserted on it. */
-let mockPagedQueries: Array<{ name: string; constraints: any[] }> = []
+/** The plan each list query asked, by collection, in order. */
+let mockPlans: Array<{ name: string; plan: any }> = []
 const FIRESTORE = {}
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
@@ -197,38 +190,33 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
       fromCache: false,
     }
   },
-  usePagedCollection: (build: (pageLimit: number) => any) => {
-    const { useState } = require('react')
-    const [page, setPage] = useState(0)
-    const [pageSize, setPageSizeState] = useState(10)
-    const windowSize = pageSize * (page + 1)
-    const built = build(windowSize + 1)
-    const name = String(built?.path ?? '').split('/').pop() ?? ''
-    // Recorded so a filter can be asserted on the QUERY the page issued, not
-    // only on what came back. A filter that never reached Firestore and one
-    // that reached it wrongly are different bugs and the rows alone cannot
-    // tell them apart.
-    mockPagedQueries.push({ name, constraints: built?.constraints ?? [] })
-    const answered = firestoreAnswer(
-      byCollection[name] ?? [],
-      built?.constraints ?? [],
-    )
-    return {
-      data: answered,
-      rows: answered.slice(page * pageSize, windowSize),
-      hasMore: answered.length > windowSize,
-      page,
-      setPage,
-      pageSize,
-      setPageSize: (next: number) => {
-        setPageSizeState(next)
-        setPage(0)
-      },
-      status: 'success',
-      fromCache: false,
-    }
-  },
+  useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
 }))
+
+/*
+ * Every list's query (AGL-3321), answered by the shared double over the
+ * collection the card opened: the real plan, each predicate applied as
+ * Firestore would, the plan's one order, pages of the requested size. The
+ * plan is recorded so a filter can be asserted on the QUERY the page issued,
+ * not only on what came back — a filter that never reached Firestore and one
+ * that reached it wrongly are different bugs, and the rows alone cannot tell
+ * them apart.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => {
+  const actual = jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')
+  const { useListQueryDouble } = jest.requireActual(
+    '@aglyn/tenant-feature-instance/testing/list-query-double',
+  )
+  return {
+    ...actual,
+    useListQuery: (options: { collection: { path: string } | null }) => {
+      const name = String(options.collection?.path ?? '').split('/').pop() ?? ''
+      const result = useListQueryDouble(() => byCollection[name] ?? [], options)
+      if (name) mockPlans.push({ name, plan: result.plan })
+      return result
+    },
+  }
+})
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
@@ -259,15 +247,6 @@ jest.mock('firebase/firestore', () => ({
 jest.mock('@aglyn/aglyn', () => ({
   formSpamCaughtNotice: () => null,
   FORMS_MAX_PER_HOST: 50,
-  // The REAL derivation, not a stub. The contacts dedupe below is asserted
-  // against it, and a stub that returned the address unchanged would let a
-  // casing-only duplicate render twice while the test stayed green.
-  normalizeContactEmail: (input: unknown) => {
-    const email = String(input ?? '').trim().toLowerCase()
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 320
-      ? email
-      : null
-  },
   formSubmissionsPausedNotice: () => null,
   pluginDocsHelp: () => undefined,
   submissionMonthKey: () => '2026-08',
@@ -375,86 +354,54 @@ describe('the submissions table walks the inbox (AGL-2501)', () => {
   })
 })
 
-describe('the contacts table cannot be paged by the query (AGL-2501)', () => {
-  it('THE CONTROL: the fixture puts a duplicated person on two pages', () => {
-    // Without this the dedupe assertion below would hold trivially — a fixture
-    // whose overlapping rows all land on page one cannot tell a whole-window
-    // dedupe from a per-page one.
-    const shared = leadDocs.slice(0, OVERLAP).map((lead) => lead.email)
-    expect(shared).toHaveLength(OVERLAP)
-    const memberIndex = memberDocs.findIndex(
-      (member) => member.email === shared[0],
-    )
-    const leadIndex = leadDocs.findIndex((lead) => lead.email === shared[0])
-    expect(Math.floor(memberIndex / TABLE_PAGE_SIZE_DEFAULT)).not.toBe(
-      Math.floor((MEMBERS + leadIndex) / TABLE_PAGE_SIZE_DEFAULT),
-    )
-
-    // And the regression this guards against, computed rather than described:
-    // a dedupe applied to one server page at a time lets every overlapping
-    // address through, because the member it should have matched is on a page
-    // this one never sees.
-    const perPage: string[] = []
-    const assembled = [
-      ...memberDocs.map((member) => ({ ...member, kind: 'member' })),
-      ...leadDocs.map((lead) => ({ ...lead, kind: 'lead' })),
-    ]
-    for (let page = 0; page * TABLE_PAGE_SIZE_DEFAULT < assembled.length; page += 1) {
-      const start = page * TABLE_PAGE_SIZE_DEFAULT
-      const window = assembled.slice(start, start + TABLE_PAGE_SIZE_DEFAULT)
-      const membersHere = window.filter((row) => row.kind === 'member')
-      for (const row of window) {
-        if (
-          row.kind === 'lead' &&
-          !membersHere.some((member) => member.email === row.email)
-        ) {
-          perPage.push(row.email)
-        }
-      }
-    }
-    for (const email of shared) expect(perPage).toContain(email)
-  })
-
-  it('shows each person ONCE across every page', async () => {
-    await mountPage('contacts')
+describe('each contacts list walks its own query (AGL-3321)', () => {
+  /** Every address a list shows, walking its pages to the end. */
+  const walk = async () => {
     const seen: string[] = []
     for (let guard = 0; guard < 20; guard += 1) {
-      for (const row of rowsOf(tables()[0])) seen.push(row[0])
+      for (const row of rowsOf(tables()[0])) seen.push(row[0].replace(/\s+/g, ''))
       const next = nextPageButtons()[0] as HTMLButtonElement
       if (!next || next.disabled) break
       fireEvent.click(next)
       await waitFor(() => expect(rowsOf(tables()[0]).length).toBeGreaterThan(0))
     }
-    const addresses = seen.map((cell) => cell.replace(/\s+/g, ''))
-    expect(new Set(addresses).size).toBe(addresses.length)
-    // And the list is the union minus the overlap, not the sum of the two
-    // collections.
-    expect(addresses).toHaveLength(MEMBERS + LEADS - OVERLAP)
+    return seen
+  }
+
+  it('shows the newest page of members and reaches every one of them by paging', async () => {
+    await mountPage('contacts')
+    const first = rowsOf(tables()[0])
+    expect(first).toHaveLength(TABLE_PAGE_SIZE_DEFAULT)
+    expect(first[0][0]).toContain('member00@example.test')
+    const seen = await walk()
+    expect(new Set(seen).size).toBe(MEMBERS)
   })
 
-  it('a duplicated address renders as the MEMBER, on one page only', async () => {
+  it('lists every lead on the Leads toggle, the ones who are also members included', async () => {
     await mountPage('contacts')
-    const shared = leadDocs[0].email
-    const found: string[] = []
-    for (let guard = 0; guard < 20; guard += 1) {
-      for (const row of rowsOf(tables()[0])) {
-        if (row[0].replace(/\s+/g, '').startsWith(shared)) found.push(row[1])
-      }
-      const next = nextPageButtons()[0] as HTMLButtonElement
-      if (!next || next.disabled) break
-      fireEvent.click(next)
-      await waitFor(() => expect(rowsOf(tables()[0]).length).toBeGreaterThan(0))
-    }
-    expect(found).toEqual(['Member'])
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Leads' }))
+    })
+    const seen = await walk()
+    // No dedupe across the two collections: a person who left their address
+    // and later signed up is a lead here and a member in Members.
+    expect(seen).toHaveLength(LEADS)
+    expect(seen.filter((address) => address.startsWith('member'))).toHaveLength(OVERLAP)
   })
 
-  it('both contact reads PROBE past their ceiling', async () => {
+  it('finds a member by name past the first page, on the query', async () => {
     await mountPage('contacts')
-    // A ceiling with no probe cannot tell a full list from a truncated one:
-    // `length === ceiling` is wrong at exactly the count that equals it. Two
-    // reads, both asking for one document more than they will render.
-    const contactCeilings = mockCeilingsAsked.filter((cap) => cap > 100)
-    expect(contactCeilings).toEqual([201, 201])
+    expect(rowsOf(tables()[0]).map((row) => row[0])).not.toContain('member21@example.test')
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'm21' } })
+    await waitFor(() => {
+      const rows = rowsOf(tables()[0])
+      expect(rows).toHaveLength(1)
+      expect(rows[0][0]).toContain('member21@example.test')
+    })
+    const members = [...mockPlans].reverse().find((entry) => entry.name === 'siteMembers')
+    expect(members?.plan.filters).toEqual([
+      { path: 'searchTokens', op: 'array-contains', value: 'm21' },
+    ])
   })
 })
 
@@ -497,20 +444,20 @@ const formFilterOptions = () =>
  * form's whole history and cannot pass these by accident.
  */
 describe('the submissions section can narrow to one form', () => {
-  /** The submissions query the page built most recently. */
+  /** The predicates of the submissions query the page asked most recently. */
   const submissionsQuery = () =>
-    [...mockPagedQueries].reverse().find((q) => q.name === 'formSubmissions')
-        ?.constraints ?? []
+    [...mockPlans].reverse().find((entry) => entry.name === 'formSubmissions')?.plan
+      .filters ?? []
 
   beforeEach(() => {
-    mockPagedQueries = []
+    mockPlans = []
   })
 
   it('issues NO form clause until one is chosen', async () => {
     await mountPage('submissions')
     // The site-wide question — "who is waiting for a reply" — does not
     // decompose by form, so the default must stay the whole inbox.
-    expect(submissionsQuery().filter((c: any) => 'where' in c)).toEqual([])
+    expect(submissionsQuery()).toEqual([])
   })
 
   it('offers the site\'s forms and narrows the QUERY when one is picked', async () => {
@@ -530,8 +477,8 @@ describe('the submissions section can narrow to one form', () => {
     await act(async () => {
       fireEvent.click(option as Element)
     })
-    expect(submissionsQuery().filter((c: any) => 'where' in c)).toEqual([
-      { where: 'formId', op: '==', value: 'form-adopted' },
+    expect(submissionsQuery()).toEqual([
+      { path: 'formId', op: '==', value: 'form-adopted' },
     ])
   })
 
@@ -620,7 +567,10 @@ describe('the form filter never presents a cut list as the whole list', () => {
   })
 })
 
-describe('the submissions list searches what its window read (AGL-3317)', () => {
+describe('the submissions list searches and filters on its query (AGL-3321)', () => {
+  const submissionsPlan = () =>
+    [...mockPlans].reverse().find((entry) => entry.name === 'formSubmissions')?.plan
+
   it('finds a sender past the first page', async () => {
     await mountPage('submissions')
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'sender14' } })
@@ -629,5 +579,28 @@ describe('the submissions list searches what its window read (AGL-3317)', () => 
       expect(rows).toHaveLength(1)
       expect(rows[0].join(' ')).toContain('sender14@example.test')
     })
+    expect(submissionsPlan()?.filters).toEqual([
+      { path: 'searchTokens', op: 'array-contains', value: 'sender14' },
+    ])
+  })
+
+  it('narrows to the unread on the query, past the first page', async () => {
+    await mountPage('submissions')
+    fireEvent.click(screen.getByRole('button', { name: /Filters/ }))
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Column' }))
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('option', { name: 'Read' }))
+    })
+    fireEvent.mouseDown(await screen.findByRole('combobox', { name: 'Value' }))
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('option', { name: 'Unread' }))
+    })
+    await waitFor(() =>
+      expect(submissionsPlan()?.filters).toEqual([{ path: 'read', op: '==', value: false }]),
+    )
+    // Every fifth of forty: eight unread, the oldest of them far past the
+    // page the list opened on.
+    await waitFor(() => expect(rowsOf(tables()[0])).toHaveLength(8))
+    expect(rowsOf(tables()[0]).some((row) => row[0].includes('sender35@example.test'))).toBe(true)
   })
 })

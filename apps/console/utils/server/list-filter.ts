@@ -259,3 +259,10 @@ export function applyListFilter(
 
   return null
 }
+
+/**
+ * The list query plan on an Admin query (AGL-3321). It lives in the admin
+ * data library so a plugin's API handler reaches the same twin a console
+ * route does.
+ */
+export { applyListQuery } from '@aglyn/tenant-data-admin/server/list-query'

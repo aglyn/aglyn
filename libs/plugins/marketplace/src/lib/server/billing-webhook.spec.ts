@@ -206,6 +206,31 @@ describe('marketplace purchase record (AGL-46/1544)', () => {
     })
   })
 
+  it('stamps the nulls the licenses tab queries by on the first record (AGL-3321)', async () => {
+    // "Not refunded" and "licenses no workspace in particular" are asked as
+    // `== null`, which an ABSENT field never answers. This session names no
+    // buyer org, as one opened before AGL-2331 did.
+    await marketplaceBillingWebhookHandler(completedSession() as any)
+    expect(adminMock.__writes[0].data).toMatchObject({ refundedAt: null, buyerOrgId: null })
+  })
+
+  it('names the buyer org, not a null, when the session carries one', async () => {
+    await marketplaceBillingWebhookHandler(
+      completedSession({
+        metadata: {
+          type: 'marketplace-purchase',
+          listingId: 'listing-1',
+          buyerUid: 'buyer-1',
+          buyerOrgId: 'buyer-org',
+          sellerOrgId: 'seller-org',
+          feeCents: '2000',
+          transferCents: '8000',
+        },
+      }) as any,
+    )
+    expect(adminMock.__writes[0].data).toMatchObject({ refundedAt: null, buyerOrgId: 'buyer-org' })
+  })
+
   it('ignores unpaid sessions and foreign metadata', async () => {
     await marketplaceBillingWebhookHandler(
       completedSession({ payment_status: 'unpaid' }) as any,
@@ -458,9 +483,10 @@ describe('refund revocation (AGL-1546)', () => {
     await marketplaceBillingWebhookHandler(
       refundEvent({ refunded: false, amount_refunded: 500 }) as any,
     )
+    // Still the null the first record stamps (AGL-3321): not revoked.
     expect(
-      adminMock.__store['marketplacePurchases/cs_test_1']?.['refundedAt'],
-    ).toBeUndefined()
+      adminMock.__store['marketplacePurchases/cs_test_1']?.['refundedAt'] ?? null,
+    ).toBeNull()
   })
 
   it('an unknown payment intent writes nothing', async () => {

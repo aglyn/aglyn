@@ -84,6 +84,7 @@ import {
   emailOrgAdmins,
   emailStaffAlert,
 } from '../../_lib/usage-alert-email'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — server-internal cron (x-cron-secret), no user caller — and it HOSTS
 // the billing auto-lock sweep; gating the locker on the lock is circular.
@@ -1323,7 +1324,7 @@ async function handler(request: Request): Promise<Response> {
               lock: { reason: 'billing' },
               revokeMemberTokens: false,
             })
-            await firestore.collection('adminAudit').add({
+            await addAdminAudit(firestore, {
               actorUid: 'system:billing-auto-lock',
               actorEmail: null,
               action: 'lockdown.lock',

@@ -31,28 +31,31 @@ import {
   useConfirmationContext,
 } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import type { RowActionsMenuItem } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { CreateArtifactDrawer } from '@aglyn/shared-ui-jsx-forms'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
-import {
-  ceilingedWindow,
-  collectionCeiling,
-} from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { collectionCeiling } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import {
   DUPLICATE_MENU_LABEL,
   useDuplicateResource,
   useFirestore,
   useFirestoreCollection,
 } from '@aglyn/tenant-feature-instance'
-import { Alert, Button, Chip, Stack, Typography } from '@mui/material'
+import { Button, Chip, Stack, Typography } from '@mui/material'
 import type { GridColDef } from '@mui/x-data-grid'
 import { useRouter } from 'next/navigation'
 import { useCallback, useMemo, useState } from 'react'
@@ -71,13 +74,17 @@ import {
   useCampaignSendApi,
 } from './use-campaign-send-api'
 import {
-  EMAIL_STATE_FILTER_FIELD,
-  EMAIL_STATE_OPTIONS,
-  EMAIL_SUBJECT_FILTER_FIELD,
-  emailFilterValues,
-} from './email-send-filter'
+  CAMPAIGN_SEND_STATUS_OPTIONS,
+  SINGLE_SEND_FILTER_VALUE,
+  campaignEmailsListQuery,
+  campaignSendsScope,
+  emailCampaignQueryClauses,
+} from '../model/campaign-list-query'
 import { useMarketingHubPath } from './use-marketing-hub-path'
-import { campaignContainersQuery, campaignSendsQuery } from './campaign-queries'
+import {
+  campaignContainersQuery,
+  campaignSendsCollection,
+} from './campaign-queries'
 import {
   orgSiteHubPath,
   orgSiteName,
@@ -86,21 +93,11 @@ import {
   useMarketingOrgMount,
 } from './marketing-org-mount'
 
-/** How many messages one read of this list covers. */
-const EMAIL_CEILING = 30
-
 /**
  * How many campaigns the Campaign filter and the create drawer offer — the
- * same read serves both.
+ * same read serves both. A picker's options, not a list.
  */
 const CONTAINER_CEILING = 50
-
-/**
- * The Campaign filter's value for an email filed under no campaign. An empty
- * value reads as "no value" to the filter, so a clause on it would never
- * apply; a sentinel is a value like any campaign id.
- */
-const SINGLE_SEND_FILTER_VALUE = '__single__'
 
 /**
  * Why discard is refused, keyed by the state that refuses it.
@@ -138,27 +135,18 @@ const STATE_COLOR: Partial<
 }
 
 /*
- * What the messages grid's Filters panel offers (AGL-3317). The card reads
- * every message under its ceiling, so the panel and the search answer over
- * all of them. State is what the email is DOING (`campaignSendDisplay`),
- * not the status it stores.
+ * What the messages grid's Filters panel offers, each clause and the search
+ * on the list's Firestore query (AGL-3321, `campaignEmailsListQuery`). The
+ * State column is what the email is DOING (`campaignSendDisplay`), which no
+ * query can ask, so the panel offers the Status it STORES instead.
  */
-const EMAIL_FILTER_FIELDS = [
-  EMAIL_SUBJECT_FILTER_FIELD,
-  EMAIL_STATE_FILTER_FIELD,
-  // Matched on a derived key, so the row's own container field stays what
-  // was stored for the row menu that reads it.
-  inMemoryListField('emailCampaignId', 'select', 'campaignFilterKey'),
-  inMemoryListField('site', 'text', 'siteName'),
-]
 const EMAIL_FILTER_HEADERS: Readonly<Record<string, string>> = {
   subject: 'Subject',
-  state: 'State',
+  status: 'Status',
   emailCampaignId: 'Campaign',
   site: 'Site',
+  createdAtMs: 'Created',
 }
-/** What the quick search reads on a message row. */
-const EMAIL_SEARCH_FIELDS = ['subjectText', 'siteName'] as const
 
 const emailsDocsHelp = pluginDocsHelp('emailCampaigns', {
   anchor: '#opens--clicks',
@@ -185,23 +173,19 @@ export interface EmailsListCardProps {
  * 14th, and to whom" — and they were previously the same list because a
  * campaign document WAS a single send.
  *
- * ## Ordered in the browser, deliberately
+ * ## Asked of Firestore, a page at a time
  *
- * No SEND date is on every message: a sent one carries `sentAt` and a
- * scheduled one carries `sendAtMs`, written by two different branches of the
- * send path, and a draft carries neither — so `orderBy` on either would not
- * mis-sort this list, it would DROP half of it. `collectionCeiling` reads a
- * bounded window in document-id order and probes one past the ceiling, so the
- * rows are sorted here and the reader is told when there are more.
+ * No SEND date is on every message — a sent one carries `sentAt`, a
+ * scheduled one `sendAtMs`, a draft neither — so the list is ordered on
+ * `createdAtMs`, the one date every writer stamps when it mints a record
+ * (and `backfill-campaign-list-fields.mjs` stamped on the ones before).
+ * Newest first, paged by the query itself.
  *
- * Every writer stamps a `createdAtMs`, which is the field this list could be
- * ordered on in Firestore. Moving it there is a query change with the same
- * hazard as the two above — `orderBy` drops a document missing the field —
- * so it needs the corpus proven to carry one, not just the writers.
- *
- * The page is therefore a SLICE of a window this card already holds, not a
- * query: paging an id-ordered walk and re-sorting each page by date would run
- * in one order within a page and another across them.
+ * The Filters panel and the search box are the grid's; every clause and the
+ * search word go onto that ONE query (AGL-3321, `campaignEmailsListQuery`),
+ * so each page is a page of matches — an email that matches on page four is
+ * found — and a combination one query cannot hold is refused by name above
+ * the table, never answered over the rows that happen to be loaded.
  *
  * ## Under a site, and over the organization
  *
@@ -222,36 +206,29 @@ export function EmailsListCard(props: EmailsListCardProps) {
   const marketingHub = orgMount ? orgMount.basePath : siteMarketingHub
   const router = useRouter()
 
-  const { data: emailDocs } = useFirestoreCollection<any>(
-    () => {
-      const sends = campaignSendsQuery(firestore, orgId, hostId)
-      return sends ? collectionCeiling(sends, EMAIL_CEILING) : null
-    },
-    [firestore, orgId, hostId],
-    { idField: '$id' },
-  )
-  const { rows: readEmails, truncated } = ceilingedWindow<any>(
-    emailDocs,
-    EMAIL_CEILING,
-  )
   /*
-   * Newest first on the time each message SITS at — its send time where it
-   * has one, its creation where it does not.
-   *
-   * A draft has neither `sentAt` nor `sendAtMs`, so sorting on the send time
-   * alone gave every draft the key 0 and filed the email a merchant is in the
-   * middle of writing at the very bottom of the list, behind whatever paging
-   * it has. `emailListTimeMs` is the same ordering with that one gap closed;
-   * a SENT message still orders by when it went out, never by when it was
-   * drafted.
+   * The Filters panel and the search, bound to the grid. Held here rather
+   * than in a saved view: this list keeps no views.
    */
-  const emails = useMemo(
-    () =>
-      [...readEmails].sort(
-        (a: any, b: any) => emailListTimeMs(b) - emailListTimeMs(a),
-      ),
-    [readEmails],
-  )
+  const declaration = campaignEmailsListQuery(!hostId)
+  const gridFilter = useListGridFilter({
+    selectFields: ['status', 'emailCampaignId', 'site'],
+  })
+  const emailPage = useListQuery<any>({
+    collection: campaignSendsCollection(firestore, orgId),
+    declaration,
+    request: {
+      clauses: emailCampaignQueryClauses(gridFilter.clauses),
+      search: gridFilter.searchWords,
+      base: campaignSendsScope(hostId),
+    },
+    deps: [firestore, orgId, hostId],
+    idField: '$id',
+  })
+  const emails = emailPage.rows
+  const filtering =
+    gridFilter.clauses.length > 0 ||
+    gridFilter.searchWords.some((word) => word.trim())
 
   /*
    * A message's own pages, beneath the Emails page this list is on — the
@@ -271,12 +248,12 @@ export function EmailsListCard(props: EmailsListCardProps) {
   const hostOfEmail = useMemo(
     () =>
       new Map<string, string | null>(
-        readEmails.map((email: any) => [
+        emails.map((email: any) => [
           String(email.$id),
           email?.hostId ? String(email.hostId) : null,
         ]),
       ),
-    [readEmails],
+    [emails],
   )
 
   const { confirm } = useConfirmationContext()
@@ -501,42 +478,17 @@ export function EmailsListCard(props: EmailsListCardProps) {
     [campaignDocs],
   )
 
-  const filterRows = useMemo(
-    () =>
-      emails.map((email: any) => ({
-        ...email,
-        ...emailFilterValues(email),
-        campaignFilterKey: email.emailCampaignId
-          ? String(email.emailCampaignId)
-          : SINGLE_SEND_FILTER_VALUE,
-        siteName: orgMount && email?.hostId ? orgSiteName(orgMount, email.hostId) : '',
-      })),
-    [emails, orgMount],
-  )
-  const filterFields = useMemo(
-    () =>
-      orgMount
-        ? EMAIL_FILTER_FIELDS
-        : EMAIL_FILTER_FIELDS.filter((field) => field.column !== 'site'),
-    [orgMount],
-  )
   const filterOptions = useMemo(
     () => ({
-      state: EMAIL_STATE_OPTIONS,
+      status: CAMPAIGN_SEND_STATUS_OPTIONS,
       emailCampaignId: [
         { value: SINGLE_SEND_FILTER_VALUE, label: 'Single send' },
         ...campaignOptions,
       ],
+      ...(hostId ? {} : { site: orgSites }),
     }),
-    [campaignOptions],
+    [campaignOptions, hostId, orgSites],
   )
-  const listFilter = useListRowsFilter({
-    rows: filterRows,
-    fields: filterFields,
-    options: filterOptions,
-    headers: EMAIL_FILTER_HEADERS,
-    search: EMAIL_SEARCH_FIELDS,
-  })
 
   /*==========================================
    * CREATE, THEN GO TO THE EMAIL'S OWN PAGE.
@@ -633,9 +585,9 @@ export function EmailsListCard(props: EmailsListCardProps) {
   )
 
   /*
-   * One row per message, in the order above; the whole window is in hand, so
-   * the grid pages it. The subject is a link AND the row opens the report: a
-   * click handler cannot be middle-clicked or opened in a new tab.
+   * One row per message, in the query's order. The subject is a link AND the
+   * row opens the report: a click handler cannot be middle-clicked or opened
+   * in a new tab.
    */
   const columns: GridColDef[] = [
     {
@@ -698,8 +650,6 @@ export function EmailsListCard(props: EmailsListCardProps) {
       field: 'when',
       headerName: 'When',
       width: 190,
-      // Sorted on the time the list is ordered by, so a draft sorts by its
-      // creation rather than as the oldest thing on the page.
       valueGetter: (_value, row) => emailListTimeMs(row),
       renderCell: ({ row }) => {
         const at = emailSendTimeMs(row)
@@ -735,6 +685,19 @@ export function EmailsListCard(props: EmailsListCardProps) {
     ),
   ]
 
+  const gridColumns = listFilterGridColumns(
+    columns,
+    declaration.fields,
+    filterOptions,
+    EMAIL_FILTER_HEADERS,
+  )
+  /** Nothing stored at all — not a filter that matched nothing. */
+  const none =
+    emailPage.status !== 'loading' &&
+    emails.length === 0 &&
+    !filtering &&
+    emailPage.page === 0
+
   return (
     <CardDisplay
       header={'Messages'}
@@ -755,7 +718,7 @@ export function EmailsListCard(props: EmailsListCardProps) {
     >
       {duplicate.dialog}
       <Stack spacing={2}>
-        {emails.length === 0 ? (
+        {none ? (
           <Stack spacing={2} sx={{ alignItems: 'flex-start' }}>
             <Typography variant="body2" color="text.secondary">
               {'Nothing has been sent or scheduled yet. Write one here, or ' +
@@ -768,29 +731,60 @@ export function EmailsListCard(props: EmailsListCardProps) {
           </Stack>
         ) : (
           <>
-            <ListFilterChips {...listFilter.chipsProps} />
+            <ListFilterChips
+              fields={declaration.fields}
+              headers={EMAIL_FILTER_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+              options={filterOptions}
+            />
+            <ListQueryNotices
+              refused={listQueryRefusals(emailPage.plan.refused, {
+                fields: declaration.fields,
+                headers: EMAIL_FILTER_HEADERS,
+                options: filterOptions,
+              })}
+              notices={emailPage.plan.notices}
+            />
             <ListTable
               aria-label="Messages"
-              rows={listFilter.rows}
-              columns={listFilter.filterColumns(columns)}
+              rows={emails}
+              columns={gridColumns}
               rowHeight={TABLE_ROW_HEIGHT}
               onOpen={(_id, row) => router.push(emailHref(row))}
-              // The panel and the search are the grid's; the card answers
-              // them over every message it read (AGL-3317).
-              {...listFilter.gridProps}
-              initialState={{ columns: { columnVisibilityModel: { emailCampaignId: false } } }}
+              loading={emailPage.status === 'loading'}
+              /*
+               * The panel and the search are the grid's; every clause and
+               * the search word are on the list's query (AGL-3321), and the
+               * grid neither filters nor sorts the page it is handed: the
+               * query's one order, newest first, is the list's.
+               */
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              disableColumnSorting
+              hideFooter
+              initialState={{
+                columns: {
+                  columnVisibilityModel: hiddenFilterVisibility(
+                    declaration.fields,
+                    columns.map((column) => column.field),
+                  ),
+                },
+              }}
               noRowsLabel="No messages match these filters"
+            />
+            <ListPagination
+              page={emailPage.page}
+              pageSize={emailPage.pageSize}
+              rowCount={emails.length}
+              hasMore={emailPage.hasMore}
+              onPageChange={emailPage.setPage}
+              onPageSizeChange={emailPage.setPageSize}
             />
           </>
         )}
-        {truncated ? (
-          <Alert severity="info">
-            {`Showing ${EMAIL_CEILING} messages. ${
-              hostId ? 'This site' : 'This organization'
-            } has sent or ` +
-              'scheduled more than that, and the rest are not in this list.'}
-          </Alert>
-        ) : null}
       </Stack>
       {/*
         AN EMAIL WRITTEN HERE BELONGS TO A CAMPAIGN, OR TO NO CAMPAIGN.

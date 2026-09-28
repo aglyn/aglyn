@@ -34,17 +34,24 @@ import {
   Section,
 } from '@aglyn/shared-ui-jsx/components/measured-figures.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import { hiddenFilterVisibility } from '@aglyn/shared-ui-jsx/const/list-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import RowActionsMenu, {
   type RowActionsMenuItem,
 } from '@aglyn/shared-ui-jsx/components/row-actions-menu.component'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { ceilingedWindow } from '@aglyn/tenant-feature-instance/hooks/host-collection-queries'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { PageHeaderRecord, pluginDocsHelp } from '@aglyn/aglyn'
 import {
   Alert,
@@ -90,11 +97,11 @@ import {
   type EmailCampaign,
 } from '@aglyn/shared-ui-email-campaigns/model'
 import {
-  EMAIL_STATE_FILTER_FIELD,
-  EMAIL_STATE_OPTIONS,
-  EMAIL_SUBJECT_FILTER_FIELD,
-  emailFilterValues,
-} from './email-send-filter'
+  CAMPAIGN_EMAILS_QUERY,
+  CAMPAIGN_SEND_STATUS_OPTIONS,
+  campaignContainerSearchFields,
+  campaignSendsScope,
+} from '../model/campaign-list-query'
 import CampaignComposer from './campaign-composer'
 import CampaignEditDrawer, {
   type CampaignEditValues,
@@ -107,7 +114,11 @@ import {
 } from './campaign-reach-sections'
 import CampaignMembersSection from './campaign-members-section'
 import CampaignReportCard from './campaign-report-card'
-import { campaignContainerDoc, campaignSendsQuery } from './campaign-queries'
+import {
+  campaignContainerDoc,
+  campaignSendsCollection,
+  campaignSendsQuery,
+} from './campaign-queries'
 import {
   orgSiteHubPath,
   orgSiteName,
@@ -149,14 +160,19 @@ const rolled = (
       : `across ${value.sends} email${value.sends === 1 ? '' : 's'}`,
 })
 
-/* What the campaign's emails table filters by (AGL-3317). */
-const SEND_FILTER_FIELDS = [EMAIL_SUBJECT_FILTER_FIELD, EMAIL_STATE_FILTER_FIELD]
-const SEND_FILTER_OPTIONS = { state: EMAIL_STATE_OPTIONS }
+/*
+ * What the campaign's emails table filters by, each clause and the search on
+ * the table's own Firestore query (AGL-3321, `CAMPAIGN_EMAILS_QUERY`). The
+ * State column is derived from an email's counters and cannot be asked of a
+ * query, so the panel offers the Status it stores.
+ */
+const SEND_FILTER_FIELDS = CAMPAIGN_EMAILS_QUERY.fields
+const SEND_FILTER_OPTIONS = { status: CAMPAIGN_SEND_STATUS_OPTIONS }
 const SEND_FILTER_HEADERS: Readonly<Record<string, string>> = {
   subject: 'Subject',
-  state: 'State',
+  status: 'Status',
+  createdAtMs: 'Created',
 }
-const SEND_SEARCH_FIELDS = ['subjectText'] as const
 
 export interface CampaignDetailCardProps {
   /** The site, or `null` on the org Marketing hub. */
@@ -344,19 +360,30 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
   )
   const rollup = useMemo(() => campaignRollup(sends), [sends])
   /*
-   * The emails table's Filters panel and search (AGL-3317), answered over
-   * every email the card read — the same window the figures above cover.
+   * THE EMAILS TABLE IS ITS OWN QUERY (AGL-3321).
+   *
+   * The figures above are a sum over the window read above; the table under
+   * them is a list a reader filters and searches, so each clause and the
+   * search word go onto a query of their own — this campaign's emails
+   * (`emailCampaignId == id`, and under a site the ones sent as it), newest
+   * first, paged by the query. A match on the fifth page is found; nothing
+   * is matched over the rows a read happened to hold. Gated on the container
+   * like the window: a single send's report reads none of it.
    */
-  const sendFilterRows = useMemo(
-    () => sends.map((send) => ({ ...send, ...emailFilterValues(send) })),
-    [sends],
-  )
-  const sendFilter = useListRowsFilter({
-    rows: sendFilterRows,
-    fields: SEND_FILTER_FIELDS,
-    options: SEND_FILTER_OPTIONS,
-    headers: SEND_FILTER_HEADERS,
-    search: SEND_SEARCH_FIELDS,
+  const gridFilter = useListGridFilter({ selectFields: ['status'] })
+  const sendPage = useListQuery<CampaignSend>({
+    collection: campaign ? campaignSendsCollection(firestore, orgId) : null,
+    declaration: CAMPAIGN_EMAILS_QUERY,
+    request: {
+      clauses: gridFilter.clauses,
+      search: gridFilter.searchWords,
+      base: [
+        { path: 'emailCampaignId', op: '==', value: campaignId },
+        ...campaignSendsScope(hostId),
+      ],
+    },
+    deps: [firestore, orgId, hostId, campaignId, Boolean(campaign)],
+    idField: '$id',
   })
   // The ids the two sections beneath the figures join on. Derived from the
   // window this card already holds, so neither of them reads the send list
@@ -396,16 +423,20 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
       setSaving(true)
       setSaveError(null)
       try {
+        const placement =
+          !hostId && values.siteIds !== undefined
+            ? { visibleTo: campaignVisibleTo(values.siteIds) }
+            : {}
         await updateDoc(campaignContainerDoc(firestore, orgId, campaignId), {
           name: values.name,
+          // The list's search keys (AGL-3321), from the name written here.
+          ...campaignContainerSearchFields(values.name),
           startAtMs: values.startAtMs,
           endAtMs: values.endAtMs,
           listIds: values.listIds,
           topicId: values.topicId ? values.topicId : deleteField(),
           listUnsubscribe: values.listUnsubscribe,
-          ...(!hostId && values.siteIds !== undefined
-            ? { visibleTo: campaignVisibleTo(values.siteIds) }
-            : {}),
+          ...placement,
         })
         setEditing(false)
         enqueueSnackbar('Campaign updated', {
@@ -610,7 +641,7 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
    * The campaign's emails, on the surface's own row grammar: the row opens
    * the email's report, its subject is also a real link so it can be
    * middle-clicked and copied, and the trailing cluster holds the actions.
-   * The window is one the card already holds, so the grid pages it.
+   * A page of the table's own query, paged by that query.
    */
   const sendColumns: GridColDef<CampaignSend>[] = [
     {
@@ -1066,26 +1097,70 @@ export function CampaignDetailCard(props: CampaignDetailCardProps) {
         </Stack>
         {sends.length ? (
           <Stack spacing={0.5}>
-            <ListFilterChips {...sendFilter.chipsProps} />
+            <ListFilterChips
+              fields={SEND_FILTER_FIELDS}
+              headers={SEND_FILTER_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+              options={SEND_FILTER_OPTIONS}
+            />
+            <ListQueryNotices
+              refused={listQueryRefusals(sendPage.plan.refused, {
+                fields: SEND_FILTER_FIELDS,
+                headers: SEND_FILTER_HEADERS,
+                options: SEND_FILTER_OPTIONS,
+              })}
+              notices={sendPage.plan.notices}
+            />
             <ListTable
               aria-label="The campaign's emails"
-              rows={sendFilter.rows}
-              columns={sendFilter.filterColumns(sendColumns as GridColDef[])}
+              rows={sendPage.rows}
+              columns={listFilterGridColumns(
+                sendColumns as GridColDef[],
+                SEND_FILTER_FIELDS,
+                SEND_FILTER_OPTIONS,
+                SEND_FILTER_HEADERS,
+              )}
               rowHeight={TABLE_ROW_HEIGHT}
               onOpen={(_id, send) => {
                 const href = sendHref(send)
                 if (href) router.push(href)
               }}
-              {...sendFilter.gridProps}
+              loading={sendPage.status === 'loading'}
+              /*
+               * The panel and the search are the grid's; every clause and the
+               * search word are on the table's query (AGL-3321), and the grid
+               * neither filters nor sorts the page it is handed.
+               */
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              disableColumnSorting
+              hideFooter
+              initialState={{
+                columns: {
+                  columnVisibilityModel: hiddenFilterVisibility(
+                    SEND_FILTER_FIELDS,
+                    sendColumns.map((column) => String(column.field)),
+                  ),
+                },
+              }}
               noRowsLabel="No emails match these filters"
+            />
+            <ListPagination
+              page={sendPage.page}
+              pageSize={sendPage.pageSize}
+              rowCount={sendPage.rows.length}
+              hasMore={sendPage.hasMore}
+              onPageChange={sendPage.setPage}
+              onPageSizeChange={sendPage.setPageSize}
             />
             {sendsTruncated ? (
               <Alert severity="info">
-                {`Showing ${CAMPAIGN_EMAIL_CEILING} of this campaign's ` +
-                  'emails. It has sent more — the ones listed are not ' +
-                  'necessarily the most recent, because a send carries no ' +
-                  'date field that every writer stamps, and the figures above ' +
-                  'cover the emails listed.'}
+                {`The figures above cover ${CAMPAIGN_EMAIL_CEILING} of this ` +
+                  'campaign’s emails. It has sent more; the table lists ' +
+                  'every one of them.'}
               </Alert>
             ) : null}
           </Stack>

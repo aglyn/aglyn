@@ -10,7 +10,7 @@ The **media library** stores your images, video, and files, keeps them organized
 serves them quickly. Media plugs into components like **Image** and **Video** and into the
 theme's favicon.
 
-![The Media page in the Aglyn console: the site library with thumbnails, folders, search, type/date/size filters and tags, plus the organization-shared media section](/img/media/media-page.png)
+![The Media page in the Aglyn console: the site library in the Grid view, with its folder rail, the Filters and Search toolbar beside the Sort control, a folder card and thumbnails, above the organization-shared media section](/img/media/media-page.png)
 
 ```mermaid
 flowchart LR
@@ -44,25 +44,18 @@ uploads are paused on every plan for now — see [Upload](#upload).
   clicking Move again picks up exactly where it stopped. Nothing is lost either way: a
   file is only ever in one folder, its URL keeps working, and a repeat move of a file
   that already arrived does nothing.
-- Filter by **type, date, and size**, search, and sort the library.
-- **Search covers everything you authored, not just file names** — alt text, description,
-  tags, folder name and your own custom metadata values are all searchable. Results update
-  as you type, and **✕** (or **Esc**) clears the box.
-  - **Wildcards**: `mock-*-noshadow.png` matches a whole family of files. `*` is any run of
-    characters, `?` is exactly one, and a wildcard pattern matches the *whole* value.
-  - **Search one field**: `tag:hero`, `name:logo`, `alt:product`, `desc:landing`,
-    `folder:brand`, or a custom field by key — `meta.campaign:spring`. Combine them with
-    plain words; everything you type has to match.
-  - **Phrases**: put quotes around anything with a space — `"landing page"`, `tag:"black friday"`.
-  - **Typos still find things.** If nothing matches literally, Aglyn falls back to close
-    matches and tells you it did.
-  - The caption under the box always says **what was actually searched** — the whole library,
-    or how much of it. Typing loads the rest of the library once so the search covers all of
-    it; on very large libraries it searches as much as it can and says where it stopped, so
-    narrowing by folder, type or date gets you the rest.
+- **Filter, search and sort** through the same toolbar as every other list in the
+  console, in either of two views — see [Filter and search](#filter-and-search) and
+  [Grid and List views](#views) below.
+- **Search finds a file by any word of its name** — `banner` finds `hero-banner_2x.png`,
+  because a file name's words are split at dashes, dots and underscores as well as spaces.
+  Results come from the whole library, however large, and **✕** (or **Esc**) clears the box.
 - Capture and edit **metadata** in a detail drawer — file name, alt text, description,
-  [tags](#tags), and your own **custom key/value metadata** (mirrored onto the delivered
-  object's storage metadata). Bulk-edit tags and folders across a selection.
+  [tags](#tags), and your own [custom key/value metadata](#custom-metadata) (mirrored onto
+  the delivered object's storage metadata). Bulk-edit tags and folders across a selection.
+- See and edit [the details inside the file itself](#file-info) — a photo's caption,
+  credit, copyright, keywords and camera, a PDF's title and author, an Office file's
+  properties, a video's tags — under **File info** in the same drawer.
 - Each card has an **overflow menu** (the ⋮ button that appears on hover) so actions stay
   tidy. What it offers depends on the file:
   - **Copy URL** — public files only. **Copy temporary link** replaces it on a private
@@ -118,6 +111,87 @@ uploads are paused on every plan for now — see [Upload](#upload).
   you deleted disappear and everything else stays exactly where it was — so a long
   clear-out is one pass, not one pass per file.
 
+### Filter and search {#filter-and-search}
+
+The library filters like every list in the console: **Filters** in its toolbar
+adds a filter, each filter in force shows as a chip above the files, and
+**Search** finds files by name. See
+[Filter and search a list](../../getting-started/console-tour.md#filter-and-search) for
+how the panel and the chips work everywhere.
+
+**Every filter and the search look through the whole library**, not just the files on
+screen: a file that matches is found however far down the library it is, and
+**Load more** only ever brings more matches.
+
+**What you can filter by** — every field is one the library stores for each file:
+
+- **Type:** Images, Video, PDF, or Other documents (ZIP, Word, Excel, PowerPoint,
+  CSV, text, Markdown and JSON).
+- **Tags:** is, or is any of, the [tags](#tags) the library has shown you.
+- **Uploaded:** a day, after or before one, or on or after or before one.
+- **Size (MB):** over, at least, under, or at most a size in megabytes.
+- **Uploaded by:** a teammate, or **API key** for a file an integration uploaded over
+  the [API](/api/resources/media).
+- **Alt text:** **Missing** or **Set**. **Alt text is Missing** is the quick way to find
+  the images a screen reader cannot describe yet.
+- **Orientation:** landscape, portrait or square, from the dimensions measured when the
+  file was uploaded — an image's own, or a video's frame.
+- **Name:** starts with.
+
+**Folders** stay in the rail, and so do the breadcrumbs: open a folder to see what is
+in it, and tick **Include subfolders** beside the breadcrumbs to see every file in the
+folders under it too. A folder with a great many subfolders is read on its own, and the
+library says so.
+
+**Search** looks for one word at a time: `hero banner` searches for `hero`, and the
+library says so. Words are matched from their start, so `ban` finds `banner` and `nner`
+does not. For a collaborator whose access is limited to some sites, search in the
+organization library finds files whose **name starts with** what you type instead, and
+the library says that too.
+
+**Filters on different fields add up**: a file shows when it matches all of them. A few
+combinations cannot be looked up together, and when you set one the library does not
+guess — it names the filter it set aside and why, above the files:
+
+- **One range at a time.** **Uploaded**, **Size (MB)** and **Name starts with** each
+  look up a range, and one range can apply at a time. A range also orders the files by
+  what it ranges over — an **Uploaded** filter sorts them by date, **Size** by size —
+  and the library says when it has changed the order you picked.
+- **Tags beside search.** A **Tags** filter and a search cannot be looked up together:
+  clear one to use the other.
+- **Tags for a collaborator limited to some sites** is not offered: the lookup that
+  shows them only the files they may see is the one of that kind a search can make.
+
+Your own [custom metadata](#custom-metadata), the alt text's words, the description and
+the folder name are not filters or search terms: they are shown and edited in each
+file's **Details**.
+
+### Grid and List views {#views}
+
+The buttons at the top right of the library switch between two views of the same
+files. Both use the same filters, chips, search, sort and selection, and the library
+remembers the view you chose — on every library you open and on every device you
+sign in on.
+
+- **Grid** shows thumbnails, with the current folder's subfolders as cards before
+  the files. The **Sort** control beside the toolbar orders them Newest, Oldest,
+  Name or Largest.
+- **List** is a table: a thumbnail, the name, type, size, dimensions (and a video's
+  length), tags, folder, upload date and who uploaded it. Click **Name**, **Size**
+  or **Uploaded** to sort, tick rows to select them for the bulk actions, click a
+  row to open its details, and drag a row by its name onto a folder in the rail to
+  move it. The toolbar's **Columns** hides columns and **Export** downloads the
+  table.
+
+![The media library's List view: a table of files with a thumbnail, name, type, size, dimensions, tags, folder, upload date and uploader, under the Columns, Filters, Export and Search toolbar](/img/media/media-list-view.png)
+
+Where a file is used is not a column: finding that means checking every page,
+layout, component and email, so it runs on demand from the file's details — see
+**Find where this is used** above.
+
+A picker that only takes one kind of file — a video field, say — shows a
+**Type is Video** chip you cannot remove, and offers no other type.
+
 ### Tags {#tags}
 
 Open a file's **Details** drawer and look under **Tags**. Existing tags are **chips**:
@@ -137,12 +211,68 @@ A tag is tidied **as you add it**, not quietly at save time:
 - a tag already on the file is not added twice — re-adding one looks like nothing
   happened, because it is nothing.
 
-That matters for finding things again. The library's filter chips and the `tag:` search
-prefix match the **stored** tag, so a tag that carried a trailing space used to become a
+That matters for finding things again. The library's **Tags** filter matches the
+**stored** tag, so a tag that carried a trailing space used to become a
 tag no chip could ever match — a file you tagged and then could not find by that tag.
 Normalizing at entry is what makes the chip you see and the tag that gets stored the
 same thing. The exact caps are in
 [Tag limits](#tag-limits).
+
+### Custom metadata {#custom-metadata}
+
+Under **Custom metadata** in the **Details** drawer, **Add field** gives you a key and a
+value — a campaign code, a license number, whatever your team files things by.
+Removing a field or renaming its key and pressing **Save** takes the old one off the
+file for good; it does not come back the next time the drawer opens.
+
+Custom metadata belongs to Aglyn, not to the file: it is never written into the file's
+bytes, so a download does not carry it. For details that should travel with the file,
+use [File info](#file-info).
+
+### Details inside the file {#file-info}
+
+Most files carry details of their own, written by the camera, the editing app or whoever
+prepared them — a photo's caption and copyright, a PDF's title and author. **File info**,
+near the bottom of the **Details** drawer, shows them next to what Aglyn itself measured
+(type, size, dimensions, running time, when it was uploaded and last changed).
+
+The first time you open a file that was uploaded before this existed, Aglyn reads the
+file and keeps what it found, so the next visit is instant. New uploads are read as they
+arrive.
+
+**What is read:**
+
+| File | Details |
+| -- | -- |
+| JPEG, PNG, WebP, TIFF | Title, headline, description, keywords, creator, copyright, credit line, source, usage terms, city/state/country, GPS position, date taken, camera, lens, exposure, rating and label — from XMP, IPTC and EXIF, plus PNG text |
+| HEIC, AVIF, GIF, SVG | The same where the format carries it |
+| PDF | Title, author, subject, keywords, the app it was created with, producer, dates, page count, and any custom document properties |
+| Word, Excel, PowerPoint | Title, subject, author, keywords, comments, category, company, dates, and custom properties |
+| MP4, MOV, WebM | Title, artist, description, recording date, location, camera and encoder tags |
+
+When a photo holds the same detail in more than one place (a caption in XMP, IPTC *and*
+EXIF, say), **File info** shows it once.
+
+**Editing.** Press **Edit** to change a value, clear it, or **Add a field** from the
+list of fields that kind of file can hold, then **Save to file**. The change is written
+into the file itself — the same link, served to every page that uses it, and included in
+every download — without re-encoding it: the picture, the pages and everything else in
+the file stay byte-for-byte the same. Where a photo holds a detail in several places,
+all of them are updated, so no app is left reading the old value.
+
+- JPEG, PNG, WebP, TIFF, PDF and Word/Excel/PowerPoint files can be edited. Video, HEIC,
+  AVIF, GIF and SVG details are read-only.
+- **Encrypted or digitally signed PDFs** are read-only — changing a signed PDF would
+  break its signature.
+- Measured facts (size, dimensions, exposure, page count) cannot be edited, because
+  they describe the file rather than annotate it.
+- If someone replaced or edited the file since you opened the drawer, saving tells you
+  to reopen it instead of writing over their change.
+
+**Remove location.** A photo taken on a phone usually records where it was taken, and
+anyone who downloads it from your site can read that. When a photo carries a GPS
+position, **Remove location from file** erases it from the file itself. It cannot be put
+back afterwards, so Aglyn asks first.
 
 ## Upload
 

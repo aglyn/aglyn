@@ -76,15 +76,27 @@ const docHandle = (id: string) => ({
   },
 })
 
-const listing = (): any => ({
-  orderBy: () => listing(),
-  limit: () => listing(),
+/** Every `where` the queue put on its query, in order (AGL-3321). */
+const wheres: Array<[string, string, unknown]> = []
+const listing = (
+  predicates: Array<[string, string, unknown]> = [],
+): any => ({
+  where: (field: string, op: string, value: unknown) => {
+    wheres.push([field, op, value])
+    return listing([...predicates, [field, op, value]])
+  },
+  orderBy: () => listing(predicates),
+  limit: () => listing(predicates),
   get: async () => ({
-    docs: Object.entries(state.reports).map(([id, data]) => ({
-      id,
-      data: () => data,
-      get: (field: string) => data[field],
-    })),
+    docs: Object.entries(state.reports)
+      .filter(([, data]) =>
+        predicates.every(([field, op, value]) => op === '==' && data[field] === value),
+      )
+      .map(([id, data]) => ({
+        id,
+        data: () => data,
+        get: (field: string) => data[field],
+      })),
   }),
   doc: (id: string) => docHandle(id),
 })
@@ -254,12 +266,16 @@ describe('EACH REPORT ARRIVES WITH ITS OWN REASON', () => {
     })
   })
 
-  it('filters by status without inventing an index', async () => {
+  it('filters by status ON THE QUERY, not over a loaded window (AGL-3321)', async () => {
     state.reports[SPAM]['status'] = 'dismissed'
+    wheres.length = 0
     const open = await (await get('?status=open')).json()
     expect(open.reports.map((row: any) => row.id)).toEqual([PHISHING])
+    expect(wheres).toEqual([['status', '==', 'open']])
+    wheres.length = 0
     const all = await (await get()).json()
     expect(all.reports).toHaveLength(2)
+    expect(wheres).toEqual([])
   })
 })
 

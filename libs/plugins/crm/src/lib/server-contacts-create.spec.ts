@@ -77,6 +77,10 @@ jest.mock('@aglyn/tenant-runtime', () => ({
   emitHostEvent: jest.fn(),
 }))
 jest.mock('@aglyn/tenant-data-admin', () => ({
+  // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
+  restampCrmListFieldsAt: async () => 'current',
+  restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
+  restampCrmListFields: async () => ({ restamped: 0, current: 0, missing: 0 }),
   firebaseAdmin: {
     app: () => ({
       auth: () => ({ verifyIdToken: async () => mockDecoded }),

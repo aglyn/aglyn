@@ -18,8 +18,12 @@
 'use client'
 
 import { Chip, Stack, Tooltip } from '@mui/material'
-import { type ListFilterField, listFilterOperatorLabel } from '../const/list-filter'
-import type { ListFilterClause, ListFilterOption } from '../const/list-grid-filter'
+import type { ListFilterField } from '../const/list-filter'
+import {
+  type ListFilterClause,
+  type ListFilterOption,
+  listFilterClauseSentence,
+} from '../const/list-grid-filter'
 
 export interface ListFilterChipsProps {
   /** The list's grammar — every field a clause may name. */
@@ -42,16 +46,6 @@ export interface ListFilterChipsProps {
    */
   marksServed?: boolean
   disabled?: boolean
-}
-
-/** Operators that carry no value. */
-const VALUELESS = new Set(['isEmpty', 'isNotEmpty'])
-/** Operators that take several values, comma-joined the way the grammar splits them. */
-const MULTI = new Set(['isAnyOf'])
-
-const dayLabel = (raw: string): string => {
-  const at = new Date(raw)
-  return Number.isNaN(at.getTime()) ? raw : at.toLocaleDateString()
 }
 
 /**
@@ -77,26 +71,9 @@ export function ListFilterChips(props: ListFilterChipsProps) {
     marksServed = props.servedField !== undefined,
     disabled = false,
   } = props
-  const header = (column: string) => headers[column] ?? column
-
-  /** How a clause reads: its header, its operator, and its value by label. */
-  const sentence = (clause: ListFilterClause): string => {
-    const field = fields.find((entry) => entry.column === clause.field)
-    const choices = options[clause.field]
-    const named = (value: string) =>
-      choices?.find((option) => option.value === value)?.label ?? value
-    const value = VALUELESS.has(clause.op)
-      ? ''
-      : MULTI.has(clause.op)
-        ? clause.value
-            .split(',')
-            .map((entry) => entry.trim())
-            .filter(Boolean)
-            .map(named)
-            .join(', ')
-        : clause.label ?? (field?.kind === 'date' ? dayLabel(clause.value) : named(clause.value))
-    return `${header(clause.field)} ${listFilterOperatorLabel(clause.op)}${value ? ` ${value}` : ''}`
-  }
+  /** How a clause reads — the one wording the notices use too. */
+  const sentence = (clause: ListFilterClause): string =>
+    listFilterClauseSentence(clause, { fields, headers, options })
 
   if (!clauses.length) return null
   return (

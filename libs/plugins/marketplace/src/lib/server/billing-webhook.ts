@@ -1039,6 +1039,16 @@ export const marketplaceBillingWebhookHandler: BillingWebhookHandler = async ({
                 // Absent, rather than null, when the session states no
                 // country: see `buyerTaxJurisdiction`.
                 ...(jurisdiction ? { customerAddress: jurisdiction } : {}),
+                // WHAT THE LICENSES TAB QUERIES BY (AGL-3321), explicit from
+                // the first record. A query cannot ask for an ABSENT field,
+                // so "not refunded" is `refundedAt == null` and "licenses no
+                // workspace in particular" is `buyerOrgId == null` — both
+                // only reach a document that carries the null. Here, in the
+                // first-record branch, and nowhere else: a redelivery landing
+                // after a refund must never write `refundedAt` back to null,
+                // which would hand the refunded buyer their install back.
+                refundedAt: null,
+                ...(buyerOrgId ? {} : { buyerOrgId: null }),
               }),
         },
         // MERGED, like every other write on this path (AGL-2109). This one

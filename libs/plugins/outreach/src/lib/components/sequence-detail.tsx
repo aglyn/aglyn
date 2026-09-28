@@ -62,7 +62,6 @@ import { OutreachSequenceEditor } from './sequence-editor'
 import { OutreachSequenceReportCard } from './sequence-report-card'
 import { OutreachRouteError, useOutreachApi } from './use-outreach-api'
 import {
-  useOutreachEnrollments,
   useOutreachSequence,
   useOutreachSequenceLinks,
 } from './use-outreach-data'
@@ -157,10 +156,6 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
   const { enqueueSnackbar } = useSnackbar()
   const { data: user } = useUser()
   const loaded = useOutreachSequence(orgId, sequenceId)
-  const enrollments = useOutreachEnrollments(
-    props.tab === 'enrollments' ? orgId : null,
-    sequenceId,
-  )
   // One document however large the sequence, and read on both tabs, because
   // the report card sits above them (AGL-3239).
   const links = useOutreachSequenceLinks(orgId, sequenceId)
@@ -432,7 +427,8 @@ export function OutreachSequenceDetail(props: OutreachSequenceDetailProps) {
         />
       ) : (
         <OutreachEnrollmentsTable
-          enrollments={enrollments}
+          orgId={orgId}
+          sequenceId={sequence.id}
           steps={sequence.steps}
           trackClicks={sequence.settings.trackClicks}
           timeZone={mailbox?.timezone ?? null}

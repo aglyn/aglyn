@@ -15,6 +15,10 @@
  * limitations under the License.
  */
 
+// The leaf module, not the server barrel: specs stage that barrel as a
+// closed world, and the list keys every create stamps (AGL-3321) are
+// nothing they have reason to name.
+import { artifactCreateListKeys } from '@aglyn/aglyn/app-utils/artifact-list-keys'
 import { PLATFORM_BRAND_NAME, pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
   ACTIONS_MAX_PER_HOST,
@@ -29,7 +33,6 @@ import {
   effectiveDatasetModel,
   hostScopeToken,
   legacyCollectionKind,
-  nameSearchKey,
   newResourceScopeFields,
   NON_PAGE_SCREEN_MAX_PER_HOST,
   resolveOrgEntitlements,
@@ -55,6 +58,11 @@ import {
   ENTRY_PUBLISH_SORT_FIELD,
   entryPublishSortStamp,
 } from '@aglyn/aglyn/app-utils/collection-entry-date'
+import {
+  contentAuthorQueryFields,
+  entryTitleSearchFields,
+} from '@aglyn/aglyn/app-utils/content-query-fields'
+import { activitySearchTokens } from '@aglyn/aglyn/app-utils/activity-search'
 import { withMatchableConditions } from '@aglyn/aglyn/app-utils/reusable-prop-values'
 import { decodeBundleTimestamps } from '../../_lib/bundle-timestamps'
 import {
@@ -104,6 +112,11 @@ function cleanDoc(
   if (clean['props'] !== undefined) {
     clean['props'] = withMatchableConditions(clean['props'])
   }
+  // A restore is a create (`merge: false` replaces the document), so a
+  // screen, layout or component lands with the keys its list queries by
+  // (AGL-835, AGL-3321) — re-derived, because a bundle may predate them or
+  // carry keys for a name it no longer holds. Nothing for other collections.
+  Object.assign(clean, artifactCreateListKeys(collection, clean))
   clean['updatedAt'] = firebaseAdmin.firestore.FieldValue.serverTimestamp()
   /*
    * `createdAt` TOO, and this one closes a trap rather than tidying a pair
@@ -959,12 +972,8 @@ async function handler(request: Request): Promise<Response> {
       for (const item of bundleItems(name)) {
         if (!item?.$id) continue
         const docRef = hostRef.collection(name).doc(String(item.$id))
+        // `cleanDoc` re-derives the list keys (AGL-835, AGL-3321).
         const cleaned = cleanDoc(name, item)
-        // Re-derive the name-search key on restore (AGL-835) — bundles may
-        // predate the field, and only screens are queried by name.
-        if (name === 'screens' && typeof cleaned['displayName'] === 'string') {
-          cleaned['nameLower'] = nameSearchKey(cleaned['displayName'] as string)
-        }
         await writeDoc(docRef, cleaned)
         if (item.version?.$id) {
           const version = cleanDoc('versions', item.version)
@@ -1036,11 +1045,35 @@ async function handler(request: Request): Promise<Response> {
           const publishSortAt = entryPublishSortStamp(cleanedEntry as any)
           await write(
             docRef.collection('entries').doc(String(entry.$id)),
-            publishSortAt
-              ? { ...cleanedEntry, [ENTRY_PUBLISH_SORT_FIELD]: publishSortAt }
-              : cleanedEntry,
+            {
+              ...cleanedEntry,
+              // The entries table's search words (AGL-3321), derived from
+              // the restored title for the same reason: a bundle's copy is
+              // whatever the export or its editor made of it.
+              ...entryTitleSearchFields(cleanedEntry['title']),
+              ...(publishSortAt
+                ? { [ENTRY_PUBLISH_SORT_FIELD]: publishSortAt }
+                : {}),
+            },
           )
         }
+      }
+    }
+
+    /**
+     * Authors through the `authors` allow-list, like any plain collection, and
+     * then the fields the Authors table queries (AGL-3321) — derived from the
+     * restored name and type, never carried: an older bundle spells `type`
+     * as a string and holds no search keys at all.
+     */
+    const importAuthors = async () => {
+      for (const item of bundleItems('authors')) {
+        if (!item?.$id) continue
+        const cleaned = cleanDoc('authors', item)
+        await write(hostRef.collection('authors').doc(String(item.$id)), {
+          ...cleaned,
+          ...contentAuthorQueryFields(cleaned),
+        })
       }
     }
 
@@ -1325,7 +1358,7 @@ async function handler(request: Request): Promise<Response> {
     await importPlain('functions')
     await importPlain('workflows')
     await importPlain('actions')
-    await importPlain('authors')
+    await importAuthors()
     await importPlain('services')
     // Folders before assets: the tree has to exist before anything points into
     // it, and both reads resolve against the same id set (AGL-1392).
@@ -1366,6 +1399,8 @@ async function handler(request: Request): Promise<Response> {
         actorEmail: decoded.email ?? null,
         action: `Restored site from export (${written} documents)`,
         target: { type: 'host', id: hostId },
+        // What the log's search box finds the entry by (AGL-3321).
+        searchTokens: activitySearchTokens({ actorEmail: decoded.email }),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
       })
       .catch(() => undefined)

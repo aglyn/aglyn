@@ -25,10 +25,11 @@
  * 1. The row OPENS the template and the name is a real `<a href>` as well.
  * 2. Edit and Delete are in the shared overflow menu. Delete in particular:
  *    it sat inline, one mis-click from the name beside it.
- * 3. The read NAMES ITS ORDER and probes one past its ceiling. `screens` holds
- *    every kind of screen and the email ones are picked out in the browser, so
- *    the cap is a ceiling rather than a page — and a ceiling with no probe is
- *    a partial site rendered as a whole one.
+ * 3. The list IS its query (AGL-3321): `kind == 'email'`, by `nameLower`,
+ *    paged by the query, with every Filters clause and search word a
+ *    predicate on it — so a match past the first page is found, and a
+ *    deleted template (whose name keys the delete clears) is left out by the
+ *    order rather than dropped in the browser.
  * 4. The list has the console's one footer under it, which is what took this
  *    file off `OWES_A_FOOTER`.
  *
@@ -38,6 +39,7 @@
 
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { EmailScreensCard } from './email-screens-card'
 
 const BASE_PATH = '/acme/hosts/site/emails'
@@ -49,10 +51,8 @@ jest.mock('next/navigation', () => ({
 }))
 
 const FIRESTORE = {}
-/** Screens the ceilinged read answers with, staged per case. */
+/** The site's screens, as the query double answers its plan over them. */
 let screenDocs: Array<Record<string, unknown>> = []
-/** Every ceiling the card asked the query builder for. */
-let ceilingsAsked: number[] = []
 
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // Duplicate (AGL-2936) is a door of its own; these specs exercise the
@@ -63,36 +63,23 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useConsoleHostRoute: () => ({ orgSlug: 'acme', subdomain: 'site' }),
   useHostResourceApi: () => jest.fn(),
   useHostVersionApi: () => jest.fn(),
-  // The builder is CALLED, not ignored: the ceiling this card asks for is
-  // recorded by the query-builder double below, and a hook that never invoked
-  // the builder would leave that assertion reading an empty array forever.
-  useFirestoreCollection: (build: () => unknown) => {
-    build()
-    return { data: screenDocs, status: 'success', fromCache: false }
-  },
 }))
 
 /*
- * The shared query builder, RECORDED rather than stubbed away.
- *
- * `collectionCeiling` is what carries the `orderBy(documentId())` for this
- * card, and `ceilingedWindow` is what turns its answer into a window plus the
- * fact that it was cut short. Recording the ceiling is how "reads one past it"
- * becomes a claim rather than a comment.
+ * The card's REAL plan, answered the way Firestore would answer it: every
+ * predicate applied, `orderBy` sorting AND dropping a row without the field,
+ * and the answer paged (AGL-3321).
  */
-jest.mock(
-  '@aglyn/tenant-feature-instance/hooks/host-collection-queries',
-  () => ({
-    collectionCeiling: (ref: unknown, ceiling: number) => {
-      ceilingsAsked.push(ceiling)
-      return ref
-    },
-    ceilingedWindow: (rows: unknown[] | undefined, ceiling: number) => ({
-      rows: (rows ?? []).slice(0, ceiling),
-      truncated: (rows ?? []).length > ceiling,
-    }),
-  }),
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(
+      () => screenDocs,
+      jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    ),
 )
+const lastPlan = () =>
+  jest.requireActual('@aglyn/tenant-feature-instance/testing/list-query-double').lastListQueryPlan()
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
@@ -100,6 +87,7 @@ jest.mock('firebase/firestore', () => ({
   }),
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   Timestamp: { now: () => ({ seconds: 0 }) },
+  deleteField: () => '__deleteField',
   updateDoc: jest.fn().mockResolvedValue(undefined),
 }))
 
@@ -128,6 +116,12 @@ jest.mock('@aglyn/shared-ui-jsx', () => ({
   MdiIcon: () => null,
 }))
 
+/** A screen as its writers store it: the name keys beside `displayName`. */
+const stamped = (screen: Record<string, unknown>) => ({
+  ...screen,
+  ...displayNameSearchFields(screen['displayName']),
+})
+
 const mountCard = async () => {
   render(<EmailScreensCard hostId="host-1" basePath={BASE_PATH} />)
   await act(async () => {
@@ -150,23 +144,23 @@ beforeEach(() => {
   mockPush.mockClear()
   mockConfirm.mockClear()
   confirmAccepts = true
-  ceilingsAsked = []
   screenDocs = [
-    {
+    stamped({
       $id: 'scr-welcome',
       kind: 'email',
       displayName: 'Welcome',
       versionId: 'ver-1',
-    },
-    {
+    }),
+    stamped({
       $id: 'scr-promo',
       kind: 'email',
       displayName: 'Promo',
       versionId: 'ver-2',
-    },
+    }),
     // Not a template: the site's ordinary screens share this collection.
-    { $id: 'scr-home', kind: 'page', displayName: 'Home', versionId: 'ver-3' },
-    // Deleted, and still in the collection until it is swept.
+    stamped({ $id: 'scr-home', kind: 'page', displayName: 'Home', versionId: 'ver-3' }),
+    // Deleted: the delete cleared its name keys, and it stays in the
+    // collection for the reports sent from it.
     {
       $id: 'scr-old',
       kind: 'email',
@@ -190,34 +184,36 @@ describe('the templates list draws the site’s email templates', () => {
     expect(names).not.toContain('Retired promo')
   })
 
-  it('asks the shared builder for a ceiling, which names the order', async () => {
-    // `orderBy('displayName')` matches only documents that HAVE the field, so
-    // a screen created without a name would vanish rather than sort oddly.
-    // `collectionCeiling` orders on the document name instead.
+  it('asks its query for the email scope, by name', async () => {
     await mountCard()
-    // The builder runs per render, so the claim is about the CEILING asked
-    // for rather than about how many times the query was rebuilt.
-    expect(ceilingsAsked.length).toBeGreaterThan(0)
-    expect([...new Set(ceilingsAsked)]).toEqual([200])
+    expect(lastPlan()?.filters).toEqual([{ path: 'kind', op: '==', value: 'email' }])
+    expect(lastPlan()?.orderBy).toMatchObject({ path: 'nameLower', direction: 'asc' })
   })
 
-  it('says when the ceiling bit, and stays quiet when it did not', async () => {
+  it('finds a template past the first page, because the search is on the query', async () => {
+    screenDocs = [
+      ...Array.from({ length: 12 }, (_, index) =>
+        stamped({
+          $id: `scr-${String(index).padStart(2, '0')}`,
+          kind: 'email',
+          displayName: `Alpha ${String(index).padStart(2, '0')}`,
+          versionId: 'ver-1',
+        }),
+      ),
+      stamped({ $id: 'scr-zulu', kind: 'email', displayName: 'Zulu digest', versionId: 'ver-1' }),
+    ]
     await mountCard()
-    expect(screen.queryByText(/more than 200 screens/)).toBeNull()
+    // THE CONTROL: the unfiltered first page does not hold it.
+    expect(rowFor('Zulu digest')).toBeUndefined()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'digest' } })
+    await waitFor(() => expect(rowFor('Zulu digest')).toBeTruthy())
+    expect(lastPlan()?.filters).toEqual([
+      { path: 'kind', op: '==', value: 'email' },
+      { path: 'nameTokens', op: 'array-contains', value: 'digest' },
+    ])
   })
 
-  it('owns up to a window that was cut short', async () => {
-    screenDocs = Array.from({ length: 201 }, (_, index) => ({
-      $id: `scr-${String(index).padStart(3, '0')}`,
-      kind: 'email',
-      displayName: `Template ${index}`,
-      versionId: 'ver-1',
-    }))
-    await mountCard()
-    expect(screen.getByText(/more than 200 screens/)).toBeTruthy()
-  })
-
-  it('pages the window it holds, on the console’s one footer', async () => {
+  it('pages its query on the console’s one footer', async () => {
     // The property that took this file off `OWES_A_FOOTER`: a table with rows
     // under it has a footer under those.
     await mountCard()
@@ -307,6 +303,14 @@ describe('the template row’s actions are in the shared overflow menu', () => {
     expect(updateDoc.mock.calls[0][0]).toEqual({
       path: 'hosts/host-1/screens/scr-promo',
     })
+    // The name keys go with the delete, which is what takes the tombstone
+    // off a list ordered by `nameLower` (AGL-3321).
+    expect(updateDoc.mock.calls[0][1]).toEqual({
+      deletedAt: { seconds: 0 },
+      nameLower: '__deleteField',
+      nameTokens: '__deleteField',
+      nameReversed: '__deleteField',
+    })
   })
 
   it('opening the menu does not open the template', async () => {
@@ -323,7 +327,7 @@ describe('the template row’s actions are in the shared overflow menu', () => {
 })
 
 describe('the templates list filters through the grid toolbar (AGL-3317)', () => {
-  it('searches every template the card read', async () => {
+  it('searches on the query', async () => {
     await mountCard()
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'promo' } })
     await waitFor(() => {

@@ -26,6 +26,7 @@ import {
 } from '@aglyn/aglyn/app-utils/plan-entitlements'
 import type { AglynOrgBilling } from '@aglyn/aglyn/foundation/definitions/org-billing.types'
 import { sendStaffAlertEmail } from '@aglyn/tenant-data-admin/server/staff-alert-email'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * The Free AI taste's precautions (AGL-2925) — the half of the meter that
@@ -356,15 +357,13 @@ export async function announcePlatformFreeSpend(
 
   const figure = `$${crossed.estCostUsd.toFixed(2)} of the $${ceilingUsd.toFixed(2)} ceiling`
   if (crossed.paused) {
-    await firestore
-      .collection('adminAudit')
-      .add({
-        actorUid: 'system:ai-free-spend',
-        action: 'platform.aiFreeSpend.paused',
-        target: `${PLATFORM_AI_FREE_SPEND_COLLECTION}/${day}`,
-        after: { day, estCostUsd: crossed.estCostUsd, ceilingUsd },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firestore, {
+      actorUid: 'system:ai-free-spend',
+      action: 'platform.aiFreeSpend.paused',
+      target: `${PLATFORM_AI_FREE_SPEND_COLLECTION}/${day}`,
+      after: { day, estCostUsd: crossed.estCostUsd, ceilingUsd },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch((error) =>
         console.error('[ai-free-spend] audit row failed', error),
       )

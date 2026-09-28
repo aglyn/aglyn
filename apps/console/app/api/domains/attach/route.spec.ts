@@ -56,6 +56,7 @@ const DELETE = { __delete__: true }
 const mockVerifyIdToken = jest.fn()
 const mockCheckEntitlement = jest.fn()
 const mockProjectDomainStatus = jest.fn()
+const mockSyncHostProjection = jest.fn(async (..._args: unknown[]) => undefined)
 const fetchMock = jest.fn()
 
 /** Applies a `set(..., { merge: true })` the way Firestore does, deletes included. */
@@ -194,6 +195,9 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
   logHostActivity: async () => undefined,
   lockdownRefusal: async () => null,
   projectDomainStatus: (...args: unknown[]) => mockProjectDomainStatus(...args),
+  // CAPTURED (AGL-3321): the members' site rows follow the new domain, for
+  // the Sites cards' search and Custom domain filter.
+  syncHostProjectionForMembers: (...args: unknown[]) => mockSyncHostProjection(...args),
 }))
 
 jest.mock('@aglyn/aglyn/server', () => ({
@@ -305,6 +309,8 @@ describe('one domain, one site — in both directions (AGL-743)', () => {
     // which is the AGL-743 bug exactly: the client wrote `cname` first and
     // kept it after losing the check.
     expect(docs.get('hosts/mine')?.['cname']).toBeUndefined()
+    // Nothing moved, so no member's site row is re-synced.
+    expect(mockSyncHostProjection).not.toHaveBeenCalled()
     expect(docs.get('hosts/theirs')?.['cname']).toBe('example.com')
     // And nothing was said to Vercel about a domain we did not claim.
     expect(fetchMock).not.toHaveBeenCalled()
@@ -320,6 +326,8 @@ describe('one domain, one site — in both directions (AGL-743)', () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ attached: true })
     expect(docs.get('hosts/mine')?.['cname']).toBe('example.com')
+    // The Sites cards' rows re-derive from the host the claim just wrote.
+    expect(mockSyncHostProjection).toHaveBeenCalledWith('org-1', 'mine')
     expect(fetchMock.mock.calls[0][0]).toBe(
       'https://api.vercel.com/v10/projects/prj_tenant/domains?teamId=team_test',
     )

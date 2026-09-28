@@ -30,9 +30,14 @@ import {
   firebaseAdmin,
   getOrgForHost,
   type HostContactCreated,
+  restampCrmListFieldsAt,
   writeContactCompanyLink,
 } from '@aglyn/tenant-data-admin'
-import { COMPANY_CONTACTS_COUNT_FIELD, planContactCompanyLink } from '@aglyn/aglyn/server'
+import {
+  COMPANY_CONTACTS_COUNT_FIELD,
+  crmNewRecordListFields,
+  planContactCompanyLink,
+} from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
 
 /** What the association did, for the spec and the log. */
@@ -137,7 +142,7 @@ export async function associateCompanyByDomain(
     if (!plan?.companyId) return { outcome: 'none', reason: 'failed' }
     const companyRef = companiesRef.doc(plan.companyId)
     const batch = firestore.batch()
-    batch.set(companyRef, {
+    const company: Record<string, unknown> = {
       ...nameSearchFields(companyNameForDomain(domain)),
       domain,
       visibleTo: crmScopeTokens(org, group),
@@ -145,12 +150,19 @@ export async function associateCompanyByDomain(
       [COMPANY_CONTACTS_COUNT_FIELD]: 1,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+    }
+    batch.set(companyRef, {
+      ...company,
+      // What the Companies list searches and filters by (AGL-3321).
+      ...crmNewRecordListFields('companies', company),
     })
     batch.update(contactRef, {
       ...contactCompanyLinkFields(plan, group.groupId),
       updatedAt: FieldValue.serverTimestamp(),
     })
     await batch.commit()
+    // The company is what the Contacts list filters by (AGL-3321).
+    await restampCrmListFieldsAt(contactRef, 'contacts')
     return { outcome: 'created', companyId: plan.companyId }
   } catch (error) {
     console.error(

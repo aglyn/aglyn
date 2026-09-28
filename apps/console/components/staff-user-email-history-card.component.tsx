@@ -22,12 +22,26 @@ import { CardDisplay } from '@aglyn/shared-ui-jsx'
 // there put ~257 KB of virtualizer into every published customer page.
 import { ListTable } from '@aglyn/shared-ui-jsx/components/list-table.component'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
-import { useListRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-rows-filter'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import {
+  type ListFilterClause,
+  listFilterGridColumns,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import { Alert, Chip, Stack, Typography } from '@mui/material'
 import { type GridColDef } from '@mui/x-data-grid'
 import { useMemo, useState } from 'react'
 import { docsHelp } from '../constants/docs-links'
+import { useStaffListQuery } from '../hooks/use-staff-list-query'
+import {
+  EMAIL_HISTORY_FIELDS,
+  EMAIL_HISTORY_HEADERS,
+  EMAIL_HISTORY_SELECT_FIELDS,
+} from '../utils/email-history-list-query'
 import StaffEmailMessageDialog from './staff-email-message-dialog.component'
 
 /** One message, as the staff detail route returns it. */
@@ -61,12 +75,8 @@ export interface StaffEmailAddress {
 }
 
 export interface StaffUserEmailHistoryCardProps {
-  rows: StaffEmailDeliveryRow[]
-  /**
-   * The read failed. NOT the same as an empty list — see the copy below,
-   * which is the whole reason the two are kept apart.
-   */
-  lookupFailed: boolean
+  /** The account whose mail this is; the card reads it a page at a time. */
+  uid: string
   /** The account's current primary, shown so a mismatch is visible. */
   address: string | null
   /**
@@ -104,32 +114,15 @@ const STATUS_PRESENTATION: Record<
   failed: { label: 'Failed', color: 'error' },
 }
 
-/*
- * What the delivery grid filters and searches by. The card holds every
- * message the detail route read (its own bounded window), so both answer
- * over all of them rather than the page the grid is showing.
- */
-const EMAIL_FILTER_FIELDS = [
-  inMemoryListField('subject', 'text'),
-  inMemoryListField('context', 'text'),
-  inMemoryListField('status', 'select'),
-  inMemoryListField('openCount', 'number'),
-  inMemoryListField('clickCount', 'number'),
-]
-const EMAIL_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  subject: 'Message',
-  context: 'Sender',
-  status: 'Status',
-  openCount: 'Opens',
-  clickCount: 'Clicks',
-}
 const EMAIL_FILTER_OPTIONS = {
   status: Object.entries(STATUS_PRESENTATION).map(([value, { label }]) => ({
     value,
     label,
   })),
 }
-const EMAIL_SEARCH_PATHS = ['subject', 'context', 'to']
+
+/** One message as the history route returns it, keyed across addresses. */
+type HistoryRow = StaffEmailDeliveryRow & { $id: string }
 
 /** Date AND time: two sends on one day is the interesting case. */
 function formatWhen(ms: number | null | undefined): string {
@@ -176,8 +169,7 @@ function formatWhen(ms: number | null | undefined): string {
  * implying completeness.
  */
 export function StaffUserEmailHistoryCard({
-  rows,
-  lookupFailed,
+  uid,
   address,
   addresses = [],
   addressesIncomplete = false,
@@ -186,14 +178,40 @@ export function StaffUserEmailHistoryCard({
   const [open, setOpen] = useState<StaffEmailDeliveryRow | null>(null)
 
   /*
-   * `$id` because that is the id `ListTable` reads (`getRowId={row => row.$id}`),
-   * and the original row is carried through as `record` so the dialog gets the
-   * whole thing rather than the flattened cells the grid renders.
+   * THE FILTERS AND THE SEARCH ARE ON THE QUERY (AGL-3321).
+   *
+   * `/api/admin/users/email-history` reads every address the account holds,
+   * newest first, a page at a time, with every clause and the search word on
+   * each address's query — so a filter reaches the whole log, not the
+   * messages a first read happened to fetch. What it cannot put on the query
+   * is named above the table and not applied.
+   */
+  const [clauses, setClauses] = useState<ListFilterClause[]>([])
+  const [searchWords, setSearchWords] = useState<string[]>([])
+  const gridFilter = useListGridFilter({
+    selectFields: EMAIL_HISTORY_SELECT_FIELDS,
+    clauses,
+    onChange: setClauses,
+    search: { words: searchWords, onChange: setSearchWords },
+  })
+  const params = useMemo(() => ({ uid }), [uid])
+  const history = useStaffListQuery<HistoryRow>({
+    endpoint: uid ? '/api/admin/users/email-history' : null,
+    clauses,
+    search: searchWords,
+    params,
+  })
+  const lookupFailed = history.failed
+
+  /*
+   * `$id` is the id `ListTable` reads, and the original row is carried
+   * through as `record` so the dialog gets the whole thing rather than the
+   * flattened cells the grid renders.
    */
   const gridRows = useMemo(
     () =>
-      rows.map((row) => ({
-        $id: row.messageId,
+      history.rows.map((row) => ({
+        $id: row.$id,
         record: row,
         subject: row.subject || 'No subject recorded',
         context: row.context,
@@ -203,16 +221,15 @@ export function StaffUserEmailHistoryCard({
         openCount: row.openCount,
         clickCount: row.clickCount,
       })),
-    [rows],
+    [history.rows],
   )
-  const emailFilter = useListRowsFilter({
-    rows: gridRows,
-    fields: EMAIL_FILTER_FIELDS,
+  const filterColumns = (shown: GridColDef[]) =>
+    listFilterGridColumns(shown, EMAIL_HISTORY_FIELDS, EMAIL_FILTER_OPTIONS, EMAIL_HISTORY_HEADERS)
+  const refused = listQueryRefusals(history.refused, {
+    fields: EMAIL_HISTORY_FIELDS,
+    headers: EMAIL_HISTORY_HEADERS,
     options: EMAIL_FILTER_OPTIONS,
-    headers: EMAIL_FILTER_HEADERS,
-    search: EMAIL_SEARCH_PATHS,
   })
-  const { filterColumns } = emailFilter
 
   /*
    * Every cell is ONE LINE, and the numeric columns are right-aligned.
@@ -314,7 +331,8 @@ export function StaffUserEmailHistoryCard({
         headerAlign: 'right',
       },
     ]),
-    [filterColumns],
+    // The declaration and its options are constants.
+    [],
   )
 
   const help = docsHelp('staffConsole', {
@@ -418,7 +436,7 @@ export function StaffUserEmailHistoryCard({
             'never emailed them" — do not tell anyone their mail was or was ' +
             'not sent from this screen until it loads.'}
         </Alert>
-      ) : rows.length === 0 ? (
+      ) : gridRows.length === 0 && !history.filtering && !history.loading ? (
         <Stack spacing={1}>
           <Typography variant="body2" color="text.secondary">
             {listed.length
@@ -441,12 +459,28 @@ export function StaffUserEmailHistoryCard({
               'images never reports one, so a missing open is not evidence ' +
               'the mail was unread. A click is a real action and is reliable.'}
           </Typography>
-          <ListFilterChips {...emailFilter.chipsProps} />
+          <ListFilterChips
+            fields={EMAIL_HISTORY_FIELDS}
+            headers={EMAIL_HISTORY_HEADERS}
+            options={EMAIL_FILTER_OPTIONS}
+            clauses={clauses}
+            onChange={setClauses}
+          />
+          <ListQueryNotices refused={refused} notices={history.notices} />
           <ListTable
             aria-label="Email delivery"
-            rows={emailFilter.rows}
+            rows={gridRows}
             columns={columns}
-            {...emailFilter.gridProps}
+            loading={history.loading}
+            hideFooter
+            /*
+             * The route answers every filter and the search; the grid holds
+             * one page and never narrows it.
+             */
+            filterMode="server"
+            filterModel={gridFilter.filterModel}
+            onFilterModelChange={gridFilter.onFilterModelChange}
+            quickFilter
             noRowsLabel="No messages match these filters"
             /*
              * One line per row. The grid's default 52px is sized for stacked
@@ -475,6 +509,15 @@ export function StaffUserEmailHistoryCard({
               },
             }}
             onOpen={(_id, row) => setOpen(row.record as StaffEmailDeliveryRow)}
+          />
+          <ListPagination
+            page={history.pageIndex}
+            pageSize={history.pageSize}
+            rowCount={gridRows.length}
+            hasMore={history.hasMore}
+            disabled={history.loading}
+            onPageChange={(next) => void history.loadPage(next)}
+            onPageSizeChange={history.setPageSize}
           />
           {/*
             * Mounted only while a row is open. The dialog reads the signed-in

@@ -21,10 +21,12 @@
  *
  * Three contracts, reached through the hub the way the shell reaches it:
  *
- *  1. THE LISTENER IS SCOPED AND ORDERED. `visibleTo array-contains-any`
- *     over this site's tokens is the predicate the rules evaluate, and
- *     `updatedAt desc` is what makes page one the recently-touched page
- *     rather than a random sample of document ids.
+ *  1. THE QUERY IS SCOPED AND ORDERED, and carries the search. `visibleTo
+ *     array-contains-any` over this site's tokens is the predicate the
+ *     rules evaluate, `updatedAt desc` is what makes page one the
+ *     recently-touched page, and a search word is folded into the scope
+ *     clause so a company past the first page is found (AGL-3321). The
+ *     query is planned for real and answered by the list-query double.
  *  2. A ROW IS A LINK TO THE RECORD, built by the one route helper.
  *  3. A CREATED COMPANY CARRIES ITS SCOPE, its provenance and its search
  *     keys, and opens its own page. A record written without `visibleTo` is
@@ -40,6 +42,8 @@ import type { ReactNode } from 'react'
 import CrmConsolePage from './crm-console-page'
 import { CRM_CONSOLE_SECTIONS } from './crm-console-sections'
 import { crmRoutes } from '../model/crm-routes'
+import { crmCompanyListFields } from '@aglyn/aglyn'
+import { lastListQueryPlan } from '@aglyn/tenant-feature-instance/testing/list-query-double'
 
 /** Every clause a built query carries, in order. */
 interface Clause {
@@ -51,14 +55,23 @@ interface BuiltQuery {
   clauses: Clause[]
 }
 
-let built: BuiltQuery[] = []
 const pushes: string[] = []
 const written: Array<{ path: string; data: Record<string, unknown> }> = []
 
+/** Newest first: `updatedAt` counts down, so Acme leads page one. */
+const listed = (row: Record<string, unknown>, at: number) => ({
+  visibleTo: ['org'],
+  updatedAt: new Date(Date.UTC(2026, 8, 1) - at * 60_000),
+  ...row,
+  ...crmCompanyListFields({ visibleTo: ['org'], ...row }),
+})
 const COMPANY_ROWS = [
   { $id: 'c-acme', name: 'Acme', domain: 'acme.com', ownerUid: 'uid-1' },
   { $id: 'c-globex', name: 'Globex', ownerUid: 'uid-2' },
-]
+  // Eleven more, so the last lies past the first page of ten.
+  ...Array.from({ length: 10 }, (_, at) => ({ $id: `c-filler-${at}`, name: `Filler ${at}` })),
+  { $id: 'c-initech', name: 'Initech Holdings', domain: 'initech.example' },
+].map(listed)
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
@@ -89,6 +102,14 @@ const FIRESTORE = {}
 const USER = { uid: 'uid-1', getIdToken: async () => 'token' }
 const DATA_SCOPE = { scope: ['orgs', 'org-1'] as const, orgId: 'org-1', ready: true }
 
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(
+      () => COMPANY_ROWS,
+      jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+    ),
+)
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   listFilterConstraints: jest.requireActual('@aglyn/tenant-feature-instance')
     .listFilterConstraints,
@@ -101,21 +122,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   useHostActivityLogger: () => jest.fn(),
   // The reader's reach, for the views control's "may edit" (AGL-2617).
   useScopeTokens: () => ({ tokens: ['org'], orgWide: true, loaded: true }),
-  usePagedCollection: (build: (pageLimit: number) => BuiltQuery | null) => {
-    const spec = build(11)
-    if (spec) built.push(spec)
-    return {
-      rows: spec ? COMPANY_ROWS : [],
-      data: COMPANY_ROWS,
-      status: 'success',
-      fromCache: false,
-      hasMore: false,
-      page: 0,
-      setPage: jest.fn(),
-      pageSize: 10,
-      setPageSize: jest.fn(),
-    }
-  },
   useFirestoreCollection: () => ({ data: [], status: 'success', fromCache: false }),
   useFirestoreDoc: () => ({ data: null, status: 'loading', fromCache: true }),
 }))
@@ -188,11 +194,20 @@ jest.mock('@aglyn/shared-ui-jsx/components/list-table.component', () => ({
   ListTable: ({
     rows,
     onOpen,
+    onFilterModelChange,
   }: {
     rows: Array<{ $id: string; name: string }>
     onOpen: (id: string) => void
+    onFilterModelChange?: (model: { items: unknown[]; quickFilterValues: string[] }) => void
   }) => (
     <ul>
+      {/* The grid's quick search, which hands the list its words. */}
+      <input
+        aria-label="Search companies"
+        onChange={(event) =>
+          onFilterModelChange?.({ items: [], quickFilterValues: event.target.value.split(' ') })
+        }
+      />
       {rows.map((row) => (
         <li key={row.$id}>
           <button type="button" onClick={() => onOpen(row.$id)}>
@@ -229,7 +244,6 @@ const field = (label: string) =>
   screen.getByLabelText(label, { exact: false }) as HTMLInputElement
 
 beforeEach(() => {
-  built = []
   pushes.length = 0
   written.length = 0
 })
@@ -238,15 +252,32 @@ describe('the Companies section (AGL-2597)', () => {
   it('lists under the scope predicate, newest activity first, and paged', () => {
     mount()
 
-    const listener = built.find((spec) => spec.path === 'orgs/org-1/companies')
-    expect(listener).toBeDefined()
-    const clauses = listener?.clauses ?? []
-    expect(clauses).toContainEqual({
-      kind: 'where',
-      args: ['visibleTo', 'array-contains-any', ['org', 'host:host-1']],
+    const plan = lastListQueryPlan()
+    expect(plan?.filters).toEqual([
+      { path: 'visibleTo', op: 'array-contains-any', value: ['org', 'host:host-1'] },
+    ])
+    expect(plan?.orderBy).toEqual({ path: 'updatedAt', direction: 'desc' })
+    // One page of ten; the thirteenth company is not on it.
+    expect(screen.queryByText('Initech Holdings')).toBeNull()
+  })
+
+  it('finds a company past the first page by a word of its name, on the query', async () => {
+    mount()
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Search companies'), { target: { value: 'hold' } })
     })
-    expect(clauses).toContainEqual({ kind: 'orderBy', args: ['updatedAt', 'desc'] })
-    expect(clauses).toContainEqual({ kind: 'limit', args: [11] })
+    const plan = lastListQueryPlan()
+    // Folded into the scope clause: one array clause answers both.
+    expect(plan?.filters).toEqual([
+      {
+        path: 'scopedSearchTokens',
+        op: 'array-contains-any',
+        value: ['org~hold', 'host:host-1~hold'],
+      },
+    ])
+    expect(screen.getByText('Initech Holdings')).toBeTruthy()
+    expect(screen.queryByText('Acme')).toBeNull()
   })
 
   it('opens a row at the address the route helper builds', () => {
@@ -290,6 +321,10 @@ describe('the Companies section (AGL-2597)', () => {
       updatedAt: { op: 'serverTimestamp' },
     })
     expect(data['nameTokens']).toEqual(expect.arrayContaining(['cof', 'acme']))
+    // What the list searches and asks "No next activity" of (AGL-3321).
+    expect(data['searchTokens']).toEqual(expect.arrayContaining(['cof', 'acme', 'com']))
+    expect(data['scopedSearchTokens']).toEqual(expect.arrayContaining(['host:host-1~acme']))
+    expect(data['nextTaskAtMs']).toBeNull()
     // And the new record's page opens.
     const id = path.slice('orgs/org-1/companies/'.length)
     expect(pushes).toEqual([routes.company(id)])

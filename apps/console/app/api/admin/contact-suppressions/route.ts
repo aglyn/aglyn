@@ -17,12 +17,12 @@
 
 import { pluginRequestFromWeb } from '@aglyn/aglyn/server'
 import {
+  CONTACT_SUPPRESSIONS_COLLECTION,
   contactSuppressionKey,
   emailUnverifiedResponse,
   firebaseAdmin,
   forgetUserPhoneNumber,
   isImpersonationSession,
-  listContactSuppressions,
   releasePhoneContact,
   suppressPhoneContact,
   type ContactChannel,
@@ -30,6 +30,12 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
 import { FieldValue } from 'firebase-admin/firestore'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
+import type { ListQueryDeclaration } from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import {
+  readStaffListQuery,
+  runStaffListQuery,
+} from '../../../../utils/server/staff-list-query'
 
 /**
  * The intake path for Privacy Policy v4 §11's non-SMS routes (AGL-1592).
@@ -89,19 +95,15 @@ async function audit(
   subjectUid?: string | null,
 ): Promise<void> {
   try {
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid,
-        action,
-        target,
-        ...(subjectUid ? { subjectUid } : {}),
-        before: null,
-        after,
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid,
+      action,
+      target,
+      ...(subjectUid ? { subjectUid } : {}),
+      before: null,
+      after,
+      at: FieldValue.serverTimestamp(),
+    })
   } catch (error) {
     // Best-effort, and only the audit row: the suppression itself has already
     // been written by the time this runs, and failing the request here would
@@ -113,12 +115,43 @@ async function audit(
 const SOURCES: ContactSuppressionSource[] = ['email', 'verbal', 'staff']
 const CHANNELS: ContactChannel[] = ['calls', 'texts']
 
+/**
+ * The list offers no filter: it is every record, newest change first, a page
+ * at a time (AGL-3321). It read the newest 200 and stopped, and the header
+ * counted the active ones among those, so past 200 records an opt-out went
+ * unlisted and uncounted.
+ */
+const CONTACT_SUPPRESSION_LIST_QUERY: ListQueryDeclaration = {
+  fields: [],
+  sorts: [{ path: 'updatedAt', direction: 'desc' }],
+}
+
 async function listHandler(request: Request): Promise<Response> {
   const authorized = await authorize(request)
   if ('response' in authorized) return authorized.response
+  const { query } = await pluginRequestFromWeb(request)
   try {
-    const records = await listContactSuppressions({ limit: 200 })
-    return Response.json({ ok: true, records }, { status: 200 })
+    const firestore = firebaseAdmin.app().firestore()
+    const collection = firestore.collection(CONTACT_SUPPRESSIONS_COLLECTION)
+    /*
+     * How many numbers are suppressed now, counted over every record by the
+     * query rather than over a page. A record opted back in keeps its row
+     * with `revokedAt` set; every writer stores `revokedAt: null` otherwise.
+     */
+    if (String(query['view'] ?? '') === 'summary') {
+      const active = await collection.where('revokedAt', '==', null).count().get()
+      return Response.json({ ok: true, active: active.data().count }, { status: 200 })
+    }
+    const listRequest = readStaffListQuery(query)
+    if (!listRequest) return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+    const page = await runStaffListQuery({
+      firestore,
+      collection,
+      declaration: CONTACT_SUPPRESSION_LIST_QUERY,
+      request: listRequest,
+      row: (doc) => ({ $id: doc.id, ...doc.data() }),
+    })
+    return Response.json({ ok: true, records: page.rows, ...page }, { status: 200 })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.

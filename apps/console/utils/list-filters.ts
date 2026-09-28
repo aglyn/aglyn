@@ -30,82 +30,10 @@ import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
  * Firestore filters the collection it queries and nothing else.
  */
 
-/**
- * Organizations (`orgs/{orgId}`).
- *
- * ⛔ Three things a reader might reasonably expect are absent, and each for the
- * same reason — the query has nothing to filter on:
- *
- *   Stripe customer   lives at `orgs/{orgId}/billing/stripe`, a subcollection
- *                     document. A parent cannot be filtered by a child's
- *                     field; a collection-group query over `billing` returns
- *                     billing documents, not organizations, so it can neither
- *                     page nor sort this list.
- *   Member counts     not stored on the org at all — seats are counted by
- *                     reading members. Filtering needs a maintained counter,
- *                     and a counter that can drift is worse than no filter.
- *   Site limit        derived from plan and entitlements when the row renders;
- *                     `entitlements` holds feature flags, not a number.
- *
- * `enterprise` is likewise absent: it is written only on the organizations
- * that have it, so `is false` would return nothing rather than everyone else —
- * a filter that lies in exactly one direction.
+/*
+ * Organizations are declared in `org-list-query.ts`, beside the query their
+ * two staff lists plan from (AGL-3321).
  */
-export const ORG_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
-  {
-    column: 'name',
-    kind: 'text',
-    path: 'name',
-    lowerPath: 'nameLower',
-    tokensPath: 'nameTokens',
-    reversedPath: 'nameReversed',
-    presence: 'always',
-  },
-  {
-    // Slugs are lower-case by construction (`generateOrgSlug`), so the stored
-    // value is its own normalized key and needs no `slugLower` twin.
-    column: 'slug',
-    kind: 'text',
-    path: 'slug',
-    lowerPath: 'slug',
-    presence: 'always',
-  },
-  { column: '$id', kind: 'id', path: '__name__' },
-  { column: 'ownerUid', kind: 'exact', path: 'ownerUid', presence: 'always' },
-  { column: 'plan', kind: 'exact', path: 'plan' },
-  {
-    /*
-     * The DENORMALIZED billing status, not the live subscription.
-     *
-     * The subscription itself moved to `orgs/{orgId}/billing/stripe`
-     * (AGL-1028) and the row merges it in after the query has run, so it is
-     * not something the query can narrow by. `billingStatus` is the mirror
-     * `writeOrgBilling` keeps on the org document for the dunning banner, and
-     * it is the only status a predicate can reach.
-     */
-    column: 'subscription',
-    kind: 'exact',
-    path: 'billingStatus',
-  },
-  { column: 'createdAt', kind: 'date', path: 'createdAt', presence: 'always' },
-  { column: 'updatedAt', kind: 'date', path: 'updatedAt', presence: 'always' },
-]
-
-/**
- * How each field above reads — as a hidden column's header, and on the chip
- * over the grid. `plan` and `subscription` name what the query matches, the
- * STORED values, which is not always what the row shows beside them.
- */
-export const ORG_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  name: 'Organization',
-  plan: 'Stored plan',
-  subscription: 'Billing status',
-  createdAt: 'Created',
-  $id: 'Org ID',
-  slug: 'Org slug',
-  ownerUid: 'Owner UID',
-  updatedAt: 'Updated',
-}
 
 /*
  * The staff ACCOUNT list is not a Firestore query (AGL-2501).
@@ -229,42 +157,42 @@ export const USER_LIST_FILTER_OPTIONS = {
 }
 
 /*
- * The activity feeds (`activity` subcollections, read as a collection group).
+ * The activity logs (`hosts/{hostId}/activity`, `orgs/{orgId}/activity`, and
+ * the person-centred feeds read across both as the `activity` group).
  *
- * These are ordered `createdAt` DESC and their cursor is a document in that
- * ordering, so the sort is not the filter's to change: re-sorting to suit a
- * predicate would not narrow the feed, it would shuffle it and invalidate
- * every cursor already handed out. With the order pinned, Firestore allows
- * equality on any field (given a composite index) and a range over the sort
- * field itself — which is exactly what is declared here.
+ * EVERY CLAUSE AND THE SEARCH ARE ON THE QUERY (AGL-3321): these fields are
+ * the Filters panel's half of `ACTIVITY_LIST_QUERY` in
+ * `./activity-list-query`, which adds the one order and the search and is
+ * what every activity feed plans its query from.
  *
- * ⛔ `scopeId` is not filterable and cannot be. It is not a stored field: the
- * reader derives it from the document's PATH (`doc.ref.parent.parent`), and a
- * query cannot filter on where a document lives. Filtering by site would mean
- * writing the scope onto each entry.
+ * One order, `createdAt` DESC — every feed's cursor is a position in it — so
+ * the only range is over `createdAt` itself, and Action merges with it
+ * through its own `(action, createdAt DESC)` composite.
  */
 export const ACTIVITY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   {
-    // Equality and `in` only — a text range would need `action` to be the
-    // first `orderBy`, which would unsort the feed.
+    // Equality and `in` only — a text range would need `action` to lead the
+    // order, which would unsort the feed.
     column: 'action',
     kind: 'exact',
     path: 'action',
     operators: ['equals', 'isAnyOf'],
   },
   {
-    // The sort field, so a range over it is free: the existing
-    // `actorId ASC, createdAt DESC` index already serves it.
+    // The sort field, so every range over it keeps the feed's order: a whole
+    // day (`is`) is two `where`s, not a cursor, and composes with the page's.
     column: 'createdAt',
     kind: 'date',
     path: 'createdAt',
-    operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
+    presence: 'always',
   },
 ]
 
 /** How the activity fields read on a chip. */
 export const ACTIVITY_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
   action: 'Action',
+  actorId: 'Who',
+  scopeId: 'Where',
   createdAt: 'When',
 }
 
@@ -276,12 +204,33 @@ export const ACTIVITY_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
  * cookie, which is why this list is a plain collection query while the staff
  * account list has to walk Auth pools.
  *
- * `suspended` is a boolean every member carries (AGL-3321): sign-up stores
- * `false`, the drawer's Suspend and Reactivate store `true` and `false`, and
- * `tools/scripts/backfill-site-account-suspended.mjs` stamps `false` on the
- * members that predate it — a query cannot find a document that LACKS a
- * field, so `is Active` needs every active member to say so. It is the one
- * clause that stands BESIDE another: see `siteAccountQueryConstraints`.
+ * EVERY clause, and the quick search, is on the list's one query, newest
+ * first (AGL-3321: `SITE_ACCOUNT_LIST_QUERY`). What each field offers is
+ * what that query can serve beneath `createdAt DESC`, the list's only order:
+ *
+ *   email        `equals`, on the stored address (sign-up lower-cases it, so
+ *                the value is its own key). No `starts with`: a prefix is a
+ *                range on `email`, which would order the list by address — a
+ *                second order, and a second set of composites for every
+ *                field, for a list that never sorts by it.
+ *   displayName  `contains` a word (`displayNameTokens`) and `equals`
+ *                (`displayNameLower`). No `starts with` for the reason above,
+ *                and no `is set`: `!= null` is a range too.
+ *   createdAt    every day operator: a range on the field the list is
+ *                already sorted by, which no extra index is needed for.
+ *   suspended    `is`, an equality on the boolean every member carries
+ *                (AGL-3321): sign-up stores `false`, the drawer's Suspend and
+ *                Reactivate store `true` and `false`, and
+ *                `tools/scripts/backfill-site-account-suspended.mjs` stamps
+ *                `false` on the members that predate it — a query cannot find
+ *                a document that LACKS a field, so `is Active` needs every
+ *                active member to say so.
+ *
+ * The quick search reads `searchTokens`, a word of the name or of the
+ * address (`memberSearchTokens`). The name fields and the search tokens are
+ * stamped at both writers of a display name (sign-up and the member's own
+ * account form), and `tools/scripts/backfill-site-member-search.mjs` stamps
+ * the members written before those fields existed.
  */
 export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
   {
@@ -292,6 +241,7 @@ export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     path: 'email',
     lowerPath: 'email',
     presence: 'always',
+    operators: ['equals'],
   },
   {
     column: 'displayName',
@@ -299,6 +249,7 @@ export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
     path: 'displayName',
     lowerPath: 'displayNameLower',
     tokensPath: 'displayNameTokens',
+    operators: ['contains', 'equals'],
   },
   {
     column: 'createdAt',
@@ -312,6 +263,7 @@ export const SITE_MEMBER_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
 /** Headers for member fields that are filterable without being columns. */
 export const SITE_MEMBER_LIST_FILTER_HEADERS: Readonly<Record<string, string>> =
   {
+    email: 'Email',
     displayName: 'Name',
     createdAt: 'Joined',
     suspended: 'Status',
@@ -331,32 +283,82 @@ export const SITE_MEMBER_LIST_FILTER_OPTIONS = {
 /*
  * Content entries (`hosts/{hostId}/collections/{collectionId}/entries`).
  *
- * Both are EQUALITY on the stored value, and that is what keeps the sorted
- * list total under a filter: an equality narrows the scan that finds the
- * entries lacking the sort field to the same entries the filter matches, so
- * the walk behind `useSortedPagedCollection` still reaches all of them. A
- * range or a word search would need its own ordering and could not share it.
+ * EVERY clause below is on the Firestore query together (AGL-3321), composed
+ * by `planListQuery` through `ENTRY_LIST_QUERY` in
+ * `components/content/entry-list-query.ts`, which also holds the orders a
+ * filtered list may take. Nothing is matched over the rows a page loaded.
+ *
+ * The equalities — status, category, author — and the title search each need
+ * one composite per filtered order (index merging serves every combination of
+ * them), which is what keeps this list's filtered orders to three. The two
+ * dates are ranges over fields those orders already walk, so they cost no
+ * index of their own; a range leads the order, and so reads with ONE ordered
+ * query rather than the two-segment walk: every entry it matches carries the
+ * field it ranges over.
  *
  * `status` matches the stored word. An entry with no `status` at all — only a
  * hand-written import bundle produces one — matches none of the three, and is
  * still on the unfiltered list.
  *
- * `categoryId` matches the stable id the entry editor writes. An entry that
- * still carries only the legacy free-typed `category` matches no id until a
- * category is picked for it in the editor.
+ * `categoryId` and `authorId` match the stable ids the entry editor writes.
+ * An entry that still carries only the legacy free-typed `category` or
+ * `authorName` matches no id until one is picked for it in the editor.
+ *
+ * `title` is WORD-level, over `titleTokens` (`entryTitleSearchFields`): the
+ * quick search reads the same array, and a query holds one array clause, so
+ * the two do not combine.
+ *
+ * `publishedAt` is the Published column, and ranges over the date that column
+ * shows — `publishSortAt`, the scheduled date while an entry waits and the
+ * published date after (AGL-3323). A draft has neither and matches no range.
  */
 export const ENTRY_LIST_FILTER_FIELDS: readonly ListFilterField[] = [
-  { column: 'status', kind: 'exact', path: 'status', operators: ['equals'] },
+  {
+    column: 'title',
+    kind: 'text',
+    path: 'title',
+    tokensPath: 'titleTokens',
+    operators: ['contains'],
+  },
+  {
+    column: 'status',
+    kind: 'exact',
+    path: 'status',
+    operators: ['equals', 'isAnyOf'],
+  },
   {
     column: 'categoryId',
     kind: 'exact',
     path: 'categoryId',
-    operators: ['equals'],
+    operators: ['equals', 'isAnyOf'],
+  },
+  {
+    column: 'authorId',
+    kind: 'exact',
+    path: 'authorId',
+    operators: ['equals', 'isAnyOf'],
+  },
+  {
+    column: 'publishedAt',
+    kind: 'date',
+    path: 'publishSortAt',
+    operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
+  },
+  {
+    column: 'updatedAt',
+    kind: 'date',
+    path: 'updatedAt',
+    operators: ['is', 'after', 'onOrAfter', 'before', 'onOrBefore'],
   },
 ]
 
-/** Headers for entry fields that are filterable without being columns. */
+/** How each entry field reads — as a hidden column's header, and on a chip. */
 export const ENTRY_LIST_FILTER_HEADERS: Readonly<Record<string, string>> = {
+  title: 'Title',
+  status: 'Status',
   categoryId: 'Category',
+  authorId: 'Author',
+  publishedAt: 'Published',
+  updatedAt: 'Updated',
 }
 

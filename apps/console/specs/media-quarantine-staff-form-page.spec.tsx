@@ -37,9 +37,12 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
+// One user object for the whole run, as the real hook holds it in state: the
+// deny-list table re-reads whenever the signed-in user changes.
+const mockUser = { uid: 'staff-1', getIdToken: async () => 'tok' }
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   __esModule: true,
-  useUser: () => ({ data: { uid: 'staff-1', getIdToken: async () => 'tok' } }),
+  useUser: () => ({ data: mockUser }),
 }))
 
 const mockEnqueueSnackbar = jest.fn()
@@ -112,10 +115,11 @@ let getReply: Record<string, unknown>
 let postReply: Record<string, unknown>
 const posted: Record<string, unknown>[] = []
 const fetched: string[] = []
-/** Just the asset lookups — the page also GETs the whole deny list on mount
- * (AGL-1700), which would otherwise sit at `fetched[0]` and make every
- * position-based assertion below about the wrong request. */
-const lookups = () => fetched.filter((url) => url.includes('?'))
+/** Just the asset lookups — the page also reads the deny list's facts and
+ * its table on mount (AGL-1700, AGL-3321), which would otherwise sit at
+ * `fetched[0]` and make every position-based assertion below about the
+ * wrong request. */
+const lookups = () => fetched.filter((url) => url.includes('mediaId='))
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -130,13 +134,18 @@ beforeEach(() => {
       posted.push(JSON.parse(String(init.body)))
       return { ok: true, json: async () => postReply } as any
     }
-    // The listing GET carries no query; the lookup GET carries the ids.
-    if (!String(input).includes('?')) {
+    // The deny list's reads name a view; the lookup GET carries the ids.
+    if (String(input).includes('view=')) {
       return {
         ok: true,
         json: async () => ({
-          records: [],
+          rows: [],
+          hasMore: false,
+          nextCursor: null,
+          refused: [],
+          notices: [],
           count: 0,
+          clearable: 0,
           maxEntries: 2000,
           readAtMs: 1_700_000_000_000,
         }),

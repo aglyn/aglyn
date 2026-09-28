@@ -35,6 +35,7 @@ import { chromium } from 'playwright-core'
 import { initializeApp, getApps } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
+import { listingQueryFieldsPatch } from '../scripts/lib/listing-query-fields.mjs'
 
 const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:4200'
 const EMAIL = process.env.E2E_EMAIL ?? 'e2e@aglyn.test'
@@ -434,7 +435,7 @@ try {
   // entries in one call, so a mis-click published pages to a live site.
   const listingId = 'e2e-listing-template'
   const listingRef = db.collection('marketplaceListings').doc(listingId)
-  await listingRef.set({
+  const listingFields = {
     kind: 'template',
     artifactType: 'template',
     profileId: 'e2e-owner',
@@ -442,6 +443,11 @@ try {
     priceUsd: 0,
     latestVersion: 1,
     screenCount: 2,
+  }
+  // What the marketplace lists query by (AGL-3321), as every writer stamps it.
+  await listingRef.set({
+    ...listingFields,
+    ...listingQueryFieldsPatch(listingFields),
     createdAt: new Date(),
   })
   await listingRef.collection('versions').doc('1').set({

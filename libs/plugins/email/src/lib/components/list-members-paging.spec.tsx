@@ -42,6 +42,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import { soloConsentGroup } from '@aglyn/aglyn'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import { ListMembersPanel } from './list-members-panel'
 
 jest.setTimeout(30_000)
@@ -59,10 +60,21 @@ const HOST = 'host-1'
  * Every row carries `addedAt` EXCEPT the two legacy-keyed ones, which is the
  * production shape: adopted rows predate the field.
  */
+/**
+ * The search keys `enrollListMember` stamps (AGL-3321): the word prefixes of
+ * the address — whole, its domain, and its pieces — and of the name.
+ */
+const searchTokensFor = (email: string, name: string) => {
+  const [local, domain] = email.split('@')
+  return nameSearchTokens(
+    [email, domain, `@${domain}`, ...local.split(/[._+-]+/), ...domain.split('.'), name].join(' '),
+  )
+}
 const memberDocs = Array.from({ length: TOTAL }, (_, index) => ({
   $id: `key-${String(TOTAL - 1 - index).padStart(2, '0')}`,
   email: `p${String(index).padStart(2, '0')}@lumen.co`,
   name: `Person ${index}`,
+  searchTokens: searchTokensFor(`p${String(index).padStart(2, '0')}@lumen.co`, `Person ${index}`),
   via: index % 2 === 0 ? 'manual' : 'rule',
   source: 'newsletter',
   ...(index < 2
@@ -128,29 +140,17 @@ const FIRESTORE = {}
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => FIRESTORE,
   useUser: () => ({ data: { uid: 'uid-test' } }),
-  usePagedCollection: (build: (pageLimit: number) => any) => {
-    const { useState } = require('react')
-    const [page, setPage] = useState(0)
-    const [pageSize, setPageSizeState] = useState(TABLE_PAGE_SIZE_DEFAULT)
-    const windowSize = pageSize * (page + 1)
-    const built = build(windowSize + 1)
-    const answered = firestoreAnswer(memberDocs, built?.constraints ?? [])
-    return {
-      data: answered,
-      rows: answered.slice(page * pageSize, windowSize),
-      hasMore: answered.length > windowSize,
-      page,
-      setPage,
-      pageSize,
-      setPageSize: (next: number) => {
-        setPageSizeState(next)
-        setPage(0)
-      },
-      status: 'success',
-      fromCache: false,
-    }
-  },
 }))
+
+/*
+ * The panel's REAL plan, answered the way Firestore would — every predicate
+ * applied, the id walk, and paged (AGL-3321).
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() => memberDocs, jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')),
+)
 
 jest.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...segments: string[]) => ({
@@ -358,10 +358,14 @@ describe('removing somebody is not suppressing them', () => {
   })
 })
 
-describe('the membership table filters through the grid toolbar (AGL-3317)', () => {
-  it('searches every member its window read, not only the page on screen', async () => {
+describe('the membership table searches on its query (AGL-3321)', () => {
+  it('finds a member pages past the first, by the search keys', async () => {
     await mountPanel()
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'p37@' } })
     await waitFor(() => expect(addressesShown()).toEqual(['p37@lumen.co']))
+    const { lastListQueryPlan } = jest.requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    expect(lastListQueryPlan().filters).toEqual([
+      { path: 'searchTokens', op: 'array-contains', value: 'p37@' },
+    ])
   })
 })

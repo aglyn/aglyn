@@ -70,10 +70,24 @@ const nextPage = async () => {
   })
 }
 const last = () => mockRequests[mockRequests.length - 1]
+const filtersOf = (params: URLSearchParams) => JSON.parse(params.get('filters') ?? '[]')
 
 beforeEach(() => {
   mockRequests = []
   mockTableProps = null
+})
+
+describe('the search box asks the route (AGL-3321)', () => {
+  it('sends the words, and starts again at page one', async () => {
+    render(<ActorActivityTable endpoint="/api/x" header="Activity" />)
+    await waitFor(() => expect(mockRequests).toHaveLength(1))
+    expect(mockTableProps.quickFilter).toBe(true)
+    await act(async () => {
+      mockTableProps.onFilterModelChange({ items: [], quickFilterValues: ['ada'] })
+    })
+    await waitFor(() => expect(last().get('search')).toBe('ada'))
+    expect(last().get('cursor')).toBeNull()
+  })
 })
 
 describe('a filtered activity feed pages forward (AGL-3321)', () => {
@@ -82,11 +96,15 @@ describe('a filtered activity feed pages forward (AGL-3321)', () => {
     await waitFor(() => expect(mockRequests).toHaveLength(1))
 
     await setClause('Published the screen')
-    expect(last().get('filterValue')).toBe('Published the screen')
+    await waitFor(() =>
+      expect(filtersOf(last())).toEqual([
+        { field: 'action', op: 'equals', value: 'Published the screen' },
+      ]),
+    )
     expect(last().get('cursor')).toBeNull()
 
     await nextPage()
-    expect(last().get('filterValue')).toBe('Published the screen')
+    expect(filtersOf(last())[0].value).toBe('Published the screen')
     expect(last().get('cursor')).toBe(`hosts/h1/activity/e${mockRequests.length - 1}`)
     expect(mockTableProps.page).toBe(1)
   })
@@ -95,16 +113,17 @@ describe('a filtered activity feed pages forward (AGL-3321)', () => {
     render(<ActorActivityTable endpoint="/api/x" header="Activity" />)
     await waitFor(() => expect(mockRequests).toHaveLength(1))
     await setClause('Published the screen')
+    await waitFor(() => expect(filtersOf(last())).toHaveLength(1))
     await nextPage()
     expect(last().get('cursor')).not.toBeNull()
 
     await setClause('Saved the screen')
-    expect(last().get('filterValue')).toBe('Saved the screen')
+    await waitFor(() => expect(filtersOf(last())[0]?.value).toBe('Saved the screen'))
     expect(last().get('cursor')).toBeNull()
     expect(mockTableProps.page).toBe(0)
 
     await setClause(null)
-    expect(last().get('filterField')).toBeNull()
+    await waitFor(() => expect(last().get('filters')).toBeNull())
     expect(last().get('cursor')).toBeNull()
   })
 })

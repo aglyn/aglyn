@@ -63,26 +63,19 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
   // undefined would throw on destructure and take every case in this file
   // with it, which is a harness failure wearing a product failure's clothes.
   useUser: () => ({ data: { uid: 'uid-test', getIdToken: async () => 'tok' } }),
-  /*
-   * The table pages its own query (AGL-2501), and the SERVER decides the order.
-   * The double sorts the way `orderBy('createdAt','desc')` would, so "newest
-   * first" is a property of the answer rather than of a client sort the card
-   * no longer performs.
-   */
-  usePagedCollection: () => ({
-    rows: [...suppressionDocs].sort(
-      (a: any, b: any) =>
-        (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0),
-    ),
-    hasMore: false,
-    page: 0,
-    setPage: jest.fn(),
-    pageSize: 10,
-    setPageSize: jest.fn(),
-    status: 'success',
-    fromCache: false,
-  }),
 }))
+
+/*
+ * The table pages its own query (AGL-2501), and the SERVER decides the order
+ * and applies every filter (AGL-3321). The double answers the card's real
+ * plan the way Firestore would — `orderBy('createdAt','desc')` included — so
+ * "newest first" is a property of the answer rather than of a client sort.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () =>
+  jest
+    .requireActual('@aglyn/tenant-feature-instance/testing/list-query-double')
+    .listQueryModule(() => suppressionDocs, jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query')),
+)
 
 jest.mock('@aglyn/aglyn', () => ({
   pluginDocsHelp: () => undefined,

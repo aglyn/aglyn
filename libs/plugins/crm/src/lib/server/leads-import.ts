@@ -92,7 +92,12 @@ import {
   type LeadImportSkippedRow,
   normalizeLeadImportRow,
 } from '../model/crm-lead-import'
-import { addHostLead, firebaseAdmin, orgLeadsForHost } from '@aglyn/tenant-data-admin'
+import {
+  addHostLead,
+  firebaseAdmin,
+  orgLeadsForHost,
+  restampCrmListFieldsAt,
+} from '@aglyn/tenant-data-admin'
 import { visibleToHost } from '@aglyn/aglyn/app-utils/scope-tokens'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
@@ -330,6 +335,9 @@ export const crmLeadsImportHandler: PluginApiHandler = async (req, res) => {
             { ...working, updatedAt: FieldValue.serverTimestamp() },
             { merge: true },
           )
+        // The file's profile, tags, status and lead source are what the
+        // Leads list searches and filters by (AGL-3321).
+        await restampCrmListFieldsAt(leadsRef.doc(key), 'leads')
       }
       if (isNew) {
         created += 1

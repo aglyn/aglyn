@@ -113,6 +113,9 @@ jest.mock('firebase-admin/firestore', () => ({
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
   __esModule: true,
+  // The list-fields restamp (AGL-3321) is `crm-records`' own spec's; here a no-op.
+  restampCrmListFieldsAt: async () => 'current',
+  restampCrmListFieldsOf: async () => ({ restamped: 0, current: 0, missing: 0 }),
   firebaseAdmin: { app: () => ({ firestore: () => firestore }) },
   getOrgForHost: async (hostId: string) =>
     hostId === 'orphan' ? null : { orgId: 'org-1', org: docs.get('orgs/org-1') ?? {} },

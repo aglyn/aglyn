@@ -19,6 +19,7 @@
 import { operatorContactLine } from '@aglyn/aglyn/app-utils/operator-identity'
 import { mdiPhoneOff } from '@aglyn/shared-data-mdi'
 import { CardDisplay, Container } from '@aglyn/shared-ui-jsx'
+import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
 import type { NextPageWithLayout } from '@aglyn/shared-ui-next'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import {
@@ -40,6 +41,10 @@ import StaffOnly from '../../../../components/staff-only.component'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
 import { docsHelp } from '../../../../constants/docs-links'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+
+/** The list takes no filter or search; it pages every record, newest change first. */
+const NO_CLAUSES: never[] = []
 
 interface SuppressionRecord {
   $id: string
@@ -114,8 +119,23 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
     [user, enqueueSnackbar],
   )
 
-  const [records, setRecords] = useState<SuppressionRecord[]>([])
-  const [loaded, setLoaded] = useState(false)
+  /*
+   * EVERY RECORD, A PAGE AT A TIME, AND A COUNT OF THEM ALL (AGL-3321).
+   *
+   * The list read the newest 200 records and stopped, and the header counted
+   * the active ones among them — so past 200 an opt-out went unlisted and
+   * uncounted. Now the route pages every record, and counts the active ones
+   * with a query over the whole list.
+   */
+  const list = useStaffListQuery<SuppressionRecord>({
+    endpoint: user ? '/api/admin/contact-suppressions' : null,
+    clauses: NO_CLAUSES,
+    search: NO_CLAUSES,
+    rowsKey: 'records',
+  })
+  const records = list.rows
+  const loaded = !list.loading
+  const [activeCount, setActiveCount] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
 
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -125,15 +145,20 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
   const [uid, setUid] = useState('')
   const [note, setNote] = useState('')
 
-  const refresh = useCallback(async () => {
+  const { refresh: refreshPage } = list
+  const refreshCount = useCallback(async () => {
     if (!user) return
-    const payload = await request('GET')
-    if (payload?.records) setRecords(payload.records)
-    setLoaded(true)
-  }, [user, request])
+    const response = await authorizedFetch(user, '/api/admin/contact-suppressions?view=summary')
+    const payload = await response.json().catch(() => null)
+    setActiveCount(response.ok && typeof payload?.active === 'number' ? payload.active : null)
+  }, [user])
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void refreshCount()
+  }, [refreshCount])
+  const refresh = useCallback(async () => {
+    refreshPage()
+    await refreshCount()
+  }, [refreshPage, refreshCount])
 
   const toggleChannel = (channel: string) => () =>
     setChannels((current) =>
@@ -185,8 +210,6 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
     },
     [request, refresh],
   )
-
-  const active = records.filter((entry) => !entry.revokedAt)
 
   return (
     <DashboardLayout
@@ -315,8 +338,8 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
 
             <CardDisplay
               header={
-                active.length
-                  ? `Suppressed numbers · ${active.length}`
+                activeCount
+                  ? `Suppressed numbers · ${activeCount}`
                   : 'Suppressed numbers'
               }
               help={docsHelp('staffConsole', {
@@ -382,6 +405,17 @@ const AdminContactSuppressions: NextPageWithLayout<Record<string, never>> = () =
                     )}
                   </Stack>
                 ))}
+                {records.length || list.pageIndex > 0 ? (
+                  <ListPagination
+                    page={list.pageIndex}
+                    pageSize={list.pageSize}
+                    rowCount={records.length}
+                    hasMore={list.hasMore}
+                    disabled={list.loading}
+                    onPageChange={(next) => void list.loadPage(next)}
+                    onPageSizeChange={list.setPageSize}
+                  />
+                ) : null}
               </Stack>
             </CardDisplay>
           </Stack>

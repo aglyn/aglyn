@@ -76,7 +76,7 @@ import { ORG_SITES_PER_PAGE, useOrgSiteReads } from './use-one-shot-reads'
  */
 export const ORG_EXPERIMENTS_PER_SITE = 10
 
-type ExperimentRow = HostExperiment & { $id: string; deletedAt?: unknown }
+type ExperimentRow = HostExperiment & { $id: string }
 
 interface SiteExperiments {
   rows: ExperimentRow[]
@@ -85,8 +85,12 @@ interface SiteExperiments {
 
 /**
  * One site's tests, ordered by name as the site's own list pages them —
- * `name` is on every experiment, since the one editor that creates them
- * refuses a save without it.
+ * `name` is on every experiment, since every writer of one sets it.
+ *
+ * Every row the query returns is shown. An experiment is never soft-deleted
+ * — the site list's Delete is a `deleteDoc` — so there is nothing to drop
+ * after the read, and the ceiling's "more than ten" is a count of live tests
+ * rather than of whatever the window happened to hold (AGL-3321).
  */
 async function readSiteExperiments(
   firestore: Firestore,
@@ -105,7 +109,7 @@ async function readSiteExperiments(
     ),
     ORG_EXPERIMENTS_PER_SITE,
   )
-  return { rows: rows.filter((row) => !row.deletedAt), truncated }
+  return { rows, truncated }
 }
 
 const TARGET_LABEL: Record<string, string> = {

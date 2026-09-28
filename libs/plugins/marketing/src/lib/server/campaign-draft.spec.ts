@@ -94,6 +94,7 @@ import { setRegisteringPluginId } from '@aglyn/aglyn/app-utils/registering-plugi
 import { pluginResourceDraftWriter } from '@aglyn/aglyn/plugin-manager/plugin-resource-drafts'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { CAMPAIGN_SEND_CONTAINER_FIELD } from '@aglyn/shared-ui-email-campaigns/model'
+import { nameSearchTokens } from '@aglyn/aglyn/app-utils/name-search'
 import {
   CAMPAIGN_DRAFT_DEFAULT_NAME,
   CAMPAIGN_DRAFT_EMAIL_FIELDS,
@@ -154,6 +155,10 @@ describe('the campaign draft writer', () => {
     expect(commits).toEqual(['orgs/org-1/emailCampaigns/job-1', 'orgs/org-1/campaigns/job-1-email'])
     expect(store.get('orgs/org-1/emailCampaigns/job-1')).toEqual({
       name: 'Weekend buns',
+      // The list search keys (AGL-3321): the whole name for a site's prefix
+      // search, and its word prefixes for the org's.
+      nameLower: 'weekend buns',
+      nameTokens: nameSearchTokens('Weekend buns'),
       listIds: [],
       visibleTo: ['host:host-1'],
       createdAtMs: NOW.getTime(),
@@ -162,6 +167,7 @@ describe('the campaign draft writer', () => {
     const email = store.get(`orgs/org-1/campaigns/${campaignDraftEmailId('job-1')}`) as Record<string, unknown>
     expect(email).toEqual({
       subject: CONTENT.subject,
+      subjectTokens: nameSearchTokens(CONTENT.subject),
       preheader: CONTENT.preheader,
       templateScreenId: 'design-1',
       subjectVariants: CONTENT.subjectVariants,

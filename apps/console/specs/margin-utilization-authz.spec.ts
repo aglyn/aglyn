@@ -37,7 +37,12 @@
 
 const mockVerifyIdToken = jest.fn()
 /** Every `orgs` query the handler actually ran, in order. */
-let mockQueries: Array<{ orderBy?: string; limit?: number; startAfter?: string }>
+let mockQueries: Array<{
+  where?: Array<[string, string, unknown]>
+  orderBy?: string
+  limit?: number
+  startAfter?: string
+}>
 /** `orgs` documents, by id, in id order. */
 let mockOrgDocs: Array<{ id: string; data: Record<string, unknown> }>
 let mockUsageByOrg: Record<string, Record<string, unknown>>
@@ -92,36 +97,69 @@ const mockOrgsCollection = {
       return mockSnapshotOf(`orgs/${id}`, found?.data)
     },
   }),
-  orderBy: (field: unknown) => {
-    const state: { orderBy?: string; limit?: number; startAfter?: string } = {
-      orderBy: String(field),
-    }
-    mockQueries.push(state)
-    const build = () => ({
-      startAfter: (snapshot: { id: string }) => {
-        state.startAfter = snapshot.id
-        return build()
-      },
-      limit: (count: number) => {
-        state.limit = count
-        return {
-          get: async () => {
-            const from = state.startAfter
-              ? mockOrgDocs.findIndex((doc) => doc.id === state.startAfter) + 1
-              : 0
-            const page = mockOrgDocs.slice(from, from + count)
-            return {
-              docs: page.map((doc) => ({
-                ...mockSnapshotOf(`orgs/${doc.id}`, doc.data),
-                ref: mockOrgRefFor(doc.id),
-              })),
-            }
-          },
-        }
-      },
-    })
-    return build()
-  },
+  /*
+   * A predicate on the scan's query (AGL-3321). Recorded, and applied to the
+   * fixtures for the equalities the margin table offers, so a filtered walk
+   * pages only the organizations that match.
+   */
+  where: (field: unknown, op: string, value: unknown) =>
+    mockFilteredCollection([[String(field), op, value]]),
+  orderBy: (field: unknown) => mockOrderedQuery([], String(field)),
+}
+
+function mockFilteredCollection(where: Array<[string, string, unknown]>): any {
+  return {
+    where: (field: unknown, op: string, value: unknown) =>
+      mockFilteredCollection([...where, [String(field), op, value]]),
+    orderBy: (field: unknown) => mockOrderedQuery(where, String(field)),
+  }
+}
+
+const mockMatches = (data: Record<string, unknown>, where: Array<[string, string, unknown]>) =>
+  where.every(([path, op, value]) =>
+    op === '=='
+      ? data[path] === value
+      : op === 'in'
+        ? (value as unknown[]).includes(data[path])
+        : op === 'array-contains'
+          ? Array.isArray(data[path]) && (data[path] as unknown[]).includes(value)
+          : false,
+  )
+
+function mockOrderedQuery(where: Array<[string, string, unknown]>, orderBy: string) {
+  const state: {
+    where?: Array<[string, string, unknown]>
+    orderBy?: string
+    limit?: number
+    startAfter?: string
+  } = where.length ? { where, orderBy } : { orderBy }
+  mockQueries.push(state)
+  const matching = () => mockOrgDocs.filter((doc) => mockMatches(doc.data, where))
+  const build = () => ({
+    startAfter: (snapshot: { id: string }) => {
+      state.startAfter = snapshot.id
+      return build()
+    },
+    limit: (count: number) => {
+      state.limit = count
+      return {
+        get: async () => {
+          const docs = matching()
+          const from = state.startAfter
+            ? docs.findIndex((doc) => doc.id === state.startAfter) + 1
+            : 0
+          const page = docs.slice(from, from + count)
+          return {
+            docs: page.map((doc) => ({
+              ...mockSnapshotOf(`orgs/${doc.id}`, doc.data),
+              ref: mockOrgRefFor(doc.id),
+            })),
+          }
+        },
+      }
+    },
+  })
+  return build()
 }
 
 jest.mock('@aglyn/tenant-data-admin', () => ({
@@ -134,6 +172,8 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
       firestore: () => ({
         collection: (name: string) =>
           name === 'orgs' ? mockOrgsCollection : { doc: () => ({}) },
+        // The cursor is a document PATH, resolved to a snapshot.
+        doc: (path: string) => mockOrgsCollection.doc(path.split('/').pop() as string),
         getAll: async (...refs: Array<{ path: string }>) =>
           refs.map((ref) => {
             mockFetched.push(ref.path)
@@ -175,12 +215,13 @@ jest.mock('@aglyn/aglyn/server', () => ({
 
 import { GET } from '../app/api/admin/margin-utilization/route'
 
-const call = (options: { token?: string; after?: string } = {}) =>
+const call = (options: { token?: string; after?: string; params?: Record<string, string> } = {}) =>
   GET(
     new Request(
-      `https://app.aglyn.com/api/admin/margin-utilization${
-        options.after ? `?after=${options.after}` : ''
-      }`,
+      `https://app.aglyn.com/api/admin/margin-utilization?${new URLSearchParams({
+        ...(options.after ? { cursor: options.after } : {}),
+        ...options.params,
+      })}`,
       { headers: options.token ? { authorization: `Bearer ${options.token}` } : {} },
     ),
   )
@@ -311,7 +352,7 @@ describe('the paged walk', () => {
     const first = await (await call({ token: 'tok' })).json()
     expect(first.rows).toHaveLength(25)
     // A FACT, not an estimate: the probe row came back, so a 26th org exists.
-    expect(first.nextCursor).toBe('org-24')
+    expect(first.nextCursor).toBe('orgs/org-24')
 
     const second = await (await call({ token: 'tok', after: first.nextCursor })).json()
     expect(second.rows).toHaveLength(5)
@@ -347,6 +388,57 @@ describe('the paged walk', () => {
     // one rollup found, one Assist lookup for it.
     expect(payload.reads).toBeGreaterThan(0)
     expect(payload.scanned).toBe(2)
+  })
+})
+
+describe('which organizations: every clause and the search on the query (AGL-3321)', () => {
+  beforeEach(() => {
+    mockOrgDocs = [
+      { id: 'org-a', data: { ...payingOrg('org-a').data, name: 'Acme', nameTokens: ['a', 'ac', 'acm', 'acme'] } },
+      { id: 'org-b', data: { ...payingOrg('org-b', 'business').data, name: 'Globex', nameTokens: ['g', 'gl'] } },
+      { id: 'org-c', data: { ...payingOrg('org-c').data, name: 'Acme Two', nameTokens: ['a', 'ac', 'acm', 'acme', 't', 'tw', 'two'] } },
+    ]
+    mockVerifyIdToken.mockResolvedValue(STAFF)
+  })
+
+  const filters = (...clauses: Array<[string, string, string]>) =>
+    JSON.stringify(clauses.map(([field, op, value]) => ({ field, op, value })))
+
+  it('the stored plan and the name search narrow WHICH organizations are read', async () => {
+    const payload = await (
+      await call({ token: 'tok', params: { search: 'acme', filters: filters(['plan', 'equals', 'pro']) } })
+    ).json()
+    expect(mockQueries).toEqual([
+      {
+        where: [
+          ['nameTokens', 'array-contains', 'acme'],
+          ['plan', '==', 'pro'],
+        ],
+        orderBy: '__name__',
+        limit: 26,
+      },
+    ])
+    expect(payload.rows.map((row: any) => row.orgId)).toEqual(['org-a', 'org-c'])
+    expect(payload.refused).toEqual([])
+    // The rollups read are the matching organizations' and no others.
+    expect(mockFetched.some((path) => path.startsWith('orgs/org-b'))).toBe(false)
+  })
+
+  it('refuses a COMPUTED column by name rather than matching the rows it read', async () => {
+    const payload = await (
+      await call({ token: 'tok', params: { filters: filters(['marginPct', '<', '0.2']) } })
+    ).json()
+    expect(payload.refused).toEqual([
+      { clause: { field: 'marginPct', op: '<', value: '0.2' }, reason: 'this list does not filter by that' },
+    ])
+    // Not applied: the walk is the unfiltered one, and says so.
+    expect(payload.rows).toHaveLength(3)
+  })
+
+  it('refuses unreadable filters rather than scanning under them', async () => {
+    const response = await call({ token: 'tok', params: { filters: '[{' } })
+    expect(response.status).toBe(400)
+    expect(mockQueries).toEqual([])
   })
 })
 

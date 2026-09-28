@@ -23,8 +23,141 @@
  */
 
 import { MEDIA_ALT_MAX_LENGTH } from './media-alt'
+import { nameSearchKey, nameSearchToken, nameSearchTokens } from './name-search'
 
 export * from './media-alt'
+
+/**
+ * The family a stored file belongs to, as the media library's Type filter
+ * names it (AGL-3327). Stored on the document as `kind`, because a Firestore
+ * query can ask for a value and cannot ask for a prefix beside a list's own
+ * sort: `kind == 'image'` sits on any query the library builds, where a
+ * `contentType` range would take the one range field the query has.
+ *
+ * Every type media ingress accepts that is not a picture, a film or a PDF is
+ * a document — ZIP, Word, Excel, PowerPoint, CSV, text, Markdown, JSON — and
+ * so is anything older than that allowlist.
+ */
+export type MediaKind = 'image' | 'video' | 'pdf' | 'document'
+
+export const MEDIA_KINDS: readonly MediaKind[] = ['image', 'video', 'pdf', 'document']
+
+export function mediaKindOf(contentType: unknown): MediaKind {
+  const type = String(contentType ?? '').trim().toLowerCase()
+  if (type.startsWith('image/')) return 'image'
+  if (type.startsWith('video/')) return 'video'
+  if (type === 'application/pdf') return 'pdf'
+  return 'document'
+}
+
+/** Which way a picture or a film is longer, as the Orientation filter asks. */
+export type MediaOrientation = 'landscape' | 'portrait' | 'square'
+
+export const MEDIA_ORIENTATIONS: readonly MediaOrientation[] = [
+  'landscape',
+  'portrait',
+  'square',
+]
+
+const positive = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+
+/**
+ * The orientation of a stored file (AGL-3327), from the pixel size it
+ * carries: a picture's `width` and `height`, or a film's `video.width` and
+ * `video.height` (a video's own `width`/`height` are never written — see
+ * `videoMediaProps`). Null when neither pair is whole, which a query for any
+ * orientation then leaves out rather than guesses at.
+ */
+export function mediaOrientationOf(media: {
+  width?: unknown
+  height?: unknown
+  video?: unknown
+}): MediaOrientation | null {
+  const video =
+    media.video && typeof media.video === 'object'
+      ? (media.video as { width?: unknown; height?: unknown })
+      : null
+  let width = positive(media.width)
+  let height = positive(media.height)
+  if (width === null || height === null) {
+    width = positive(video?.width)
+    height = positive(video?.height)
+  }
+  if (width === null || height === null) return null
+  if (width === height) return 'square'
+  return width > height ? 'landscape' : 'portrait'
+}
+
+/**
+ * A file name as words (AGL-3327): every run of characters that is not a
+ * letter or a digit becomes a space, so `hero-banner_2x.png` is the four
+ * words a person would search it by. The shared name search splits on
+ * spaces only, which suits a person's name and misses nearly every file's.
+ */
+export function mediaNameWords(fileName: unknown): string {
+  return String(fileName ?? '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+}
+
+/**
+ * The one token a library search asks for (AGL-3327): the first word of what
+ * was typed, folded the way `mediaNameWords` folds a stored name, lower-cased
+ * and capped as `nameSearchToken` caps it. A query holds one array filter, so
+ * a search is one word.
+ */
+export function mediaSearchToken(query: unknown): string {
+  return nameSearchToken(mediaNameWords(query))
+}
+
+/** The derived fields every writer of a media document stores beside it. */
+export interface MediaFilterKeys {
+  kind: MediaKind
+  /**
+   * `nameSearchKey` of the file name: the Name sort, and the "starts with"
+   * range a search is served by where the scope clause holds the query's one
+   * array filter.
+   */
+  nameLower: string
+  /** Word-prefix tokens of the file name's words, for search. */
+  nameTokens: string[]
+  /** Whether alt text is written — "missing" is a value a query can find. */
+  hasAlt: boolean
+  /** Which way the file is longer, or null when its size is not known. */
+  orientation: MediaOrientation | null
+}
+
+/** What `mediaFilterKeys` reads off a media document. */
+export interface MediaFilterSource {
+  fileName?: unknown
+  contentType?: unknown
+  alt?: unknown
+  width?: unknown
+  height?: unknown
+  video?: unknown
+}
+
+/**
+ * What the media library filters, sorts and searches by, derived from the
+ * fields a document already carries (AGL-3327). Every writer — the upload
+ * routes, replace, the REST API, restore, the Details drawer — spreads this
+ * beside the fields it writes, derived from the document as it will stand
+ * after the write, so a query finds every file by it. The backfill
+ * (`tools/scripts/backfill-media-filter-keys.mjs`) stamps the documents
+ * written before it existed, through `tools/scripts/lib/media-filter-keys.mjs`;
+ * both are held to `media-filter-keys.fixtures.json` beside it.
+ */
+export function mediaFilterKeys(media: MediaFilterSource): MediaFilterKeys {
+  const fileName = String(media.fileName ?? '')
+  return {
+    kind: mediaKindOf(media.contentType),
+    nameLower: nameSearchKey(fileName),
+    nameTokens: nameSearchTokens(mediaNameWords(fileName)),
+    hasAlt: String(media.alt ?? '').trim().length > 0,
+    orientation: mediaOrientationOf(media),
+  }
+}
 
 export const MEDIA_TAG_MAX_COUNT = 20
 export const MEDIA_TAG_MAX_LENGTH = 40

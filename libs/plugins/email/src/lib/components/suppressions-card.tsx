@@ -28,14 +28,17 @@ import {
 } from '@aglyn/shared-ui-jsx'
 import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
 import { ListPagination } from '@aglyn/shared-ui-jsx/components/list-pagination.component'
+import ListQueryNotices, {
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
 import {
   ListRowActions,
   ListTable,
   listActionsColumn,
 } from '@aglyn/shared-ui-jsx/components/list-table.component'
-import { inMemoryListField } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { listFilterGridColumns } from '@aglyn/shared-ui-jsx/const/list-grid-filter'
 import { TABLE_ROW_HEIGHT } from '@aglyn/shared-ui-jsx/const/table-pagination'
-import { usePagedRowsFilter } from '@aglyn/shared-ui-jsx/hooks/use-paged-rows-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 /*
  * The shared drawer, reached by its own path.
  *
@@ -60,21 +63,15 @@ import {
 } from '@mui/material'
 import Button from '@mui/material/Button'
 import type { GridColDef } from '@mui/x-data-grid'
-import {
-  collection,
-  deleteDoc,
-  doc,
-  limit,
-  orderBy,
-  query,
-} from 'firebase/firestore'
+import { collection, deleteDoc, doc } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  useFirestore,
-  usePagedCollection,
-  useUser,
-} from '@aglyn/tenant-feature-instance'
+import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { useListQuery } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import {
+  SUPPRESSION_FILTER_HEADERS,
+  SUPPRESSION_LIST_QUERY,
+} from '../constants/list-queries'
 import {
   describeSuppressionReason as describeReason,
   readSuppressionTotals,
@@ -102,34 +99,17 @@ interface SuppressionRow {
 }
 
 /*
- * What the suppressions grid's Filters panel offers (AGL-3317). The list is a
- * paged listener, so a filter matches over what its window has read, which
- * the first filter widens (`usePagedRowsFilter`). Reason reads `reasonKey`,
- * the stored reason with an absent one read as an unsubscribe, which is how
- * the column and the breakdown describe it.
+ * What the suppressions grid's Filters panel offers, every clause and the
+ * search on the list's query (AGL-3321): see `SUPPRESSION_LIST_QUERY`. The
+ * Reason choices are the stored reasons, by the words the column uses.
  */
-const SUPPRESSION_FILTER_FIELDS = [
-  inMemoryListField('email', 'text'),
-  inMemoryListField('reason', 'select', 'reasonKey'),
-]
-const SUPPRESSION_FILTER_HEADERS: Readonly<Record<string, string>> = {
-  email: 'Address',
-  reason: 'Reason',
-}
 const SUPPRESSION_FILTER_OPTIONS = {
   reason: Object.entries(SUPPRESSION_REASONS).map(([value, described]) => ({
     value,
     label: described.label,
   })),
 }
-const SUPPRESSION_SEARCH_FIELDS = ['email'] as const
-
-type FilterableSuppressionRow = SuppressionRow & { reasonKey: string }
-
-const withReasonKey = (row: SuppressionRow): FilterableSuppressionRow => ({
-  ...row,
-  reasonKey: String(row.reason ?? 'unsubscribe'),
-})
+const SUPPRESSION_SELECT_FIELDS = ['reason']
 
 /**
  * `YYYY-MM-DD` from a Firestore timestamp shape, or an em dash.
@@ -204,7 +184,8 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
   const [busy, setBusy] = useState(false)
 
   /*
-   * The window IS the query, ordered by the server (AGL-2501, AGL-2292).
+   * The page IS the query, ordered by the server (AGL-2501, AGL-2292), and
+   * every filter and search word is a predicate on it (AGL-3321).
    *
    * This was `limit(500)` with no `orderBy`, sorted by date in the browser.
    * Firestore answers an unordered limit in DOCUMENT-ID order, and an entry
@@ -223,45 +204,33 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
    * written before AGL-1918, and `orderBy` drops documents that lack the
    * field rather than mis-sorting them.
    */
+  const gridFilter = useListGridFilter({ selectFields: SUPPRESSION_SELECT_FIELDS })
   const {
-    data: entryData,
-    rows: entryRows,
+    rows: entries,
     hasMore,
     page,
     setPage,
     pageSize,
     setPageSize,
-  } = usePagedCollection<SuppressionRow>(
-    (pageLimit) =>
-      query(
-        collection(firestore, 'hosts', hostId, 'suppressions'),
-        orderBy('createdAt', 'desc'),
-        limit(pageLimit),
-      ),
-    [firestore, hostId],
-    { idField: '$id' },
+    plan,
+  } = useListQuery<SuppressionRow>({
+    collection: collection(firestore, 'hosts', hostId, 'suppressions'),
+    declaration: SUPPRESSION_LIST_QUERY,
+    request: { clauses: gridFilter.clauses, search: gridFilter.searchWords },
+    deps: [firestore, hostId],
+    idField: '$id',
+  })
+  const filtering =
+    gridFilter.clauses.length > 0 || gridFilter.searchWords.some((word) => word.trim())
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(plan.refused, {
+        fields: SUPPRESSION_LIST_QUERY.fields,
+        headers: SUPPRESSION_FILTER_HEADERS,
+        options: SUPPRESSION_FILTER_OPTIONS,
+      }),
+    [plan.refused],
   )
-  const entryWindow = useMemo(() => entryData?.map(withReasonKey), [entryData])
-  const entryPage = useMemo(() => entryRows.map(withReasonKey), [entryRows])
-  const entryFilter = usePagedRowsFilter<FilterableSuppressionRow>(
-    {
-      data: entryWindow,
-      rows: entryPage,
-      hasMore,
-      page,
-      setPage,
-      pageSize,
-      setPageSize,
-    },
-    {
-      fields: SUPPRESSION_FILTER_FIELDS,
-      options: SUPPRESSION_FILTER_OPTIONS,
-      headers: SUPPRESSION_FILTER_HEADERS,
-      search: SUPPRESSION_SEARCH_FIELDS,
-    },
-  )
-  // The rows on screen: the page, or the page of the matches.
-  const entries = entryFilter.rows
 
   /*==========================================
    * THE BREAKDOWN IS A SERVER AGGREGATE, not a tally of the page.
@@ -465,7 +434,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
     }
   }
 
-  const columns: GridColDef<FilterableSuppressionRow>[] = [
+  const columns: GridColDef<SuppressionRow>[] = [
     {
       field: 'email',
       headerName: 'Address',
@@ -488,7 +457,8 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
       field: 'reason',
       headerName: 'Reason',
       width: 230,
-      valueGetter: (_value, row) => row.reasonKey,
+      // An absent reason is an unsubscribe, as the chip says.
+      valueGetter: (_value, row) => String(row.reason ?? 'unsubscribe'),
       renderCell: ({ row }) => {
         const described = describeReason(row.reason)
         return (
@@ -583,7 +553,7 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
             'gap between a campaign’s recipient count and what it actually ' +
             'sent comes from.'}
         </Typography>
-        {entryRows.length === 0 && !hasMore && !entryFilter.filtering ? (
+        {entries.length === 0 && !hasMore && !filtering ? (
           <Typography variant="body2" color="text.secondary">
             {'Nobody is suppressed. Every address in your audiences is ' +
               'currently mailable.'}
@@ -615,32 +585,48 @@ export function SuppressionsCard(props: SuppressionsCardProps) {
                   })
               )}
             </Stack>
-            <ListFilterChips {...entryFilter.chipsProps} />
-            {entryFilter.filtering && hasMore ? (
-              <Typography variant="caption" color="text.secondary">
-                {`Filtering the ${entryFilter.read} suppressions read so far — the next page reads more.`}
-              </Typography>
-            ) : null}
+            <ListFilterChips
+              fields={SUPPRESSION_LIST_QUERY.fields}
+              headers={SUPPRESSION_FILTER_HEADERS}
+              clauses={gridFilter.clauses}
+              onChange={gridFilter.setClauses}
+              options={SUPPRESSION_FILTER_OPTIONS}
+            />
+            <ListQueryNotices refused={refusals} notices={plan.notices} />
             <ListTable
               aria-label="Suppressed addresses"
               rows={entries}
-              columns={entryFilter.filterColumns(columns as GridColDef[])}
+              columns={listFilterGridColumns(
+                columns as GridColDef[],
+                SUPPRESSION_LIST_QUERY.fields,
+                SUPPRESSION_FILTER_OPTIONS,
+                SUPPRESSION_FILTER_HEADERS,
+              )}
               rowHeight={TABLE_ROW_HEIGHT}
               // Paged by the footer below, so the grid must not also slice.
               hideFooter
-              // The panel and the search are the grid's; the card answers
-              // them over what its window read.
-              {...entryFilter.gridProps}
+              // The panel and the search go to the query; the grid neither
+              // filters nor sorts the page it holds.
+              filterMode="server"
+              filterModel={gridFilter.filterModel}
+              onFilterModelChange={gridFilter.onFilterModelChange}
+              quickFilter
+              disableColumnSorting
               noRowsLabel="No suppressions match these filters"
             />
             <ListPagination
-              {...entryFilter.pagination}
+              page={page}
+              pageSize={pageSize}
+              rowCount={entries.length}
+              hasMore={hasMore}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
               // The collection's real size, so the footer's count line says
               // "1–10 of 812" rather than "of more than 10" — the aggregate
               // above already knows it, and it is the same number the chips
               // are a breakdown of. A filtered list's size is unknown.
               count={
-                totals && !entryFilter.filtering
+                totals && !filtering
                   ? Object.values(totals).reduce((a, b) => a + b, 0)
                   : undefined
               }

@@ -50,6 +50,10 @@
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { useListQueryDouble } from '@aglyn/tenant-feature-instance/testing/list-query-double'
+
+/** Read by the hook mock at render time, after every import has resolved. */
+const mockUseListQueryDouble = useListQueryDouble
 
 const mockUpdateDoc = jest.fn().mockResolvedValue(undefined)
 const mockSetDoc = jest.fn().mockResolvedValue(undefined)
@@ -196,6 +200,15 @@ jest.mock('firebase/firestore', () => ({
   updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
 }))
 
+/*
+  The Authors table is its own query (AGL-3321): answered by the list query
+  double over the site's authors, the way Firestore would answer the plan.
+*/
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  ...jest.requireActual('@aglyn/tenant-feature-instance/hooks/use-list-query'),
+  useListQuery: (options: never) => mockUseListQueryDouble(() => mockAuthors, options),
+}))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   useFirestore: () => ({}),
   /*
@@ -215,6 +228,18 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
     setPageSize: () => undefined,
     status: mockEntries.status,
     fromCache: mockEntries.fromCache,
+  }),
+  // The ranged read (a date filter, AGL-3321): handed no query while the
+  // list is not ranged, which is every case here.
+  usePagedCollection: () => ({
+    rows: [],
+    hasMore: false,
+    page: 0,
+    setPage: () => undefined,
+    pageSize: 10,
+    setPageSize: () => undefined,
+    status: 'success',
+    fromCache: false,
   }),
   useHostResourceApi: () => jest.fn(async () => ({ id: 'created-id' })),
   useUser: () => ({ data: { uid: 'uid-editor', getIdToken: jest.fn() } }),

@@ -184,14 +184,18 @@ const StaffUserAiUsageCard = ({ uid }: { uid: string }) => {
           {'No AI usage attributed to this account in any workspace it belongs to.'}
         </Typography>
       ) : (
-        // Every month kept is in hand, so the grid pages, sorts and searches
-        // the one read itself.
+        // Every month kept is in hand — at most fifty workspaces times the
+        // retention window — so the grid pages and sorts the one read, and
+        // offers no filter or search: a bounded readout is read whole, not
+        // narrowed over the rows it holds (AGL-3321).
         <ListTable
           rows={rows}
           columns={COLUMNS}
           getRowId={rowId}
           rowHeight={TABLE_ROW_HEIGHT}
           onOpen={(_id, row: StaffUserAiUsageRow) => router.push(orgHref(row.orgId))}
+          disableColumnFilter
+          quickFilter={false}
         />
       )}
     </CardDisplay>

@@ -35,6 +35,7 @@
  */
 
 import { ConsoleWidgetSlotContext } from '@aglyn/aglyn/app-utils/console-widget-slot-context'
+import { displayNameSearchFields } from '@aglyn/aglyn/app-utils/name-search'
 import { registerPluginRecordRoute } from '@aglyn/aglyn/plugin-manager/plugin-record-routes'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
@@ -538,9 +539,13 @@ describe('the design can be renamed on its own page', () => {
       Record<string, unknown>,
     ]
     expect(ref.__path).toBe(SCREEN_PATH)
-    // One field. A patch carrying anything else would write a seed the
-    // reader never touched back over the live document.
-    expect(patch).toEqual({ displayName: 'August newsletter' })
+    // The typed name and the keys derived from it (AGL-3321). A patch
+    // carrying anything else would write a seed the reader never touched
+    // back over the live document.
+    expect(patch).toEqual({
+      displayName: 'August newsletter',
+      ...displayNameSearchFields('August newsletter'),
+    })
   })
 
   it('cannot save an untouched field — there is nothing to write', async () => {

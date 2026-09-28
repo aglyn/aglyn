@@ -143,6 +143,11 @@ export interface HostProduct {
   /** Ordered media-library image URLs (first = primary). */
   mediaUrls?: string[]
   categoryIds?: string[]
+  /**
+   * The SMART collections this product's rules answer (AGL-3321), written by
+   * every writer — see `productCollectionIds`.
+   */
+  collectionIds?: string[]
   tags?: string[]
   options?: ProductOption[]
   variants: ProductVariant[]
@@ -302,6 +307,13 @@ export function commerceSlug(name: string): string {
  * `[]`. `isNotEmpty` is served as `!= null`, and an empty array is not null —
  * so a product with no SKUs at all would answer "has a SKU" for every row.
  *
+ * `priceFromCents` is the storefront's price key (AGL-3321): the price a
+ * product grid card shows — "From $X", the lowest variant price — in whole
+ * cents, so the catalog's price slider and its price sorts are a range and an
+ * `orderBy` on one stored number rather than a comparison over variants no
+ * query can reach. Written only when the variants are, because it is derived
+ * from them: a write that carries no variants must not stamp a price.
+ *
  * ⚠️ Spread this at EVERY write that sets a product's name or variants. A
  * write that sets the name without it leaves the keys describing the previous
  * name, and the product becomes findable only by what it used to be called.
@@ -316,6 +328,7 @@ export function productSearchFields(product: {
   nameReversed: string
   skus?: string[]
   barcodes?: string[]
+  priceFromCents?: number
 } {
   const flatten = (read: (variant: ProductVariant) => string | undefined) => [
     ...new Set(
@@ -330,6 +343,44 @@ export function productSearchFields(product: {
     ...nameSearchFields(product.name),
     ...(skus.length ? { skus } : {}),
     ...(barcodes.length ? { barcodes } : {}),
+    ...(product.variants
+      ? { priceFromCents: productPriceFromCents({ variants: product.variants }) }
+      : {}),
+  }
+}
+
+/**
+ * The price a storefront card shows, in whole cents (AGL-3321): the low end
+ * of the variant range, which is what "From $X" prints and what the catalog's
+ * price filter and price sorts compare. Stored as `priceFromCents` by
+ * {@link productSearchFields}; `0` for a product with no priced variant yet.
+ */
+export function productPriceFromCents(
+  product: Pick<HostProduct, 'variants'>,
+): number {
+  return Math.round(productPriceRange(product)[0] * 100)
+}
+
+/**
+ * The stock keys a product write carries (AGL-3321): the flat `inventory`
+ * total, and `soldOut` — whether a storefront card reads "Sold out", which is
+ * what the product grid's In stock chip asks the catalog query for
+ * (`soldOut == false`). A grid cannot ask a query about stock inside
+ * `variants`, so the verdict is stored beside them.
+ *
+ * ⚠️ Spread this at EVERY write that changes `variants` or `oversellPolicy`:
+ * a sale, a cancellation, a stock adjustment and the editor alike. A write
+ * that moves stock without it leaves a sold-out product under In stock, or an
+ * in-stock one missing from it. Stored by `backfill-products-list-fields.mjs`
+ * on the products written before it.
+ */
+export function productStockFields(
+  product: Pick<HostProduct, 'variants' | 'oversellPolicy'>,
+): { inventory: number | null; soldOut: boolean } {
+  const inventory = productInventory(product)
+  return {
+    inventory,
+    soldOut: inventory != null && inventory <= 0 && product.oversellPolicy !== 'backorder',
   }
 }
 
@@ -570,7 +621,11 @@ export function unpricedProductDraft(
   const seoTitle = proposal.seoTitle.trim()
   const seoDescription = proposal.seoDescription.trim()
   return {
-    ...productSearchFields({ name }),
+    // The keys for the variants as created: no price is `priceFromCents: 0`
+    // and no tracked stock is never sold out, so the draft is ordered and
+    // filtered like every other product once it is priced and activated.
+    ...productSearchFields({ name, variants: variants as ProductVariant[] }),
+    ...productStockFields({ variants: variants as ProductVariant[] }),
     slug,
     type: proposal.type,
     status: 'draft',
@@ -958,6 +1013,36 @@ function ruleMatches(product: HostProduct, rule: CollectionRule): boolean {
 }
 
 /**
+ * Whether a product's own fields answer a SMART collection's rules — its
+ * tags, categories, prices, name and type, and nothing about whether it is
+ * on sale. That is the storefront query's scope (`deletedAt == null`,
+ * `status == 'active'`), so membership stored on the product never goes stale
+ * when a product is archived or brought back.
+ *
+ * A collection with no rules holds nothing.
+ */
+/** What smart-collection membership reads of a product — a draft's too. */
+export interface MembershipProduct {
+  name?: string
+  type?: ProductType
+  tags?: string[]
+  categoryIds?: string[]
+  variants?: ReadonlyArray<{ id?: string; priceUsd?: number | null }>
+}
+
+export function smartCollectionMatches(
+  product: MembershipProduct,
+  collection: Pick<HostCollection, 'rules' | 'matchAll'>,
+): boolean {
+  const rules = collection.rules ?? []
+  if (rules.length === 0) return false
+  const matcher = (rule: CollectionRule) => ruleMatches(product as HostProduct, rule)
+  return collection.matchAll === false
+    ? rules.some(matcher)
+    : rules.every(matcher)
+}
+
+/**
  * Smart-collection membership: draft/archived/deleted products never
  * match; manual collections answer from productIds.
  */
@@ -971,12 +1056,40 @@ export function matchesCollection(
     return productId != null &&
       (collection.productIds ?? []).includes(productId)
   }
-  const rules = collection.rules ?? []
-  if (rules.length === 0) return false
-  const matcher = (rule: CollectionRule) => ruleMatches(product, rule)
-  return collection.matchAll === false
-    ? rules.some(matcher)
-    : rules.every(matcher)
+  return smartCollectionMatches(product, collection)
+}
+
+/**
+ * The stored membership of a product in the host's SMART collections
+ * (AGL-3321): the ids of those whose rules it answers
+ * ({@link smartCollectionMatches}), sorted.
+ *
+ * The storefront reads a smart collection whose rules no query can hold (a
+ * NOT, an OR, a name rule, a price over) as `collectionIds array-contains
+ * <id>` — so the membership is WRITTEN, by every product writer from the
+ * host's smart collections as they stand, and by the collection-membership
+ * route for every product whenever a smart collection's rules change or it
+ * is deleted. `tools/scripts/backfill-product-collection-ids.mjs` stamps the
+ * products written before; the two answer
+ * `tools/scripts/lib/product-collection-ids.fixtures.json`.
+ */
+export const PRODUCT_COLLECTION_IDS = 'collectionIds'
+
+/** A smart collection as membership is computed from it. */
+export interface SmartCollectionRules {
+  id: string
+  rules?: CollectionRule[]
+  matchAll?: boolean
+}
+
+export function productCollectionIds(
+  product: MembershipProduct,
+  smartCollections: readonly SmartCollectionRules[],
+): string[] {
+  return smartCollections
+    .filter((collection) => smartCollectionMatches(product, collection))
+    .map((collection) => collection.id)
+    .sort()
 }
 
 /**

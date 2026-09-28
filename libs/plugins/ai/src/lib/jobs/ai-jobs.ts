@@ -82,6 +82,7 @@ import {
   reserveAssistMessage,
   type AssistReservation,
 } from '../usage/assist-usage'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /**
  * AI generation jobs — the Firestore state machine (AGL-2904).
@@ -1175,7 +1176,7 @@ export async function writeAiJobAudit(
   entry: AiJobAuditEntry,
 ): Promise<void> {
   try {
-    await firestore.collection('adminAudit').add({
+    await addAdminAudit(firestore, {
       actorUid: entry.actorUid,
       actorEmail: entry.actorEmail ?? null,
       action: entry.action,

@@ -21,18 +21,17 @@
  * ## Why this file exists
  *
  * Scheduling an entry writes `{ status: 'scheduled', publishAt }` from the
- * console and then NOTHING ELSE HAPPENS. There is no cron, no job and no
- * server beat that promotes a content entry: `publish-schedule-job.ts` is
- * "SCREENS ONLY, deliberately" and queries `publishSchedule.publishAt`, a map
- * field on a screen document that an entry does not have. `grep` finds no
- * `collectionGroup('entries')` anywhere and `vercel.json` declares no crons.
+ * console. Two things publish it: the tenant's `apply-entry-schedules` beat at
+ * its time (AGL-3340), and — as the backstop for a beat that is down or has
+ * not reached it — any render that reads it once it is due.
  *
- * So the entire feature rests on two private functions in
- * `get-collection-content.ts` — `isLive`, which decides per render whether a
- * due schedule counts as published, and `flipDueEntry`, which makes that
- * durable fail-open. Both were untested. A regression in either is invisible:
- * the console keeps accepting schedules and reporting "Scheduled for …", and
- * the entry simply never appears on the site, or appears immediately.
+ * Both rest on two functions in `get-collection-content.ts` — `isLive`, which
+ * decides per render whether a due schedule counts as published, and
+ * `flipDueEntry`, which makes that durable fail-open; the beat reaches the
+ * second through `applyDueEntrySchedule`. A regression in either is
+ * invisible: the console keeps accepting schedules and reporting "Scheduled
+ * for …", and the entry simply never appears on the site, or appears
+ * immediately.
  *
  * These cases therefore drive the gate from BOTH SIDES of the instant. A suite
  * that only asserted the due case cannot tell a working scheduler from one
@@ -153,7 +152,11 @@ jest.mock('@aglyn/tenant-data-admin/render-cache', () => ({
 }))
 
 import { COLLECTION_SOURCE_MAX } from '@aglyn/aglyn/server'
-import { getCollectionContent } from './get-collection-content'
+import {
+  applyDueEntrySchedule,
+  entryScheduleDueAtMs,
+  getCollectionContent,
+} from './get-collection-content'
 
 const HOST = 'host-1'
 const SLUG = 'shipping-the-export'
@@ -539,5 +542,142 @@ describe('a bounded read declares itself past the liveness gate (AGL-1516)', () 
     const content = await entryPage()
     expect(content.entry?.slug).toBe(SLUG)
     expect(content.entriesReachedBound).toBeUndefined()
+  })
+})
+
+describe('the beat executes the same flip the render does (AGL-3340)', () => {
+  /**
+   * The beat reads a due entry with a collection-group query and hands the
+   * snapshot here. What it needs back is an OUTCOME — it drops pages only for
+   * a flip that landed — and a write guarded on the snapshot it read, so an
+   * author rescheduling the post in between wins.
+   */
+  const updateTime = { seconds: 1, nanoseconds: 0 }
+  const writes: Array<{
+    payload: Record<string, unknown>
+    precondition: unknown
+  }> = []
+  let updateThrows = false
+
+  const beatSnapshot = (value: Record<string, unknown>) => ({
+    updateTime: updateTime as never,
+    data: () => ({ ...value }),
+    ref: {
+      update: async (payload: Record<string, unknown>, precondition?: unknown) => {
+        if (updateThrows) throw new Error('FAILED_PRECONDITION')
+        writes.push({ payload, precondition })
+        return undefined
+      },
+    } as never,
+  })
+
+  beforeEach(() => {
+    writes.length = 0
+    updateThrows = false
+  })
+
+  it('publishes a due entry, stamping publishAt and guarding on updateTime', async () => {
+    const publishAt = AN_HOUR_AGO()
+    const outcome = await applyDueEntrySchedule({
+      hostId: HOST,
+      entry: beatSnapshot(scheduledEntry({ publishAt })),
+    })
+    expect(outcome).toBe('published')
+    expect(writes).toEqual([
+      {
+        payload: {
+          status: 'published',
+          publishedAt: publishAt,
+          publishSortAt: publishAt,
+        },
+        precondition: { lastUpdateTime: updateTime },
+      },
+    ])
+  })
+
+  it('leaves a schedule that is not due yet alone, without asking the plan', async () => {
+    const outcome = await applyDueEntrySchedule({
+      hostId: HOST,
+      entry: beatSnapshot(scheduledEntry({ publishAt: IN_AN_HOUR() })),
+    })
+    expect(outcome).toBe('unchanged')
+    expect(writes).toEqual([])
+    expect(orgReads).toBe(0)
+  })
+
+  it('records the refusal on a plan that cannot schedule — and it is not a publish', async () => {
+    orgForHost = { orgId: 'org-1', org: { plan: 'free' } }
+    const outcome = await applyDueEntrySchedule({
+      hostId: HOST,
+      entry: beatSnapshot(scheduledEntry({ publishAt: AN_HOUR_AGO() })),
+    })
+    // `refused` changes nothing a visitor sees, so the beat drops no page.
+    expect(outcome).toBe('refused')
+    expect(writes.map((write) => write.payload)).toEqual([
+      { scheduleStatus: 'skipped-unentitled' },
+    ])
+  })
+
+  it('writes nothing when the org cannot be resolved', async () => {
+    orgForHost = null
+    const outcome = await applyDueEntrySchedule({
+      hostId: HOST,
+      entry: beatSnapshot(scheduledEntry({ publishAt: AN_HOUR_AGO() })),
+    })
+    expect(outcome).toBe('unchanged')
+    expect(writes).toEqual([])
+  })
+
+  it('reports a write that did not land as failed, not published', async () => {
+    // The precondition refusing is the ordinary case: the author edited the
+    // entry after the beat read it. No page is dropped for a flip that did not
+    // happen, and the next beat reads the entry fresh.
+    updateThrows = true
+    const outcome = await applyDueEntrySchedule({
+      hostId: HOST,
+      entry: beatSnapshot(scheduledEntry({ publishAt: AN_HOUR_AGO() })),
+    })
+    expect(outcome).toBe('failed')
+  })
+
+  it('never republishes an entry that is already published', async () => {
+    const outcome = await applyDueEntrySchedule({
+      hostId: HOST,
+      entry: beatSnapshot({
+        ...scheduledEntry({ publishAt: AN_HOUR_AGO() }),
+        status: 'published',
+      }),
+    })
+    expect(outcome).toBe('unchanged')
+    expect(writes).toEqual([])
+  })
+})
+
+describe('when a schedule comes due, as the beat orders its probe (AGL-3340)', () => {
+  it('is the publishAt instant for a pending schedule', () => {
+    const publishAt = IN_AN_HOUR()
+    expect(entryScheduleDueAtMs(scheduledEntry({ publishAt }))).toBe(
+      publishAt.seconds * 1000,
+    )
+  })
+
+  it('is null for a REFUSED schedule, which keeps status scheduled forever', () => {
+    // Read as due, a refusal would make every beat re-probe for work that
+    // will never be done.
+    expect(
+      entryScheduleDueAtMs(
+        scheduledEntry({
+          publishAt: AN_HOUR_AGO(),
+          scheduleStatus: 'skipped-unentitled',
+        }),
+      ),
+    ).toBeNull()
+  })
+
+  it('is null for an entry that is not scheduled, or carries no publishAt', () => {
+    expect(
+      entryScheduleDueAtMs({ status: 'published', publishAt: AN_HOUR_AGO() }),
+    ).toBeNull()
+    expect(entryScheduleDueAtMs(scheduledEntry({}))).toBeNull()
   })
 })

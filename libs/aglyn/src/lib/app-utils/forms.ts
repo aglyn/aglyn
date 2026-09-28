@@ -35,6 +35,7 @@ import type { AglynNodeSchema, NodeId } from '../foundation/definitions/componen
 import { FORMS_PLUGIN_ID } from '../plugin-manager/enabled-plugins'
 import type { PlacementKind } from './compose-reusable-components'
 import { submissionMonthKey } from './form-abuse-ceiling'
+import { displayNameSearchFields, nameSearchTokens } from './name-search'
 
 /**
  * The `componentId` of the node that RENDERS a form, and of the node that
@@ -202,6 +203,20 @@ export interface FormDocument<N = AglynNodeSchema> {
    * about presence rather than about what kind of clock wrote it.
    */
   archivedAt?: unknown
+  /**
+   * Whether the form is retired, as a boolean the Forms list can QUERY
+   * (AGL-3330). {@link archivedAt} stays the fact every other reader asks,
+   * through {@link isFormArchived}; this mirrors it because Firestore cannot
+   * find a document by the absence of a field, and "in use" is an absence
+   * there. Written beside `archivedAt` by the one writer that retires a form,
+   * `false` on every create — see {@link newFormListFields}.
+   */
+  retired?: boolean
+  /** The Forms list's search fields — see {@link formListFields}. */
+  nameLower?: string
+  nameTokens?: string[]
+  nameReversed?: string
+  searchTokens?: string[]
   /*
    * ── THE DESIGN ───────────────────────────────────────────────────────────
    *
@@ -257,6 +272,91 @@ export function isFormArchived(
   return Boolean(form?.archivedAt)
 }
 
+/** The search fields the Forms list queries — see {@link formListFields}. */
+export interface FormListSearchFields {
+  nameLower: string
+  nameTokens: string[]
+  nameReversed: string
+  searchTokens: string[]
+}
+
+/**
+ * The fields the Forms list FILTERS AND SEARCHES BY ON THE QUERY (AGL-3330).
+ *
+ * The list pages a site's catalog, so a filter that matched the rows already
+ * read would answer "no such form" for one on a later page. Firestore has no
+ * case-insensitive or substring match, so the name travels with the keys
+ * every document named by `displayName` carries
+ * (`displayNameSearchFields`): `nameLower`, `nameTokens`, `nameReversed`.
+ * The Display name filter asks `nameTokens`.
+ *
+ * `searchTokens` is what the list's search box asks with one
+ * `array-contains`: the word prefixes of the name AND of the slug (its words
+ * are hyphen-joined) AND the lower-cased prefixes of the form's id, because
+ * the box finds a form by any of the three. A slug usually repeats its name's
+ * words, so the union mostly costs nothing; it earns its place on a form
+ * renamed after its slug was minted.
+ *
+ * `tools/scripts/lib/site-form-list-fields.mjs` is the script-side twin, and both
+ * answer `tools/scripts/lib/site-form-list-fields.fixtures.json`.
+ *
+ * ⚠️ Spread at EVERY write that sets `displayName` or `slug`, and at create.
+ * A rename that skips it leaves the keys naming the old name, and the form is
+ * then findable only by what it used to be called, while it still lists
+ * normally.
+ */
+export function formListFields(form: {
+  id: string
+  displayName?: unknown
+  slug?: unknown
+}): FormListSearchFields {
+  const name = typeof form.displayName === 'string' ? form.displayName : ''
+  const slugWords = (typeof form.slug === 'string' ? form.slug : '').replace(/-+/g, ' ')
+  return {
+    ...displayNameSearchFields(name),
+    searchTokens: [
+      ...new Set([
+        ...nameSearchTokens(name),
+        ...nameSearchTokens(slugWords),
+        ...nameSearchTokens(form.id),
+      ]),
+    ],
+  }
+}
+
+/**
+ * What a NEW form is written with so the Forms list can query every filter
+ * it offers (AGL-3330): its search fields, and an explicit value for each
+ * field a query would otherwise have to find by its absence.
+ *
+ *  - `retired: false`, the queryable mirror of an unset `archivedAt`.
+ *  - `routing.lead` as a boolean, `false` unless the form routes to leads, so
+ *    "Lead routing is off" is an equality rather than a missing field.
+ *  - `stats` with a NULL for each counter. Null, never zero: a form that has
+ *    counted nothing has no figure, which is what the list's dash says, and a
+ *    zero would claim a measurement. `/api/forms/submit` increments these,
+ *    and an increment on null starts from nothing, so it needs no change.
+ *
+ * `routing` keeps whatever else it carries (a dataset binding).
+ */
+export function newFormListFields(form: {
+  id: string
+  displayName?: unknown
+  slug?: unknown
+  routing?: FormRouting | null
+}): FormListSearchFields & {
+  retired: false
+  routing: FormRouting
+  stats: { submissions: null; leads: null; lastSubmissionAtMs: null }
+} {
+  return {
+    ...formListFields(form),
+    retired: false,
+    routing: { ...(form.routing ?? {}), lead: form.routing?.lead === true },
+    stats: { submissions: null, leads: null, lastSubmissionAtMs: null },
+  }
+}
+
 /**
  * One entry in a form's `versions` subcollection.
  *
@@ -283,9 +383,14 @@ export interface FormVersion<N = AglynNodeSchema> {
  * pattern with the same reasoning.
  */
 export interface FormStats {
-  submissions?: number
-  leads?: number
-  lastSubmissionAtMs?: number
+  /*
+   * `null` on a form created since AGL-3330, until the first submission:
+   * written so the Forms list can query "none yet", which an absent field
+   * cannot answer. A reader treats null and absent alike, as no figure.
+   */
+  submissions?: number | null
+  leads?: number | null
+  lastSubmissionAtMs?: number | null
   /**
    * Form views, counted by the beacon at `/api/analytics/collect` — one per
    * rendered form on a live page, the same shape and the same cost as an

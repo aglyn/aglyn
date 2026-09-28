@@ -740,7 +740,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         const counter = await transaction.get(counterRef)
         const number = Number(counter.get('next') ?? 1)
         transaction.set(counterRef, { next: number + 1 }, { merge: true })
-        transaction.set(orderRef, {
+        // With the fields the orders list queries by (AGL-3321).
+        transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
           number,
           status: 'pending',
           channel: 'pos',
@@ -792,7 +793,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
           timeline: [{ atMs: Date.now(), event: 'pos-card-pending' }],
           createdAtMs: Date.now(),
           createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        })
+        }))
       })
       // Stripe returns the cashier to the console POS page. This was
       // `/{hostDocId}/pos`, the pre-AGL-621/622 shape, so completing a card
@@ -958,7 +959,8 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
       const counter = await transaction.get(counterRef)
       const number = Number(counter.get('next') ?? 1)
       transaction.set(counterRef, { next: number + 1 }, { merge: true })
-      transaction.set(orderRef, {
+      // With the fields the orders list queries by (AGL-3321).
+      transaction.set(orderRef, CommerceModel.withOrderListFields(orderRef.id, {
         number,
         status: 'paid',
         channel: 'pos',
@@ -1004,7 +1006,7 @@ export const posOrderHandler: PluginApiHandler = async (req, res) => {
         ...(payment === 'folio' ? { reservationId } : {}),
         createdAtMs: Date.now(),
         createdAt: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-      })
+      }))
       // ACCRUED IN THE SAME TRANSACTION AS THE ORDER (AGL-2111), so an order
       // and the fee it owes cannot diverge: either both land or neither does.
       // A separate write after the commit would drop the accrual on any crash

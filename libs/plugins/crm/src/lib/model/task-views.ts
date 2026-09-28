@@ -22,6 +22,13 @@ import {
   type TaskDueState,
   taskDueState,
 } from '@aglyn/aglyn'
+import type { ListFilterField } from '@aglyn/shared-ui-jsx/const/list-filter'
+import type {
+  ListQueryDeclaration,
+  ListQueryFilter,
+  ListQuerySort,
+} from '@aglyn/shared-ui-jsx/const/list-query-plan'
+import { CRM_LIST_SEARCH, crmSelectField } from './crm-list-query'
 import type { CrmRoutes } from './crm-routes'
 
 /**
@@ -79,16 +86,6 @@ export const CRM_TASK_PRIORITY_LABELS: Record<CrmTaskPriority, string> = {
   high: 'High',
 }
 
-/**
- * How many rows a view reads at most.
- *
- * Every view is a listener, and a listener with no cap is a bill that grows
- * with the org. Two hundred is more than a person works through in a sitting
- * and far under what a table paints comfortably; the list says when the
- * window is full so a reader knows to narrow the view rather than assume
- * the end of the table is the end of the work.
- */
-export const CRM_TASK_VIEW_LIMIT = 200
 
 /** Midnight at the START of the local calendar day `nowMs` falls in. */
 export function startOfLocalDay(nowMs: number): number {
@@ -155,6 +152,49 @@ export function crmTaskViewPlan(
       return { status: 'done', direction: 'desc' }
   }
 }
+
+/*==========================================
+ * THE TASKS LIST'S QUERY (AGL-3321).
+ *
+ * The view is the query's base — its status, the reader as assignee for
+ * "My tasks", and the `dueAtMs` window for Overdue, Today and Upcoming —
+ * and Kind, Priority, Assignee and the search word are predicates on the
+ * same query, paged by it. Every equality rides one `(field, dueAtMs)`
+ * composite per direction: ascending for the working views, descending for
+ * Done.
+ *=========================================*/
+
+/** The orders the list takes: soonest first, and Done's most recently due first. */
+export const TASK_LIST_SORTS: readonly ListQuerySort[] = [
+  { path: 'dueAtMs', direction: 'asc' },
+  { path: 'dueAtMs', direction: 'desc' },
+]
+
+/** What the Filters panel may name on a task, besides the view. */
+export const TASK_LIST_QUERY_FIELDS: readonly ListFilterField[] = [
+  crmSelectField('kind'),
+  crmSelectField('priority'),
+  crmSelectField('assigneeUid'),
+]
+
+export const TASK_LIST_DECLARATION: ListQueryDeclaration = {
+  fields: TASK_LIST_QUERY_FIELDS,
+  sorts: TASK_LIST_SORTS,
+  search: CRM_LIST_SEARCH,
+}
+
+/** The view's own predicates, which the plan takes as its base beside the scope. */
+export function crmTaskViewBase(plan: CrmTaskViewPlan): ListQueryFilter[] {
+  return [
+    { path: 'status', op: '==', value: plan.status },
+    ...(plan.assigneeUid ? [{ path: 'assigneeUid', op: '==' as const, value: plan.assigneeUid }] : []),
+    ...(plan.dueFrom !== undefined ? [{ path: 'dueAtMs', op: '>=' as const, value: plan.dueFrom }] : []),
+    ...(plan.dueBefore !== undefined ? [{ path: 'dueAtMs', op: '<' as const, value: plan.dueBefore }] : []),
+  ]
+}
+
+/** The base's shape for `listQueryIndexes`: the view's two equalities. */
+export const TASK_LIST_VIEW_BASE_INDEX = [{ path: 'status' }, { path: 'assigneeUid' }] as const
 
 /**
  * Rows in the order a view should paint them.

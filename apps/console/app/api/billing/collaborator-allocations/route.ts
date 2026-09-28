@@ -31,6 +31,7 @@ import {
 } from '@aglyn/tenant-data-admin'
 import { FieldValue } from 'firebase-admin/firestore'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — same posture as the sibling add-on route it serves.
 // AGL-1501 keeps billing/maintenance-locked sessions alive precisely so
@@ -242,17 +243,15 @@ async function handler(request: Request): Promise<Response> {
       },
       { merge: true },
     )
-    await firestore
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        actorEmail: decoded.email ?? null,
-        action: 'billing.collaboratorAllocation',
-        target: `orgs/${orgId}/hosts/${hostId}`,
-        before: { seats: current },
-        after: { seats },
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firestore, {
+      actorUid: decoded.uid,
+      actorEmail: decoded.email ?? null,
+      action: 'billing.collaboratorAllocation',
+      target: `orgs/${orgId}/hosts/${hostId}`,
+      before: { seats: current },
+      after: { seats },
+      at: FieldValue.serverTimestamp(),
+    })
       .catch(() => undefined)
 
     const nextAllocations = { ...(org.collaboratorAllocations ?? {}) }

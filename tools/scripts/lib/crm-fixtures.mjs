@@ -72,6 +72,9 @@
 //   is the seed invariant `docs/E2E_LOCAL.md` states.
 
 import { Timestamp } from 'firebase-admin/firestore'
+import { withCrmListFields } from './org-record-list-fields.mjs'
+import { displayNameSearchFields } from './name-search-tokens.mjs'
+import { newFormListFields } from './site-form-list-fields.mjs'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const HOUR_MS = 60 * 60 * 1000
@@ -246,8 +249,11 @@ export async function seedCrmFixtures(options) {
     ownerName,
     teammateUid,
     nowMs = Date.now(),
-    write = (ref, data) => ref.set(data),
+    write: writeRaw = (ref, data) => ref.set(data),
   } = options
+  // Every CRM record carries the fields its list queries (AGL-3321), as
+  // the writers stamp them.
+  const write = (ref, data) => writeRaw(ref, withCrmListFields(ref, data))
   const orgRef = firestore.collection('orgs').doc(orgId)
   const hostRef = firestore.collection('hosts').doc(hostId)
   const F = CRM_FIXTURE
@@ -619,7 +625,9 @@ export async function seedCrmFixtures(options) {
   // A live audience: the bulk bar's "Add to list" picker offers it, and a
   // dynamic list is the case the dialog explains ("whoever you add stays").
   await write(orgRef.collection('lists').doc(F.listId), {
+    // The name and the keys the Emails lists table queries (AGL-3321).
     name: F.listName,
+    ...displayNameSearchFields(F.listName),
     kind: 'dynamic',
     rule: { sources: ['contacts'], tags: ['wholesale'] },
     createdAt: stamp(at(20)),
@@ -679,8 +687,10 @@ export async function seedCrmFixtures(options) {
         { fieldName: 'marketingConsent', fieldType: 'checkbox', label: 'Send me the roast calendar' },
       ],
       consentFieldName: 'marketingConsent',
-      routing,
       hostId,
+      // What a console create stamps, so the Forms list's query finds the
+      // seeded forms (AGL-3330); the routing is kept with its lead switch.
+      ...newFormListFields({ id, displayName: name, slug, routing }),
       createdAt: stamp(at(40)),
       updatedAt: stamp(at(40)),
     },

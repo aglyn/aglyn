@@ -35,7 +35,7 @@
  * listens with `limit(201)` to render ten rows is buying two hundred and one.
  */
 
-import { render } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { FORMS_MAX_PER_HOST } from '@aglyn/aglyn'
 import { TABLE_PAGE_SIZE_DEFAULT } from '@aglyn/shared-ui-jsx/const/table-pagination'
 import type { ReactNode } from 'react'
@@ -269,7 +269,8 @@ function summarize(
  */
 const SECTION_COLLECTIONS: Record<string, readonly string[]> = {
   submissions: ['formSubmissions', 'forms'],
-  contacts: ['siteMembers', 'leads'],
+  // Members is the list the section opens on; Leads is read on its toggle.
+  contacts: ['siteMembers'],
   campaigns: [],
 }
 
@@ -402,18 +403,22 @@ describe('inbox console read cost (AGL-2501)', () => {
     )
   })
 
-  it('the contacts section buys two whole windows, and nothing else', async () => {
+  it('the contacts section buys one page of members, and one of leads on its toggle', async () => {
     await renderConsole('contacts')
     summarize('contacts section', mockListens)
-    // Ceilinged rather than paged, because the dedupe between the two lists is
-    // only correct while both windows are whole — see the card.
+    // Each list pages its own query (AGL-3321): one page plus the probe row,
+    // and the list not shown reads nothing.
     expect(listenKeys()).toEqual(
-      [
-        ...NOTICE_LISTENS,
-        'orgs/org1/leads#201',
-        'hosts/site1/siteMembers#201',
-      ].sort(),
+      [...NOTICE_LISTENS, `hosts/site1/siteMembers#${TABLE_PAGE_SIZE_DEFAULT + 1}`].sort(),
     )
+    mockListens.length = 0
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Leads' }))
+    })
+    summarize('contacts section, leads', mockListens)
+    expect(listenKeys()).toEqual([`orgs/org1/leads#${TABLE_PAGE_SIZE_DEFAULT + 1}`])
+    // Narrowed to what this site may see.
+    expect(mockListens[0].wheres).toEqual(['visibleTo array-contains-any org,host:site1'])
   })
 
   /*
@@ -500,10 +505,10 @@ describe('the organization’s inbox read cost (AGL-3303)', () => {
     expect(mockListens[0].wheres).toEqual(['orgId == org1'])
   })
 
-  it('every site’s leads are one unscoped window, and no site’s members', async () => {
+  it('every site’s leads are one unscoped page, and no site’s members', async () => {
     await renderOrgConsole('contacts')
     summarize('org contacts, every site', mockListens)
-    expect(listenKeys()).toEqual(['orgs/org1/leads#201'])
+    expect(listenKeys()).toEqual([`orgs/org1/leads#${TABLE_PAGE_SIZE_DEFAULT + 1}`])
     // An org-wide member reads the org's leads unscoped; a `visibleTo`
     // clause would only narrow what the rules already admit.
     expect(mockListens[0].wheres).toEqual([])
@@ -528,7 +533,7 @@ describe('the organization’s inbox read cost (AGL-3303)', () => {
     )
     await renderOrgConsole('contacts')
     expect(listenKeys()).toEqual(
-      [...NOTICE_LISTENS, 'orgs/org1/leads#201', 'hosts/site1/siteMembers#201'].sort(),
+      [...NOTICE_LISTENS, `hosts/site1/siteMembers#${TABLE_PAGE_SIZE_DEFAULT + 1}`].sort(),
     )
   })
 

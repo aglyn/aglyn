@@ -27,6 +27,7 @@ import {
   lockdownRefusal,
   logHostActivity,
   projectDomainStatus,
+  syncHostProjectionForMembers,
   validatePlatformDomain,
 } from '@aglyn/tenant-data-admin'
 // Shared with the AGL-2010 completer cron so there is exactly one
@@ -160,6 +161,14 @@ async function handler(request: Request): Promise<Response> {
     })
     if (!claimed) {
       return Response.json({ error: 'That domain is already connected to another site' }, { status: 409 })
+    }
+    // Every member's row of this site carries the domain for the Sites list's
+    // search and its Custom domain filter (AGL-3321, `membershipRow`), so the
+    // rows follow the write. Best-effort, as the rename's re-sync is: a row
+    // left behind is re-derived by the next re-sync of this site.
+    {
+      const orgId = String(hostSnapshot.get('orgId') ?? '')
+      if (orgId) await syncHostProjectionForMembers(orgId, hostId).catch(() => undefined)
     }
 
     // Ask the provider whether this deployment can register a name at all,

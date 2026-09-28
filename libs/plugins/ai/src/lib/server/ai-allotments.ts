@@ -61,6 +61,7 @@ import type {
   AiAllotmentsMemberWire,
   AiAllotmentsWire,
 } from '../usage/ai-usage-wire'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — a spend control, the posture of ai/billing/overage
 // beside it: a billing-locked workspace must still be able to LOWER what its
@@ -490,20 +491,18 @@ async function handlePost(request: Request): Promise<Response> {
     ).catch((error) => console.error('[ai/allotments] site month seed failed', orgId, error))
   }
 
-  void firestore
-    .collection('adminAudit')
-    .add({
-      actorUid: caller.uid,
-      actorEmail: caller.email,
-      action: 'ai.allotments.set',
-      target: `orgs/${orgId}/aiAllotments`,
-      before: null,
-      after: {
-        set: set.map((write) => ({ subject: write.subject.id, credits: write.credits, mode: write.mode, models: write.models })),
-        removed: removals.map((subject) => subject.id),
-      },
-      at: FieldValue.serverTimestamp(),
-    })
+  void addAdminAudit(firestore, {
+    actorUid: caller.uid,
+    actorEmail: caller.email,
+    action: 'ai.allotments.set',
+    target: `orgs/${orgId}/aiAllotments`,
+    before: null,
+    after: {
+      set: set.map((write) => ({ subject: write.subject.id, credits: write.credits, mode: write.mode, models: write.models })),
+      removed: removals.map((subject) => subject.id),
+    },
+    at: FieldValue.serverTimestamp(),
+  })
     .catch(() => undefined)
 
   const actor = { uid: caller.uid, email: caller.email }

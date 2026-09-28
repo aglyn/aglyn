@@ -57,11 +57,18 @@
  * alarm, not a quiet success, and it is reported as NOT CONFIRMED — the same
  * read-back discipline the Lockdown and Disabled-files pages keep.
  *
- * **Counts are page-scoped and say so.** The listing is the first `pageSize`
- * rows by `updatedAt`, so `openUrgent` is "urgent in what you can see". A
- * truncated page renders that sentence rather than an unqualified number,
+ * **A count says what it counts.** The urgent backlog, the counter-notices
+ * awaiting forward and the overdue restorations are the route's own queries
+ * over the whole queue (`view=summary`), never a tally of the page on screen.
+ * The one count that IS of the page — failed receipts — says "on this page",
  * because a queue that looks calm while it is behind is the failure mode this
  * whole arc exists to prevent.
+ *
+ * **The filters reach the whole queue.** Status and Category are clauses the
+ * route puts on its Firestore query (AGL-3321), and both lists page by a
+ * cursor; nothing here narrows the rows the route hands back. A combination
+ * the query cannot hold is named above the list (`ListQueryNotices`) rather
+ * than applied to some rows and not others.
  *
  * ## The §512 additions (AGL-1983), and their own invariants
  *
@@ -104,6 +111,16 @@ import { AppLink, CardDisplay, Container } from '@aglyn/shared-ui-jsx'
 import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
+import ListFilterChips from '@aglyn/shared-ui-jsx/components/list-filter-chips.component'
+import {
+  ListQueryNotices,
+  listQueryRefusals,
+} from '@aglyn/shared-ui-jsx/components/list-query-notices.component'
+import {
+  type ListFilterClause,
+  upsertListFilterClause,
+} from '@aglyn/shared-ui-jsx/const/list-grid-filter'
+import { useListGridFilter } from '@aglyn/shared-ui-jsx/hooks/use-list-grid-filter'
 import {
   Alert,
   Button,
@@ -117,10 +134,17 @@ import {
 } from '@mui/material'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import DashboardLayout from '../../../../components/layouts/dashboard.layout'
+import StaffListPaginationControls from '../../../../components/staff-list-pagination.component'
 import StaffOnly from '../../../../components/staff-only.component'
 import { docsHelp } from '../../../../constants/docs-links'
 import { buildRoute, Route } from '../../../../constants/route-links'
 import { CONTENT_MAX_WIDTH } from '../../../../constants/shared'
+import { useStaffListQuery } from '../../../../hooks/use-staff-list-query'
+import {
+  ABUSE_REPORT_FILTER_FIELDS,
+  ABUSE_REPORT_FILTER_HEADERS,
+  ABUSE_REPORT_FILTER_OPTIONS,
+} from '../../../../utils/abuse-report-list-query'
 
 /**
  * The statutory block, exactly as the route hands it over. `signature` is the
@@ -172,6 +196,16 @@ interface AbuseReportRow {
   resolution: string | null
   resolvedBy: string | null
   resolvedAtMs: number | null
+  /**
+   * The §512(i) verdict for the row's account — copyright rows only, and
+   * only when the route looked the account up.
+   */
+  strike: RepeatInfringerRow | null
+  /**
+   * The account was past the page's lookup cap, so its count is UNKNOWN —
+   * never to be rendered as zero.
+   */
+  strikeUnknown: boolean
 }
 
 /**
@@ -252,24 +286,18 @@ interface RepeatInfringerRow {
   ledger?: StrikeLedgerRow[]
 }
 
-interface ReportListing {
-  reports: AbuseReportRow[]
-  counterNotices: CounterNoticeRow[]
-  /** orgId → verdict, for the orgs with a copyright report on this page. */
-  strikes: Record<string, RepeatInfringerRow>
-  /** Some orgs' counts were past the lookup cap and are UNKNOWN, not zero. */
-  strikesTruncated: boolean
-  counterNoticesTruncated: boolean
+/**
+ * The queue's counts — `view=summary` on the route, each its own query over
+ * the whole queue, so none of them describes only the page on screen.
+ */
+interface QueueSummary {
+  /** Open reports in an urgent category. */
+  openUrgent: number
   awaitingForward: number
   overdueRestorations: number
-  /** Submitters on this page whose receipt is recorded as NOT sent. */
-  receiptsFailed: number
+  /** More candidates than one read covers: the overdue count is a floor. */
+  overdueAtLeast: boolean
   counterNoticeStatuses: string[]
-  count: number
-  pageSize: number
-  /** The page was full, so these counts describe a window, not the queue. */
-  truncated: boolean
-  openUrgent: number
   identityVisible: boolean
   actorRole: string
   readAtMs: number
@@ -372,6 +400,14 @@ const STRIKE_COLOR: Record<string, 'default' | 'warning' | 'error'> = {
 }
 
 /** A closing status is the one the route refuses without a written note. */
+/** Stable empties, so a list's request is not a new query every render. */
+const NO_WORDS: readonly string[] = []
+const NO_CLAUSES: readonly ListFilterClause[] = []
+/** The counter-notice queue is the same route's second list. */
+const COUNTER_NOTICE_PARAMS: Readonly<Record<string, string>> = {
+  queue: 'counterNotices',
+}
+
 const isClosingStatus = (status: string): boolean =>
   status === 'actioned' || status === 'dismissed'
 
@@ -513,10 +549,8 @@ function AdminAbuseReports() {
   const { data: user } = useUser()
   const { enqueueSnackbar } = useSnackbar()
 
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [listing, setListing] = useState<ReportListing | null>(null)
+  const [summary, setSummary] = useState<QueueSummary | null>(null)
   const [busy, setBusy] = useState(false)
-  const [loaded, setLoaded] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, StatusDraft>>({})
   const [counterDrafts, setCounterDrafts] = useState<
     Record<string, CounterNoticeDraft>
@@ -526,75 +560,110 @@ function AdminAbuseReports() {
   >([])
 
   /**
+   * Status and Category, as clauses the route puts on its query. The two
+   * selects write them and the chips remove them; the rows that come back
+   * are the answer, and nothing here narrows them further.
+   */
+  const reportFilter = useListGridFilter({
+    selectFields: Object.keys(ABUSE_REPORT_FILTER_OPTIONS),
+  })
+  const { clauses, setClauses } = reportFilter
+  const pickedOf = (field: string): string =>
+    clauses.find((clause) => clause.field === field && clause.op === 'equals')
+      ?.value ?? 'all'
+  const pick = (field: string, value: string) => {
+    const label = ABUSE_REPORT_FILTER_OPTIONS[field]?.find(
+      (option) => option.value === value,
+    )?.label
+    const next: ListFilterClause | null =
+      value === 'all' ? null : { field, op: 'equals', value, label }
+    setClauses(upsertListFilterClause(clauses, field, next))
+  }
+
+  const onListError = useCallback(
+    (error: unknown) =>
+      enqueueSnackbar(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Reading the abuse queue failed',
+        { variant: 'error', allowDuplicate: true },
+      ),
+    [enqueueSnackbar],
+  )
+
+  /**
    * Read the queue. Open to every staff role — triage is the larger half of
    * the work and `support` can do all of it without ever learning who filed a
    * report, which is exactly why the route redacts rather than refuses.
    */
-  const load = useCallback(async () => {
-    const params = new URLSearchParams()
-    if (statusFilter !== 'all') params.set('status', statusFilter)
-    const query = params.toString()
-    setBusy(true)
+  const reportList = useStaffListQuery<AbuseReportRow>({
+    endpoint: '/api/admin/abuse-reports',
+    clauses,
+    search: NO_WORDS,
+    rowsKey: 'reports',
+    onError: onListError,
+  })
+  const counterList = useStaffListQuery<CounterNoticeRow>({
+    endpoint: '/api/admin/abuse-reports',
+    clauses: NO_CLAUSES,
+    search: NO_WORDS,
+    params: COUNTER_NOTICE_PARAMS,
+    rowsKey: 'counterNotices',
+    onError: onListError,
+  })
+  const { refresh: refreshReports } = reportList
+  const { refresh: refreshCounterNotices } = counterList
+
+  const loadSummary = useCallback(async () => {
     try {
       const response = await authorizedFetch(
         user,
-        `/api/admin/abuse-reports${query ? `?${query}` : ''}`,
+        '/api/admin/abuse-reports?view=summary',
       )
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(payload.error ?? `Failed (${response.status})`)
       }
-      setListing({
-        reports: Array.isArray(payload.reports) ? payload.reports : [],
-        counterNotices: Array.isArray(payload.counterNotices)
-          ? payload.counterNotices
-          : [],
-        strikes:
-          payload.strikes && typeof payload.strikes === 'object'
-            ? payload.strikes
-            : {},
-        strikesTruncated: payload.strikesTruncated === true,
-        counterNoticesTruncated: payload.counterNoticesTruncated === true,
+      setSummary({
+        openUrgent: Number(payload.openUrgent ?? 0),
         awaitingForward: Number(payload.awaitingForward ?? 0),
         overdueRestorations: Number(payload.overdueRestorations ?? 0),
-        receiptsFailed: Number(payload.receiptsFailed ?? 0),
+        overdueAtLeast: payload.overdueAtLeast === true,
         counterNoticeStatuses: Array.isArray(payload.counterNoticeStatuses)
           ? payload.counterNoticeStatuses
           : [],
-        count: Number(payload.count ?? 0),
-        pageSize: Number(payload.pageSize ?? 0),
-        truncated: payload.truncated === true,
-        openUrgent: Number(payload.openUrgent ?? 0),
         identityVisible: payload.identityVisible === true,
         actorRole: String(payload.actorRole ?? 'support'),
         readAtMs: Number(payload.readAtMs ?? Date.now()),
       })
     } catch (error: any) {
       console.error(error)
-      // Cleared rather than kept. Rows from the PREVIOUS filter, sitting under
-      // a control that now says something else, is a queue an operator reads
-      // as empty when it is not.
-      setListing(null)
-      enqueueSnackbar(error?.message ?? 'Reading the abuse queue failed', {
+      // Cleared rather than kept: yesterday's "nothing overdue" sitting under
+      // a failed read is a breach an operator reads as quiet.
+      setSummary(null)
+      enqueueSnackbar(error?.message ?? 'Reading the queue’s counts failed', {
         variant: 'error',
         allowDuplicate: true,
       })
-    } finally {
-      setBusy(false)
-      setLoaded(true)
     }
-  }, [user, statusFilter, enqueueSnackbar])
+  }, [user, enqueueSnackbar])
 
   const signedInUid = (user as any)?.uid
   useEffect(() => {
     if (!signedInUid) return
-    void load()
-    // Keyed on WHO is signed in and WHICH filter is chosen, not on `load`.
-    // `useUser` returns a fresh object every render, so `load` changes
-    // identity every render — depending on the callback would re-query the
-    // collection on each one.
+    void loadSummary()
+    // Keyed on WHO is signed in, not on `loadSummary`. `useUser` returns a
+    // fresh object every render, so `loadSummary` changes identity every
+    // render — depending on the callback would re-read on each one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signedInUid, statusFilter])
+  }, [signedInUid])
+
+  /** Re-read both lists where they stand, and the counts. */
+  const load = useCallback(async () => {
+    refreshReports()
+    refreshCounterNotices()
+    await loadSummary()
+  }, [refreshReports, refreshCounterNotices, loadSummary])
 
   /** The pending edit for a row, defaulting to what the server last stored. */
   const draftFor = useCallback(
@@ -819,15 +888,33 @@ function AdminAbuseReports() {
     [counterDrafts],
   )
 
-  const reports = listing?.reports ?? []
-  const counterNotices = listing?.counterNotices ?? []
+  const reports = reportList.rows
+  const counterNotices = counterList.rows
+  const loading = reportList.loading || counterList.loading
   // Urgent rows still sitting at `open` are the ones with a clock on them, and
-  // the number the route counted is the number this page repeats — recomputing
-  // it here would be a second answer to the same question.
-  const urgentBacklog = listing ? listing.openUrgent : 0
-  const statusOptions = useMemo(
-    () => (ABUSE_REPORT_STATUSES as readonly string[]).slice(),
-    [],
+  // the number the route counted over the whole queue is the number this page
+  // repeats — a tally of the rows on screen would be a second, smaller answer.
+  const urgentBacklog = summary ? summary.openUrgent : 0
+  /**
+   * Submitters on THIS PAGE holding nothing (AGL-2400): the rows shown, both
+   * lists, and the alert says "on this page". Counted from `'failed'` ONLY —
+   * a row with no receipt record is unknown, not broken.
+   */
+  const receiptsFailed =
+    reports.filter((report) => report.receiptStatus === 'failed').length +
+    counterNotices.filter((notice) => notice.receiptStatus === 'failed').length
+  const strikesUnknown = reports.some((report) => report.strikeUnknown)
+  const identityVisible = summary
+    ? summary.identityVisible
+    : (reports[0]?.identityVisible ?? true)
+  const refusals = useMemo(
+    () =>
+      listQueryRefusals(reportList.refused, {
+        fields: ABUSE_REPORT_FILTER_FIELDS,
+        headers: ABUSE_REPORT_FILTER_HEADERS,
+        options: ABUSE_REPORT_FILTER_OPTIONS,
+      }),
+    [reportList.refused],
   )
 
   return (
@@ -856,7 +943,7 @@ function AdminAbuseReports() {
               }
             </Alert>
 
-            {busy ? <LinearProgress /> : null}
+            {busy || loading ? <LinearProgress /> : null}
 
             <CardDisplay
               header={'The queue'}
@@ -870,68 +957,82 @@ function AdminAbuseReports() {
                   spacing={1}
                   sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 1 }}
                 >
-                  <TextField
-                    select
-                    size="small"
-                    label="Status"
-                    value={statusFilter}
-                    onChange={(event) => setStatusFilter(event.target.value)}
-                    sx={{ minWidth: 200 }}
-                  >
-                    <MenuItem value="all">{'All statuses'}</MenuItem>
-                    {statusOptions.map((status) => (
-                      <MenuItem key={status} value={status}>
-                        {status}
+                  {(['status', 'category'] as const).map((field) => (
+                    <TextField
+                      key={field}
+                      select
+                      size="small"
+                      label={ABUSE_REPORT_FILTER_HEADERS[field]}
+                      value={pickedOf(field)}
+                      onChange={(event) => pick(field, event.target.value)}
+                      sx={{ minWidth: 200 }}
+                    >
+                      <MenuItem value="all">
+                        {field === 'status' ? 'All statuses' : 'All categories'}
                       </MenuItem>
-                    ))}
-                  </TextField>
+                      {ABUSE_REPORT_FILTER_OPTIONS[field].map((option) => (
+                        <MenuItem key={option.value} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  ))}
                   <Typography variant="body2" color="text.secondary">
-                    {listing
-                      ? `${listing.count} report${listing.count === 1 ? '' : 's'} shown`
-                      : 'Reading the queue…'}
+                    {reportList.loading && !reports.length
+                      ? 'Reading the queue…'
+                      : `${reports.length} report${reports.length === 1 ? '' : 's'} on this page`}
                   </Typography>
-                  {listing ? (
+                  {summary ? (
                     <Typography variant="caption" color="text.secondary">
-                      {`read ${new Date(listing.readAtMs).toLocaleString()}`}
+                      {`read ${new Date(summary.readAtMs).toLocaleString()}`}
                     </Typography>
                   ) : null}
                   <Button
                     size="small"
                     variant="outlined"
-                    disabled={busy}
+                    disabled={busy || loading}
                     onClick={() => void load()}
                   >
                     {'Refresh'}
                   </Button>
                 </Stack>
 
+                <ListFilterChips
+                  fields={ABUSE_REPORT_FILTER_FIELDS}
+                  headers={ABUSE_REPORT_FILTER_HEADERS}
+                  options={ABUSE_REPORT_FILTER_OPTIONS}
+                  clauses={clauses}
+                  onChange={setClauses}
+                />
+                <ListQueryNotices refused={refusals} notices={reportList.notices} />
+
                 {urgentBacklog > 0 ? (
                   <Alert severity="error">
                     {`${urgentBacklog} URGENT report${
                       urgentBacklog === 1 ? ' is' : 's are'
-                    } still open. Urgent means phishing, malware, or CSAM: the harm is being done to someone who is not our customer while the row sits here.`}
+                    } still open across the queue. Urgent means phishing, malware, or CSAM: the harm is being done to someone who is not our customer while the row sits here.`}
                   </Alert>
                 ) : null}
 
                 {/*
-                  The §512(g) breach banner, above the truncation notice and
-                  below only the urgent one. An overdue restoration is a
-                  customer locked out of their own work past the date the law
-                  gave us — a harm we are causing, and the only thing on this
-                  page more pressing is active harm to a stranger.
+                  The §512(g) breach banner, below only the urgent one. An
+                  overdue restoration is a customer locked out of their own
+                  work past the date the law gave us — a harm we are causing,
+                  and the only thing on this page more pressing is active harm
+                  to a stranger.
                 */}
-                {listing && listing.overdueRestorations > 0 ? (
+                {summary && summary.overdueRestorations > 0 ? (
                   <Alert severity="error">
-                    {`${listing.overdueRestorations} counter-notice${
-                      listing.overdueRestorations === 1 ? ' is' : 's are'
+                    {`${summary.overdueAtLeast ? 'At least ' : ''}${summary.overdueRestorations} counter-notice${
+                      summary.overdueRestorations === 1 ? ' is' : 's are'
                     } PAST the statutory restoration deadline. Access should already have been restored. Every day this sits is a customer locked out of their own site, and a §512(g) breach we cannot undo by acting later.`}
                   </Alert>
                 ) : null}
 
-                {listing && listing.awaitingForward > 0 ? (
+                {summary && summary.awaitingForward > 0 ? (
                   <Alert severity="warning">
-                    {`${listing.awaitingForward} counter-notice${
-                      listing.awaitingForward === 1 ? ' has' : 's have'
+                    {`${summary.awaitingForward} counter-notice${
+                      summary.awaitingForward === 1 ? ' has' : 's have'
                     } not been forwarded to the complainant yet. The clock started when the subscriber filed, not when you open this — so the wait comes out of the remaining window rather than being added to theirs.`}
                   </Alert>
                 ) : null}
@@ -939,42 +1040,36 @@ function AdminAbuseReports() {
                 {/* AGL-2400. `warning`, not `error`: nothing is out of
                     compliance yet, but somebody who wrote to us is holding no
                     evidence they did, and only this screen knows. */}
-                {listing && listing.receiptsFailed > 0 ? (
+                {receiptsFailed > 0 ? (
                   <Alert severity="warning">
-                    {`${listing.receiptsFailed} submitter${
-                      listing.receiptsFailed === 1
+                    {`${receiptsFailed} submitter${
+                      receiptsFailed === 1
                         ? ' on this page was'
                         : 's on this page were'
                     } never sent the emailed receipt. They hold no reference and no proof they filed, and there is no copy of the message anywhere for either side to find — under our published mail policy a receipt that fails is refused outright rather than landing in a junk folder. Each row below names the reason and the address to re-send from by hand.`}
                   </Alert>
                 ) : null}
 
-                {listing?.truncated ? (
+                {strikesUnknown ? (
                   <Alert severity="warning">
-                    {`This is the first ${listing.pageSize} reports by last update, and the counts above — including the urgent count — describe only those rows. There are more behind them. Filter by status to reach the rest.`}
+                    Some accounts on this page are past what the strike lookup
+                    covers, so their strike count is UNKNOWN rather than zero.
+                    Check the account directly before closing a report on one
+                    of them.
                   </Alert>
                 ) : null}
 
-                {listing?.strikesTruncated ? (
-                  <Alert severity="warning">
-                    Some accounts on this page have more copyright reports than
-                    the strike lookup covers, so their strike count is UNKNOWN
-                    rather than zero. Check the account directly before closing
-                    a report on one of them.
-                  </Alert>
-                ) : null}
-
-                {listing && !listing.identityVisible ? (
+                {!identityVisible ? (
                   <Alert severity="info">
-                    {`Your staff role (${listing.actorRole}) triages without reporter identity: emails, names and DMCA signatures come back empty by design, not because they are missing. Each report below says whether there was a contactable reporter at all.`}
+                    {`Your staff role (${summary?.actorRole ?? 'support'}) triages without reporter identity: emails, names and DMCA signatures come back empty by design, not because they are missing. Each report below says whether there was a contactable reporter at all.`}
                   </Alert>
                 ) : null}
 
-                {loaded && listing && !reports.length ? (
+                {!reportList.loading && !reportList.failed && !reports.length ? (
                   <Typography variant="body2" color="text.secondary">
-                    {statusFilter === 'all'
+                    {clauses.length === 0
                       ? 'No reports have been filed. That is the good state — but if the public form ever broke it would look exactly like this, so check the form itself before treating a long silence as quiet.'
-                      : `No reports with status “${statusFilter}”. Switch the filter to All to see the rest of the queue.`}
+                      : 'No reports match these filters anywhere in the queue. Remove a filter to see the rest of it.'}
                   </Typography>
                 ) : null}
               </Stack>
@@ -990,13 +1085,11 @@ function AdminAbuseReports() {
               const severity = report.severity ?? 'normal'
               const urgent = severity === 'urgent'
               // Only for copyright rows, and only when the route actually
-              // looked the account up — an absent entry means UNKNOWN (past
+              // looked the account up — an absent verdict means UNKNOWN (past
               // the lookup cap), never zero, so it renders nothing rather
               // than a reassuring "0 strikes".
               const verdict =
-                report.category === 'dmca' && report.orgId
-                  ? (listing?.strikes?.[report.orgId] ?? null)
-                  : null
+                report.category === 'dmca' && report.orgId ? report.strike : null
               return (
                 <CardDisplay
                   key={report.id}
@@ -1348,7 +1441,7 @@ function AdminAbuseReports() {
                         }
                         sx={{ minWidth: 180 }}
                       >
-                        {statusOptions.map((status) => (
+                        {ABUSE_REPORT_STATUSES.map((status) => (
                           <MenuItem key={status} value={status}>
                             {status}
                           </MenuItem>
@@ -1429,6 +1522,9 @@ function AdminAbuseReports() {
               )
             })}
 
+            {/* The reports' pages: the route answers one at a time. */}
+            <StaffListPaginationControls pagination={reportList} />
+
             {/*
               THE §512(g) QUEUE (AGL-1983).
               Below the reports, because a counter-notice answers one — but
@@ -1448,16 +1544,18 @@ function AdminAbuseReports() {
                     'A subscriber whose material we removed can answer with a sworn counter-notice. Forward it to the complainant, and unless they tell us they have filed a court action, access goes back on the statutory date. Forwarding is what stamps that date onto the site’s own suspension, so the lock lifts itself.'
                   }
                 </Typography>
-                {loaded && listing && !counterNotices.length ? (
+                {!counterList.loading && !counterList.failed && !counterNotices.length ? (
                   <Typography variant="body2" color="text.secondary">
                     {
                       'No counter-notices. If a removal was wrong this is where the customer would appear, so a long silence is worth checking against the public form at /api/counter-notice rather than read as agreement.'
                     }
                   </Typography>
                 ) : null}
-                {listing?.counterNoticesTruncated ? (
-                  <Alert severity="warning">
-                    {`This is the first ${listing.pageSize} counter-notices by receipt. There are older ones behind them, and older means closer to the deadline.`}
+                {counterList.pageIndex > 0 ? (
+                  <Alert severity="info">
+                    {
+                      'The first page holds the oldest counter-notices — the ones closest to their deadline.'
+                    }
                   </Alert>
                 ) : null}
               </Stack>
@@ -1698,7 +1796,7 @@ function AdminAbuseReports() {
                           }))
                         }
                       >
-                        {(listing?.counterNoticeStatuses ?? []).map((status) => (
+                        {(summary?.counterNoticeStatuses ?? []).map((status) => (
                           <MenuItem key={status} value={status}>
                             {status}
                           </MenuItem>
@@ -1738,6 +1836,9 @@ function AdminAbuseReports() {
                 </CardDisplay>
               )
             })}
+
+            {/* The counter-notices' pages, oldest first. */}
+            <StaffListPaginationControls pagination={counterList} />
 
             <CardDisplay
               header={'Changes made in this session'}

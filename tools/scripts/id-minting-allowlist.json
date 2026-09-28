@@ -221,202 +221,9 @@
       "reason": "To fix: a screen version; its id is in the besigner URL /screens/[screenId]/versions/[versionId] and on the screen's versionId."
     },
     {
-      "site": "apps/console/app/api/_lib/success-manager.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/account/close/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/account/export/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/abuse-reports/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 2,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/broadcast/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/contact-suppressions/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/coupons/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 2,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/email-send-rate/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/emails/import-history/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/emails/test/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/enterprise-billing/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/firestore-export/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/flags/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/free-workspace-cap/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/host/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 2,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/impersonate/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/lockdown/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/plugins/marketplace/src/lib/server/admin-reports.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/media-quarantine/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/org-discount/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 2,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/org-notes/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
       "site": "apps/console/app/api/admin/org-notes/route.ts: notesRef.add(…)",
       "class": "RECORD",
       "reason": "A staff note on an org: listed in order by the notes route, which has no per-note address."
-    },
-    {
-      "site": "apps/console/app/api/admin/org-override/route.ts: firestore.collection('adminAudit').doc()",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/org-refund/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/plugins/marketplace/src/lib/server/admin-reviews.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 6,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/reap-plugin-artifacts/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/reap-sending-domains/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/reap-unverified-orgs/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/reverify-plugin-versions/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/reverify-sso-domains/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/run-erasures/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/plugins/marketplace/src/lib/server/admin-trust.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/tax-filing/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 2,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/tax-purchases/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 2,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/admin/users/manage/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 6,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/auth/sso-jit/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/billing/collaborator-allocations/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/billing/register-allocations/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
     },
     {
       "site": "apps/console/app/api/billing/retention/route.ts: retention.doc()",
@@ -424,45 +231,9 @@
       "reason": "A retention funnel marker (a churn survey, a cancel or a delete request): read in aggregate by the funnel, never addressed by its id."
     },
     {
-      "site": "apps/console/app/api/billing/storage-overage/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
       "site": "apps/console/app/api/billing/subscription/route.ts: firebaseAdmin.app().firestore().collection('orgs').doc(orgId).collection(RETENTION_COLLECTION).doc()",
       "class": "RECORD",
       "reason": "A retention funnel marker (a churn survey, a cancel or a delete request): read in aggregate by the funnel, never addressed by its id."
-    },
-    {
-      "site": "apps/console/app/api/billing/usage-alerts/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/billing/usage-budget/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/billing/webhook/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/billing/webhook/route.ts: observed().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 2,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/crm/export/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/hosts/delete/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
     },
     {
       "site": "apps/console/app/api/hosts/import/route.ts: hostRef.collection('activity').add(…)",
@@ -470,24 +241,9 @@
       "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
     },
     {
-      "site": "apps/console/app/api/hosts/rename/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/app/api/orgs/datasets/export/route.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
       "site": "apps/console/app/api/orgs/delete/route.ts: orgRef.collection(RETENTION_COLLECTION).doc()",
       "class": "RECORD",
       "reason": "A retention funnel marker (a churn survey, a cancel or a delete request): read in aggregate by the funnel, never addressed by its id."
-    },
-    {
-      "site": "apps/console/app/api/orgs/export-data/route.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
     },
     {
       "site": "apps/console/app/api/support/forum/route.ts: threadsRef.doc(threadId).collection('replies').add(…)",
@@ -513,47 +269,6 @@
       "site": "apps/console/constants/screen-publishing.ts: doc(collection(firestore, PUBLISH_OUTBOX_COLLECTION))",
       "class": "RECORD",
       "reason": "A publish outbox entry: a transient queue row the tab deletes once its announce lands, and the drain ages; never addressed from outside."
-    },
-    {
-      "site": "apps/console/utils/remote-server-bundles.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/console/utils/server/maintenance-actor.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "apps/tenant/utils/remote-server-bundles.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/plugins/ai/src/lib/jobs/ai-jobs.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/plugins/ai/src/lib/server/ai-allotments.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/plugins/ai/src/lib/server/ai-usage.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/plugins/ai/src/lib/server/billing-overage.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 2,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/plugins/ai/src/lib/usage/assist-free-taste.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
     },
     {
       "site": "libs/plugins/ai/src/lib/usage/assist-usage.ts: orgRef.collection('assistExchanges').doc()",
@@ -591,11 +306,6 @@
       "reason": "A stock-ledger row: an internal line of the inventory ledger, read in aggregate and never addressed by its id."
     },
     {
-      "site": "libs/plugins/crm/src/lib/server/erase-person.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
       "site": "libs/plugins/inbox/src/lib/server.ts: context.submissionRef.collection(LIST_ASSIGNMENTS_SUBCOLLECTION).add(…)",
       "class": "RECORD",
       "reason": "A reply or a list assignment logged under a form submission: the submission's own history, read only by the inbox module."
@@ -627,22 +337,6 @@
       "reason": "The shared admin audit writer's new row: append-only, read by query, never addressed by its id."
     },
     {
-      "site": "libs/tenant/data/admin/src/lib/server/erase-person.ts: db.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/tenant/data/admin/src/lib/server/erase.ts: firebaseAdmin.app().firestore().collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/tenant/data/admin/src/lib/server/erase.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "count": 2,
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
       "site": "libs/tenant/data/admin/src/lib/server/notifications.ts: db.collection('users').doc(userDoc.id).collection('notifications').doc()",
       "class": "RECORD",
       "reason": "A notification in a user's own feed: listed by query and marked read in place from its row; never shown, routed or referenced by another document."
@@ -656,16 +350,6 @@
       "site": "libs/tenant/data/admin/src/lib/server/organizations.ts: firestore().collection('orgs').doc(orgId).collection('activity').add(…)",
       "class": "RECORD",
       "reason": "A site or org activity-feed entry: listed by query in the feed and never addressed by its id."
-    },
-    {
-      "site": "libs/tenant/data/admin/src/lib/server/replay-erasures.ts: firestore.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
-    },
-    {
-      "site": "libs/tenant/data/admin/src/lib/server/sso-enforcement.ts: db.collection('adminAudit').add(…)",
-      "class": "RECORD",
-      "reason": "An admin audit row: append-only, read by query on actor, target or subject, and never addressed by its id. New audit writes go through the shared writer in admin-audit.ts."
     },
     {
       "site": "libs/tenant/feature/instance/src/lib/hooks/use-host-activity-logger.ts: addDoc(collection(firestore, 'hosts', hostId, 'activity'), …)",
@@ -792,6 +476,16 @@
       "site": "tools/scripts/seed-e2e.mjs: teamDataset.collection('records').doc(`seed-${index}`)",
       "class": "DELIBERATE",
       "reason": "Seed data keyed by its place or slug (seed-<n>, seed-invite-<brandId>, cl-<slug>), so seeding again overwrites rather than duplicates."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/admin-audit-write.ts: firestore.collection(ADMIN_AUDIT_COLLECTION).add(…)",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target, subject or the fields withAdminAuditIndex stamps, and never addressed by its id. Every server write goes through this door (AGL-3321)."
+    },
+    {
+      "site": "libs/tenant/data/admin/src/lib/server/admin-audit-write.ts: firestore.collection(ADMIN_AUDIT_COLLECTION).doc()",
+      "class": "RECORD",
+      "reason": "An admin audit row: append-only, read by query on actor, target, subject or the fields withAdminAuditIndex stamps, and never addressed by its id. Every server write goes through this door (AGL-3321)."
     }
   ]
 }

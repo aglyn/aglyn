@@ -37,7 +37,7 @@ import { readFileSync } from 'node:fs'
 // plugin's levers and activity codes come from its declaration, not core.
 import { registerPluginDeclarations } from '../constants/plugins.declarations.generated'
 import { join } from 'node:path'
-import { ADMIN_AUDIT_FILTER_FIELDS } from '../utils/audit-log-filters'
+import { ADMIN_AUDIT_LIST_FIELDS } from '../utils/admin-audit-list-query'
 import {
   pluginStaffAuditActionGroup as staffAuditActionGroup,
   pluginStaffAuditActionGroupLabel as staffAuditActionGroupLabel,
@@ -59,13 +59,14 @@ describe('the audit page wires an Action facet through the shared catalog', () =
   })
 
   it('files each entry it reads under its group, and offers the groups by label', () => {
-    // The group rides on the row, so the toolbar's Action group pick is
-    // matched against the same grouping the menu offers.
-    expect(PAGE).toContain("actionGroup: staffAuditActionGroup(data['action'])")
+    // The group is stamped on the row by the writer, and the toolbar's
+    // Action group pick is a query on that stored field (AGL-3321); a row
+    // the backfill has not reached shows the registry's group meanwhile.
+    expect(PAGE).toContain("data['actionGroup'] ?? staffAuditActionGroup(data['action'])")
     expect(PAGE).toContain('label: staffAuditActionGroupLabel(group)')
-    expect(
-      ADMIN_AUDIT_FILTER_FIELDS.find((field) => field.column === 'actionGroup'),
-    ).toMatchObject({ windowOnly: true })
+    const field = ADMIN_AUDIT_LIST_FIELDS.find((entry) => entry.column === 'actionGroup')
+    expect(field).toMatchObject({ kind: 'exact', path: 'actionGroup' })
+    expect(field?.windowOnly).toBeUndefined()
   })
 
   it('files every AI row the staff log holds under the one group the menu labels AI', () => {

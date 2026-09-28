@@ -19,7 +19,9 @@ import {
   consentGroupForHost,
   CONTACT_FACETS_FIELD,
   CRM_COLLECTIONS,
+  CRM_LEAD_SOURCE_KEY_FIELD,
   CRM_LEAD_SOURCE_PICKLIST,
+  crmLeadSourceKey,
   type CrmPicklist,
   effectiveCrmLeadSourcePicklist,
   newResourceScopeFields,
@@ -46,7 +48,8 @@ const BATCH_SIZE = 400
 
 /**
  * Set `field` to `to` (or remove it, for `null`) on every document `query`
- * finds holding `from`, a batch at a time. Answers how many were written.
+ * finds holding `from`, a batch at a time, with `beside` written alongside.
+ * Answers how many were written.
  *
  * The query is re-run after each batch rather than paged, because each
  * batch moves its documents OUT of the query's answer — the next run finds
@@ -57,6 +60,7 @@ async function replaceEverywhere(
   query: FirebaseFirestore.Query,
   field: string | FirebaseFirestore.FieldPath,
   to: string | null,
+  beside: Record<string, unknown> = {},
 ): Promise<number> {
   let written = 0
   for (;;) {
@@ -64,7 +68,14 @@ async function replaceEverywhere(
     if (page.empty) return written
     const batch = firestore.batch()
     for (const snapshot of page.docs) {
-      batch.update(snapshot.ref, field, to ?? FieldValue.delete(), 'updatedAt', FieldValue.serverTimestamp())
+      batch.update(
+        snapshot.ref,
+        field,
+        to ?? FieldValue.delete(),
+        'updatedAt',
+        FieldValue.serverTimestamp(),
+        ...Object.entries(beside).flat(),
+      )
     }
     await batch.commit()
     written += page.size
@@ -199,6 +210,8 @@ export const crmLeadSourceValuesHandler: PluginApiHandler = async (req, res) => 
         orgRef.collection('leads').where('leadSource', '==', moved.from),
         'leadSource',
         moved.to,
+        // The key the Leads list filters by moves with the label (AGL-3321).
+        { [CRM_LEAD_SOURCE_KEY_FIELD]: crmLeadSourceKey(moved.to) },
       )
       const hostIds = await orgHostIds(firestore, writer.orgId)
       const groupIds = [

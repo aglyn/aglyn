@@ -291,7 +291,18 @@ export function FormDetailCard(props: FormDetailCardProps) {
     const dequeue = queueLoading()
     try {
       await updateDoc(doc(firestore, 'hosts', hostId, 'forms', formId), {
-        ...(name != null ? { displayName: name.trim() } : {}),
+        // A rename carries the keys the Forms list searches by (AGL-3330), or
+        // the form would be findable only by the name it used to have.
+        ...(name != null
+          ? {
+              displayName: name.trim(),
+              ...Aglyn.formListFields({
+                id: formId,
+                displayName: name.trim(),
+                slug: form?.slug,
+              }),
+            }
+          : {}),
         ...(lead != null ? { routing: { ...(form?.routing ?? {}), lead } } : {}),
         ...(consentField != null
           ? { consentFieldName: consentField.trim() }

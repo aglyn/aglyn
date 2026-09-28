@@ -52,6 +52,7 @@ import {
   readContactFacet,
 } from '@aglyn/aglyn/server'
 import { FieldValue } from 'firebase-admin/firestore'
+import { restampCrmListFieldsAt } from './crm-records'
 
 export type ContactLifecycleFloor =
   | {
@@ -127,6 +128,8 @@ export async function floorContactLifecycleStage(
     [contactFacetPath(groupId, 'lifecycleStage')]: lifecycleStage,
     updatedAt: FieldValue.serverTimestamp(),
   })
+  // The stage is what the Contacts list filters by (AGL-3321).
+  await restampCrmListFieldsAt(snapshot.ref, 'contacts')
   return {
     outcome: 'advanced',
     contactId: snapshot.id,

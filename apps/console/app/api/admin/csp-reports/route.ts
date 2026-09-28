@@ -34,14 +34,18 @@
  * Query params:
  *   `days`      window ending today (UTC), default 7, clamped 1..60 —
  *               the aggregate retention;
- *   `app`       optional `console` | `tenant` filter;
- *   `directive` optional exact directive filter (e.g. `img-src`).
+ *   `view`      absent: the WINDOW, every counter in it, highest counts
+ *               first — the rollup the page's directive chips and totals are
+ *               computed from. `rows`: the table, one page of it, on the
+ *               staff list wire (`readStaffListQuery`) — every Filters clause
+ *               and the search on the Firestore query beneath the window
+ *               (`utils/csp-report-list-query.ts`), paged by cursor.
  *
- * The Firestore query is a single-field range on `day` — served by the
+ * The window read is a single-field range on `day` — served by the
  * automatic index, no composite needed (the `/api/health/rate-limits`
- * pattern) — and the app/directive filters run in memory: the collection is
- * counter documents with a capped mint rate, so the read is bounded by
- * construction, and `READ_LIMIT` is a backstop rather than the bound.
+ * pattern). The collection is counter documents with a capped mint rate, so
+ * the read is bounded by construction, and `READ_LIMIT` is a backstop
+ * rather than the bound. Nothing is filtered after either read.
  */
 
 import {
@@ -52,6 +56,8 @@ import {
   isImpersonationSession,
 } from '@aglyn/tenant-data-admin'
 import { invalidIdTokenResponse } from '../../_lib/invalid-id-token-response'
+import { CSP_LIST_QUERY, cspWindowBase } from '../../../../utils/csp-report-list-query'
+import { readStaffListQuery, runStaffListQuery } from '../../../../utils/server/staff-list-query'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,6 +72,27 @@ const DEFAULT_WINDOW_DAYS = 7
 /** UTC day string `days - 1` days before `now`, so `days=1` means today. */
 function cutoffDay(nowMs: number, days: number): string {
   return new Date(nowMs - (days - 1) * 86_400_000).toISOString().slice(0, 10)
+}
+
+/**
+ * A counter as the page reads it. Named fields rather than the document:
+ * the search tokens and the TTL stamp are the query's and the database's,
+ * not the reader's.
+ */
+function cspRow(doc: { id: string; data: () => Record<string, unknown> }) {
+  const data = doc.data()
+  return {
+    id: doc.id,
+    day: data['day'],
+    app: data['app'],
+    directive: data['directive'],
+    disposition: data['disposition'],
+    origin: data['origin'],
+    count: data['count'],
+    lastSeenMs: data['lastSeenMs'],
+    lastPath: data['lastPath'],
+    lastSite: data['lastSite'],
+  }
 }
 
 async function handler(request: Request): Promise<Response> {
@@ -91,37 +118,45 @@ async function handler(request: Request): Promise<Response> {
     const days = Number.isFinite(parsedDays)
       ? Math.min(Math.max(parsedDays, 1), CSP_AGGREGATE_RETENTION_DAYS)
       : DEFAULT_WINDOW_DAYS
-    const appFilter = url.searchParams.get('app')
-    const directiveFilter = url.searchParams.get('directive')
-
     const now = Date.now()
-    const snapshot = await firebaseAdmin
-      .app()
-      .firestore()
+    const since = cutoffDay(now, days)
+    const firestore = firebaseAdmin.app().firestore()
+
+    if (url.searchParams.get('view') === 'rows') {
+      const listRequest = readStaffListQuery(Object.fromEntries(url.searchParams))
+      if (!listRequest) {
+        return Response.json({ error: 'Unreadable filters' }, { status: 400 })
+      }
+      const page = await runStaffListQuery({
+        firestore,
+        collection: firestore.collection(CSP_AGGREGATE_COLLECTION),
+        declaration: CSP_LIST_QUERY,
+        request: listRequest,
+        base: cspWindowBase(since),
+        row: cspRow,
+      })
+      return Response.json({ ...page, windowDays: days, since }, { status: 200 })
+    }
+
+    const snapshot = await firestore
       .collection(CSP_AGGREGATE_COLLECTION)
-      .where('day', '>=', cutoffDay(now, days))
+      .where('day', '>=', since)
       .orderBy('day', 'desc')
       .limit(READ_LIMIT)
       .get()
 
     const rows = snapshot.docs
-      .map((doc: { data: () => Record<string, unknown> }) => doc.data())
-      .filter(
-        (row: Record<string, unknown>) =>
-          (!appFilter || row['app'] === appFilter) &&
-          (!directiveFilter || row['directive'] === directiveFilter),
-      )
+      .map(cspRow)
       // Highest counts first within the whole window: the read is "what would
       // this flip break", and the answer starts at the top.
       .sort(
-        (a: Record<string, unknown>, b: Record<string, unknown>) =>
-          Number(b['count'] ?? 0) - Number(a['count'] ?? 0),
+        (a, b) => Number(b.count ?? 0) - Number(a.count ?? 0),
       )
 
     return Response.json(
       {
         windowDays: days,
-        since: cutoffDay(now, days),
+        since,
         generatedAtMs: now,
         rowCount: rows.length,
         /**

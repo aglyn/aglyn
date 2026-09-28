@@ -83,6 +83,7 @@ import {
   resolveTaxFilingSettings,
   taxFilingConfigWrite,
 } from '../../../../utils/server/tax-filing-store'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 /** What an audit row may say about an identifier: whether there was one. */
 function auditShape(resolved: {
@@ -175,19 +176,15 @@ async function handler(request: Request): Promise<Response> {
       await settings.delete()
       invalidateTaxFilingConfigCache()
       const after = await resolveTaxFilingSettings()
-      await firebaseAdmin
-        .app()
-        .firestore()
-        .collection('adminAudit')
-        .add({
-          actorUid: decoded.uid,
-          action: 'taxFilingConfig.clear',
-          target: `${PLATFORM_SETTINGS_COLLECTION}/${TAX_FILING_CONFIG_DOC}`,
-          before: auditShape(before),
-          after: auditShape(after),
-          note,
-          at: FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(firebaseAdmin.app().firestore(), {
+        actorUid: decoded.uid,
+        action: 'taxFilingConfig.clear',
+        target: `${PLATFORM_SETTINGS_COLLECTION}/${TAX_FILING_CONFIG_DOC}`,
+        before: auditShape(before),
+        after: auditShape(after),
+        note,
+        at: FieldValue.serverTimestamp(),
+      })
       return Response.json(
         { ok: true, config: taxFilingConfigView(after) },
         { status: 200 },
@@ -252,19 +249,15 @@ async function handler(request: Request): Promise<Response> {
     invalidateTaxFilingConfigCache()
 
     const after = await resolveTaxFilingSettings()
-    await firebaseAdmin
-      .app()
-      .firestore()
-      .collection('adminAudit')
-      .add({
-        actorUid: decoded.uid,
-        action: 'taxFilingConfig.update',
-        target: `${PLATFORM_SETTINGS_COLLECTION}/${TAX_FILING_CONFIG_DOC}`,
-        before: auditShape(before),
-        after: auditShape(after),
-        note,
-        at: FieldValue.serverTimestamp(),
-      })
+    await addAdminAudit(firebaseAdmin.app().firestore(), {
+      actorUid: decoded.uid,
+      action: 'taxFilingConfig.update',
+      target: `${PLATFORM_SETTINGS_COLLECTION}/${TAX_FILING_CONFIG_DOC}`,
+      before: auditShape(before),
+      after: auditShape(after),
+      note,
+      at: FieldValue.serverTimestamp(),
+    })
 
     return Response.json(
       { ok: true, config: taxFilingConfigView(after) },

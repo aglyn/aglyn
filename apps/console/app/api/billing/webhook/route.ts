@@ -94,6 +94,7 @@ import {
   eventLivemode,
   livemodeDecision,
 } from '../../../../utils/server/stripe-livemode'
+import { addAdminAudit } from '@aglyn/tenant-data-admin/server/admin-audit-write'
 
 // lockdown-423: exempt — Stripe server callback, no user caller — and the very path a lapsed
 // org PAYS through; a 423 here would block the recovery it needs.
@@ -235,18 +236,14 @@ async function recordOrphanedSubscription(entry: {
     '[billing/webhook] subscription metadata names no workspace',
     entry,
   )
-  await firebaseAdmin
-    .app()
-    .firestore()
-    .collection('adminAudit')
-    .add({
-      actorUid: 'system:stripe-webhook',
-      action: 'billing.orphanedSubscription',
-      target: `orgs/${entry.orgId}`,
-      before: null,
-      after: { ...entry },
-      at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-    })
+  await addAdminAudit(firebaseAdmin.app().firestore(), {
+    actorUid: 'system:stripe-webhook',
+    action: 'billing.orphanedSubscription',
+    target: `orgs/${entry.orgId}`,
+    before: null,
+    after: { ...entry },
+    at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+  })
     .catch(() => undefined)
 }
 
@@ -1826,34 +1823,32 @@ async function handler(request: Request): Promise<Response> {
         // Every platform dispute reaches staff, won or lost — `created` is
         // the actionable one and `closed` is the outcome. Best-effort: a
         // failed audit append must not 500 a billing webhook.
-        await observed()
-          .collection('adminAudit')
-          .add({
-            actorUid: 'system:stripe-webhook',
-            action:
-              type === 'charge.dispute.created'
-                ? 'billing.disputeOpened'
-                : 'billing.disputeClosed',
-            target: orgId
-              ? `orgs/${orgId}`
-              : `platformRevenue/${revenueDoc.id}`,
-            reason:
-              type === 'charge.dispute.created'
-                ? `Card dispute opened against subscription invoice ${revenueDoc.id} — answer it in Stripe before the evidence deadline; an unanswered dispute is decided for the cardholder.`
-                : `Card dispute ${String(object?.status ?? 'closed')} on subscription invoice ${revenueDoc.id}${lost ? ' — the money has been reversed and the revenue row adjusted.' : ' — nothing was reversed.'}`,
-            before: null,
-            after: {
-              disputeId,
-              invoiceId: revenueDoc.id,
-              orgId: orgId || null,
-              status: String(object?.status ?? ''),
-              disputeReason: String(object?.reason ?? ''),
-              disputedCents,
-              chargeId: chargeId || null,
-              evidenceDueBy: Number(object?.evidence_details?.due_by ?? 0) || null,
-            },
-            at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-          })
+        await addAdminAudit(observed(), {
+          actorUid: 'system:stripe-webhook',
+          action:
+            type === 'charge.dispute.created'
+              ? 'billing.disputeOpened'
+              : 'billing.disputeClosed',
+          target: orgId
+            ? `orgs/${orgId}`
+            : `platformRevenue/${revenueDoc.id}`,
+          reason:
+            type === 'charge.dispute.created'
+              ? `Card dispute opened against subscription invoice ${revenueDoc.id} — answer it in Stripe before the evidence deadline; an unanswered dispute is decided for the cardholder.`
+              : `Card dispute ${String(object?.status ?? 'closed')} on subscription invoice ${revenueDoc.id}${lost ? ' — the money has been reversed and the revenue row adjusted.' : ' — nothing was reversed.'}`,
+          before: null,
+          after: {
+            disputeId,
+            invoiceId: revenueDoc.id,
+            orgId: orgId || null,
+            status: String(object?.status ?? ''),
+            disputeReason: String(object?.reason ?? ''),
+            disputedCents,
+            chargeId: chargeId || null,
+            evidenceDueBy: Number(object?.evidence_details?.due_by ?? 0) || null,
+          },
+          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+        })
           .catch(() => undefined)
       } else if (paymentIntentId || chargeId) {
         // No row matched. This is the ORDINARY answer for a storefront or
@@ -1959,17 +1954,15 @@ async function handler(request: Request): Promise<Response> {
       // `adminAudit` filling its window with high-frequency system actions
       // (AGL-2324). Neither can throw: `notifyStaff` never does, and the
       // audit add is caught.
-      await observed()
-        .collection('adminAudit')
-        .add({
-          actorUid: 'system:stripe-webhook',
-          action: 'billing.disputeUnattributed',
-          target: `disputes/${disputeId}`,
-          reason,
-          before: null,
-          after: { ...unattributedDispute, eventType: type },
-          at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
-        })
+      await addAdminAudit(observed(), {
+        actorUid: 'system:stripe-webhook',
+        action: 'billing.disputeUnattributed',
+        target: `disputes/${disputeId}`,
+        reason,
+        before: null,
+        after: { ...unattributedDispute, eventType: type },
+        at: firebaseAdmin.firestore.FieldValue.serverTimestamp(),
+      })
         .catch((error: unknown) => {
           console.error(
             '[billing/webhook] could not record an unattributed dispute',

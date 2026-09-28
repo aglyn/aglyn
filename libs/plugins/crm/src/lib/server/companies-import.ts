@@ -53,6 +53,8 @@ import {
   checkCrmRecordsQuota,
   type ContactFieldDefinition,
   CRM_COLLECTIONS,
+  crmCompanyListFields,
+  crmNewRecordListFields,
   fieldDefinitionsForObject,
   nameSearchFields,
   type PluginApiHandler,
@@ -233,6 +235,8 @@ export const crmCompaniesImportHandler: PluginApiHandler = async (req, res) => {
       if (existing) {
         await existing.ref.update({
           ...stored,
+          // The file may rename the company: what the list searches follows.
+          ...crmCompanyListFields({ ...existing.data(), ...stored }),
           ...(row.tags.length ? { tags: FieldValue.arrayUnion(...row.tags) } : {}),
           ...customUpdate(row),
           updatedAt: FieldValue.serverTimestamp(),
@@ -254,6 +258,8 @@ export const crmCompaniesImportHandler: PluginApiHandler = async (req, res) => {
         tags: row.tags,
         ...(Object.keys(row.custom).length ? { custom: row.custom } : {}),
         ...stamp,
+        // What the Companies list searches and filters by (AGL-3321).
+        ...crmNewRecordListFields('companies', { ...stored, ...stamp }),
       })
       createdHere += 1
       created += 1

@@ -322,7 +322,9 @@ describe('both staff list screens use the one implementation', () => {
 
   it.each(SCREENS)('%s paginates through the shared hook', (file) => {
     const text = read(file)
-    expect(text).toContain('useStaffListPagination')
+    // Directly, or through `useStaffListQuery` — the same walk, with the
+    // list's filters and search on every page's query (AGL-3321).
+    expect(text).toMatch(/\buseStaffList(Pagination|Query)\b/)
     expect(text).toMatch(SHARED_FOOTER)
   })
 

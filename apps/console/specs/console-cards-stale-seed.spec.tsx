@@ -84,6 +84,30 @@ const mockComponentDocs = [
 const mockSetDoc = jest.fn().mockResolvedValue(undefined)
 const mockDuplicateRequest = jest.fn()
 
+/*
+ * The components card pages its LIST QUERY now (AGL-2501, AGL-3321), so its
+ * rows and — the part these cases turn on — its `fromCache` flag arrive
+ * through that hook rather than the collection hook.
+ *
+ * The query is not what is under test here; `fromCache` is. So the page is
+ * the fixture verbatim, and the flag is the one the listener mock is set to,
+ * which is what the seed guard reads.
+ */
+jest.mock('@aglyn/tenant-feature-instance/hooks/use-list-query', () => ({
+  useListQuery: () => ({
+    data: mockComponentDocs,
+    rows: mockComponentDocs,
+    hasMore: false,
+    page: 0,
+    setPage: jest.fn(),
+    pageSize: 10,
+    setPageSize: jest.fn(),
+    status: mockListener.status,
+    fromCache: mockListener.fromCache,
+    plan: { filters: [], orderBy: { path: '__name__', direction: 'asc' }, served: [], searched: null, refused: [], notices: [] },
+  }),
+}))
+
 jest.mock('@aglyn/tenant-feature-instance', () => ({
   // Duplicate (AGL-2936) is a door of its own; these specs exercise the
   // rest of the card, so the flow is a stub and its dialog is not mounted.
@@ -107,26 +131,6 @@ jest.mock('@aglyn/tenant-feature-instance', () => ({
    */
   useLiveArtifactCount: () => 0,
   useUser: () => ({ data: { uid: 'uid-owner', getIdToken: jest.fn() } }),
-  /*
-   * The components card reads a PAGE now (AGL-2501), so its rows and — the
-   * part these cases turn on — its `fromCache` flag arrive through the window
-   * hook rather than the collection hook.
-   *
-   * The window arithmetic is not what is under test here; `fromCache` is. So
-   * the page is the fixture verbatim, and the flag is the one the listener
-   * mock is set to, which is what the seed guard reads.
-   */
-  usePagedCollection: () => ({
-    data: mockComponentDocs,
-    rows: mockComponentDocs,
-    hasMore: false,
-    page: 0,
-    setPage: jest.fn(),
-    pageSize: 10,
-    setPageSize: jest.fn(),
-    status: mockListener.status,
-    fromCache: mockListener.fromCache,
-  }),
   // The REAL guard, not a stub. A stub would let the write through whatever
   // the card passed it, which is the one thing these specs disprove.
   writeGuardedBySeed: jest.requireActual('@aglyn/tenant-feature-instance')
