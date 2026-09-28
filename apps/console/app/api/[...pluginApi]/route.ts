@@ -40,6 +40,10 @@ import {
 // The leaf, not the barrel: the dispatcher's specs substitute the barrel,
 // and a route's own registration must still be read where it was made.
 import { isPluginRecipientLinkRoute } from '@aglyn/aglyn/app-utils/api-plugins'
+import {
+  conflictingHostIdResponse,
+  pluginApiRequestHost,
+} from '@aglyn/aglyn/app-utils/plugin-api-request-host'
 import { ensureRemoteServerBundles } from '../../../utils/remote-server-bundles'
 import { serverPluginLoader as loader } from '../../../utils/server-plugin-loader'
 
@@ -64,8 +68,8 @@ async function dispatch(
   const path = Array.isArray(pluginApi) ? pluginApi.join('/') : ''
 
   // Per-request org gate: owning plugin from the path prefix; target host
-  // from query `hostId`, else the JSON body read off a clone so the handler
-  // still receives the untouched stream.
+  // from the query AND the body, read the way the handler will read them
+  // (`pluginApiRequestHost`, AGL-3360) so the site gated is the site served.
   // Exact ownership recorded at registration time; the manifest prefix map
   // is only the fallback for paths registered outside the loader.
   const pluginId =
@@ -77,16 +81,12 @@ async function dispatch(
   // opt-out outlives a rollout. It skips the two gates below and nothing
   // else; it verifies its own signature.
   if (pluginId && !isPluginRecipientLinkRoute(path)) {
-    const url = new URL(request.url)
-    let hostId = url.searchParams.get('hostId') ?? ''
-    if (!hostId && request.method !== 'GET' && request.method !== 'HEAD') {
-      try {
-        const body = (await request.clone().json()) as { hostId?: unknown }
-        hostId = String(body?.hostId ?? '')
-      } catch {
-        // Non-JSON body — fall through to handler self-gating.
-      }
-    }
+    // Two different sites in one request is refused outright (AGL-3360):
+    // gating either one lets the other through to a handler that may read
+    // it, which is how a suspended workspace could still take a payment.
+    const named = await pluginApiRequestHost(request)
+    if (named.conflict) return conflictingHostIdResponse()
+    const hostId = named.hostId
     let orgId: string | null
     let subjectUid: string | null = null
     if (hostId) {
