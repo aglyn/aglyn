@@ -211,6 +211,8 @@ interface AbuseReportRow {
   source: string | null
   /** The held send, when the screen filed this row (AGL-3356). */
   heldSend: HeldSendRow | null
+  /** The page a held or flagged page row is about, by name (AGL-3374). */
+  heldPage: HeldPageRow | null
   /** A Stripe fraud signal, when the billing webhook filed this row (AGL-3356). */
   paymentSignal: PaymentSignalRow | null
   /** A seller's fraud pattern across its sales (AGL-3360). */
@@ -324,6 +326,23 @@ interface HeldSendRow {
   decidedBy: string | null
   decidedAtMs: number | null
   reasons: string[]
+}
+
+/**
+ * The page a held or flagged row is about, as `heldPagePayload()` hands it
+ * over (AGL-3374): its name and route, the entry it was showing, where its
+ * flagged content lives, and the console page to open it on.
+ */
+interface HeldPageRow {
+  label: string
+  kind: string | null
+  route: string | null
+  url: string | null
+  entryUrl: string | null
+  details: string[]
+  visitorSentence: string | null
+  consolePath: string | null
+  consoleHref: string | null
 }
 
 /** What a held send's state means, in the words the reviewer acts on. */
@@ -1716,6 +1735,43 @@ function AdminAbuseReports() {
                           ) : null}
                         </Stack>
                       </Alert>
+                    ) : null}
+
+                    {report.heldPage ? (
+                      <Stack spacing={0.5}>
+                        <Typography variant="caption" color="text.secondary">
+                          {'The page'}
+                        </Typography>
+                        <Typography variant="body2">{report.heldPage.label}</Typography>
+                        {/* Addresses as TEXT: the page may be the lure. */}
+                        {report.heldPage.details.map((line) => (
+                          <Typography key={line} variant="body2" sx={{ wordBreak: 'break-all' }}>
+                            {line}
+                          </Typography>
+                        ))}
+                        {report.heldPage.visitorSentence ? (
+                          <Typography variant="body2" color="text.secondary">
+                            {report.heldPage.visitorSentence}
+                          </Typography>
+                        ) : null}
+                        {report.heldPage.consoleHref ? (
+                          <Stack direction="row" spacing={1}>
+                            {/* A console route on this origin, never the reported address. */}
+                            <AppLink
+                              componentVariant="button"
+                              size="small"
+                              variant="outlined"
+                              href={report.heldPage.consoleHref}
+                            >
+                              {'Open in console'}
+                            </AppLink>
+                          </Stack>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">
+                            {'Its console page could not be resolved — the site or workspace may be gone.'}
+                          </Typography>
+                        )}
+                      </Stack>
                     ) : null}
 
                     {report.heldSend ? (

@@ -18,7 +18,6 @@
 'use client'
 
 import { AppLink, CardDisplay } from '@aglyn/shared-ui-jsx'
-import { useSnackbar } from '@aglyn/shared-ui-snackstack'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import { useUser } from '@aglyn/tenant-feature-instance'
 import {
@@ -26,20 +25,16 @@ import {
   Box,
   Button,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   LinearProgress,
   Link,
   Stack,
-  TextField,
   Typography,
 } from '@mui/material'
 import { RISK_NOTICE_HELP_PATH } from '@aglyn/shared-util-email/risk-notice-catalog'
 import { useCallback, useEffect, useState } from 'react'
 import { buildDocsUrl } from '../../constants/docs-links'
 import { useOrgScope } from '../../hooks/use-org-scope'
+import RequestReviewDialog from './request-review-dialog.component'
 
 /** One notice as `/api/orgs/risk-notices` hands it over (`OwnerRiskNoticeView`). */
 interface HoldNotice {
@@ -57,6 +52,8 @@ interface HoldNotice {
   status: 'held' | 'in-review' | 'released' | 'rejected' | 'closed' | null
   reviewable: boolean
   reviewRequests: Array<{ atMs: number; note: string; mine: boolean }>
+  /** A page notice: the page by name, where it lives, what visitors see (AGL-3374). */
+  page: { label: string; details: string[]; visitorSentence: string } | null
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: 'default' | 'warning' | 'success' | 'error' | 'info' }> = {
@@ -66,9 +63,6 @@ const STATUS_LABELS: Record<string, { label: string; color: 'default' | 'warning
   rejected: { label: 'Not approved', color: 'error' },
   closed: { label: 'Closed', color: 'default' },
 }
-
-/** The shortest note a review request takes, matching the server. */
-const NOTE_MIN = 10
 
 /**
  * HOLDS & REVIEWS (AGL-3368): everything on the workspace that was held,
@@ -84,15 +78,12 @@ const NOTE_MIN = 10
  */
 export default function OrgHoldsCard() {
   const { data: user } = useUser()
-  const { enqueueSnackbar } = useSnackbar()
   const { currentOrg } = useOrgScope()
   const orgId = currentOrg?.$id ? String(currentOrg.$id) : ''
   const [notices, setNotices] = useState<HoldNotice[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [requesting, setRequesting] = useState<HoldNotice | null>(null)
-  const [note, setNote] = useState('')
-  const [sending, setSending] = useState(false)
   const [linkedNoticeId, setLinkedNoticeId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -129,40 +120,20 @@ export default function OrgHoldsCard() {
     if (typeof window === 'undefined') return
     setLinkedNoticeId(new URLSearchParams(window.location.search).get('notice'))
   }, [])
+  // A page's banner links its notice here as `#notice-<id>` (AGL-3374):
+  // bring it into view once the list has rendered.
+  useEffect(() => {
+    if (!notices || typeof window === 'undefined') return
+    const hash = window.location.hash
+    if (!hash.startsWith('#notice-')) return
+    document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' })
+  }, [notices])
   useEffect(() => {
     if (!linkedNoticeId || !notices) return
     const linked = notices.find((notice) => notice.noticeId === linkedNoticeId)
     if (linked?.reviewable) setRequesting(linked)
     setLinkedNoticeId(null)
   }, [linkedNoticeId, notices])
-
-  const submit = useCallback(async () => {
-    if (!requesting || note.trim().length < NOTE_MIN) return
-    setSending(true)
-    try {
-      const response = await authorizedFetch(user, '/api/orgs/risk-notices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgId, noticeId: requesting.noticeId, note: note.trim() }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload.error ?? `Failed (${response.status})`)
-      enqueueSnackbar(
-        `Review requested${payload.reference ? ` — reference ${payload.reference}` : ''}. We’ll email you when it’s done.`,
-        { variant: 'success' },
-      )
-      setRequesting(null)
-      setNote('')
-      await load()
-    } catch (caught: any) {
-      enqueueSnackbar(caught?.message ?? 'The review request did not send', {
-        variant: 'error',
-        allowDuplicate: true,
-      })
-    } finally {
-      setSending(false)
-    }
-  }, [requesting, note, orgId, user, enqueueSnackbar, load])
 
   return (
     <CardDisplay
@@ -200,6 +171,7 @@ export default function OrgHoldsCard() {
           return (
             <Box
               key={notice.noticeId}
+              id={`notice-${notice.noticeId}`}
               sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}
             >
               <Stack spacing={1}>
@@ -218,7 +190,20 @@ export default function OrgHoldsCard() {
                   }`}
                 </Typography>
                 <Typography variant="body2">{notice.summary}</Typography>
-                <Typography variant="body2">{notice.meaning}</Typography>
+                {notice.page ? (
+                  // The page by name, and what visitors get meanwhile
+                  // (AGL-3374) — more specific than the catalog's meaning.
+                  <>
+                    {notice.page.details.map((line) => (
+                      <Typography key={line} variant="body2" color="text.secondary">
+                        {line}
+                      </Typography>
+                    ))}
+                    <Typography variant="body2">{notice.page.visitorSentence}</Typography>
+                  </>
+                ) : (
+                  <Typography variant="body2">{notice.meaning}</Typography>
+                )}
                 <Typography variant="subtitle2">{'What to do next'}</Typography>
                 <Box component="ol" sx={{ m: 0, pl: 3 }}>
                   {notice.steps.map((step, index) => (
@@ -269,46 +254,13 @@ export default function OrgHoldsCard() {
         })}
       </Stack>
 
-      <Dialog
-        open={Boolean(requesting)}
-        onClose={() => (sending ? undefined : setRequesting(null))}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>{'Request a review'}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            <Typography variant="body2">{requesting?.title}</Typography>
-            <Typography variant="body2" color="text.secondary">
-              {
-                'Tell us what this is for and why it is genuine. A person reads every request, on the same case our team already has open. Requesting a review does not release anything by itself.'
-              }
-            </Typography>
-            <TextField
-              label="Your note"
-              multiline
-              minRows={4}
-              value={note}
-              onChange={(event) => setNote(event.target.value.slice(0, 2000))}
-              helperText={
-                note.trim().length < NOTE_MIN ? 'At least a sentence, please.' : `${note.length}/2000`
-              }
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button disabled={sending} onClick={() => setRequesting(null)}>
-            {'Cancel'}
-          </Button>
-          <Button
-            variant="contained"
-            disabled={sending || note.trim().length < NOTE_MIN}
-            onClick={() => void submit()}
-          >
-            {'Send request'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <RequestReviewDialog
+        noticeId={requesting?.noticeId ?? null}
+        orgId={orgId}
+        title={requesting?.title ?? null}
+        onClose={() => setRequesting(null)}
+        onSent={() => void load()}
+      />
     </CardDisplay>
   )
 }

@@ -64,11 +64,13 @@ jest.mock('./render-system-email', () => ({
 
 import {
   closeRiskNotice,
+  listHostPageHolds,
   listOwnerRiskNotices,
   notifyRiskEvent,
   RISK_NOTICE_BURST,
   requestRiskReview,
   type RiskNoticeDeps,
+  resolveHostConsolePaths,
   riskNoticeId,
 } from './risk-notice'
 
@@ -114,7 +116,7 @@ function fakeFirestore() {
         .filter((path) =>
           filters.every(([field, op, value]) => {
             const actual = docs.get(path)?.[field] as number
-            return op === '==' ? actual === value : op === '<=' ? actual <= (value as number) : actual > (value as number)
+            return op === '==' ? actual === value : op === 'in' ? (value as unknown[]).includes(actual) : op === '<=' ? actual <= (value as number) : actual > (value as number)
           }),
         )
         .map((path) => ({ ...snapshot(path), ref: ref(path) }))
@@ -454,5 +456,148 @@ describe('listOwnerRiskNotices', () => {
     })
     const [after] = await listOwnerRiskNotices({ orgId: 'org-1', viewerUid: 'owner-1' }, h.deps)
     expect(after.status).toBe('released')
+  })
+})
+
+/**
+ * A site's held and flagged pages, for the console surfaces an owner works
+ * in (AGL-3374): the page notices for the host, each named from the subject
+ * the page review stored, with its row's state. Nothing here releases.
+ */
+describe('listHostPageHolds', () => {
+  const subject = {
+    kind: 'entry-template' as const,
+    screenId: 'IhmjX3ymSg',
+    versionId: 'v2',
+    name: 'Video detail',
+    route: '/videos/:slug',
+    url: null,
+    entryUrl: 'https://aglyn.com/videos/intro',
+    collectionName: 'Videos',
+    variantName: null,
+    source: { type: 'layout' as const, id: 'main', name: 'Main', pagesUsing: 4 },
+    visitorView: 'built-in-design' as const,
+  }
+  const pageNotice = (n: number, kind: 'page-held' | 'page-flagged', page: unknown = subject) => ({
+    kind,
+    orgId: 'org-1',
+    hostId: 'host-1',
+    reviewId: `${'b'.repeat(39)}${n.toString(16)}`.slice(-40),
+    reference: `HS-P${n}`,
+    item: {
+      label: 'the "Video detail" template (/videos/:slug)',
+      path: '/host-1/screens/IhmjX3ymSg/versions/v2/view',
+    },
+    ...(page ? { page } : {}),
+    occurredAtMs: NOW,
+  })
+
+  it('stores the page on the notice and lists it by name, with what visitors see, on the page AND its layout', async () => {
+    const h = harness()
+    const input = pageNotice(1, 'page-held')
+    h.firestore.docs.set(`abuseReports/${input.reviewId}`, {
+      orgId: 'org-1',
+      status: 'open',
+      heldSend: { state: 'held' },
+    })
+    await notifyRiskEvent(input as never, h.deps)
+    const stored = [...h.firestore.docs.entries()].find(([path]) => path.startsWith('riskNotices/'))
+    expect(stored?.[1]['page']).toMatchObject({ kind: 'entry-template', route: '/videos/:slug' })
+
+    const [hold, ...rest] = await listHostPageHolds({ hostId: 'host-1' }, h.deps)
+    expect(rest).toEqual([])
+    expect(hold).toMatchObject({
+      kind: 'page-held',
+      status: 'held',
+      chip: { label: 'Held for review', color: 'warning' },
+      label: 'the "Video detail" template (/videos/:slug)',
+      details: [
+        'Found while showing https://aglyn.com/videos/intro.',
+        'The flagged content is in the layout "Main", used on 4 pages, not on the page itself.',
+      ],
+      visitorSentence: 'Visitors see the site’s built-in design for these pages until the review is done.',
+      targets: [
+        { type: 'screen', id: 'IhmjX3ymSg' },
+        { type: 'layout', id: 'main' },
+      ],
+      reviewable: true,
+      reference: 'HS-P1',
+    })
+    // A status and facts — never a release.
+    expect(JSON.stringify(hold)).not.toMatch(/release|dismiss|staff-/i)
+  })
+
+  it('shows a flagged live page as live and under review, and hides a page once it is released', async () => {
+    const h = harness()
+    const flagged = pageNotice(2, 'page-flagged', { ...subject, visitorView: 'live', source: null })
+    h.firestore.docs.set(`abuseReports/${flagged.reviewId}`, { orgId: 'org-1', status: 'open' })
+    await notifyRiskEvent(flagged as never, h.deps)
+    const released = pageNotice(3, 'page-held', { ...subject, screenId: 'other' })
+    h.firestore.docs.set(`abuseReports/${released.reviewId}`, {
+      orgId: 'org-1',
+      status: 'dismissed',
+      heldSend: { state: 'released' },
+    })
+    await notifyRiskEvent(released as never, h.deps)
+    const rejected = pageNotice(4, 'page-held', { ...subject, screenId: 'third' })
+    h.firestore.docs.set(`abuseReports/${rejected.reviewId}`, {
+      orgId: 'org-1',
+      status: 'actioned',
+      heldSend: { state: 'rejected' },
+    })
+    await notifyRiskEvent(rejected as never, h.deps)
+
+    const holds = await listHostPageHolds({ hostId: 'host-1' }, h.deps)
+    expect(holds.map((hold) => [hold.targets[0].id, hold.chip.label])).toEqual([
+      ['IhmjX3ymSg', 'Flagged — live, under review'],
+      ['third', 'Not approved'],
+    ])
+    expect(holds[0].visitorSentence).toBe('Visitors still see this page while it is reviewed.')
+  })
+
+  it('still places a notice written before notices carried the page, by its item path', async () => {
+    const h = harness()
+    const legacy = pageNotice(5, 'page-held', null)
+    h.firestore.docs.set(`abuseReports/${legacy.reviewId}`, {
+      orgId: 'org-1',
+      status: 'open',
+      heldSend: { state: 'held' },
+    })
+    await notifyRiskEvent(legacy as never, h.deps)
+    const [hold] = await listHostPageHolds({ hostId: 'host-1' }, h.deps)
+    expect(hold.targets).toEqual([{ type: 'screen', id: 'IhmjX3ymSg' }])
+    expect(hold.label).toBe('the "Video detail" template (/videos/:slug)')
+  })
+
+  it('shows the owners the page by name on Holds & reviews', async () => {
+    const h = harness()
+    const input = pageNotice(6, 'page-held')
+    h.firestore.docs.set(`abuseReports/${input.reviewId}`, {
+      orgId: 'org-1',
+      status: 'open',
+      heldSend: { state: 'held' },
+    })
+    await notifyRiskEvent(input as never, h.deps)
+    const [view] = await listOwnerRiskNotices({ orgId: 'org-1', viewerUid: 'owner-1' }, h.deps)
+    expect(view.summary).toContain('the "Video detail" template (/videos/:slug)')
+    expect(view.page).toMatchObject({
+      label: 'the "Video detail" template (/videos/:slug)',
+      visitorSentence: 'Visitors see the site’s built-in design for these pages until the review is done.',
+    })
+    expect(view.actions.find((action) => action.id === 'view-details')?.href).toBe(
+      '/harbor-view/hosts/harborview/screens/IhmjX3ymSg/versions/v2/view',
+    )
+  })
+})
+
+describe('resolveHostConsolePaths', () => {
+  it('turns a stored site path into the console route staff can open', async () => {
+    const h = harness()
+    const resolved = await resolveHostConsolePaths(h.firestore as never, [
+      { hostId: 'host-1', orgId: 'org-1', path: '/host-1/layouts/main' },
+      { hostId: 'gone', orgId: null, path: '/gone/layouts/x' },
+    ])
+    expect(resolved.get('host-1\n/host-1/layouts/main')).toBe('/harbor-view/hosts/harborview/layouts/main')
+    expect(resolved.has('gone\n/gone/layouts/x')).toBe(false)
   })
 })

@@ -72,7 +72,13 @@
  *=========================================*/
 
 import { ABUSE_REPORT_COLLECTION } from '@aglyn/aglyn/app-utils/abuse-report'
-import { TENANT_APEX } from '@aglyn/aglyn/app-utils/host-naming'
+import {
+  heldPageConsolePath,
+  heldPageDetails,
+  heldPageLabel,
+  heldPageVisitorSentence,
+  type HeldPageSubject,
+} from '@aglyn/shared-util-email/held-page'
 import { screenHostedPage } from '@aglyn/shared-util-email/hosted-page-screen'
 import {
   lookalikeBrandForHost,
@@ -84,6 +90,7 @@ import {
 } from '@aglyn/shared-util-email/outbound-phishing-screen'
 import { FieldValue } from 'firebase-admin/firestore'
 import firebaseAdmin from './firebase-admin'
+import { describeHeldPage, type HostedPageContext } from './held-page-subject'
 import { notifyRiskEvent } from './risk-notice'
 import { orgAgeDays } from './org-age'
 import { getHostDocAdmin, getOrgForHost } from './organizations'
@@ -112,6 +119,13 @@ export interface HostedPageReviewRequest {
   org?: Record<string, unknown> | null
   orgId?: string | null
   nowMs?: number
+  /**
+   * What the composer knows about the page (AGL-3374): the screen document,
+   * the template route it is rendering, the variant, and a way to read the
+   * layouts and components composed into it. Read only when a row is filed,
+   * to name the page — never to decide whether it serves.
+   */
+  page?: HostedPageContext | null
 }
 
 export type HostedPageReviewOutcome =
@@ -147,16 +161,35 @@ export function resetHostedPageReviewMemoForTests(): void {
   flaggedMemo.clear()
 }
 
-/** The page's public URL, for the review row. Best effort; the row stands without it. */
-function pageUrl(host: Record<string, unknown> | null, screenId: string): string | null {
-  const subdomain = typeof host?.['subdomain'] === 'string' ? (host['subdomain'] as string) : ''
-  const cname = typeof host?.['cname'] === 'string' ? (host['cname'] as string) : ''
-  const origin = cname ? `https://${cname}` : subdomain ? `https://${subdomain}.${TENANT_APEX}` : ''
-  if (!origin) return null
-  const screens = (host?.['screens'] ?? {}) as Record<string, unknown>
-  const path = typeof screens[screenId] === 'string' ? (screens[screenId] as string) : ''
-  const clean = path.replace(/^\/+|\/+$/g, '')
-  return `${origin}/${clean === 'index' ? '' : clean}`
+/**
+ * The subject a row already stored, or a fresh description (AGL-3374). A row
+ * that names its page is not described again, so the reads the description
+ * may make are paid once per row, not once per render.
+ */
+async function subjectForRow(
+  reviewId: string,
+  describe: () => Promise<HeldPageSubject>,
+): Promise<HeldPageSubject> {
+  const stored = await firebaseAdmin
+    .app()
+    .firestore()
+    .collection(ABUSE_REPORT_COLLECTION)
+    .doc(reviewId)
+    .get()
+    .then((row) => storedSubject(row.get('heldPage')))
+    .catch(() => null)
+  return stored ?? describe()
+}
+
+/** A row's stored subject, when it has one. */
+function storedSubject(heldPage: unknown): HeldPageSubject | null {
+  const subject = (heldPage as { subject?: HeldPageSubject } | null | undefined)?.subject
+  return subject && typeof subject === 'object' && subject.screenId ? subject : null
+}
+
+/** The row's first line, naming the page and where it was seen. */
+function pageHeadline(subject: HeldPageSubject, siteName: string): string {
+  return [`${heldPageLabel(subject)} of ${siteName}.`, ...heldPageDetails(subject)].join(' ')
 }
 
 /**
@@ -208,6 +241,8 @@ export async function reviewHostedPage(
           host,
           signals: strong,
           nowMs,
+          page: request.page ?? null,
+          identity,
         })
         return { outcome: 'serve' }
       }
@@ -223,10 +258,26 @@ export async function reviewHostedPage(
         ? { outcome: 'serve' }
         : { outcome: memo.state === 'rejected' ? 'rejected' : 'held', reviewId, reference }
     }
-    const url = pageUrl(host, request.screenId)
+    // The page by its real name and route (AGL-3374): a template, a list,
+    // a variant, or a page whose flagged content lives in its layout.
+    const subject = await subjectForRow(reviewId, async () =>
+      describeHeldPage({
+        hostId: request.hostId,
+        screenId: request.screenId,
+        versionId: request.versionId,
+        host,
+        page: request.page,
+        signals,
+        identity,
+        live: false,
+        previousVersionId: await servedPageVersion(request.hostId, request.screenId),
+      }),
+    )
+    const url = subject.entryUrl ?? subject.url
     const flagged = flaggedHostOf(signals)
-    const pageName =
+    const siteName =
       typeof host?.['name'] === 'string' && host['name'] ? `"${host['name']}"` : 'a site'
+    const label = heldPageLabel(subject)
     const state = await fileOutboundHold({
       reviewId,
       heldSend: {
@@ -235,28 +286,24 @@ export async function reviewHostedPage(
         hostId: request.hostId,
         orgId,
         contentHash: outboundContentHash([signals]),
-        subject: (url ?? `screen ${request.screenId}`).slice(0, 300),
+        subject: label.slice(0, 300),
         fromName: null,
         signals,
         state: 'held',
         heldAtMs: nowMs,
         ageDays,
       },
-      extra: { heldPage: { screenId: request.screenId, versionId: request.versionId, url } },
-      headline:
-        `Held a published page of ${pageName}${url ? ` (${url})` : ''}, version ` +
-        `${request.versionId}, from a workspace ${ageDays ?? '?'} day(s) old. The page ` +
-        'serves its last clean version, or nothing, until this is decided.',
-      alertTitle: 'Published page held for review — possible phishing',
-      alertBody: `A page ${url ? `at ${url} ` : ''}was held before it went live.`,
-      // The owners' words for it, and the held version's own page in the
-      // console (AGL-3368).
-      item: {
-        label: url ? `the page ${url}` : 'a page on your site',
-        path:
-          `/${request.hostId}/screens/${encodeURIComponent(request.screenId)}` +
-          `/versions/${encodeURIComponent(request.versionId)}/view`,
+      extra: {
+        heldPage: { screenId: request.screenId, versionId: request.versionId, url, subject },
       },
+      headline:
+        `Held ${pageHeadline(subject, siteName)} Version ${request.versionId}, from a ` +
+        `workspace ${ageDays ?? '?'} day(s) old. ${heldPageVisitorSentence(subject)}`,
+      alertTitle: 'Published page held for review — possible phishing',
+      alertBody: `${label.charAt(0).toUpperCase()}${label.slice(1)} was held before it went live.`,
+      // The owners' words for it, and where they fix it (AGL-3368, AGL-3374).
+      item: { label, path: heldPageConsolePath(subject, request.hostId) },
+      page: subject,
       // The page itself is what was reported; the flagged host, when there
       // is one, is named in the details and on `reportedHostname`.
       url,
@@ -334,19 +381,40 @@ async function flagLivePage(input: {
   host: Record<string, unknown> | null
   signals: readonly PhishingScreenSignal[]
   nowMs: number
+  page?: HostedPageContext | null
+  identity?: ReturnType<typeof workspaceScreenIdentity>
 }): Promise<void> {
   const key = `${input.hostId}\n${input.screenId}\n${input.signals.map((signal) => canonicalJson(signal)).sort().join('\n')}`
   const at = flaggedMemo.get(key)
   if (at !== undefined && input.nowMs - at < FLAGGED_MEMO_TTL_MS) return
   flaggedMemo.set(key, input.nowMs)
   try {
-    const url = pageUrl(input.host, input.screenId)
     const reviewId = pageReviewId(input.hostId, `${input.screenId}/live`, input.signals)
     const reference = heldOutboundReference(reviewId)
     const evidence = describePhishingScreenSignals(input.signals).join(' ')
     const flagged = flaggedHostOf(input.signals)
     const ref = firebaseAdmin.app().firestore().collection(ABUSE_REPORT_COLLECTION).doc(reviewId)
-    const first = !(await ref.get()).exists
+    const existing = await ref.get()
+    const first = !existing.exists
+    // Named once, when the row is new (AGL-3374).
+    const subject =
+      (existing.exists ? storedSubject(existing.get('heldPage')) : null) ??
+      (await describeHeldPage({
+        hostId: input.hostId,
+        screenId: input.screenId,
+        versionId: input.versionId,
+        host: input.host,
+        page: input.page,
+        signals: input.signals,
+        identity: input.identity ?? workspaceScreenIdentity({ host: input.host }),
+        live: true,
+        previousVersionId: null,
+      }))
+    const url = subject.entryUrl ?? subject.url
+    const siteName =
+      typeof input.host?.['name'] === 'string' && input.host['name']
+        ? `"${input.host['name']}"`
+        : 'a site'
     await ref.set(
       {
         reference,
@@ -358,13 +426,14 @@ async function flagLivePage(input: {
         hostId: input.hostId,
         orgId: input.orgId,
         details: [
-          `A LIVE page${url ? ` (${url})` : ''} was flagged by the phishing screen and is still serving.`,
+          `LIVE: ${pageHeadline(subject, siteName)} It was flagged by the phishing screen and is still serving.`,
           evidence,
           'Lock the site if it is impersonation or the account looks compromised; dismiss this if the content is theirs.',
         ].join('\n'),
         reporterEmail: null,
         reporterName: null,
         dmca: null,
+        heldPage: { screenId: input.screenId, versionId: input.versionId, url, subject },
         riskNotice: { kind: 'page-flagged' },
         reportCount: FieldValue.increment(1),
         updatedAt: FieldValue.serverTimestamp(),
@@ -379,13 +448,9 @@ async function flagLivePage(input: {
       hostId: input.hostId,
       reviewId,
       reference,
-      item: {
-        label: url ? `the page at ${url}` : 'a page on your site',
-        path:
-          `/${input.hostId}/screens/${encodeURIComponent(input.screenId)}` +
-          `/versions/${encodeURIComponent(input.versionId)}/view`,
-      },
-      staffEvidence: evidence,
+      item: { label: heldPageLabel(subject), path: heldPageConsolePath(subject, input.hostId) },
+      page: subject,
+      staffEvidence: [...heldPageDetails(subject), evidence].join(' '),
     })
   } catch (error) {
     console.error('[page-review] a live page could not be flagged', error)

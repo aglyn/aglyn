@@ -52,6 +52,7 @@ import {
 } from 'firebase/firestore'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useFirestore, useUser } from '@aglyn/tenant-feature-instance'
+import { getDocsBounded } from '@aglyn/tenant-feature-instance/hooks/firebase/firestore-bounded-read'
 import { listQueryConstraints } from '@aglyn/tenant-feature-instance/hooks/use-list-query'
 import { authorizedFetch } from '@aglyn/shared-util-http/authorized-token'
 import AuthenticatedLayout from '../../../../components/layouts/authenticated.layout'
@@ -375,7 +376,10 @@ const AdminAudit: NextPageWithLayout<Record<string, never>> = () => {
       setLoading(true)
       try {
         // One extra row says whether a next page exists.
-        const snapshot = await getDocs(
+        // Bounded (AGL-3373): a stalled client answers from the cache after
+        // a few seconds and is asked to recover, instead of holding `loading`
+        // forever.
+        const { snapshot } = await getDocsBounded(
           query(
             collection(firestore, 'adminAudit'),
             ...constraints,

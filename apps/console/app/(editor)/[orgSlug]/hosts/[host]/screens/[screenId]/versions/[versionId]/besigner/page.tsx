@@ -133,6 +133,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // Dynamic site-plugin activation (AGL-417): canvas components register
 // via the org-gated loader; the page gates the canvas on readiness.
 import { withSitePlugins } from '../../../../../../../../../../components/console-plugins-gate.component'
+import PageHoldBanner from '../../../../../../../../../../components/page-holds/page-hold-banner.component'
 import BesignerFunctionsButton from '../../../../../../../../../../components/besigner-functions-button.component'
 import PluginWidgetSlot from '../../../../../../../../../../components/plugin-widget-slot.component'
 import BindingPickerProvider from '../../../../../../../../../../components/binding-picker-provider.component'
@@ -2152,6 +2153,13 @@ function BesignerPage(props) {
                         {remoteChanged && !draft.available ? (
                           <BesignerConflictAlertComponent noun="screen" />
                         ) : null}
+                        {/* Held or flagged by the page review (AGL-3374):
+                            what visitors see, and what the owner can do. */}
+                        <PageHoldBanner
+                          hostId={hostId}
+                          target={{ type: 'screen', id: screenId }}
+                          sx={{ position: 'relative', zIndex: 'appBar' }}
+                        />
                         {layoutId ? (
                           <Alert
                             severity="info"

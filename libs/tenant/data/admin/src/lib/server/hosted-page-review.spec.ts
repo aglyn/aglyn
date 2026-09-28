@@ -44,11 +44,32 @@ function write(path: string, value: Doc) {
   store.set(path, next)
 }
 
+/** `where(field, '==', value).limit(n).get()` over one subcollection — the collection-template lookup. */
+const whereEquals = (collectionPath: string, field: string, value: unknown) => {
+  const query = {
+    limit: () => query,
+    get: async () => ({
+      docs: [...store.keys()]
+        .filter(
+          (key) =>
+            key.startsWith(`${collectionPath}/`) &&
+            key.split('/').length === collectionPath.split('/').length + 1 &&
+            store.get(key)?.[field] === value,
+        )
+        .map((key) => snapshotOf(key)),
+    }),
+  }
+  return query
+}
+
 const docRef = (path: string): Record<string, unknown> => ({
   path,
   get: async () => snapshotOf(path),
   set: async (value: Doc) => write(path, value),
-  collection: (name: string) => ({ doc: (id: string) => docRef(`${path}/${name}/${id}`) }),
+  collection: (name: string) => ({
+    doc: (id: string) => docRef(`${path}/${name}/${id}`),
+    where: (field: string, _op: string, value: unknown) => whereEquals(`${path}/${name}`, field, value),
+  }),
 })
 
 const db = {
@@ -352,5 +373,150 @@ describe('a commerce link that wears a brand (AGL-3363)', () => {
     await expect(
       flagLookalikeDomain({ kind: 'link', hostId: 'host-1', orgId: null, domain: 'files.harborviewhotel.com' }),
     ).resolves.toBe('clean')
+  })
+})
+
+/**
+ * Every held or flagged page NAMED (AGL-3374). The row that started this
+ * said "https://aglyn.com/" for a collection entry template, because the only
+ * address the review looked up was the routing map's, and a template has none.
+ */
+describe('naming the held page', () => {
+  type Notified = {
+    kind: string
+    item: { label: string; path: string }
+    page: { kind: string; visitorView: string; source: unknown }
+    staffEvidence?: string
+  }
+  const notified = () => mockNotifyRisk.mock.calls[0]?.[0] as Notified
+  const young = () => {
+    mockOrg = { name: 'Harbor View', createdAt: NOW - 2 * DAY }
+  }
+  const reviewAs = (screenId: string, page: Parameters<typeof reviewHostedPage>[0]['page'], versionId = 'v2') =>
+    reviewHostedPage({ hostId: 'host-1', screenId, versionId, nodes: LOOKALIKE_PAGE, nowMs: NOW, page })
+
+  it('names a routed page by its name and route, not by a bare URL', async () => {
+    young()
+    await reviewAs('screen-1', { screen: { displayName: 'Review file' } })
+    expect(notified()).toMatchObject({
+      kind: 'page-held',
+      item: {
+        label: 'the "Review file" page (/reviewfile)',
+        path: '/host-1/screens/screen-1/versions/v2/view',
+      },
+      page: { kind: 'screen', visitorView: 'not-found' },
+    })
+    expect(pageRow()?.['url']).toMatch(/^https:\/\/harborview\.[^/]+\/reviewfile$/)
+  })
+
+  it('names a collection ENTRY template by its name and route pattern, with the entry that tripped it — never the site root', async () => {
+    young()
+    await reviewAs('IhmjX3ymSg', {
+      screen: { displayName: 'Video detail', kind: 'template' },
+      template: {
+        role: 'entry',
+        route: '/videos/:slug',
+        collectionName: 'Videos',
+        entryPath: '/videos/intro',
+        fallback: 'built-in-design',
+      },
+    })
+    const row = pageRow() as Record<string, any>
+    expect(notified().item).toEqual({
+      label: 'the "Video detail" template (/videos/:slug)',
+      path: '/host-1/screens/IhmjX3ymSg/versions/v2/view',
+    })
+    expect(notified().page).toMatchObject({ kind: 'entry-template', visitorView: 'built-in-design' })
+    expect(row['url']).toMatch(/^https:\/\/harborview\.[^/]+\/videos\/intro$/)
+    expect(row['url']).not.toMatch(/\/$/)
+    expect(row['heldSend']['subject']).toBe('the "Video detail" template (/videos/:slug)')
+    expect(row['details']).toContain('the "Video detail" template (/videos/:slug) of "Harbor View Hotel".')
+    expect(row['details']).toMatch(/Found while showing https:\/\/harborview\.[^/]+\/videos\/intro\./)
+    expect(row['heldPage']['subject']).toMatchObject({ kind: 'entry-template', route: '/videos/:slug' })
+  })
+
+  it('finds a template’s collection route itself when the caller did not say (a list template)', async () => {
+    young()
+    store.set('hosts/host-1/collections/c1', { slug: 'blog', displayName: 'Blog', listScreenId: 'list-1' })
+    await reviewAs('list-1', { screen: { displayName: 'Blog list' } })
+    expect(notified().item.label).toBe('the "Blog list" list template (/blog)')
+    expect(notified().page).toMatchObject({ kind: 'list-template', visitorView: 'built-in-design' })
+  })
+
+  it('names the LAYOUT the flagged content lives in, and sends the owner there', async () => {
+    young()
+    await reviewAs('screen-1', {
+      screen: { displayName: 'About' },
+      parts: async () => [
+        { type: 'screen', id: 'screen-1', nodes: CLEAN_PAGE },
+        { type: 'layout', id: 'main', name: 'Main', nodes: LOOKALIKE_PAGE },
+      ],
+    })
+    expect(notified().item).toEqual({
+      label: 'the "About" page (/reviewfile)',
+      path: '/host-1/layouts/main',
+    })
+    expect(notified().page.source).toMatchObject({ type: 'layout', id: 'main', name: 'Main' })
+    expect(String(pageRow()?.['details'])).toMatch(/The flagged content is in the layout "Main"/)
+  })
+
+  it('names the COMPONENT when neither the page nor its layout carries it', async () => {
+    young()
+    store.set('hosts/host-1/components/hdr', { displayName: 'Header' })
+    await reviewAs('screen-1', {
+      screen: { displayName: 'About' },
+      parts: async () => [
+        { type: 'screen', id: 'screen-1', nodes: CLEAN_PAGE },
+        { type: 'layout', id: 'main', name: 'Main', nodes: CLEAN_PAGE },
+        { type: 'component', id: 'hdr', nodes: LOOKALIKE_PAGE },
+      ],
+    })
+    expect(notified().item.path).toBe('/host-1/components/hdr')
+    expect(notified().page.source).toMatchObject({ type: 'component', id: 'hdr', name: 'Header' })
+  })
+
+  it('blames the page itself when its own nodes carry the content', async () => {
+    young()
+    await reviewAs('screen-1', {
+      screen: { displayName: 'About' },
+      parts: async () => [
+        { type: 'screen', id: 'screen-1', nodes: LOOKALIKE_PAGE },
+        { type: 'layout', id: 'main', name: 'Main', nodes: LOOKALIKE_PAGE },
+      ],
+    })
+    expect(notified().page.source).toBeNull()
+    expect(notified().item.path).toBe('/host-1/screens/screen-1/versions/v2/view')
+  })
+
+  it('names an experiment VARIANT, whose visitors get the published page meanwhile', async () => {
+    young()
+    await reviewAs('screen-1', {
+      screen: { displayName: 'Pricing' },
+      variant: { experimentId: 'exp-1', variantId: 'b', name: 'B' },
+    })
+    expect(notified().item.label).toBe('variant "B" of the "Pricing" page (/reviewfile)')
+    expect(notified().page).toMatchObject({ kind: 'variant', visitorView: 'published-version' })
+  })
+
+  it('names a flagged LIVE page too, and says it is still serving', async () => {
+    await reviewAs('IhmjX3ymSg', {
+      screen: { displayName: 'Video detail', kind: 'template' },
+      template: { role: 'entry', route: '/videos/:slug', entryPath: '/videos/intro' },
+    })
+    expect(notified()).toMatchObject({
+      kind: 'page-flagged',
+      item: { label: 'the "Video detail" template (/videos/:slug)' },
+      page: { kind: 'entry-template', visitorView: 'live' },
+    })
+    expect(String(pageRow()?.['details'])).toMatch(/^LIVE: the "Video detail" template/)
+  })
+
+  it('describes a row once: a later filing reuses what the row already says', async () => {
+    young()
+    const parts = jest.fn(async () => [{ type: 'screen' as const, id: 'screen-1', nodes: LOOKALIKE_PAGE }])
+    await reviewAs('screen-1', { screen: { displayName: 'About' }, parts })
+    resetHostedPageReviewMemoForTests()
+    await reviewAs('screen-1', { screen: { displayName: 'About' }, parts })
+    expect(parts).toHaveBeenCalledTimes(1)
   })
 })

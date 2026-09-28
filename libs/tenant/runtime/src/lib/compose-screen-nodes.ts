@@ -27,6 +27,7 @@ import {
   reviewHostedPage,
   servedPageVersion,
 } from '@aglyn/tenant-data-admin/server/hosted-page-review'
+import type { HostedPagePart } from '@aglyn/tenant-data-admin/server/held-page-subject'
 import applyDuePublishSchedule from './apply-publish-schedule'
 import getComponents from './get-components'
 import getDatasets from './get-datasets'
@@ -736,6 +737,80 @@ export async function composeNodesWithChrome(options: {
 }
 
 /**
+ * What the caller knows about the page it is composing, for the page review
+ * to NAME it when it holds or flags it (AGL-3374). Never read to decide
+ * whether the page serves.
+ */
+export interface ComposePageContext {
+  /**
+   * A template composed against a routed listing or entry: the route pattern
+   * it serves (`/videos`, `/videos/:slug`), the collection it renders, the
+   * address being shown, and what a visitor gets when it has no clean
+   * version (`built-in-design` for a content collection, whose routes fall
+   * back to it; `not-found` for a store template, which has none).
+   */
+  template?: {
+    role: 'list' | 'entry'
+    route: string
+    collectionName?: string | null
+    entryPath?: string | null
+    fallback?: 'built-in-design' | 'not-found'
+  } | null
+  /** An experiment variant's version of the page. */
+  variant?: { experimentId: string; variantId: string; name?: string | null } | null
+}
+
+/**
+ * The page's own nodes and those of every layout and reusable component
+ * composed into it, for the page review to say WHICH one carries flagged
+ * content (AGL-3374). Read only when a review row is filed: the layout
+ * versions and the component definitions are the cached reads the compose
+ * already made.
+ */
+async function composedPageParts(options: {
+  hostId: string
+  screenId: string
+  screenNodes: Record<string, any>
+  layoutId: string | null | undefined
+}): Promise<HostedPagePart[]> {
+  const parts: HostedPagePart[] = [
+    { type: 'screen', id: options.screenId, nodes: options.screenNodes },
+  ]
+  const seen = new Set<string>()
+  let layoutId = options.layoutId ? String(options.layoutId) : undefined
+  while (layoutId && !seen.has(layoutId) && seen.size < Aglyn.MAX_LAYOUT_CHAIN_DEPTH) {
+    seen.add(layoutId)
+    const layoutRes = await getPublishedLayoutVersion({ hostId: options.hostId, layoutId })
+    const layout = layoutRes?.layout as { displayName?: unknown; layoutId?: unknown } | undefined
+    parts.push({
+      type: 'layout',
+      id: layoutId,
+      name: typeof layout?.displayName === 'string' ? layout.displayName : null,
+      nodes: layoutRes?.version?.nodes ?? {},
+    })
+    layoutId = layout?.layoutId ? String(layout.layoutId) : undefined
+  }
+  // Only the components this page actually renders, followed through
+  // components that nest others, so an unused one is never blamed.
+  const { definitions } = await getComponents({ hostId: options.hostId })
+  const used = new Set<string>()
+  let frontier = parts.map((part) => part.nodes as Record<string, any>)
+  while (frontier.length) {
+    const next: Record<string, any>[] = []
+    for (const [id, definition] of Object.entries(definitions)) {
+      if (used.has(id)) continue
+      if (frontier.some((nodes) => Aglyn.nodesReferenceComponent(nodes, id))) {
+        used.add(id)
+        next.push(definition.nodes as Record<string, any>)
+        parts.push({ type: 'component', id, nodes: definition.nodes })
+      }
+    }
+    frontier = next
+  }
+  return parts
+}
+
+/**
  * Full published-render composition for one screen (extracted for AGL-87 so
  * the SSG path and the password-unlock API build identical trees): applies
  * a due publish schedule, loads the version, composes the shared layout
@@ -774,6 +849,8 @@ export async function composeScreenNodes(options: {
    * than falling back again.
    */
   pageReviewFallback?: boolean
+  /** What this page is, for naming it if the page review holds it (AGL-3374). */
+  page?: ComposePageContext
 }): Promise<Record<string, any> | null> {
   const { hostId, screenId, screen } = options
 
@@ -883,11 +960,32 @@ export async function composeScreenNodes(options: {
    * again, or nothing.
    */
   const nodes = await composed
+  const version = versionRes.version as Aglyn.AglynScreenVersion
   const review = await reviewHostedPage({
     hostId,
     screenId,
     versionId,
     nodes,
+    // Named by what it is, not only its id (AGL-3374).
+    page: {
+      screen: {
+        displayName: (screen as { displayName?: unknown }).displayName,
+        name: (screen as { name?: unknown }).name,
+        kind: (screen as { kind?: unknown }).kind,
+      },
+      template: options.page?.template ?? null,
+      variant: options.page?.variant ?? null,
+      parts: () =>
+        composedPageParts({
+          hostId,
+          screenId,
+          screenNodes: (version?.nodes ?? {}) as Record<string, any>,
+          layoutId:
+            version && 'layoutId' in version
+              ? (version.layoutId as string | null)
+              : (screen.layoutId as string | undefined),
+        }),
+    },
   })
   if (review.outcome === 'serve') {
     // Only the PUBLISHED version is the page's last clean one; a variant or

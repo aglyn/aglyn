@@ -697,6 +697,24 @@
       ]
     },
     {
+      "collectionGroup": "riskNotices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "hostId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "kind",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAtMs",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "storefrontTaxCollected",
       "queryScope": "COLLECTION",
       "fields": [

@@ -189,6 +189,18 @@ export async function composeCollectionTemplatePage(options: {
     // layout's — fill in as they do on every other page (AGL-2883).
     host: options.host,
     tokens,
+    // What this template is, for naming it if the page review holds it
+    // (AGL-3374): its route pattern, its collection and the entry shown.
+    // Without it the route falls back to the built-in design.
+    page: {
+      template: {
+        role: kind,
+        route: kind === 'entry' ? `/${collection.slug}/:slug` : `/${collection.slug}`,
+        collectionName: collection.displayName || collection.slug,
+        entryPath: entry ? `/${collection.slug}/${entry.slug}` : null,
+        fallback: 'built-in-design',
+      },
+    },
     // List pages hand their already-fetched entries to the Collection
     // entries block; entry pages carry the routed entry (AGL-582, Related
     // posts) and let blocks fetch entry lists on demand (e.g. a "More
