@@ -20,7 +20,8 @@
           "pag",
           "page"
         ],
-        "nameReversed": "egap emoh"
+        "nameReversed": "egap emoh",
+        "deletedAt": null
       }
     },
     {
@@ -32,7 +33,28 @@
       "expected": {
         "nameLower": "",
         "nameTokens": [],
-        "nameReversed": ""
+        "nameReversed": "",
+        "deletedAt": null
+      }
+    },
+    {
+      "name": "a screen created with deletedAt: null already keeps it null",
+      "collection": "screens",
+      "doc": {
+        "displayName": "Promo",
+        "deletedAt": null
+      },
+      "expected": {
+        "nameLower": "promo",
+        "nameTokens": [
+          "p",
+          "pr",
+          "pro",
+          "prom",
+          "promo"
+        ],
+        "nameReversed": "omorp",
+        "deletedAt": null
       }
     },
     {

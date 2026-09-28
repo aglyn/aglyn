@@ -183,7 +183,8 @@ async function seedGuideFixtures() {
   const putScreen = async (screenId, screen, nodes) => {
     const screenRef = hostRef.collection('screens').doc(screenId)
     const versionId = `${screenId}-v1`
-    await put(screenRef, { ...screen, versionId, createdAt: now })
+    // `deletedAt: null` stored, as every screen create stamps it (AGL-3321).
+    await put(screenRef, { ...screen, versionId, deletedAt: null, createdAt: now })
     await put(screenRef.collection('versions').doc(versionId), {
       screenId,
       nodes,
