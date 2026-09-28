@@ -30,7 +30,7 @@
 // asserts it against the TypeScript, and `media-filter-keys.test.mjs`
 // (`npm run test:media-filter-keys`) against this.
 
-import { nameSearchKey, nameSearchTokens } from './name-search-tokens.mjs'
+import { NAME_TOKEN_LIMIT, nameSearchKey, nameSearchTokens } from './name-search-tokens.mjs'
 
 /** `mediaKindOf`: the family the library's Type filter names. */
 export function mediaKindOf(contentType) {
@@ -71,19 +71,81 @@ export function mediaNameWords(fileName) {
     .trim()
 }
 
+/** `MEDIA_EMBEDDED_METADATA_VERSION`: the stored record's shape. */
+const EMBEDDED_VERSION = 1
+
+/** `SEARCHABLE_EMBEDDED_KEYS`: the details a search reads, most telling first. */
+const SEARCHABLE_EMBEDDED_KEYS = [
+  'title',
+  'keywords',
+  'headline',
+  'subject',
+  'creator',
+  'credit',
+  'source',
+  'city',
+  'state',
+  'country',
+  'category',
+  'label',
+  'description',
+]
+
+/** `embeddedMetadataIsCurrent`: a record of today's shape, for these bytes when they are known. */
+function embeddedIsCurrent(stored, contentSha256) {
+  if (!stored || typeof stored !== 'object') return false
+  if (stored.version !== EMBEDDED_VERSION || !Array.isArray(stored.fields)) return false
+  return typeof contentSha256 !== 'string' || stored.contentSha256 === contentSha256
+}
+
+/** `mediaEmbeddedSearchText`: the searchable text of a stored record. */
+export function mediaEmbeddedSearchText(stored) {
+  const fields = stored?.fields
+  if (!Array.isArray(fields)) return ''
+  const byKey = new Map(fields.map((field) => [field?.key, field]))
+  return SEARCHABLE_EMBEDDED_KEYS.flatMap((key) => {
+    const field = byKey.get(key)
+    if (!field) return []
+    return Array.isArray(field.values)
+      ? field.values.map(String)
+      : typeof field.value === 'string'
+        ? [field.value]
+        : []
+  })
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .join(' ')
+}
+
+/**
+ * `mediaNameTokens`: the name's word prefixes, then the details' (AGL-3339),
+ * inside the one `NAME_TOKEN_LIMIT`.
+ */
+export function mediaNameTokens(fileName, embeddedMetadata, contentSha256) {
+  const tokens = new Set(nameSearchTokens(mediaNameWords(fileName)))
+  if (!embeddedIsCurrent(embeddedMetadata, contentSha256)) return [...tokens]
+  for (const token of nameSearchTokens(mediaNameWords(mediaEmbeddedSearchText(embeddedMetadata)))) {
+    if (tokens.size >= NAME_TOKEN_LIMIT) break
+    tokens.add(token)
+  }
+  return [...tokens]
+}
+
 /**
  * `mediaFilterKeys`: what the library filters, sorts and searches a
- * document by.
+ * document by — the search reading the file's own details too (AGL-3339),
+ * from the document's `embeddedMetadata`.
  *
  * @param {{ fileName?: unknown, contentType?: unknown, alt?: unknown,
- *   width?: unknown, height?: unknown, video?: unknown }} media
+ *   width?: unknown, height?: unknown, video?: unknown,
+ *   embeddedMetadata?: unknown, contentSha256?: unknown }} media
  */
 export function mediaFilterKeys(media) {
   const fileName = String(media?.fileName ?? '')
   return {
     kind: mediaKindOf(media?.contentType),
     nameLower: nameSearchKey(fileName),
-    nameTokens: nameSearchTokens(mediaNameWords(fileName)),
+    nameTokens: mediaNameTokens(fileName, media?.embeddedMetadata, media?.contentSha256),
     hasAlt: String(media?.alt ?? '').trim().length > 0,
     orientation: mediaOrientationOf(media ?? {}),
   }

@@ -238,7 +238,9 @@ describe('read', () => {
       expect.objectContaining({ key: 'title', value: 'Harbor', editable: true }),
     )
     expect(mockState.updates).toHaveLength(1)
-    expect(Object.keys(mockState.updates[0] ?? {})).toEqual(['embeddedMetadata'])
+    // The record, and the search keys that now carry its words (AGL-3339).
+    expect(Object.keys(mockState.updates[0] ?? {})).toEqual(['embeddedMetadata', 'nameTokens'])
+    expect(mockState.updates[0]?.['nameTokens']).toEqual(expect.arrayContaining(['harbor']))
     expect(mockState.wholeDownloads).toBe(0)
   })
 

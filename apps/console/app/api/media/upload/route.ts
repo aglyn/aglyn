@@ -446,6 +446,9 @@ async function handler(request: Request): Promise<Response> {
         contentType,
         ...(dimensions ?? {}),
         video: videoFields['video'],
+        // The details read above join the search (AGL-3339).
+        embeddedMetadata,
+        contentSha256,
       }),
       ...(dimensions ?? {}),
       // AGL-2742 — `video`, `poster`, `posterError`, or no keys at all for a

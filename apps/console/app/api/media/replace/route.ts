@@ -69,6 +69,10 @@ import {
   UPLOAD_TYPES_MESSAGE,
 } from '../../../../utils/media-upload-limits'
 import { videoUploadFields } from '../../../../utils/server/media-video-fields'
+import {
+  embeddedMetadataAtIngress,
+  storageObjectReader,
+} from '../../../../utils/server/media-embedded'
 import { videoUploadPausedRefusal } from '../../../../utils/server/video-uploads'
 import {
   removeAssetDeliveryCopies,
@@ -620,6 +624,21 @@ async function handler(request: Request): Promise<Response> {
 
     const token = randomUUID()
     const file = bucket.file(objectPath)
+    /**
+     * The asset's custom fields ride its Storage object as well as its
+     * document (AGL-822), and both legs below leave an object that has none:
+     * `save` writes a fresh one, and `move` keeps the staged upload's. So
+     * they are written back from the document, which is where the drawer
+     * edits them (AGL-3339).
+     */
+    const storageMetadata: Record<string, string> = {
+      ...Object.fromEntries(
+        Object.entries(mediaSnapshot.get('customMetadata') ?? {}).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string',
+        ),
+      ),
+      firebaseStorageDownloadTokens: token,
+    }
     if (staged) {
       // Server-side within the bucket: the bytes never travel through this
       // function, which is the whole reason the signed leg exists. The master
@@ -629,14 +648,14 @@ async function handler(request: Request): Promise<Response> {
       await file.setMetadata({
         contentType,
         cacheControl: 'public, max-age=31536000, immutable',
-        metadata: { firebaseStorageDownloadTokens: token },
+        metadata: storageMetadata,
       })
     } else {
       await file.save(buffer as Buffer, {
         contentType,
         metadata: {
           cacheControl: 'public, max-age=31536000, immutable',
-          metadata: { firebaseStorageDownloadTokens: token },
+          metadata: storageMetadata,
         },
       })
     }
@@ -664,6 +683,25 @@ async function handler(request: Request): Promise<Response> {
         dimensions = readImageDimensions(new Uint8Array(header))
       }
     }
+    /**
+     * What the NEW file carries inside itself (AGL-3339): its title, caption,
+     * keywords, creator, location. Read here, from the bytes that just
+     * landed, so the Details drawer, search and the API describe this file
+     * and never the one it replaced. The record replaces the old one whole —
+     * a field the new file dropped is gone, and one it changed shows its new
+     * value.
+     *
+     * Time-boxed like the upload routes' read, and never a refusal: a read
+     * that gives up clears the record, and the drawer reads the file the
+     * next time it opens.
+     */
+    const embeddedMetadata = await embeddedMetadataAtIngress({
+      contentType,
+      ...(buffer
+        ? { bytes: new Uint8Array(buffer) }
+        : { reader: storageObjectReader(file, uploadedBytes) }),
+      ...(contentSha256 ? { contentSha256 } : {}),
+    })
     // Replacing the bytes of a PRIVATE asset must not hand it a `cdnPath`
     // (AGL-1051) — that would quietly publish it, and the `: delete()`
     // branch below means the field is actively removed if one lingers.
@@ -748,6 +786,10 @@ async function handler(request: Request): Promise<Response> {
           width: dimensions?.width,
           height: dimensions?.height,
           video: videoFields['video'],
+          // The new file's own details join the search, the old file's leave
+          // it (AGL-3339).
+          embeddedMetadata,
+          contentSha256,
         }),
         sizeBytes: uploadedBytes,
         url,
@@ -774,10 +816,9 @@ async function handler(request: Request): Promise<Response> {
         poster: videoFields['poster'] ?? remove,
         posterError: videoFields['posterError'] ?? remove,
         videoRenditions: remove,
-        // Read from the previous bytes (AGL-3331). Cleared rather than
-        // re-read here: the Details drawer reads the new file the first
-        // time it opens, and a replace must not wait on a caption.
-        embeddedMetadata: remove,
+        // Read from the new bytes above (AGL-3339), or cleared when that
+        // read gave up — never left describing the previous file.
+        embeddedMetadata: embeddedMetadata ?? remove,
         // The delivery provider's copies were made from the previous bytes
         // (AGL-2824). The new `contentHash` already stops them being served;
         // clearing the record says so, and the copies themselves are removed

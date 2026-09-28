@@ -44,6 +44,17 @@ site.
   "url": "https://firebasestorage.googleapis.com/…?alt=media&token=…",
   "cdnUrl": "https://app.aglyn.com/api/media/cdn/org:org_abc123/m_9fK2xQ",
   "private": false,
+  "customMetadata": { "campaign": "spring-launch" },
+  "embeddedMetadata": {
+    "format": "jpeg",
+    "truncated": false,
+    "fields": [
+      { "key": "title", "label": "Title", "group": "description", "value": "Morning bake", "values": null },
+      { "key": "keywords", "label": "Keywords", "group": "description", "value": null, "values": ["bread", "bakery"] },
+      { "key": "creator", "label": "Creator", "group": "rights", "value": null, "values": ["Dana Ruiz"] },
+      { "key": "make", "label": "Camera make", "group": "capture", "value": "FUJIFILM", "values": null }
+    ]
+  },
   "created": "2026-06-11T14:20:03.881Z"
 }
 ```
@@ -63,6 +74,8 @@ site.
 | `url` | string \| null | The **durable download URL**. Always present. See below. |
 | `cdnUrl` | string \| null | The CDN URL, **or `null`**. See below. |
 | `private` | boolean | `true` for restricted files. |
+| `customMetadata` | object | The custom fields set in the library's **Details** drawer, name → value, all strings. `{}` when there are none. |
+| `embeddedMetadata` | object \| null | The details the file carries inside itself. See [below](#embedded-metadata). |
 | `created` | string \| null | ISO 8601. |
 
 ### `url` versus `cdnUrl` — pick deliberately {#urls}
@@ -94,6 +107,32 @@ if (!src) {
 
 Private files are reachable only through a short-lived signed link the console mints;
 there is no API endpoint that signs one.
+
+### Details inside the file {#embedded-metadata}
+
+`embeddedMetadata` is what the file itself says about itself: a photo's EXIF, IPTC and
+XMP (title, caption, keywords, creator, copyright, location, camera), a PDF's document
+information and custom properties, an Office document's properties, a video's tags.
+It is the same list the console shows under **File info**.
+
+- **`fields`** is a list, not a map, because a file can carry details Aglyn has no fixed
+  name for. The common ones have stable keys — `title`, `description`, `keywords`,
+  `creator`, `copyright`, `city`, `gps`, `createdAt`, `make`, `model` — and anything else
+  gets a namespaced key such as `pdf|Client` or `xmp|http://ns.example.com/|Client`.
+  Match on `key` and show `label`.
+- Exactly one of **`value`** and **`values`** is set. List-valued details (keywords,
+  creators) come in `values`; everything else is a string in `value`. Dates are ISO 8601,
+  and `gps` is `"latitude,longitude"` in decimal degrees.
+- **`group`** is the section the console files it under: `description`, `rights`,
+  `location`, `capture`, `document`, `technical` or `other`.
+- **`truncated`** is `true` when a file carried more than Aglyn stores (150 fields, and
+  2,000 characters a value), so some were left out.
+- **`null`** means the file has not been read yet — it was uploaded before this existed
+  and nobody has opened it since — or it is a type with nothing to read (CSV, ZIP, plain
+  text). It is never the previous file's details: replacing a file reads the new one.
+
+Read-only here: details are edited in the console, where the change is written into the
+file itself.
 
 ### The response does not tell you which variants exist {#no-variants}
 

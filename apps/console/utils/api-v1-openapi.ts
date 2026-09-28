@@ -47,6 +47,8 @@
  * nothing and cost discovery everything.
  */
 
+import { MEDIA_EMBEDDED_GROUP_ORDER } from '@aglyn/aglyn/app-utils/media-embedded-fields'
+
 /** A JSON Schema / OpenAPI fragment. Same shape the tenant builder uses. */
 type Schema = Record<string, unknown>
 
@@ -612,6 +614,40 @@ const RESOURCES: readonly ResourceSpec[] = [
       url: str('Canonical URL.'),
       cdnUrl: str('CDN URL. Prefer this for delivery.'),
       private: bool('Whether the asset requires a signed URL.'),
+      customMetadata: {
+        type: 'object',
+        description: 'Custom fields set in the library, name to value. Empty when there are none.',
+        additionalProperties: { type: 'string' },
+      },
+      embeddedMetadata: nullable({
+        type: 'object',
+        description:
+          'What the file carries inside itself: EXIF, IPTC and XMP on photos, a PDF’s document info, Office document properties, video tags. Null until the file has been read.',
+        required: ['format', 'truncated', 'fields'],
+        properties: {
+          format: str('The file format the details were read from, e.g. `jpeg`, `pdf`, `mp4`.'),
+          truncated: bool('True when fields were left out to stay inside the stored limits.'),
+          fields: {
+            type: 'array',
+            description: 'Every detail found, grouped the way the library shows them.',
+            items: {
+              type: 'object',
+              required: ['key', 'label', 'group', 'value', 'values'],
+              properties: {
+                key: str('Stable key: `title`, `creator`, `gps`… or a namespaced key for anything else the file carries.'),
+                label: str('The name to show a person.'),
+                group: {
+                  type: 'string',
+                  description: 'Which section the field belongs to.',
+                  enum: [...MEDIA_EMBEDDED_GROUP_ORDER],
+                },
+                value: nullable(str('The value of a single-valued field; null for a list.')),
+                values: nullable(strList('The items of a list-valued field, such as keywords; null otherwise.')),
+              },
+            },
+          },
+        },
+      }),
       created: STAMPS.created,
     },
     ops: [

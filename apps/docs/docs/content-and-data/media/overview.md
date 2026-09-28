@@ -249,7 +249,9 @@ near the bottom of the **Details** drawer, shows them next to what Aglyn itself 
 
 The first time you open a file that was uploaded before this existed, Aglyn reads the
 file and keeps what it found, so the next visit is instant. New uploads are read as they
-arrive.
+arrive, and so is a replacement: **Replace file** reads the new file, so **File info**
+shows its details — a changed caption with its new wording, and nothing the new file
+no longer carries.
 
 **What is read:**
 
@@ -402,7 +404,8 @@ link you copied stays correct when you:
 - **Replace the file** — every screen, layout, and content entry that embeds it serves
   the new file immediately, with no re-linking. A replaced video also drops the poster
   frame and any encoded versions of the old footage, so nothing left over is served
-  under the new file's link.
+  under the new file's link. The file's [details](#file-info) are read from the new
+  file, and your [custom fields](#custom-metadata) stay with the asset.
 - **Move it between folders** — organizing your library never breaks a live page.
 
 So replacing a logo across a whole site is one upload, not a hunt for every reference.
@@ -659,8 +662,10 @@ rather than replacing an earlier one.
 
 ### Over the API
 
-Media is **read-only** over the REST API: file names, sizes, dimensions, tags, folders,
-and both URL forms. See [the Media API resource](/api/resources/media), including
+The REST API lists and reads media — file names, sizes, dimensions, tags, folders, both
+URL forms, your [custom fields](#custom-metadata) and the [details inside each
+file](#file-info) — and uploads new files. The same fields come back through Aglyn's MCP
+server. See [the Media API resource](/api/resources/media), including
 [what it does not return](/api/resources/media#no-variants).
 
 ## Components

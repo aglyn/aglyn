@@ -709,6 +709,9 @@ async function handler(request: Request): Promise<Response> {
         contentType,
         ...(dimensions ?? {}),
         video: videoFields['video'],
+        // The details read above join the search (AGL-3339).
+        embeddedMetadata,
+        contentSha256,
       }),
       // AGL-1476 — the four fields that only `/api/media/upload` used to
       // write. `dimensions` spreads to nothing when the header was

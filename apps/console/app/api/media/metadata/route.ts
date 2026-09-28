@@ -32,6 +32,7 @@ import {
   embeddedFieldLabel,
   sanitizeEmbeddedPatch,
 } from '@aglyn/aglyn/app-utils/media-embedded-fields'
+import { mediaNameTokens } from '@aglyn/aglyn/app-utils/media-metadata'
 import {
   emailUnverifiedResponse,
   firebaseAdmin,
@@ -180,7 +181,11 @@ async function handler(request: Request): Promise<Response> {
       // alone when the format has no reader, which the drawer never asks
       // about twice (it gates on the content type).
       if (embeddedMetadata) {
-        await mediaRef.update({ embeddedMetadata })
+        await mediaRef.update({
+          embeddedMetadata,
+          // What the file says about itself joins the search (AGL-3339).
+          nameTokens: mediaNameTokens(snapshot.get('fileName'), embeddedMetadata, storedSha256),
+        })
       }
       return Response.json({ embeddedMetadata }, { status: 200 })
     }
@@ -359,6 +364,8 @@ async function handler(request: Request): Promise<Response> {
       contentHash,
       contentSha256,
       embeddedMetadata: after,
+      // The edited details are what the search finds now (AGL-3339).
+      nameTokens: mediaNameTokens(snapshot.get('fileName'), after, contentSha256),
       // The provider's copies were made from the previous bytes (AGL-2824).
       ...(snapshot.get('deliveryCopies') !== undefined
         ? { deliveryCopies: remove }

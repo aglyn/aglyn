@@ -147,6 +147,8 @@ import { resolveOrgMediaBand } from './server/media-storage-band'
 import { videoUploadsOpenForOrg } from './server/video-uploads'
 import { scheduleMediaDeliveryCopies } from './server/media-delivery-copies'
 import { folderStoragePath, mediaCdnPathUpdate } from './server/media-scope'
+import { embeddedMetadataAtIngress } from './server/media-embedded'
+import { mediaEmbeddedPublicView } from '@aglyn/aglyn/app-utils/media-embedded-fields'
 import {
   claimHostForOrg,
   findSubdomainConflict,
@@ -2009,8 +2011,27 @@ function mediaView(doc: FirebaseFirestore.DocumentSnapshot, origin: string) {
     url: data.url ?? null,
     cdnUrl: cdnPath ? `${origin}${cdnPath}` : null,
     private: Boolean(data.private),
+    // The name → value fields set in the library's Details drawer (AGL-822).
+    customMetadata: publishedCustomMetadata(data.customMetadata),
+    // What the file carries inside itself — title, caption, keywords,
+    // creator, location, camera (AGL-3339). `null` until the file has been
+    // read, and never the details of bytes this asset no longer holds.
+    embeddedMetadata: mediaEmbeddedPublicView(
+      data.embeddedMetadata,
+      data.contentSha256,
+    ),
     created: serialize(data.createdAt) ?? null,
   }
+}
+
+/** Only string values: the map is typed, and a stray write must not leak. */
+function publishedCustomMetadata(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object') return {}
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  )
 }
 
 /**
@@ -2280,6 +2301,13 @@ async function createMedia(
           },
         }).catch(() => null)
       : null
+    // What the file carries inside itself (AGL-3339), read the way the
+    // console's upload routes read it: time-boxed, and never a refusal.
+    const embeddedMetadata = await embeddedMetadataAtIngress({
+      contentType,
+      bytes: new Uint8Array(buffer),
+      contentSha256,
+    })
 
     await scopeRef.collection('media').doc(mediaId).create({
       fileName,
@@ -2296,10 +2324,14 @@ async function createMedia(
         contentType,
         alt: body.alt ? String(body.alt).slice(0, 500) : '',
         ...dimensions,
+        // The details read at ingress join the search (AGL-3339).
+        embeddedMetadata,
+        contentSha256,
       }),
       contentHash,
       contentSha256,
       variants: (variants as { variants?: number[] })?.variants ?? [],
+      ...(embeddedMetadata ? { embeddedMetadata } : {}),
       ...(svg?.removed?.length ? { svgSanitized: svg.removed } : {}),
       // The org library is shared across sites, so a file written there needs
       // a scope token or it matches no scoped read (AGL-1044).

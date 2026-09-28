@@ -691,3 +691,112 @@ export function embeddedFieldDisplay(
       return value
   }
 }
+
+/**
+ * Whether a stored record still describes the asset's bytes (AGL-3331).
+ * Stale when the reader has changed shape since, or when the bytes were
+ * replaced by a path that did not re-read them — both are answered by
+ * reading the file again, never by showing the old record.
+ */
+export function embeddedMetadataIsCurrent(
+  stored: unknown,
+  contentSha256: unknown,
+): stored is MediaEmbeddedMetadata {
+  if (!stored || typeof stored !== 'object') return false
+  const record = stored as Partial<MediaEmbeddedMetadata>
+  if (record.version !== MEDIA_EMBEDDED_METADATA_VERSION) return false
+  if (!Array.isArray(record.fields)) return false
+  return typeof contentSha256 !== 'string' || record.contentSha256 === contentSha256
+}
+
+/**
+ * What a person would type to find a file, most telling first (AGL-3339):
+ * its title, its keywords, who made it and where. A search token budget is
+ * spent in this order, so a long caption can never crowd out a title. GPS,
+ * camera settings, dates and software are left out — nobody searches a
+ * library by shutter speed.
+ */
+const SEARCHABLE_EMBEDDED_KEYS: readonly MediaEmbeddedCanonicalKey[] = [
+  'title',
+  'keywords',
+  'headline',
+  'subject',
+  'creator',
+  'credit',
+  'source',
+  'city',
+  'state',
+  'country',
+  'category',
+  'label',
+  'description',
+]
+
+/**
+ * The searchable text of a stored record, for the library's search keys
+ * (AGL-3339). Empty for anything that is not a current-shape record, so a
+ * caller can pass a document field straight through.
+ */
+export function mediaEmbeddedSearchText(stored: unknown): string {
+  const fields = (stored as Partial<MediaEmbeddedMetadata> | null)?.fields
+  if (!Array.isArray(fields)) return ''
+  const byKey = new Map(fields.map((field) => [field?.key, field]))
+  return SEARCHABLE_EMBEDDED_KEYS.flatMap((key) => {
+    const field = byKey.get(key)
+    if (!field) return []
+    return Array.isArray(field.values)
+      ? field.values.map(String)
+      : typeof field.value === 'string'
+        ? [field.value]
+        : []
+  })
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .join(' ')
+}
+
+/** One field as the customer API publishes it (AGL-3339). */
+export interface MediaEmbeddedPublicField {
+  key: string
+  label: string
+  group: MediaEmbeddedGroup
+  /** The value of a single-valued field; `null` for a list. */
+  value: string | null
+  /** The items of a list-valued field (keywords, creators); else `null`. */
+  values: string[] | null
+}
+
+/** `embeddedMetadata` as the customer API publishes it (AGL-3339). */
+export interface MediaEmbeddedPublicView {
+  format: MediaEmbeddedFormat
+  /** True when fields were dropped to stay inside the stored caps. */
+  truncated: boolean
+  fields: MediaEmbeddedPublicField[]
+}
+
+/**
+ * The stored record as the customer API and the MCP tools return it
+ * (AGL-3339), or `null` when there is no current record for these bytes —
+ * never an old file's details under a new file's id.
+ *
+ * `sources` and `editable` stay behind: they answer the drawer's question
+ * (can this be written back, and where from), and the API has no call that
+ * writes a file's details.
+ */
+export function mediaEmbeddedPublicView(
+  stored: unknown,
+  contentSha256: unknown,
+): MediaEmbeddedPublicView | null {
+  if (!embeddedMetadataIsCurrent(stored, contentSha256)) return null
+  return {
+    format: stored.format,
+    truncated: stored.truncated === true,
+    fields: stored.fields.map((field) => ({
+      key: field.key,
+      label: field.label,
+      group: field.group,
+      value: Array.isArray(field.values) ? null : (field.value ?? ''),
+      values: Array.isArray(field.values) ? field.values.map(String) : null,
+    })),
+  }
+}
