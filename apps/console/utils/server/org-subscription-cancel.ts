@@ -138,13 +138,13 @@ export interface OrgSubscriptionCancelResult {
   readAtMs: number
 }
 
-interface StripeReply {
+export interface StripeReply {
   ok: boolean
   status: number
   body: any
 }
 
-async function stripe(
+export async function stripe(
   secretKey: string,
   method: 'GET' | 'POST' | 'DELETE',
   path: string,

@@ -43,6 +43,8 @@ export interface FakeSubscription {
   schedule?: string | null
   metadata?: Record<string, string>
   cancellation_details?: { comment?: string | null }
+  /** Stripe's collection pause (AGL-3364); null or absent when collecting. */
+  pause_collection?: { behavior: string } | null
   items?: { data: Array<{ price: { id: string; recurring?: { interval: string } } }> }
 }
 
@@ -53,8 +55,25 @@ export interface StripeCall {
   params: Record<string, string>
 }
 
+/** A connected account, as far as the payout pause reads it (AGL-3364). */
+export interface FakeAccount {
+  id: string
+  type: 'express' | 'custom' | 'standard'
+  settings: {
+    payouts: {
+      schedule: {
+        interval: string
+        delay_days?: number
+        weekly_anchor?: string
+        monthly_anchor?: number
+      }
+    }
+  }
+}
+
 export interface StripeDouble {
   subscriptions: Map<string, FakeSubscription>
+  accounts: Map<string, FakeAccount>
   calls: StripeCall[]
   /** Make every DELETE/POST answer 500 and change nothing. */
   failWrites: boolean
@@ -94,9 +113,13 @@ const reply = (status: number, body: unknown) => ({
 
 export function installStripeDouble(
   seed: FakeSubscription[] = [],
+  accounts: FakeAccount[] = [],
 ): StripeDouble {
   const double: StripeDouble = {
     subscriptions: new Map(seed.map((entry) => [entry.id, { ...entry }])),
+    accounts: new Map(
+      accounts.map((entry) => [entry.id, JSON.parse(JSON.stringify(entry))]),
+    ),
     calls: [],
     failWrites: false,
     failSearch: false,
@@ -135,6 +158,39 @@ export function installStripeDouble(
       )
       return reply(200, { object: 'search_result', data, has_more: false })
     }
+    const account = /^accounts\/([^/]+)$/.exec(path)
+    if (account) {
+      const found = double.accounts.get(decodeURIComponent(account[1]))
+      if (!found) return reply(404, { error: { message: 'No such account' } })
+      if (method === 'GET') return reply(200, JSON.parse(JSON.stringify(found)))
+      if (double.failWrites) {
+        return reply(500, { error: { message: 'Stripe is having a moment' } })
+      }
+      // A Standard account's payouts are its own; Stripe refuses the write.
+      if (found.type === 'standard') {
+        return reply(400, {
+          error: { message: 'You cannot update payout settings of a Standard account' },
+        })
+      }
+      const schedule = found.settings.payouts.schedule
+      const key = (name: string) => `settings[payouts][schedule][${name}]`
+      if (params[key('interval')]) {
+        found.settings.payouts.schedule = { interval: params[key('interval')] }
+        if (schedule.delay_days !== undefined && !params[key('delay_days')]) {
+          found.settings.payouts.schedule.delay_days = schedule.delay_days
+        }
+      }
+      if (params[key('delay_days')]) {
+        found.settings.payouts.schedule.delay_days = Number(params[key('delay_days')])
+      }
+      if (params[key('weekly_anchor')]) {
+        found.settings.payouts.schedule.weekly_anchor = params[key('weekly_anchor')]
+      }
+      if (params[key('monthly_anchor')]) {
+        found.settings.payouts.schedule.monthly_anchor = Number(params[key('monthly_anchor')])
+      }
+      return reply(200, JSON.parse(JSON.stringify(found)))
+    }
     const scheduleRelease = /^subscription_schedules\/([^/]+)\/release$/.exec(path)
     if (scheduleRelease && method === 'POST') {
       if (double.failWrites) return reply(500, { error: { message: 'boom' } })
@@ -169,6 +225,11 @@ export function installStripeDouble(
       if (params['cancel_at_period_end'] === 'true') {
         entry.cancel_at_period_end = true
         entry.cancel_at = entry.current_period_end ?? null
+      }
+      if (params['pause_collection[behavior]']) {
+        entry.pause_collection = { behavior: params['pause_collection[behavior]'] }
+      } else if ('pause_collection' in params && params['pause_collection'] === '') {
+        entry.pause_collection = null
       }
       if (params['cancellation_details[comment]']) {
         entry.cancellation_details = {

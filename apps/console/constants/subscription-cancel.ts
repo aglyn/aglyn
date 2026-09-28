@@ -106,3 +106,14 @@ export function normalizeSubscriptionCancelReason(
 export function lockdownCancelsBillingByDefault(reason: unknown): boolean {
   return reason === 'security'
 }
+
+/**
+ * Should a tenant lock with this reason pause the money its sites take —
+ * membership renewals and the seller's payouts (AGL-3364)? Only `security`,
+ * for the reasons above: a billing, maintenance or manual lock must never
+ * stop a merchant's income unless someone ticks the box. The console's
+ * initial checkbox state; the route applies no default.
+ */
+export function lockdownPausesSiteMoneyByDefault(reason: unknown): boolean {
+  return reason === 'security'
+}

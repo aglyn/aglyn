@@ -43,9 +43,13 @@
  * A lock can also stop BILLING (AGL-3359): `cancelSubscription: true` on an
  * org lock cancels the workspace's subscriptions now, no refund, and
  * `lockOwnedWorkspaces: true` on a user lock locks and cancels every
- * workspace that account owns. Both run after the lock is written, report as
- * their own step, and can never undo or hide the lock. No flag is implied by
- * a reason — the console defaults them on for `security` only.
+ * workspace that account owns. An org or host lock can also stop the SITES'
+ * money (AGL-3364): `pauseRenewals: true` pauses the membership renewals
+ * they sell and `pausePayouts: true` switches the seller to manual payouts;
+ * the lift resumes and restores exactly what that lock paused. All of them
+ * run after the lock is written, report as their own step, and can never
+ * undo or hide the lock. No flag is implied by a reason — the console
+ * defaults them on for `security` only.
  *
  * Every action also ANSWERS WITH A FRESH READ of what it wrote (AGL-1571).
  * A click is a request, and a request that never left the pointer looks
@@ -707,6 +711,180 @@ async function cancelBillingAfterLock(options: {
       lookupErrors: [
         `The cancel did not run: ${(error as Error)?.message ?? String(error)}`,
       ],
+    }
+  }
+}
+
+/**
+ * A tenant lock's money steps (AGL-3364): pause the membership renewals the
+ * locked sites sell, and switch the seller's connected account to manual
+ * payouts. Each is asked for by its own explicit flag — the console ticks
+ * both for `security` only — and runs after the lock is durable. Neither
+ * can throw here: a failure is an unconfirmed step beside a lock that
+ * stands. Loaded on demand, with the plugins that declare what a site
+ * sells, so a lock that asks for neither pays for none of it.
+ */
+async function pauseMoneyAfterLock(options: {
+  firestore: AdminFirestore
+  actor: LockActor
+  scope: 'org' | 'host'
+  targetId: string
+  reason: string
+  renewals: boolean
+  payouts: boolean
+}): Promise<Record<string, unknown>> {
+  if (!options.renewals && !options.payouts) return {}
+  const steps: Record<string, unknown> = {}
+  try {
+    const billing = await import('../../../../utils/server/lockdown-billing-pause')
+    const target = await billing.resolveLockdownBillingTarget(
+      options.firestore,
+      options.scope,
+      options.targetId,
+    )
+    const secretKey = process.env.STRIPE_SECRET_KEY
+    if (options.renewals) {
+      const { serverPluginLoader } = await import('../../../../utils/server-plugin-loader')
+      const { listRecurringChargeSources } = await import(
+        '@aglyn/aglyn/plugin-manager/plugin-recurring-charges'
+      )
+      await serverPluginLoader.ensureAll(['consoleApi'])
+      const renewals = await billing.pauseMembershipRenewals({
+        firestore: options.firestore,
+        scope: options.scope,
+        targetId: options.targetId,
+        hostIds: target.hostIds,
+        sources: listRecurringChargeSources(),
+        secretKey,
+        actorUid: options.actor.actorUid,
+      })
+      const withLookups = {
+        ...renewals,
+        lookupErrors: [...target.lookupErrors, ...renewals.lookupErrors],
+        confirmed: renewals.confirmed && target.lookupErrors.length === 0,
+      }
+      steps['renewalsPause'] = withLookups
+      await billing
+        .auditLockdownBillingStep(options.firestore, {
+          ...options.actor,
+          scope: options.scope,
+          targetId: options.targetId,
+          reason: options.reason,
+          action: 'lockdown.renewals-pause',
+          result: withLookups,
+        })
+        .catch((error: unknown) =>
+          console.error('[admin/lockdown] renewals audit write failed', error),
+        )
+    }
+    if (options.payouts) {
+      const payouts = await billing.pauseSellerPayouts({
+        firestore: options.firestore,
+        scope: options.scope,
+        targetId: options.targetId,
+        accountId: target.accountId,
+        secretKey,
+        actorUid: options.actor.actorUid,
+      })
+      steps['payoutsPause'] = payouts
+      await billing
+        .auditLockdownBillingStep(options.firestore, {
+          ...options.actor,
+          scope: options.scope,
+          targetId: options.targetId,
+          reason: options.reason,
+          action: 'lockdown.payouts-pause',
+          result: { ...payouts },
+        })
+        .catch((error: unknown) =>
+          console.error('[admin/lockdown] payouts audit write failed', error),
+        )
+    }
+  } catch (error) {
+    console.error('[admin/lockdown] money pause failed', error)
+    const failed = {
+      attempted: true,
+      confirmed: false,
+      error: `The pause did not run: ${(error as Error)?.message ?? String(error)}`,
+    }
+    if (options.renewals && !steps['renewalsPause']) {
+      steps['renewalsPause'] = { ...failed, subscriptions: [], lookupErrors: [failed.error] }
+    }
+    if (options.payouts && !steps['payoutsPause']) steps['payoutsPause'] = failed
+  }
+  return steps
+}
+
+/**
+ * A lift's half (AGL-3364): resume exactly the renewals and restore exactly
+ * the payout schedule THIS lock paused, and nothing it did not. Always runs
+ * on an org or host lift — it touches only what this lock recorded, so a
+ * lock that paused nothing costs one read and reports nothing.
+ */
+async function resumeMoneyAfterLift(options: {
+  firestore: AdminFirestore
+  actor: LockActor
+  scope: 'org' | 'host'
+  targetId: string
+}): Promise<Record<string, unknown>> {
+  try {
+    const billing = await import('../../../../utils/server/lockdown-billing-pause')
+    const secretKey = process.env.STRIPE_SECRET_KEY
+    const renewals = await billing.resumeMembershipRenewals({
+      firestore: options.firestore,
+      scope: options.scope,
+      targetId: options.targetId,
+      secretKey,
+    })
+    const payouts = await billing.restoreSellerPayouts({
+      firestore: options.firestore,
+      scope: options.scope,
+      targetId: options.targetId,
+      secretKey,
+    })
+    const steps: Record<string, unknown> = {}
+    if (renewals.subscriptions.length || renewals.lookupErrors.length) {
+      steps['renewalsResume'] = renewals
+      await billing
+        .auditLockdownBillingStep(options.firestore, {
+          ...options.actor,
+          scope: options.scope,
+          targetId: options.targetId,
+          reason: null,
+          action: 'lockdown.renewals-resume',
+          result: { ...renewals },
+        })
+        .catch((error: unknown) =>
+          console.error('[admin/lockdown] renewals audit write failed', error),
+        )
+    }
+    if (payouts.outcome !== 'nothing-held') {
+      steps['payoutsRestore'] = payouts
+      await billing
+        .auditLockdownBillingStep(options.firestore, {
+          ...options.actor,
+          scope: options.scope,
+          targetId: options.targetId,
+          reason: null,
+          action: 'lockdown.payouts-restore',
+          result: { ...payouts },
+        })
+        .catch((error: unknown) =>
+          console.error('[admin/lockdown] payouts audit write failed', error),
+        )
+    }
+    return steps
+  } catch (error) {
+    console.error('[admin/lockdown] money resume failed', error)
+    return {
+      renewalsResume: {
+        attempted: true,
+        confirmed: false,
+        subscriptions: [],
+        lookupErrors: [
+          `The resume did not run: ${(error as Error)?.message ?? String(error)}`,
+        ],
+      },
     }
   }
 }
@@ -1402,12 +1580,30 @@ async function handler(request: Request): Promise<Response> {
               reason: lock.reason,
             })
           : undefined
+      // The workspace's SITES' money (AGL-3364): their members' renewals and
+      // the seller's payouts, paused after the lock, restored by the lift.
+      const money =
+        action === 'lock'
+          ? await pauseMoneyAfterLock({
+              firestore,
+              actor,
+              scope: 'org',
+              targetId,
+              reason: lock.reason,
+              renewals: body?.pauseRenewals === true,
+              payouts: body?.pausePayouts === true,
+            })
+          : await resumeMoneyAfterLift({ firestore, actor, scope: 'org', targetId })
       return actionResponse({
         firestore,
         scope,
         targetId,
         action,
-        extra: { ...result, ...(subscriptionCancel ? { subscriptionCancel } : {}) },
+        extra: {
+          ...result,
+          ...(subscriptionCancel ? { subscriptionCancel } : {}),
+          ...money,
+        },
       })
     }
 
@@ -1444,7 +1640,26 @@ async function handler(request: Request): Promise<Response> {
         ...auditRotationShape(result.downloadTokensRotated),
       },
     })
-    return actionResponse({ firestore, scope, targetId, action, extra: result })
+    // The site's money (AGL-3364), after the lock is durable and audited.
+    const money =
+      action === 'lock'
+        ? await pauseMoneyAfterLock({
+            firestore,
+            actor,
+            scope: 'host',
+            targetId,
+            reason: lock.reason,
+            renewals: body?.pauseRenewals === true,
+            payouts: body?.pausePayouts === true,
+          })
+        : await resumeMoneyAfterLift({ firestore, actor, scope: 'host', targetId })
+    return actionResponse({
+      firestore,
+      scope,
+      targetId,
+      action,
+      extra: { ...result, ...money },
+    })
   } catch (error) {
     // An unverifiable credential is a 401, not a fault of ours
     // (AGL-1993). Null for anything else, so a real failure keeps its 500.
