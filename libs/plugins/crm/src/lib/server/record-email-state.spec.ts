@@ -58,6 +58,16 @@ function docRef(path: string): any {
       mockDocs.set(path, { ...(mockDocs.get(path) ?? {}), ...data })
       mockWrites.push(path)
     },
+    // `FieldValue.delete()` removes the field, as the store would.
+    update: async (data: Data) => {
+      const next: Data = { ...(mockDocs.get(path) ?? {}) }
+      for (const [field, value] of Object.entries(data)) {
+        if ((value as { isEqual?: (other: unknown) => boolean })?.isEqual?.(FieldValue.delete())) delete next[field]
+        else next[field] = value
+      }
+      mockDocs.set(path, next)
+      mockWrites.push(path)
+    },
     collection: (name: string) => collectionRef(`${path}/${name}`),
   }
 }
@@ -87,6 +97,7 @@ jest.mock('@aglyn/tenant-data-admin', () => ({
 }))
 
 import { personKey } from '@aglyn/aglyn/app-utils/person-key'
+import { FieldValue } from 'firebase-admin/firestore'
 import { pluginRecordEmailStateWriter } from '@aglyn/aglyn/plugin-manager/plugin-record-email-state'
 import { resetPluginServicesForTests } from '@aglyn/aglyn/plugin-manager/plugin-services'
 import { createCrmRecordEmailStateWriter, registerCrmRecordEmailStateWriter } from './record-email-state'
@@ -163,6 +174,34 @@ describe('the CRM on the record email-state seam (AGL-3245)', () => {
     // down with it would cost the send its own answer.
     mockFailHosts = true
     expect(await writer.stamp({ orgId: ORG, email: EMAIL, state: BLOCKED })).toEqual({ records: 1 })
+  })
+
+  it('writes the deliverability check’s "Would bounce" once, and keeps the date it was first found', async () => {
+    const check = { status: 'undeliverable' as const, atMs: AT, source: 'check' as const, detail: null }
+    expect(await writer.stamp({ orgId: ORG, email: EMAIL, state: check })).toEqual({ records: 2 })
+    expect(mockDocs.get(`orgs/${ORG}/leads/${KEY}`)).toMatchObject({ emailState: check, emailStatus: 'undeliverable' })
+    mockWrites.length = 0
+    expect(await writer.stamp({ orgId: ORG, email: EMAIL, state: { ...check, atMs: AT + 1 } })).toEqual({ records: 0 })
+    expect(mockWrites).toEqual([])
+    // A real verdict still replaces the prediction.
+    expect(await writer.stamp({ orgId: ORG, email: EMAIL, state: { ...BLOCKED, status: 'bounced' } })).toEqual({ records: 2 })
+    expect(mockDocs.get(`orgs/${ORG}/contacts/c-1`)?.['emailState']).toMatchObject({ status: 'bounced' })
+  })
+
+  it('withdraws only the verdict it names (AGL-3328)', async () => {
+    const check = { status: 'undeliverable' as const, atMs: AT, source: 'check' as const, detail: null }
+    await writer.stamp({ orgId: ORG, email: EMAIL, state: check })
+    mockDocs.set(`orgs/${ORG}/contacts/c-1`, {
+      ...mockDocs.get(`orgs/${ORG}/contacts/c-1`),
+      emailState: { status: 'bounced', atMs: AT, source: 'campaign', detail: null },
+      emailStatus: 'bounced',
+    })
+    expect(await writer.stamp({ orgId: ORG, email: EMAIL, state: check, withdraw: true })).toEqual({ records: 1 })
+    const lead = mockDocs.get(`orgs/${ORG}/leads/${KEY}`) ?? {}
+    expect('emailState' in lead).toBe(false)
+    expect(lead['emailStatus']).toBe('none')
+    // The bounce is not DNS's to clear.
+    expect(mockDocs.get(`orgs/${ORG}/contacts/c-1`)).toMatchObject({ emailStatus: 'bounced' })
   })
 
   it('reads the organization off the site when only the site is known', async () => {

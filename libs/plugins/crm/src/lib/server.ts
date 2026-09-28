@@ -101,6 +101,7 @@ import { crmLeadsImportHandler } from './server/leads-import'
 import { crmTasksImportHandler } from './server/tasks-import'
 import { crmDealStageHandler } from './server-deal-stage'
 import { crmEmailSendHandler } from './server/email-send'
+import { CRM_EMAIL_CHECK_ROUTE, crmEmailCheckHandler } from './server/email-check'
 import { leadConvertHandler } from './server/lead-convert'
 import { leadCreateHandler } from './server/lead-create'
 import {
@@ -637,6 +638,11 @@ export function registerCrmConsoleApi(): void {
   // read off the record, the daily cap and both suppression lists are
   // judged, and the message leaves on the site's sending identity.
   registerPluginApiRoute(CRM_API_ROUTES.emailSend, crmEmailSendHandler)
+  // What the platform knows about one address before somebody writes to it
+  // (AGL-3328): the gateway chip on a record page, and the composer's
+  // warning about a domain with no mail server or a gateway holding this
+  // site's mail. DNS and the ledger are the server's.
+  registerPluginApiRoute(CRM_EMAIL_CHECK_ROUTE, crmEmailCheckHandler)
   // Two records for one person become one (AGL-2625): the repoint of every
   // row naming the merged record and the transaction over both documents
   // are the server's, and the address index it writes is closed to clients.

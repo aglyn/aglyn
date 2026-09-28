@@ -52,6 +52,7 @@ import { CrmSendEmailButton } from './crm-send-email-button'
 import { ContactDealsCard } from './contact-deals-card'
 import { CrmCallButton } from './crm-call-actions'
 import { CrmEmailStateChip } from './crm-email-state-chip'
+import { CrmEmailGatewayChip } from './crm-email-check'
 import { CrmRecordChip, CrmRecordHeader } from './crm-record-header'
 import { CrmRecordInsightsZone } from './crm-record-insights-zone'
 import { CrmSuiteNotice, crmSuiteIncluded, crmSuiteLockedReason } from './crm-suite-lock'
@@ -426,6 +427,13 @@ export function ContactDetailPage(props: CrmDetailPageProps) {
               {/* The verdict on the address (AGL-3245), first: a bounce or a
                   do-not-contact mark is what a person deciding to write must see. */}
               <CrmEmailStateChip state={record.emailState} />
+              {/* The mail gateway in front of the address (AGL-3328). */}
+              <CrmEmailGatewayChip
+                hostId={siteHostId}
+                email={record.email}
+                emailState={record.emailState}
+                enabled={suiteIncluded}
+              />
               <CrmRecordChip
                 label="Stage"
                 value={

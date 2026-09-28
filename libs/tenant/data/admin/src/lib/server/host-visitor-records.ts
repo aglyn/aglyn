@@ -42,6 +42,7 @@ import {
   type ResolvedCampaignTouch,
 } from './campaign-conversion-attribution'
 import { notifyHostManagers } from './notifications'
+import { scheduleCapturedEmailCheck } from './capture-email-check'
 import firebaseAdmin from './firebase-admin'
 import {
   consentGroupForSite,
@@ -422,6 +423,7 @@ export async function addHostLeadOutcome(options: {
     }
     let created = false
     let sourceAdded = false
+    let predicted = false
     const refused = await firestore.runTransaction(async (tx) => {
       // Reset per attempt: a contended transaction re-runs its body, and a
       // flag left standing from an aborted attempt would credit a campaign
@@ -430,6 +432,8 @@ export async function addHostLeadOutcome(options: {
       sourceAdded = false
       // ALL READS BEFORE THE WRITE, which Firestore requires.
       const existing = await tx.get(leadRef)
+      // Whether the lead already reads "Would bounce", for the check below.
+      predicted = (existing.data() ?? {})['emailStatus'] === 'undeliverable'
       /*
        * ⛔ THE CEILING GATES A NEW PERSON, NEVER AN EXISTING ONE.
        *
@@ -609,6 +613,17 @@ export async function addHostLeadOutcome(options: {
      * its own write, and a caller that `void`s it (every one of them) is
      * unaffected. Never throws, so a failure here cannot cost the lead.
      */
+    /*
+     * THE ADDRESS'S DOMAIN, checked after the response (AGL-3328): a lead
+     * whose domain takes no mail reads "Would bounce". Queued, never
+     * awaited — the write above is the capture, and this costs it nothing.
+     */
+    scheduleCapturedEmailCheck({
+      orgId: leadsRef.parent?.id ?? null,
+      hostId,
+      email: lead.email,
+      predicted,
+    })
     if (created && options.touch) {
       await attributeCampaignConversion({
         hostId,

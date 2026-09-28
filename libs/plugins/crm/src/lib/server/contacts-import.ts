@@ -80,6 +80,13 @@ import {
 } from '../model/crm-import'
 import { crmRecordsQuotaForOrg, firebaseAdmin } from '@aglyn/tenant-data-admin'
 import { captureHostContact } from '@aglyn/tenant-runtime'
+// The leaf, so a spec that stands a partial barrel in still reaches it.
+import {
+  countUndeliverableEmails,
+  findUndeliverableEmails,
+  IMPORT_MAIL_CHECK_GRACE_MS,
+  settleWithin,
+} from '@aglyn/tenant-data-admin/server/capture-email-check'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   type ImportContext,
@@ -246,6 +253,11 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
       normalized.push({ index, row: verdict.row })
     })
 
+    // The addresses' mail servers (AGL-3328), asked while the rows are
+    // written — see the leads import. The check `upsertHostContact` queues
+    // stamps the records; this is the count the result states.
+    const mailServers = findUndeliverableEmails(normalized.map((entry) => entry.row.email))
+    const imported: string[] = []
     const owners = await ownerDirectory(
       context.orgId,
       normalized.map((entry) => entry.row),
@@ -303,9 +315,14 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
         })
         continue
       }
+      imported.push(row.email)
       if (verdict.created) created += 1
       else merged += 1
     }
+    const noMailServer = countUndeliverableEmails(
+      imported,
+      await settleWithin(mailServers, IMPORT_MAIL_CHECK_GRACE_MS),
+    )
 
     const result: ContactImportChunkResult = {
       received: read.rows.length,
@@ -315,6 +332,7 @@ export const crmContactsImportHandler: PluginApiHandler = async (req, res) => {
       dropped,
       companiesCreated: companyTally.created,
       ownersUnresolved: [...ownersUnresolved],
+      ...(noMailServer !== undefined ? { noMailServer } : {}),
     }
     return res.status(200).json(result)
   } catch (error) {

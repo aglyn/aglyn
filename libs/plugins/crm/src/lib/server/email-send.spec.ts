@@ -1025,6 +1025,22 @@ describe('a send the provider refused', () => {
     expect(status).toBe(409)
     expect(body).toEqual({ error: 'No identity.', reason: 'sending-identity' })
   })
+
+  it('says in the check\'s words that the address\'s domain takes no mail (AGL-3328)', async () => {
+    sentToday(5)
+    sendEmail.mockResolvedValue({
+      sent: false,
+      reason: 'undeliverable',
+      detail: 'parked.example has no mail server, so pat@parked.example would bounce.',
+    })
+    const { status, body } = await call(MESSAGE)
+    expect(status).toBe(409)
+    expect(body).toEqual({
+      error: 'parked.example has no mail server, so pat@parked.example would bounce.',
+      reason: 'undeliverable',
+    })
+    expect(countedToday()).toBe(5)
+  })
 })
 
 /**
